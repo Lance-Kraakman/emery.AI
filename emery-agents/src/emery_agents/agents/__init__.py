@@ -22,6 +22,13 @@ from .evaluator_agent import (
     create_evaluator_agent,
     create_evaluator_factory,
 )
+from .interrupt_classifier import (
+    InterruptClassification,
+    InterruptClassificationTool,
+    create_interrupt_classifier,
+    create_interrupt_classifier_factory,
+    build_classification_prompt,
+)
 from .research_agent import create_research_agent
 from .stateful_managed_agent import StatefulManagedAgent
 from .interrupt_aware_agent import InterruptAwareToolCallingAgent, InterruptAwareCodeAgent
@@ -33,6 +40,11 @@ __all__ = [
     "EvaluationTool",
     "create_evaluator_agent",
     "create_evaluator_factory",
+    "InterruptClassification",
+    "InterruptClassificationTool",
+    "create_interrupt_classifier",
+    "create_interrupt_classifier_factory",
+    "build_classification_prompt",
     "create_research_agent",
     "StatefulManagedAgent",
     "InterruptAwareToolCallingAgent",

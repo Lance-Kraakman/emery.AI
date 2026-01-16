@@ -6,6 +6,7 @@ Enforces tool restrictions based on execution phase.
 Includes evaluation loop for goal detection and replanning.
 """
 
+import asyncio
 import json
 import logging
 import re
@@ -14,8 +15,14 @@ from typing import List, Optional, Any, AsyncIterator, Dict, Callable, Tuple, TY
 from enum import Enum
 
 from ..agents.evaluator_agent import EvaluationTool
+from ..agents.interrupt_classifier import (
+    InterruptClassification,
+    create_interrupt_classifier,
+    build_classification_prompt,
+)
 from ..models.plan import Plan, PlanStep, PlanStatus, PlanStepStatus, SubPlan, RecoveryResult, create_plan
 from ..models.task_ledger import TaskLedger, create_ledger_from_plan, LedgerEventType
+from ..utils.toon_format import to_toon
 from ..models.context_mapping import ResolvedContext
 from ..models.execution import StepExecutionResult, EvaluatorInput, ReplanContext
 from ..models.planning_questions import BatchedQuestions, QuestionAnswers
@@ -37,6 +44,40 @@ class ExecutionPhase(Enum):
     EXECUTING = "executing"
     COMPLETED = "completed"
     FAILED = "failed"
+
+
+class Phase(str, Enum):
+    """
+    Unified phase enum for handle_message() routing.
+
+    AIDEV-NOTE: This merges SessionManager's string phases with ExecutionPhase enum.
+    The string inheritance allows direct comparison with string values.
+    """
+    IDLE = "idle"
+    CLASSIFYING = "classifying"
+    AWAITING_CLARIFICATION = "awaiting_clarification"
+    PLANNING = "planning"
+    AWAITING_CASCADE_QUESTIONS = "awaiting_cascade_questions"
+    AWAITING_APPROVAL = "awaiting_approval"
+    EXECUTING = "executing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+@dataclass
+class PendingContext:
+    """
+    Context preserved across user interactions.
+
+    AIDEV-NOTE: Replaces the `original_task` hack in SessionManager.
+    All state needed for resumption after user input lives here.
+    """
+    original_task: str
+    tools: List[Any]
+    managed_agents: List[Any]
+    agent_factories: Optional[Dict[str, Callable[..., Any]]] = None
+    clarification_response: Optional[str] = None
+    cascade_answers: Optional[Dict[str, str]] = None
 
 
 @dataclass
@@ -165,6 +206,62 @@ class RecoveryPlanProposedEvent:
     gathered_context: Dict[str, Any]
 
 
+@dataclass(frozen=True)
+class PlanRejectedEvent:
+    """Event emitted when user rejects the plan."""
+    plan_id: str
+
+
+@dataclass(frozen=True)
+class PlanFeedbackEvent:
+    """Event emitted when user provides feedback on plan (not approval/rejection)."""
+    plan_id: str
+    feedback: str
+
+
+@dataclass(frozen=True)
+class ErrorEvent:
+    """Generic error event for handle_message() routing errors."""
+    error: str
+    recoverable: bool = True
+
+
+# Interrupt handling events
+@dataclass
+class InterruptQueuedEvent:
+    """User sent message during planning - queued for processing after plan completes."""
+    message: str
+    phase: str  # "planning" or "executing"
+
+
+@dataclass
+class InterruptReceivedEvent:
+    """User interrupt received during execution - being incorporated."""
+    message: str
+    step_index: int  # Which step we were about to execute
+
+
+@dataclass
+class InterruptProcessingEvent:
+    """Processing queued interrupt after planning completed."""
+    message: str
+    classification: str  # CONTEXT_ADD | SCOPE_CHANGE | CANCEL
+
+
+@dataclass
+class PlanCancelledEvent:
+    """User cancelled the plan via interrupt."""
+    plan_id: str
+    reason: str
+
+
+@dataclass
+class ContextInjectedEvent:
+    """User's context was injected into execution."""
+    message: str
+    step_index: int
+
+
 class CoordinatorMode(Enum):
     """How coordinator handles the task."""
     PLAN_AND_APPROVE = "plan_and_approve"  # Full planning flow
@@ -282,7 +379,17 @@ class ExecutionCoordinator:
         self._replan_count: int = 0
         self._evaluation_count: int = 0
         self._managed_agents: Optional[List[Any]] = None  # Stored from execute() for later use
+        self._agent_factories: Optional[Dict[str, Callable[..., Any]]] = None  # For cascade planning
         self._sub_planner: Optional[SubAgentPlanner] = None  # For cascading planning resume
+
+        # Unified phase for handle_message() routing (replaces session_manager's coordinator_phase)
+        self._unified_phase: Phase = Phase.IDLE
+        # Pending context for resumption after user input (replaces session_manager's original_task)
+        self._pending_context: Optional[PendingContext] = None
+
+        # Interrupt handling queue for messages received during planning/execution
+        self._interrupt_queue: List[str] = []
+        self._execution_paused: bool = False
 
         # LLM-based task classifier (replaces string matching)
         self._task_classifier: Optional[TaskClassifier] = None
@@ -323,6 +430,21 @@ class ExecutionCoordinator:
         """Get current task ledger for evaluator access."""
         return self._ledger
 
+    @property
+    def unified_phase(self) -> Phase:
+        """Get current unified phase for handle_message() routing."""
+        return self._unified_phase
+
+    @property
+    def is_terminal_state(self) -> bool:
+        """Check if coordinator is in a terminal state (completed or failed)."""
+        return self._unified_phase in (Phase.COMPLETED, Phase.FAILED)
+
+    @property
+    def pending_context(self) -> Optional[PendingContext]:
+        """Get pending context for resumption after user input."""
+        return self._pending_context
+
     # ============================================================
     # Smart Execution - Adaptive Mode Selection
     # ============================================================
@@ -334,6 +456,7 @@ class ExecutionCoordinator:
         managed_agents: Optional[List[ManagedAgent]] = None,
         context: Optional[str] = None,
         stored_plan: Optional[Plan] = None,
+        agent_factories: Optional[Dict[str, Callable[..., Any]]] = None,
     ) -> AsyncIterator[Any]:
         """
         Smart execution entry point - decides mode based on LLM task analysis.
@@ -353,9 +476,10 @@ class ExecutionCoordinator:
         Args:
             task: The user's task/request
             tools: Available tools
-            managed_agents: Available managed agents
+            managed_agents: Available managed agents (for classification)
             context: Additional context (e.g., existing databases)
             stored_plan: Pre-approved plan from skill config (enables autonomous execution)
+            agent_factories: Factory functions for cascade planning (SubAgentPlanner)
 
         Yields:
             AwaitingClarificationEvent if questions needed
@@ -363,8 +487,9 @@ class ExecutionCoordinator:
             PlanCreatedEvent for complex tasks
             PlanApprovedEvent + execution events for stored plans
         """
-        # Store managed_agents for later use in execute_plan
+        # Store managed_agents and agent_factories for later use in execute_plan
         self._managed_agents = managed_agents
+        self._agent_factories = agent_factories
 
         # === AUTONOMOUS MODE: Execute stored plan directly ===
         if stored_plan:
@@ -406,13 +531,25 @@ class ExecutionCoordinator:
             return
 
         # PLAN_AND_APPROVE: Full planning flow
-        logger.info("📋 Coordinator: Plan and approve mode (complex task)")
-        async for event in self.create_plan(
-            goal=task,
-            instructions=task,
-            tools=tools,
-        ):
-            yield event
+        # Check if cascade planning is needed (multi-agent complex tasks)
+        # Requires agent_factories for SubAgentPlanner to create agents with planning callbacks
+        if classification.use_cascade_planning and agent_factories:
+            logger.info("📋 Coordinator: Cascade planning mode (multi-agent complex task)")
+            async for event in self.create_cascading_plan(
+                goal=task,
+                instructions=task,
+                tools=tools,
+                agent_factories=agent_factories,
+            ):
+                yield event
+        else:
+            logger.info("📋 Coordinator: Plan and approve mode (complex task)")
+            async for event in self.create_plan(
+                goal=task,
+                instructions=task,
+                tools=tools,
+            ):
+                yield event
         # Session manager handles approval state
 
     def _classify_task(
@@ -446,6 +583,7 @@ class ExecutionCoordinator:
                 target_agent=None,
                 clarification_questions=[],
                 reasoning="No classifier configured",
+                use_cascade_planning=False,
             )
 
         # Get agent info for classification context
@@ -488,6 +626,7 @@ class ExecutionCoordinator:
             PlanCreatedEvent when plan is ready for approval
         """
         self._current_phase = ExecutionPhase.PLANNING
+        self._unified_phase = Phase.PLANNING
         logger.info(f"Starting planning phase for goal: {goal}")
 
         # Use passed managed_agents or fall back to stored ones
@@ -538,6 +677,46 @@ class ExecutionCoordinator:
 
         logger.info(f"Plan {plan.id} created, awaiting approval")
         yield PlanCreatedEvent(plan_id=plan.id, plan=plan)
+
+        # Check for queued interrupts after planning completes
+        if self._interrupt_queue:
+            interrupt_msg = self._interrupt_queue.pop(0)
+            logger.info(f"📋 Processing queued interrupt after planning: {interrupt_msg[:50]}...")
+
+            # Classify the interrupt
+            classification = await self._classify_interrupt(interrupt_msg)
+            yield InterruptProcessingEvent(
+                message=interrupt_msg,
+                classification=classification.classification,
+            )
+
+            if classification.is_cancel:
+                # User wants to cancel - reset state
+                yield PlanCancelledEvent(
+                    plan_id=plan.id,
+                    reason=f"User cancelled: {interrupt_msg}",
+                )
+                self._reset_state()
+                return
+
+            if classification.requires_replan:
+                # User wants to change direction - replan with new context
+                logger.info(f"📋 Replanning with user feedback: {interrupt_msg[:50]}...")
+                combined_task = f"{goal}\n\nUser feedback: {interrupt_msg}"
+
+                # Re-run planning with the new context
+                async for event in self.create_plan(
+                    goal=combined_task,
+                    instructions=f"{instructions}\n\nAdditional user input: {interrupt_msg}",
+                    tools=tools,
+                    context_tables=context_tables,
+                    managed_agents=managed_agents,
+                ):
+                    yield event
+                return
+
+            # CONTEXT_ADD: Inject context into ledger for execution phase
+            self._inject_interrupt_context(interrupt_msg)
 
     async def approve_plan(self, plan_id: str) -> Plan:
         """
@@ -605,6 +784,7 @@ class ExecutionCoordinator:
             )
 
         self._current_phase = ExecutionPhase.EXECUTING
+        self._unified_phase = Phase.EXECUTING
         self._current_plan = self._current_plan.start_execution()
         logger.info(f"Starting execution of plan {plan_id}")
 
@@ -627,7 +807,87 @@ class ExecutionCoordinator:
                 # No more steps to execute
                 break
 
-            for step in pending_steps:
+            for step_index, step in enumerate(pending_steps):
+                # Check for queued interrupts before each step
+                if self._interrupt_queue or self._execution_paused:
+                    self._execution_paused = False
+                    if self._interrupt_queue:
+                        interrupt_msg = self._interrupt_queue.pop(0)
+                        logger.info(f"⏸️ Processing interrupt before step {step_index}: {interrupt_msg[:50]}...")
+
+                        yield InterruptReceivedEvent(
+                            message=interrupt_msg,
+                            step_index=step_index,
+                        )
+
+                        # Classify the interrupt
+                        classification = await self._classify_interrupt(interrupt_msg)
+                        yield InterruptProcessingEvent(
+                            message=interrupt_msg,
+                            classification=classification.classification,
+                        )
+
+                        if classification.is_cancel:
+                            # User wants to cancel - reset state
+                            yield PlanCancelledEvent(
+                                plan_id=plan_id,
+                                reason=f"User cancelled: {interrupt_msg}",
+                            )
+                            self._reset_state()
+                            return
+
+                        if classification.requires_replan:
+                            # User wants to change direction - trigger replan
+                            logger.info(f"📋 User interrupt requires replan: {interrupt_msg[:50]}...")
+
+                            if self._replan_count >= self.max_replans:
+                                logger.warning(f"Max replans ({self.max_replans}) exceeded")
+                                yield ExecutionBlockedEvent(
+                                    plan_id=plan_id,
+                                    reason=f"Max replans exceeded after user interrupt: {interrupt_msg}",
+                                )
+                                success = False
+                                break
+
+                            self._replan_count += 1
+                            yield ReplanTriggeredEvent(
+                                plan_id=plan_id,
+                                reason=f"User interrupt: {interrupt_msg}",
+                                replan_number=self._replan_count,
+                            )
+
+                            # Replan with interrupt context
+                            old_pending_count = len(self._current_plan.get_pending_steps())
+                            self._current_plan = await self._handle_replan(
+                                current_plan=self._current_plan,
+                                failed_step=None,
+                                reason=f"User interrupt: {interrupt_msg}",
+                                tools=tools,
+                            )
+                            new_pending_count = len(self._current_plan.get_pending_steps())
+
+                            yield PlanUpdatedEvent(
+                                plan_id=plan_id,
+                                reason=f"User interrupt: {interrupt_msg}",
+                                added_steps=new_pending_count,
+                                removed_steps=old_pending_count - new_pending_count if old_pending_count > new_pending_count else 0,
+                                replan_number=self._replan_count,
+                            )
+
+                            should_restart = True
+                            break
+
+                        # CONTEXT_ADD: Inject context and continue
+                        self._inject_interrupt_context(interrupt_msg)
+                        yield ContextInjectedEvent(
+                            message=interrupt_msg,
+                            step_index=step_index,
+                        )
+
+                # Exit the loop if we need to restart after replan
+                if should_restart:
+                    break
+
                 # Update ledger - step started
                 if self._ledger:
                     self._ledger.start_step(step.step_id)
@@ -873,13 +1133,13 @@ class ExecutionCoordinator:
 
     def get_ledger_summary(self) -> Optional[str]:
         """
-        Get concise ledger summary JSON for evaluator.
+        Get concise ledger summary in TOON format for evaluator.
 
         Returns:
-            JSON string summary or None if no ledger exists
+            TOON string summary or None if no ledger exists
         """
         if self._ledger:
-            return self._ledger.to_json_summary()
+            return self._ledger.to_toon_summary()
         return None
 
     async def _evaluate_progress(self) -> EvaluationResult:
@@ -906,19 +1166,20 @@ class ExecutionCoordinator:
             evaluator, eval_tool = self.evaluator_factory()
             ledger_data = self.get_ledger_for_evaluator() or {}
 
-            # Build evaluation prompt
+            # Build evaluation prompt with TOON for minimal token usage
             goal = self._current_plan.goal if self._current_plan else "Unknown"
             prompt = f"""
 Goal: {goal}
 
 Ledger State:
-{json.dumps(ledger_data, indent=2, default=str)}
+{to_toon(ledger_data)}
 
 Analyze this state and call the report_evaluation tool with your assessment.
 """
 
             # Run evaluator - it will call report_evaluation tool
-            evaluator.run(prompt)
+            # Wrap in thread since evaluator.run() is synchronous (calls blocking LLM APIs)
+            await asyncio.to_thread(evaluator.run, prompt)
 
             # Get structured result from tool
             result = eval_tool.get_result()
@@ -977,8 +1238,10 @@ Analyze this state and call the report_evaluation tool with your assessment.
         logger.info(f"Executing step {step.step_id}: {step.description[:100]}...")
 
         # Use PlanStepExecutor - pass Plan object, executor generates prompt from it
+        # Wrap in asyncio.to_thread since execute() is synchronous (calls blocking LLM APIs)
         if self.plan_step_executor and self._current_plan:
-            result = self.plan_step_executor.execute(
+            result = await asyncio.to_thread(
+                self.plan_step_executor.execute,
                 plan=self._current_plan,
                 current_step=step,
             )
@@ -998,7 +1261,8 @@ Analyze this state and call the report_evaluation tool with your assessment.
 
             logger.info(f"Executing tool {step.tool_call} with params: {step.parameters}")
             try:
-                result = tool.forward(**(step.parameters or {}))
+                # Wrap blocking tool call in thread
+                result = await asyncio.to_thread(tool.forward, **(step.parameters or {}))
                 return f"Executed {step.tool_call}: {result}"
             except Exception as e:
                 logger.error(f"Tool execution failed: {e}")
@@ -1497,6 +1761,345 @@ Consider what has already been done and what still needs to happen.
             plan_id=self._current_plan.id,
             total_sub_plans=total_sub_plans,
         )
+
+    # ============================================================
+    # Unified Message Handling - Single Entry Point
+    # ============================================================
+
+    def _reset_state(self) -> None:
+        """
+        Clean reset of all internal state.
+
+        AIDEV-NOTE: Replaces the scattered `clear_coordinator_state()` calls
+        in chat_processing_service.py with a single method.
+        """
+        self._unified_phase = Phase.IDLE
+        self._current_phase = ExecutionPhase.PLANNING
+        self._current_plan = None
+        self._ledger = None
+        self._pending_context = None
+        self._sub_planner = None
+        self._replan_count = 0
+        self._evaluation_count = 0
+        self._interrupt_queue = []
+        self._execution_paused = False
+        logger.info("📋 Coordinator state reset to IDLE")
+
+    def queue_interrupt(self, message: str) -> InterruptQueuedEvent:
+        """
+        Queue an interrupt message for processing.
+
+        Called when a message arrives during planning or execution phase.
+
+        Args:
+            message: The user's interrupt message
+
+        Returns:
+            InterruptQueuedEvent for UI feedback
+        """
+        self._interrupt_queue.append(message)
+        phase_str = self._unified_phase.value
+        logger.info(f"⏸️ Interrupt queued during {phase_str}: {message[:50]}...")
+        return InterruptQueuedEvent(message=message, phase=phase_str)
+
+    def has_pending_interrupts(self) -> bool:
+        """Check if there are pending interrupt messages."""
+        return len(self._interrupt_queue) > 0
+
+    async def _classify_interrupt(
+        self,
+        interrupt_message: str,
+    ) -> InterruptClassification:
+        """
+        Use subagent pattern to classify interrupt intent.
+
+        Args:
+            interrupt_message: The user's interrupt message
+
+        Returns:
+            InterruptClassification with classification and reasoning
+        """
+        if not self._model_provider or not self._current_plan:
+            # Fallback if no model available - default to CONTEXT_ADD
+            logger.warning("No model provider available for interrupt classification")
+            return InterruptClassification(
+                classification="CONTEXT_ADD",
+                requires_replan=False,
+                is_cancel=False,
+                reasoning="No classifier available, defaulting to context injection",
+            )
+
+        # Build context for classification
+        completed_steps = "\n".join([
+            f"- {s.description}"
+            for s in self._current_plan.steps
+            if s.status == PlanStepStatus.COMPLETED.value
+        ]) or "None yet"
+
+        remaining_steps = "\n".join([
+            f"- {s.description}"
+            for s in self._current_plan.steps
+            if s.status == PlanStepStatus.PENDING.value
+        ]) or "None remaining"
+
+        prompt = build_classification_prompt(
+            interrupt_message=interrupt_message,
+            current_plan_summary=f"Goal: {self._current_plan.goal}",
+            completed_steps=completed_steps,
+            remaining_steps=remaining_steps,
+        )
+
+        try:
+            # Create classifier and run (synchronous, wrap in thread)
+            model = self._org_model or "claude-sonnet-4-20250514"
+            classifier_agent, classification_tool = create_interrupt_classifier(model)
+
+            await asyncio.to_thread(classifier_agent.run, prompt)
+
+            result = classification_tool.get_result()
+            if result:
+                return result
+
+            # Tool wasn't called - default to CONTEXT_ADD
+            logger.warning("Interrupt classifier did not call report_classification tool")
+            return InterruptClassification(
+                classification="CONTEXT_ADD",
+                requires_replan=False,
+                is_cancel=False,
+                reasoning="Classifier did not provide classification, defaulting to context injection",
+            )
+
+        except Exception as e:
+            logger.error(f"Interrupt classification failed: {e}")
+            return InterruptClassification(
+                classification="CONTEXT_ADD",
+                requires_replan=False,
+                is_cancel=False,
+                reasoning=f"Classification error: {e}, defaulting to context injection",
+            )
+
+    def _inject_interrupt_context(self, interrupt_msg: str) -> None:
+        """
+        Add user interrupt as context for the agent to consider in next steps.
+
+        This updates the ledger with the user's feedback so subsequent steps
+        can see and act on the new information.
+
+        Args:
+            interrupt_msg: The user's interrupt message
+        """
+        if self._ledger:
+            self._ledger._record_event(
+                event_type=LedgerEventType.USER_FEEDBACK,
+                data={"feedback": interrupt_msg}
+            )
+            logger.info(f"💉 Injected interrupt context into ledger: {interrupt_msg[:50]}...")
+
+    async def handle_message(
+        self,
+        message: str,
+        tools: Optional[List[Any]] = None,
+        managed_agents: Optional[List[Any]] = None,
+        agent_factories: Optional[Dict[str, Callable[..., Any]]] = None,
+    ) -> AsyncIterator[Any]:
+        """
+        Route message based on current phase - SINGLE ENTRY POINT.
+
+        AIDEV-NOTE: This method replaces the phase handling logic scattered
+        throughout chat_processing_service.py. All flow control lives here now.
+
+        Args:
+            message: The user's message (task, approval response, or answers)
+            tools: Available tools (only needed for fresh start)
+            managed_agents: Available managed agents (only needed for fresh start)
+            agent_factories: Factory functions for cascade planning
+
+        Yields:
+            Appropriate events based on current phase and message content
+        """
+        logger.info(f"📋 handle_message() in phase {self._unified_phase.value}")
+
+        # Handle interrupts during planning phase - queue for processing after plan completes
+        if self._unified_phase == Phase.PLANNING:
+            yield self.queue_interrupt(message)
+            return
+
+        # Handle interrupts during execution phase - queue and pause
+        if self._unified_phase == Phase.EXECUTING:
+            self._execution_paused = True
+            yield self.queue_interrupt(message)
+            return
+
+        if self._unified_phase == Phase.AWAITING_CLARIFICATION:
+            async for event in self._handle_clarification_response(message):
+                yield event
+
+        elif self._unified_phase == Phase.AWAITING_APPROVAL:
+            async for event in self._handle_approval_response(message, tools):
+                yield event
+
+        elif self._unified_phase == Phase.AWAITING_CASCADE_QUESTIONS:
+            async for event in self._handle_cascade_response(message):
+                yield event
+
+        else:
+            # IDLE or fresh start - run classification + planning
+            # Store context for potential resumption
+            effective_tools = tools or (self._pending_context.tools if self._pending_context else [])
+            effective_agents = managed_agents or (self._pending_context.managed_agents if self._pending_context else [])
+            effective_factories = agent_factories or (self._pending_context.agent_factories if self._pending_context else None)
+
+            # Store pending context for potential clarification/approval
+            self._pending_context = PendingContext(
+                original_task=message,
+                tools=effective_tools,
+                managed_agents=effective_agents,
+                agent_factories=effective_factories,
+            )
+
+            async for event in self.execute(
+                task=message,
+                tools=effective_tools,
+                managed_agents=effective_agents,
+                agent_factories=effective_factories,
+            ):
+                # Track phase transitions based on events
+                if isinstance(event, AwaitingClarificationEvent):
+                    self._unified_phase = Phase.AWAITING_CLARIFICATION
+                elif isinstance(event, PlanCreatedEvent):
+                    self._unified_phase = Phase.AWAITING_APPROVAL
+                elif isinstance(event, QuestionsCollectedEvent):
+                    self._unified_phase = Phase.AWAITING_CASCADE_QUESTIONS
+                elif isinstance(event, ExecutionCompletedEvent):
+                    self._unified_phase = Phase.COMPLETED if event.success else Phase.FAILED
+                elif isinstance(event, DirectExecutionStartedEvent):
+                    # Direct mode doesn't need coordinator state
+                    self._unified_phase = Phase.IDLE
+
+                yield event
+
+    async def _handle_clarification_response(self, response: str) -> AsyncIterator[Any]:
+        """
+        Combine original task with clarification and re-classify.
+
+        AIDEV-NOTE: Replaces the `original_task` handling in chat_processing_service.py.
+        """
+        if not self._pending_context:
+            yield ErrorEvent(error="No pending context for clarification")
+            return
+
+        combined_task = f"{self._pending_context.original_task}\n\nUser's clarification: {response}"
+        self._unified_phase = Phase.IDLE
+        logger.info("📋 Processing clarification response, re-executing with combined task")
+
+        async for event in self.execute(
+            task=combined_task,
+            tools=self._pending_context.tools,
+            managed_agents=self._pending_context.managed_agents,
+            agent_factories=self._pending_context.agent_factories,
+        ):
+            # Track phase transitions
+            if isinstance(event, PlanCreatedEvent):
+                self._unified_phase = Phase.AWAITING_APPROVAL
+            elif isinstance(event, QuestionsCollectedEvent):
+                self._unified_phase = Phase.AWAITING_CASCADE_QUESTIONS
+            elif isinstance(event, ExecutionCompletedEvent):
+                self._unified_phase = Phase.COMPLETED if event.success else Phase.FAILED
+
+            yield event
+
+    async def _handle_approval_response(
+        self,
+        response: str,
+        tools: Optional[List[Any]] = None,
+    ) -> AsyncIterator[Any]:
+        """
+        Handle approve/reject/feedback for plan.
+
+        AIDEV-NOTE: Replaces the `awaiting_approval` phase handling in
+        chat_processing_service.py. Supports:
+        - Approval keywords: approve, yes, y, ok, proceed
+        - Rejection keywords: reject, no, n, cancel
+        - Feedback: any other response treated as plan feedback
+        """
+        response_lower = response.lower().strip()
+
+        if not self._current_plan:
+            yield ErrorEvent(error="No current plan to approve/reject")
+            return
+
+        if response_lower in ("approve", "yes", "y", "ok", "proceed", "approved"):
+            # Approve and execute
+            logger.info(f"📋 Plan {self._current_plan.id} approved by user")
+            await self.approve_plan(self._current_plan.id)
+            yield PlanApprovedEvent(plan_id=self._current_plan.id)
+
+            self._unified_phase = Phase.EXECUTING
+            effective_tools = tools or (self._pending_context.tools if self._pending_context else [])
+
+            async for event in self.execute_plan(self._current_plan.id, effective_tools):
+                if isinstance(event, ExecutionCompletedEvent):
+                    self._unified_phase = Phase.COMPLETED if event.success else Phase.FAILED
+                yield event
+
+        elif response_lower in ("reject", "no", "n", "cancel", "rejected"):
+            # Reject and reset
+            logger.info(f"📋 Plan {self._current_plan.id} rejected by user")
+            yield PlanRejectedEvent(plan_id=self._current_plan.id)
+            self._reset_state()
+
+        else:
+            # Treat as feedback - re-plan with feedback context
+            logger.info(f"📋 Received feedback on plan {self._current_plan.id}")
+            yield PlanFeedbackEvent(plan_id=self._current_plan.id, feedback=response)
+
+            if not self._pending_context:
+                yield ErrorEvent(error="No pending context for feedback-based replan")
+                return
+
+            # Re-plan with feedback context
+            feedback_task = f"{self._pending_context.original_task}\n\nUser feedback on plan: {response}"
+            self._unified_phase = Phase.PLANNING
+
+            async for event in self.execute(
+                task=feedback_task,
+                tools=self._pending_context.tools,
+                managed_agents=self._pending_context.managed_agents,
+                agent_factories=self._pending_context.agent_factories,
+            ):
+                if isinstance(event, PlanCreatedEvent):
+                    self._unified_phase = Phase.AWAITING_APPROVAL
+                yield event
+
+    async def _handle_cascade_response(self, response: str) -> AsyncIterator[Any]:
+        """
+        Handle answers to cascade planning questions.
+
+        AIDEV-NOTE: Replaces the `awaiting_cascade_questions` phase handling
+        in chat_processing_service.py.
+        """
+        if not self._current_plan:
+            yield ErrorEvent(error="No current plan for cascade response")
+            return
+
+        # Try to parse as JSON, fall back to simple dict
+        try:
+            answers_dict = json.loads(response)
+        except json.JSONDecodeError:
+            # Treat as single answer to first question
+            answers_dict = {"default": response}
+
+        logger.info(f"📋 Processing cascade answers: {len(answers_dict)} answers")
+
+        async for event in self.resume_cascading_plan(QuestionAnswers(answers=answers_dict)):
+            if isinstance(event, QuestionsCollectedEvent):
+                # More questions - stay in this phase
+                self._unified_phase = Phase.AWAITING_CASCADE_QUESTIONS
+            elif isinstance(event, CascadingPlanCompleteEvent):
+                # Planning complete - transition to awaiting approval
+                self._unified_phase = Phase.AWAITING_APPROVAL
+
+            yield event
 
 
 class ExecutionCoordinatorFactory:

@@ -14,6 +14,7 @@ from typing import List, Optional, Dict, Any
 from enum import Enum
 
 from emery_agents.models.plan import PlanStepStatus
+from emery_agents.utils.toon_format import to_toon
 
 
 class LedgerEventType(Enum):
@@ -28,6 +29,7 @@ class LedgerEventType(Enum):
     REPLAN_TRIGGERED = "replan_triggered"
     EVALUATION_RUN = "evaluation_run"
     EXECUTION_COMPLETED = "execution_completed"
+    USER_FEEDBACK = "user_feedback"  # User interrupt/feedback during execution
 
 
 @dataclass
@@ -300,20 +302,20 @@ class TaskLedger:
             "step_results": self.get_step_results(),
         }
 
-    def to_json_summary(self) -> str:
+    def to_toon_summary(self) -> str:
         """
-        Generate a concise JSON summary for the evaluator.
+        Generate a concise TOON summary for the evaluator.
 
+        Uses TOON format for minimal LLM token usage.
         Smaller than full to_dict() - focuses on what evaluator needs.
         """
-        import json
-        return json.dumps({
+        return to_toon({
             "goal": self.goal,
             "progress": f"{self.completed_steps}/{self.total_steps}",
             "has_failures": self.has_failures,
             "is_complete": self.is_complete,
             "step_results": self.get_step_results(),
-        }, indent=2)
+        })
 
 
 def create_ledger_from_plan(task_id: str, goal: str, plan_steps: List[Dict[str, Any]]) -> TaskLedger:
