@@ -78,101 +78,41 @@ from ..models.plan import Plan, PlanStatus, create_plan
 from ..entities.execution_context import ExecutionContext
 from ..types import ExecutionMode
 from ..tools.tool_modes import ToolMode, filter_tools_for_mode
+from .message_processor import (
+    extract_user_api_key_from_tools,
+    extract_file_attachments,
+    extract_images_from_message,
+    extract_text_from_message,
+    build_task_with_conversation_context,
+)
+from .step_converter import (
+    extract_planning_step,
+    extract_action_step,
+    extract_final_step,
+    build_skill_message,
+)
+from .coordinator_event_converter import convert_coordinator_event
+from .response_types import (
+    StepType,
+    StepMetadata,
+    StepProgressDict,
+    ContentChunkDict,
+    ErrorDetailsDict,
+    ErrorDataDict,
+    ErrorResponseDict,
+    InterruptedResponseDict,
+    InputOptionDict,
+    AwaitingInputDataDict,
+    AwaitingInputResponseDict,
+    StreamResponseDict,
+)
+from .agents import ManagedAgentsFactory
 
 if TYPE_CHECKING:
     from .generated.agent_worker_pb2 import AgentConfig, SkillConfig
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-
-
-# Type definitions for step progress
-StepType = Literal["PLANNING", "ACTION", "REASONING", "FINAL"]
-
-class StepMetadata(TypedDict, total=False):
-    """Metadata for execution steps."""
-    tool: str
-    arguments: str
-    observations: str
-    error: str
-    skill_name: str  # Name of executing skill/managed agent
-    skill_status: str  # "executing" | "completed" | "failed"
-    skill_message: str  # Detailed message about skill execution (can be multi-line)
-    # Coordinator-specific metadata
-    step_id: str  # ID of the step being executed
-    result: str  # Result of step execution
-    type: str  # Type of coordinator event (goal_achieved, replan, etc.)
-    replan_number: str  # Number of replans (as string for protobuf map)
-    success: str  # Whether execution was successful (as string)
-
-class StepProgressDict(TypedDict):
-    """Typed structure for step progress events."""
-    type: Literal["step_progress"]
-    step_type: StepType
-    step_name: str
-    content: str
-    metadata: StepMetadata
-    step_index: int
-
-
-class ContentChunkDict(TypedDict):
-    """Typed structure for content chunk events."""
-    type: Literal["content_chunk"]
-    content: str
-
-
-class ErrorDetailsDict(TypedDict, total=False):
-    """Error details metadata."""
-    severity: str
-
-
-class ErrorDataDict(TypedDict):
-    """Error data structure."""
-    error_code: str
-    error_message: str
-    error_details: ErrorDetailsDict
-    hint: str
-    can_retry: bool
-    auto_retry: bool
-    session_reset: bool
-
-
-class ErrorResponseDict(TypedDict):
-    """Typed structure for error response events."""
-    type: Literal["error"]
-    error: ErrorDataDict
-
-
-class InterruptedResponseDict(TypedDict):
-    """Typed structure for HITL interrupt events (not an error - pause for user approval)."""
-    type: Literal["interrupted"]
-    message: str
-
-
-class InputOptionDict(TypedDict, total=False):
-    """Option for awaiting input questions."""
-    id: str
-    label: str
-    description: str
-
-
-class AwaitingInputDataDict(TypedDict, total=False):
-    """Data structure for awaiting input response."""
-    input_type: str  # "plan_approval" or "question"
-    title: str
-    content: str
-    options: List[InputOptionDict]
-    plan_json: str
-
-
-class AwaitingInputResponseDict(TypedDict):
-    """Typed structure for awaiting_input HITL events (plan approval or questions)."""
-    type: Literal["awaiting_input"]
-    data: AwaitingInputDataDict
-
-
-# Union type for all possible stream response types
-StreamResponseDict = StepProgressDict | ContentChunkDict | ErrorResponseDict | InterruptedResponseDict | AwaitingInputResponseDict
 
 
 # Type variable for generic async function return type
@@ -311,7 +251,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             # Model provider and AgentFactory (shared utilities)
             self.model_provider = SmolagentsModelProvider()
             self.agent_factory = AgentFactory(self.model_provider)
-            logger.info("✅ AgentFactory initialized successfully")
+            self.managed_agents_factory = ManagedAgentsFactory(self.model_provider)
+            logger.info("✅ AgentFactory and ManagedAgentsFactory initialized successfully")
 
             # SkillExecutorService for shared skill execution logic
             self.skill_executor_service = SkillExecutorService(
@@ -376,7 +317,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         # Extract file attachments (audio, PDFs) for skill context injection
         # AIDEV-NOTE: Don't add to session here - session may not exist yet (created lazily)
         # Attachments are passed to _stream_tool_calling_agent_response and added after session creation
-        file_attachments = self._extract_file_attachments(message_parts)
+        file_attachments = extract_file_attachments(message_parts)
         if file_attachments:
             logger.info(f"📎 Extracted {len(file_attachments)} file attachments")
 
@@ -747,7 +688,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
             # Get effective API key BEFORE hot/cold path split
             # This is needed for tool provider regardless of hot/cold path
-            effective_api_key = user_api_key or self._extract_user_api_key_from_tools(tools)
+            effective_api_key = user_api_key or extract_user_api_key_from_tools(tools)
             if effective_api_key:
                 logger.info(f"🔑 Using API key for tools (source: {'request' if user_api_key else 'tools'})")
             else:
@@ -776,35 +717,34 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 # Agent doesn't exist - COLD PATH (create + restore from history)
                 logger.info(f"✨ [COLD-PATH] Creating new agent for session {session_id}")
 
-                # Create managed agents using centralized tool provider (routes automatically via smolagents)
-                skill_builder_agent = self._create_skill_builder_agent(
+                # Create managed agents using factory with centralized tool provider
+                skill_builder_agent = self.managed_agents_factory.create_skill_builder(
                     tool_provider=tool_provider,
                     org_model=org_model
                 )
-                document_builder_agent = self._create_document_builder_agent(
+                document_builder_agent = self.managed_agents_factory.create_document_builder(
                     tool_provider=tool_provider,
                     org_model=org_model
                 )
-                table_builder_agent = self._create_table_builder_agent(
+                table_builder_agent = self.managed_agents_factory.create_table_builder(
                     tool_provider=tool_provider,
                     org_model=org_model
                 )
-                schema_builder_agent = self._create_schema_builder_agent(
+                schema_builder_agent = self.managed_agents_factory.create_schema_builder(
                     tool_provider=tool_provider,
                     org_model=org_model
                 )
                 # Research agent may fail if ddgs package is missing - make it optional
                 research_agent = None
                 try:
-                    research_agent = self._create_research_agent(
-                        tool_provider=tool_provider,
+                    research_agent = self.managed_agents_factory.create_research_agent(
                         org_model=org_model
                     )
                 except ImportError as e:
-                    logger.warning(f"⚠️ Research agent unavailable (missing dependency): {e}")
+                    logger.warning(f"Research agent unavailable (missing dependency): {e}")
 
                 # Create ToolCallingAgent with managed agents
-                # AIDEV-NOTE: InterruptAwareToolCallingAgent sets interrupt_switch=True
+                # InterruptAwareToolCallingAgent sets interrupt_switch=True
                 # when detecting interrupt from managed agent, breaking the loop
                 # Pass file_attachments so chat agent can see available files in session
                 # Filter None values in case research_agent failed to create
@@ -812,12 +752,12 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     skill_builder_agent, document_builder_agent,
                     table_builder_agent, schema_builder_agent, research_agent
                 ] if a is not None]
-                agent = self._create_agent_with_model_provider(
+                agent = self.managed_agents_factory.create_chat_planner(
                     smolagents_tools,
                     org_model=org_model,
                     has_images=has_images,
                     managed_agents=managed_agents,
-                    session_attachments=file_attachments  # Current message files for initial agent context
+                    session_attachments=file_attachments
                 )
 
                 logger.info(f"🧠 [MEMORY-DEBUG] New agent created, memory steps: {len(agent.memory.steps)}")
@@ -878,10 +818,10 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             last_message = conversation_messages[-1] if conversation_messages else None
 
             # Extract images from last message (smolagents limitation - only last message images)
-            images = self._extract_images_from_message(last_message) if last_message else []
+            images = extract_images_from_message(last_message) if last_message else []
 
             # Extract current user message text (agent.memory has conversation history)
-            current_task = self._extract_text_from_message(last_message) if last_message else "Continue the conversation"
+            current_task = extract_text_from_message(last_message) if last_message else "Continue the conversation"
 
             logger.info(f"🖼️ Extracted {len(images)} images from last message")
             logger.info(f"💬 Current task: {len(current_task)} chars")
@@ -998,7 +938,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 step_data: StepProgressDict | None = None
 
                 if isinstance(step, PlanningStep):
-                    step_data = self._extract_planning_step(step, step_index)
+                    step_data = extract_planning_step(step, step_index)
                     logger.info(f"🧠 Planning: {step_data['content'][:100]}...")
 
                 elif isinstance(step, ActionStep):
@@ -1009,7 +949,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                             step_index += 1
                             continue
 
-                    step_data = self._extract_action_step(step, step_index)
+                    step_data = extract_action_step(step, step_index)
                     logger.info(f"🔧 Action: {step_data['step_name']}")
 
                     # Yield collected nested steps from skill execution (if any)
@@ -1030,7 +970,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
                 elif isinstance(step, (FinalAnswerStep, AgentText)):
                     # Extract final step indicator
-                    step_data = self._extract_final_step(step_index)
+                    step_data = extract_final_step(step_index)
 
                     # Extract final answer text
                     if isinstance(step, FinalAnswerStep):
@@ -1307,572 +1247,6 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             self._inference_client = HuggingFaceInferenceClient()
         return self._inference_client
 
-    def _create_agent_with_model_provider(
-        self,
-        smolagents_tools: List[Any],
-        org_model: Optional[str] = None,
-        has_images: bool = False,
-        managed_agents: Optional[List[Any]] = None,
-        session_attachments: Optional[List[Any]] = None
-    ) -> InterruptAwareToolCallingAgent:
-        """
-        Create Chat Planner orchestrator agent with managed agents.
-
-        Uses create_chat_planner_agent for proper template-based instructions
-        and interrupt propagation from managed agents.
-
-        Args:
-            session_attachments: Optional list of file attachments available in session
-                                (displayed to agent for file reference awareness)
-        """
-        # Get model with smart vision selection
-        model = self.model_provider.get_model(
-            model_id=self.model_provider.resolve_model_selection(
-                org_model=org_model,
-                has_images=has_images
-            )
-        )
-
-        return create_chat_planner_agent(
-            tools=smolagents_tools,
-            model=model,
-            managed_agents=managed_agents,
-            context_type="interactive",
-            max_steps=10,
-            session_attachments=session_attachments
-        )
-
-    def _create_skill_builder_agent(
-        self,
-        tool_provider: ToolProvider,
-        org_model: Optional[str] = None
-    ) -> ToolCallingAgent:
-        """
-        Create a Skill Builder agent with native planning for HITL workflow.
-
-        This agent runs as a TOP-LEVEL agent (not managed agent) so that
-        interrupt() works natively for human-in-the-loop approval.
-
-        AIDEV-NOTE: Changed from managed agent to top-level agent because
-        smolagents wraps managed agent interrupts as errors, breaking HITL.
-
-        AIDEV-NOTE: Uses native planning_interval + step_callbacks for human-in-the-loop:
-        - planning_interval=1: Plan after first action (reading skill)
-        - step_callbacks: Interrupt after planning for user approval
-        - reset=False: Memory preserved between messages for resumption
-
-        AIDEV-NOTE: Uses ToolExecutorTool to delegate tool calls to a sub-agent with
-        proper instructions. The sub-agent gets tool-specific docs from build_agent_instructions
-        and executor rules from tool_executor.j2 template.
-        """
-        # Get tools from centralized provider
-        tools = tool_provider.get_skill_builder_tools()
-        skill_crud_tool = tools[0]  # skill_crud
-
-        # Get model for the agent and sub-agent
-        model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
-
-        # Create tool_executor that wraps the CRUD tool
-        # Sub-agent gets proper instructions via build_agent_instructions
-        tool_executor = create_tool_executor(
-            tools=[skill_crud_tool],
-            model=model,
-            max_steps=3
-        )
-
-        # Use factory function with native planning support
-        # CodeAgent calls tool_executor which delegates to sub-agent
-        skill_builder = create_skill_builder_agent(
-            tools=[tool_executor],
-            model=model,
-            max_steps=10
-        )
-
-        logger.info("✨ Created Skill Builder agent with ToolExecutor sub-agent")
-        return skill_builder
-
-    def _create_document_builder_agent(
-        self,
-        tool_provider: ToolProvider,
-        org_model: Optional[str] = None
-    ) -> ToolCallingAgent:
-        """
-        Create a Document Builder agent with native planning for HITL workflow.
-
-        This agent runs as a TOP-LEVEL agent (not managed agent) so that
-        interrupt() works natively for human-in-the-loop approval.
-
-        AIDEV-NOTE: Uses native planning_interval + step_callbacks for human-in-the-loop:
-        - planning_interval=1: Plan after first action (reading document)
-        - step_callbacks: Interrupt after planning for user approval
-        - reset=False: Memory preserved between messages for resumption
-
-        AIDEV-NOTE: Uses ToolExecutorTool to delegate tool calls to a sub-agent with
-        proper instructions. The sub-agent gets tool-specific docs from build_agent_instructions
-        and executor rules from tool_executor.j2 template.
-        """
-        # Get tools from centralized provider
-        tools = tool_provider.get_document_builder_tools()
-        document_crud_tool = tools[0]  # document_crud
-
-        # Get model for the agent and sub-agent
-        model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
-
-        # Create tool_executor that wraps the CRUD tool
-        # Sub-agent gets proper instructions via build_agent_instructions
-        tool_executor = create_tool_executor(
-            tools=[document_crud_tool],
-            model=model,
-            max_steps=3
-        )
-
-        # Use factory function with native planning support
-        # CodeAgent calls tool_executor which delegates to sub-agent
-        document_builder = create_document_builder_agent(
-            tools=[tool_executor],
-            model=model,
-            max_steps=10
-        )
-
-        logger.info("✨ Created Document Builder agent with ToolExecutor sub-agent")
-        return document_builder
-
-    def _create_table_builder_agent(
-        self,
-        tool_provider: ToolProvider,
-        org_model: Optional[str] = None
-    ) -> ToolCallingAgent:
-        """
-        Create a Table Builder agent for single table operations (autonomous).
-
-        This agent executes directly without HITL approval - designed for
-        quick schema changes like adding/deleting fields.
-
-        AIDEV-NOTE: Unlike skill_builder/document_builder which use HITL workflow,
-        table_builder is autonomous because single field operations are low-risk.
-        """
-        # Get tools from centralized provider
-        tools = tool_provider.get_table_builder_tools()
-        table_crud_tool, field_crud_tool = tools[0], tools[1]
-
-        # Get model for the agent and sub-agent
-        model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
-
-        # Create tool_executor that wraps the CRUD tools
-        tool_executor = create_tool_executor(
-            tools=[field_crud_tool, table_crud_tool],
-            model=model,
-            max_steps=3
-        )
-
-        # Use factory function - autonomous agent (no HITL)
-        table_builder = create_table_builder_agent(
-            tools=[tool_executor],
-            model=model,
-            max_steps=6  # Smaller for single operations
-        )
-
-        logger.info("✨ Created Table Builder agent (autonomous) with ToolExecutor sub-agent")
-        return table_builder
-
-    def _create_schema_builder_agent(
-        self,
-        tool_provider: ToolProvider,
-        org_model: Optional[str] = None
-    ) -> ToolCallingAgent:
-        """
-        Create a Schema Builder agent for complex schema design (HITL).
-
-        This agent uses HITL workflow for designing schemas from requirements:
-        - Analyzes unstructured data (questionnaires, forms, specs)
-        - Proposes table structure with all fields
-        - Waits for user approval
-        - Batch creates fields on approval
-
-        AIDEV-NOTE: Uses native planning_interval + step_callbacks for human-in-the-loop:
-        - planning_interval=2: Plan after 2 actions (gathers context first)
-        - step_callbacks: Interrupt after planning for user approval
-        - reset=False: Memory preserved between messages for resumption
-        """
-        # Get tools from centralized provider (database_crud for listing, table/field for mutations)
-        tools = tool_provider.get_schema_builder_tools()
-        database_crud_tool, table_crud_tool, field_crud_tool = tools[0], tools[1], tools[2]
-
-        # Get model for the agent and sub-agent
-        model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
-
-        # Create tool_executor that wraps the CRUD tools
-        tool_executor = create_tool_executor(
-            tools=[field_crud_tool, table_crud_tool, database_crud_tool],
-            model=model,
-            max_steps=8  # More steps for database listing + batch field creation
-        )
-
-        # Use factory function with native planning support (HITL)
-        schema_builder = create_schema_builder_agent(
-            tools=[tool_executor],
-            model=model,
-            max_steps=15  # More steps for analyzing and batch creating
-        )
-
-        logger.info("✨ Created Schema Builder agent (HITL) with ToolExecutor sub-agent")
-        return schema_builder
-
-    def _create_research_agent(
-        self,
-        tool_provider: ToolProvider,
-        org_model: Optional[str] = None,
-    ) -> ToolCallingAgent:
-        """
-        Create Research agent for web search and information gathering.
-
-        Research agent is READ-ONLY - no HITL approval needed.
-        Uses DuckDuckGoSearchTool and VisitWebpageTool.
-        """
-        model = self.model_provider.get_model(
-            self.model_provider.resolve_model_selection(org_model=org_model)
-        )
-
-        research_agent = create_research_agent(
-            model=model,
-            max_steps=10,
-        )
-
-        logger.info("✨ Created Research agent (read-only)")
-        return research_agent
-
-    def _extract_user_api_key_from_tools(self, tools: List['agent_worker_pb2.ToolConfig']) -> Optional[str]:
-        """
-        Extract user API key from enriched tool configs.
-
-        The Next.js layer enriches tool configs with user API keys for authentication.
-        This extracts the key so managed agents (like skill_builder) can reuse it.
-
-        Args:
-            tools: List of ToolConfig proto objects with config maps
-
-        Returns:
-            User API key string if found, None otherwise
-        """
-        for tool in tools:
-            if tool.config:
-                api_key = tool.config.get('api_key')
-                if api_key and api_key.startswith('user_'):
-                    logger.debug(f"🔑 Extracted user API key from tool {tool.name}")
-                    return api_key
-        logger.warning("⚠️ No user API key found in tool configs")
-        return None
-
-    def _extract_file_attachments(self, message_parts: List['agent_worker_pb2.MessagePart']) -> List['agent_worker_pb2.FileAttachment']:
-        """
-        Extract file attachments (audio, PDFs, etc.) from message parts.
-
-        Used to pass file context to skills that need raw file bytes (e.g., speech-to-text).
-
-        Args:
-            message_parts: List of MessagePart from the request
-
-        Returns:
-            List of FileAttachment protos with url and mime_type
-        """
-        attachments = []
-        for part in message_parts:
-            if part.HasField('file'):
-                # Create FileAttachment from the file part
-                attachment = agent_worker_pb2.FileAttachment(
-                    url=part.file.url,
-                    mime_type=part.file.mime_type
-                )
-                attachments.append(attachment)
-        return attachments
-
-    def _extract_images_from_message(self, message: ChatMessage) -> list[Image.Image]:
-        """Extract PIL Image objects from ChatMessage content using shared utility."""
-        return ImageProcessor.extract_images_from_message(message)
-
-    def _extract_text_from_message(self, message: ChatMessage) -> str:
-        """
-        Extract text content from ChatMessage.
-
-        Args:
-            message: ChatMessage object with content as MessageContentList
-
-        Returns:
-            Combined text string (empty string if no text content)
-
-        AIDEV-NOTE: Used to extract text for agent.run() task parameter.
-        Content is always MessageContentList (list of content parts).
-        """
-        if not message or not message.content:
-            return ""
-
-        content: MessageContentList = message.content
-
-        # Extract all text from content parts
-        text_parts: list[str] = []
-        for part in content:
-            if part.get("type") == "text":
-                text_parts.append(part["text"])
-
-        return " ".join(text_parts).strip()
-
-    def _build_task_with_conversation_context(
-        self,
-        conversation_messages: List[ChatMessage],
-        system_prompt: str
-    ) -> str:
-        """
-        Build task prompt with full conversation history.
-
-        Since we create a NEW agent per request, agent.memory doesn't persist
-        between requests. Instead, we include the full conversation history
-        in the task prompt itself.
-
-        Args:
-            conversation_messages: List of ChatMessage objects (user and assistant)
-            system_prompt: System prompt to include as context
-
-        Returns:
-            Formatted task string with conversation history
-
-        AIDEV-NOTE: This is the key to context persistence - we manually format
-        conversation history into the task prompt instead of relying on agent.memory
-        which doesn't persist across agent instances.
-        """
-        if not conversation_messages:
-            return "Continue the conversation"
-
-        # Build conversation history as text
-        history_parts = []
-
-        # Add system context at the beginning
-        if system_prompt:
-            history_parts.append(f"SYSTEM CONTEXT:\n{system_prompt}\n")
-
-        # Add previous conversation (all but last message)
-        if len(conversation_messages) > 1:
-            history_parts.append("CONVERSATION HISTORY:")
-            for msg in conversation_messages[:-1]:
-                role = msg.role.value.upper()
-                text = self._extract_text_from_message(msg)
-                if text:
-                    history_parts.append(f"{role}: {text}")
-
-        # Add current message as the task
-        last_message = conversation_messages[-1]
-        current_text = self._extract_text_from_message(last_message)
-
-        if history_parts:
-            # If we have history, format with clear separation
-            history_str = "\n".join(history_parts)
-            return f"{history_str}\n\nCURRENT USER MESSAGE:\n{current_text}"
-        else:
-            # First message in conversation
-            return current_text
-
-    def _extract_planning_step(self, step: PlanningStep, index: int) -> StepProgressDict:
-        """
-        Extract typed data from PlanningStep.
-
-        PlanningStep has 'plan' attribute containing the planning text.
-        No hasattr checks needed - smolagents guarantees this structure.
-        """
-        return StepProgressDict(
-            type="step_progress",
-            step_type="PLANNING",
-            step_name="Planning",
-            content=step.plan,
-            metadata=StepMetadata(),
-            step_index=index
-        )
-
-    def _extract_action_step(self, step: ActionStep, index: int) -> StepProgressDict:
-        """
-        Extract typed data from ActionStep.
-
-        ActionStep has 'tool_calls' (list of ToolCall objects), 'code_action' (for CodeAgent),
-        and 'observations'. When tool_calls is empty/None, checks for code_action (CodeAgent),
-        then falls back to model_output for raw LLM response.
-
-        AIDEV-NOTE: CodeAgent populates step.code_action with Python code, not tool_calls.
-        We now handle this as a CODE_EXECUTION step type for proper UI display.
-        """
-        # Extract tool info from tool_calls
-        tool_name = "unknown"
-        tool_args = "{}"
-        step_type = "ACTION"
-        step_name = "Tool: unknown"
-        content = ""
-
-        if step.tool_calls and len(step.tool_calls) > 0:
-            # Has valid tool calls (ToolCallingAgent)
-            tool_call = step.tool_calls[0]
-            tool_name = tool_call.name
-            tool_args = str(tool_call.arguments)
-            step_name = f"Tool: {tool_name}"
-
-            # Format observations (truncate if too long)
-            if step.observations:
-                obs = str(step.observations)
-                MAX_LENGTH = 500
-                content = obs[:MAX_LENGTH] + "..." if len(obs) > MAX_LENGTH else obs
-
-        elif step.code_action:
-            # CodeAgent: has Python code execution instead of tool_calls
-            # AIDEV-NOTE: code_action contains the Python code that was executed
-            step_type = "CODE_EXECUTION"
-            step_name = "Code Execution"
-            tool_name = "python_interpreter"
-
-            # Format the code (truncate if too long)
-            code = str(step.code_action)
-            MAX_CODE_LENGTH = 1000
-            content = code[:MAX_CODE_LENGTH] + "..." if len(code) > MAX_CODE_LENGTH else code
-            tool_args = code[:500]  # Store truncated code in args
-
-            # Append observations/output if available
-            if step.observations:
-                obs = str(step.observations)
-                MAX_OUTPUT_LENGTH = 500
-                output_truncated = obs[:MAX_OUTPUT_LENGTH] + "..." if len(obs) > MAX_OUTPUT_LENGTH else obs
-                content += f"\n\n--- Output ---\n{output_truncated}"
-
-            logger.info(f"📜 CodeAgent step: code_action detected, {len(code)} chars")
-
-        else:
-            # No tool calls or code - check for raw model output
-            logger.debug(f"ActionStep without tool_calls/code_action: model_output={'exists' if step.model_output else 'None'}")
-
-            if step.model_output:
-                # Use model's raw output as reasoning step
-                step_type = "REASONING"
-                step_name = "Model Reasoning (No Tool Call)"
-                raw_output = str(step.model_output)
-                MAX_LENGTH = 500
-                content = raw_output[:MAX_LENGTH] + "..." if len(raw_output) > MAX_LENGTH else raw_output
-            else:
-                # Fallback: use observations if available
-                step_name = "Agent Step"
-                if step.observations:
-                    obs = str(step.observations)
-                    MAX_LENGTH = 500
-                    content = obs[:MAX_LENGTH] + "..." if len(obs) > MAX_LENGTH else obs
-
-        # Build metadata dict with only non-None string values (protobuf requires map<string, string>)
-        metadata_dict: Dict[str, str] = {}
-        if tool_name != "unknown":
-            metadata_dict["tool"] = tool_name
-        if tool_args != "{}":
-            metadata_dict["arguments"] = tool_args
-        if content:
-            metadata_dict["observations"] = content
-
-        # Add skill metadata for managed agents and skill-related tools
-        # This enables UI to show skill execution progress
-        MANAGED_AGENTS = {"skill_builder", "document_builder", "table_builder", "schema_builder"}
-        SKILL_TOOLS = {"tool_executor"}
-
-        if tool_name in MANAGED_AGENTS or tool_name in SKILL_TOOLS or tool_name.startswith("skill-"):
-            metadata_dict["skill_name"] = tool_name
-            # Determine status based on observations (completed if we have output)
-            metadata_dict["skill_status"] = "completed" if content else "executing"
-
-            # Build descriptive message from tool arguments and observations
-            skill_message = self._build_skill_message(tool_name, tool_args, content)
-            if skill_message:
-                metadata_dict["skill_message"] = skill_message
-
-        return StepProgressDict(
-            type="step_progress",
-            step_type=step_type,
-            step_name=step_name,
-            content=content,
-            metadata=metadata_dict,
-            step_index=index
-        )
-
-    def _build_skill_message(self, tool_name: str, tool_args: str, observations: str) -> str:
-        """
-        Build a descriptive message for skill execution.
-
-        Extracts meaningful information from tool arguments and observations
-        to provide user-friendly progress messages.
-        """
-        messages = []
-
-        # Try to parse tool_args as JSON for structured extraction
-        try:
-            args = json.loads(tool_args) if tool_args and tool_args != "{}" else {}
-        except json.JSONDecodeError:
-            args = {}
-
-        # Build message based on tool type
-        if tool_name == "tool_executor":
-            # Extract task description from tool_executor args
-            task = args.get("task", "")
-            tool = args.get("tool", "")
-            if task:
-                messages.append(f"Running: {task[:100]}{'...' if len(task) > 100 else ''}")
-            if tool:
-                messages.append(f"Using tool: {tool}")
-
-        elif tool_name == "schema_builder":
-            # Schema builder working on database schema
-            task = args.get("task", args.get("request", ""))
-            if task:
-                messages.append(f"Schema task: {task[:100]}{'...' if len(task) > 100 else ''}")
-
-        elif tool_name == "table_builder":
-            task = args.get("task", "")
-            if task:
-                messages.append(f"Table task: {task[:100]}{'...' if len(task) > 100 else ''}")
-
-        elif tool_name == "skill_builder":
-            task = args.get("task", "")
-            if task:
-                messages.append(f"Building skill: {task[:100]}{'...' if len(task) > 100 else ''}")
-
-        elif tool_name == "document_builder":
-            task = args.get("task", "")
-            if task:
-                messages.append(f"Document task: {task[:100]}{'...' if len(task) > 100 else ''}")
-
-        elif tool_name.startswith("skill-"):
-            # Generic skill call
-            skill_id = tool_name.replace("skill-", "")
-            messages.append(f"Executing skill: {skill_id}")
-
-        # Add observation summary if available
-        if observations:
-            # Check for success/failure indicators
-            obs_lower = observations.lower()
-            if "success" in obs_lower or "created" in obs_lower:
-                # Extract key success info
-                lines = observations.split('\n')
-                for line in lines[:3]:  # First 3 lines
-                    if line.strip():
-                        messages.append(f"✓ {line.strip()[:80]}")
-                        break
-            elif "error" in obs_lower or "failed" in obs_lower:
-                messages.append(f"✗ {observations[:100]}{'...' if len(observations) > 100 else ''}")
-
-        return "\n".join(messages) if messages else ""
-
-    def _extract_final_step(self, index: int) -> StepProgressDict:
-        """
-        Extract typed data for final step.
-
-        Final step is just a marker indicating response generation.
-        """
-        return StepProgressDict(
-            type="step_progress",
-            step_type="FINAL",
-            step_name="Final Answer",
-            content="Generating final response...",
-            metadata=StepMetadata(),
-            step_index=index
-        )
-
     async def _stream_text_chunks(self, text: str, chunk_size: int = 5) -> AsyncIterator[str]:
         """Stream text by word chunks to simulate streaming."""
         words = text.split()
@@ -1963,7 +1337,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 managed_agents=managed_agents,
                 stored_plan=stored_plan,  # Pass stored plan for direct execution
             ):
-                yield self._convert_coordinator_event(event, session_id)
+                yield convert_coordinator_event(event, session_id)
 
             return
 
@@ -2113,7 +1487,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 execution_success = False
 
                 async for event in coordinator_from_session.execute_plan(plan_from_session.id, tools):
-                    converted = self._convert_coordinator_event(event, step_index)
+                    converted = convert_coordinator_event(event, step_index)
                     if converted:
                         yield converted
                         step_index += 1
@@ -2222,160 +1596,6 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 })
             }
         }
-
-    def _convert_coordinator_event(self, event: Any, step_index: int) -> Optional[StreamResponseDict]:
-        """Convert ExecutionCoordinator events to frontend SSE events."""
-
-        if isinstance(event, StepStartedEvent):
-            return {
-                "type": "step_progress",
-                "step_type": "ACTION",
-                "step_name": f"Executing: {event.step_description[:50]}...",
-                "content": event.step_description,
-                "metadata": {"step_id": event.step_id},
-                "step_index": step_index
-            }
-
-        elif isinstance(event, StepCompletedEvent):
-            return {
-                "type": "step_progress",
-                "step_type": "ACTION",
-                "step_name": f"Completed: Step {step_index + 1}",
-                "content": str(event.result) if event.result else "Step completed",
-                "metadata": {"result": str(event.result) if event.result else ""},
-                "step_index": step_index
-            }
-
-        elif isinstance(event, StepFailedEvent):
-            return {
-                "type": "step_progress",
-                "step_type": "ACTION",
-                "step_name": f"Failed: Step {step_index + 1}",
-                "content": event.error,
-                "metadata": {"error": event.error},
-                "step_index": step_index
-            }
-
-        elif isinstance(event, EvaluationCompletedEvent):
-            if event.evaluation.goal_achieved:
-                return {
-                    "type": "step_progress",
-                    "step_type": "FINAL",
-                    "step_name": "Goal Achieved",
-                    "content": event.evaluation.reason,
-                    "metadata": {"type": "goal_achieved"},
-                    "step_index": 999
-                }
-            # Don't show intermediate evaluations
-            return None
-
-        elif isinstance(event, ReplanTriggeredEvent):
-            return {
-                "type": "step_progress",
-                "step_type": "REASONING",
-                "step_name": f"Replanning (attempt {event.replan_number})",
-                "content": event.reason,
-                "metadata": {"type": "replan", "replan_number": str(event.replan_number)},
-                "step_index": step_index
-            }
-
-        elif isinstance(event, GoalAchievedEvent):
-            return {
-                "type": "step_progress",
-                "step_type": "FINAL",
-                "step_name": "Goal Achieved",
-                "content": event.reason,
-                "metadata": {"type": "goal_achieved"},
-                "step_index": 999
-            }
-
-        elif isinstance(event, ExecutionBlockedEvent):
-            return {
-                "type": "error",
-                "error": {
-                    "error_code": "EXECUTION_BLOCKED",
-                    "error_message": event.reason,
-                    "error_details": {"severity": "recoverable"},
-                    "hint": "The plan encountered a blocking issue. You may need to provide more information.",
-                    "can_retry": True,
-                    "auto_retry": False,
-                    "session_reset": False
-                }
-            }
-
-        elif isinstance(event, ExecutionCompletedEvent):
-            status = "successfully" if event.success else "with errors"
-            return {
-                "type": "step_progress",
-                "step_type": "FINAL",
-                "step_name": "Execution Complete",
-                "content": f"All steps completed {status}",
-                "metadata": {"success": str(event.success)},
-                "step_index": 999
-            }
-
-        # Recovery events (confidence-based error handling)
-        elif isinstance(event, RecoveryAnalysisEvent):
-            confidence_pct = f"{event.confidence:.0%}"
-            return {
-                "type": "step_progress",
-                "step_type": "REASONING",
-                "step_name": f"Recovery Analysis ({confidence_pct} confidence)",
-                "content": f"Analyzing error for step {event.step_id}",
-                "metadata": {
-                    "type": "recovery_analysis",
-                    "step_id": event.step_id,
-                    "confidence": str(event.confidence),
-                },
-                "step_index": step_index
-            }
-
-        elif isinstance(event, AutoFixStartedEvent):
-            confidence_pct = f"{event.confidence:.0%}"
-            return {
-                "type": "step_progress",
-                "step_type": "ACTION",
-                "step_name": f"Auto-fixing ({confidence_pct} confidence)",
-                "content": event.fix_description,
-                "metadata": {
-                    "type": "auto_fix_started",
-                    "step_id": event.step_id,
-                    "confidence": str(event.confidence),
-                },
-                "step_index": step_index
-            }
-
-        elif isinstance(event, AutoFixCompletedEvent):
-            return {
-                "type": "step_progress",
-                "step_type": "ACTION",
-                "step_name": "Auto-fix Completed",
-                "content": event.result,
-                "metadata": {
-                    "type": "auto_fix_completed",
-                    "step_id": event.step_id,
-                },
-                "step_index": step_index
-            }
-
-        elif isinstance(event, RecoveryPlanProposedEvent):
-            # Medium confidence: Show recovery plan for user approval
-            confidence_pct = f"{event.confidence:.0%}"
-            return {
-                "type": "awaiting_input",
-                "data": {
-                    "input_type": "recovery_approval",
-                    "title": f"Recovery Plan ({confidence_pct} confidence)",
-                    "content": f"**Proposed fix:** {event.fix_description}\n\nDo you want to proceed with this fix?",
-                    "options": [
-                        {"id": "approve", "label": "Approve Fix", "description": "Execute the recovery action"},
-                        {"id": "skip", "label": "Skip", "description": "Skip this step and continue"},
-                    ],
-                    "plan_json": ""
-                }
-            }
-
-        return None  # Unknown event type
 
     def _create_error_response(self, error_code: str, error_message: str) -> ErrorResponseDict:
         """Create a typed error response dict."""
