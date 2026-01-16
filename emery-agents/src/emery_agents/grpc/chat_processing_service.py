@@ -13,6 +13,7 @@ import grpc
 from grpc import aio
 from PIL import Image
 import requests
+import httpx
 
 from smolagents import ToolCallingAgent, AgentText
 from smolagents.models import ChatMessage, MessageRole
@@ -309,8 +310,6 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             - List of AgentExecutor instances (for managed_agents list)
             - List of agent metadata dicts (for template display)
         """
-        import httpx
-
         api_base = os.getenv("NEXT_API_URL", "http://localhost:3000")
         headers = {
             "Authorization": f"Bearer {tool_provider.api_key}",
@@ -328,14 +327,19 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     headers=headers,
                 )
                 if not agents_response.is_success:
-                    logger.warning(f"⚠️ Failed to load user agents: {agents_response.status_code}")
+                    logger.warning(f"[USER-AGENTS] Failed to load agents: {agents_response.status_code}")
                     return [], []
 
-                agents_data = agents_response.json()
+                try:
+                    agents_data = agents_response.json()
+                except json.JSONDecodeError as e:
+                    logger.warning(f"[USER-AGENTS] Invalid JSON response: {e}")
+                    return [], []
+
                 agents = agents_data.get("data", [])
 
                 if not agents:
-                    logger.info("📦 No user-defined agents found for organization")
+                    logger.info("[USER-AGENTS] No user-defined agents found for organization")
                     return [], []
 
                 for agent_config in agents:
@@ -349,9 +353,16 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                             params={"agent_id": agent_id},
                             headers=headers,
                         )
-                        skills = skills_response.json().get("data", []) if skills_response.is_success else []
+                        if skills_response.is_success:
+                            try:
+                                skills = skills_response.json().get("data", [])
+                            except json.JSONDecodeError:
+                                logger.warning(f"[USER-AGENTS] Invalid JSON for skills of {agent_name}")
+                                skills = []
+                        else:
+                            skills = []
                     except Exception as e:
-                        logger.warning(f"⚠️ Failed to load skills for agent {agent_name}: {e}")
+                        logger.warning(f"[USER-AGENTS] Failed to load skills for {agent_name}: {e}")
                         skills = []
 
                     # 3. Create AgentExecutor (for managed_agents)
@@ -373,19 +384,19 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                             'skillNames': skill_names,
                         })
 
-                        logger.info(f"📦 Loaded user agent: {agent_name} ({len(skills)} skills)")
+                        logger.info(f"[USER-AGENTS] Loaded: {agent_name} ({len(skills)} skills)")
                     except Exception as e:
-                        logger.warning(f"⚠️ Failed to create AgentExecutor for {agent_name}: {e}")
+                        logger.warning(f"[USER-AGENTS] Failed to create AgentExecutor for {agent_name}: {e}")
                         continue
 
         except httpx.RequestError as e:
-            logger.warning(f"⚠️ HTTP error loading user agents: {e}")
+            logger.warning(f"[USER-AGENTS] HTTP error loading agents: {e}")
             return [], []
         except Exception as e:
-            logger.warning(f"⚠️ Unexpected error loading user agents: {e}")
+            logger.warning(f"[USER-AGENTS] Unexpected error loading agents: {e}")
             return [], []
 
-        logger.info(f"📦 Loaded {len(user_agent_executors)} user-defined agents total")
+        logger.info(f"[USER-AGENTS] Total: {len(user_agent_executors)} agents loaded")
         return user_agent_executors, user_agents_metadata
 
     async def ProcessMessage(
