@@ -1,6 +1,11 @@
 /**
  * Agent management API endpoint using AgentApplicationService
  * Supports REST API access for agent operations
+ *
+ * Query params for GET:
+ * - name: Filter by agent name (for @mention resolution)
+ * - format: 'llm' for TOON format output
+ * - meta: '1' to include metadata in TOON format
  */
 
 // AIDEV-NOTE: Force dynamic rendering to prevent build-time database connections
@@ -8,9 +13,12 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
-import { getAgentApplicationService } from '@/ddd/application/di/container';
+import { getAgentApplicationService, getSkillApplicationService } from '@/ddd/application/di/container';
 import type { CreateAgentDTO } from '@/app/dtos/agent.dto';
 import { UserId, OrganizationId } from '@/ddd/domain/shared/value-objects';
+import { agentsToToon, type AgentForToon } from '@/lib/toon-format';
+import { AgentMapper } from '@/app/mappers/agent-mapper';
+import { SkillMapper } from '@/app/mappers/skill-mapper';
 
 /**
  * Create a new agent using AgentApplicationService
@@ -84,20 +92,71 @@ export async function POST(request: NextRequest): Promise<Response> {
 
 /**
  * Get agents list using AgentApplicationService
+ *
+ * Query params:
+ * - name: Filter by agent name (exact match, case-insensitive)
+ * - format: 'llm' for TOON format with skills info
+ * - meta: '1' to include metadata in TOON format
  */
 export async function GET(request: NextRequest): Promise<Response> {
   try {
     const authResult = await authenticateRequest(request);
-    
+
     if (!authResult.success || !authResult.user) {
       return Response.json({ error: authResult.error || 'Unauthorized' }, { status: 401 });
     }
 
     const userId = authResult.user.id;
+    const organizationId = authResult.user.organizationId;
+    const { searchParams } = new URL(request.url);
+    const nameFilter = searchParams.get('name');
+    const format = searchParams.get('format');
+    const includeMeta = searchParams.get('meta') === '1';
 
-    // Use AgentApplicationService for agent listing
     const agentApplicationService = getAgentApplicationService();
+
+    // If name filter, get specific agent by name
+    if (nameFilter) {
+      const result = await agentApplicationService.getAgentByName(
+        nameFilter,
+        organizationId!
+      );
+
+      if (!result.success || !result.data) {
+        return Response.json({
+          success: false,
+          error: `Agent '${nameFilter}' not found`
+        }, { status: 404 });
+      }
+
+      const agent = result.data;
+
+      // TOON format for LLM consumption
+      if (format === 'llm') {
+        const enriched = await enrichAgentWithSkills(agent);
+        const toon = agentsToToon([enriched], { includeMeta });
+        return new Response(toon, {
+          headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+        });
+      }
+
+      return Response.json({
+        success: true,
+        data: agent,
+      });
+    }
+
+    // Get all agents for owner
     const userAgents = await agentApplicationService.getAgentsByOwner(userId);
+
+    // TOON format for LLM consumption
+    if (format === 'llm') {
+      const enriched = await enrichAgentsWithSkills(userAgents);
+      const toon = agentsToToon(enriched, { includeMeta });
+      return new Response(toon, {
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+      });
+    }
 
     return Response.json({
       success: true,
@@ -106,9 +165,34 @@ export async function GET(request: NextRequest): Promise<Response> {
 
   } catch (error) {
     console.error('Error fetching agents:', error);
-    return Response.json({ 
+    return Response.json({
       success: false,
-      error: 'Internal server error' 
+      error: 'Internal server error'
     }, { status: 500 });
   }
+}
+
+/**
+ * Enrich agent with skill names for TOON format
+ */
+async function enrichAgentWithSkills(agent: ReturnType<typeof AgentMapper.toDTO>): Promise<AgentForToon> {
+  const skillService = getSkillApplicationService();
+  const skillsResult = await skillService.getSkillsByAgent(agent.id);
+
+  const skillNames = skillsResult.success && skillsResult.data
+    ? SkillMapper.toDTOList(skillsResult.data).map(s => s.name)
+    : [];
+
+  return {
+    ...agent,
+    skillNames,
+    skillCount: skillNames.length,
+  };
+}
+
+/**
+ * Enrich multiple agents with skill names
+ */
+async function enrichAgentsWithSkills(agents: ReturnType<typeof AgentMapper.toDTO>[]): Promise<AgentForToon[]> {
+  return Promise.all(agents.map(enrichAgentWithSkills));
 }

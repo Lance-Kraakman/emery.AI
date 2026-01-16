@@ -50,6 +50,25 @@ schema_builder("Create tables for this intake form: [paste full questionnaire]")
 No specialized agents available - handle all requests directly with tools.
 {% endif %}
 
+{% if user_agents %}
+### User-Defined Agents
+
+These are custom agents created by the user. Route to them when the task matches their description:
+
+{% for agent in user_agents %}
+**{{ agent.name }}** (ID: {{ agent.id }}): {{ agent.description }}
+{% if agent.skillNames %}
+  Skills: {{ agent.skillNames | join(', ') }}
+{% endif %}
+  Use: `@agent:{{ agent.name | lower | replace(' ', '-') }}` or route via agent ID
+{% endfor %}
+
+When delegating to user-defined agents:
+- Include the task clearly
+- The agent will use its persona and skills to respond
+- User agents can execute their assigned skills and access their linked data
+{% endif %}
+
 ### Direct Tool Usage
 
 Use tools directly for:
