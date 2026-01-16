@@ -30,6 +30,10 @@ from .interrupt_classifier import (
     build_classification_prompt,
 )
 from .research_agent import create_research_agent
+from .research_emery_agent import create_research_emery_agent
+from .app_builder_agent import create_app_builder_agent
+from .agent_builder_agent import create_agent_builder_agent
+from .agent_executor_agent import create_agent_executor
 from .stateful_managed_agent import StatefulManagedAgent
 from .interrupt_aware_agent import InterruptAwareToolCallingAgent, InterruptAwareCodeAgent
 
@@ -46,6 +50,10 @@ __all__ = [
     "create_interrupt_classifier_factory",
     "build_classification_prompt",
     "create_research_agent",
+    "create_research_emery_agent",
+    "create_app_builder_agent",
+    "create_agent_builder_agent",
+    "create_agent_executor",
     "StatefulManagedAgent",
     "InterruptAwareToolCallingAgent",
     "InterruptAwareCodeAgent",

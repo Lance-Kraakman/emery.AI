@@ -9,7 +9,7 @@ Extracted from chat_processing_service.py for single responsibility.
 
 import logging
 from dataclasses import dataclass
-from typing import Any, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from smolagents import ToolCallingAgent
 
@@ -20,6 +20,10 @@ from ...agents.document_builder_agent import create_document_builder_agent
 from ...agents.table_builder_agent import create_table_builder_agent
 from ...agents.schema_builder_agent import create_schema_builder_agent
 from ...agents.research_agent import create_research_agent
+from ...agents.research_emery_agent import create_research_emery_agent
+from ...agents.app_builder_agent import create_app_builder_agent
+from ...agents.agent_builder_agent import create_agent_builder_agent
+from ...agents.agent_executor_agent import create_agent_executor
 from ...tools.tool_executor import create_tool_executor
 from ...services.tool_provider import ToolProvider
 from ...services.model_provider import SmolagentsModelProvider
@@ -225,6 +229,8 @@ class ManagedAgentsFactory:
 
     def create_research_agent(
         self,
+        api_key: Optional[str] = None,
+        organization_id: Optional[int] = None,
         org_model: Optional[str] = None,
     ) -> ToolCallingAgent:
         """
@@ -232,6 +238,9 @@ class ManagedAgentsFactory:
 
         Research agent is READ-ONLY - no HITL approval needed.
         Uses DuckDuckGoSearchTool and VisitWebpageTool.
+
+        When api_key and organization_id are provided, ResearchEmery is
+        automatically created as a managed agent for system introspection.
         """
         model = self.model_provider.get_model(
             self.model_provider.resolve_model_selection(org_model=org_model)
@@ -240,7 +249,320 @@ class ManagedAgentsFactory:
         research_agent = create_research_agent(
             model=model,
             max_steps=10,
+            api_key=api_key,
+            organization_id=organization_id,
         )
 
-        logger.info("Created Research agent (read-only)")
+        logger.info("Created Research agent (read-only) with ResearchEmery sub-agent")
         return research_agent
+
+    def create_research_emery(
+        self,
+        api_key: Optional[str] = None,
+        organization_id: Optional[int] = None,
+        org_model: Optional[str] = None,
+    ) -> ToolCallingAgent:
+        """
+        Create ResearchEmery agent for system introspection.
+
+        ResearchEmery agent is READ-ONLY - no HITL approval needed.
+        Uses system_research tool to query Emery platform resources
+        (agents, skills, tasks, tables, apps, audit).
+
+        AIDEV-NOTE: Can be used as a managed agent of ResearchAgent for
+        combined web + system research capabilities.
+        """
+        model = self.model_provider.get_model(
+            self.model_provider.resolve_model_selection(org_model=org_model)
+        )
+
+        research_emery = create_research_emery_agent(
+            model=model,
+            api_key=api_key,
+            organization_id=organization_id,
+            max_steps=10,
+        )
+
+        logger.info("Created ResearchEmery agent (read-only system introspection)")
+        return research_emery
+
+    def create_app_builder(
+        self,
+        tool_provider: ToolProvider,
+        org_model: Optional[str] = None
+    ) -> ToolCallingAgent:
+        """
+        Create an App Builder agent with native planning for HITL workflow.
+
+        This agent runs as a TOP-LEVEL agent (not managed agent) so that
+        interrupt() works natively for human-in-the-loop approval.
+
+        Uses ToolExecutorTool to delegate tool calls to a sub-agent with
+        proper instructions.
+        """
+        tools = tool_provider.get_app_builder_tools()
+        app_crud_tool, page_crud_tool = tools[0], tools[1]
+
+        model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
+
+        tool_executor = create_tool_executor(
+            tools=[app_crud_tool, page_crud_tool],
+            model=model,
+            max_steps=5
+        )
+
+        app_builder = create_app_builder_agent(
+            tools=[tool_executor],
+            model=model,
+            max_steps=10
+        )
+
+        logger.info("Created App Builder agent with ToolExecutor sub-agent")
+        return app_builder
+
+    def create_agent_builder(
+        self,
+        tool_provider: ToolProvider,
+        org_model: Optional[str] = None
+    ) -> ToolCallingAgent:
+        """
+        Create an Agent Builder agent with native planning for HITL workflow.
+
+        This agent runs as a TOP-LEVEL agent (not managed agent) so that
+        interrupt() works natively for human-in-the-loop approval.
+
+        Uses ToolExecutorTool to delegate tool calls to a sub-agent with
+        proper instructions.
+        """
+        tools = tool_provider.get_agent_builder_tools()
+        agent_crud_tool, skill_crud_tool = tools[0], tools[1]
+
+        model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
+
+        tool_executor = create_tool_executor(
+            tools=[agent_crud_tool, skill_crud_tool],
+            model=model,
+            max_steps=5
+        )
+
+        agent_builder = create_agent_builder_agent(
+            tools=[tool_executor],
+            model=model,
+            max_steps=10
+        )
+
+        logger.info("Created Agent Builder agent with ToolExecutor sub-agent")
+        return agent_builder
+
+    def create_agent_executor(
+        self,
+        agent_config: Dict[str, Any],
+        skills: List[Dict[str, Any]],
+        tool_provider: ToolProvider,
+        org_model: Optional[str] = None,
+        skill_executor_callback: Optional[Callable] = None,
+    ) -> ToolCallingAgent:
+        """
+        Create AgentExecutor for a user-defined agent.
+
+        This creates a dynamic ToolCallingAgent at runtime that wraps a
+        user-defined Agent entity with its skills and data access.
+
+        AIDEV-NOTE: Unlike other managed agents, AgentExecutor is created
+        dynamically from database entities, not static configurations.
+
+        Args:
+            agent_config: Agent entity data (id, name, persona, databaseId, etc.)
+            skills: List of skill definitions for this agent
+            tool_provider: Provider for data access tools (row_crud)
+            org_model: Organization-level model override
+            skill_executor_callback: Callback to execute skills
+
+        Returns:
+            Configured ToolCallingAgent for the user-defined agent
+        """
+        model = self.model_provider.get_model(
+            self.model_provider.resolve_model_selection(org_model=org_model)
+        )
+
+        # Create scoped row_crud if agent has databaseId
+        additional_tools = []
+        database_id = agent_config.get("databaseId")
+        if database_id:
+            # Get row_crud tool scoped to agent's database
+            # This allows the agent to interact with its linked data
+            try:
+                row_crud = tool_provider.get_scoped_row_crud(database_id=database_id)
+                additional_tools.append(row_crud)
+                logger.info(f"   Added row_crud scoped to database {database_id}")
+            except Exception as e:
+                logger.warning(f"   Could not create scoped row_crud: {e}")
+
+        agent_executor = create_agent_executor(
+            agent_config=agent_config,
+            skills=skills,
+            model=model,
+            api_key=tool_provider.api_key,
+            organization_id=tool_provider.organization_id,
+            additional_tools=additional_tools,
+            skill_executor_callback=skill_executor_callback,
+            max_steps=15,
+        )
+
+        logger.info(f"Created AgentExecutor for agent: {agent_config.get('name')}")
+        return agent_executor
+
+    def get_agent_factories(
+        self,
+        tool_provider: ToolProvider,
+        org_model: Optional[str] = None
+    ) -> Dict[str, Callable[..., Any]]:
+        """
+        Return factory functions for cascade planning.
+
+        These factories can be called with custom parameters (planning_callback,
+        planning_only, extra_tools) by SubAgentPlanner during cascade planning.
+
+        AIDEV-NOTE: The factory functions accept **kwargs to allow SubAgentPlanner
+        to inject planning callbacks. The underlying agent creation functions
+        have been updated to accept these optional parameters.
+
+        Args:
+            tool_provider: Provider for agent-specific tools
+            org_model: Organization-level model override
+
+        Returns:
+            Dict mapping agent names to factory functions
+        """
+        model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
+
+        def schema_builder_factory(**kwargs: Any) -> Any:
+            """Factory for schema_builder with cascade planning support."""
+            tools = tool_provider.get_schema_builder_tools()
+            database_crud, table_crud, field_crud = tools[0], tools[1], tools[2]
+            tool_executor = create_tool_executor(
+                tools=[field_crud, table_crud, database_crud],
+                model=model,
+                max_steps=8
+            )
+            return create_schema_builder_agent(
+                tools=[tool_executor],
+                model=model,
+                max_steps=15,
+                **kwargs  # Accept planning_callback, planning_only, extra_tools
+            )
+
+        def table_builder_factory(**kwargs: Any) -> Any:
+            """Factory for table_builder with cascade planning support."""
+            tools = tool_provider.get_table_builder_tools()
+            table_crud, field_crud = tools[0], tools[1]
+            tool_executor = create_tool_executor(
+                tools=[field_crud, table_crud],
+                model=model,
+                max_steps=3
+            )
+            return create_table_builder_agent(
+                tools=[tool_executor],
+                model=model,
+                max_steps=6,
+                **kwargs
+            )
+
+        def document_builder_factory(**kwargs: Any) -> Any:
+            """Factory for document_builder with cascade planning support."""
+            tools = tool_provider.get_document_builder_tools()
+            document_crud = tools[0]
+            tool_executor = create_tool_executor(
+                tools=[document_crud],
+                model=model,
+                max_steps=3
+            )
+            return create_document_builder_agent(
+                tools=[tool_executor],
+                model=model,
+                max_steps=10,
+                **kwargs
+            )
+
+        def skill_builder_factory(**kwargs: Any) -> Any:
+            """Factory for skill_builder with cascade planning support."""
+            tools = tool_provider.get_skill_builder_tools()
+            skill_crud = tools[0]
+            tool_executor = create_tool_executor(
+                tools=[skill_crud],
+                model=model,
+                max_steps=3
+            )
+            return create_skill_builder_agent(
+                tools=[tool_executor],
+                model=model,
+                max_steps=10,
+                **kwargs
+            )
+
+        def research_agent_factory(**kwargs: Any) -> Any:
+            """Factory for research_agent with cascade planning support."""
+            # AIDEV-NOTE: Pass api_key and organization_id from tool_provider
+            # to auto-create ResearchEmery as managed agent for system introspection
+            return create_research_agent(
+                model=model,
+                max_steps=10,
+                api_key=kwargs.pop('api_key', tool_provider.api_key),
+                organization_id=kwargs.pop('organization_id', tool_provider.organization_id),
+                **kwargs
+            )
+
+        def research_emery_factory(**kwargs: Any) -> Any:
+            """Factory for research_emery with cascade planning support."""
+            # AIDEV-NOTE: api_key and organization_id can be passed via kwargs
+            # if needed for auth context during cascade planning
+            return create_research_emery_agent(
+                model=model,
+                api_key=kwargs.pop('api_key', None),
+                organization_id=kwargs.pop('organization_id', None),
+                max_steps=10,
+                **kwargs
+            )
+
+        def app_builder_factory(**kwargs: Any) -> Any:
+            """Factory for app_builder with cascade planning support."""
+            tools = tool_provider.get_app_builder_tools()
+            app_crud, page_crud = tools[0], tools[1]
+            tool_executor = create_tool_executor(
+                tools=[app_crud, page_crud],
+                model=model,
+                max_steps=5
+            )
+            return create_app_builder_agent(
+                tools=[tool_executor],
+                model=model,
+                max_steps=10,
+                **kwargs
+            )
+
+        def agent_builder_factory(**kwargs: Any) -> Any:
+            """Factory for agent_builder with cascade planning support."""
+            tools = tool_provider.get_agent_builder_tools()
+            agent_crud, skill_crud = tools[0], tools[1]
+            tool_executor = create_tool_executor(
+                tools=[agent_crud, skill_crud],
+                model=model,
+                max_steps=5
+            )
+            return create_agent_builder_agent(
+                tools=[tool_executor],
+                model=model,
+                max_steps=10,
+                **kwargs
+            )
+
+        return {
+            "schema_builder": schema_builder_factory,
+            "table_builder": table_builder_factory,
+            "document_builder": document_builder_factory,
+            "skill_builder": skill_builder_factory,
+            "research_agent": research_agent_factory,
+            "research_emery": research_emery_factory,
+            "app_builder": app_builder_factory,
+            "agent_builder": agent_builder_factory,
+        }
