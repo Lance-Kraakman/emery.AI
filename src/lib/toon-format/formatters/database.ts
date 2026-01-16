@@ -1,8 +1,9 @@
-import type { Database } from '@/ddd/domain/databases/entities/database';
-import { escapeToonValue, extractId, type ToonConfig } from '../formatter';
+import type { DatabaseDTO } from '@/app/mappers/database-mapper';
+import { escapeToonValue, type ToonConfig } from '../formatter';
 
 /**
  * Format databases to TOON format.
+ * Expects DatabaseDTO from DatabaseMapper.toDTO() - not raw domain entities.
  *
  * Key fields only (default):
  * databases[3]{id,name,slug}:
@@ -13,7 +14,7 @@ import { escapeToonValue, extractId, type ToonConfig } from '../formatter';
  * databases[3]{id,name,slug,organizationId,createdAt}:
  * 1,Main DB,main-db,5,2024-01-16
  */
-export function databasesToToon(databases: Database[], config: ToonConfig = {}): string {
+export function databasesToToon(databases: DatabaseDTO[], config: ToonConfig = {}): string {
   const { includeMeta = false, maxItems = 50 } = config;
 
   const items = databases.slice(0, maxItems);
@@ -26,13 +27,13 @@ export function databasesToToon(databases: Database[], config: ToonConfig = {}):
 
   const rows = items.map(d => {
     const values: (string | number)[] = [
-      extractId(d.id),
+      d.id,
       escapeToonValue(d.name),
       escapeToonValue(d.slug),
     ];
     if (includeMeta) {
       values.push(
-        extractId(d.organizationId),
+        d.organizationId,
         d.createdAt?.toISOString().split('T')[0] || ''
       );
     }
@@ -48,6 +49,6 @@ export function databasesToToon(databases: Database[], config: ToonConfig = {}):
   return result.join('\n');
 }
 
-export function databaseToToon(database: Database, config: ToonConfig = {}): string {
+export function databaseToToon(database: DatabaseDTO, config: ToonConfig = {}): string {
   return databasesToToon([database], { ...config, includeMeta: true });
 }
