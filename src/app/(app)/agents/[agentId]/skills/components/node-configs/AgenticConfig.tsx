@@ -1,6 +1,5 @@
 'use client';
 
-import { useState, useCallback } from 'react';
 import { ChevronDown, X } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -17,8 +16,8 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { UnifiedChatInput } from '@/components/shared/UnifiedChatInput';
-import { uploadSkillAttachment, deleteSkillAttachment } from '@/app/actions/skills';
 import { OutputDefinitionsSection } from '../editor/OutputDefinitionsSection';
+import { useSkillAttachments, workflowVariablesToChatVariables } from '../hooks';
 import type { ConfigWithVariables, AgenticNodeData } from './types';
 
 interface AgenticConfigProps extends ConfigWithVariables<AgenticNodeData> {
@@ -32,77 +31,20 @@ export function AgenticConfig({
   skillId,
   disabled,
 }: AgenticConfigProps) {
-  // Track pending attachments (files being uploaded)
-  const [pendingAttachments, setPendingAttachments] = useState<File[]>([]);
-  const [isUploading, setIsUploading] = useState(false);
+  // Use shared attachment hook
+  const {
+    pendingAttachments,
+    handleAttachmentAdd,
+    handleAttachmentRemove,
+    handleExistingAttachmentRemove,
+  } = useSkillAttachments({
+    skillId,
+    existingAttachments: data.attachments,
+    onAttachmentsChange: (attachments) => onUpdate({ attachments }),
+  });
 
-  // Convert WorkflowVariable to the format expected by UnifiedChatInput
-  const chatVariables = variables.map((v) => ({
-    name: v.name,
-    description: v.description || v.label || '',
-  }));
-
-  // Handle adding a new attachment - upload to S3 immediately
-  const handleAttachmentAdd = useCallback(async (file: File) => {
-    if (!skillId) {
-      console.error('Cannot upload attachment: skillId is required');
-      return;
-    }
-
-    // Add to pending while uploading
-    setPendingAttachments((prev) => [...prev, file]);
-    setIsUploading(true);
-
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('type', file.type.startsWith('image/') ? 'image' : 'file');
-
-      const result = await uploadSkillAttachment(skillId, formData);
-
-      if (result.success && result.data) {
-        // Add to existing attachments
-        const newAttachment = {
-          url: result.data.url,
-          filename: result.data.filename,
-          type: result.data.type as 'image' | 'file',
-          size: result.data.sizeBytes,
-          s3Key: result.data.s3Key,
-        };
-        onUpdate({
-          attachments: [...(data.attachments || []), newAttachment],
-        });
-      } else {
-        console.error('Upload failed:', result.error);
-      }
-    } catch (error) {
-      console.error('Upload error:', error);
-    } finally {
-      // Remove from pending
-      setPendingAttachments((prev) => prev.filter((f) => f !== file));
-      setIsUploading(false);
-    }
-  }, [skillId, data.attachments, onUpdate]);
-
-  // Handle removing a pending attachment (while uploading)
-  const handleAttachmentRemove = useCallback((index: number) => {
-    setPendingAttachments((prev) => prev.filter((_, i) => i !== index));
-  }, []);
-
-  // Handle removing an existing (already uploaded) attachment
-  const handleExistingAttachmentRemove = useCallback(async (index: number) => {
-    const attachment = data.attachments?.[index];
-    if (!attachment || !skillId) return;
-
-    // Remove from S3 if we have the s3Key
-    if ((attachment as { s3Key?: string }).s3Key) {
-      await deleteSkillAttachment(skillId, (attachment as { s3Key?: string }).s3Key!);
-    }
-
-    const newAttachments = [...(data.attachments || [])];
-    newAttachments.splice(index, 1);
-    onUpdate({ attachments: newAttachments });
-  }, [data.attachments, skillId, onUpdate]);
+  // Convert workflow variables to chat format using shared utility
+  const chatVariables = workflowVariablesToChatVariables(variables);
 
   return (
     <div className="space-y-2">

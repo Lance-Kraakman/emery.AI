@@ -5,18 +5,21 @@ import { WorkflowCanvas } from '@/components/workflow-canvas';
 import { X, Settings2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import type { InputDefinition, OutputDefinition } from '@/app/mappers/skill-mapper';
-import type { SkillStep, CanvasMetadata } from '@/ddd/domain/skills/entities/skill';
+import type { InputDefinition, OutputDefinition, ToolConfigDTO } from '@/app/mappers/skill-mapper';
+import type { SkillStep, CanvasMetadata, SkillExecutionType } from '@/ddd/domain/skills/entities/skill';
 import type { FlowToStepsResult } from '@/components/workflow-canvas/utils/flow-converters';
 import type { WorkflowNode, WorkflowNodeData, WorkflowEdge } from '@/components/workflow-canvas/types';
 import type { WorkflowVariable } from '@/components/workflow-canvas/WorkflowVariableInput';
 import { inferVariablesForNode } from '@/components/workflow-canvas/utils/variable-inference';
 import { NodeConfigContent } from './NodeConfigContent';
 import { RootSkillConfig } from './RootSkillConfig';
+import { AgenticSkillEditor } from './AgenticSkillEditor';
 
 /**
- * Simplified SkillFormData - all skills are now workflows
- * Node-specific configs live inside the steps (SkillStep[])
+ * SkillFormData - supports both workflow (DAG) and agentic (single-step) modes
+ *
+ * - executionType: 'agent' = workflow mode (uses steps[])
+ * - executionType: 'agentic' = agentic mode (uses instructions, tools, agentType)
  */
 export interface SkillFormData {
   name: string;
@@ -26,6 +29,12 @@ export interface SkillFormData {
   steps: SkillStep[];
   canvasMetadata?: CanvasMetadata; // Canvas annotations (sticky notes)
   model?: string | null;
+  // Execution mode
+  executionType?: SkillExecutionType;
+  // Agentic mode fields
+  instructions?: string;
+  tools?: ToolConfigDTO[];
+  agentType?: string | null;
 }
 
 interface SkillEditorProps {
@@ -143,6 +152,20 @@ export function SkillEditor({
   // For I/O nodes, show RootSkillConfig (treat as if no regular node selected)
   const showRootConfig = !selectedNode || isIONode;
 
+  // Agentic mode: show simplified single-step editor
+  if (value.executionType !== 'agent') {
+    return (
+      <AgenticSkillEditor
+        value={value}
+        onChange={onChange}
+        skillId={skillId}
+        organizationTier={organizationTier}
+        isReadOnly={isReadOnly}
+      />
+    );
+  }
+
+  // Workflow mode: show DAG canvas with config panel
   return (
     <div className="relative h-full w-full">
       {/* Full-height Canvas - uncontrolled mode */}

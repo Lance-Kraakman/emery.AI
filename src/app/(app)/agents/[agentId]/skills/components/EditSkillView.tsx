@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Trash2, Bot } from 'lucide-react';
+import { ArrowLeft, Trash2, Bot, Sparkles, GitBranch } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ShareButton } from '@/components/permissions/ShareButton';
@@ -97,6 +97,28 @@ export function EditSkillView({ agent, skill }: EditSkillViewProps) {
           requiredCapabilities={['toolCalling']}
           className="w-[180px] h-8"
         />
+
+        {/* Mode Toggle - non-destructive switching */}
+        <div className="flex items-center gap-0.5 p-0.5 bg-muted rounded-lg h-8">
+          <Button
+            variant={formData.executionType !== 'agent' ? 'secondary' : 'ghost'}
+            size="sm"
+            onClick={() => setFormData({ ...formData, executionType: 'agentic' })}
+            className="h-7 px-2 gap-1"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            Agentic
+          </Button>
+          <Button
+            variant={formData.executionType === 'agent' ? 'secondary' : 'ghost'}
+            size="sm"
+            onClick={() => setFormData({ ...formData, executionType: 'agent' })}
+            className="h-7 px-2 gap-1"
+          >
+            <GitBranch className="h-3.5 w-3.5" />
+            Workflow
+          </Button>
+        </div>
 
         <Button
           variant="outline"

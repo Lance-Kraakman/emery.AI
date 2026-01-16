@@ -30,7 +30,13 @@ export function useSkillEditor({ skill, agentId, onDeleteRedirect }: UseSkillEdi
     outputs: skill.outputs,
     steps: skill.steps || [],
     canvasMetadata: skill.canvasMetadata,
-    model: skill.model
+    model: skill.model,
+    // Execution mode - default to 'agentic' for new skills, respect existing for loaded skills
+    executionType: skill.executionType || 'agentic',
+    // Agentic mode fields
+    instructions: skill.instructions,
+    tools: skill.tools,
+    agentType: skill.agentType,
   });
 
   // Ref to always have current formData (fixes stale closure in auto-save)
@@ -112,6 +118,11 @@ export function useSkillEditor({ skill, agentId, onDeleteRedirect }: UseSkillEdi
           steps: dataToSave.steps,
           canvasMetadata: dataToSave.canvasMetadata,
           model: dataToSave.model,
+          // Execution mode and agentic fields
+          executionType: dataToSave.executionType,
+          instructions: dataToSave.instructions,
+          tools: dataToSave.tools,
+          agentType: dataToSave.agentType,
         });
 
         if (result.success) {
@@ -162,6 +173,11 @@ export function useSkillEditor({ skill, agentId, onDeleteRedirect }: UseSkillEdi
         steps: currentFormData.steps,
         canvasMetadata: currentFormData.canvasMetadata,
         model: currentFormData.model,
+        // Execution mode and agentic fields
+        executionType: currentFormData.executionType,
+        instructions: currentFormData.instructions,
+        tools: currentFormData.tools,
+        agentType: currentFormData.agentType,
       });
 
       if (!result.success) {
