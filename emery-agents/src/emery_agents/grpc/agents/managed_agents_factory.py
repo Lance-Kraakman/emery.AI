@@ -63,6 +63,7 @@ class ManagedAgentsFactory:
         org_model: Optional[str] = None,
         has_images: bool = False,
         managed_agents: Optional[List[Any]] = None,
+        user_agents: Optional[List[Dict[str, Any]]] = None,
         session_attachments: Optional[List[Any]] = None
     ) -> InterruptAwareToolCallingAgent:
         """
@@ -76,6 +77,7 @@ class ManagedAgentsFactory:
             org_model: Organization-level model override
             has_images: Whether request contains images (for vision model selection)
             managed_agents: List of managed sub-agents
+            user_agents: Metadata about user-defined agents (for template display)
             session_attachments: Optional list of file attachments available in session
         """
         model = self.model_provider.get_model(
@@ -89,6 +91,7 @@ class ManagedAgentsFactory:
             tools=smolagents_tools,
             model=model,
             managed_agents=managed_agents,
+            user_agents=user_agents,
             context_type="interactive",
             max_steps=10,
             session_attachments=session_attachments

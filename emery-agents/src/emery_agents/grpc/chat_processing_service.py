@@ -287,6 +287,107 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             self.model_provider = None
             self.agent_factory = None
 
+    async def _load_user_agents(
+        self,
+        tool_provider: ToolProvider,
+        org_model: Optional[str] = None,
+    ) -> tuple[List[ToolCallingAgent], List[Dict[str, Any]]]:
+        """
+        Load all user-defined agents for this organization.
+
+        AIDEV-NOTE: Returns BOTH executors (for managed_agents list) and metadata
+        (for template display). This enables ChatPlanner to:
+        1. Route to user agents via smolagents managed_agents mechanism
+        2. Display user agents in its instructions for natural language routing
+
+        Args:
+            tool_provider: Provider for auth context and tool creation
+            org_model: Optional organization-level model override
+
+        Returns:
+            Tuple of:
+            - List of AgentExecutor instances (for managed_agents list)
+            - List of agent metadata dicts (for template display)
+        """
+        import httpx
+
+        api_base = os.getenv("NEXT_API_URL", "http://localhost:3000")
+        headers = {
+            "Authorization": f"Bearer {tool_provider.api_key}",
+            "Content-Type": "application/json"
+        }
+
+        user_agent_executors: List[ToolCallingAgent] = []
+        user_agents_metadata: List[Dict[str, Any]] = []
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                # 1. Fetch all agents for org
+                agents_response = await client.get(
+                    f"{api_base}/api/agents",
+                    headers=headers,
+                )
+                if not agents_response.is_success:
+                    logger.warning(f"⚠️ Failed to load user agents: {agents_response.status_code}")
+                    return [], []
+
+                agents_data = agents_response.json()
+                agents = agents_data.get("data", [])
+
+                if not agents:
+                    logger.info("📦 No user-defined agents found for organization")
+                    return [], []
+
+                for agent_config in agents:
+                    agent_id = agent_config.get("id")
+                    agent_name = agent_config.get("name", "Unknown")
+
+                    # 2. Fetch skills for each agent
+                    try:
+                        skills_response = await client.get(
+                            f"{api_base}/api/skills",
+                            params={"agent_id": agent_id},
+                            headers=headers,
+                        )
+                        skills = skills_response.json().get("data", []) if skills_response.is_success else []
+                    except Exception as e:
+                        logger.warning(f"⚠️ Failed to load skills for agent {agent_name}: {e}")
+                        skills = []
+
+                    # 3. Create AgentExecutor (for managed_agents)
+                    try:
+                        executor = self.managed_agents_factory.create_agent_executor(
+                            agent_config=agent_config,
+                            skills=skills,
+                            tool_provider=tool_provider,
+                            org_model=org_model,
+                        )
+                        user_agent_executors.append(executor)
+
+                        # 4. Build metadata (for template)
+                        skill_names = [s.get('name', '') for s in skills]
+                        user_agents_metadata.append({
+                            'id': agent_id,
+                            'name': agent_name,
+                            'description': agent_config.get('description', ''),
+                            'skillNames': skill_names,
+                        })
+
+                        logger.info(f"📦 Loaded user agent: {agent_name} ({len(skills)} skills)")
+                    except Exception as e:
+                        logger.warning(f"⚠️ Failed to create AgentExecutor for {agent_name}: {e}")
+                        continue
+
+        except httpx.RequestError as e:
+            logger.warning(f"⚠️ HTTP error loading user agents: {e}")
+            return [], []
+        except Exception as e:
+            logger.warning(f"⚠️ Unexpected error loading user agents: {e}")
+            return [], []
+
+        logger.info(f"📦 Loaded {len(user_agent_executors)} user-defined agents total")
+        return user_agent_executors, user_agents_metadata
+
     async def ProcessMessage(
         self,
         request: agent_worker_pb2.ProcessMessageRequest,
@@ -761,6 +862,14 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 except ImportError as e:
                     logger.warning(f"Research agent unavailable (missing dependency): {e}")
 
+                # Load user-defined agents (dynamically created from DB)
+                # AIDEV-NOTE: This enables ChatPlanner to route to user agents via:
+                # 1. Natural language ("use my sales bot") via managed_agents
+                # 2. Template display (user_agents_metadata shows them in instructions)
+                user_agent_executors, user_agents_metadata = await self._load_user_agents(
+                    tool_provider, org_model
+                )
+
                 # Create ToolCallingAgent with managed agents
                 # InterruptAwareToolCallingAgent sets interrupt_switch=True
                 # when detecting interrupt from managed agent, breaking the loop
@@ -771,11 +880,17 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     table_builder_agent, schema_builder_agent,
                     app_builder_agent, agent_builder_agent, research_agent
                 ] if a is not None]
+
+                # Add user-defined agent executors to managed agents
+                managed_agents.extend(user_agent_executors)
+                logger.info(f"📋 Total managed agents: {len(managed_agents)} ({len(user_agent_executors)} user-defined)")
+
                 agent = self.managed_agents_factory.create_chat_planner(
                     smolagents_tools,
                     org_model=org_model,
                     has_images=has_images,
                     managed_agents=managed_agents,
+                    user_agents=user_agents_metadata,  # For template display
                     session_attachments=file_attachments
                 )
 

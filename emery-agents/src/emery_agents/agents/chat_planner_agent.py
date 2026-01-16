@@ -36,6 +36,7 @@ def create_chat_planner_agent(
     tools: List[Tool],
     model: Any,
     managed_agents: Optional[List[Any]] = None,
+    user_agents: Optional[List[dict]] = None,
     context_type: str = "interactive",
     max_steps: int = 10,
     session_attachments: Optional[List[Any]] = None
@@ -57,7 +58,9 @@ def create_chat_planner_agent(
     Args:
         tools: Available tools for direct execution
         model: The LLM model to use
-        managed_agents: Sub-agents (skill_builder, document_builder)
+        managed_agents: Sub-agents (skill_builder, document_builder, user-defined agents)
+        user_agents: Metadata about user-defined agents for template display
+                    (id, name, description, skillNames)
         context_type: "interactive" for chat, "autonomous" for tasks
         max_steps: Maximum execution steps
         session_attachments: Optional list of file attachments available in session
@@ -68,12 +71,14 @@ def create_chat_planner_agent(
     """
     # Get instructions from centralized function (base + agent-specific + tools)
     # Pass managed_agents so template can list available specialists
+    # Pass user_agents for user-defined agent visibility in template
     # Pass session_attachments so agent knows what files are available
     instructions = build_agent_instructions(
         tools=tools,
         agent_type="chat_planner",
         context_type=context_type,
         managed_agents=managed_agents or [],
+        user_agents=user_agents or [],
         session_attachments=session_attachments
     )
 
