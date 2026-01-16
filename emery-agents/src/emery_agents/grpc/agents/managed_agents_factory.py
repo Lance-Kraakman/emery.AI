@@ -27,6 +27,7 @@ from ...agents.agent_executor_agent import create_agent_executor
 from ...tools.tool_executor import create_tool_executor
 from ...services.tool_provider import ToolProvider
 from ...services.model_provider import SmolagentsModelProvider
+from ...services.agent_api_service import AgentAPIService
 
 logger = logging.getLogger(__name__)
 
@@ -414,6 +415,81 @@ class ManagedAgentsFactory:
 
         logger.info(f"Created AgentExecutor for agent: {agent_config.get('name')}")
         return agent_executor
+
+    async def load_user_agents(
+        self,
+        tool_provider: ToolProvider,
+        org_model: Optional[str] = None,
+    ) -> tuple[List[ToolCallingAgent], List[Dict[str, Any]]]:
+        """
+        Load all user-defined agents for this organization.
+
+        Uses AgentAPIService for consistent API access with RLS headers
+        and observability. Returns BOTH executors (for managed_agents list)
+        and metadata (for template display).
+
+        AIDEV-NOTE: This method replaces the inline _load_user_agents() that was
+        previously in chat_processing_service.py. Centralizing here:
+        - Keeps all agent creation in the factory
+        - Reuses create_agent_executor() method
+        - Shares AgentAPIService with mention_routing
+
+        Args:
+            tool_provider: Provider for auth context and tool creation
+            org_model: Optional organization-level model override
+
+        Returns:
+            Tuple of:
+            - List of AgentExecutor instances (for managed_agents list)
+            - List of agent metadata dicts (for template display)
+        """
+        api_service = AgentAPIService(
+            api_key=tool_provider.api_key,
+            organization_id=tool_provider.organization_id,
+        )
+
+        # Fetch all agents with their skills
+        agents_with_skills = await api_service.fetch_agents_with_skills()
+
+        if not agents_with_skills:
+            logger.info("[USER-AGENTS] No user-defined agents found for organization")
+            return [], []
+
+        user_agent_executors: List[ToolCallingAgent] = []
+        user_agents_metadata: List[Dict[str, Any]] = []
+
+        for agent_data, skills_data in agents_with_skills:
+            try:
+                # Convert to raw dicts for create_agent_executor
+                agent_config = agent_data.raw
+                skills = [s.raw for s in skills_data]
+
+                # Create AgentExecutor using existing factory method
+                executor = self.create_agent_executor(
+                    agent_config=agent_config,
+                    skills=skills,
+                    tool_provider=tool_provider,
+                    org_model=org_model,
+                )
+                user_agent_executors.append(executor)
+
+                # Build metadata for template display
+                skill_names = [s.name for s in skills_data]
+                user_agents_metadata.append({
+                    'id': agent_data.id,
+                    'name': agent_data.name,
+                    'description': agent_data.description,
+                    'skillNames': skill_names,
+                })
+
+                logger.info(f"[USER-AGENTS] Loaded: {agent_data.name} ({len(skills_data)} skills)")
+
+            except Exception as e:
+                logger.warning(f"[USER-AGENTS] Failed to create AgentExecutor for {agent_data.name}: {e}")
+                continue
+
+        logger.info(f"[USER-AGENTS] Total: {len(user_agent_executors)} agents loaded")
+        return user_agent_executors, user_agents_metadata
 
     def get_agent_factories(
         self,

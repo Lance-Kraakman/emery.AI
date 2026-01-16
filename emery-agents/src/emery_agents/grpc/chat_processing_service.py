@@ -13,7 +13,6 @@ import grpc
 from grpc import aio
 from PIL import Image
 import requests
-import httpx
 
 from smolagents import ToolCallingAgent, AgentText
 from smolagents.models import ChatMessage, MessageRole
@@ -287,117 +286,6 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             self.tool_loader = None
             self.model_provider = None
             self.agent_factory = None
-
-    async def _load_user_agents(
-        self,
-        tool_provider: ToolProvider,
-        org_model: Optional[str] = None,
-    ) -> tuple[List[ToolCallingAgent], List[Dict[str, Any]]]:
-        """
-        Load all user-defined agents for this organization.
-
-        AIDEV-NOTE: Returns BOTH executors (for managed_agents list) and metadata
-        (for template display). This enables ChatPlanner to:
-        1. Route to user agents via smolagents managed_agents mechanism
-        2. Display user agents in its instructions for natural language routing
-
-        Args:
-            tool_provider: Provider for auth context and tool creation
-            org_model: Optional organization-level model override
-
-        Returns:
-            Tuple of:
-            - List of AgentExecutor instances (for managed_agents list)
-            - List of agent metadata dicts (for template display)
-        """
-        api_base = os.getenv("NEXT_API_URL", "http://localhost:3000")
-        headers = {
-            "Authorization": f"Bearer {tool_provider.api_key}",
-            "Content-Type": "application/json"
-        }
-
-        user_agent_executors: List[ToolCallingAgent] = []
-        user_agents_metadata: List[Dict[str, Any]] = []
-
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                # 1. Fetch all agents for org
-                agents_response = await client.get(
-                    f"{api_base}/api/agents",
-                    headers=headers,
-                )
-                if not agents_response.is_success:
-                    logger.warning(f"[USER-AGENTS] Failed to load agents: {agents_response.status_code}")
-                    return [], []
-
-                try:
-                    agents_data = agents_response.json()
-                except json.JSONDecodeError as e:
-                    logger.warning(f"[USER-AGENTS] Invalid JSON response: {e}")
-                    return [], []
-
-                agents = agents_data.get("data", [])
-
-                if not agents:
-                    logger.info("[USER-AGENTS] No user-defined agents found for organization")
-                    return [], []
-
-                for agent_config in agents:
-                    agent_id = agent_config.get("id")
-                    agent_name = agent_config.get("name", "Unknown")
-
-                    # 2. Fetch skills for each agent
-                    try:
-                        skills_response = await client.get(
-                            f"{api_base}/api/skills",
-                            params={"agent_id": agent_id},
-                            headers=headers,
-                        )
-                        if skills_response.is_success:
-                            try:
-                                skills = skills_response.json().get("data", [])
-                            except json.JSONDecodeError:
-                                logger.warning(f"[USER-AGENTS] Invalid JSON for skills of {agent_name}")
-                                skills = []
-                        else:
-                            skills = []
-                    except Exception as e:
-                        logger.warning(f"[USER-AGENTS] Failed to load skills for {agent_name}: {e}")
-                        skills = []
-
-                    # 3. Create AgentExecutor (for managed_agents)
-                    try:
-                        executor = self.managed_agents_factory.create_agent_executor(
-                            agent_config=agent_config,
-                            skills=skills,
-                            tool_provider=tool_provider,
-                            org_model=org_model,
-                        )
-                        user_agent_executors.append(executor)
-
-                        # 4. Build metadata (for template)
-                        skill_names = [s.get('name', '') for s in skills]
-                        user_agents_metadata.append({
-                            'id': agent_id,
-                            'name': agent_name,
-                            'description': agent_config.get('description', ''),
-                            'skillNames': skill_names,
-                        })
-
-                        logger.info(f"[USER-AGENTS] Loaded: {agent_name} ({len(skills)} skills)")
-                    except Exception as e:
-                        logger.warning(f"[USER-AGENTS] Failed to create AgentExecutor for {agent_name}: {e}")
-                        continue
-
-        except httpx.RequestError as e:
-            logger.warning(f"[USER-AGENTS] HTTP error loading agents: {e}")
-            return [], []
-        except Exception as e:
-            logger.warning(f"[USER-AGENTS] Unexpected error loading agents: {e}")
-            return [], []
-
-        logger.info(f"[USER-AGENTS] Total: {len(user_agent_executors)} agents loaded")
-        return user_agent_executors, user_agents_metadata
 
     async def ProcessMessage(
         self,
@@ -877,7 +765,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 # AIDEV-NOTE: This enables ChatPlanner to route to user agents via:
                 # 1. Natural language ("use my sales bot") via managed_agents
                 # 2. Template display (user_agents_metadata shows them in instructions)
-                user_agent_executors, user_agents_metadata = await self._load_user_agents(
+                user_agent_executors, user_agents_metadata = await self.managed_agents_factory.load_user_agents(
                     tool_provider, org_model
                 )
 

@@ -4,6 +4,9 @@
 AIDEV-NOTE: This module handles routing to user-defined agents via @agent:name mentions.
 Extracted from chat_processing_service.py to keep that file manageable.
 
+Uses AgentAPIService for consistent API access with RLS headers and observability,
+sharing the same patterns as ManagedAgentsFactory.load_user_agents().
+
 Usage:
     from .mention_routing import handle_agent_mention_routing
 
@@ -18,14 +21,12 @@ Usage:
 
 import asyncio
 import logging
-import os
-from typing import Any, AsyncIterator, Dict, List, Optional
-
-import httpx
+from typing import Any, AsyncIterator, List, Optional
 
 from ..services.tool_provider import ToolProvider
 from ..services.model_provider import SmolagentsModelProvider
 from ..services.skill_executor import SkillExecutorService
+from ..services.agent_api_service import AgentAPIService
 from ..agents.agent_executor_agent import create_agent_executor
 from .response_types import StreamResponseDict, create_error_response
 
@@ -56,6 +57,9 @@ async def handle_agent_mention_routing(
     Fetches the agent by name, loads its skills, creates an AgentExecutor,
     and runs the task through it directly (bypassing normal orchestration).
 
+    AIDEV-NOTE: Uses AgentAPIService for API calls, sharing patterns with
+    ManagedAgentsFactory.load_user_agents() for consistency.
+
     Args:
         agent_mention: The agent name from @agent:name mention
         task: The cleaned task (with mention removed)
@@ -68,79 +72,33 @@ async def handle_agent_mention_routing(
     Yields:
         StreamResponseDict events (step_progress, content_chunk, error)
     """
-    logger.info(f"🔄 Routing to @agent:{agent_mention} with task: {task[:100]}...")
+    logger.info(f"[MENTION-ROUTING] Routing to @agent:{agent_mention} with task: {task[:100]}...")
 
-    api_base = os.getenv("NEXT_API_URL", "http://localhost:3000")
-    headers = {
-        "Authorization": f"Bearer {tool_provider.api_key}",
-        "Content-Type": "application/json"
-    }
+    # Use shared AgentAPIService for consistent API access
+    api_service = AgentAPIService(
+        api_key=tool_provider.api_key,
+        organization_id=tool_provider.organization_id,
+    )
 
-    # 1. Fetch agent by name from API (async)
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        try:
-            agent_response = await client.get(
-                f"{api_base}/api/agents",
-                params={"name": agent_mention},
-                headers=headers,
-            )
+    # 1. Fetch agent by name
+    agent_data = await api_service.fetch_agent_by_name(agent_mention)
 
-            if agent_response.status_code == 404:
-                logger.warning(f"⚠️ Agent '{agent_mention}' not found")
-                yield {
-                    "type": "content_chunk",
-                    "content": f"I couldn't find an agent named '{agent_mention}'. Please check the agent name and try again."
-                }
-                return
+    if not agent_data:
+        logger.warning(f"[MENTION-ROUTING] Agent '{agent_mention}' not found")
+        yield {
+            "type": "content_chunk",
+            "content": f"I couldn't find an agent named '{agent_mention}'. Please check the agent name and try again."
+        }
+        return
 
-            if not agent_response.is_success:
-                logger.error(f"❌ Failed to fetch agent: {agent_response.status_code}")
-                yield create_error_response(
-                    "AGENT_LOOKUP_FAILED",
-                    f"Failed to look up agent '{agent_mention}'"
-                )
-                return
+    agent_config = agent_data.raw
+    agent_id = agent_data.id
+    logger.info(f"[MENTION-ROUTING] Found agent: {agent_data.name} (id={agent_id})")
 
-            agent_data = agent_response.json()
-            if not agent_data.get("success") or not agent_data.get("data"):
-                logger.warning(f"⚠️ Agent '{agent_mention}' not found in response")
-                yield {
-                    "type": "content_chunk",
-                    "content": f"I couldn't find an agent named '{agent_mention}'. Please check the agent name and try again."
-                }
-                return
-
-            agent_config = agent_data["data"]
-            agent_id = agent_config.get("id")
-            logger.info(f"✅ Found agent: {agent_config.get('name')} (id={agent_id})")
-
-        except httpx.RequestError as e:
-            logger.error(f"❌ API request failed: {e}")
-            yield create_error_response(
-                "AGENT_LOOKUP_FAILED",
-                f"Failed to look up agent: {e}"
-            )
-            return
-
-        # 2. Fetch agent's skills (async)
-        try:
-            skills_response = await client.get(
-                f"{api_base}/api/skills",
-                params={"agent_id": agent_id},
-                headers=headers,
-            )
-
-            if skills_response.is_success:
-                skills_data = skills_response.json()
-                skills = skills_data.get("data", [])
-                logger.info(f"📦 Loaded {len(skills)} skills for agent {agent_id}")
-            else:
-                skills = []
-                logger.warning(f"⚠️ Failed to load skills for agent {agent_id}")
-
-        except httpx.RequestError as e:
-            logger.warning(f"⚠️ Skills fetch failed: {e}, continuing without skills")
-            skills = []
+    # 2. Fetch agent's skills
+    skills_data = await api_service.fetch_skills(agent_id)
+    skills = [s.raw for s in skills_data]
+    logger.info(f"[MENTION-ROUTING] Loaded {len(skills)} skills for agent {agent_id}")
 
     # 3. Create AgentExecutor
     model = model_provider.get_model(
@@ -167,16 +125,16 @@ async def handle_agent_mention_routing(
         max_steps=15,
     )
 
-    logger.info(f"🤖 Created AgentExecutor for {agent_config.get('name')}")
+    logger.info(f"[MENTION-ROUTING] Created AgentExecutor for {agent_data.name}")
 
     # 4. Run the task through the executor
     # Send initial step progress
     yield {
         "type": "step_progress",
         "step_type": "ACTION",
-        "step_name": f"Running {agent_config.get('name')}",
-        "content": f"Executing task with {agent_config.get('name')}...",
-        "metadata": {"agent_id": str(agent_id), "agent_name": agent_config.get("name")},
+        "step_name": f"Running {agent_data.name}",
+        "content": f"Executing task with {agent_data.name}...",
+        "metadata": {"agent_id": str(agent_id), "agent_name": agent_data.name},
         "step_index": 0
     }
 
@@ -201,10 +159,10 @@ async def handle_agent_mention_routing(
                 "content": chunk
             }
 
-        logger.info(f"✅ AgentExecutor completed for @agent:{agent_mention}")
+        logger.info(f"[MENTION-ROUTING] AgentExecutor completed for @agent:{agent_mention}")
 
     except Exception as e:
-        logger.error(f"❌ AgentExecutor failed: {e}")
+        logger.error(f"[MENTION-ROUTING] AgentExecutor failed: {e}")
         yield create_error_response(
             "AGENT_EXECUTION_FAILED",
             f"Agent execution failed: {str(e)}"
