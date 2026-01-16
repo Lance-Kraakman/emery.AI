@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import { ChevronDown, X } from 'lucide-react';
 import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
 import {
   Select,
   SelectContent,
@@ -9,6 +11,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import { UnifiedChatInput } from '@/components/shared/UnifiedChatInput';
 import { uploadSkillAttachment, deleteSkillAttachment } from '@/app/actions/skills';
 import { OutputDefinitionsSection } from '../editor/OutputDefinitionsSection';
@@ -166,6 +173,53 @@ export function AgenticConfig({
           isReadOnly={disabled}
         />
       </div>
+
+      {/* Stored Plan - for autonomous execution */}
+      {data.plan && (
+        <div className="space-y-1 pt-2 border-t">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs">Stored Plan</Label>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0"
+              onClick={() => onUpdate({ plan: undefined })}
+              disabled={disabled}
+              title="Remove stored plan"
+            >
+              <X className="h-3 w-3" />
+            </Button>
+          </div>
+          <div className="text-[10px] text-muted-foreground space-y-1 p-2 bg-muted rounded">
+            <div>
+              <strong>Goal:</strong> {data.plan.goal}
+            </div>
+            <div>
+              <strong>Steps:</strong> {data.plan.steps?.length || 0}
+            </div>
+            {data.plan.approvedAt && (
+              <div>
+                <strong>Approved:</strong>{' '}
+                {new Date(data.plan.approvedAt).toLocaleDateString()}
+              </div>
+            )}
+          </div>
+          <Collapsible>
+            <CollapsibleTrigger className="flex items-center text-[10px] text-blue-600 hover:text-blue-800">
+              View steps <ChevronDown className="h-3 w-3 ml-1" />
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <ul className="text-[10px] space-y-1 mt-1">
+                {data.plan.steps?.map((step, i) => (
+                  <li key={step.stepId} className="pl-2 border-l border-muted-foreground/30">
+                    {i + 1}. {step.description}
+                  </li>
+                ))}
+              </ul>
+            </CollapsibleContent>
+          </Collapsible>
+        </div>
+      )}
     </div>
   );
 }
