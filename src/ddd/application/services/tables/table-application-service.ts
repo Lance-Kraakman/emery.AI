@@ -379,13 +379,19 @@ export class TableApplicationService {
         return ResultHelpers.failure(saveResult.error || 'Failed to save table with new field');
       }
 
-      // 9. Get the newly added field
-      const newField = table.getField(command.name);
+      // 9. Get the newly added field from the SAVED table (which has the real DB-assigned ID)
+      // AIDEV-NOTE: Must use saveResult.data, not original table - the original has temporary ID 0
+      const savedTable = saveResult.data;
+      if (!savedTable) {
+        return ResultHelpers.failure('Table saved but could not be retrieved');
+      }
+
+      const newField = savedTable.getField(command.name);
       if (!newField) {
         return ResultHelpers.failure('Field was added but could not be retrieved');
       }
 
-      logger.summary(`Created field: ${newField.name} (${newField.type}) for table ${table.name}`);
+      logger.summary(`Created field: ${newField.name} (${newField.type}) for table ${savedTable.name}`);
 
       return ResultHelpers.success(newField);
 
@@ -452,9 +458,15 @@ export class TableApplicationService {
         return ResultHelpers.failure(saveResult.error || 'Failed to save table with updated field');
       }
 
-      // 6. Get the updated field (name might have changed)
+      // 8. Get the updated field from SAVED table (which has the correct persisted data)
+      // AIDEV-NOTE: Must use saveResult.data, not original table
+      const savedTable = saveResult.data;
+      if (!savedTable) {
+        return ResultHelpers.failure('Table saved but could not be retrieved');
+      }
+
       const fieldName = command.name || command.fieldName;
-      const finalField = table.getField(fieldName);
+      const finalField = savedTable.getField(fieldName);
       if (!finalField) {
         return ResultHelpers.failure('Field was updated but could not be retrieved');
       }
