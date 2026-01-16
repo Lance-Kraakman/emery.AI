@@ -16,45 +16,29 @@ Usage:
         yield event
 """
 
+import asyncio
 import logging
 import os
 from typing import Any, AsyncIterator, Dict, List, Optional
 
-import requests
+import httpx
 
 from ..services.tool_provider import ToolProvider
 from ..services.model_provider import SmolagentsModelProvider
 from ..services.skill_executor import SkillExecutorService
 from ..agents.agent_executor_agent import create_agent_executor
-from .response_types import StreamResponseDict, ErrorResponseDict
+from .response_types import StreamResponseDict, create_error_response
 
 logger = logging.getLogger(__name__)
 
 
-def _create_error_response(error_code: str, error_message: str) -> ErrorResponseDict:
-    """Create a typed error response dict."""
-    return {
-        "type": "error",
-        "error": {
-            "error_code": error_code,
-            "error_message": error_message,
-            "error_details": {"severity": "recoverable"},
-            "hint": "",
-            "can_retry": True,
-            "auto_retry": False,
-            "session_reset": False
-        }
-    }
-
-
-async def _stream_text_chunks(text: str, chunk_size: int = 5) -> AsyncIterator[str]:
-    """Stream text by word chunks to simulate streaming."""
-    import asyncio
+async def _stream_text_chunks(text: str, chunk_size: int = 8) -> AsyncIterator[str]:
+    """Stream text by word chunks for progressive UI display."""
     words = text.split()
     for i in range(0, len(words), chunk_size):
         chunk = ' '.join(words[i:i + chunk_size]) + ' '
         yield chunk
-        await asyncio.sleep(0.05)  # Small delay for realistic streaming feel
+        await asyncio.sleep(0.02)  # Small delay for progressive display
 
 
 async def handle_agent_mention_routing(
@@ -64,7 +48,7 @@ async def handle_agent_mention_routing(
     model_provider: SmolagentsModelProvider,
     skill_executor_service: Optional[SkillExecutorService] = None,
     org_model: Optional[str] = None,
-    images: Optional[List] = None,
+    images: Optional[List[Any]] = None,
 ) -> AsyncIterator[StreamResponseDict]:
     """
     Handle @agent:name mention routing to user-defined agents.
@@ -86,79 +70,77 @@ async def handle_agent_mention_routing(
     """
     logger.info(f"🔄 Routing to @agent:{agent_mention} with task: {task[:100]}...")
 
-    # 1. Fetch agent by name from API
-    try:
-        api_base = os.getenv("NEXT_API_URL", "http://localhost:3000")
-        headers = {
-            "Authorization": f"Bearer {tool_provider.api_key}",
-            "Content-Type": "application/json"
-        }
+    api_base = os.getenv("NEXT_API_URL", "http://localhost:3000")
+    headers = {
+        "Authorization": f"Bearer {tool_provider.api_key}",
+        "Content-Type": "application/json"
+    }
 
-        # GET /api/agents?name=agent_mention
-        agent_response = requests.get(
-            f"{api_base}/api/agents",
-            params={"name": agent_mention},
-            headers=headers,
-            timeout=10
-        )
+    # 1. Fetch agent by name from API (async)
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        try:
+            agent_response = await client.get(
+                f"{api_base}/api/agents",
+                params={"name": agent_mention},
+                headers=headers,
+            )
 
-        if agent_response.status_code == 404:
-            logger.warning(f"⚠️ Agent '{agent_mention}' not found")
-            yield {
-                "type": "content_chunk",
-                "content": f"I couldn't find an agent named '{agent_mention}'. Please check the agent name and try again."
-            }
-            return
+            if agent_response.status_code == 404:
+                logger.warning(f"⚠️ Agent '{agent_mention}' not found")
+                yield {
+                    "type": "content_chunk",
+                    "content": f"I couldn't find an agent named '{agent_mention}'. Please check the agent name and try again."
+                }
+                return
 
-        if not agent_response.ok:
-            logger.error(f"❌ Failed to fetch agent: {agent_response.status_code}")
-            yield _create_error_response(
+            if not agent_response.is_success:
+                logger.error(f"❌ Failed to fetch agent: {agent_response.status_code}")
+                yield create_error_response(
+                    "AGENT_LOOKUP_FAILED",
+                    f"Failed to look up agent '{agent_mention}'"
+                )
+                return
+
+            agent_data = agent_response.json()
+            if not agent_data.get("success") or not agent_data.get("data"):
+                logger.warning(f"⚠️ Agent '{agent_mention}' not found in response")
+                yield {
+                    "type": "content_chunk",
+                    "content": f"I couldn't find an agent named '{agent_mention}'. Please check the agent name and try again."
+                }
+                return
+
+            agent_config = agent_data["data"]
+            agent_id = agent_config.get("id")
+            logger.info(f"✅ Found agent: {agent_config.get('name')} (id={agent_id})")
+
+        except httpx.RequestError as e:
+            logger.error(f"❌ API request failed: {e}")
+            yield create_error_response(
                 "AGENT_LOOKUP_FAILED",
-                f"Failed to look up agent '{agent_mention}'"
+                f"Failed to look up agent: {e}"
             )
             return
 
-        agent_data = agent_response.json()
-        if not agent_data.get("success") or not agent_data.get("data"):
-            logger.warning(f"⚠️ Agent '{agent_mention}' not found in response")
-            yield {
-                "type": "content_chunk",
-                "content": f"I couldn't find an agent named '{agent_mention}'. Please check the agent name and try again."
-            }
-            return
+        # 2. Fetch agent's skills (async)
+        try:
+            skills_response = await client.get(
+                f"{api_base}/api/skills",
+                params={"agent_id": agent_id},
+                headers=headers,
+            )
 
-        agent_config = agent_data["data"]
-        agent_id = agent_config.get("id")
-        logger.info(f"✅ Found agent: {agent_config.get('name')} (id={agent_id})")
+            if skills_response.is_success:
+                skills_data = skills_response.json()
+                skills = skills_data.get("data", [])
+                logger.info(f"📦 Loaded {len(skills)} skills for agent {agent_id}")
+            else:
+                skills = []
+                logger.warning(f"⚠️ Failed to load skills for agent {agent_id}")
 
-    except requests.RequestException as e:
-        logger.error(f"❌ API request failed: {e}")
-        yield _create_error_response(
-            "AGENT_LOOKUP_FAILED",
-            f"Failed to look up agent: {e}"
-        )
-        return
-
-    # 2. Fetch agent's skills
-    try:
-        skills_response = requests.get(
-            f"{api_base}/api/skills",
-            params={"agent_id": agent_id},
-            headers=headers,
-            timeout=10
-        )
-
-        if skills_response.ok:
-            skills_data = skills_response.json()
-            skills = skills_data.get("data", [])
-            logger.info(f"📦 Loaded {len(skills)} skills for agent {agent_id}")
-        else:
+        except httpx.RequestError as e:
+            logger.warning(f"⚠️ Skills fetch failed: {e}, continuing without skills")
             skills = []
-            logger.warning(f"⚠️ Failed to load skills for agent {agent_id}")
-
-    except requests.RequestException as e:
-        logger.warning(f"⚠️ Skills fetch failed: {e}, continuing without skills")
-        skills = []
 
     # 3. Create AgentExecutor
     model = model_provider.get_model(
@@ -199,14 +181,19 @@ async def handle_agent_mention_routing(
     }
 
     try:
-        # Run the agent (non-streaming for simplicity)
-        result = agent_executor.run(
-            task=task,
-            images=images if images else None,
-            reset=True  # Fresh execution for each mention
+        # Run the agent in a thread pool to avoid blocking async loop
+        # AIDEV-NOTE: smolagents agents are synchronous, so we run in executor
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None,
+            lambda: agent_executor.run(
+                task=task,
+                images=images if images else None,
+                reset=True  # Fresh execution for each mention
+            )
         )
 
-        # Stream the result
+        # Stream the result progressively
         final_text = str(result) if result else "Task completed."
         async for chunk in _stream_text_chunks(final_text):
             yield {
@@ -218,7 +205,7 @@ async def handle_agent_mention_routing(
 
     except Exception as e:
         logger.error(f"❌ AgentExecutor failed: {e}")
-        yield _create_error_response(
+        yield create_error_response(
             "AGENT_EXECUTION_FAILED",
             f"Agent execution failed: {str(e)}"
         )

@@ -28,6 +28,11 @@ class StepMetadata(TypedDict, total=False):
     replan_number: str
     success: str
     confidence: str
+    # Cascade planning and unified message handling metadata
+    plan_id: str
+    agent_name: str
+    total_sub_plans: str
+    feedback: str
 
 
 class StepProgressDict(TypedDict):
@@ -104,3 +109,45 @@ StreamResponseDict = Union[
     InterruptedResponseDict,
     AwaitingInputResponseDict,
 ]
+
+
+# ============================================================================
+# Factory Functions
+# ============================================================================
+
+def create_error_response(
+    error_code: str,
+    error_message: str,
+    severity: str = "recoverable",
+    hint: str = "",
+    can_retry: bool = True,
+    auto_retry: bool = False,
+    session_reset: bool = False
+) -> ErrorResponseDict:
+    """
+    Create a standardized error response dict.
+
+    Args:
+        error_code: Machine-readable error code
+        error_message: Human-readable error description
+        severity: Error severity level (recoverable, warning, fatal)
+        hint: Optional hint for resolution
+        can_retry: Whether the operation can be retried
+        auto_retry: Whether to auto-retry the operation
+        session_reset: Whether session state should be reset
+
+    Returns:
+        ErrorResponseDict ready to yield from streaming handlers
+    """
+    return {
+        "type": "error",
+        "error": {
+            "error_code": error_code,
+            "error_message": error_message,
+            "error_details": {"severity": severity},
+            "hint": hint,
+            "can_retry": can_retry,
+            "auto_retry": auto_retry,
+            "session_reset": session_reset
+        }
+    }
