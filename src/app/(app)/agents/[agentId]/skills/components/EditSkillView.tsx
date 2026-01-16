@@ -60,8 +60,8 @@ export function EditSkillView({ agent, skill }: EditSkillViewProps) {
 
   return (
     <div className="h-full relative">
-      {/* Floating Header - centered in canvas area (between side panels) */}
-      <div className="absolute top-2 left-56 right-[21.5rem] z-20 flex justify-center">
+      {/* Floating Header - centered, fits content */}
+      <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20">
         <div className="flex items-center gap-2 px-4 py-2 bg-background/50 backdrop-blur-sm border rounded-full shadow-sm">
         {/* Back button when navigated from org chart */}
         {returnTo?.startsWith('org-chart') && (

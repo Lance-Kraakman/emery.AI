@@ -206,7 +206,7 @@ export function AgenticSkillEditor({
       {/* Main content area - Instructions (full height like workflow canvas) */}
       <div className={cn(
         'h-full flex flex-col p-4 pr-[21.5rem]',
-        hasFloatingHeader && 'pt-14'
+        hasFloatingHeader && 'pt-20'
       )}>
         <div className="flex-1 flex flex-col min-h-0">
           <Label className="text-sm font-medium mb-2 shrink-0">Instructions</Label>
@@ -234,7 +234,7 @@ export function AgenticSkillEditor({
         className={cn(
           'absolute right-2 z-10 w-80 bg-background/50 backdrop-blur-sm border rounded-lg shadow-lg overflow-hidden flex flex-col',
           'transition-all duration-200',
-          hasFloatingHeader ? 'top-[52px] max-h-[calc(100%-60px)]' : 'top-2 max-h-[calc(100%-1rem)]'
+          hasFloatingHeader ? 'top-[72px] max-h-[calc(100%-80px)]' : 'top-2 max-h-[calc(100%-1rem)]'
         )}
       >
         {/* Panel Header */}
