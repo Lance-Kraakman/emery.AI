@@ -44,6 +44,8 @@ import type { ToolDTO } from '@/app/mappers/tool-mapper'
 import { StepProgressIndicator } from './StepProgressIndicator'
 import { StepHistoryDisplay } from './StepHistoryDisplay'
 import { ApprovalInputBar } from './ApprovalInputBar'
+import { SaveToSkillDialog } from './SaveToSkillDialog'
+import { savePlanToSkill } from '@/app/actions/skills'
 import { createDebugLogger } from '@/lib/utils/debug-logger'
 import type { ExecutionStep } from '@/app/dtos/chat.dto'
 import type { ChatMessage as EmeryChatMessage } from './types/extended-chat-handler'
@@ -225,9 +227,50 @@ function ChatContentWithCanvas({
   onAddTool,
   onRemoveTool,
   handler,
+  chatContext,
 }: ChatContentWithCanvasProps) {
   // AIDEV-NOTE: useChatCanvas must be called at component level, not inside handlers
   const { openArtifactInCanvas } = useChatCanvas()
+
+  // State for Save to Skill dialog
+  const [showSaveToSkillDialog, setShowSaveToSkillDialog] = useState(false)
+
+  // Get agentId from chat context if available (domainType is 'agents' plural)
+  const agentId = chatContext?.domainType === 'agents' ? chatContext.domainId : undefined
+
+  // Handle saving plan to skill
+  const handleSaveToSkill = async (skillId: number | null, skillName?: string, selectedAgentId?: number) => {
+    if (!handler.awaitingInput?.planJson) {
+      throw new Error('No plan data available')
+    }
+
+    // Use selected agent ID from dialog, fallback to context agentId
+    const effectiveAgentId = selectedAgentId ?? agentId
+
+    const result = await savePlanToSkill({
+      skillId,
+      planJson: handler.awaitingInput.planJson,
+      agentId: effectiveAgentId,
+      skillName,
+    })
+
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to save plan to skill')
+    }
+
+    logger.debug('Plan saved to skill', { skillId: result.data?.id })
+  }
+
+  // Get plan goal from awaiting input for dialog
+  const planGoal = useMemo(() => {
+    if (!handler.awaitingInput?.planJson) return ''
+    try {
+      const plan = JSON.parse(handler.awaitingInput.planJson)
+      return plan.goal || ''
+    } catch {
+      return ''
+    }
+  }, [handler.awaitingInput?.planJson])
 
   // Handle tool click using global UI state for artifacts
   const handleToolClick = async (tool: ToolDTO) => {
@@ -418,24 +461,41 @@ function ChatContentWithCanvas({
             awaitingInput={handler.awaitingInput}
             onRespond={(response) => handler.respondToInput?.(response)}
             disabled={handler.isLoading}
+            onSaveToSkill={
+              handler.awaitingInput.planJson
+                ? () => setShowSaveToSkillDialog(true)
+                : undefined
+            }
           />
         )}
 
-        <UnifiedChatInput
-          onSendMessage={async (message) => {
-            // Send message with proper MessagePart format
-            handler.append({
-              role: 'user',
-              parts: [{ type: 'text', text: message }],
-              id: generateId() // Add id for type compatibility
-            })
-          }}
-          onToolsChange={onToolsChange}
-          placeholder="Ask Emery anything... (type @ to add tools, docs, agents, etc.)"
-          pendingAttachments={handler.pendingAttachments}
-          onAttachmentAdd={handler.addAttachment}
-          onAttachmentRemove={handler.removeAttachment}
+        {/* Save to Skill Dialog */}
+        <SaveToSkillDialog
+          open={showSaveToSkillDialog}
+          onClose={() => setShowSaveToSkillDialog(false)}
+          onSave={handleSaveToSkill}
+          planGoal={planGoal}
+          agentId={agentId}
         />
+
+        {/* Hide main input when awaiting user response (Claude Code-style) */}
+        {!handler.awaitingInput && (
+          <UnifiedChatInput
+            onSendMessage={async (message) => {
+              // Send message with proper MessagePart format
+              handler.append({
+                role: 'user',
+                parts: [{ type: 'text', text: message }],
+                id: generateId() // Add id for type compatibility
+              })
+            }}
+            onToolsChange={onToolsChange}
+            placeholder="Ask Emery anything... (type @ to add tools, docs, agents, etc.)"
+            pendingAttachments={handler.pendingAttachments}
+            onAttachmentAdd={handler.addAttachment}
+            onAttachmentRemove={handler.removeAttachment}
+          />
+        )}
       </div>
     </div>
   )
