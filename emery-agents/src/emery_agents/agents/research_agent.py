@@ -62,7 +62,7 @@ def create_research_agent(
         tools=all_tools,
         model=model,
         max_steps=max_steps,
-        system_prompt=instructions,
+        instructions=instructions,  # smolagents uses 'instructions', not 'system_prompt'
         verbosity_level=LogLevel.OFF,
     )
 
