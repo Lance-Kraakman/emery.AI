@@ -1205,9 +1205,35 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
 }
 
 
+def normalize_model_id(model_id: str) -> str:
+    """
+    Normalize model ID to match registry format.
+
+    Handles cases where model ID might be missing provider prefix:
+    - "gemini-2.0-flash" → "google/gemini-2.0-flash"
+    - "google/gemini-2.0-flash" → "google/gemini-2.0-flash" (no change)
+
+    AIDEV-NOTE: This is needed because smolagents OpenAIModel stores the short
+    model name (without provider prefix) in token_usage, but the registry uses
+    the full prefixed format for Google models.
+    """
+    # If already has a provider prefix, return as-is
+    if "/" in model_id:
+        return model_id
+
+    # Check if this is a Gemini model without prefix
+    if model_id.startswith("gemini-"):
+        return f"google/{model_id}"
+
+    # Return as-is for other models
+    return model_id
+
+
 def get_model_metadata(model_id: str) -> Optional[ModelMetadata]:
     """Get model metadata by ID."""
-    return HUGGINGFACE_MODELS.get(model_id)
+    # Normalize model ID to handle missing prefixes (e.g., Gemini models)
+    normalized_id = normalize_model_id(model_id)
+    return HUGGINGFACE_MODELS.get(normalized_id)
 
 
 def get_all_models() -> List[ModelMetadata]:
