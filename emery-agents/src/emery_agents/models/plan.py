@@ -11,8 +11,14 @@ Two levels of instructions:
 
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, TYPE_CHECKING
 from enum import Enum
+import json
+
+if TYPE_CHECKING:
+    from ..grpc.generated.agent_worker_pb2 import StoredPlan as StoredPlanProto
+    from ..grpc.generated.agent_worker_pb2 import StoredPlanStep as StoredPlanStepProto
+    from ..grpc.generated.agent_worker_pb2 import StoredSubPlan as StoredSubPlanProto
 
 
 class PlanStepStatus(str, Enum):
@@ -74,6 +80,20 @@ class SubPlan:
             planning_observations=data.get("planningObservations", data.get("planning_observations")),
         )
 
+    @classmethod
+    def from_stored_proto(cls, proto: "StoredSubPlanProto") -> "SubPlan":
+        """Create SubPlan from StoredSubPlan proto message.
+
+        Used when hydrating stored plans from agentic step configs.
+        """
+        return cls(
+            agent_name=proto.agent_name or "",
+            goal=proto.goal or "",
+            steps=[PlanStep.from_stored_proto(s) for s in proto.steps],
+            context_gathered={},  # Not stored in proto
+            planning_observations=proto.planning_observations or None,
+        )
+
 
 @dataclass(frozen=True)
 class PlanStep:
@@ -125,6 +145,36 @@ class PlanStep:
             error=data.get("error"),
             sub_plan=SubPlan.from_dict(sub_plan_data) if sub_plan_data else None,
             target_agent=data.get("targetAgent", data.get("target_agent")),
+        )
+
+    @classmethod
+    def from_stored_proto(cls, proto: "StoredPlanStepProto") -> "PlanStep":
+        """Create PlanStep from StoredPlanStep proto message.
+
+        Used when hydrating stored plans from agentic step configs.
+        Proto parameters are stored as string map - parse JSON values.
+        """
+        # Parse parameters: proto stores as Map[str, str], parse JSON values
+        parameters: Optional[Dict[str, Any]] = None
+        if proto.parameters:
+            parameters = {}
+            for key, value in proto.parameters.items():
+                try:
+                    parameters[key] = json.loads(value)
+                except (json.JSONDecodeError, TypeError):
+                    parameters[key] = value
+
+        return cls(
+            step_id=proto.step_id or "",
+            description=proto.description or "",
+            tool_call=proto.tool_call or None,
+            parameters=parameters,
+            context_tables=list(proto.context_tables),
+            status=PlanStepStatus.PENDING.value,  # Fresh execution
+            result=None,  # No result yet
+            error=None,  # No error yet
+            sub_plan=SubPlan.from_stored_proto(proto.sub_plan) if proto.sub_plan.agent_name else None,
+            target_agent=proto.target_agent or None,
         )
 
     def mark_in_progress(self) -> "PlanStep":
@@ -320,6 +370,46 @@ class Plan:
             version=data.get("version", 1),
             context=data.get("context"),
             analysis=data.get("analysis"),
+        )
+
+    @classmethod
+    def from_stored_proto(cls, proto: "StoredPlanProto") -> "Plan":
+        """Create Plan from StoredPlan proto message.
+
+        Used when executing agentic steps with pre-approved plans.
+        Sets status to APPROVED since stored plans are pre-approved.
+
+        Args:
+            proto: StoredPlan proto message from AgenticStepConfig.plan
+
+        Returns:
+            Plan ready for execution (status=APPROVED)
+        """
+        generated_at = None
+        if proto.generated_at:
+            try:
+                generated_at = datetime.fromisoformat(proto.generated_at.replace("Z", "+00:00"))
+            except ValueError:
+                pass  # Invalid timestamp, leave as None
+
+        approved_at = None
+        if proto.approved_at:
+            try:
+                approved_at = datetime.fromisoformat(proto.approved_at.replace("Z", "+00:00"))
+            except ValueError:
+                pass  # Invalid timestamp, leave as None
+
+        return cls(
+            id=proto.id or "",
+            goal=proto.goal or "",
+            basic_instructions=proto.basic_instructions or "",
+            context=proto.context or None,
+            analysis=proto.analysis or None,
+            steps=[PlanStep.from_stored_proto(s) for s in proto.steps],
+            status=PlanStatus.APPROVED.value,  # Pre-approved for execution
+            generated_at=generated_at,
+            approved_at=approved_at or datetime.utcnow(),  # Set now if not provided
+            version=proto.version or 1,
         )
 
     def approve(self) -> "Plan":

@@ -332,6 +332,7 @@ class ExecutionCoordinator:
         tools: List[Any],
         managed_agents: Optional[List[ManagedAgent]] = None,
         context: Optional[str] = None,
+        stored_plan: Optional[Plan] = None,
     ) -> AsyncIterator[Any]:
         """
         Smart execution entry point - decides mode based on LLM task analysis.
@@ -340,6 +341,9 @@ class ExecutionCoordinator:
         - Whether task is simple (DIRECT) or complex (PLAN_AND_APPROVE)
         - Whether clarifying questions should be asked first
         - Which agent should handle the task (if clear)
+
+        If stored_plan is provided, skips classification and executes
+        the pre-approved plan directly (autonomous mode).
 
         AIDEV-NOTE: Replaces brittle string matching patterns with intelligent
         LLM-based classification. If needs_clarification is True, questions
@@ -350,14 +354,34 @@ class ExecutionCoordinator:
             tools: Available tools
             managed_agents: Available managed agents
             context: Additional context (e.g., existing databases)
+            stored_plan: Pre-approved plan from skill config (enables autonomous execution)
 
         Yields:
             AwaitingClarificationEvent if questions needed
             DirectExecutionStartedEvent for simple tasks
             PlanCreatedEvent for complex tasks
+            PlanApprovedEvent + execution events for stored plans
         """
         # Store managed_agents for later use in execute_plan
         self._managed_agents = managed_agents
+
+        # === AUTONOMOUS MODE: Execute stored plan directly ===
+        if stored_plan:
+            logger.info(
+                f"📋 Coordinator: Executing stored plan '{stored_plan.id}' "
+                f"with {len(stored_plan.steps)} steps (autonomous mode)"
+            )
+            self._current_plan = stored_plan
+            self._current_phase = ExecutionPhase.EXECUTING
+
+            # Emit events for UI visibility
+            yield PlanCreatedEvent(plan_id=stored_plan.id, plan=stored_plan)
+            yield PlanApprovedEvent(plan_id=stored_plan.id)
+
+            # Execute the pre-approved plan
+            async for event in self.execute_plan(stored_plan.id, tools):
+                yield event
+            return
 
         # Use LLM-based classification
         classification = self._classify_task(task, managed_agents or [], context)

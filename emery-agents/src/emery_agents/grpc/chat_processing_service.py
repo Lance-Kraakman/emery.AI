@@ -78,6 +78,10 @@ from ..models.plan import Plan, PlanStatus, create_plan
 from ..entities.execution_context import ExecutionContext
 from ..types import ExecutionMode
 from ..tools.tool_modes import ToolMode, filter_tools_for_mode
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .generated.agent_worker_pb2 import AgentConfig, SkillConfig
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -205,6 +209,53 @@ def _cleanup_thread_pool():
     logger.info("Chat processing thread pool shut down")
 
 atexit.register(_cleanup_thread_pool)
+
+
+def detect_stored_plan_from_skills(
+    skills: Optional[List['agent_worker_pb2.SkillConfig']]
+) -> Optional[Plan]:
+    """
+    Detect stored plan from skill configurations.
+
+    Scans skills for agentic steps that have pre-approved execution plans.
+    When found, the plan enables autonomous execution without HITL approval.
+
+    Args:
+        skills: List of SkillConfig proto messages from agent config
+
+    Returns:
+        Hydrated Plan object if found, None otherwise
+    """
+    if not skills:
+        return None
+
+    for skill in skills:
+        # Check if skill has steps (DAG-based execution)
+        if not skill.steps:
+            continue
+
+        for step in skill.steps:
+            # Check if step has agentic config with a plan
+            if not step.HasField('agentic_config'):
+                continue
+
+            agentic_config = step.agentic_config
+            if not agentic_config.HasField('plan'):
+                continue
+
+            # Check if plan has an ID (empty proto message means no plan)
+            if not agentic_config.plan.id:
+                continue
+
+            # Found a stored plan - hydrate it
+            stored_plan = Plan.from_stored_proto(agentic_config.plan)
+            logger.info(
+                f"📋 Found stored plan '{stored_plan.id}' in skill '{skill.name}' "
+                f"step '{step.name}' - enabling AUTONOMOUS mode"
+            )
+            return stored_plan
+
+    return None
 
 
 class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingServiceServicer):
@@ -904,6 +955,12 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             if hasattr(agent, 'managed_agents') and agent.managed_agents:
                 managed_agents = list(agent.managed_agents.values())
 
+            # Detect stored plan from agent config skills
+            # If found, enables autonomous execution (skip HITL approval)
+            stored_plan = None
+            if agent_config and agent_config.skills:
+                stored_plan = detect_stored_plan_from_skills(list(agent_config.skills))
+
             # Coordinator handles all execution paths
             should_fall_through = False
             async for event in self._stream_coordinator_response(
@@ -914,6 +971,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 org_model=org_model,
                 coordinator_phase=coordinator_phase,
                 managed_agents=managed_agents,
+                stored_plan=stored_plan,  # Pass stored plan for autonomous execution
             ):
                 if isinstance(event, dict):
                     # Regular event - yield it
@@ -1841,6 +1899,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         org_model: Optional[str],
         coordinator_phase: str,
         managed_agents: Optional[List[Any]] = None,
+        stored_plan: Optional[Plan] = None,
     ) -> AsyncIterator[Any]:
         """
         Coordinator-driven execution path.
@@ -1849,6 +1908,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         - PASSTHROUGH: Single managed agent task (agent has own HITL)
         - DIRECT: Simple task, execute without plan
         - PLAN_AND_APPROVE: Complex task, create plan and await approval
+        - AUTONOMOUS: Pre-approved stored plan, execute directly (skip HITL)
 
         Args:
             context: Execution context with tool_mode
@@ -1858,7 +1918,56 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             org_model: Organization model for evaluator
             coordinator_phase: Current phase from session
             managed_agents: Available managed agents for mode detection
+            stored_plan: Pre-approved plan from skill's agentic step config (enables autonomous execution)
         """
+        # === AUTONOMOUS MODE: Execute stored plan directly ===
+        if stored_plan and coordinator_phase == "idle":
+            logger.info(f"📋 Coordinator: AUTONOMOUS mode - executing stored plan '{stored_plan.id}' directly")
+
+            # Create coordinator for execution
+            model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
+            evaluator_factory = create_evaluator_factory(model)
+
+            # Get managed agents as list for step executor
+            if managed_agents:
+                if isinstance(managed_agents, dict):
+                    managed_agents_list = list(managed_agents.values())
+                else:
+                    managed_agents_list = list(managed_agents)
+            else:
+                managed_agents_list = []
+
+            plan_step_executor = PlanStepExecutor(
+                tools=tools,
+                managed_agents=managed_agents_list,
+                model=model,
+                max_steps=10,
+            )
+
+            context_tools = context.tool_provider.get_context_tools() if context.tool_provider else []
+
+            coordinator = ExecutionCoordinator(
+                plan_service=self.plan_service,
+                model_provider=self.model_provider,
+                evaluator_factory=evaluator_factory,
+                plan_step_executor=plan_step_executor,
+                evaluate_after_steps=1,
+                max_replans=3,
+                org_model=org_model,
+                context_tools=context_tools,
+            )
+
+            # Execute stored plan directly (no classification, no approval)
+            async for event in coordinator.execute(
+                task=task,
+                tools=tools,
+                managed_agents=managed_agents,
+                stored_plan=stored_plan,  # Pass stored plan for direct execution
+            ):
+                yield self._convert_coordinator_event(event, session_id)
+
+            return
+
         if coordinator_phase == "idle":
             # === NEW REQUEST - Let coordinator determine mode ===
             logger.info("📋 Coordinator: Analyzing task to determine execution mode...")
