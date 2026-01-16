@@ -3,6 +3,15 @@ Analyze this user task and classify how it should be handled.
 ## User Task
 {{ task }}
 
+## Default Assumptions
+
+ALWAYS assume the user is asking about their Emery data unless they explicitly say otherwise.
+- "Create a database" → Create in Emery (not design a theoretical schema)
+- "Build a CRM" → Create CRM tables in Emery
+- "Help me plan X" → Plan to create X in Emery
+
+Do NOT ask "where do you want this?" - the answer is always Emery.
+
 ## Available Agents
 {% if available_agents %}
 {% for agent in available_agents %}
@@ -46,12 +55,15 @@ Set needs_clarification=True when:
 - User might regret the action if assumptions are wrong
 
 Do NOT ask clarifying questions when:
+- User wants to create/design something → Assume they want it in Emery
 - Context shows only one matching resource (e.g., one database, one table with that name)
 - The user provides detailed content (questionnaire, form, document) - proceed with planning
 - Details can be reasonably inferred from the gathered context
 - All necessary details are provided
 - The action is clearly specified and reversible
 - It's a simple query/read operation
+
+**Bias toward action**: If in doubt, proceed to planning. The user can always modify the plan.
 
 **Use the gathered context and agent descriptions to make informed decisions.** Don't ask questions when the answer is obvious from what exists.
 

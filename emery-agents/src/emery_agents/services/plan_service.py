@@ -66,6 +66,7 @@ class PlanService:
         tools: Optional[List[Tool]] = None,
         managed_agents: Optional[List[Any]] = None,
         context_tools: Optional[List[Any]] = None,
+        research_tools: Optional[List[Any]] = None,
     ) -> Plan:
         """
         Generate plan using context-first planning pattern.
@@ -84,6 +85,7 @@ class PlanService:
             tools: Actual tool objects (for prompt template)
             managed_agents: Available managed agents (planner sees their descriptions)
             context_tools: Optional context-gathering tools (database_list, table_list)
+            research_tools: Optional web research tools (web_search, visit_webpage)
 
         Returns:
             Plan object with generated steps, context, and analysis
@@ -100,11 +102,14 @@ class PlanService:
         # Create plan output tool
         plan_tool = PlanOutputTool()
 
-        # Build list of planner tools: context tools + submit_plan
+        # Build list of planner tools: context tools + research tools + submit_plan
         planner_tools = []
         if context_tools:
             planner_tools.extend(context_tools)
             logger.info(f"📋 Planner has {len(context_tools)} context-gathering tools")
+        if research_tools:
+            planner_tools.extend(research_tools)
+            logger.info(f"🔬 Planner has {len(research_tools)} research tools")
         planner_tools.append(plan_tool)
 
         # Extract agent info for template (names + descriptions + capabilities)
@@ -124,6 +129,7 @@ class PlanService:
             task=basic_instructions,
             tools=tools or [],
             managed_agents=agent_info,  # Pass info, not actual agents
+            has_research_tools=bool(research_tools),
         )
 
         logger.info(f"📋 Generating plan with context-first pattern...")
@@ -137,10 +143,12 @@ class PlanService:
         steps: List[PlanStep] = []
 
         try:
+            # Allow more steps when research tools are available
+            max_steps = 10 if research_tools else 6
             planner = ToolCallingAgent(
                 tools=planner_tools,
                 model=model,
-                max_steps=6,  # Allow context gathering + submit_plan
+                max_steps=max_steps,  # Context + research + submit_plan
             )
             planner.run(prompt)
 

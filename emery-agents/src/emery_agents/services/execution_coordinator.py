@@ -25,6 +25,7 @@ from .plan_step_executor import PlanStepExecutor
 from .sub_agent_planner import SubAgentPlanner, SubAgentPlanningResult
 from .protocols import EvaluatorAgent, Tool, ModelProvider, ManagedAgent
 from .task_classifier import TaskClassifier, TaskClassification
+from .research_tools_provider import get_research_tools, detect_research_intent
 
 logger = logging.getLogger(__name__)
 
@@ -499,9 +500,19 @@ class ExecutionCoordinator:
             f"(filtered from {len(tools)} total)"
         )
 
+        # Detect if research is needed and get research tools
+        research_tools = None
+        if detect_research_intent(goal) or detect_research_intent(instructions):
+            research_tools = get_research_tools()
+            if research_tools:
+                logger.info(f"🔬 Research intent detected, adding {len(research_tools)} research tools")
+            else:
+                logger.warning("🔬 Research intent detected but research tools unavailable")
+
         # Generate plan using LLM
         # Pass managed_agents so planner knows available agents for routing
         # Pass context_tools so planner can list databases/tables before planning
+        # Pass research_tools so planner can do web research if needed
         plan = await self.plan_service.generate_plan(
             basic_instructions=instructions,
             context_tables=context_tables,
@@ -511,6 +522,7 @@ class ExecutionCoordinator:
             tools=planning_tools,
             managed_agents=agents,
             context_tools=self._context_tools,
+            research_tools=research_tools,
         )
 
         self._current_plan = plan
