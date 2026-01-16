@@ -10,7 +10,7 @@ Two levels of instructions:
 """
 
 from dataclasses import dataclass, field, asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any, TYPE_CHECKING
 from enum import Enum
 import json
@@ -37,12 +37,6 @@ class PlanStatus(str, Enum):
     EXECUTING = "executing"
     COMPLETED = "completed"
     FAILED = "failed"
-
-
-# Forward reference for SubPlan (defined after PlanStep)
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from typing import ForwardRef
 
 
 @dataclass(frozen=True)
@@ -408,7 +402,7 @@ class Plan:
             steps=[PlanStep.from_stored_proto(s) for s in proto.steps],
             status=PlanStatus.APPROVED.value,  # Pre-approved for execution
             generated_at=generated_at,
-            approved_at=approved_at or datetime.utcnow(),  # Set now if not provided
+            approved_at=approved_at or datetime.now(timezone.utc),  # Set now if not provided
             version=proto.version or 1,
         )
 
@@ -421,7 +415,7 @@ class Plan:
             steps=self.steps,
             status=PlanStatus.APPROVED.value,
             generated_at=self.generated_at,
-            approved_at=datetime.utcnow(),
+            approved_at=datetime.now(timezone.utc),
             version=self.version,
             context=self.context,
             analysis=self.analysis,
@@ -592,7 +586,7 @@ def create_plan(
         basic_instructions=basic_instructions,
         steps=steps or [],
         status=PlanStatus.DRAFT.value,
-        generated_at=datetime.utcnow(),
+        generated_at=datetime.now(timezone.utc),
         context=context,
         analysis=analysis,
     )

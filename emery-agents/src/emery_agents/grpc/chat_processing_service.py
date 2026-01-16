@@ -7,7 +7,7 @@ import re
 import time
 import asyncio
 import concurrent.futures
-from typing import AsyncIterator, Optional, List, Dict, Any, TypedDict, Literal, TypeVar, Coroutine
+from typing import AsyncIterator, Optional, List, Dict, Any, TypedDict, Literal, TypeVar, Coroutine, TYPE_CHECKING
 
 import grpc
 from grpc import aio
@@ -78,7 +78,6 @@ from ..models.plan import Plan, PlanStatus, create_plan
 from ..entities.execution_context import ExecutionContext
 from ..types import ExecutionMode
 from ..tools.tool_modes import ToolMode, filter_tools_for_mode
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .generated.agent_worker_pb2 import AgentConfig, SkillConfig
