@@ -29,6 +29,7 @@ import {
   exportBuiltinTemplate,
   saveBuiltinToLibrary,
   applyBuiltinSkillTemplate,
+  applyBuiltinDatabaseTemplate,
 } from '@/app/actions/templates';
 
 // =============================================================================
@@ -130,6 +131,14 @@ export function TemplateGallery({
         if (result.success) {
           toast.success(`Skill "${result.data?.skillName}" created successfully`);
           router.push('/skills');
+        } else {
+          toast.error(result.error || 'Failed to apply template');
+        }
+      } else if (template.entityType === 'database') {
+        const result = await applyBuiltinDatabaseTemplate(template.id);
+        if (result.success) {
+          toast.success(`Database "${result.data?.name}" created successfully`);
+          router.push('/data');
         } else {
           toast.error(result.error || 'Failed to apply template');
         }

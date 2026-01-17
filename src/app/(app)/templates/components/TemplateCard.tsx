@@ -122,38 +122,23 @@ export function TemplateCard({
   return (
     <Card className="flex flex-col h-full hover:shadow-md transition-shadow">
       <CardHeader className="p-3 pb-2">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-start gap-2 min-w-0 flex-1">
-            <div className={`p-1 rounded ${getEntityTypeColor(entityType)} shrink-0`}>
-              {getEntityTypeIcon(entityType)}
-            </div>
-            <div className="min-w-0 flex-1">
-              <CardTitle className="text-sm font-medium line-clamp-2 leading-tight">
-                {template.name}
-              </CardTitle>
-              <div className="flex items-center gap-1.5 mt-1">
-                <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 h-4 ${getEntityTypeColor(entityType)}`}>
-                  {getEntityTypeLabel(entityType)}
-                </Badge>
-                {template.category && (
-                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
-                    {template.category}
-                  </Badge>
-                )}
-              </div>
-            </div>
-          </div>
-          {isBuiltin && (
-            <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0 h-5 gap-0.5">
-              <Lock className="h-2.5 w-2.5" />
-              Builtin
+        <CardTitle className="text-sm font-medium line-clamp-2 leading-tight">
+          {template.name}
+        </CardTitle>
+        <div className="flex items-center gap-1.5 mt-1.5">
+          <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 h-4 ${getEntityTypeColor(entityType)}`}>
+            {getEntityTypeLabel(entityType)}
+          </Badge>
+          {template.category && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+              {template.category}
             </Badge>
           )}
         </div>
       </CardHeader>
 
       <CardContent className="flex-1 px-3 pb-2">
-        <CardDescription className="line-clamp-2 text-xs">
+        <CardDescription className="line-clamp-3 text-xs">
           {template.description || 'No description provided'}
         </CardDescription>
 
