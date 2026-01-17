@@ -1,0 +1,42 @@
+## app_crud Tool - App Management
+
+The `app_crud` tool manages Puck visual apps.
+
+### Methods
+| Method | Description | Required Params |
+|--------|-------------|-----------------|
+| list | List all apps | - |
+| read | Get app by ID | app_id |
+| create | Create new app | data.name |
+| update | Update app settings | app_id, data |
+| delete | Delete app (cascades) | app_id |
+
+### App Fields
+- `id`: Unique app identifier
+- `name`: Display name (required for create)
+- `slug`: URL-friendly identifier (auto-generated if not provided)
+- `description`: What the app does
+- `themeConfig`: Theme settings (JSON: primaryColor, secondaryColor, etc.)
+- `homePageId`: Default landing page ID
+
+### Example Usage
+```python
+# List all apps
+result = app_crud(method="list")
+
+# Get an app
+result = app_crud(method="read", app_id=1)
+
+# Create an app
+result = app_crud(method="create", data={"name": "My App", "description": "..."})
+
+# Update an app
+result = app_crud(method="update", app_id=1, data={"name": "New Name"})
+
+# Delete an app (WARNING: deletes all pages too)
+result = app_crud(method="delete", app_id=1)
+```
+
+### Response Format (TOON)
+- Success: `app:created,1,My App,my-app` or `apps|5]{id,name,slug}:...`
+- Failure: `FAILED: error message`

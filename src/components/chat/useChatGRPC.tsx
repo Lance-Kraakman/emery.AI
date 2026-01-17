@@ -664,11 +664,11 @@ export function useChatGRPC(
                   planJson: eventData.planJson
                 });
 
-                // If it's a plan approval, also display the plan as part of the message
-                if (eventData.inputType === 'plan_approval' && eventData.content) {
-                  // Add plan content to assistant message for display
-                  const planMessage = `\n\n**${eventData.title}**\n\n${eventData.content}`;
-                  assistantMessage += planMessage;
+                // Display ALL awaiting input content (questions, plans, etc.) in the message
+                // This ensures clarifying questions and plan approvals appear in chat history
+                if (eventData.content) {
+                  const inputMessage = `\n\n**${eventData.title}**\n\n${eventData.content}`;
+                  assistantMessage += inputMessage;
 
                   if (!messageCreated) {
                     setMessages((prev) => [...prev, createTextMessage(assistantMessage, 'assistant', assistantId)]);

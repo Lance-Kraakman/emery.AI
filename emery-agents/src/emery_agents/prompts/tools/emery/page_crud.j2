@@ -1,0 +1,134 @@
+## page_crud Tool - Page Management with Puck Visual Builder
+
+The `page_crud` tool manages pages within Puck apps.
+
+### Methods
+| Method | Description | Required Params |
+|--------|-------------|-----------------|
+| list | List pages in app | app_id |
+| read | Get page by ID | page_id |
+| create | Create page | app_id, data.name |
+| update | Update page metadata | page_id, data |
+| update_content | Update Puck content | page_id, data.templateData |
+| publish | Make page public | page_id |
+| unpublish | Make page private | page_id |
+| delete | Delete page | page_id |
+
+### Page Fields
+- `id`: Unique page identifier
+- `appId`: Parent app ID
+- `name`: Display name
+- `slug`: URL-friendly identifier
+- `description`: What the page shows
+- `order`: Position in navigation (number)
+- `templateData`: **Puck visual content (JSON)** - see structure below
+- `isPublic`: Whether page is published
+- `requiresAuth`: Whether login is required
+- `allowedRoles`: Array of role names for access control
+
+### Puck templateData Structure
+
+The `templateData` field contains the visual page content in Puck format:
+
+```json
+{
+  "root": {
+    "props": { "title": "Page Title" }
+  },
+  "content": [
+    {
+      "type": "Hero",
+      "props": {
+        "title": "Welcome",
+        "description": "Your hero section text",
+        "buttons": [{"text": "Get Started", "href": "/start"}]
+      }
+    },
+    {
+      "type": "Cards",
+      "props": {
+        "items": [
+          {"title": "Feature 1", "description": "..."},
+          {"title": "Feature 2", "description": "..."}
+        ]
+      }
+    }
+  ],
+  "zones": {}
+}
+```
+
+### Available Puck Blocks
+
+| Block | Purpose | Key Props |
+|-------|---------|-----------|
+| Hero | Header section with title and CTA | title, description, buttons, backgroundImage |
+| Cards | Grid of feature cards | items[], columns |
+| Text | Rich text content | text, align |
+| Heading | Section heading | text, level (h1-h6) |
+| Image | Image with caption | src, alt, caption |
+| Button | CTA button | text, href, variant |
+| Columns | Multi-column layout | columns[] |
+| VerticalSpace | Spacing element | size |
+| Flex | Flexible container | direction, gap, items[] |
+| Stats | Statistics display | items[] with value, label |
+| Logos | Logo grid | logos[] with src, alt |
+
+### Example: Creating a Landing Page
+
+```python
+# Create page with Puck content
+page_crud(
+    method="create",
+    app_id=1,
+    data={
+        "name": "Home",
+        "slug": "home",
+        "templateData": {
+            "root": {"props": {"title": "Home"}},
+            "content": [
+                {
+                    "type": "Hero",
+                    "props": {
+                        "title": "Welcome to Our Product",
+                        "description": "The best solution for your needs",
+                        "buttons": [{"text": "Get Started", "href": "/signup"}]
+                    }
+                },
+                {
+                    "type": "Cards",
+                    "props": {
+                        "items": [
+                            {"title": "Feature 1", "description": "Description of feature 1"},
+                            {"title": "Feature 2", "description": "Description of feature 2"},
+                            {"title": "Feature 3", "description": "Description of feature 3"}
+                        ]
+                    }
+                }
+            ],
+            "zones": {}
+        }
+    }
+)
+```
+
+### Example: Update Existing Page Content
+
+```python
+# Update existing page content
+page_crud(
+    method="update_content",
+    page_id=5,
+    data={
+        "templateData": {
+            "root": {"props": {"title": "Updated Page"}},
+            "content": [...],  # New Puck content
+            "zones": {}
+        }
+    }
+)
+```
+
+### Response Format (TOON)
+- Success: `page:created,5,Home,home` or `pages|3]{id,name,slug,isPublic}:...`
+- Failure: `FAILED: error message`
