@@ -104,7 +104,9 @@ class TokenUsageExtractor:
                             total_output = token_counts.get('output_tokens', 0)
                             logger.info(f"📊 Extracted from agent.monitor: input={total_input}, output={total_output}")
                     except Exception as e:
-                        logger.debug(f"Could not get token counts from monitor: {e}")
+                        logger.warning(f"⚠️ BILLING: Failed to get token counts from monitor: {e}")
+                else:
+                    logger.warning(f"⚠️ BILLING: No token usage in steps and no monitor available")
 
             # Try to get model name from agent.model if not found in steps
             # OpenAIModel stores model_id, CustomInferenceModel stores model_name
@@ -113,10 +115,14 @@ class TokenUsageExtractor:
                     model_name = getattr(agent.model, 'model_id', '') or getattr(agent.model, 'model_name', '')
                     if model_name:
                         logger.info(f"📊 Got model name from agent.model: {model_name}")
+                    else:
+                        logger.warning(f"⚠️ BILLING: Could not get model name from agent.model (no model_id or model_name)")
+                else:
+                    logger.warning(f"⚠️ BILLING: Agent has no model attribute, cannot determine model name")
 
+            # Note: 0 tokens is valid (future free models) - only log, don't fail
             if total_input == 0 and total_output == 0:
-                logger.warning(f"⚠️ Total token usage is zero after checking steps and monitor")
-                return None
+                logger.info(f"📊 Token usage is zero (may be valid for free models)")
 
             # Calculate cost using model registry
             cost = calculate_token_cost(model_name or default_model_name, total_input, total_output)
