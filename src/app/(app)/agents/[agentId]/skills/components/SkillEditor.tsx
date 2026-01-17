@@ -163,6 +163,7 @@ export function SkillEditor({
         skillId={skillId}
         organizationTier={organizationTier}
         isReadOnly={isReadOnly}
+        hasFloatingHeader={hasFloatingHeader}
       />
     );
   }

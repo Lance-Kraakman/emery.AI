@@ -232,8 +232,8 @@ export function AgenticSkillEditor({
     <div className="relative h-full w-full">
       {/* Main content area - Instructions (full height like workflow canvas) */}
       <div className={cn(
-        'h-full flex flex-col p-4 pr-[21.5rem]',
-        hasFloatingHeader && 'pt-20'
+        'h-full flex flex-col p-4 pr-80',
+        hasFloatingHeader && 'pt-24'
       )}>
         <div className="flex-1 flex flex-col min-h-0">
           <Label className="text-sm font-medium mb-2 shrink-0">Instructions</Label>
@@ -283,16 +283,13 @@ export function AgenticSkillEditor({
         </div>
       </div>
 
-      {/* Floating Config Panel (Right) - like workflow mode */}
-      <div
-        className={cn(
-          'absolute right-2 z-10 w-80 bg-background/50 backdrop-blur-sm border rounded-lg shadow-lg overflow-hidden flex flex-col',
-          'transition-all duration-200',
-          hasFloatingHeader ? 'top-[72px] max-h-[calc(100%-80px)]' : 'top-2 max-h-[calc(100%-1rem)]'
-        )}
-      >
+      {/* Right Config Sidebar - full height docked panel */}
+      <div className="absolute top-0 right-0 h-full w-80 bg-background border-l flex flex-col">
         {/* Panel Header */}
-        <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/30 shrink-0">
+        <div className={cn(
+          "flex items-center justify-between px-3 py-2 border-b bg-muted/30 shrink-0",
+          hasFloatingHeader && "pt-16"
+        )}>
           <div className="flex items-center gap-2">
             <Settings2 className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-medium">Skill Config</span>
