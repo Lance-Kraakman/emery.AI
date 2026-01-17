@@ -1,0 +1,160 @@
+{
+  "$format": "brain-template",
+  "$version": 1,
+  "metadata": {
+    "name": "Event Planning",
+    "description": "Plan and manage events, attendees, vendors, and tasks. Perfect for event coordinators.",
+    "category": "Events",
+    "tags": ["events", "planning", "attendees", "vendors"],
+    "version": "1.0.0"
+  },
+  "template": {
+    "type": "database",
+    "data": {
+      "name": "Event Planning",
+      "slug": "event-planning",
+      "description": "Event management system",
+      "tables": [
+        {
+          "name": "Events",
+          "description": "Event details",
+          "fields": [
+            { "name": "Name", "slug": "name", "type": "text", "required": true },
+            { "name": "Description", "slug": "description", "type": "text" },
+            { "name": "Date", "slug": "date", "type": "date", "required": true },
+            { "name": "End Date", "slug": "end_date", "type": "date" },
+            { "name": "Location", "slug": "location", "type": "text" },
+            {
+              "name": "Status",
+              "slug": "status",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Planning", "color": "#6B7280" },
+                  { "id": 2, "value": "Confirmed", "color": "#3B82F6" },
+                  { "id": 3, "value": "Completed", "color": "#10B981" },
+                  { "id": 4, "value": "Cancelled", "color": "#EF4444" }
+                ]
+              }
+            },
+            { "name": "Budget", "slug": "budget", "type": "number" },
+            { "name": "Notes", "slug": "notes", "type": "text" }
+          ]
+        },
+        {
+          "name": "Vendors",
+          "description": "Event service providers",
+          "fields": [
+            { "name": "Name", "slug": "name", "type": "text", "required": true },
+            {
+              "name": "Service Type",
+              "slug": "service_type",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Catering", "color": "#10B981" },
+                  { "id": 2, "value": "Venue", "color": "#3B82F6" },
+                  { "id": 3, "value": "Entertainment", "color": "#EC4899" },
+                  { "id": 4, "value": "Photography", "color": "#8B5CF6" },
+                  { "id": 5, "value": "Decor", "color": "#F59E0B" }
+                ]
+              }
+            },
+            { "name": "Contact Name", "slug": "contact_name", "type": "text" },
+            { "name": "Email", "slug": "email", "type": "email" },
+            { "name": "Phone", "slug": "phone", "type": "phone" },
+            { "name": "Rate", "slug": "rate", "type": "number" }
+          ]
+        },
+        {
+          "name": "Attendees",
+          "description": "Event attendees and RSVPs",
+          "fields": [
+            { "name": "Name", "slug": "name", "type": "text", "required": true },
+            { "name": "Email", "slug": "email", "type": "email" },
+            { "name": "Phone", "slug": "phone", "type": "phone" },
+            {
+              "name": "Event",
+              "slug": "event",
+              "type": "relation",
+              "fieldConfig": {
+                "targetTableRef": "Events",
+                "relationshipType": "many-to-many"
+              }
+            },
+            {
+              "name": "RSVP",
+              "slug": "rsvp",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Pending", "color": "#6B7280" },
+                  { "id": 2, "value": "Confirmed", "color": "#10B981" },
+                  { "id": 3, "value": "Declined", "color": "#EF4444" },
+                  { "id": 4, "value": "Cancelled", "color": "#F59E0B" }
+                ]
+              }
+            },
+            {
+              "name": "Dietary",
+              "slug": "dietary",
+              "type": "multi-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Vegetarian", "color": "#10B981" },
+                  { "id": 2, "value": "Vegan", "color": "#84CC16" },
+                  { "id": 3, "value": "Gluten-Free", "color": "#F59E0B" },
+                  { "id": 4, "value": "Kosher", "color": "#3B82F6" },
+                  { "id": 5, "value": "Halal", "color": "#8B5CF6" }
+                ]
+              }
+            },
+            { "name": "Notes", "slug": "notes", "type": "text" }
+          ]
+        },
+        {
+          "name": "Event Tasks",
+          "description": "Tasks for event planning",
+          "fields": [
+            { "name": "Name", "slug": "name", "type": "text", "required": true },
+            {
+              "name": "Event",
+              "slug": "event",
+              "type": "relation",
+              "fieldConfig": {
+                "targetTableRef": "Events",
+                "relationshipType": "many-to-many"
+              }
+            },
+            { "name": "Assigned To", "slug": "assigned_to", "type": "text" },
+            { "name": "Due Date", "slug": "due_date", "type": "date" },
+            {
+              "name": "Status",
+              "slug": "status",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Todo", "color": "#6B7280" },
+                  { "id": 2, "value": "In Progress", "color": "#3B82F6" },
+                  { "id": 3, "value": "Done", "color": "#10B981" }
+                ]
+              }
+            },
+            {
+              "name": "Priority",
+              "slug": "priority",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Low", "color": "#6B7280" },
+                  { "id": 2, "value": "Medium", "color": "#F59E0B" },
+                  { "id": 3, "value": "High", "color": "#EF4444" }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -9,14 +9,43 @@ import tableOperations from './skills/table-operations.brain.json';
 import documentOperations from './skills/document-operations.brain.json';
 import dataLookup from './skills/data-lookup.brain.json';
 
+// Import builtin database templates
+import crm from './databases/crm.brain.json';
+import projectManagement from './databases/project-management.brain.json';
+import taskManagement from './databases/task-management.brain.json';
+import inventoryManagement from './databases/inventory-management.brain.json';
+import employeeDirectory from './databases/employee-directory.brain.json';
+import contentCalendar from './databases/content-calendar.brain.json';
+import bugTracker from './databases/bug-tracker.brain.json';
+import propertyManagement from './databases/property-management.brain.json';
+import eventPlanning from './databases/event-planning.brain.json';
+import expenseTracking from './databases/expense-tracking.brain.json';
+import productCatalog from './databases/product-catalog.brain.json';
+import meetingNotes from './databases/meeting-notes.brain.json';
+
 /**
  * Registry of all builtin templates
  * Key format: "{entityType}/{templateName}" (e.g., "skill/table-operations")
  */
 export const BUILTIN_TEMPLATES: Record<string, BrainTemplate> = {
+  // Skill templates
   'skill/table-operations': tableOperations as unknown as BrainTemplate,
   'skill/document-operations': documentOperations as unknown as BrainTemplate,
   'skill/data-lookup': dataLookup as unknown as BrainTemplate,
+
+  // Database templates
+  'database/crm': crm as unknown as BrainTemplate,
+  'database/project-management': projectManagement as unknown as BrainTemplate,
+  'database/task-management': taskManagement as unknown as BrainTemplate,
+  'database/inventory-management': inventoryManagement as unknown as BrainTemplate,
+  'database/employee-directory': employeeDirectory as unknown as BrainTemplate,
+  'database/content-calendar': contentCalendar as unknown as BrainTemplate,
+  'database/bug-tracker': bugTracker as unknown as BrainTemplate,
+  'database/property-management': propertyManagement as unknown as BrainTemplate,
+  'database/event-planning': eventPlanning as unknown as BrainTemplate,
+  'database/expense-tracking': expenseTracking as unknown as BrainTemplate,
+  'database/product-catalog': productCatalog as unknown as BrainTemplate,
+  'database/meeting-notes': meetingNotes as unknown as BrainTemplate,
 };
 
 /**

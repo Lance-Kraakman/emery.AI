@@ -450,12 +450,17 @@ async function databaseToTemplateData(db: {
 
 /**
  * Helper to create tables and fields from template data after database creation
+ * Handles relation fields by resolving targetTableRef to targetTableId
  */
 async function createTablesFromTemplate(
   databaseId: number,
   tables: TableTemplateData[] | undefined
 ): Promise<void> {
   if (!tables || tables.length === 0) return;
+
+  // Phase 1: Create all tables and build name → ID mapping
+  const tableNameToId = new Map<string, number>();
+  const tableQueue: Array<{ tableId: number; fields: FieldTemplateData[] }> = [];
 
   for (const tableData of tables) {
     const tableResult = await createTable({
@@ -470,21 +475,66 @@ async function createTablesFromTemplate(
     }
 
     const tableId = tableResult.data.id;
+    tableNameToId.set(tableData.name, tableId);
+    tableQueue.push({ tableId, fields: tableData.fields || [] });
+  }
 
-    // Create fields for the table
-    if (tableData.fields && tableData.fields.length > 0) {
-      for (const fieldData of tableData.fields) {
-        const fieldResult = await createField({
-          tableId,
-          name: fieldData.name,
-          type: fieldData.type as any, // FieldType cast
-          required: fieldData.required ?? false,
-          metadata: fieldData.fieldConfig as Record<string, unknown> | undefined,
-        });
+  // Phase 2: Create fields for each table
+  // First pass: non-relation fields
+  // Second pass: relation fields (with resolved targetTableId)
+  for (const { tableId, fields } of tableQueue) {
+    // Create non-relation fields first
+    const nonRelationFields = fields.filter(f => f.type !== 'relation');
+    for (const fieldData of nonRelationFields) {
+      const fieldResult = await createField({
+        tableId,
+        name: fieldData.name,
+        type: fieldData.type as any, // FieldType cast
+        required: fieldData.required ?? false,
+        metadata: fieldData.fieldConfig as Record<string, unknown> | undefined,
+      });
 
-        if (!fieldResult.success) {
-          console.error('Failed to create field from template:', fieldResult.error);
-        }
+      if (!fieldResult.success) {
+        console.error('Failed to create field from template:', fieldResult.error);
+      }
+    }
+
+    // Create relation fields with resolved targetTableId
+    const relationFields = fields.filter(f => f.type === 'relation');
+    for (const fieldData of relationFields) {
+      const config = fieldData.fieldConfig as Record<string, unknown> | undefined;
+      const targetTableRef = config?.targetTableRef as string | undefined;
+
+      if (!targetTableRef) {
+        console.error('Relation field missing targetTableRef:', fieldData.name);
+        continue;
+      }
+
+      const targetTableId = tableNameToId.get(targetTableRef);
+      if (!targetTableId) {
+        console.error(`Target table not found for relation: ${targetTableRef}`);
+        continue;
+      }
+
+      // Build metadata with resolved targetTableId
+      const relationMetadata: Record<string, unknown> = {
+        targetTableId,
+        relationshipType: config?.relationshipType || 'many-to-many',
+      };
+      if (config?.displayField) {
+        relationMetadata.displayField = config.displayField;
+      }
+
+      const fieldResult = await createField({
+        tableId,
+        name: fieldData.name,
+        type: 'relation',
+        required: fieldData.required ?? false,
+        metadata: relationMetadata,
+      });
+
+      if (!fieldResult.success) {
+        console.error('Failed to create relation field from template:', fieldResult.error);
       }
     }
   }

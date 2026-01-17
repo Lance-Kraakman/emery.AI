@@ -1,0 +1,99 @@
+{
+  "$format": "brain-template",
+  "$version": 1,
+  "metadata": {
+    "name": "Product Catalog",
+    "description": "Manage products, categories, and reviews. Perfect for e-commerce and retail businesses.",
+    "category": "E-Commerce",
+    "tags": ["products", "catalog", "ecommerce", "shop"],
+    "version": "1.0.0"
+  },
+  "template": {
+    "type": "database",
+    "data": {
+      "name": "Product Catalog",
+      "slug": "product-catalog",
+      "description": "Product management system",
+      "tables": [
+        {
+          "name": "Categories",
+          "description": "Product categories",
+          "fields": [
+            { "name": "Name", "slug": "name", "type": "text", "required": true },
+            { "name": "Description", "slug": "description", "type": "text" },
+            { "name": "Display Order", "slug": "display_order", "type": "number" },
+            {
+              "name": "Status",
+              "slug": "status",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Active", "color": "#10B981" },
+                  { "id": 2, "value": "Hidden", "color": "#6B7280" }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Products",
+          "description": "Product listings",
+          "fields": [
+            { "name": "Name", "slug": "name", "type": "text", "required": true },
+            { "name": "Description", "slug": "description", "type": "text" },
+            { "name": "SKU", "slug": "sku", "type": "text" },
+            { "name": "Price", "slug": "price", "type": "number", "required": true },
+            { "name": "Sale Price", "slug": "sale_price", "type": "number" },
+            {
+              "name": "Category",
+              "slug": "category",
+              "type": "relation",
+              "fieldConfig": {
+                "targetTableRef": "Categories",
+                "relationshipType": "many-to-many"
+              }
+            },
+            { "name": "Stock", "slug": "stock", "type": "number" },
+            { "name": "Images", "slug": "images", "type": "file" },
+            { "name": "Featured", "slug": "featured", "type": "boolean" },
+            {
+              "name": "Status",
+              "slug": "status",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Draft", "color": "#6B7280" },
+                  { "id": 2, "value": "Active", "color": "#10B981" },
+                  { "id": 3, "value": "Sold Out", "color": "#F59E0B" },
+                  { "id": 4, "value": "Discontinued", "color": "#EF4444" }
+                ]
+              }
+            },
+            { "name": "Created At", "slug": "created_at", "type": "created-at" }
+          ]
+        },
+        {
+          "name": "Reviews",
+          "description": "Product reviews",
+          "fields": [
+            {
+              "name": "Product",
+              "slug": "product",
+              "type": "relation",
+              "fieldConfig": {
+                "targetTableRef": "Products",
+                "relationshipType": "many-to-many"
+              }
+            },
+            { "name": "Rating", "slug": "rating", "type": "number" },
+            { "name": "Title", "slug": "title", "type": "text" },
+            { "name": "Content", "slug": "content", "type": "text" },
+            { "name": "Author Name", "slug": "author_name", "type": "text" },
+            { "name": "Verified", "slug": "verified", "type": "boolean" },
+            { "name": "Created At", "slug": "created_at", "type": "created-at" }
+          ]
+        }
+      ]
+    }
+  }
+}

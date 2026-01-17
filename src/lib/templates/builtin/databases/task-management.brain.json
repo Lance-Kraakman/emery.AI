@@ -1,0 +1,113 @@
+{
+  "$format": "brain-template",
+  "$version": 1,
+  "metadata": {
+    "name": "Task Management",
+    "description": "Simple task and project tracking. Organize your work with statuses, priorities, and due dates.",
+    "category": "Productivity",
+    "tags": ["tasks", "todo", "productivity"],
+    "version": "1.0.0"
+  },
+  "template": {
+    "type": "database",
+    "data": {
+      "name": "Task Management",
+      "slug": "task-management",
+      "description": "Simple task tracking system",
+      "tables": [
+        {
+          "name": "Projects",
+          "description": "Project groupings for tasks",
+          "fields": [
+            { "name": "Name", "slug": "name", "type": "text", "required": true },
+            { "name": "Description", "slug": "description", "type": "text" },
+            {
+              "name": "Status",
+              "slug": "status",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Active", "color": "#10B981" },
+                  { "id": 2, "value": "Completed", "color": "#3B82F6" },
+                  { "id": 3, "value": "Archived", "color": "#6B7280" }
+                ]
+              }
+            },
+            {
+              "name": "Color",
+              "slug": "color",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Blue", "color": "#3B82F6" },
+                  { "id": 2, "value": "Green", "color": "#10B981" },
+                  { "id": 3, "value": "Purple", "color": "#8B5CF6" },
+                  { "id": 4, "value": "Orange", "color": "#F59E0B" },
+                  { "id": 5, "value": "Red", "color": "#EF4444" }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Tasks",
+          "description": "Individual tasks to complete",
+          "fields": [
+            { "name": "Name", "slug": "name", "type": "text", "required": true },
+            { "name": "Description", "slug": "description", "type": "text" },
+            {
+              "name": "Project",
+              "slug": "project",
+              "type": "relation",
+              "fieldConfig": {
+                "targetTableRef": "Projects",
+                "relationshipType": "many-to-many"
+              }
+            },
+            {
+              "name": "Status",
+              "slug": "status",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Todo", "color": "#6B7280" },
+                  { "id": 2, "value": "In Progress", "color": "#3B82F6" },
+                  { "id": 3, "value": "Done", "color": "#10B981" }
+                ]
+              }
+            },
+            {
+              "name": "Priority",
+              "slug": "priority",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Low", "color": "#6B7280" },
+                  { "id": 2, "value": "Medium", "color": "#F59E0B" },
+                  { "id": 3, "value": "High", "color": "#EF4444" }
+                ]
+              }
+            },
+            { "name": "Due Date", "slug": "due_date", "type": "date" },
+            {
+              "name": "Tags",
+              "slug": "tags",
+              "type": "multi-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Bug", "color": "#EF4444" },
+                  { "id": 2, "value": "Feature", "color": "#3B82F6" },
+                  { "id": 3, "value": "Improvement", "color": "#10B981" },
+                  { "id": 4, "value": "Documentation", "color": "#8B5CF6" },
+                  { "id": 5, "value": "Research", "color": "#F59E0B" }
+                ]
+              }
+            },
+            { "name": "Completed", "slug": "completed", "type": "boolean" },
+            { "name": "Created At", "slug": "created_at", "type": "created-at" }
+          ]
+        }
+      ]
+    }
+  }
+}

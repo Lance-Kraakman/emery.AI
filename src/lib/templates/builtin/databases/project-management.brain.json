@@ -1,0 +1,166 @@
+{
+  "$format": "brain-template",
+  "$version": 1,
+  "metadata": {
+    "name": "Project Management",
+    "description": "Manage projects, tasks, team members, and clients. Track progress and deadlines effectively.",
+    "category": "Business",
+    "tags": ["projects", "tasks", "team", "clients"],
+    "version": "1.0.0"
+  },
+  "template": {
+    "type": "database",
+    "data": {
+      "name": "Project Management",
+      "slug": "project-management",
+      "description": "Project and task management system",
+      "tables": [
+        {
+          "name": "Team",
+          "description": "Team members and their roles",
+          "fields": [
+            { "name": "Name", "slug": "name", "type": "text", "required": true },
+            { "name": "Email", "slug": "email", "type": "email" },
+            { "name": "Phone", "slug": "phone", "type": "phone" },
+            {
+              "name": "Role",
+              "slug": "role",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Manager", "color": "#8B5CF6" },
+                  { "id": 2, "value": "Developer", "color": "#3B82F6" },
+                  { "id": 3, "value": "Designer", "color": "#EC4899" },
+                  { "id": 4, "value": "QA", "color": "#10B981" },
+                  { "id": 5, "value": "Analyst", "color": "#F59E0B" }
+                ]
+              }
+            },
+            {
+              "name": "Skills",
+              "slug": "skills",
+              "type": "multi-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Frontend", "color": "#3B82F6" },
+                  { "id": 2, "value": "Backend", "color": "#10B981" },
+                  { "id": 3, "value": "Design", "color": "#EC4899" },
+                  { "id": 4, "value": "DevOps", "color": "#F59E0B" },
+                  { "id": 5, "value": "Testing", "color": "#8B5CF6" }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Clients",
+          "description": "Client information",
+          "fields": [
+            { "name": "Name", "slug": "name", "type": "text", "required": true },
+            { "name": "Contact Name", "slug": "contact_name", "type": "text" },
+            { "name": "Email", "slug": "email", "type": "email" },
+            { "name": "Phone", "slug": "phone", "type": "phone" },
+            { "name": "Address", "slug": "address", "type": "text" },
+            { "name": "Notes", "slug": "notes", "type": "text" }
+          ]
+        },
+        {
+          "name": "Projects",
+          "description": "Project details and status",
+          "fields": [
+            { "name": "Name", "slug": "name", "type": "text", "required": true },
+            { "name": "Description", "slug": "description", "type": "text" },
+            {
+              "name": "Client",
+              "slug": "client",
+              "type": "relation",
+              "fieldConfig": {
+                "targetTableRef": "Clients",
+                "relationshipType": "many-to-many"
+              }
+            },
+            {
+              "name": "Project Lead",
+              "slug": "project_lead",
+              "type": "relation",
+              "fieldConfig": {
+                "targetTableRef": "Team",
+                "relationshipType": "many-to-many"
+              }
+            },
+            {
+              "name": "Status",
+              "slug": "status",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Planning", "color": "#6B7280" },
+                  { "id": 2, "value": "Active", "color": "#3B82F6" },
+                  { "id": 3, "value": "On Hold", "color": "#F59E0B" },
+                  { "id": 4, "value": "Completed", "color": "#10B981" }
+                ]
+              }
+            },
+            { "name": "Start Date", "slug": "start_date", "type": "date" },
+            { "name": "End Date", "slug": "end_date", "type": "date" },
+            { "name": "Created At", "slug": "created_at", "type": "created-at" }
+          ]
+        },
+        {
+          "name": "Tasks",
+          "description": "Individual tasks within projects",
+          "fields": [
+            { "name": "Name", "slug": "name", "type": "text", "required": true },
+            { "name": "Description", "slug": "description", "type": "text" },
+            {
+              "name": "Project",
+              "slug": "project",
+              "type": "relation",
+              "fieldConfig": {
+                "targetTableRef": "Projects",
+                "relationshipType": "many-to-many"
+              }
+            },
+            {
+              "name": "Assigned To",
+              "slug": "assigned_to",
+              "type": "relation",
+              "fieldConfig": {
+                "targetTableRef": "Team",
+                "relationshipType": "many-to-many"
+              }
+            },
+            {
+              "name": "Status",
+              "slug": "status",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Not Started", "color": "#6B7280" },
+                  { "id": 2, "value": "In Progress", "color": "#3B82F6" },
+                  { "id": 3, "value": "Review", "color": "#F59E0B" },
+                  { "id": 4, "value": "Completed", "color": "#10B981" }
+                ]
+              }
+            },
+            {
+              "name": "Priority",
+              "slug": "priority",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Low", "color": "#6B7280" },
+                  { "id": 2, "value": "Medium", "color": "#F59E0B" },
+                  { "id": 3, "value": "High", "color": "#F97316" },
+                  { "id": 4, "value": "Urgent", "color": "#EF4444" }
+                ]
+              }
+            },
+            { "name": "Due Date", "slug": "due_date", "type": "date" },
+            { "name": "Completed", "slug": "completed", "type": "boolean" }
+          ]
+        }
+      ]
+    }
+  }
+}
