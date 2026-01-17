@@ -209,6 +209,11 @@ class ChatProcessingServiceStub(object):
                 request_serializer=agent__worker__pb2.CancelMessageRequest.SerializeToString,
                 response_deserializer=agent__worker__pb2.CancelMessageResponse.FromString,
                 _registered_method=True)
+        self.GeneratePlan = channel.unary_unary(
+                '/emery.agents.ChatProcessingService/GeneratePlan',
+                request_serializer=agent__worker__pb2.GeneratePlanRequest.SerializeToString,
+                response_deserializer=agent__worker__pb2.GeneratePlanResponse.FromString,
+                _registered_method=True)
 
 
 class ChatProcessingServiceServicer(object):
@@ -229,6 +234,13 @@ class ChatProcessingServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GeneratePlan(self, request, context):
+        """Generate an autonomous execution plan for skill instructions
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_ChatProcessingServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -241,6 +253,11 @@ def add_ChatProcessingServiceServicer_to_server(servicer, server):
                     servicer.CancelMessage,
                     request_deserializer=agent__worker__pb2.CancelMessageRequest.FromString,
                     response_serializer=agent__worker__pb2.CancelMessageResponse.SerializeToString,
+            ),
+            'GeneratePlan': grpc.unary_unary_rpc_method_handler(
+                    servicer.GeneratePlan,
+                    request_deserializer=agent__worker__pb2.GeneratePlanRequest.FromString,
+                    response_serializer=agent__worker__pb2.GeneratePlanResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -298,6 +315,33 @@ class ChatProcessingService(object):
             '/emery.agents.ChatProcessingService/CancelMessage',
             agent__worker__pb2.CancelMessageRequest.SerializeToString,
             agent__worker__pb2.CancelMessageResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GeneratePlan(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/emery.agents.ChatProcessingService/GeneratePlan',
+            agent__worker__pb2.GeneratePlanRequest.SerializeToString,
+            agent__worker__pb2.GeneratePlanResponse.FromString,
             options,
             channel_credentials,
             insecure,

@@ -59,6 +59,28 @@ function deserialize_emery_agents_Empty(buffer_arg) {
   return agent_worker_pb.Empty.deserializeBinary(new Uint8Array(buffer_arg));
 }
 
+function serialize_emery_agents_GeneratePlanRequest(arg) {
+  if (!(arg instanceof agent_worker_pb.GeneratePlanRequest)) {
+    throw new Error('Expected argument of type emery.agents.GeneratePlanRequest');
+  }
+  return Buffer.from(arg.serializeBinary());
+}
+
+function deserialize_emery_agents_GeneratePlanRequest(buffer_arg) {
+  return agent_worker_pb.GeneratePlanRequest.deserializeBinary(new Uint8Array(buffer_arg));
+}
+
+function serialize_emery_agents_GeneratePlanResponse(arg) {
+  if (!(arg instanceof agent_worker_pb.GeneratePlanResponse)) {
+    throw new Error('Expected argument of type emery.agents.GeneratePlanResponse');
+  }
+  return Buffer.from(arg.serializeBinary());
+}
+
+function deserialize_emery_agents_GeneratePlanResponse(buffer_arg) {
+  return agent_worker_pb.GeneratePlanResponse.deserializeBinary(new Uint8Array(buffer_arg));
+}
+
 function serialize_emery_agents_ProcessMessageRequest(arg) {
   if (!(arg instanceof agent_worker_pb.ProcessMessageRequest)) {
     throw new Error('Expected argument of type emery.agents.ProcessMessageRequest');
@@ -181,6 +203,18 @@ cancelMessage: {
     requestDeserialize: deserialize_emery_agents_CancelMessageRequest,
     responseSerialize: serialize_emery_agents_CancelMessageResponse,
     responseDeserialize: deserialize_emery_agents_CancelMessageResponse,
+  },
+  // Generate an autonomous execution plan for skill instructions
+generatePlan: {
+    path: '/emery.agents.ChatProcessingService/GeneratePlan',
+    requestStream: false,
+    responseStream: false,
+    requestType: agent_worker_pb.GeneratePlanRequest,
+    responseType: agent_worker_pb.GeneratePlanResponse,
+    requestSerialize: serialize_emery_agents_GeneratePlanRequest,
+    requestDeserialize: deserialize_emery_agents_GeneratePlanRequest,
+    responseSerialize: serialize_emery_agents_GeneratePlanResponse,
+    responseDeserialize: deserialize_emery_agents_GeneratePlanResponse,
   },
 };
 

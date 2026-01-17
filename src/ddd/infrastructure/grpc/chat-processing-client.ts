@@ -376,6 +376,65 @@ export class ChatProcessingClient {
   }
 
   /**
+   * Generate an autonomous execution plan for skill instructions.
+   *
+   * Creates a plan from skill instructions that can be stored and executed
+   * autonomously (without HITL approval) when the skill runs.
+   *
+   * @param params - Plan generation parameters
+   * @returns Generated plan as JSON string plus metadata
+   */
+  async generatePlan(params: {
+    instructions: string;
+    organizationId: number;
+    userId: string;
+    skillId: number;
+    model?: string;
+    userApiKey?: string;
+    timeoutSeconds?: number;
+  }): Promise<{
+    planJson: string;
+    planId: string;
+    planningTimeMs: number;
+    status: string;
+    errorMessage?: string;
+  }> {
+    console.log(`[CHAT-GRPC-CLIENT] Generating plan for skill ${params.skillId}`);
+
+    return new Promise((resolve, reject) => {
+      const request = {
+        instructions: params.instructions,
+        organizationId: params.organizationId,
+        userId: params.userId,
+        skillId: params.skillId,
+        model: params.model || '',
+        userApiKey: params.userApiKey || '',
+        timeoutSeconds: params.timeoutSeconds || 60
+      };
+
+      this.client.GeneratePlan(request, (error: any, response: any) => {
+        if (error) {
+          console.error(`[CHAT-GRPC-CLIENT] GeneratePlan failed:`, error);
+          reject(error);
+        } else {
+          console.log(`[CHAT-GRPC-CLIENT] GeneratePlan response:`, {
+            status: response.status,
+            planId: response.planId,
+            planningTimeMs: response.planningTimeMs
+          });
+          resolve({
+            planJson: response.planJson || '',
+            planId: response.planId || '',
+            planningTimeMs: response.planningTimeMs || 0,
+            status: response.status || 'unknown',
+            errorMessage: response.errorMessage || undefined
+          });
+        }
+      });
+    });
+  }
+
+  /**
    * Close the gRPC connection
    */
   close(): void {

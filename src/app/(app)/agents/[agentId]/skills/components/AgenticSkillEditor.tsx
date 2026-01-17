@@ -24,7 +24,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { UnifiedChatInput } from '@/components/shared/UnifiedChatInput';
 import { DataSourcePicker } from '@/components/data-sources';
-import { uploadSkillAttachment } from '@/app/actions/skills';
+import { uploadSkillAttachment, generateSkillPlan } from '@/app/actions/skills';
 import {
   getContextMappings,
   attachContextTable,
@@ -65,6 +65,9 @@ export function AgenticSkillEditor({
   // Track pending attachments (files being uploaded)
   const [pendingAttachments, setPendingAttachments] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+
+  // Plan generation state
+  const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
 
   // Data sources state
   const [dataSources, setDataSources] = useState<ContextMappingDTO[]>([]);
@@ -201,6 +204,30 @@ export function AgenticSkillEditor({
     onChange({ ...value, plan: undefined });
   }, [value, onChange]);
 
+  // Handle generating a plan from instructions
+  const handleGeneratePlan = useCallback(async () => {
+    if (!skillId || !value.instructions?.trim()) {
+      toast.error('Save the skill and add instructions first');
+      return;
+    }
+
+    setIsGeneratingPlan(true);
+    try {
+      const result = await generateSkillPlan(skillId, value.instructions);
+      if (result.success && result.data) {
+        onChange({ ...value, plan: result.data });
+        toast.success(`Plan generated with ${result.data.steps?.length || 0} steps`);
+      } else {
+        toast.error(result.error || 'Failed to generate plan');
+      }
+    } catch (error) {
+      console.error('Plan generation failed:', error);
+      toast.error('Failed to generate plan');
+    } finally {
+      setIsGeneratingPlan(false);
+    }
+  }, [skillId, value, onChange]);
+
   return (
     <div className="relative h-full w-full">
       {/* Main content area - Instructions (full height like workflow canvas) */}
@@ -225,6 +252,33 @@ export function AgenticSkillEditor({
               disabled={isReadOnly}
               placeholder="Describe what this skill should do... (@ for tools, { for variables)"
             />
+          </div>
+
+          {/* Plan generation bar */}
+          <div className="flex items-center justify-between mt-2 pt-2 border-t shrink-0">
+            <div className="text-xs text-muted-foreground">
+              {value.plan
+                ? `Plan: ${value.plan.steps?.length || 0} steps`
+                : 'No autonomous plan'}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleGeneratePlan}
+              disabled={isGeneratingPlan || !value.instructions?.trim() || !skillId || isReadOnly}
+            >
+              {isGeneratingPlan ? (
+                <>
+                  <Loader2 className="h-3 w-3 animate-spin mr-1.5" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <Settings2 className="h-3 w-3 mr-1.5" />
+                  {value.plan ? 'Regenerate Plan' : 'Generate Plan'}
+                </>
+              )}
+            </Button>
           </div>
         </div>
       </div>

@@ -720,6 +720,40 @@ class FileAttachment(_message.Message):
     mime_type: str
     def __init__(self, type: _Optional[str] = ..., url: _Optional[str] = ..., filename: _Optional[str] = ..., mime_type: _Optional[str] = ...) -> None: ...
 
+class GeneratePlanRequest(_message.Message):
+    __slots__ = ("instructions", "organization_id", "user_id", "skill_id", "model", "user_api_key", "timeout_seconds")
+    INSTRUCTIONS_FIELD_NUMBER: _ClassVar[int]
+    ORGANIZATION_ID_FIELD_NUMBER: _ClassVar[int]
+    USER_ID_FIELD_NUMBER: _ClassVar[int]
+    SKILL_ID_FIELD_NUMBER: _ClassVar[int]
+    MODEL_FIELD_NUMBER: _ClassVar[int]
+    USER_API_KEY_FIELD_NUMBER: _ClassVar[int]
+    TIMEOUT_SECONDS_FIELD_NUMBER: _ClassVar[int]
+    instructions: str
+    organization_id: int
+    user_id: str
+    skill_id: int
+    model: str
+    user_api_key: str
+    timeout_seconds: int
+    def __init__(self, instructions: _Optional[str] = ..., organization_id: _Optional[int] = ..., user_id: _Optional[str] = ..., skill_id: _Optional[int] = ..., model: _Optional[str] = ..., user_api_key: _Optional[str] = ..., timeout_seconds: _Optional[int] = ...) -> None: ...
+
+class GeneratePlanResponse(_message.Message):
+    __slots__ = ("plan_json", "plan_id", "planning_time_ms", "token_usage", "status", "error_message")
+    PLAN_JSON_FIELD_NUMBER: _ClassVar[int]
+    PLAN_ID_FIELD_NUMBER: _ClassVar[int]
+    PLANNING_TIME_MS_FIELD_NUMBER: _ClassVar[int]
+    TOKEN_USAGE_FIELD_NUMBER: _ClassVar[int]
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    ERROR_MESSAGE_FIELD_NUMBER: _ClassVar[int]
+    plan_json: str
+    plan_id: str
+    planning_time_ms: int
+    token_usage: TokenUsage
+    status: str
+    error_message: str
+    def __init__(self, plan_json: _Optional[str] = ..., plan_id: _Optional[str] = ..., planning_time_ms: _Optional[int] = ..., token_usage: _Optional[_Union[TokenUsage, _Mapping]] = ..., status: _Optional[str] = ..., error_message: _Optional[str] = ...) -> None: ...
+
 class ProcessMessageRequest(_message.Message):
     __slots__ = ("message_parts", "user_id", "organization_id", "context", "conversation_history", "agent_config", "model", "message_id", "session_id", "user_api_key")
     MESSAGE_PARTS_FIELD_NUMBER: _ClassVar[int]

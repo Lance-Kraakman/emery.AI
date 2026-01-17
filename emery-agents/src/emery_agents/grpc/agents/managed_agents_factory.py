@@ -491,6 +491,69 @@ class ManagedAgentsFactory:
         logger.info(f"[USER-AGENTS] Total: {len(user_agent_executors)} agents loaded")
         return user_agent_executors, user_agents_metadata
 
+    def create_all_agents(
+        self,
+        tool_provider: ToolProvider,
+        org_model: Optional[str] = None
+    ) -> List[Any]:
+        """
+        Create all managed agents for plan generation.
+
+        Returns list of all available managed agents. Used by GeneratePlan
+        to provide agent info to the planner for routing decisions.
+
+        Args:
+            tool_provider: Provider for agent-specific tools
+            org_model: Organization-level model override
+
+        Returns:
+            List of managed agent instances
+        """
+        agents = []
+
+        # Create each managed agent (skip any that fail)
+        try:
+            agents.append(self.create_skill_builder(tool_provider, org_model))
+        except Exception as e:
+            logger.warning(f"Failed to create skill_builder: {e}")
+
+        try:
+            agents.append(self.create_document_builder(tool_provider, org_model))
+        except Exception as e:
+            logger.warning(f"Failed to create document_builder: {e}")
+
+        try:
+            agents.append(self.create_table_builder(tool_provider, org_model))
+        except Exception as e:
+            logger.warning(f"Failed to create table_builder: {e}")
+
+        try:
+            agents.append(self.create_schema_builder(tool_provider, org_model))
+        except Exception as e:
+            logger.warning(f"Failed to create schema_builder: {e}")
+
+        try:
+            agents.append(self.create_app_builder(tool_provider, org_model))
+        except Exception as e:
+            logger.warning(f"Failed to create app_builder: {e}")
+
+        try:
+            agents.append(self.create_agent_builder(tool_provider, org_model))
+        except Exception as e:
+            logger.warning(f"Failed to create agent_builder: {e}")
+
+        try:
+            agents.append(self.create_research_agent(
+                api_key=tool_provider.api_key,
+                organization_id=tool_provider.organization_id,
+                org_model=org_model
+            ))
+        except Exception as e:
+            logger.warning(f"Failed to create research_agent: {e}")
+
+        logger.info(f"Created {len(agents)} managed agents for plan generation")
+        return agents
+
     def get_agent_factories(
         self,
         tool_provider: ToolProvider,

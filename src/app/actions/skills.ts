@@ -14,7 +14,8 @@ import type { SkillDTO } from '@/app/mappers/skill-mapper';
 import { s3SkillAttachmentService } from '@/ddd/infrastructure/multimodal/s3-skill-attachment-service';
 import type { AttachmentMetadata, AttachmentType } from '@/ddd/domain/multimodal/value-objects/attachment-metadata';
 import type { MessagePart } from '@/ddd/infrastructure/grpc/generated/agent_worker';
-import type { SkillExecutionType, ToolExecutionConfig, WriteConfig, ReadConfig, SkillStep, CanvasMetadata } from '@/ddd/domain/skills/entities/skill';
+import type { SkillExecutionType, ToolExecutionConfig, WriteConfig, ReadConfig, SkillStep, CanvasMetadata, StoredPlan } from '@/ddd/domain/skills/entities/skill';
+import { getChatProcessingClient } from '@/ddd/infrastructure/grpc/chat-processing-client';
 
 /**
  * Server Actions for Skill Management
@@ -1252,6 +1253,86 @@ export async function transferSkillToAgent(
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to transfer skill to agent'
+    };
+  }
+}
+
+/**
+ * Generate an autonomous execution plan for skill instructions.
+ *
+ * Uses gRPC to call the Python planning service which creates a structured
+ * plan using context-aware planning. The generated plan can be stored on
+ * the skill for autonomous execution (no HITL approval required at runtime).
+ *
+ * @param skillId - Skill ID (used to get context and org info)
+ * @param instructions - The instructions to generate a plan for
+ * @returns StoredPlan that can be saved to the skill
+ */
+export async function generateSkillPlan(
+  skillId: number,
+  instructions: string
+): Promise<Result<StoredPlan>> {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id || !session?.user?.currentOrganizationId) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    // Get skill to verify access and get model override
+    const service = getSkillApplicationService();
+    const skillResult = await service.getSkill(skillId);
+    if (!skillResult.success || !skillResult.data) {
+      return { success: false, error: 'Skill not found' };
+    }
+
+    const skill = skillResult.data;
+
+    // Check permission based on skill type
+    if (skill.agentId) {
+      await requireResourcePermission("agents:manage", "agent", skill.agentId.value);
+    } else {
+      await requireResourcePermission("skills:manage", "skill", skillId);
+    }
+
+    // Get user API key for the gRPC call
+    // AIDEV-NOTE: User API key is stored in session for managed agent calls
+    const userApiKey = session.user.apiKey || '';
+
+    // Call gRPC to generate the plan
+    const grpcClient = getChatProcessingClient(String(session.user.currentOrganizationId));
+
+    const result = await grpcClient.generatePlan({
+      instructions,
+      organizationId: skill.organizationId.value,
+      userId: session.user.id,
+      skillId,
+      model: skill.model || undefined,
+      userApiKey,
+      timeoutSeconds: 90, // Allow more time for complex plans
+    });
+
+    if (result.status !== 'success') {
+      console.error('[generateSkillPlan] gRPC error:', result.errorMessage);
+      return { success: false, error: result.errorMessage || 'Plan generation failed' };
+    }
+
+    // Parse the plan JSON
+    let plan: StoredPlan;
+    try {
+      plan = JSON.parse(result.planJson);
+    } catch (e) {
+      console.error('[generateSkillPlan] Failed to parse plan JSON:', e);
+      return { success: false, error: 'Invalid plan format returned' };
+    }
+
+    console.log(`[generateSkillPlan] Generated plan ${result.planId} with ${plan.steps?.length || 0} steps in ${result.planningTimeMs}ms`);
+
+    return { success: true, data: plan };
+  } catch (error) {
+    console.error('[generateSkillPlan] error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to generate plan'
     };
   }
 }

@@ -924,6 +924,42 @@ export interface FileAttachment {
   mimeType: string;
 }
 
+/** Request for autonomous plan generation */
+export interface GeneratePlanRequest {
+  /** Task instructions (required) */
+  instructions: string;
+  /** For ToolProvider context */
+  organizationId: number;
+  /** For auth context */
+  userId: string;
+  /** To resolve skill's data sources */
+  skillId: number;
+  /** Optional model override */
+  model: string;
+  /** For ToolProvider auth */
+  userApiKey: string;
+  /** Default: 60 */
+  timeoutSeconds: number;
+}
+
+/** Response from plan generation */
+export interface GeneratePlanResponse {
+  /** StoredPlan as JSON */
+  planJson: string;
+  /** Plan UUID */
+  planId: string;
+  /** Generation time */
+  planningTimeMs: number;
+  /** For billing */
+  tokenUsage:
+    | TokenUsage
+    | undefined;
+  /** "success" or "error" */
+  status: string;
+  /** If status == "error" */
+  errorMessage: string;
+}
+
 /** Request for AI message processing */
 export interface ProcessMessageRequest {
   /** Input message for AI processing (multimodal support) */
@@ -7605,6 +7641,304 @@ export const FileAttachment: MessageFns<FileAttachment> = {
   },
 };
 
+function createBaseGeneratePlanRequest(): GeneratePlanRequest {
+  return { instructions: "", organizationId: 0, userId: "", skillId: 0, model: "", userApiKey: "", timeoutSeconds: 0 };
+}
+
+export const GeneratePlanRequest: MessageFns<GeneratePlanRequest> = {
+  encode(message: GeneratePlanRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.instructions !== "") {
+      writer.uint32(10).string(message.instructions);
+    }
+    if (message.organizationId !== 0) {
+      writer.uint32(16).int32(message.organizationId);
+    }
+    if (message.userId !== "") {
+      writer.uint32(26).string(message.userId);
+    }
+    if (message.skillId !== 0) {
+      writer.uint32(32).int32(message.skillId);
+    }
+    if (message.model !== "") {
+      writer.uint32(42).string(message.model);
+    }
+    if (message.userApiKey !== "") {
+      writer.uint32(50).string(message.userApiKey);
+    }
+    if (message.timeoutSeconds !== 0) {
+      writer.uint32(56).int32(message.timeoutSeconds);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GeneratePlanRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGeneratePlanRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.instructions = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.organizationId = reader.int32();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.userId = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.skillId = reader.int32();
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.model = reader.string();
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.userApiKey = reader.string();
+          continue;
+        }
+        case 7: {
+          if (tag !== 56) {
+            break;
+          }
+
+          message.timeoutSeconds = reader.int32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GeneratePlanRequest {
+    return {
+      instructions: isSet(object.instructions) ? globalThis.String(object.instructions) : "",
+      organizationId: isSet(object.organizationId) ? globalThis.Number(object.organizationId) : 0,
+      userId: isSet(object.userId) ? globalThis.String(object.userId) : "",
+      skillId: isSet(object.skillId) ? globalThis.Number(object.skillId) : 0,
+      model: isSet(object.model) ? globalThis.String(object.model) : "",
+      userApiKey: isSet(object.userApiKey) ? globalThis.String(object.userApiKey) : "",
+      timeoutSeconds: isSet(object.timeoutSeconds) ? globalThis.Number(object.timeoutSeconds) : 0,
+    };
+  },
+
+  toJSON(message: GeneratePlanRequest): unknown {
+    const obj: any = {};
+    if (message.instructions !== "") {
+      obj.instructions = message.instructions;
+    }
+    if (message.organizationId !== 0) {
+      obj.organizationId = Math.round(message.organizationId);
+    }
+    if (message.userId !== "") {
+      obj.userId = message.userId;
+    }
+    if (message.skillId !== 0) {
+      obj.skillId = Math.round(message.skillId);
+    }
+    if (message.model !== "") {
+      obj.model = message.model;
+    }
+    if (message.userApiKey !== "") {
+      obj.userApiKey = message.userApiKey;
+    }
+    if (message.timeoutSeconds !== 0) {
+      obj.timeoutSeconds = Math.round(message.timeoutSeconds);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GeneratePlanRequest>, I>>(base?: I): GeneratePlanRequest {
+    return GeneratePlanRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GeneratePlanRequest>, I>>(object: I): GeneratePlanRequest {
+    const message = createBaseGeneratePlanRequest();
+    message.instructions = object.instructions ?? "";
+    message.organizationId = object.organizationId ?? 0;
+    message.userId = object.userId ?? "";
+    message.skillId = object.skillId ?? 0;
+    message.model = object.model ?? "";
+    message.userApiKey = object.userApiKey ?? "";
+    message.timeoutSeconds = object.timeoutSeconds ?? 0;
+    return message;
+  },
+};
+
+function createBaseGeneratePlanResponse(): GeneratePlanResponse {
+  return { planJson: "", planId: "", planningTimeMs: 0, tokenUsage: undefined, status: "", errorMessage: "" };
+}
+
+export const GeneratePlanResponse: MessageFns<GeneratePlanResponse> = {
+  encode(message: GeneratePlanResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.planJson !== "") {
+      writer.uint32(10).string(message.planJson);
+    }
+    if (message.planId !== "") {
+      writer.uint32(18).string(message.planId);
+    }
+    if (message.planningTimeMs !== 0) {
+      writer.uint32(24).int32(message.planningTimeMs);
+    }
+    if (message.tokenUsage !== undefined) {
+      TokenUsage.encode(message.tokenUsage, writer.uint32(34).fork()).join();
+    }
+    if (message.status !== "") {
+      writer.uint32(42).string(message.status);
+    }
+    if (message.errorMessage !== "") {
+      writer.uint32(50).string(message.errorMessage);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GeneratePlanResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGeneratePlanResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.planJson = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.planId = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.planningTimeMs = reader.int32();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.tokenUsage = TokenUsage.decode(reader, reader.uint32());
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.status = reader.string();
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.errorMessage = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GeneratePlanResponse {
+    return {
+      planJson: isSet(object.planJson) ? globalThis.String(object.planJson) : "",
+      planId: isSet(object.planId) ? globalThis.String(object.planId) : "",
+      planningTimeMs: isSet(object.planningTimeMs) ? globalThis.Number(object.planningTimeMs) : 0,
+      tokenUsage: isSet(object.tokenUsage) ? TokenUsage.fromJSON(object.tokenUsage) : undefined,
+      status: isSet(object.status) ? globalThis.String(object.status) : "",
+      errorMessage: isSet(object.errorMessage) ? globalThis.String(object.errorMessage) : "",
+    };
+  },
+
+  toJSON(message: GeneratePlanResponse): unknown {
+    const obj: any = {};
+    if (message.planJson !== "") {
+      obj.planJson = message.planJson;
+    }
+    if (message.planId !== "") {
+      obj.planId = message.planId;
+    }
+    if (message.planningTimeMs !== 0) {
+      obj.planningTimeMs = Math.round(message.planningTimeMs);
+    }
+    if (message.tokenUsage !== undefined) {
+      obj.tokenUsage = TokenUsage.toJSON(message.tokenUsage);
+    }
+    if (message.status !== "") {
+      obj.status = message.status;
+    }
+    if (message.errorMessage !== "") {
+      obj.errorMessage = message.errorMessage;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GeneratePlanResponse>, I>>(base?: I): GeneratePlanResponse {
+    return GeneratePlanResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GeneratePlanResponse>, I>>(object: I): GeneratePlanResponse {
+    const message = createBaseGeneratePlanResponse();
+    message.planJson = object.planJson ?? "";
+    message.planId = object.planId ?? "";
+    message.planningTimeMs = object.planningTimeMs ?? 0;
+    message.tokenUsage = (object.tokenUsage !== undefined && object.tokenUsage !== null)
+      ? TokenUsage.fromPartial(object.tokenUsage)
+      : undefined;
+    message.status = object.status ?? "";
+    message.errorMessage = object.errorMessage ?? "";
+    return message;
+  },
+};
+
 function createBaseProcessMessageRequest(): ProcessMessageRequest {
   return {
     messageParts: [],
@@ -10017,6 +10351,17 @@ export const ChatProcessingServiceService = {
       Buffer.from(CancelMessageResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): CancelMessageResponse => CancelMessageResponse.decode(value),
   },
+  /** Generate an autonomous execution plan for skill instructions */
+  generatePlan: {
+    path: "/emery.agents.ChatProcessingService/GeneratePlan",
+    requestStream: false,
+    responseStream: false,
+    requestSerialize: (value: GeneratePlanRequest): Buffer => Buffer.from(GeneratePlanRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GeneratePlanRequest => GeneratePlanRequest.decode(value),
+    responseSerialize: (value: GeneratePlanResponse): Buffer =>
+      Buffer.from(GeneratePlanResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GeneratePlanResponse => GeneratePlanResponse.decode(value),
+  },
 } as const;
 
 export interface ChatProcessingServiceServer extends UntypedServiceImplementation {
@@ -10024,6 +10369,8 @@ export interface ChatProcessingServiceServer extends UntypedServiceImplementatio
   processMessage: handleServerStreamingCall<ProcessMessageRequest, ProcessMessageResponse>;
   /** Cancel an in-progress message processing */
   cancelMessage: handleUnaryCall<CancelMessageRequest, CancelMessageResponse>;
+  /** Generate an autonomous execution plan for skill instructions */
+  generatePlan: handleUnaryCall<GeneratePlanRequest, GeneratePlanResponse>;
 }
 
 export interface ChatProcessingServiceClient extends Client {
@@ -10052,6 +10399,22 @@ export interface ChatProcessingServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: CancelMessageResponse) => void,
+  ): ClientUnaryCall;
+  /** Generate an autonomous execution plan for skill instructions */
+  generatePlan(
+    request: GeneratePlanRequest,
+    callback: (error: ServiceError | null, response: GeneratePlanResponse) => void,
+  ): ClientUnaryCall;
+  generatePlan(
+    request: GeneratePlanRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GeneratePlanResponse) => void,
+  ): ClientUnaryCall;
+  generatePlan(
+    request: GeneratePlanRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GeneratePlanResponse) => void,
   ): ClientUnaryCall;
 }
 

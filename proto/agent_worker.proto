@@ -503,6 +503,30 @@ service ChatProcessingService {
 
   // Cancel an in-progress message processing
   rpc CancelMessage(CancelMessageRequest) returns (CancelMessageResponse);
+
+  // Generate an autonomous execution plan for skill instructions
+  rpc GeneratePlan(GeneratePlanRequest) returns (GeneratePlanResponse);
+}
+
+// Request for autonomous plan generation
+message GeneratePlanRequest {
+  string instructions = 1;              // Task instructions (required)
+  int32 organization_id = 2;            // For ToolProvider context
+  string user_id = 3;                   // For auth context
+  int32 skill_id = 4;                   // To resolve skill's data sources
+  string model = 5;                     // Optional model override
+  string user_api_key = 6;              // For ToolProvider auth
+  int32 timeout_seconds = 7;            // Default: 60
+}
+
+// Response from plan generation
+message GeneratePlanResponse {
+  string plan_json = 1;                 // StoredPlan as JSON
+  string plan_id = 2;                   // Plan UUID
+  int32 planning_time_ms = 3;           // Generation time
+  TokenUsage token_usage = 4;           // For billing
+  string status = 5;                    // "success" or "error"
+  string error_message = 6;             // If status == "error"
 }
 
 // Request for AI message processing

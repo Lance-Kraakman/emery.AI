@@ -1757,3 +1757,96 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             }
         }
 
+    async def GeneratePlan(
+        self,
+        request: agent_worker_pb2.GeneratePlanRequest,
+        context: grpc.aio.ServicerContext
+    ) -> agent_worker_pb2.GeneratePlanResponse:
+        """
+        Generate autonomous plan for skill editor using existing patterns.
+
+        Creates a plan from skill instructions that can be stored and executed
+        autonomously (without HITL approval) when the skill runs.
+
+        Uses the same ToolProvider and planning patterns as ProcessMessage.
+        """
+        start_time = time.time()
+
+        try:
+            logger.info(f"📋 GeneratePlan: Starting for skill {request.skill_id}")
+
+            # 1. Create ToolProvider (same pattern as ProcessMessage)
+            tool_provider = ToolProvider(
+                api_key=request.user_api_key or "",
+                organization_id=request.organization_id
+            )
+
+            # 2. Get context tools from provider
+            context_tools = tool_provider.get_context_tools()
+            logger.info(f"📋 GeneratePlan: Using {len(context_tools)} context tools")
+
+            # 3. Get managed agents for routing info in plan
+            managed_agents = self.managed_agents_factory.create_all_agents(
+                tool_provider=tool_provider,
+                org_model=request.model or None
+            )
+            logger.info(f"📋 GeneratePlan: Using {len(managed_agents)} managed agents")
+
+            # 4. Generate plan (uses PlanOutputTool internally)
+            timeout = request.timeout_seconds if request.timeout_seconds > 0 else 60
+            plan = await asyncio.wait_for(
+                self.plan_service.generate_plan(
+                    basic_instructions=request.instructions,
+                    context_tables=None,  # Could resolve from skill_id in future
+                    org_model=request.model or None,
+                    managed_agents=managed_agents,
+                    context_tools=context_tools,
+                ),
+                timeout=timeout
+            )
+
+            planning_time_ms = int((time.time() - start_time) * 1000)
+            logger.info(f"📋 GeneratePlan: Created plan {plan.id} with {len(plan.steps)} steps in {planning_time_ms}ms")
+
+            # 5. Convert Plan to StoredPlan JSON format (matches TypeScript StoredPlan type)
+            stored_plan = {
+                "id": plan.id,
+                "goal": plan.goal,
+                "basicInstructions": plan.basic_instructions,
+                "context": plan.context,
+                "analysis": plan.analysis,
+                "steps": [
+                    {
+                        "stepId": step.step_id,
+                        "description": step.description,
+                        "toolCall": step.tool_call,
+                        "parameters": step.parameters or {},
+                        "targetAgent": step.target_agent,
+                    }
+                    for step in plan.steps
+                ],
+                "version": 1,
+                "generatedAt": plan.generated_at.isoformat() if plan.generated_at else None,
+            }
+
+            return agent_worker_pb2.GeneratePlanResponse(
+                plan_json=json.dumps(stored_plan),
+                plan_id=plan.id,
+                planning_time_ms=planning_time_ms,
+                status="success"
+            )
+
+        except asyncio.TimeoutError:
+            logger.error(f"📋 GeneratePlan: Timed out after {request.timeout_seconds}s")
+            return agent_worker_pb2.GeneratePlanResponse(
+                status="error",
+                error_message="Plan generation timed out"
+            )
+
+        except Exception as e:
+            logger.error(f"📋 GeneratePlan: Failed with error: {e}", exc_info=True)
+            return agent_worker_pb2.GeneratePlanResponse(
+                status="error",
+                error_message=str(e)
+            )
+
