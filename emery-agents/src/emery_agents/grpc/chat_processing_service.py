@@ -902,6 +902,38 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 self.session_manager.clear_coordinator_state(session_id)
                 coordinator_phase = "idle"
 
+            # Handle managed agent HITL response: prepare task for agent.run() resume
+            # AIDEV-NOTE: When managed agent (app_builder, etc.) pauses for questions/approval,
+            # we prepare the task and let agent.run() resume with reset=False.
+            # The managed agent's _waiting_for_approval flag triggers resume logic.
+            elif coordinator_phase == "awaiting_questions" and session_id:
+                original_task = self.session_manager.get_original_task(session_id)
+                if original_task:
+                    # Check if this is an approval or feedback
+                    if self._is_approval_response(current_task):
+                        # Approval - use "approve" as task for managed agent resume
+                        logger.info("✅ Managed agent HITL: Approved, will resume agent")
+                        current_task = "approve"  # Managed agent checks for this
+                    else:
+                        # Parse answers from JSON (batched questions) or treat as feedback
+                        try:
+                            answers = json.loads(current_task)
+                            if isinstance(answers, dict):
+                                # Store answers and use approval message
+                                self.session_manager.store_question_answers(session_id, answers)
+                                logger.info(f"📝 Managed agent HITL: Stored {len(answers)} answers")
+                                current_task = "approve"  # Resume with answers stored
+                            else:
+                                # Not a dict, treat as feedback
+                                current_task = f"{original_task}\n\nUser feedback: {current_task}"
+                                logger.info("📝 Managed agent HITL: Feedback received")
+                        except json.JSONDecodeError:
+                            # Free-form feedback - combine with original task
+                            current_task = f"{original_task}\n\nUser feedback: {current_task}"
+                            logger.info("📝 Managed agent HITL: Feedback received")
+                # DON'T reset phase here - let _stream_coordinator_response handle it
+                # The phase will be used to trigger FALL_THROUGH to agent.run()
+
             # Create Plan for tracking this execution
             # AIDEV-NOTE: Plan provides visibility into complex task progress and enables HITL
             # Only create for new tasks (idle phase), not for approvals or ongoing execution
@@ -1164,6 +1196,13 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     }
                 }
                 yield awaiting_input_response
+
+                # Preserve state for managed agent HITL flow
+                # This enables iterative question answering and context preservation
+                if session_id:
+                    self.session_manager.set_coordinator_phase(session_id, "awaiting_questions")
+                    self.session_manager.set_original_task(session_id, current_task)
+                    logger.info(f"📊 Session {session_id}: Managed agent HITL, awaiting questions/approval")
                 return
 
             # ============================================================
@@ -1692,6 +1731,18 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     if converted:
                         yield converted
                         step_index += 1
+
+        elif coordinator_phase == "awaiting_questions":
+            # Managed agent HITL response - let agent.run() resume the managed agent
+            # The managed agent has _waiting_for_approval=True and will resume with memory intact
+            logger.info("📋 Coordinator: Managed agent HITL response, falling through to agent.run()")
+
+            # Clear state after falling through (will be re-set if agent interrupts again)
+            if session_id:
+                self.session_manager.set_coordinator_phase(session_id, "idle")
+                self.session_manager.set_original_task(session_id, None)
+
+            yield "FALL_THROUGH"
 
     def _is_approval_response(self, task: str) -> bool:
         """

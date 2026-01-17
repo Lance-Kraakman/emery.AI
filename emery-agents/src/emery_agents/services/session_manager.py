@@ -25,7 +25,15 @@ logger = logging.getLogger(__name__)
 # - awaiting_approval: Waiting for user to approve a plan
 # - awaiting_clarification: Waiting for user to answer clarifying questions
 # - executing: Plan is being executed
-CoordinatorPhase = Literal["idle", "planning", "awaiting_approval", "awaiting_clarification", "executing"]
+CoordinatorPhase = Literal[
+    "idle",
+    "planning",
+    "awaiting_questions",      # Waiting for batched question answers (managed agent HITL)
+    "awaiting_approval",
+    "awaiting_clarification",  # Waiting for task classifier clarification
+    "awaiting_cascade_questions",  # Waiting for cascade planning question answers
+    "executing"
+]
 
 
 @dataclass
@@ -49,6 +57,10 @@ class SessionMetadata:
     coordinator: Optional["ExecutionCoordinator"] = None
     current_plan: Optional["Plan"] = None
     coordinator_phase: CoordinatorPhase = "idle"
+    # Original task stored when awaiting clarification (so we can combine with user's answer)
+    original_task: Optional[str] = None
+    # Question answers stored between planning rounds (for iterative question flow)
+    question_answers: Optional[Dict[str, str]] = None
 
 
 class SessionManager:
@@ -621,4 +633,35 @@ class SessionManager:
             self.metadata[session_id].coordinator = None
             self.metadata[session_id].current_plan = None
             self.metadata[session_id].coordinator_phase = "idle"
+            self.metadata[session_id].original_task = None
+            self.metadata[session_id].question_answers = None
             logger.info(f"🧹 Session {session_id}: coordinator state cleared")
+
+    def set_original_task(self, session_id: str, task: str) -> None:
+        """Store original task when awaiting clarification."""
+        if session_id in self.metadata:
+            self.metadata[session_id].original_task = task
+            logger.info(f"📝 Session {session_id}: stored original task for clarification")
+
+    def get_original_task(self, session_id: str) -> Optional[str]:
+        """Get original task stored when awaiting clarification."""
+        if session_id in self.metadata:
+            return self.metadata[session_id].original_task
+        return None
+
+    def store_question_answers(self, session_id: str, answers: Dict[str, str]) -> None:
+        """Store question answers for iterative planning rounds."""
+        if session_id in self.metadata:
+            self.metadata[session_id].question_answers = answers
+            logger.info(f"📝 Session {session_id}: stored {len(answers)} question answers")
+
+    def get_question_answers(self, session_id: str) -> Optional[Dict[str, str]]:
+        """Get stored question answers for resume planning."""
+        if session_id in self.metadata:
+            return self.metadata[session_id].question_answers
+        return None
+
+    def clear_question_answers(self, session_id: str) -> None:
+        """Clear question answers after they've been processed."""
+        if session_id in self.metadata:
+            self.metadata[session_id].question_answers = None
