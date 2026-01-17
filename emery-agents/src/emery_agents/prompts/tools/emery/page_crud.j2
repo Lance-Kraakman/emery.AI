@@ -2,6 +2,8 @@
 
 The `page_crud` tool manages pages within Puck apps.
 
+**Block Schema Reference:** `src/components/puck/blocks-schema.json` documents all blocks and system concepts.
+
 ### Methods
 | Method | Description | Required Params |
 |--------|-------------|-----------------|
@@ -28,105 +30,175 @@ The `page_crud` tool manages pages within Puck apps.
 
 ### Puck templateData Structure
 
-The `templateData` field contains the visual page content in Puck format:
-
 ```json
 {
-  "root": {
-    "props": { "title": "Page Title" }
-  },
+  "root": { "props": { "title": "Page Title" } },
   "content": [
-    {
-      "type": "Hero",
-      "props": {
-        "title": "Welcome",
-        "description": "Your hero section text",
-        "buttons": [{"text": "Get Started", "href": "/start"}]
-      }
-    },
-    {
-      "type": "Cards",
-      "props": {
-        "items": [
-          {"title": "Feature 1", "description": "..."},
-          {"title": "Feature 2", "description": "..."}
-        ]
-      }
-    }
+    { "type": "BlockName", "props": { ... } }
   ],
   "zones": {}
 }
 ```
 
-### Available Puck Blocks
+---
 
-| Block | Purpose | Key Props |
-|-------|---------|-----------|
-| Hero | Header section with title and CTA | title, description, buttons, backgroundImage |
-| Cards | Grid of feature cards | items[], columns |
-| Text | Rich text content | text, align |
-| Heading | Section heading | text, level (h1-h6) |
-| Image | Image with caption | src, alt, caption |
-| Button | CTA button | text, href, variant |
-| Columns | Multi-column layout | columns[] |
-| VerticalSpace | Spacing element | size |
-| Flex | Flexible container | direction, gap, items[] |
-| Stats | Statistics display | items[] with value, label |
-| Logos | Logo grid | logos[] with src, alt |
+## Available Puck Blocks (38 total)
 
-### Example: Creating a Landing Page
+### Layout Blocks
+| Block | Description | Props |
+|-------|-------------|-------|
+| Grid | CSS grid container | columns (number), gap (number) |
+| Flex | Flexbox container | direction (row/column), gap, align, justify |
+| Container | Content wrapper | maxWidth (sm/md/lg/xl/full), padding |
+| Space | Vertical spacing | size (xs/sm/md/lg/xl) |
+| Divider | Horizontal line | color (CSS value) |
 
-```python
-# Create page with Puck content
-page_crud(
-    method="create",
-    app_id=1,
-    data={
-        "name": "Home",
-        "slug": "home",
-        "templateData": {
-            "root": {"props": {"title": "Home"}},
-            "content": [
-                {
-                    "type": "Hero",
-                    "props": {
-                        "title": "Welcome to Our Product",
-                        "description": "The best solution for your needs",
-                        "buttons": [{"text": "Get Started", "href": "/signup"}]
-                    }
-                },
-                {
-                    "type": "Cards",
-                    "props": {
-                        "items": [
-                            {"title": "Feature 1", "description": "Description of feature 1"},
-                            {"title": "Feature 2", "description": "Description of feature 2"},
-                            {"title": "Feature 3", "description": "Description of feature 3"}
-                        ]
-                    }
-                }
-            ],
-            "zones": {}
+### Typography Blocks
+| Block | Description | Props |
+|-------|-------------|-------|
+| Heading | Section heading | text, level (h1-h6), align |
+| Text | Rich text paragraph | text, align |
+
+### Action Blocks
+| Block | Description | Props |
+|-------|-------------|-------|
+| Button | CTA button | label (supports {fieldName}), variant, actions[] |
+| LinkBlock | Navigation link | label (supports {fieldName}), href (supports {params.x}) |
+
+### Authentication Blocks
+| Block | Description | Props |
+|-------|-------------|-------|
+| LoginBlock | Sign in/up form | mode (signin/signup/both), redirectUrl |
+| SignOutBlock | Sign out button | label, redirectUrl |
+
+### Data Blocks (connect to database tables/views)
+| Block | Description | Props |
+|-------|-------------|-------|
+| DataBlock | **Parent for Field blocks** - provides row context | viewId (required), mode (single/list), filters[], sorts[], limit |
+| TableBlock | Tabular data display | viewId (required), columns[], pageSize |
+| MetricBlock | Single KPI value | viewId, fieldId, label, format |
+| ChartBlock | Data visualization | viewId, chartType (bar/line/pie/area), xField, yField |
+| FormBlock | Create/edit form | tableId (required), fields[], mode (create/edit), submitLabel |
+
+### Field Blocks (MUST be inside DataBlock)
+| Block | Description | Props |
+|-------|-------------|-------|
+| TextField | Text field value | fieldId (required), label, fallback, labelPosition |
+| NumberField | Number with formatting | fieldId (required), label, format (number/currency/percent) |
+| BooleanField | Boolean as checkbox | fieldId (required), label |
+| DateField | Date with formatting | fieldId (required), label, format |
+| SelectField | Dropdown value | fieldId (required), label |
+| ImageField | Image display | fieldId (required), alt, size |
+| FileField | File download link | fieldId (required), label |
+| DocumentField | Document display | fieldId (required) |
+| RelationField | Linked record | fieldId (required), displayField |
+| LinkField | URL as clickable link | fieldId (required), label |
+
+### Logic Blocks
+| Block | Description | Props |
+|-------|-------------|-------|
+| ConditionalBlock | Show/hide content | condition (expression), showIf (boolean) |
+
+### Content Blocks
+| Block | Description | Props |
+|-------|-------------|-------|
+| EditorBlock | Rich text editor | content (HTML) |
+| MarkdownBlock | Markdown renderer | content (markdown text) |
+
+### Page Structure Blocks
+| Block | Description | Props |
+|-------|-------------|-------|
+| HeaderBlock | Page header with nav | logo, title, showNav |
+| FooterBlock | Page footer | text, links[] |
+
+### Template Blocks (pre-built combinations)
+| Block | Description | Props |
+|-------|-------------|-------|
+| Hero | Hero section | title, description, buttons[], backgroundImage |
+| Card | Card container | title, description, children slot |
+| Logos | Logo grid/carousel | logos[] with {src, alt, href} |
+| Stats | Statistics grid | items[] with {value, label} |
+
+---
+
+## System Concepts
+
+### Theme Variables
+Theme is stored as JSON in database (themeConfig), converted to CSS variables at render.
+
+**Color Variables:**
+`--theme-primary`, `--theme-secondary`, `--theme-background`, `--theme-surface`, `--theme-text`, `--theme-text-muted`, `--theme-border`, `--theme-link`, `--theme-success`, `--theme-warning`, `--theme-error`
+
+**Typography Variables:**
+`--theme-font-family`, `--theme-font-size`, `--theme-heading-font-weight`, `--theme-heading-color`, `--theme-font-xs/sm/base/lg/xl/2xl/3xl/4xl/5xl`
+
+### Page Variables (Dynamic Content)
+Use `{params.varName}` syntax in text fields for dynamic content from URL.
+
+**Examples:**
+- `{params.product_id}` - URL path parameter
+- `{params.user_id}` - Query string parameter
+
+**Supported in:** TextField, NumberField, Button label, LinkBlock href
+
+### Data Binding with DataBlock
+1. DataBlock queries a view with filters
+2. DataBlock provides row context to children
+3. Field blocks display values from that context
+
+**CRITICAL:** TextField, NumberField, and other Field blocks MUST be inside a DataBlock to access row data.
+
+---
+
+## Examples
+
+### Landing Page with Hero and Features
+```json
+{
+  "templateData": {
+    "root": {"props": {"title": "Home"}},
+    "content": [
+      {
+        "type": "Hero",
+        "props": {
+          "title": "Welcome to Our Product",
+          "description": "The best solution for your needs",
+          "buttons": [{"text": "Get Started", "href": "/signup"}]
         }
-    }
-)
+      },
+      {
+        "type": "Grid",
+        "props": {"columns": 3, "gap": 4}
+      }
+    ],
+    "zones": {}
+  }
+}
 ```
 
-### Example: Update Existing Page Content
-
-```python
-# Update existing page content
-page_crud(
-    method="update_content",
-    page_id=5,
-    data={
-        "templateData": {
-            "root": {"props": {"title": "Updated Page"}},
-            "content": [...],  # New Puck content
-            "zones": {}
+### Detail Page with Data Binding
+```json
+{
+  "templateData": {
+    "root": {"props": {"title": "Product Detail"}},
+    "content": [
+      {
+        "type": "DataBlock",
+        "props": {
+          "viewId": 123,
+          "mode": "single",
+          "filters": [{"field": "id", "operator": "=", "value": "{params.product_id}"}]
         }
+      }
+    ],
+    "zones": {
+      "DataBlock-1:children": [
+        {"type": "TextField", "props": {"fieldId": 45, "label": "Name"}},
+        {"type": "NumberField", "props": {"fieldId": 46, "label": "Price", "format": "currency"}}
+      ]
     }
-)
+  }
+}
 ```
 
 ### Response Format (TOON)
