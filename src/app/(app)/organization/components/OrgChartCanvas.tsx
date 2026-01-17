@@ -194,7 +194,55 @@ export function OrgChartCanvas({
     event.dataTransfer.dropEffect = 'move';
   }, []);
 
-  // Handle drop from entity palette or existing entity drag
+  // Helper to find agent container at a given position
+  const findAgentAtPosition = useCallback((position: XYPosition, excludeNodeId?: string) => {
+    const agentNodes = nodes.filter(n => n.type === 'agent' && n.id !== excludeNodeId);
+    return agentNodes.find((agentNode) => {
+      const nodeAny = agentNode as any;
+      const nodeWidth = nodeAny.width ?? nodeAny.measured?.width ?? (agentNode.style?.width as number) ?? 400;
+      const nodeHeight = nodeAny.height ?? nodeAny.measured?.height ?? (agentNode.style?.height as number) ?? 140;
+      return (
+        position.x >= agentNode.position.x &&
+        position.x <= agentNode.position.x + nodeWidth &&
+        position.y >= agentNode.position.y &&
+        position.y <= agentNode.position.y + nodeHeight
+      );
+    });
+  }, [nodes]);
+
+  // Handle node drag stop - detect org-level nodes dropped on agents
+  const handleNodeDragStop = useCallback(
+    (_event: React.MouseEvent, node: any) => {
+      // Only handle skill or database nodes
+      if (node.type !== 'skill' && node.type !== 'database') return;
+
+      // Check if this is an org-level node (no agentId)
+      const nodeData = node.data;
+      const isOrgLevel = nodeData.agentId === null || nodeData.agentId === undefined;
+      if (!isOrgLevel) return;
+
+      // Check if dropped over an agent container
+      const targetAgent = findAgentAtPosition(node.position);
+      if (!targetAgent) return;
+
+      const agentData = targetAgent.data as AgentContainerNodeData;
+      const agentId = agentData.agentId;
+
+      // Show assignment dialog
+      setAssignmentDialog({
+        isOpen: true,
+        mode: node.type === 'skill' ? 'org_skill' : 'database',
+        entityId: node.type === 'skill' ? nodeData.skillId : nodeData.databaseId,
+        entityName: nodeData.name,
+        targetAgent: { id: agentId, name: agentData.name || '' },
+        pendingPosition: node.position,
+        tables: nodeData.tables,
+      });
+    },
+    [findAgentAtPosition]
+  );
+
+  // Handle drop from entity palette
   const handleDrop = useCallback(
     async (event: React.DragEvent) => {
       event.preventDefault();
@@ -223,31 +271,7 @@ export function OrgChartCanvas({
         : null;
       const agentData = targetAgent?.data as AgentContainerNodeData | undefined;
 
-      // Check for existing entity drag first (from org-level nodes on canvas)
-      const existingEntityData = event.dataTransfer.getData('application/existing-entity');
-      if (existingEntityData) {
-        try {
-          const entity = JSON.parse(existingEntityData);
-
-          // Only handle if dropping org-level entity onto an agent
-          if (entity.agentId === null && targetAgent && agentId) {
-            setAssignmentDialog({
-              isOpen: true,
-              mode: entity.type === 'skill' ? 'org_skill' : 'database',
-              entityId: entity.id,
-              entityName: entity.name,
-              targetAgent: { id: agentId, name: agentData?.name || '' },
-              pendingPosition: position,
-              tables: entity.tables,
-            });
-          }
-        } catch (e) {
-          console.error('Failed to parse existing entity data:', e);
-        }
-        return;
-      }
-
-      // Handle new entity from palette
+      // Handle new entity from palette (existing entity drags handled by onNodeDragStop)
       const entityType = event.dataTransfer.getData('application/orgchart-entity') as OrgChartNodeType;
       if (!entityType || !onCreateEntity) return;
 
@@ -700,6 +724,7 @@ export function OrgChartCanvas({
         isValidConnection={isValidConnection}
         onSelectionChange={handleSelectionChange}
         onNodeDoubleClick={handleNodeDoubleClick}
+        onNodeDragStop={disabled ? undefined : handleNodeDragStop}
         onDragOver={disabled ? undefined : handleDragOver}
         onDrop={disabled ? undefined : handleDrop}
         nodeTypes={orgChartNodeTypes}
