@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { LucideIcon, Plus, ChevronRight, ChevronDown, FileText } from "lucide-react"
+import { LucideIcon, Plus, ChevronRight, ChevronDown, FileText, LayoutTemplate } from "lucide-react"
 import {
   Collapsible,
   CollapsibleContent,
@@ -19,6 +19,12 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import { SidebarItemActions } from "./sidebar-item-actions"
 import { InlineRename } from "./inline-rename"
@@ -45,6 +51,10 @@ interface NestedSidebarSectionProps<TParent, TChild> {
   onAddChild: (parentId: number) => void
   addParentLabel?: string
   addChildLabel?: string
+  /** Optional callback for "From Template" parent option - if provided, shows dropdown */
+  onAddParentFromTemplate?: () => void
+  /** Optional callback for "From Template" child option - if provided, shows dropdown */
+  onAddChildFromTemplate?: (parentId: number) => void
   // Resource type mapping for ShareButton
   parentResourceType?: string
   childResourceType?: string
@@ -82,6 +92,8 @@ export function NestedSidebarSection<TParent, TChild>({
   onAddChild,
   addParentLabel = `Add ${label.slice(0, -1)}`, // Remove trailing 's'
   addChildLabel = "Add Item",
+  onAddParentFromTemplate,
+  onAddChildFromTemplate,
   parentResourceType,
   childResourceType,
   onRenameParent,
@@ -225,17 +237,44 @@ export function NestedSidebarSection<TParent, TChild>({
                             )
                           })}
                           <SidebarMenuSubItem>
-                            <Button
-                              variant="ghost"
-                              className="w-full justify-start h-6 px-2 text-xs group-data-[collapsible=icon]:hidden"
-                              onClick={() => onAddChild(parentId)}
-                              disabled={isCreating}
-                            >
-                              <Plus className="h-3 w-3" />
-                              <span className="group-data-[collapsible=icon]:hidden">
-                                {addChildLabel}
-                              </span>
-                            </Button>
+                            {onAddChildFromTemplate ? (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    className="w-full justify-start h-6 px-2 text-xs group-data-[collapsible=icon]:hidden"
+                                    disabled={isCreating}
+                                  >
+                                    <Plus className="h-3 w-3" />
+                                    <span className="group-data-[collapsible=icon]:hidden">
+                                      {addChildLabel}
+                                    </span>
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="start" className="w-48">
+                                  <DropdownMenuItem onClick={() => onAddChild(parentId)}>
+                                    <Plus className="h-4 w-4 mr-2" />
+                                    Create Blank
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => onAddChildFromTemplate(parentId)}>
+                                    <LayoutTemplate className="h-4 w-4 mr-2" />
+                                    From Template
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                className="w-full justify-start h-6 px-2 text-xs group-data-[collapsible=icon]:hidden"
+                                onClick={() => onAddChild(parentId)}
+                                disabled={isCreating}
+                              >
+                                <Plus className="h-3 w-3" />
+                                <span className="group-data-[collapsible=icon]:hidden">
+                                  {addChildLabel}
+                                </span>
+                              </Button>
+                            )}
                           </SidebarMenuSubItem>
                         </SidebarMenuSub>
                       </CollapsibleContent>
@@ -243,15 +282,40 @@ export function NestedSidebarSection<TParent, TChild>({
                   </Collapsible>
                 )
               })}
-              <Button
-                variant="ghost"
-                className="w-full justify-start h-6 px-2 text-sm mt-0.5 group-data-[collapsible=icon]:hidden"
-                onClick={onAddParent}
-                disabled={isCreating}
-              >
-                <Plus className="h-4 w-4" />
-                <span className="group-data-[collapsible=icon]:hidden">{addParentLabel}</span>
-              </Button>
+              {onAddParentFromTemplate ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      className="w-full justify-start h-6 px-2 text-sm mt-0.5 group-data-[collapsible=icon]:hidden"
+                      disabled={isCreating}
+                    >
+                      <Plus className="h-4 w-4" />
+                      <span className="group-data-[collapsible=icon]:hidden">{addParentLabel}</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-48">
+                    <DropdownMenuItem onClick={onAddParent}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create Blank
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={onAddParentFromTemplate}>
+                      <LayoutTemplate className="h-4 w-4 mr-2" />
+                      From Template
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start h-6 px-2 text-sm mt-0.5 group-data-[collapsible=icon]:hidden"
+                  onClick={onAddParent}
+                  disabled={isCreating}
+                >
+                  <Plus className="h-4 w-4" />
+                  <span className="group-data-[collapsible=icon]:hidden">{addParentLabel}</span>
+                </Button>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </CollapsibleContent>

@@ -15,6 +15,7 @@ import {
   FileText,
   CreditCard,
   ScrollText,
+  LayoutTemplate,
 } from "lucide-react"
 
 import {
@@ -63,6 +64,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { TemplatePickerDialog } from "./templates/TemplatePickerDialog"
+import type { TemplateEntityType } from "@/ddd/domain/templates/types"
+import { useRouter } from "next/navigation"
 
 // AIDEV-NOTE: Refactored sidebar using reusable components
 // SidebarSection handles simple list sections (Agents, Teams, Skills)
@@ -76,6 +80,7 @@ export function AppSidebar({
   databases,
 }: AppSidebarProps) {
   const pathname = usePathname()
+  const router = useRouter()
   const { data: sessionData } = useSession()
   const { state, toggleSidebar } = useSidebar()
   const isCollapsed = state === 'collapsed'
@@ -83,6 +88,12 @@ export function AppSidebar({
   // Track open state for nested collapsibles
   const { openSet: openApps, toggle: toggleApp } = useToggleSet<number>()
   const { openSet: openDatabases, toggle: toggleDatabase } = useToggleSet<number>()
+
+  // Template picker state
+  const [templatePicker, setTemplatePicker] = React.useState<{
+    type: TemplateEntityType;
+    parentId?: number;  // For tables: databaseId
+  } | null>(null)
 
   // Entity creation handlers using the reusable hook
   const { handleCreate: handleCreateApp, isCreating: isCreatingApp } = useEntityCreation(
@@ -286,6 +297,63 @@ export function AppSidebar({
     setDeletingItem({ type: 'table', id: table.id, name: table.name })
   }
 
+  // Template handlers
+  const handleCreateAgentFromTemplate = () => {
+    setTemplatePicker({ type: 'agent' })
+  }
+
+  const handleCreateSkillFromTemplate = () => {
+    setTemplatePicker({ type: 'skill' })
+  }
+
+  const handleCreateDatabaseFromTemplate = () => {
+    setTemplatePicker({ type: 'database' })
+  }
+
+  const handleCreateTableFromTemplate = (databaseId: number) => {
+    setTemplatePicker({ type: 'table', parentId: databaseId })
+  }
+
+  const handleSelectBuiltinTemplate = async (templateId: string) => {
+    if (!templatePicker) return
+    // Navigate to the appropriate creation page with template param
+    switch (templatePicker.type) {
+      case 'skill':
+        router.push(`/skills/new?builtinId=${encodeURIComponent(templateId)}`)
+        break
+      case 'agent':
+        router.push(`/organization?templatePicker=agent&builtinId=${encodeURIComponent(templateId)}`)
+        break
+      case 'database':
+        router.push(`/organization?templatePicker=database&builtinId=${encodeURIComponent(templateId)}`)
+        break
+      case 'table':
+        router.push(`/data?templatePicker=table&databaseId=${templatePicker.parentId}&builtinId=${encodeURIComponent(templateId)}`)
+        break
+    }
+    setTemplatePicker(null)
+  }
+
+  const handleSelectSavedTemplate = async (templateId: number) => {
+    if (!templatePicker) return
+    // Navigate to the appropriate creation page with template param
+    switch (templatePicker.type) {
+      case 'skill':
+        router.push(`/skills/new?templateId=${templateId}`)
+        break
+      case 'agent':
+        router.push(`/organization?templatePicker=agent&templateId=${templateId}`)
+        break
+      case 'database':
+        router.push(`/organization?templatePicker=database&templateId=${templateId}`)
+        break
+      case 'table':
+        router.push(`/data?templatePicker=table&databaseId=${templatePicker.parentId}&templateId=${templateId}`)
+        break
+    }
+    setTemplatePicker(null)
+  }
+
   // Unified delete confirmation handler
   const confirmDelete = async () => {
     if (!deletingItem) return
@@ -413,6 +481,7 @@ export function AppSidebar({
           getItemKey={(agent) => agent.id}
           isItemActive={(agent, path) => path?.startsWith(`/agents/${agent.id}`) ?? false}
           onAdd={handleCreateAgent}
+          onAddFromTemplate={handleCreateAgentFromTemplate}
           addButtonLabel="Add Agent"
           onRename={handleRenameAgent}
           onDuplicate={handleDuplicateAgent}
@@ -508,6 +577,8 @@ export function AppSidebar({
           onAddChild={handleCreateTable}
           addParentLabel="Add Database"
           addChildLabel="Add Table"
+          onAddParentFromTemplate={handleCreateDatabaseFromTemplate}
+          onAddChildFromTemplate={handleCreateTableFromTemplate}
           parentResourceType="database"
           childResourceType="table"
           onRenameParent={handleRenameDatabase}
@@ -521,7 +592,7 @@ export function AppSidebar({
         />
 
         {/* Settings */}
-        <Collapsible defaultOpen={pathname?.startsWith("/connections") || pathname?.startsWith("/organization/settings") || pathname?.startsWith("/settings")}>
+        <Collapsible defaultOpen={pathname?.startsWith("/connections") || pathname?.startsWith("/organization/settings") || pathname?.startsWith("/settings") || pathname?.startsWith("/templates")}>
           <SidebarGroup>
             <SidebarGroupLabel asChild>
               <CollapsibleTrigger>
@@ -532,6 +603,14 @@ export function AppSidebar({
             <CollapsibleContent className="group-data-[collapsible=icon]:hidden">
               <SidebarGroupContent>
                 <SidebarMenu className="gap-0.5">
+                  <SidebarMenuItem>
+                    <SidebarMenuButton asChild isActive={pathname === "/templates"} className="h-6">
+                      <Link href="/templates">
+                        <LayoutTemplate className="h-4 w-4" />
+                        <span className="group-data-[collapsible=icon]:hidden">Templates</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
                   <SidebarMenuItem>
                     <SidebarMenuButton asChild isActive={pathname === "/connections"} className="h-6">
                       <Link href="/connections">
@@ -691,6 +770,15 @@ export function AppSidebar({
           resourceName={sharingItem.name}
         />
       )}
+
+      {/* Template Picker Dialog */}
+      <TemplatePickerDialog
+        isOpen={!!templatePicker}
+        onClose={() => setTemplatePicker(null)}
+        entityType={templatePicker?.type ?? 'skill'}
+        onSelectBuiltin={handleSelectBuiltinTemplate}
+        onSelectSaved={handleSelectSavedTemplate}
+      />
     </Sidebar>
   )
 }

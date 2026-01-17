@@ -323,6 +323,14 @@ export class TableApplicationService {
   }
 
   /**
+   * Get tables for a specific database
+   * Used by template export to include full database structure
+   */
+  async getTablesForDatabase(databaseId: DatabaseId): Promise<DynamicTable[]> {
+    return await this.dynamicTableService.getTablesByDatabase(databaseId);
+  }
+
+  /**
    * Create a new field for a table using table aggregate
    */
   async createField(command: CreateFieldCommand): Promise<TableApplicationServiceResult<TableField>> {

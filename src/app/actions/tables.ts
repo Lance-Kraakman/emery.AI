@@ -12,6 +12,12 @@ import { OrganizationId, TableId, DatabaseId, UserId } from "@/ddd/domain/shared
 import type { Result, CreateTableData } from "./types";
 import type { CreateTableCommand, UpdateTableCommand } from "@/ddd/application/services/tables/table-application-service";
 import { TableMapper, type TableDTO } from "@/app/mappers/table-mapper";
+import { FieldMapper, type FieldDTO } from "@/app/mappers/field-mapper";
+
+// Extended DTO that includes fields - used for template export
+export interface TableWithFieldsDTO extends TableDTO {
+  fields: FieldDTO[];
+}
 
 // Import the DI setup to ensure container is initialized
 // AIDEV-NOTE: DIContainer now auto-initializes, no manual setup required
@@ -456,13 +462,40 @@ function resolveDisplayValue(row: any): string {
   if (textField && textField.value) {
     return textField.value as string;
   }
-  
+
   // Fallback to first non-null field
   const firstField = row.fieldValues?.find((fv: any) => fv.value !== null && fv.value !== undefined);
   if (firstField && firstField.value) {
     return String(firstField.value);
   }
-  
+
   // Final fallback
   return `Record ${row.id.value}`;
+}
+
+/**
+ * Get all tables with fields for a specific database
+ * Used by template export to include full database structure
+ */
+export async function getTablesForDatabase(databaseId: number): Promise<TableWithFieldsDTO[]> {
+  try {
+    if (!databaseId) {
+      return [];
+    }
+
+    await requireResourcePermission("database:view", "database", databaseId);
+
+    const tableApplicationService = getTableApplicationService();
+    const tables = await tableApplicationService.getTablesForDatabase(
+      DatabaseId.fromNumber(databaseId)
+    );
+
+    return tables.map(table => ({
+      ...TableMapper.toDTO(table),
+      fields: table.fields.map(field => FieldMapper.toDTO(field))
+    }));
+  } catch (error) {
+    console.error("Error fetching tables for database:", error);
+    return [];
+  }
 }

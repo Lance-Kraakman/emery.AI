@@ -25,7 +25,10 @@ import { db } from '@/ddd/infrastructure/db/client';
 import { createSkill, createOrganizationSkill, getSkill, getSkillsByAgent } from './skills';
 import { getAgent, createAgentFromClient } from './agents';
 import { getDatabase, getAgentDatabases, createDatabase } from './databases';
+import { getTablesForDatabase, createTable, type TableWithFieldsDTO } from './tables';
+import { createField } from './fields';
 import { isBrainTemplate, isOrgSectionTemplateData } from '@/ddd/domain/templates/types';
+import type { TableTemplateData, FieldTemplateData, TemplateContent } from '@/ddd/domain/templates/types';
 
 /**
  * Server Actions for Template Management
@@ -45,12 +48,12 @@ function getTemplateService(): TemplateApplicationService {
 
 async function getSessionInfo(): Promise<{ userId: string; organizationId: number } | null> {
   const session = await getServerSession(authOptions);
-  if (!session?.user?.id || !session?.user?.organizationId) {
+  if (!session?.user?.id || !session?.user?.currentOrganizationId) {
     return null;
   }
   return {
     userId: session.user.id,
-    organizationId: session.user.organizationId
+    organizationId: session.user.currentOrganizationId
   };
 }
 
@@ -409,6 +412,85 @@ export async function saveBuiltinToLibrary(
 // =============================================================================
 
 /**
+ * Helper to convert a database with tables/fields to template format
+ */
+async function databaseToTemplateData(db: {
+  id: number;
+  name: string;
+  slug: string;
+  description?: string | null;
+  metadata?: Record<string, unknown> | null;
+}): Promise<DatabaseTemplateData> {
+  // Fetch tables with fields for this database
+  const tablesWithFields = await getTablesForDatabase(db.id);
+
+  // Convert to template format
+  const tables: TableTemplateData[] = tablesWithFields.map(table => ({
+    name: table.name,
+    description: table.description,
+    fields: table.fields.map(field => ({
+      name: field.name,
+      slug: field.name, // Use name as slug since field doesn't have separate slug
+      type: field.type,
+      required: field.required ?? false,
+      description: field.metadata?.description as string | undefined,
+      fieldConfig: field.metadata as Record<string, unknown> | undefined,
+    })),
+    metadata: table.metadata as Record<string, unknown> | undefined,
+  }));
+
+  return {
+    name: db.name,
+    slug: db.slug,
+    description: db.description || undefined,
+    metadata: db.metadata as Record<string, unknown> | undefined,
+    tables: tables.length > 0 ? tables : undefined,
+  };
+}
+
+/**
+ * Helper to create tables and fields from template data after database creation
+ */
+async function createTablesFromTemplate(
+  databaseId: number,
+  tables: TableTemplateData[] | undefined
+): Promise<void> {
+  if (!tables || tables.length === 0) return;
+
+  for (const tableData of tables) {
+    const tableResult = await createTable({
+      name: tableData.name,
+      description: tableData.description,
+      databaseId,
+    });
+
+    if (!tableResult.success || !tableResult.data) {
+      console.error('Failed to create table from template:', tableResult.error);
+      continue;
+    }
+
+    const tableId = tableResult.data.id;
+
+    // Create fields for the table
+    if (tableData.fields && tableData.fields.length > 0) {
+      for (const fieldData of tableData.fields) {
+        const fieldResult = await createField({
+          tableId,
+          name: fieldData.name,
+          type: fieldData.type as any, // FieldType cast
+          required: fieldData.required ?? false,
+          metadata: fieldData.fieldConfig as Record<string, unknown> | undefined,
+        });
+
+        if (!fieldResult.success) {
+          console.error('Failed to create field from template:', fieldResult.error);
+        }
+      }
+    }
+  }
+}
+
+/**
  * Export selection from org chart as a BrainTemplate
  * Fetches full entity data and builds an org_section template
  */
@@ -482,13 +564,10 @@ export async function exportOrgChartSelection(
         canvasMetadata: skill.canvasMetadata,
       }));
 
-      const databasesTemplateData: DatabaseTemplateData[] = agentDatabases.map(db => ({
-        name: db.name,
-        slug: db.slug,
-        description: db.description || undefined,
-        metadata: db.metadata || undefined,
-        // Tables could be included here if needed
-      }));
+      // Fetch databases with tables/fields
+      const databasesTemplateData: DatabaseTemplateData[] = await Promise.all(
+        agentDatabases.map(db => databaseToTemplateData(db))
+      );
 
       agentEntries.push({
         agent: agentTemplateData,
@@ -523,18 +602,14 @@ export async function exportOrgChartSelection(
       });
     }
 
-    // Fetch standalone databases
+    // Fetch standalone databases with tables/fields
     const standaloneDatabases: DatabaseTemplateData[] = [];
     for (const dbId of selection.databaseIds) {
       const db = await getDatabase(dbId);
       if (!db) continue;
 
-      standaloneDatabases.push({
-        name: db.name,
-        slug: db.slug,
-        description: db.description || undefined,
-        metadata: db.metadata || undefined,
-      });
+      const dbTemplateData = await databaseToTemplateData(db);
+      standaloneDatabases.push(dbTemplateData);
     }
 
     // Build the template
@@ -597,6 +672,212 @@ export async function exportAndSaveOrgChartSelection(
     entityType: 'org_section',
     templateData: exportResult.data!.template,
   });
+}
+
+// =============================================================================
+// SINGLE-ENTITY EXPORT FUNCTIONS
+// =============================================================================
+
+/**
+ * Export a single skill as template content
+ * Used by "Save as Template" in skill editor
+ */
+export async function exportSkillAsTemplate(
+  skillId: number
+): Promise<Result<TemplateContent>> {
+  try {
+    const sessionInfo = await getSessionInfo();
+    if (!sessionInfo) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const skillResult = await getSkill(skillId);
+    if (!skillResult.success || !skillResult.data) {
+      return { success: false, error: skillResult.error || 'Skill not found' };
+    }
+
+    const skill = skillResult.data;
+
+    const templateData: SkillTemplateData = {
+      name: skill.name,
+      description: skill.description || '',
+      inputs: skill.inputs || [],
+      outputs: skill.outputs || [],
+      instructions: skill.instructions || '',
+      tools: skill.tools || [],
+      model: skill.model || null,
+      agentType: skill.agentType || null,
+      executionType: skill.executionType,
+      taskModelConfig: skill.taskModelConfig,
+      toolExecutionConfig: skill.toolExecutionConfig,
+      writeConfig: skill.writeConfig,
+      steps: skill.steps,
+      canvasMetadata: skill.canvasMetadata,
+    };
+
+    return {
+      success: true,
+      data: {
+        type: 'skill',
+        data: templateData,
+      },
+    };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to export skill' };
+  }
+}
+
+/**
+ * Export a single database (with tables/fields) as template content
+ * Used by "Save as Template" in database settings
+ */
+export async function exportDatabaseAsTemplate(
+  databaseId: number
+): Promise<Result<TemplateContent>> {
+  try {
+    const sessionInfo = await getSessionInfo();
+    if (!sessionInfo) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const db = await getDatabase(databaseId);
+    if (!db) {
+      return { success: false, error: 'Database not found' };
+    }
+
+    const templateData = await databaseToTemplateData(db);
+
+    return {
+      success: true,
+      data: {
+        type: 'database',
+        data: templateData,
+      },
+    };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to export database' };
+  }
+}
+
+/**
+ * Export a single agent (with skills and databases) as template content
+ * Used by "Save as Template" in agent settings
+ */
+export async function exportAgentAsTemplate(
+  agentId: number
+): Promise<Result<TemplateContent>> {
+  try {
+    const sessionInfo = await getSessionInfo();
+    if (!sessionInfo) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const agent = await getAgent(agentId);
+    if (!agent) {
+      return { success: false, error: 'Agent not found' };
+    }
+
+    // Fetch agent's skills
+    const agentSkillsResult = await getSkillsByAgent(agentId);
+    const agentSkills = agentSkillsResult.success ? agentSkillsResult.data || [] : [];
+
+    // Fetch agent's databases
+    const agentDatabases = await getAgentDatabases(agentId);
+
+    // Convert skills to template format
+    const skillsTemplateData: SkillTemplateData[] = agentSkills.map(skill => ({
+      name: skill.name,
+      description: skill.description || '',
+      inputs: skill.inputs || [],
+      outputs: skill.outputs || [],
+      instructions: skill.instructions || '',
+      tools: skill.tools || [],
+      model: skill.model || null,
+      agentType: skill.agentType || null,
+      executionType: skill.executionType,
+      taskModelConfig: skill.taskModelConfig,
+      toolExecutionConfig: skill.toolExecutionConfig,
+      writeConfig: skill.writeConfig,
+      steps: skill.steps,
+      canvasMetadata: skill.canvasMetadata,
+    }));
+
+    // Convert databases to template format (with tables/fields)
+    const databasesTemplateData: DatabaseTemplateData[] = await Promise.all(
+      agentDatabases.map(db => databaseToTemplateData(db))
+    );
+
+    const templateData: AgentTemplateData = {
+      name: agent.name,
+      role: agent.role || '',
+      description: agent.description || '',
+      persona: agent.persona || '',
+      defaultModel: agent.defaultModel || null,
+      avatarConfig: agent.avatarConfig || null,
+      automations: [], // TODO: Include automations that reference agent's own skills
+      skills: skillsTemplateData,
+      databases: databasesTemplateData,
+    };
+
+    return {
+      success: true,
+      data: {
+        type: 'agent',
+        data: templateData,
+      },
+    };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to export agent' };
+  }
+}
+
+/**
+ * Export a single table (with fields) as template content
+ * Used by "Save as Template" in table view
+ */
+export async function exportTableAsTemplate(
+  tableId: number
+): Promise<Result<TemplateContent>> {
+  try {
+    const sessionInfo = await getSessionInfo();
+    if (!sessionInfo) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    // Get tables from the database - need to find which database this table is in
+    // We'll get the table through the application service
+    const tableApplicationService = (await import('@/ddd/application/di/container')).getTableApplicationService();
+    const { TableId } = await import('@/ddd/domain/shared/value-objects');
+
+    const table = await tableApplicationService.getTable(TableId.fromNumber(tableId));
+    if (!table) {
+      return { success: false, error: 'Table not found' };
+    }
+
+    const templateData: TableTemplateData = {
+      name: table.name,
+      description: table.description,
+      fields: table.fields.map(field => ({
+        name: field.name,
+        slug: field.name,
+        type: field.type,
+        required: field.required ?? false,
+        description: field.metadata?.description as string | undefined,
+        fieldConfig: field.metadata as Record<string, unknown> | undefined,
+      })),
+      metadata: table.metadata?.toDatabaseJson() as Record<string, unknown> | undefined,
+    };
+
+    return {
+      success: true,
+      data: {
+        type: 'table',
+        data: templateData,
+      },
+    };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to export table' };
+  }
 }
 
 // =============================================================================
@@ -769,8 +1050,13 @@ export async function applyOrgSectionTemplate(
         defaultModel: agentData.defaultModel || undefined,
         avatarConfig: agentData.avatarConfig || undefined,
         status: 'active',
-        // Note: automations are not applied here as they reference skills by name
-        // which would need to be resolved after skills are created
+        // TODO: Implement automation restoration for templates
+        // Design decision: Only export/import automations that reference skills owned by the same agent.
+        // Implementation steps:
+        // 1. When exporting: Filter automations to only include those where skillRef matches an agent-owned skill
+        // 2. When applying: After creating skills, resolve skillRef by name to get the newly created skill ID
+        // 3. Call updateAgent to set the automations with resolved skill IDs
+        // Currently automations are not restored - they reference skills by name which need resolution after skill creation
       });
 
       if (!agentResult.success || !agentResult.data) {
@@ -812,7 +1098,7 @@ export async function applyOrgSectionTemplate(
         }
       }
 
-      // Create agent's databases
+      // Create agent's databases (with tables/fields from template)
       for (const dbData of agentEntry.databases) {
         const dbResult = await createDatabase({
           name: dbData.name,
@@ -827,6 +1113,9 @@ export async function applyOrgSectionTemplate(
             name: dbData.name,
             agentId,
           });
+
+          // Create tables and fields if template includes them
+          await createTablesFromTemplate(dbResult.data.id, dbData.tables);
         } else {
           console.error('Failed to create database:', dbResult.error);
         }
@@ -865,7 +1154,7 @@ export async function applyOrgSectionTemplate(
       }
     }
 
-    // Create org-level databases
+    // Create org-level databases (with tables/fields from template)
     if (orgSectionData.orgDatabases) {
       for (const dbData of orgSectionData.orgDatabases) {
         const dbResult = await createDatabase({
@@ -881,6 +1170,9 @@ export async function applyOrgSectionTemplate(
             name: dbData.name,
             agentId: null,
           });
+
+          // Create tables and fields if template includes them
+          await createTablesFromTemplate(dbResult.data.id, dbData.tables);
         } else {
           console.error('Failed to create org database:', dbResult.error);
         }
