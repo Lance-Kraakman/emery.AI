@@ -92,8 +92,30 @@ class TokenUsageExtractor:
                 else:
                     logger.info(f"ℹ️ Step {i}: {type(step).__name__} (no token tracking)")
 
+            # If step-based extraction found nothing, try agent.monitor
+            # This is needed for OpenAIModel (Google/Gemini) which tracks tokens in monitor
+            # instead of on individual steps
             if total_input == 0 and total_output == 0:
-                logger.warning(f"⚠️ Total token usage is zero after checking {len(agent.memory.steps)} steps")
+                if hasattr(agent, 'monitor') and agent.monitor:
+                    try:
+                        token_counts = agent.monitor.get_total_token_counts()
+                        if token_counts:
+                            total_input = token_counts.get('input_tokens', 0)
+                            total_output = token_counts.get('output_tokens', 0)
+                            logger.info(f"📊 Extracted from agent.monitor: input={total_input}, output={total_output}")
+                    except Exception as e:
+                        logger.debug(f"Could not get token counts from monitor: {e}")
+
+            # Try to get model name from agent.model if not found in steps
+            # OpenAIModel stores model_id, CustomInferenceModel stores model_name
+            if not model_name:
+                if hasattr(agent, 'model'):
+                    model_name = getattr(agent.model, 'model_id', '') or getattr(agent.model, 'model_name', '')
+                    if model_name:
+                        logger.info(f"📊 Got model name from agent.model: {model_name}")
+
+            if total_input == 0 and total_output == 0:
+                logger.warning(f"⚠️ Total token usage is zero after checking steps and monitor")
                 return None
 
             # Calculate cost using model registry
