@@ -67,6 +67,7 @@ class PlanService:
         managed_agents: Optional[List[Any]] = None,
         context_tools: Optional[List[Any]] = None,
         research_tools: Optional[List[Any]] = None,
+        api_key: Optional[str] = None,
     ) -> Plan:
         """
         Generate plan using context-first planning pattern.
@@ -86,6 +87,7 @@ class PlanService:
             managed_agents: Available managed agents (planner sees their descriptions)
             context_tools: Optional context-gathering tools (database_list, table_list)
             research_tools: Optional web research tools (web_search, visit_webpage)
+            api_key: Optional API key for model providers (e.g., Gemini)
 
         Returns:
             Plan object with generated steps, context, and analysis
@@ -97,7 +99,7 @@ class PlanService:
             return create_plan(goal=fallback_goal, basic_instructions=basic_instructions)
 
         model_id = self.model_provider.resolve_model_selection(org_model=org_model)
-        model = self.model_provider.get_model(model_id=model_id)
+        model = self.model_provider.get_model(model_id=model_id, api_key=api_key)
 
         # Create plan output tool
         plan_tool = PlanOutputTool()
@@ -190,6 +192,9 @@ class PlanService:
 
         except Exception as e:
             logger.error(f"❌ Plan generation failed: {e}")
+            # Re-raise the exception so the coordinator can handle it properly
+            # instead of silently creating an empty plan
+            raise
 
         # Fallback goal hierarchy: captured > explicit param > summarize
         if not plan_goal:
@@ -473,7 +478,7 @@ class PlanService:
             error_message=error_message,
             plan_goal=plan.goal,
             plan_context=plan.context,
-            ledger_summary=ledger.to_json_summary(),
+            ledger_summary=ledger.to_toon_summary(),
         )
 
         logger.info(f"🔧 Analyzing step failure for '{failed_step.step_id}'")

@@ -1399,6 +1399,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 max_replans=3,
                 org_model=org_model,
                 context_tools=context_tools,
+                api_key=context.tool_provider.api_key,  # For Gemini and other auth-required models
             )
 
             # Execute stored plan directly (no classification, no approval)
@@ -1465,6 +1466,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 max_replans=3,
                 org_model=org_model,
                 context_tools=context_tools,
+                api_key=context.tool_provider.api_key,  # For Gemini and other auth-required models
             )
 
             # Use smart execute to determine mode and handle accordingly

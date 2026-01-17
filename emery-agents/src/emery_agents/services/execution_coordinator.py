@@ -352,6 +352,7 @@ class ExecutionCoordinator:
         max_replans: int = 3,
         org_model: Optional[str] = None,
         context_tools: Optional[List[Any]] = None,
+        api_key: Optional[str] = None,
     ):
         """
         Initialize execution coordinator.
@@ -365,6 +366,7 @@ class ExecutionCoordinator:
             max_replans: Maximum number of replans before stopping (default: 3)
             org_model: Organization model ID for model resolution hierarchy
             context_tools: Tools for context gathering during planning (database_crud, table_crud)
+            api_key: API key for model providers that require authentication (e.g., Gemini)
         """
         self.plan_service = plan_service or PlanService()
         self.evaluator_factory = evaluator_factory
@@ -373,6 +375,7 @@ class ExecutionCoordinator:
         self.max_replans = max_replans
         self._org_model = org_model
         self._context_tools = context_tools or []
+        self._api_key = api_key
         self._current_phase = ExecutionPhase.PLANNING
         self._current_plan: Optional[Plan] = None
         self._ledger: Optional[TaskLedger] = None
@@ -652,17 +655,28 @@ class ExecutionCoordinator:
         # Pass managed_agents so planner knows available agents for routing
         # Pass context_tools so planner can list databases/tables before planning
         # Pass research_tools so planner can do web research if needed
-        plan = await self.plan_service.generate_plan(
-            basic_instructions=instructions,
-            context_tables=context_tables,
-            available_tools=[getattr(t, 'name', str(t)) for t in planning_tools],
-            goal=goal,
-            org_model=self._org_model,
-            tools=planning_tools,
-            managed_agents=agents,
-            context_tools=self._context_tools,
-            research_tools=research_tools,
-        )
+        try:
+            plan = await self.plan_service.generate_plan(
+                basic_instructions=instructions,
+                context_tables=context_tables,
+                available_tools=[getattr(t, 'name', str(t)) for t in planning_tools],
+                goal=goal,
+                org_model=self._org_model,
+                tools=planning_tools,
+                managed_agents=agents,
+                context_tools=self._context_tools,
+                research_tools=research_tools,
+                api_key=self._api_key,
+            )
+        except Exception as e:
+            logger.error(f"❌ Plan generation failed: {e}")
+            self._current_phase = ExecutionPhase.FAILED
+            self._unified_phase = Phase.FAILED
+            yield ErrorEvent(
+                error=f"Failed to generate plan: {e}",
+                recoverable=True,
+            )
+            return
 
         self._current_plan = plan
         self._current_phase = ExecutionPhase.AWAITING_APPROVAL

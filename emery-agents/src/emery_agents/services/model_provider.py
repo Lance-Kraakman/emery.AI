@@ -391,9 +391,12 @@ class SmolagentsModelProvider:
 
         logger.info(f"🔧 Creating model: {metadata.name} ({metadata.category.value})")
 
+        # Use the actual model ID from metadata (handles aliases like gemini-1.5-pro -> gemini-1.5-pro-latest)
+        actual_model_id = metadata.id
+
         # Handle Google Gemini models via OpenAI-compatible API
-        if model_id.startswith("google/"):
-            gemini_model_id = model_id.replace("google/", "")  # e.g., "gemini-2.0-flash"
+        if actual_model_id.startswith("google/"):
+            gemini_model_id = actual_model_id.replace("google/", "")  # e.g., "gemini-1.5-pro-latest"
             gemini_api_key = api_key or os.environ.get("GEMINI_API_KEY")
             if not gemini_api_key:
                 raise EnvironmentError(
@@ -417,12 +420,12 @@ class SmolagentsModelProvider:
             # HF Inference API - pass model ID directly (InferenceClient handles routing to router.huggingface.co)
             # AIDEV-NOTE: As of Nov 2025, old api-inference.huggingface.co is deprecated (404)
             # InferenceClient automatically routes to router.huggingface.co/hf-inference/ when given model ID
-            endpoint_url = model_id
-            logger.info(f"🔧 Using HF Inference API for model: {model_id}")
+            endpoint_url = actual_model_id
+            logger.info(f"🔧 Using HF Inference API for model: {actual_model_id}")
 
         model = CustomInferenceModel(
             endpoint_url=endpoint_url,
-            model_name=model_id,
+            model_name=actual_model_id,
             token=self.hf_token
         )
 
