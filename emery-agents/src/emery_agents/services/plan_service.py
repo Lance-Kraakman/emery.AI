@@ -68,6 +68,9 @@ class PlanService:
         context_tools: Optional[List[Any]] = None,
         research_tools: Optional[List[Any]] = None,
         api_key: Optional[str] = None,
+        skill_inputs: Optional[List[dict]] = None,
+        previous_plan_json: Optional[str] = None,
+        user_feedback: Optional[str] = None,
     ) -> Plan:
         """
         Generate plan using context-first planning pattern.
@@ -88,6 +91,9 @@ class PlanService:
             context_tools: Optional context-gathering tools (database_list, table_list)
             research_tools: Optional web research tools (web_search, visit_webpage)
             api_key: Optional API key for model providers (e.g., Gemini)
+            skill_inputs: Optional skill input definitions for variable-aware planning
+            previous_plan_json: Optional previous plan JSON for regeneration with feedback
+            user_feedback: Optional user feedback for plan regeneration
 
         Returns:
             Plan object with generated steps, context, and analysis
@@ -132,6 +138,9 @@ class PlanService:
             tools=tools or [],
             managed_agents=agent_info,  # Pass info, not actual agents
             has_research_tools=bool(research_tools),
+            skill_inputs=skill_inputs or [],  # For variable-aware planning
+            previous_plan_json=previous_plan_json,  # For regeneration with feedback
+            user_feedback=user_feedback,  # User feedback for improvement
         )
 
         logger.info(f"📋 Generating plan with context-first pattern...")

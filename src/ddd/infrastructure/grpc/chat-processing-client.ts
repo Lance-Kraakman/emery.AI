@@ -392,6 +392,9 @@ export class ChatProcessingClient {
     model?: string;
     userApiKey?: string;
     timeoutSeconds?: number;
+    skillInputs?: Array<{ name: string; type?: string; required?: boolean }>;
+    previousPlanJson?: string;
+    userFeedback?: string;
   }): Promise<{
     planJson: string;
     planId: string;
@@ -399,7 +402,7 @@ export class ChatProcessingClient {
     status: string;
     errorMessage?: string;
   }> {
-    console.log(`[CHAT-GRPC-CLIENT] Generating plan for skill ${params.skillId}`);
+    console.log(`[CHAT-GRPC-CLIENT] Generating plan for skill ${params.skillId}${params.userFeedback ? ' (with feedback)' : ''}`);
 
     return new Promise((resolve, reject) => {
       const request = {
@@ -409,7 +412,14 @@ export class ChatProcessingClient {
         skillId: params.skillId,
         model: params.model || '',
         userApiKey: params.userApiKey || '',
-        timeoutSeconds: params.timeoutSeconds || 60
+        timeoutSeconds: params.timeoutSeconds || 60,
+        skillInputs: (params.skillInputs || []).map(input => ({
+          name: input.name,
+          type: input.type || 'text',
+          required: input.required ?? false,
+        })),
+        previousPlanJson: params.previousPlanJson || '',
+        userFeedback: params.userFeedback || '',
       };
 
       this.client.GeneratePlan(request, (error: any, response: any) => {

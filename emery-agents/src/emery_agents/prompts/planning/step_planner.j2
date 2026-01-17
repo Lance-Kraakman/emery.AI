@@ -15,6 +15,47 @@ Emery is a dynamic database and workflow platform. Users can:
 {{ task }}
 
 ---
+{% if previous_plan_json and user_feedback %}
+
+## REGENERATION MODE: Improve Previous Plan
+
+You are regenerating an existing plan based on user feedback. DO NOT start from scratch - improve the existing plan.
+
+### Previous Plan
+```json
+{{ previous_plan_json }}
+```
+
+### User Feedback
+{{ user_feedback }}
+
+**Instructions:**
+1. Review the previous plan and user feedback
+2. Make targeted improvements based on the feedback
+3. Keep steps that are working well
+4. Modify, add, or remove steps as needed to address the feedback
+5. Maintain the same goal unless the feedback explicitly changes it
+
+---
+{% endif %}
+{% if skill_inputs %}
+
+## Skill Inputs (Use as Variables)
+
+This skill receives runtime inputs. Use `{input_name}` placeholders in your step descriptions instead of hardcoded values:
+
+{% for input in skill_inputs %}
+- `{{"{"}}{{ input.name }}{{"}"}}` - {{ input.type or 'text' }}{% if input.required %} (required){% endif %}
+
+{% endfor %}
+**IMPORTANT**: Plans are reusable templates. Use variable placeholders like `{description}` that will be resolved with actual values at runtime. DO NOT use specific hardcoded values.
+
+**Example**:
+- BAD: "Search for 'pizza recipes' in the recipes table"
+- GOOD: "Search for {search_term} in the relevant table"
+
+---
+{% endif %}
 
 ## Available Managed Agents
 

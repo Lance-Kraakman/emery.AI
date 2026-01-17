@@ -940,6 +940,12 @@ export interface GeneratePlanRequest {
   userApiKey: string;
   /** Default: 60 */
   timeoutSeconds: number;
+  /** Skill input definitions for variable-aware planning */
+  skillInputs: InputDefinition[];
+  /** Previous plan as JSON (for regeneration with feedback) */
+  previousPlanJson: string;
+  /** User feedback for regeneration */
+  userFeedback: string;
 }
 
 /** Response from plan generation */
@@ -7642,7 +7648,18 @@ export const FileAttachment: MessageFns<FileAttachment> = {
 };
 
 function createBaseGeneratePlanRequest(): GeneratePlanRequest {
-  return { instructions: "", organizationId: 0, userId: "", skillId: 0, model: "", userApiKey: "", timeoutSeconds: 0 };
+  return {
+    instructions: "",
+    organizationId: 0,
+    userId: "",
+    skillId: 0,
+    model: "",
+    userApiKey: "",
+    timeoutSeconds: 0,
+    skillInputs: [],
+    previousPlanJson: "",
+    userFeedback: "",
+  };
 }
 
 export const GeneratePlanRequest: MessageFns<GeneratePlanRequest> = {
@@ -7667,6 +7684,15 @@ export const GeneratePlanRequest: MessageFns<GeneratePlanRequest> = {
     }
     if (message.timeoutSeconds !== 0) {
       writer.uint32(56).int32(message.timeoutSeconds);
+    }
+    for (const v of message.skillInputs) {
+      InputDefinition.encode(v!, writer.uint32(66).fork()).join();
+    }
+    if (message.previousPlanJson !== "") {
+      writer.uint32(74).string(message.previousPlanJson);
+    }
+    if (message.userFeedback !== "") {
+      writer.uint32(82).string(message.userFeedback);
     }
     return writer;
   },
@@ -7734,6 +7760,30 @@ export const GeneratePlanRequest: MessageFns<GeneratePlanRequest> = {
           message.timeoutSeconds = reader.int32();
           continue;
         }
+        case 8: {
+          if (tag !== 66) {
+            break;
+          }
+
+          message.skillInputs.push(InputDefinition.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 9: {
+          if (tag !== 74) {
+            break;
+          }
+
+          message.previousPlanJson = reader.string();
+          continue;
+        }
+        case 10: {
+          if (tag !== 82) {
+            break;
+          }
+
+          message.userFeedback = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -7752,6 +7802,11 @@ export const GeneratePlanRequest: MessageFns<GeneratePlanRequest> = {
       model: isSet(object.model) ? globalThis.String(object.model) : "",
       userApiKey: isSet(object.userApiKey) ? globalThis.String(object.userApiKey) : "",
       timeoutSeconds: isSet(object.timeoutSeconds) ? globalThis.Number(object.timeoutSeconds) : 0,
+      skillInputs: globalThis.Array.isArray(object?.skillInputs)
+        ? object.skillInputs.map((e: any) => InputDefinition.fromJSON(e))
+        : [],
+      previousPlanJson: isSet(object.previousPlanJson) ? globalThis.String(object.previousPlanJson) : "",
+      userFeedback: isSet(object.userFeedback) ? globalThis.String(object.userFeedback) : "",
     };
   },
 
@@ -7778,6 +7833,15 @@ export const GeneratePlanRequest: MessageFns<GeneratePlanRequest> = {
     if (message.timeoutSeconds !== 0) {
       obj.timeoutSeconds = Math.round(message.timeoutSeconds);
     }
+    if (message.skillInputs?.length) {
+      obj.skillInputs = message.skillInputs.map((e) => InputDefinition.toJSON(e));
+    }
+    if (message.previousPlanJson !== "") {
+      obj.previousPlanJson = message.previousPlanJson;
+    }
+    if (message.userFeedback !== "") {
+      obj.userFeedback = message.userFeedback;
+    }
     return obj;
   },
 
@@ -7793,6 +7857,9 @@ export const GeneratePlanRequest: MessageFns<GeneratePlanRequest> = {
     message.model = object.model ?? "";
     message.userApiKey = object.userApiKey ?? "";
     message.timeoutSeconds = object.timeoutSeconds ?? 0;
+    message.skillInputs = object.skillInputs?.map((e) => InputDefinition.fromPartial(e)) || [];
+    message.previousPlanJson = object.previousPlanJson ?? "";
+    message.userFeedback = object.userFeedback ?? "";
     return message;
   },
 };

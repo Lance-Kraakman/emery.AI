@@ -92,6 +92,22 @@ export async function createSkill(command: {
       return { success: false, error: 'Agent not found' };
     }
 
+    // Auto-create agentic step for 'agentic' mode skills
+    // This ensures there's always a place to store the plan
+    let steps = command.steps;
+    if (command.executionType === 'agentic' && (!steps || steps.length === 0)) {
+      steps = [{
+        id: crypto.randomUUID(),
+        name: 'main',
+        nodeType: 'agentic' as const,
+        agenticConfig: {
+          instructions: command.instructions || '',
+          tools: command.tools || [],
+          agentType: (command.agentType || 'tool_calling') as 'tool_calling' | 'code_agent',
+        },
+      }];
+    }
+
     const service = getSkillApplicationService();
     const result = await service.createSkill({
       ...command,
@@ -99,6 +115,7 @@ export async function createSkill(command: {
       outputs: outputs,
       instructions: command.instructions || '',
       tools: command.tools || [],
+      steps,
       organizationId: agent.organizationId.value
     });
 
@@ -197,6 +214,21 @@ export async function createOrganizationSkill(command: {
       return { success: false, error: 'All outputs must have names' };
     }
 
+    // Auto-create agentic step for 'agentic' mode skills
+    let steps = command.steps;
+    if (command.executionType === 'agentic' && (!steps || steps.length === 0)) {
+      steps = [{
+        id: crypto.randomUUID(),
+        name: 'main',
+        nodeType: 'agentic' as const,
+        agenticConfig: {
+          instructions: command.instructions || '',
+          tools: command.tools || [],
+          agentType: (command.agentType || 'tool_calling') as 'tool_calling' | 'code_agent',
+        },
+      }];
+    }
+
     const service = getSkillApplicationService();
 
     // Create organization skill without agentId (null for organization-scoped)
@@ -215,7 +247,7 @@ export async function createOrganizationSkill(command: {
       taskModelConfig: command.taskModelConfig,
       toolExecutionConfig: command.toolExecutionConfig,
       writeConfig: command.writeConfig,
-      steps: command.steps
+      steps,
     });
 
     if (!result.success) {
@@ -319,7 +351,27 @@ export async function updateSkill(
       stepsLength: command.steps?.length
     });
 
-    const result = await service.updateSkill(skillId, command);
+    // Auto-create agentic step for 'agentic' mode skills without steps
+    // This ensures there's always a place to store the plan
+    const executionType = command.executionType ?? skill.executionType;
+    let steps = command.steps;
+    if (executionType === 'agentic' && (!steps || steps.length === 0) && (!skill.steps || skill.steps.length === 0)) {
+      steps = [{
+        id: crypto.randomUUID(),
+        name: 'main',
+        nodeType: 'agentic' as const,
+        agenticConfig: {
+          instructions: command.instructions ?? skill.instructions ?? '',
+          tools: command.tools ?? skill.tools ?? [],
+          agentType: (command.agentType ?? skill.agentType ?? 'tool_calling') as 'tool_calling' | 'code_agent',
+        },
+      }];
+    }
+
+    const result = await service.updateSkill(skillId, {
+      ...command,
+      steps: steps !== undefined ? steps : command.steps,
+    });
 
     if (!result.success) {
       return { success: false, error: result.error };
@@ -1253,11 +1305,15 @@ export async function transferSkillToAgent(
  *
  * @param skillId - Skill ID (used to get context and org info)
  * @param instructions - The instructions to generate a plan for
+ * @param previousPlan - Optional previous plan for regeneration with feedback
+ * @param userFeedback - Optional user feedback for plan regeneration
  * @returns StoredPlan that can be saved to the skill
  */
 export async function generateSkillPlan(
   skillId: number,
-  instructions: string
+  instructions: string,
+  previousPlan?: StoredPlan,
+  userFeedback?: string
 ): Promise<Result<StoredPlan>> {
   try {
     const session = await getServerSession(authOptions);
@@ -1315,6 +1371,15 @@ export async function generateSkillPlan(
       model: organizationModel, // Pass org default model like chat does
       userApiKey,
       timeoutSeconds: 90, // Allow more time for complex plans
+      // Pass skill inputs for variable-aware planning
+      skillInputs: (skill.inputs || []).map(input => ({
+        name: input.name,
+        type: input.type,
+        required: input.required,
+      })),
+      // Pass previous plan and feedback for regeneration
+      previousPlanJson: previousPlan ? JSON.stringify(previousPlan) : undefined,
+      userFeedback: userFeedback,
     });
 
     if (result.status !== 'success') {

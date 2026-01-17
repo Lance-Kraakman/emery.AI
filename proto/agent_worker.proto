@@ -517,6 +517,9 @@ message GeneratePlanRequest {
   string model = 5;                     // Optional model override
   string user_api_key = 6;              // For ToolProvider auth
   int32 timeout_seconds = 7;            // Default: 60
+  repeated InputDefinition skill_inputs = 8;  // Skill input definitions for variable-aware planning
+  string previous_plan_json = 9;        // Previous plan as JSON (for regeneration with feedback)
+  string user_feedback = 10;            // User feedback for regeneration
 }
 
 // Response from plan generation

@@ -721,7 +721,7 @@ class FileAttachment(_message.Message):
     def __init__(self, type: _Optional[str] = ..., url: _Optional[str] = ..., filename: _Optional[str] = ..., mime_type: _Optional[str] = ...) -> None: ...
 
 class GeneratePlanRequest(_message.Message):
-    __slots__ = ("instructions", "organization_id", "user_id", "skill_id", "model", "user_api_key", "timeout_seconds")
+    __slots__ = ("instructions", "organization_id", "user_id", "skill_id", "model", "user_api_key", "timeout_seconds", "skill_inputs", "previous_plan_json", "user_feedback")
     INSTRUCTIONS_FIELD_NUMBER: _ClassVar[int]
     ORGANIZATION_ID_FIELD_NUMBER: _ClassVar[int]
     USER_ID_FIELD_NUMBER: _ClassVar[int]
@@ -729,6 +729,9 @@ class GeneratePlanRequest(_message.Message):
     MODEL_FIELD_NUMBER: _ClassVar[int]
     USER_API_KEY_FIELD_NUMBER: _ClassVar[int]
     TIMEOUT_SECONDS_FIELD_NUMBER: _ClassVar[int]
+    SKILL_INPUTS_FIELD_NUMBER: _ClassVar[int]
+    PREVIOUS_PLAN_JSON_FIELD_NUMBER: _ClassVar[int]
+    USER_FEEDBACK_FIELD_NUMBER: _ClassVar[int]
     instructions: str
     organization_id: int
     user_id: str
@@ -736,7 +739,10 @@ class GeneratePlanRequest(_message.Message):
     model: str
     user_api_key: str
     timeout_seconds: int
-    def __init__(self, instructions: _Optional[str] = ..., organization_id: _Optional[int] = ..., user_id: _Optional[str] = ..., skill_id: _Optional[int] = ..., model: _Optional[str] = ..., user_api_key: _Optional[str] = ..., timeout_seconds: _Optional[int] = ...) -> None: ...
+    skill_inputs: _containers.RepeatedCompositeFieldContainer[InputDefinition]
+    previous_plan_json: str
+    user_feedback: str
+    def __init__(self, instructions: _Optional[str] = ..., organization_id: _Optional[int] = ..., user_id: _Optional[str] = ..., skill_id: _Optional[int] = ..., model: _Optional[str] = ..., user_api_key: _Optional[str] = ..., timeout_seconds: _Optional[int] = ..., skill_inputs: _Optional[_Iterable[_Union[InputDefinition, _Mapping]]] = ..., previous_plan_json: _Optional[str] = ..., user_feedback: _Optional[str] = ...) -> None: ...
 
 class GeneratePlanResponse(_message.Message):
     __slots__ = ("plan_json", "plan_id", "planning_time_ms", "token_usage", "status", "error_message")

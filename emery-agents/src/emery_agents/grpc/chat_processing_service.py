@@ -1794,7 +1794,24 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             )
             logger.info(f"📋 GeneratePlan: Using {len(managed_agents)} managed agents")
 
-            # 4. Generate plan (uses PlanOutputTool internally)
+            # 4. Extract skill inputs for variable-aware planning
+            skill_inputs = []
+            for input_def in request.skill_inputs:
+                skill_inputs.append({
+                    "name": input_def.name,
+                    "type": input_def.type or "text",
+                    "required": input_def.required,
+                })
+            if skill_inputs:
+                logger.info(f"📋 GeneratePlan: {len(skill_inputs)} skill inputs for variable placeholders")
+
+            # 4b. Extract previous plan and feedback for regeneration
+            previous_plan_json = request.previous_plan_json if request.previous_plan_json else None
+            user_feedback = request.user_feedback if request.user_feedback else None
+            if previous_plan_json and user_feedback:
+                logger.info(f"📋 GeneratePlan: Regenerating with user feedback")
+
+            # 5. Generate plan (uses PlanOutputTool internally)
             timeout = request.timeout_seconds if request.timeout_seconds > 0 else 60
             plan = await asyncio.wait_for(
                 self.plan_service.generate_plan(
@@ -1803,6 +1820,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     org_model=request.model or None,
                     managed_agents=managed_agents,
                     context_tools=context_tools,
+                    skill_inputs=skill_inputs,  # Pass for variable-aware planning
+                    previous_plan_json=previous_plan_json,  # Pass for regeneration
+                    user_feedback=user_feedback,  # Pass for regeneration
                 ),
                 timeout=timeout
             )
