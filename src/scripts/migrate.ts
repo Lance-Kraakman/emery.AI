@@ -75,8 +75,10 @@ async function runMigration() {
       console.log('  🛠️  Seeding tools...');
       await seedTools();
 
-      console.log('  🤖 Seeding system skills...');
-      await seedSystemSkills();
+      // DEPRECATED: System skills are now replaced by builtin templates
+      // Users can apply templates from the template library instead
+      // console.log('  🤖 Seeding system skills...');
+      // await seedSystemSkills();
 
       console.log('  🎨 Seeding puck templates...');
       await seedSystemTemplates();

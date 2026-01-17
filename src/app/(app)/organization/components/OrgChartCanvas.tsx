@@ -23,13 +23,13 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { cn } from '@/lib/utils';
-import { Undo2, Redo2, StickyNote, Search, Maximize, LayoutGrid } from 'lucide-react';
+import { Undo2, Redo2, StickyNote, Search, Maximize, LayoutGrid, FileDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { orgChartNodeTypes } from '@/components/org-chart/nodes';
 import { orgChartEdgeTypes } from '@/components/org-chart/edges';
 import { orgChartNodeSizes } from '@/components/org-chart/theme';
-import { useOrgChart } from '@/components/org-chart/hooks';
+import { useOrgChart, useOrgChartExport } from '@/components/org-chart/hooks';
 import {
   getNodeDimensions,
   arrangeNodesInRow,
@@ -39,7 +39,7 @@ import {
   getNextGridSlotPosition,
   normalizeEdgeConnection,
 } from '@/components/org-chart/utils';
-import { DeleteConfirmationDialog, buildDeleteImpactItems, AgentAssignmentDialog, type AssignmentConfig } from '@/components/org-chart/dialogs';
+import { DeleteConfirmationDialog, buildDeleteImpactItems, AgentAssignmentDialog, ExportTemplateDialog, type AssignmentConfig } from '@/components/org-chart/dialogs';
 import { extractDataSourceEdges, type DataSourceMapping } from '@/components/org-chart/edgeUtils';
 import { EntityPalette } from './EntityPalette';
 import { SearchDialog } from './SearchDialog';
@@ -118,6 +118,7 @@ export function OrgChartCanvas({
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
 
   // Assignment dialog state for database/skill drops
   const [assignmentDialog, setAssignmentDialog] = useState<{
@@ -162,6 +163,28 @@ export function OrgChartCanvas({
     canvasMetadata,
     // onSelect is handled in handleSelectionChange where we have access to edges
   });
+
+  // Export hook for selected items
+  const { exportPreview, canExport } = useOrgChartExport(nodes, selectedNodeIds, skills, databases);
+
+  // Build selection for export
+  const exportSelection = useMemo(() => {
+    const agentIds: number[] = [];
+    const skillIds: number[] = [];
+    const databaseIds: number[] = [];
+
+    for (const entity of exportPreview.agents) {
+      agentIds.push(entity.id);
+    }
+    for (const entity of exportPreview.standaloneSkills) {
+      skillIds.push(entity.id);
+    }
+    for (const entity of exportPreview.standaloneDatabases) {
+      databaseIds.push(entity.id);
+    }
+
+    return { agentIds, skillIds, databaseIds };
+  }, [exportPreview]);
 
   // Merge skill edges with data source edges
   const allEdges = useMemo(() => {
@@ -869,6 +892,26 @@ export function OrgChartCanvas({
                       <p>Search <kbd className="ml-1 text-[10px] opacity-60">⌘K</kbd></p>
                     </TooltipContent>
                   </Tooltip>
+                  {canExport && (
+                    <>
+                      <div className="w-px h-6 bg-border mx-0.5" />
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => setIsExportDialogOpen(true)}
+                          >
+                            <FileDown className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom">
+                          <p>Export as Template</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </>
+                  )}
                 </>
               )}
             </TooltipProvider>
@@ -925,6 +968,14 @@ export function OrgChartCanvas({
           agentName={assignmentDialog.targetAgent.name}
         />
       )}
+
+      {/* Export template dialog */}
+      <ExportTemplateDialog
+        isOpen={isExportDialogOpen}
+        onClose={() => setIsExportDialogOpen(false)}
+        exportPreview={exportPreview}
+        selection={exportSelection}
+      />
     </div>
     </OrgChartDragProvider>
   );

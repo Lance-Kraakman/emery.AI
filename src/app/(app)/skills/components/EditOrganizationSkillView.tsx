@@ -82,7 +82,7 @@ export function EditOrganizationSkillView({ skill, isSystem = false }: EditOrgan
         {isSystem && (
           <Badge variant="secondary" className="gap-1 text-xs shrink-0">
             <Lock className="h-3 w-3" />
-            System
+            Template
           </Badge>
         )}
 
