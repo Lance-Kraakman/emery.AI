@@ -1810,7 +1810,15 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             planning_time_ms = int((time.time() - start_time) * 1000)
             logger.info(f"📋 GeneratePlan: Created plan {plan.id} with {len(plan.steps)} steps in {planning_time_ms}ms")
 
-            # 5. Convert Plan to StoredPlan JSON format (matches TypeScript StoredPlan type)
+            # 5. Check for empty plan - return error instead of false positive
+            if not plan.steps:
+                logger.error(f"📋 GeneratePlan: Plan has no steps - generation failed")
+                return agent_worker_pb2.GeneratePlanResponse(
+                    status="error",
+                    error_message="Plan generation failed - no steps were created. Check that the model can access database context."
+                )
+
+            # 6. Convert Plan to StoredPlan JSON format (matches TypeScript StoredPlan type)
             stored_plan = {
                 "id": plan.id,
                 "goal": plan.goal,

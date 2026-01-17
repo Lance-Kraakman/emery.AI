@@ -2,6 +2,9 @@
 
 import { revalidatePath } from 'next/cache';
 import { getSkillApplicationService, getAgentApplicationService, getStorageQuotaApplicationService, getAuditApplicationService } from '@/ddd/application/di/container';
+import { getOrganizationRepository, getUserRepository } from '@/ddd/application/di/getters';
+import { UserId } from '@/ddd/domain/shared/value-objects/user-id';
+import { assignApiKeyToUser } from '@/lib/auth/user-api-keys';
 import { OrganizationId } from '@/ddd/domain/shared/value-objects';
 import { SkillMapper } from '@/app/mappers/skill-mapper';
 import { AgentId } from '@/ddd/domain/shared/value-objects/agent-id';
@@ -301,11 +304,6 @@ export async function updateSkill(
 
     const skill = skillResult.data;
 
-    // Prevent editing of system skills
-    if (skill.isSystem) {
-      return { success: false, error: 'System skills cannot be edited. Duplicate this skill to create your own version.' };
-    }
-
     // Check appropriate permission based on skill type
     if (skill.agentId) {
       // Agent-scoped skill: check agent management permission
@@ -378,7 +376,6 @@ export async function updateSkill(
 
 /**
  * Delete a skill
- * System skills (isSystem=true) cannot be deleted
  */
 export async function deleteSkill(skillId: number): Promise<Result<void>> {
   try {
@@ -397,11 +394,6 @@ export async function deleteSkill(skillId: number): Promise<Result<void>> {
 
     const skill = skillResult.data;
     const agentId = skill.agentId?.value ?? null;
-
-    // Prevent deletion of system skills
-    if (skill.isSystem) {
-      return { success: false, error: 'System skills cannot be deleted. You can duplicate this skill to create your own version.' };
-    }
 
     // Check appropriate permission based on skill type
     if (skill.agentId) {
@@ -1193,11 +1185,6 @@ export async function transferSkillToAgent(
       return { success: false, error: 'Skill is already assigned to an agent' };
     }
 
-    // Verify skill is not a system skill
-    if (skill.isSystem) {
-      return { success: false, error: 'System skills cannot be transferred' };
-    }
-
     // Check permission to manage the org-level skill
     await requireResourcePermission("skills:manage", "skill", skillId);
 
@@ -1294,12 +1281,30 @@ export async function generateSkillPlan(
       await requireResourcePermission("skills:manage", "skill", skillId);
     }
 
-    // Get user API key for the gRPC call
-    // AIDEV-NOTE: User API key is stored in session for managed agent calls
-    const userApiKey = session.user.apiKey || '';
+    // Get user API key for managed agents (same pattern as chat route)
+    // AIDEV-NOTE: User API key is stored in users table, not session
+    let userApiKey = '';
+    try {
+      const userRepository = getUserRepository();
+      const user = await userRepository.findById(UserId.fromString(session.user.id));
+
+      if (user && user.apiKey) {
+        userApiKey = user.apiKey.value;
+      } else {
+        // Generate API key if none exists
+        userApiKey = await assignApiKeyToUser(session.user.id);
+      }
+    } catch (error) {
+      console.error('[generateSkillPlan] Error fetching user API key:', error);
+      // Continue without API key - context tools will fail but plan generation might still work
+    }
+
+    // Get organization default model (same pattern as agent-task-application-service)
+    const organizationRepository = getOrganizationRepository();
+    const organization = await organizationRepository.findById(skill.organizationId);
+    const organizationModel = organization?.defaultModel || undefined;
 
     // Call gRPC to generate the plan
-    // Model is not passed - Python side uses org/default model for planning
     const grpcClient = getChatProcessingClient(String(session.user.currentOrganizationId));
 
     const result = await grpcClient.generatePlan({
@@ -1307,6 +1312,7 @@ export async function generateSkillPlan(
       organizationId: skill.organizationId.value,
       userId: session.user.id,
       skillId,
+      model: organizationModel, // Pass org default model like chat does
       userApiKey,
       timeoutSeconds: 90, // Allow more time for complex plans
     });
