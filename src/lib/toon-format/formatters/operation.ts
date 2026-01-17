@@ -13,10 +13,12 @@ import { escapeToonValue, type ToonConfig } from '../formatter';
  *   table:updated,5,Users
  *   row:deleted,abc-123
  *   database:created,1,My Database
+ *   app:created,3,My App,my-app
+ *   page:published,7,Home,true
  */
 export interface OperationResult {
-  action: 'created' | 'updated' | 'deleted';
-  entity: 'database' | 'table' | 'field' | 'row';
+  action: 'created' | 'updated' | 'deleted' | 'published' | 'unpublished';
+  entity: 'database' | 'table' | 'field' | 'row' | 'app' | 'page' | 'page_content' | 'page_state' | 'page_dialog';
   id: string | number;
   data?: Record<string, unknown>;
 }

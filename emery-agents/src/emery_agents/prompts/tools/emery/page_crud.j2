@@ -15,6 +15,8 @@ The `page_crud` tool manages pages within Puck apps.
 | publish | Make page public | page_id |
 | unpublish | Make page private | page_id |
 | delete | Delete page | page_id |
+| update_state | Update page state config | page_id, data.variables |
+| add_dialog | Add a dialog to page | page_id, data.name, data.stateKey |
 
 ### Page Fields
 - `id`: Unique page identifier
@@ -140,6 +142,44 @@ Use `{params.varName}` syntax in text fields for dynamic content from URL.
 - `{params.user_id}` - Query string parameter
 
 **Supported in:** TextField, NumberField, Button label, LinkBlock href
+
+### Page State (Interactive Variables)
+Use `{state.varName}` syntax for interactive state managed at runtime.
+
+**Variable types:** `string`, `number`, `boolean`, `object`, `array`
+**Persistence:** `none`, `session`, `localStorage`
+
+**Example:**
+```python
+page_crud(method="update_state", page_id=5, data={
+    "variables": [
+        {"name": "showModal", "type": "boolean", "defaultValue": False},
+        {"name": "userName", "type": "string", "defaultValue": ""}
+    ],
+    "persistence": "session"
+})
+```
+
+### Page Dialogs (Modal Components)
+Dialogs are controlled by boolean state variables.
+
+**Dialog properties:**
+- `name` - Display name (required)
+- `stateKey` - Boolean state key controlling open/close (required)
+- `title` - Dialog title (supports `{state.x}`)
+- `size` - `sm` | `md` | `lg` | `xl` | `full`
+- `content` - Puck templateData for dialog body
+
+**Example:**
+```python
+page_crud(method="add_dialog", page_id=5, data={
+    "name": "Login Dialog",
+    "stateKey": "showModal",
+    "title": "Sign In",
+    "size": "md",
+    "content": {"root": {"props": {}}, "content": [...], "zones": {}}
+})
+```
 
 ### Data Binding with DataBlock
 1. DataBlock queries a view with filters

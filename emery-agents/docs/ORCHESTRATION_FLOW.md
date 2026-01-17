@@ -11,6 +11,8 @@ This document describes the complete orchestration flow for the Emery agent syst
 - [6. Callback Patterns](#6-callback-patterns)
 - [7. Error Recovery Flow](#7-error-recovery-flow)
 - [8. Key Files Reference](#8-key-files-reference)
+- [9. App and Page Builder HITL Workflow](#9-app-and-page-builder-hitl-workflow)
+- [10. Architecture Summary](#10-architecture-summary)
 
 ---
 
@@ -629,12 +631,248 @@ flowchart TD
 | `document_builder_agent.py` | HITL agent for document operations |
 | `table_builder_agent.py` | HITL agent for table modifications |
 | `schema_builder_agent.py` | HITL agent for complex schema design |
+| `app_builder_agent.py` | HITL agent for Puck app management (has page_builder as managed agent) |
+| `page_builder_agent.py` | HITL agent for Puck page creation with full block schema |
 | `research_agent.py` | Web search and research agent |
 | `research_emery_agent.py` | System introspection agent |
+| `planning_utils.py` | Shared count-based planning callback for HITL workflows |
 
 ---
 
-## Architecture Summary
+## 9. App and Page Builder HITL Workflow
+
+### Overview
+
+The `app_builder` and `page_builder` agents use a count-based planning callback pattern that ensures context gathering before presenting plans to users for approval.
+
+### Count-Based Planning Callback
+
+Both agents use `create_planning_callback()` from `planning_utils.py`:
+
+- **First PlanningStep (count=1)**: Skip interrupt, allow agent to continue gathering context
+- **Second PlanningStep (count=2)**: Interrupt and request user approval
+- **planning_interval=3**: Generate plans after every 3 action steps
+
+This pattern ensures agents gather sufficient context (e.g., reading existing apps/pages, analyzing requirements) before creating detailed plans.
+
+```mermaid
+flowchart TB
+    START[Agent Starts Task] --> PLAN1[PlanningStep 1<br/>Generic Plan]
+    PLAN1 --> CHECK1{Callback Count Check}
+    CHECK1 -->|count=1| CONTINUE[No Interrupt<br/>Continue Context Gathering]
+    CONTINUE --> ACTION1[ActionStep 2<br/>List Apps/Pages]
+    ACTION1 --> ACTION2[ActionStep 3<br/>Read Existing Data]
+    ACTION2 --> PLAN2[PlanningStep 2<br/>Detailed Plan with Context]
+    PLAN2 --> CHECK2{Callback Count Check}
+    CHECK2 -->|count=2| INTERRUPT[Interrupt for Approval]
+    INTERRUPT --> HITL[User Approval Required]
+    HITL -->|Approved| EXECUTE[Execute Plan]
+    HITL -->|Rejected| IDLE[Return to IDLE]
+    HITL -->|Feedback| REPLAN[Replan with Feedback]
+```
+
+### App Builder Agent
+
+```mermaid
+flowchart TB
+    subgraph AppBuilder["App Builder Agent"]
+        AB_TOOLS[Tools: tool_executor]
+        AB_MANAGED[Managed Agent: page_builder]
+        AB_PLANNING[planning_interval=3]
+        AB_CALLBACK[Count-based Callback]
+    end
+
+    subgraph PageBuilder["Page Builder (Managed)"]
+        PB_TOOLS[Tools: page_crud directly]
+        PB_RESEARCH[Managed Agent: research_agent]
+        PB_PLANNING[planning_interval=3]
+        PB_CALLBACK[Count-based Callback]
+    end
+
+    AppBuilder -->|Delegates Complex Page Tasks| PageBuilder
+    AppBuilder -->|App CRUD Operations| APP_API[App API Endpoints]
+    AppBuilder -->|Page CRUD Operations| PAGE_API[Page API Endpoints]
+    PageBuilder -->|Analyzes Reference URLs| PB_RESEARCH
+    PageBuilder -->|Direct Page Operations| PAGE_API
+```
+
+**Key Features:**
+- Uses `tool_executor` wrapper for app_crud and page_crud
+- Has `page_builder` as managed agent for complex page creation
+- Can delegate internally or be part of cascade planning
+- planning_interval=3 with count-based callback for HITL
+
+**Tools Available via tool_executor:**
+- `app_crud`: list, read, create, update, delete
+- `page_crud`: list, read, create, update, delete, update_content, publish, unpublish, update_state, add_dialog
+
+### Page Builder Agent
+
+**Key Features:**
+- Receives `page_crud` DIRECTLY (not wrapped) to get full Puck block schema in instructions
+- Has optional `research_agent` as managed agent for analyzing reference websites
+- Full knowledge of all 38 Puck block types (prevents hallucination)
+- planning_interval=3 with count-based callback for HITL
+- max_steps=15 to accommodate research + planning + execution
+
+**Workflow:**
+1. Optionally research reference URL via research_agent
+2. List/read existing pages (ActionStep)
+3. Create detailed plan with Puck blocks (PlanningStep with count=2 → interrupt)
+4. User approves plan
+5. Build templateData with correct Puck block structure
+6. Execute page_crud operations
+
+### Page CRUD Tool - New Methods
+
+The `page_crud` tool now includes additional methods for advanced page configuration:
+
+#### update_state
+
+Updates page state configuration (variables and persistence).
+
+```python
+page_crud(
+    method="update_state",
+    page_id=5,
+    data={
+        "variables": [
+            {
+                "name": "showLogin",
+                "type": "boolean",
+                "defaultValue": False
+            },
+            {
+                "name": "userName",
+                "type": "string",
+                "defaultValue": ""
+            }
+        ],
+        "persistence": "localStorage"  # Options: 'none' | 'session' | 'localStorage'
+    }
+)
+```
+
+**API Endpoint:** `PUT /api/pages/[id]/state`
+
+**Use Cases:**
+- Create dynamic pages with reactive state
+- Store user preferences across sessions
+- Build interactive applications with client-side state
+
+#### add_dialog
+
+Adds a dialog (modal) to the page.
+
+```python
+page_crud(
+    method="add_dialog",
+    page_id=5,
+    data={
+        "name": "Login Dialog",
+        "stateKey": "showLogin",  # Boolean state variable controlling open/close
+        "title": "Sign In",
+        "description": "Enter your credentials",
+        "size": "md",  # Options: 'sm' | 'md' | 'lg' | 'xl' | 'full'
+        "closeOnOutsideClick": True,
+        "closeOnEscape": True,
+        "content": {
+            "root": {"props": {}},
+            "content": [
+                # Puck blocks for dialog content
+            ],
+            "zones": {}
+        }
+    }
+)
+```
+
+**API Endpoint:** `POST /api/pages/[id]/dialogs`
+
+**Use Cases:**
+- Add login/signup modals
+- Create product detail popups
+- Build confirmation dialogs
+- Implement help/tutorial overlays
+
+### API Endpoints
+
+| Endpoint | Method | Purpose | TOON Support |
+|----------|--------|---------|--------------|
+| `/api/apps?format=llm` | GET | List all apps | Yes |
+| `/api/apps?format=llm` | POST | Create app | Yes |
+| `/api/apps/[id]?format=llm` | GET | Get app details | Yes |
+| `/api/apps/[id]?format=llm` | PUT | Update app | Yes |
+| `/api/apps/[id]?format=llm` | DELETE | Delete app | Yes |
+| `/api/apps/[id]/pages?format=llm` | GET | List pages in app | Yes |
+| `/api/apps/[id]/pages?format=llm` | POST | Create page | Yes |
+| `/api/pages/[id]?format=llm` | GET | Get page details | Yes |
+| `/api/pages/[id]?format=llm` | PUT | Update page metadata | Yes |
+| `/api/pages/[id]?format=llm` | DELETE | Delete page | Yes |
+| `/api/pages/[id]/content?format=llm` | PUT | Update page content | Yes |
+| `/api/pages/[id]/publish?format=llm` | POST | Publish/unpublish page | Yes |
+| `/api/pages/[id]/state?format=llm` | PUT | Update page state | Yes |
+| `/api/pages/[id]/dialogs?format=llm` | POST | Add dialog to page | Yes |
+
+All endpoints support `?format=llm` query parameter for TOON (LLM-optimized) responses.
+
+### Agent Delegation Flow
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant CP as ChatPlanner
+    participant AB as AppBuilder
+    participant PB as PageBuilder (Managed)
+    participant RA as ResearchAgent
+    participant API as Next.js API
+
+    U->>CP: "Create an app with a landing page like flaxx.ai"
+    CP->>AB: Route to app_builder
+
+    Note over AB: PlanningStep 1 (count=1)
+    AB->>AB: Create generic plan
+    Note over AB: No interrupt - continue
+
+    AB->>API: List existing apps
+    AB->>API: Read app structure
+    Note over AB: Context gathered
+
+    Note over AB: PlanningStep 2 (count=2)
+    AB->>AB: Create detailed plan
+    Note over AB: INTERRUPT for approval
+
+    AB-->>U: Show plan for approval
+    U->>AB: Approve
+
+    AB->>API: Create app
+    AB->>PB: Delegate page creation to page_builder
+
+    Note over PB: PlanningStep 1 (count=1)
+    PB->>PB: Create generic page plan
+    Note over PB: No interrupt - continue
+
+    PB->>RA: Research flaxx.ai
+    RA-->>PB: Design analysis
+    PB->>API: List existing pages
+
+    Note over PB: PlanningStep 2 (count=2)
+    PB->>PB: Create detailed page plan with Puck blocks
+    Note over PB: INTERRUPT for approval
+
+    PB-->>U: Show page plan for approval
+    U->>PB: Approve
+
+    PB->>API: Create page with templateData
+    PB->>API: Update page state (if needed)
+    PB->>API: Add dialogs (if needed)
+    PB-->>AB: Page created
+    AB-->>U: App with page created successfully
+```
+
+---
+
+## 10. Architecture Summary
 
 ```mermaid
 flowchart TB
@@ -668,6 +906,8 @@ flowchart TB
         SB[SkillBuilderAgent]
         DB[DocumentBuilderAgent]
         TB[TableBuilderAgent]
+        AB[AppBuilderAgent]
+        PB[PageBuilderAgent<br/>managed by AppBuilder]
         RA[ResearchAgent]
     end
 
@@ -702,7 +942,11 @@ flowchart TB
     SE --> SB
     SE --> DB
     SE --> TB
+    SE --> AB
+    SE --> PB
     SE --> RA
+    AB --> PB
+    PB --> RA
     EC --> CONV
     MR --> CONV
     CONV --> RESP

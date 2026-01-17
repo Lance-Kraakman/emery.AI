@@ -23,6 +23,7 @@ from ...agents.research_agent import create_research_agent
 from ...agents.research_emery_agent import create_research_emery_agent
 from ...agents.app_builder_agent import create_app_builder_agent
 from ...agents.agent_builder_agent import create_agent_builder_agent
+from ...agents.page_builder_agent import create_page_builder_agent
 from ...agents.agent_executor_agent import create_agent_executor
 from ...tools.tool_executor import create_tool_executor
 from ...services.tool_provider import ToolProvider
@@ -303,6 +304,14 @@ class ManagedAgentsFactory:
 
         Uses ToolExecutorTool to delegate tool calls to a sub-agent with
         proper instructions.
+
+        Includes page_builder as a managed_agent for delegating complex page
+        creation tasks (especially when reference URLs are provided).
+
+        AIDEV-NOTE: Even though page_builder is available as managed_agent,
+        the main planner can also route directly to page_builder for proper
+        cascade planning with HITL. The managed_agent relationship provides
+        flexibility for internal delegation.
         """
         tools = tool_provider.get_app_builder_tools()
         app_crud_tool, page_crud_tool = tools[0], tools[1]
@@ -315,14 +324,69 @@ class ManagedAgentsFactory:
             max_steps=5
         )
 
+        # Create page_builder as managed agent for complex page creation
+        # page_builder has research capability and full Puck block knowledge
+        page_builder = self.create_page_builder(tool_provider, org_model)
+
         app_builder = create_app_builder_agent(
             tools=[tool_executor],
             model=model,
-            max_steps=10
+            max_steps=10,
+            managed_agents=[page_builder],
         )
 
-        logger.info("Created App Builder agent with ToolExecutor sub-agent")
+        logger.info("Created App Builder agent with ToolExecutor + page_builder sub-agent")
         return app_builder
+
+    def create_page_builder(
+        self,
+        tool_provider: ToolProvider,
+        org_model: Optional[str] = None
+    ) -> ToolCallingAgent:
+        """
+        Create a Page Builder agent with native planning for HITL workflow.
+
+        This agent specializes in creating Puck visual pages with proper block types.
+        Unlike app_builder (which uses tool_executor wrapper), page_builder gets
+        page_crud DIRECTLY so it receives the full page_crud.j2 instructions
+        including the complete Puck block schema.
+
+        Optionally includes research_agent as a managed agent for analyzing
+        reference URLs when creating pages.
+
+        AIDEV-NOTE: The key difference from app_builder is that this agent gets
+        the page_crud tool directly (not wrapped in tool_executor). This ensures
+        build_agent_instructions() includes page_crud.j2 with all 38 block types,
+        preventing hallucination of block names like "HeroSection" vs "Hero".
+        """
+        # Get page_crud tool directly (not via tool_executor)
+        page_crud_tool = tool_provider.get("page_crud")
+
+        model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
+
+        # Create research_agent as managed agent for URL analysis
+        research_agent = None
+        try:
+            research_agent = self.create_research_agent(
+                api_key=tool_provider.api_key,
+                organization_id=tool_provider.organization_id,
+                org_model=org_model
+            )
+            logger.info("   Added research_agent for URL analysis")
+        except Exception as e:
+            logger.warning(f"   Could not create research_agent: {e}")
+
+        # Pass page_crud directly so agent gets full block schema in instructions
+        managed_agents = [research_agent] if research_agent else None
+        page_builder = create_page_builder_agent(
+            tools=[page_crud_tool],  # Direct tool, not wrapped - gets full page_crud.j2
+            model=model,
+            max_steps=15,
+            managed_agents=managed_agents,
+        )
+
+        logger.info("Created Page Builder agent with direct page_crud + research_agent")
+        return page_builder
 
     def create_agent_builder(
         self,
@@ -538,6 +602,11 @@ class ManagedAgentsFactory:
             logger.warning(f"Failed to create app_builder: {e}")
 
         try:
+            agents.append(self.create_page_builder(tool_provider, org_model))
+        except Exception as e:
+            logger.warning(f"Failed to create page_builder: {e}")
+
+        try:
             agents.append(self.create_agent_builder(tool_provider, org_model))
         except Exception as e:
             logger.warning(f"Failed to create agent_builder: {e}")
@@ -667,7 +736,10 @@ class ManagedAgentsFactory:
             )
 
         def app_builder_factory(**kwargs: Any) -> Any:
-            """Factory for app_builder with cascade planning support."""
+            """Factory for app_builder with cascade planning support.
+
+            AIDEV-NOTE: Includes page_builder as managed_agent for delegation.
+            """
             tools = tool_provider.get_app_builder_tools()
             app_crud, page_crud = tools[0], tools[1]
             tool_executor = create_tool_executor(
@@ -675,10 +747,15 @@ class ManagedAgentsFactory:
                 model=model,
                 max_steps=5
             )
+
+            # Create page_builder as managed agent
+            page_builder = page_builder_factory(**kwargs)
+
             return create_app_builder_agent(
                 tools=[tool_executor],
                 model=model,
                 max_steps=10,
+                managed_agents=[page_builder],
                 **kwargs
             )
 
@@ -698,6 +775,36 @@ class ManagedAgentsFactory:
                 **kwargs
             )
 
+        def page_builder_factory(**kwargs: Any) -> Any:
+            """Factory for page_builder with cascade planning support.
+
+            AIDEV-NOTE: Unlike other builders, page_builder gets page_crud DIRECTLY
+            (not via tool_executor) so it receives the full page_crud.j2 instructions
+            with all 38 Puck block types. This prevents block name hallucination.
+            """
+            page_crud = tool_provider.get("page_crud")
+
+            # Create research_agent as managed agent for URL analysis
+            managed_agents = None
+            try:
+                research = create_research_agent(
+                    model=model,
+                    max_steps=10,
+                    api_key=kwargs.pop('api_key', tool_provider.api_key),
+                    organization_id=kwargs.pop('organization_id', tool_provider.organization_id),
+                )
+                managed_agents = [research]
+            except Exception:
+                pass  # Research is optional
+
+            return create_page_builder_agent(
+                tools=[page_crud],  # Direct tool - gets full block schema
+                model=model,
+                max_steps=15,
+                managed_agents=managed_agents,
+                **kwargs
+            )
+
         return {
             "schema_builder": schema_builder_factory,
             "table_builder": table_builder_factory,
@@ -707,4 +814,5 @@ class ManagedAgentsFactory:
             "research_emery": research_emery_factory,
             "app_builder": app_builder_factory,
             "agent_builder": agent_builder_factory,
+            "page_builder": page_builder_factory,
         }
