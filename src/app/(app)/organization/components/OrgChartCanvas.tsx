@@ -8,6 +8,7 @@
  */
 
 import React, { useCallback, useRef, useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   ReactFlow,
   Background,
@@ -23,7 +24,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { cn } from '@/lib/utils';
-import { Undo2, Redo2, StickyNote, Search, Maximize, LayoutGrid, FileDown } from 'lucide-react';
+import { Undo2, Redo2, StickyNote, Search, Maximize, LayoutGrid, FileDown, FileUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { orgChartNodeTypes } from '@/components/org-chart/nodes';
@@ -40,6 +41,7 @@ import {
   normalizeEdgeConnection,
 } from '@/components/org-chart/utils';
 import { DeleteConfirmationDialog, buildDeleteImpactItems, AgentAssignmentDialog, ExportTemplateDialog, type AssignmentConfig } from '@/components/org-chart/dialogs';
+import { ImportTemplateDialog } from '@/components/templates/ImportTemplateDialog';
 import { extractDataSourceEdges, type DataSourceMapping } from '@/components/org-chart/edgeUtils';
 import { EntityPalette } from './EntityPalette';
 import { SearchDialog } from './SearchDialog';
@@ -113,12 +115,14 @@ export function OrgChartCanvas({
   initialViewport,
   onViewportChange,
 }: OrgChartCanvasProps) {
+  const router = useRouter();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
 
   // Assignment dialog state for database/skill drops
   const [assignmentDialog, setAssignmentDialog] = useState<{
@@ -892,6 +896,22 @@ export function OrgChartCanvas({
                       <p>Search <kbd className="ml-1 text-[10px] opacity-60">⌘K</kbd></p>
                     </TooltipContent>
                   </Tooltip>
+                  <div className="w-px h-6 bg-border mx-0.5" />
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => setIsImportDialogOpen(true)}
+                      >
+                        <FileUp className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      <p>Import Template</p>
+                    </TooltipContent>
+                  </Tooltip>
                   {canExport && (
                     <>
                       <div className="w-px h-6 bg-border mx-0.5" />
@@ -975,6 +995,18 @@ export function OrgChartCanvas({
         onClose={() => setIsExportDialogOpen(false)}
         exportPreview={exportPreview}
         selection={exportSelection}
+      />
+
+      {/* Import template dialog - applies immediately for org chart */}
+      <ImportTemplateDialog
+        isOpen={isImportDialogOpen}
+        onClose={() => setIsImportDialogOpen(false)}
+        applyImmediately={true}
+        onEntitiesCreated={(result) => {
+          // Entities created - soft refresh to reload server data
+          router.refresh();
+        }}
+        onImportComplete={() => setIsImportDialogOpen(false)}
       />
     </div>
     </OrgChartDragProvider>

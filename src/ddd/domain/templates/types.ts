@@ -402,3 +402,23 @@ export function isSkillTemplateData(obj: unknown): obj is SkillTemplateData {
     Array.isArray(s.tools)
   );
 }
+
+/**
+ * Type guard for OrgSectionTemplateData
+ */
+export function isOrgSectionTemplateData(obj: unknown): obj is OrgSectionTemplateData {
+  if (typeof obj !== 'object' || obj === null) return false;
+  const o = obj as Record<string, unknown>;
+  return (
+    Array.isArray(o.agents) &&
+    o.agents.every((item: unknown) => {
+      if (typeof item !== 'object' || item === null) return false;
+      const a = item as Record<string, unknown>;
+      return (
+        typeof a.agent === 'object' && a.agent !== null &&
+        Array.isArray(a.skills) &&
+        Array.isArray(a.databases)
+      );
+    })
+  );
+}

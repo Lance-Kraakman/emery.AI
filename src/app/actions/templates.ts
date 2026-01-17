@@ -23,8 +23,9 @@ import { db } from '@/ddd/infrastructure/db/client';
 
 // Skill imports for template application
 import { createSkill, createOrganizationSkill, getSkill, getSkillsByAgent } from './skills';
-import { getAgent } from './agents';
-import { getDatabase, getAgentDatabases } from './databases';
+import { getAgent, createAgentFromClient } from './agents';
+import { getDatabase, getAgentDatabases, createDatabase } from './databases';
+import { isBrainTemplate, isOrgSectionTemplateData } from '@/ddd/domain/templates/types';
 
 /**
  * Server Actions for Template Management
@@ -693,5 +694,218 @@ export async function applyBuiltinSkillTemplate(
     };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to apply template' };
+  }
+}
+
+// =============================================================================
+// APPLY ORG SECTION TEMPLATE
+// =============================================================================
+
+/**
+ * Result of applying an org_section template
+ */
+export interface ApplyOrgSectionResult {
+  agents: Array<{ id: number; name: string }>;
+  skills: Array<{ id: number; name: string; agentId: number | null }>;
+  databases: Array<{ id: number; name: string; agentId: number | null }>;
+}
+
+/**
+ * Apply an org_section template to create agents, skills, and databases
+ * This creates actual entities from the template data and appends them to the organization
+ *
+ * @param templateContent - Either a BrainTemplate object or raw JSON string
+ * @returns Created entity IDs for the org chart to display
+ */
+export async function applyOrgSectionTemplate(
+  templateContent: BrainTemplate | string
+): Promise<Result<ApplyOrgSectionResult>> {
+  try {
+    const sessionInfo = await getSessionInfo();
+    if (!sessionInfo) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    // Parse if string
+    let template: BrainTemplate;
+    if (typeof templateContent === 'string') {
+      try {
+        const parsed = JSON.parse(templateContent);
+        if (!isBrainTemplate(parsed)) {
+          return { success: false, error: 'Invalid template format' };
+        }
+        template = parsed;
+      } catch {
+        return { success: false, error: 'Invalid JSON format' };
+      }
+    } else {
+      template = templateContent;
+    }
+
+    // Verify it's an org_section template
+    if (template.template.type !== 'org_section') {
+      return { success: false, error: `Expected org_section template, got ${template.template.type}` };
+    }
+
+    const orgSectionData = template.template.data as OrgSectionTemplateData;
+    if (!isOrgSectionTemplateData(orgSectionData)) {
+      return { success: false, error: 'Invalid org_section template data' };
+    }
+
+    const createdAgents: ApplyOrgSectionResult['agents'] = [];
+    const createdSkills: ApplyOrgSectionResult['skills'] = [];
+    const createdDatabases: ApplyOrgSectionResult['databases'] = [];
+
+    // Create agents and their children
+    for (const agentEntry of orgSectionData.agents) {
+      const agentData = agentEntry.agent;
+
+      // Create the agent
+      const agentResult = await createAgentFromClient({
+        name: agentData.name,
+        role: agentData.role || undefined,
+        description: agentData.description || undefined,
+        persona: agentData.persona || undefined,
+        defaultModel: agentData.defaultModel || undefined,
+        avatarConfig: agentData.avatarConfig || undefined,
+        status: 'active',
+        // Note: automations are not applied here as they reference skills by name
+        // which would need to be resolved after skills are created
+      });
+
+      if (!agentResult.success || !agentResult.data) {
+        console.error('Failed to create agent:', agentResult.error);
+        continue;
+      }
+
+      const agentId = agentResult.data.id;
+      createdAgents.push({ id: agentId, name: agentData.name });
+
+      // Create agent's skills
+      for (const skillData of agentEntry.skills) {
+        const skillResult = await createSkill({
+          agentId,
+          name: skillData.name,
+          description: skillData.description,
+          instructions: skillData.instructions,
+          inputs: skillData.inputs,
+          outputs: skillData.outputs,
+          tools: skillData.tools,
+          executionType: skillData.executionType,
+          model: skillData.model,
+          agentType: skillData.agentType,
+          taskModelConfig: skillData.taskModelConfig,
+          toolExecutionConfig: skillData.toolExecutionConfig,
+          writeConfig: skillData.writeConfig,
+          steps: skillData.steps,
+          canvasMetadata: skillData.canvasMetadata,
+        });
+
+        if (skillResult.success && skillResult.data) {
+          createdSkills.push({
+            id: skillResult.data.id,
+            name: skillData.name,
+            agentId,
+          });
+        } else {
+          console.error('Failed to create skill:', skillResult.error);
+        }
+      }
+
+      // Create agent's databases
+      for (const dbData of agentEntry.databases) {
+        const dbResult = await createDatabase({
+          name: dbData.name,
+          description: dbData.description,
+          metadata: dbData.metadata,
+          agentId,
+        });
+
+        if (dbResult.success && dbResult.data) {
+          createdDatabases.push({
+            id: dbResult.data.id,
+            name: dbData.name,
+            agentId,
+          });
+        } else {
+          console.error('Failed to create database:', dbResult.error);
+        }
+      }
+    }
+
+    // Create org-level skills
+    if (orgSectionData.orgSkills) {
+      for (const skillData of orgSectionData.orgSkills) {
+        const skillResult = await createOrganizationSkill({
+          organizationId: sessionInfo.organizationId,
+          name: skillData.name,
+          description: skillData.description,
+          instructions: skillData.instructions,
+          inputs: skillData.inputs,
+          outputs: skillData.outputs,
+          tools: skillData.tools,
+          executionType: skillData.executionType,
+          model: skillData.model,
+          agentType: skillData.agentType,
+          taskModelConfig: skillData.taskModelConfig,
+          toolExecutionConfig: skillData.toolExecutionConfig,
+          writeConfig: skillData.writeConfig,
+          steps: skillData.steps,
+        });
+
+        if (skillResult.success && skillResult.data) {
+          createdSkills.push({
+            id: skillResult.data.id,
+            name: skillData.name,
+            agentId: null,
+          });
+        } else {
+          console.error('Failed to create org skill:', skillResult.error);
+        }
+      }
+    }
+
+    // Create org-level databases
+    if (orgSectionData.orgDatabases) {
+      for (const dbData of orgSectionData.orgDatabases) {
+        const dbResult = await createDatabase({
+          name: dbData.name,
+          description: dbData.description,
+          metadata: dbData.metadata,
+          agentId: null,
+        });
+
+        if (dbResult.success && dbResult.data) {
+          createdDatabases.push({
+            id: dbResult.data.id,
+            name: dbData.name,
+            agentId: null,
+          });
+        } else {
+          console.error('Failed to create org database:', dbResult.error);
+        }
+      }
+    }
+
+    // Revalidate paths
+    revalidatePath('/organization');
+    revalidatePath('/agents');
+    revalidatePath('/skills');
+    revalidatePath('/data');
+
+    return {
+      success: true,
+      data: {
+        agents: createdAgents,
+        skills: createdSkills,
+        databases: createdDatabases,
+      },
+    };
+  } catch (error) {
+    console.error('Apply org section template error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to apply template',
+    };
   }
 }
