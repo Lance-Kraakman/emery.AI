@@ -90,6 +90,7 @@ class PlanStepExecutor:
         plan: Plan,
         parent_step: PlanStep,
         sub_plan: SubPlan,
+        depth: int = 0,
     ) -> str:
         """
         Execute a pre-planned sub-plan from cascading planning.
@@ -97,15 +98,60 @@ class PlanStepExecutor:
         The sub-plan was already created during planning phase.
         We execute it directly without replanning.
 
+        Supports RECURSIVE execution: if a sub-plan step has its own
+        nested sub_plan, we recursively execute that first.
+
         Args:
             plan: The parent Plan object
             parent_step: The parent step containing the sub_plan
             sub_plan: The pre-planned SubPlan to execute
+            depth: Current recursion depth (for logging)
 
         Returns:
             Result from sub-plan execution
         """
-        # Find target agent
+        depth_prefix = "  " * depth
+        logger.info(
+            f"{depth_prefix}🔧 Executing sub-plan for {sub_plan.agent_name}: "
+            f"{len(sub_plan.steps)} steps (depth={depth})"
+        )
+        logger.debug(f"{depth_prefix}🔧 Sub-plan goal: {sub_plan.goal[:100]}...")
+
+        # Execute each step, handling nested sub-plans recursively
+        results: List[str] = []
+
+        for i, step in enumerate(sub_plan.steps):
+            step_num = i + 1
+
+            # Check for nested sub-plan (from recursive cascade planning)
+            if step.sub_plan:
+                logger.info(
+                    f"{depth_prefix}📋 Step {step_num}: Executing nested {step.sub_plan.agent_name} sub-plan"
+                )
+
+                # RECURSIVE: Execute nested sub-plan
+                nested_result = self._execute_sub_plan(
+                    plan=plan,
+                    parent_step=step,
+                    sub_plan=step.sub_plan,
+                    depth=depth + 1,
+                )
+                results.append(
+                    f"Step {step_num} ({step.sub_plan.agent_name}): {nested_result}"
+                )
+                continue
+
+            # Regular step - execute via target agent
+            logger.info(f"{depth_prefix}📋 Step {step_num}: {step.description[:60]}...")
+
+        # If all steps were nested sub-plans, return combined results
+        all_nested = len(results) == len(sub_plan.steps)
+        if results and all_nested:
+            combined = "\n".join(results)
+            logger.info(f"{depth_prefix}✅ Sub-plan executed (all nested)")
+            return combined
+
+        # Otherwise, execute via target agent for non-nested steps
         target_agent = None
         for agent in self.managed_agents:
             if getattr(agent, 'name', None) == sub_plan.agent_name:
@@ -117,10 +163,11 @@ class PlanStepExecutor:
                 f"Target agent '{sub_plan.agent_name}' not found in managed_agents"
             )
 
-        # Format sub-plan steps for execution
+        # Format remaining non-nested steps for execution
+        non_nested_steps = [s for s in sub_plan.steps if not s.sub_plan]
         steps_text = "\n".join([
             f"{i+1}. {step.description}"
-            for i, step in enumerate(sub_plan.steps)
+            for i, step in enumerate(non_nested_steps)
         ])
 
         # Generate execution-mode prompt (no replanning)
@@ -129,16 +176,10 @@ class PlanStepExecutor:
             goal=plan.goal,
             sub_plan_goal=sub_plan.goal,
             parent_step=parent_step,
-            sub_plan_steps=sub_plan.steps,
+            sub_plan_steps=non_nested_steps,
             steps_text=steps_text,
             planning_observations=sub_plan.planning_observations,
         )
-
-        logger.info(
-            f"🔧 Executing pre-planned sub-plan for {sub_plan.agent_name}: "
-            f"{len(sub_plan.steps)} steps"
-        )
-        logger.debug(f"🔧 Sub-plan goal: {sub_plan.goal[:100]}...")
 
         try:
             # Disable HITL on sub-agent during execution
@@ -146,21 +187,27 @@ class PlanStepExecutor:
             original_planning_interval = getattr(target_agent, 'planning_interval', None)
             if hasattr(target_agent, 'planning_interval'):
                 target_agent.planning_interval = None
-                logger.debug(f"🔧 Disabled planning_interval for {sub_plan.agent_name}")
+                logger.debug(f"{depth_prefix}🔧 Disabled planning_interval for {sub_plan.agent_name}")
 
             # Execute via target agent directly
             # The agent should not replan - just execute the approved steps
             result = target_agent(prompt)
             result_str = str(result)
 
-            logger.info(f"✅ Sub-plan executed for {sub_plan.agent_name}")
-            logger.debug(f"🔧 Result preview: {result_str[:200]}...")
+            # Combine with nested results
+            if results:
+                combined = "\n".join(results) + f"\n\nAgent execution: {result_str}"
+                logger.info(f"{depth_prefix}✅ Sub-plan executed for {sub_plan.agent_name}")
+                return combined
+
+            logger.info(f"{depth_prefix}✅ Sub-plan executed for {sub_plan.agent_name}")
+            logger.debug(f"{depth_prefix}🔧 Result preview: {result_str[:200]}...")
 
             return result_str
 
         except Exception as e:
             error_msg = f"Sub-plan execution error: {str(e)}"
-            logger.error(f"❌ PlanStepExecutor: {error_msg}", exc_info=True)
+            logger.error(f"{depth_prefix}❌ PlanStepExecutor: {error_msg}", exc_info=True)
             raise
 
         finally:

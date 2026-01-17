@@ -10,6 +10,21 @@ AIDEV-NOTE: Two-phase question generation:
 
 Gap analysis ensures we only ask about genuinely unclear things,
 not things the user already specified.
+
+RECURSIVE CASCADE PLANNING:
+When a sub-plan step references another managed agent, we recursively
+plan for that nested agent. This creates a tree of detailed plans:
+
+    Main Planner → app_builder
+                        ↓
+                  sub-plan A with steps:
+                        ├─ Step 1: Create app
+                        ├─ Step 2: page_builder creates Home page ← DETECTED
+                        │              ↓
+                        │         RECURSIVE: page_builder sub-plan
+                        │              ├─ Step 2a: Add Hero
+                        │              └─ Step 2b: Add Features
+                        └─ Step 3: Publish
 """
 
 import logging
@@ -27,6 +42,8 @@ from ..tools.ask_question_tool import AskQuestionTool
 
 if TYPE_CHECKING:
     from .gap_analyzer import GapAnalyzer
+    from .task_classifier import TaskClassifier
+    from .protocols import ModelProvider
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +76,10 @@ class SubAgentPlanner:
     1. Gap Analysis: Check domain concerns → identify what's unclear
     2. Planning: If no gaps, create detailed plan
 
+    Supports RECURSIVE CASCADE PLANNING:
+    When a sub-plan step references another managed agent, we recursively
+    plan for that nested agent, creating a tree of detailed plans.
+
     This ensures we only ask questions about genuinely missing info,
     not things the user already specified.
     """
@@ -70,6 +91,9 @@ class SubAgentPlanner:
         model: Any,
         gap_analyzer: Optional["GapAnalyzer"] = None,
         max_planning_rounds: int = 3,
+        max_depth: int = 3,
+        model_provider: Optional["ModelProvider"] = None,
+        org_model: Optional[str] = None,
     ):
         """
         Initialize SubAgentPlanner.
@@ -80,34 +104,53 @@ class SubAgentPlanner:
             model: LLM model to use
             gap_analyzer: Analyzer for checking domain concerns (optional)
             max_planning_rounds: Max iterations for question rounds
+            max_depth: Maximum recursion depth for nested agent planning (default: 3)
+            model_provider: Provider for LLM access (used for step classification)
+            org_model: Organization model ID for model resolution
         """
         self.agent_factories = agent_factories
         self.original_task = original_task
         self.model = model
         self.gap_analyzer = gap_analyzer
         self.max_planning_rounds = max_planning_rounds
+        self.max_depth = max_depth
+        self.model_provider = model_provider
+        self.org_model = org_model
         self._agent_states: Dict[str, Any] = {}
         self._collected_questions: List[AgentQuestion] = []
         self._planning_round: int = 1
         self._gap_results: Dict[str, GapAnalysisResult] = {}  # Cache gap analysis per step
+        self._task_classifier: Optional["TaskClassifier"] = None
+
+        # Initialize TaskClassifier for step → agent classification
+        if model_provider:
+            from .task_classifier import TaskClassifier
+            self._task_classifier = TaskClassifier(model_provider=model_provider)
 
     def run_planning(
         self,
         step: PlanStep,
         agent_name: str,
         gathered_context: Optional[str] = None,
+        parent_context: Optional[str] = None,
+        depth: int = 0,
     ) -> SubAgentPlanningResult:
         """
-        Run sub-agent in planning-only mode.
+        Run sub-agent in planning-only mode with optional recursive planning.
 
         Two-phase approach:
         1. Gap Analysis: Check domain concerns to identify missing info
         2. Planning: If no gaps, create detailed plan
 
+        After planning, if depth < max_depth, checks sub-plan steps for
+        managed agent references and recursively plans those.
+
         Args:
             step: Parent PlanStep this sub-agent will detail
             agent_name: Name of agent to use
             gathered_context: Optional context from previous tools (e.g., list of tables)
+            parent_context: Context from parent agent's planning (for nested agents)
+            depth: Current recursion depth (0 = top-level)
 
         Returns:
             SubAgentPlanningResult with sub_plan and/or questions
@@ -118,12 +161,24 @@ class SubAgentPlanner:
                 error=f"Unknown agent: {agent_name}",
             )
 
+        # Check max depth
+        if depth >= self.max_depth:
+            logger.warning(
+                f"📋 Max depth {self.max_depth} reached at {agent_name}, "
+                f"skipping recursive planning for step: {step.description[:40]}..."
+            )
+            # Still run planning, just don't recurse into nested agents
+            return self._run_agent_planning(step, agent_name, gathered_context)
+
+        # Merge contexts: gathered_context + parent_context
+        full_context = self._merge_contexts(gathered_context, parent_context)
+
         # Phase 1: Gap Analysis - Check what's clear vs unclear
         if self.gap_analyzer:
             gap_result = self.gap_analyzer.analyze(
                 agent_name=agent_name,
                 user_request=self.original_task,
-                gathered_context=gathered_context,
+                gathered_context=full_context,
             )
             self._gap_results[step.step_id] = gap_result
 
@@ -133,7 +188,7 @@ class SubAgentPlanner:
                 self._collected_questions.extend(questions)
 
                 logger.info(
-                    f"📋 Gap analysis for {agent_name}: "
+                    f"📋 Gap analysis for {agent_name} (depth={depth}): "
                     f"{len(gap_result.clear_concerns)} clear, "
                     f"{len(gap_result.gaps)} gaps"
                 )
@@ -142,6 +197,8 @@ class SubAgentPlanner:
                 self._agent_states[step.step_id] = {
                     "agent": None,  # No agent created yet
                     "gap_result": gap_result,
+                    "depth": depth,
+                    "parent_context": parent_context,
                 }
 
                 return SubAgentPlanningResult(
@@ -152,11 +209,27 @@ class SubAgentPlanner:
                 )
 
             logger.info(
-                f"✅ Gap analysis for {agent_name}: All concerns clear, proceeding to plan"
+                f"✅ Gap analysis for {agent_name} (depth={depth}): All concerns clear, proceeding to plan"
             )
 
         # Phase 2: Planning - Create detailed plan
-        return self._run_agent_planning(step, agent_name, gathered_context)
+        result = self._run_agent_planning(step, agent_name, full_context)
+
+        # Phase 3: Recursive planning for nested agents
+        if result.success and result.sub_plan and depth < self.max_depth:
+            result = self._enhance_with_nested_plans(result, depth)
+
+        return result
+
+    def _merge_contexts(
+        self,
+        gathered_context: Optional[str],
+        parent_context: Optional[str],
+    ) -> Optional[str]:
+        """Merge gathered context with parent's planning observations."""
+        if gathered_context and parent_context:
+            return f"{gathered_context}\n\n## Parent Agent Context\n{parent_context}"
+        return gathered_context or parent_context
 
     def _run_agent_planning(
         self,
@@ -242,6 +315,136 @@ class SubAgentPlanner:
             questions=collected_questions,
             agent_state=agent,
         )
+
+    def _enhance_with_nested_plans(
+        self,
+        result: SubAgentPlanningResult,
+        depth: int,
+    ) -> SubAgentPlanningResult:
+        """
+        Recursively plan managed agents referenced in sub-plan steps.
+
+        For each step in the sub-plan, checks if it references a managed agent.
+        If so, runs recursive planning for that nested agent.
+
+        Args:
+            result: The planning result to enhance
+            depth: Current recursion depth
+
+        Returns:
+            Enhanced SubAgentPlanningResult with nested sub-plans attached
+        """
+        if not result.sub_plan or not result.sub_plan.steps:
+            return result
+
+        processed_steps: List[PlanStep] = []
+        nested_agent_count = 0
+
+        for step in result.sub_plan.steps:
+            nested_agent = self._detect_managed_agent(step)
+
+            if nested_agent and nested_agent in self.agent_factories:
+                logger.info(
+                    f"📋 Depth {depth + 1}: Detected {nested_agent} in step: "
+                    f"'{step.description[:40]}...'"
+                )
+
+                # Recursively plan the nested agent
+                nested_result = self.run_planning(
+                    step=step,
+                    agent_name=nested_agent,
+                    depth=depth + 1,
+                    parent_context=result.sub_plan.planning_observations,
+                )
+
+                if nested_result.success and nested_result.sub_plan:
+                    # Attach nested sub-plan to this step
+                    processed_steps.append(step.with_sub_plan(nested_result.sub_plan))
+                    nested_agent_count += 1
+
+                    # Collect questions from nested agent
+                    if nested_result.questions:
+                        self._collected_questions.extend(nested_result.questions)
+                        logger.info(
+                            f"📋 Collected {len(nested_result.questions)} questions "
+                            f"from nested {nested_agent}"
+                        )
+                    continue
+
+            # No nested agent detected, or planning failed - keep step as-is
+            processed_steps.append(step)
+
+        if nested_agent_count > 0:
+            logger.info(
+                f"✅ Enhanced sub-plan with {nested_agent_count} nested agent sub-plans "
+                f"at depth {depth}"
+            )
+
+        return SubAgentPlanningResult(
+            success=True,
+            sub_plan=result.sub_plan.with_steps(processed_steps),
+            questions=result.questions,
+            agent_state=result.agent_state,
+        )
+
+    def _detect_managed_agent(self, step: PlanStep) -> Optional[str]:
+        """
+        Detect if a step references a managed agent.
+
+        Uses LLM-based classification if TaskClassifier is available,
+        falls back to pattern matching otherwise.
+
+        Args:
+            step: The plan step to analyze
+
+        Returns:
+            Agent name if detected, None otherwise
+        """
+        # Fast path: check if already set
+        if step.target_agent and step.target_agent in self.agent_factories:
+            return step.target_agent
+
+        # Try LLM classification first (more accurate)
+        if self._task_classifier:
+            from .task_classifier import StepClassification
+
+            classification = self._task_classifier.classify_step(
+                step_description=step.description,
+                available_agents=list(self.agent_factories.keys()),
+                org_model=self.org_model,
+            )
+
+            if classification.target_agent and classification.confidence > 0.7:
+                logger.debug(
+                    f"🔍 LLM classified step → {classification.target_agent} "
+                    f"({classification.confidence:.0%} confidence)"
+                )
+                return classification.target_agent
+
+        # Fallback: Pattern matching against agent names
+        desc_lower = step.description.lower()
+        for agent_name in self.agent_factories.keys():
+            # Check for explicit agent name references
+            if agent_name.replace('_', ' ') in desc_lower:
+                logger.debug(f"🔍 Pattern matched step → {agent_name}")
+                return agent_name
+            if agent_name.replace('_', '') in desc_lower:
+                logger.debug(f"🔍 Pattern matched step → {agent_name}")
+                return agent_name
+
+            # Check for common delegation phrases
+            delegation_patterns = [
+                f"{agent_name} creates",
+                f"{agent_name} builds",
+                f"delegate to {agent_name}",
+                f"using {agent_name}",
+            ]
+            for pattern in delegation_patterns:
+                if pattern.replace('_', ' ') in desc_lower:
+                    logger.debug(f"🔍 Delegation pattern matched step → {agent_name}")
+                    return agent_name
+
+        return None
 
     def _gaps_to_questions(
         self,

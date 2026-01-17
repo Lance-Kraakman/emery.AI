@@ -11,7 +11,9 @@ The classifier determines:
 3. Which agent should handle the task (if clear)
 """
 
+import json
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -32,6 +34,16 @@ class TaskClassification:
     needs_clarification: bool
     target_agent: Optional[str] = None
     clarification_questions: List[str] = field(default_factory=list)
+    reasoning: str = ""
+    use_cascade_planning: bool = False  # True if task involves multiple agents needing sub-planning
+
+
+@dataclass
+class StepClassification:
+    """Result of step → agent classification for recursive cascade planning."""
+
+    target_agent: Optional[str] = None  # Agent that should handle this step, or None
+    confidence: float = 0.0  # 0.0 to 1.0
     reasoning: str = ""
 
 
@@ -115,7 +127,8 @@ class TaskClassifier:
                 logger.info(
                     f"✅ Classification: mode={classification.mode}, "
                     f"needs_clarification={classification.needs_clarification}, "
-                    f"target_agent={classification.target_agent}"
+                    f"target_agent={classification.target_agent}, "
+                    f"cascade={classification.use_cascade_planning}"
                 )
                 if classification.clarification_questions:
                     logger.info(
@@ -159,4 +172,105 @@ class TaskClassifier:
             target_agent=None,
             clarification_questions=[],
             reasoning="Proceeding with planning (classification unavailable)",
+            use_cascade_planning=False,
         )
+
+    def classify_step(
+        self,
+        step_description: str,
+        available_agents: List[str],
+        org_model: Optional[str] = None,
+    ) -> StepClassification:
+        """
+        Classify which agent should handle a sub-plan step.
+
+        Used in recursive cascade planning to detect when a step
+        references a managed agent that needs its own sub-planning.
+
+        Args:
+            step_description: The step description text to analyze
+            available_agents: List of agent names that could handle the step
+            org_model: Organization model ID for model resolution
+
+        Returns:
+            StepClassification with target_agent and confidence
+        """
+        if not available_agents:
+            return StepClassification(
+                target_agent=None,
+                confidence=0.0,
+                reasoning="No available agents to classify against",
+            )
+
+        logger.debug(f"🔍 Classifying step: {step_description[:60]}...")
+
+        # Build classification prompt
+        agent_list = ", ".join(available_agents)
+        prompt = f"""Analyze this step and determine which agent should handle it.
+
+Step: {step_description}
+
+Available agents: {agent_list}
+
+Rules:
+1. If the step clearly references one of these agents (e.g., "page_builder creates...",
+   "delegate to table_builder", "schema_builder designs..."), return that agent name.
+2. If the step describes work that matches an agent's domain but doesn't explicitly name it,
+   still return the appropriate agent with moderate confidence.
+3. If the step doesn't need delegation to any specific agent (e.g., it's a simple tool call
+   or coordination step), return "none".
+
+Return JSON only: {{"agent": "agent_name or none", "confidence": 0.0-1.0, "reasoning": "brief explanation"}}"""
+
+        try:
+            # Get model and run simple completion
+            model_id = self.model_provider.resolve_model_selection(org_model=org_model)
+            model = self.model_provider.get_model(model_id=model_id)
+
+            # Use direct model call for simple classification
+            response = model(prompt)
+
+            # Extract JSON from response (handle markdown code blocks)
+            response_text = str(response)
+            json_match = re.search(r'\{[^}]+\}', response_text)
+
+            if json_match:
+                result = json.loads(json_match.group())
+                agent = result.get("agent", "none")
+                confidence = float(result.get("confidence", 0.0))
+                reasoning = result.get("reasoning", "")
+
+                # Validate agent is in available list or is "none"
+                if agent != "none" and agent not in available_agents:
+                    logger.debug(f"🔍 Agent '{agent}' not in available agents, returning none")
+                    return StepClassification(
+                        target_agent=None,
+                        confidence=0.0,
+                        reasoning=f"Agent '{agent}' not available",
+                    )
+
+                target = agent if agent != "none" else None
+                logger.debug(
+                    f"🔍 Step classified: agent={target}, confidence={confidence:.2f}"
+                )
+
+                return StepClassification(
+                    target_agent=target,
+                    confidence=confidence,
+                    reasoning=reasoning,
+                )
+
+            logger.warning("🔍 Could not parse step classification response")
+            return StepClassification(
+                target_agent=None,
+                confidence=0.0,
+                reasoning="Failed to parse classification response",
+            )
+
+        except Exception as e:
+            logger.error(f"🔍 Step classification failed: {e}")
+            return StepClassification(
+                target_agent=None,
+                confidence=0.0,
+                reasoning=f"Classification error: {e}",
+            )

@@ -1643,6 +1643,9 @@ Consider what has already been done and what still needs to happen.
             agent_factories=agent_factories,
             original_task=instructions,
             model=None,  # Model passed via agent factories
+            max_depth=3,  # Enable 3 levels of recursive cascade planning
+            model_provider=self._model_provider,  # For LLM step classification
+            org_model=self._org_model,
         )
 
         updated_steps: List[PlanStep] = []

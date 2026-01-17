@@ -88,6 +88,19 @@ class SubPlan:
             planning_observations=proto.planning_observations or None,
         )
 
+    def with_steps(self, steps: List["PlanStep"]) -> "SubPlan":
+        """Return new SubPlan with updated steps.
+
+        Used in recursive cascade planning to attach nested sub-plans.
+        """
+        return SubPlan(
+            agent_name=self.agent_name,
+            goal=self.goal,
+            steps=steps,
+            context_gathered=self.context_gathered,
+            planning_observations=self.planning_observations,
+        )
+
 
 @dataclass(frozen=True)
 class PlanStep:
