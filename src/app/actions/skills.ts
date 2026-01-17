@@ -1299,6 +1299,7 @@ export async function generateSkillPlan(
     const userApiKey = session.user.apiKey || '';
 
     // Call gRPC to generate the plan
+    // Model is not passed - Python side uses org/default model for planning
     const grpcClient = getChatProcessingClient(String(session.user.currentOrganizationId));
 
     const result = await grpcClient.generatePlan({
@@ -1306,7 +1307,6 @@ export async function generateSkillPlan(
       organizationId: skill.organizationId.value,
       userId: session.user.id,
       skillId,
-      model: skill.model || undefined,
       userApiKey,
       timeoutSeconds: 90, // Allow more time for complex plans
     });

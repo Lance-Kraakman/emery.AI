@@ -276,7 +276,7 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
             multimodal=True,
         ),
         pricing=ModelPricing(input_per_1m=1.25, output_per_1m=5.00),
-        tier=ModelTier.ADVANCED,
+        tier=ModelTier.PRO,
         category=ModelCategory.ADVANCED,
         endpoint=ModelEndpoint(type="inference-api"),
     ),

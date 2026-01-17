@@ -236,31 +236,9 @@ export function AgenticSkillEditor({
         hasFloatingHeader && 'pt-24'
       )}>
         <div className="flex-1 flex flex-col min-h-0">
-          <Label className="text-sm font-medium mb-2 shrink-0">Instructions</Label>
-          <div className="flex-1 min-h-0">
-            <UnifiedChatInput
-              mode="form"
-              minHeight="100%"
-              value={value.instructions || ''}
-              onChange={(instructions) => handleChange({ instructions })}
-              variables={chatVariables}
-              enableSendButton={false}
-              enableAttachments={true}
-              pendingAttachments={pendingAttachments}
-              onAttachmentAdd={handleAttachmentAdd}
-              onAttachmentRemove={handleAttachmentRemove}
-              disabled={isReadOnly}
-              placeholder="Describe what this skill should do... (@ for tools, { for variables)"
-            />
-          </div>
-
-          {/* Plan generation bar */}
-          <div className="flex items-center justify-between mt-2 pt-2 border-t shrink-0">
-            <div className="text-xs text-muted-foreground">
-              {value.plan
-                ? `Plan: ${value.plan.steps?.length || 0} steps`
-                : 'No autonomous plan'}
-            </div>
+          {/* Instructions header with Generate Plan button */}
+          <div className="flex items-center justify-between mb-2 shrink-0">
+            <Label className="text-sm font-medium">Instructions</Label>
             <Button
               variant="outline"
               size="sm"
@@ -280,16 +258,29 @@ export function AgenticSkillEditor({
               )}
             </Button>
           </div>
+          <div className="flex-1 min-h-0">
+            <UnifiedChatInput
+              mode="form"
+              minHeight="100%"
+              value={value.instructions || ''}
+              onChange={(instructions) => handleChange({ instructions })}
+              variables={chatVariables}
+              enableSendButton={false}
+              enableAttachments={true}
+              pendingAttachments={pendingAttachments}
+              onAttachmentAdd={handleAttachmentAdd}
+              onAttachmentRemove={handleAttachmentRemove}
+              disabled={isReadOnly}
+              placeholder="Describe what this skill should do... (@ for tools, { for variables)"
+            />
+          </div>
         </div>
       </div>
 
       {/* Right Config Sidebar - full height docked panel */}
       <div className="absolute top-0 right-0 h-full w-80 bg-background border-l flex flex-col">
         {/* Panel Header */}
-        <div className={cn(
-          "flex items-center justify-between px-3 py-2 border-b bg-muted/30 shrink-0",
-          hasFloatingHeader && "pt-16"
-        )}>
+        <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/30 shrink-0">
           <div className="flex items-center gap-2">
             <Settings2 className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-medium">Skill Config</span>
@@ -297,7 +288,10 @@ export function AgenticSkillEditor({
         </div>
 
         {/* Panel Content */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-4">
+        <div className={cn(
+          "flex-1 overflow-y-auto p-3 space-y-4",
+          hasFloatingHeader && "pt-14"
+        )}>
           {/* Description */}
           <div className="space-y-1">
             <Label className="text-xs">Description</Label>
