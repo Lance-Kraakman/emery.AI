@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -156,114 +155,105 @@ export function PermissionsPanel({
 
   if (isLoading || isLoadingAccess) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Access Control</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-sm text-muted-foreground">Loading permissions...</div>
-        </CardContent>
-      </Card>
+      <div className="pt-4 border-t">
+        <div className="mb-3">
+          <h3 className="text-sm font-semibold">Access Control</h3>
+        </div>
+        <div className="text-sm text-muted-foreground">Loading permissions...</div>
+      </div>
     );
   }
 
   return (
     <>
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-base">Access Control</CardTitle>
-              <CardDescription>
-                Manage who can access this {resourceType}
-              </CardDescription>
-            </div>
+      <div className="pt-4 border-t">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h3 className="text-sm font-semibold">Access Control</h3>
+            <p className="text-xs text-muted-foreground">Manage who can access this {resourceType}</p>
+          </div>
+          {canManage && (
+            <Button
+              size="sm"
+              onClick={() => setShareDialogOpen(true)}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add Access
+            </Button>
+          )}
+        </div>
+
+        {accessList.length === 0 ? (
+          <div className="text-center py-6 text-muted-foreground">
+            <Users className="w-10 h-10 mx-auto mb-2 opacity-50" />
+            <p className="text-sm">No one has been granted access yet</p>
             {canManage && (
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setShareDialogOpen(true)}
+                className="mt-3"
               >
                 <Plus className="w-4 h-4 mr-2" />
-                Add Access
+                Grant Access
               </Button>
             )}
           </div>
-        </CardHeader>
-
-        <CardContent>
-          {accessList.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
-              <p className="text-sm">No one has been granted access yet</p>
-              {canManage && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShareDialogOpen(true)}
-                  className="mt-4"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Grant Access
-                </Button>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {accessList.map((entry) => (
-                <div
-                  key={entry.id}
-                  className="flex items-center justify-between p-3 border rounded-lg hover:border-primary/30 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <Avatar className="w-8 h-8">
-                      <AvatarFallback>
-                        {entry.type === 'team' ? (
-                          <Users className="w-4 h-4" />
-                        ) : (
-                          <User className="w-4 h-4" />
-                        )}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <div className="font-medium text-sm">{entry.name}</div>
-                      <div className="flex items-center gap-2 mt-1">
-                        {entry.permissions.map((permission) => (
-                          <Badge
-                            key={permission}
-                            variant="secondary"
-                            className="text-xs flex items-center gap-1"
-                          >
-                            {getPermissionIcon(permission)}
-                            {getPermissionLabel(permission)}
-                          </Badge>
-                        ))}
-                      </div>
+        ) : (
+          <div className="space-y-1">
+            {accessList.map((entry) => (
+              <div
+                key={entry.id}
+                className="flex items-center justify-between p-2 border rounded hover:bg-secondary/50 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <Avatar className="w-7 h-7">
+                    <AvatarFallback>
+                      {entry.type === 'team' ? (
+                        <Users className="w-3.5 h-3.5" />
+                      ) : (
+                        <User className="w-3.5 h-3.5" />
+                      )}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <div className="font-medium text-sm">{entry.name}</div>
+                    <div className="flex items-center gap-1 mt-0.5">
+                      {entry.permissions.map((permission) => (
+                        <Badge
+                          key={permission}
+                          variant="secondary"
+                          className="text-xs h-5 flex items-center gap-1"
+                        >
+                          {getPermissionIcon(permission)}
+                          {getPermissionLabel(permission)}
+                        </Badge>
+                      ))}
                     </div>
                   </div>
-
-                  {canManage && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleRemoveAccess(entry)}
-                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                    >
-                      <X className="w-4 h-4" />
-                    </Button>
-                  )}
                 </div>
-              ))}
-            </div>
-          )}
 
-          {!canManage && accessList.length > 0 && (
-            <p className="text-xs text-muted-foreground mt-4 pt-4 border-t">
-              You need manage permission to modify access
-            </p>
-          )}
-        </CardContent>
-      </Card>
+                {canManage && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleRemoveAccess(entry)}
+                    className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!canManage && accessList.length > 0 && (
+          <p className="text-xs text-muted-foreground mt-3 pt-3 border-t">
+            You need manage permission to modify access
+          </p>
+        )}
+      </div>
 
       <ShareDialog
         open={shareDialogOpen}
