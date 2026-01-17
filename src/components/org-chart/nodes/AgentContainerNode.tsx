@@ -3,56 +3,22 @@
 /**
  * AgentContainerNode Component
  *
- * Container node for an agent that holds its skills, databases, and automations.
+ * Container node for an agent that holds its skills and databases.
  * Uses React Flow's parent/child node system for grouping.
- * Skills are rendered in top section, databases in bottom section.
+ * Single unified content area - no separate sections.
  */
 
-import React, { memo, useMemo } from 'react';
+import React, { memo } from 'react';
 import { NodeResizer, Handle, Position } from '@xyflow/react';
 import { cn } from '@/lib/utils';
-import { Bot, ChevronDown, ChevronRight, Sparkles, Database, Plus } from 'lucide-react';
+import { Bot, ChevronDown, ChevronRight, Sparkles, Database } from 'lucide-react';
 import { orgChartNodeTheme, orgChartNodeSizes, orgChartHandles } from '../theme';
-import { getAgentSectionLayout } from '../utils';
 import { useOrgChartDragSafe } from '../context';
 import type { AgentContainerNodeData } from '../types';
 
 interface AgentContainerNodeProps {
   data: AgentContainerNodeData;
   selected: boolean;
-}
-
-/**
- * Placeholder slot component for adding new items
- */
-function PlaceholderSlot({
-  isHighlighted,
-  colorClass,
-}: {
-  isHighlighted: boolean;
-  colorClass: string;
-}) {
-  return (
-    <div
-      className={cn(
-        'flex items-center justify-center rounded-lg border-2 border-dashed transition-all',
-        isHighlighted
-          ? `${colorClass} scale-105`
-          : 'border-muted-foreground/20 hover:border-muted-foreground/40'
-      )}
-      style={{
-        width: orgChartNodeSizes.nodeWidth,
-        height: 28,
-      }}
-    >
-      <Plus
-        className={cn(
-          'h-4 w-4 transition-colors',
-          isHighlighted ? 'text-current' : 'text-muted-foreground/40'
-        )}
-      />
-    </div>
-  );
 }
 
 export const AgentContainerNode = memo(function AgentContainerNode({
@@ -70,16 +36,9 @@ export const AgentContainerNode = memo(function AgentContainerNode({
     isExpanded = true,
   } = data;
 
-  // Calculate section positions for labels
-  const sectionLayout = useMemo(
-    () => getAgentSectionLayout(skillCount, databaseCount),
-    [skillCount, databaseCount]
-  );
-
   // Determine if this agent accepts the current drag type
   const canAcceptDrag = isDragging && (dragType === 'skill' || dragType === 'database');
-  const isDraggingSkill = isDragging && dragType === 'skill';
-  const isDraggingDatabase = isDragging && dragType === 'database';
+  const isEmpty = skillCount === 0 && databaseCount === 0;
 
   return (
     <>
@@ -162,79 +121,54 @@ export const AgentContainerNode = memo(function AgentContainerNode({
           )}
         </div>
 
-        {/* Expanded content area with sections */}
+        {/* Expanded content area - unified layout */}
         {isExpanded && (
           <div
             className="relative px-4 pb-4"
             style={{
-              minHeight: Math.max(
-                orgChartNodeSizes.containerMinHeight - orgChartNodeSizes.containerHeaderHeight,
-                sectionLayout.totalHeight - orgChartNodeSizes.containerHeaderHeight
-              ),
+              minHeight: orgChartNodeSizes.containerMinHeight - orgChartNodeSizes.containerHeaderHeight,
             }}
           >
-            {/* Skills Section */}
-            <div className="mb-2">
-              {/* Section Header */}
-              <div className="flex items-center gap-1.5 mb-2 mt-2">
+            {/* Combined header with counts */}
+            <div className="flex items-center gap-3 mb-2 mt-2">
+              <div className="flex items-center gap-1">
                 <Sparkles className="h-3 w-3 text-violet-500" />
                 <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
                   Skills
                 </span>
-                {skillCount > 0 && (
-                  <span className="text-[10px] text-muted-foreground">({skillCount})</span>
-                )}
+                <span className="text-[10px] text-muted-foreground">({skillCount})</span>
               </div>
-
-              {/* Skills placeholder slot - shown when empty or as drop target */}
-              {skillCount === 0 && (
-                <PlaceholderSlot
-                  isHighlighted={isDraggingSkill}
-                  colorClass="border-violet-400 bg-violet-50/50 dark:bg-violet-900/20 text-violet-500"
-                />
-              )}
-            </div>
-
-            {/* Section Divider - only show when both sections have items */}
-            {skillCount > 0 && databaseCount > 0 && (
-              <div
-                className="absolute border-t border-dashed border-muted-foreground/20"
-                style={{
-                  left: orgChartNodeSizes.containerPadding,
-                  right: orgChartNodeSizes.containerPadding,
-                  top: sectionLayout.skillsEndY - orgChartNodeSizes.sectionGap / 2,
-                }}
-              />
-            )}
-
-            {/* Databases Section */}
-            <div
-              style={{
-                position: 'absolute',
-                left: orgChartNodeSizes.containerPadding,
-                right: orgChartNodeSizes.containerPadding,
-                top: sectionLayout.databasesStartY,
-              }}
-            >
-              {/* Section Header */}
-              <div className="flex items-center gap-1.5 mb-2">
+              <div className="flex items-center gap-1">
                 <Database className="h-3 w-3 text-slate-500" />
                 <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
                   Databases
                 </span>
-                {databaseCount > 0 && (
-                  <span className="text-[10px] text-muted-foreground">({databaseCount})</span>
-                )}
+                <span className="text-[10px] text-muted-foreground">({databaseCount})</span>
               </div>
-
-              {/* Databases placeholder slot - shown when empty or as drop target */}
-              {databaseCount === 0 && (
-                <PlaceholderSlot
-                  isHighlighted={isDraggingDatabase}
-                  colorClass="border-slate-400 bg-slate-50/50 dark:bg-slate-800/20 text-slate-500"
-                />
-              )}
             </div>
+
+            {/* Empty state message - shown when no skills or databases */}
+            {isEmpty && (
+              <div
+                className={cn(
+                  'flex items-center justify-center rounded-lg border-2 border-dashed transition-all py-6 px-4',
+                  canAcceptDrag
+                    ? 'border-primary bg-primary/5 scale-[1.02]'
+                    : 'border-muted-foreground/20'
+                )}
+              >
+                <span className="text-xs text-muted-foreground text-center">
+                  Drop Skills and Databases to assign them to agent ownership
+                </span>
+              </div>
+            )}
+
+            {/* Content area for child nodes (React Flow handles positioning) */}
+            {!isEmpty && (
+              <div className="min-h-[40px]">
+                {/* Child skill and database nodes are rendered by React Flow */}
+              </div>
+            )}
           </div>
         )}
       </div>

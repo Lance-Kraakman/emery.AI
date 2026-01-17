@@ -917,3 +917,341 @@ export async function generateSkillAttachmentUrl(
     };
   }
 }
+
+/**
+ * Save a plan to a skill for autonomous execution
+ *
+ * Either updates an existing skill with the plan, or creates a new skill with the plan.
+ * The plan is stored in the skill's first step's agenticConfig.plan field.
+ *
+ * @param skillId - Existing skill ID to update, or null to create new skill
+ * @param planJson - Serialized plan JSON string (from awaiting input)
+ * @param agentId - Agent ID (required when creating new skill)
+ * @param skillName - Name for new skill (required when creating new skill)
+ */
+export async function savePlanToSkill(params: {
+  skillId: number | null;
+  planJson: string;
+  agentId?: number;
+  skillName?: string;
+}): Promise<Result<SkillDTO>> {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const { skillId, planJson, agentId, skillName } = params;
+
+    // Parse the plan JSON
+    let plan: any;
+    try {
+      plan = JSON.parse(planJson);
+    } catch (e) {
+      return { success: false, error: 'Invalid plan JSON' };
+    }
+
+    // Convert to StoredPlan format (strip runtime state like status, result, error)
+    const storedPlan = {
+      id: plan.id || plan.planId || `plan_${Date.now()}`,
+      goal: plan.goal || '',
+      basicInstructions: plan.basicInstructions || plan.goal || '',
+      context: plan.context,
+      analysis: plan.analysis,
+      steps: (plan.steps || []).map((step: any) => ({
+        stepId: step.stepId || step.step_id || `step_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        description: step.description || '',
+        toolCall: step.toolCall || step.tool_call,
+        parameters: step.parameters,
+        contextTables: step.contextTables || step.context_tables,
+        targetAgent: step.targetAgent || step.target_agent,
+        subPlan: step.subPlan || step.sub_plan,
+      })),
+      version: plan.version || 1,
+      generatedAt: plan.generatedAt || new Date().toISOString(),
+      approvedAt: new Date().toISOString(), // Mark as approved when saved
+    };
+
+    const service = getSkillApplicationService();
+
+    if (skillId) {
+      // Update existing skill
+      const skillResult = await service.getSkill(skillId);
+      if (!skillResult.success || !skillResult.data) {
+        return { success: false, error: 'Skill not found' };
+      }
+
+      const skill = skillResult.data;
+
+      // Check permission
+      if (skill.agentId) {
+        await requireResourcePermission("agents:manage", "agent", skill.agentId.value);
+      } else {
+        await requireResourcePermission("skills:manage", "skill", skillId);
+      }
+
+      // Get existing steps or create a default step structure
+      const existingSteps = skill.steps || [];
+      let updatedSteps: SkillStep[];
+
+      if (existingSteps.length > 0) {
+        // Update first step with the plan
+        updatedSteps = existingSteps.map((step, index) => {
+          if (index === 0) {
+            return {
+              ...step,
+              agenticConfig: {
+                ...step.agenticConfig,
+                instructions: step.agenticConfig?.instructions || storedPlan.goal,
+                tools: step.agenticConfig?.tools || [],
+                plan: storedPlan,
+              },
+            };
+          }
+          return step;
+        });
+      } else {
+        // Create a new step with the plan
+        updatedSteps = [{
+          id: `step_${Date.now()}`,
+          name: 'Autonomous Execution',
+          nodeType: 'agentic' as const,
+          agenticConfig: {
+            instructions: storedPlan.goal,
+            tools: [],
+            plan: storedPlan,
+          },
+        }];
+      }
+
+      // Update the skill with the plan
+      const updateResult = await service.updateSkill(skillId, {
+        executionType: 'agentic',
+        steps: updatedSteps,
+      });
+
+      if (!updateResult.success) {
+        return { success: false, error: updateResult.error };
+      }
+
+      // Fetch updated skill
+      const updatedSkillResult = await service.getSkill(skillId);
+      if (!updatedSkillResult.success || !updatedSkillResult.data) {
+        return { success: false, error: 'Failed to fetch updated skill' };
+      }
+
+      // AUDIT: Log plan save
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        skill.organizationId,
+        {
+          eventType: 'agent',
+          eventCategory: 'skill_crud',
+          eventAction: 'update',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'skill',
+          resourceId: String(skillId),
+          resourceName: skill.name,
+          parentResourceType: skill.agentId ? 'agent' : undefined,
+          parentResourceId: skill.agentId ? String(skill.agentId.value) : undefined,
+          eventData: { action: 'save_plan_for_autonomous_execution' },
+          success: true,
+        }
+      );
+
+      // Revalidate
+      if (skill.agentId) {
+        revalidatePath(`/agents/${skill.agentId.value}/skills`);
+      }
+      revalidatePath('/');
+
+      return {
+        success: true,
+        data: SkillMapper.toDTO(updatedSkillResult.data)
+      };
+
+    } else {
+      // Create new skill with the plan
+      if (!agentId) {
+        return { success: false, error: 'Agent ID is required when creating a new skill' };
+      }
+      if (!skillName?.trim()) {
+        return { success: false, error: 'Skill name is required when creating a new skill' };
+      }
+
+      // Check permission to manage the agent
+      await requireResourcePermission("agents:manage", "agent", agentId);
+
+      // Get agent for organizationId
+      const agentService = getAgentApplicationService();
+      const agent = await agentService.getAgent(AgentId.fromNumber(agentId));
+      if (!agent) {
+        return { success: false, error: 'Agent not found' };
+      }
+
+      // Create the skill with the plan
+      const createResult = await service.createSkill({
+        agentId,
+        organizationId: agent.organizationId.value,
+        name: skillName.trim(),
+        description: `Autonomous skill created from plan: ${storedPlan.goal}`,
+        instructions: storedPlan.goal,
+        inputs: [],
+        outputs: [],
+        tools: [],
+        executionType: 'agentic',
+        steps: [{
+          id: `step_${Date.now()}`,
+          name: 'Autonomous Execution',
+          nodeType: 'agentic' as const,
+          agenticConfig: {
+            instructions: storedPlan.goal,
+            tools: [],
+            plan: storedPlan,
+          },
+        }],
+      });
+
+      if (!createResult.success || !createResult.data) {
+        return { success: false, error: createResult.error || 'Failed to create skill' };
+      }
+
+      // Fetch the created skill
+      const newSkillResult = await service.getSkill(createResult.data.value);
+      if (!newSkillResult.success || !newSkillResult.data) {
+        return { success: false, error: 'Failed to fetch created skill' };
+      }
+
+      // AUDIT: Log skill creation with plan
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        OrganizationId.fromNumber(agent.organizationId.value),
+        {
+          eventType: 'agent',
+          eventCategory: 'skill_crud',
+          eventAction: 'create',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'skill',
+          resourceId: String(createResult.data.value),
+          resourceName: skillName,
+          parentResourceType: 'agent',
+          parentResourceId: String(agentId),
+          eventData: { action: 'create_with_autonomous_plan' },
+          success: true,
+        }
+      );
+
+      // Revalidate
+      revalidatePath(`/agents/${agentId}/skills`);
+      revalidatePath('/');
+
+      return {
+        success: true,
+        data: SkillMapper.toDTO(newSkillResult.data)
+      };
+    }
+  } catch (error) {
+    console.error('[savePlanToSkill] error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to save plan to skill'
+    };
+  }
+}
+
+/**
+ * Transfer an organization-level skill to an agent
+ * This changes the skill's scope from org-level to agent-scoped
+ */
+export async function transferSkillToAgent(
+  skillId: number,
+  agentId: number
+): Promise<Result<SkillDTO>> {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const service = getSkillApplicationService();
+
+    // Fetch skill to verify it's org-level
+    const skillResult = await service.getSkill(skillId);
+    if (!skillResult.success || !skillResult.data) {
+      return { success: false, error: 'Skill not found' };
+    }
+
+    const skill = skillResult.data;
+
+    // Verify skill is org-level (not already agent-scoped)
+    if (skill.agentId) {
+      return { success: false, error: 'Skill is already assigned to an agent' };
+    }
+
+    // Verify skill is not a system skill
+    if (skill.isSystem) {
+      return { success: false, error: 'System skills cannot be transferred' };
+    }
+
+    // Check permission to manage the org-level skill
+    await requireResourcePermission("skills:manage", "skill", skillId);
+
+    // Check permission to manage the target agent
+    await requireResourcePermission("agents:manage", "agent", agentId);
+
+    // Update the skill's agentId to transfer ownership
+    const updateResult = await service.updateSkillAgent(skillId, agentId);
+
+    if (!updateResult.success) {
+      return { success: false, error: updateResult.error || 'Failed to transfer skill' };
+    }
+
+    // Fetch updated skill
+    const updatedSkillResult = await service.getSkill(skillId);
+    if (!updatedSkillResult.success || !updatedSkillResult.data) {
+      return { success: false, error: 'Failed to fetch updated skill' };
+    }
+
+    // AUDIT: Log skill transfer
+    const auditService = getAuditApplicationService();
+    auditService.logEvent(
+      skill.organizationId,
+      {
+        eventType: 'agent',
+        eventCategory: 'skill_crud',
+        eventAction: 'update',
+        actorType: 'user',
+        actorId: session.user.id,
+        actorName: session.user.name || undefined,
+        resourceType: 'skill',
+        resourceId: String(skillId),
+        resourceName: skill.name,
+        parentResourceType: 'agent',
+        parentResourceId: String(agentId),
+        eventData: { action: 'transfer_to_agent', previousScope: 'organization' },
+        success: true,
+      }
+    );
+
+    // Revalidate paths
+    revalidatePath('/skills'); // Org skills page
+    revalidatePath(`/agents/${agentId}/skills`); // Agent skills page
+    revalidatePath('/manage'); // Org chart
+    revalidatePath('/');
+
+    return {
+      success: true,
+      data: SkillMapper.toDTO(updatedSkillResult.data)
+    };
+  } catch (error) {
+    console.error('[transferSkillToAgent] error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to transfer skill to agent'
+    };
+  }
+}

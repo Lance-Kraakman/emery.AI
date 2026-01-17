@@ -39,12 +39,15 @@ import {
   getNextGridSlotPosition,
   normalizeEdgeConnection,
 } from '@/components/org-chart/utils';
-import { DeleteConfirmationDialog, buildDeleteImpactItems } from '@/components/org-chart/dialogs';
+import { DeleteConfirmationDialog, buildDeleteImpactItems, AgentAssignmentDialog, type AssignmentConfig } from '@/components/org-chart/dialogs';
 import { extractDataSourceEdges, type DataSourceMapping } from '@/components/org-chart/edgeUtils';
 import { EntityPalette } from './EntityPalette';
 import { SearchDialog } from './SearchDialog';
 import { StickyNoteProvider } from '@/components/shared/StickyNoteContext';
 import { OrgChartDragProvider } from '@/components/org-chart/context';
+import { attachContextTable } from '@/app/actions/context-mappings';
+import { transferSkillToAgent, duplicateSkill } from '@/app/actions/skills';
+import { toast } from 'sonner';
 import type { OrgChartCanvasMetadata, OrgChartNodeType, AgentContainerNodeData, OrgChartEdge } from '@/components/org-chart/types';
 
 interface OrgChartCanvasProps {
@@ -116,6 +119,18 @@ export function OrgChartCanvas({
   const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Assignment dialog state for database/skill drops
+  const [assignmentDialog, setAssignmentDialog] = useState<{
+    isOpen: boolean;
+    mode: 'database' | 'org_skill';
+    entityId: number;
+    entityName: string;
+    targetAgent: { id: number; name: string };
+    pendingPosition: XYPosition;
+    // For database mode: tables from the database
+    tables?: Array<{ id: number; name: string }>;
+  } | null>(null);
+
   // Note: We don't pass onSelect to useOrgChart - we handle it in handleSelectionChange
   // so we have access to edges at selection time
 
@@ -179,23 +194,18 @@ export function OrgChartCanvas({
     event.dataTransfer.dropEffect = 'move';
   }, []);
 
-  // Handle drop from entity palette
+  // Handle drop from entity palette or existing entity drag
   const handleDrop = useCallback(
     async (event: React.DragEvent) => {
       event.preventDefault();
 
-      const entityType = event.dataTransfer.getData('application/orgchart-entity') as OrgChartNodeType;
-      if (!entityType || !onCreateEntity) return;
-
       // Get drop position in flow coordinates
-      // screenToFlowPosition expects screen/client coordinates directly
       const position = reactFlowInstance.screenToFlowPosition({
         x: event.clientX,
         y: event.clientY,
       });
 
-      // Check if dropping inside an agent container by checking bounds directly
-      // React Flow stores resized dimensions in node.width/height or node.measured, not node.style
+      // Check if dropping inside an agent container
       const agentNodes = nodes.filter((n) => n.type === 'agent');
       const targetAgent = agentNodes.find((agentNode) => {
         const nodeAny = agentNode as any;
@@ -212,6 +222,34 @@ export function OrgChartCanvas({
         ? (targetAgent.data as AgentContainerNodeData).agentId
         : null;
       const agentData = targetAgent?.data as AgentContainerNodeData | undefined;
+
+      // Check for existing entity drag first (from org-level nodes on canvas)
+      const existingEntityData = event.dataTransfer.getData('application/existing-entity');
+      if (existingEntityData) {
+        try {
+          const entity = JSON.parse(existingEntityData);
+
+          // Only handle if dropping org-level entity onto an agent
+          if (entity.agentId === null && targetAgent && agentId) {
+            setAssignmentDialog({
+              isOpen: true,
+              mode: entity.type === 'skill' ? 'org_skill' : 'database',
+              entityId: entity.id,
+              entityName: entity.name,
+              targetAgent: { id: agentId, name: agentData?.name || '' },
+              pendingPosition: position,
+              tables: entity.tables,
+            });
+          }
+        } catch (e) {
+          console.error('Failed to parse existing entity data:', e);
+        }
+        return;
+      }
+
+      // Handle new entity from palette
+      const entityType = event.dataTransfer.getData('application/orgchart-entity') as OrgChartNodeType;
+      if (!entityType || !onCreateEntity) return;
 
       // Create entity on server first, then add node at drop position
       switch (entityType) {
@@ -252,12 +290,85 @@ export function OrgChartCanvas({
               { id: createdDb.id, name: createdDb.name, slug: createdDb.slug || 'db', agentId },
               nodePosition
             );
+
+            // If dropped onto an agent, show config dialog for data source settings
+            if (targetAgent && agentId) {
+              const dbData = databases.find((d) => d.id === createdDb.id);
+              setAssignmentDialog({
+                isOpen: true,
+                mode: 'database',
+                entityId: createdDb.id,
+                entityName: createdDb.name,
+                targetAgent: { id: agentId, name: agentData?.name || '' },
+                pendingPosition: nodePosition,
+                tables: dbData?.tables,
+              });
+            }
           }
           break;
         }
       }
     },
-    [reactFlowInstance, onCreateEntity, addAgentNode, addSkillNode, addDatabaseNode, nodes]
+    [reactFlowInstance, onCreateEntity, addAgentNode, addSkillNode, addDatabaseNode, nodes, databases]
+  );
+
+  // Handle assignment dialog confirmation (data source config)
+  const handleAssignmentConfirm = useCallback(
+    async (config: AssignmentConfig) => {
+      if (!assignmentDialog) return;
+
+      const { mode, entityId, targetAgent } = assignmentDialog;
+
+      if (mode === 'database') {
+        // Attach database tables as agent-level data sources
+        const db = databases.find((d) => d.id === entityId);
+        if (db?.tables && db.tables.length > 0) {
+          // Attach each table as an agent data source
+          for (const table of db.tables) {
+            try {
+              await attachContextTable({
+                targetType: 'agent',
+                targetId: String(targetAgent.id),
+                tableId: table.id,
+                tableName: table.name,
+                accessMode: config.accessMode || 'readwrite',
+                syncMode: config.syncMode || 'on_access',
+              });
+            } catch (error) {
+              console.error('Failed to attach table:', error);
+              toast.error(`Failed to attach table ${table.name}`);
+            }
+          }
+          toast.success(`Database "${db.name}" configured as data source for ${targetAgent.name}`);
+        }
+      } else if (mode === 'org_skill') {
+        // Handle org skill transfer or clone
+        if (config.action === 'convert') {
+          const result = await transferSkillToAgent(entityId, targetAgent.id);
+          if (result.success) {
+            toast.success(`Skill transferred to ${targetAgent.name}`);
+          } else {
+            toast.error(result.error || 'Failed to transfer skill');
+          }
+        } else if (config.action === 'clone') {
+          const result = await duplicateSkill(entityId);
+          if (result.success && result.data) {
+            // The duplicated skill is org-level, we need to transfer it to the agent
+            const transferResult = await transferSkillToAgent(result.data.id, targetAgent.id);
+            if (transferResult.success) {
+              toast.success(`Skill copied to ${targetAgent.name}`);
+            } else {
+              toast.error(transferResult.error || 'Failed to copy skill');
+            }
+          } else {
+            toast.error(result.error || 'Failed to duplicate skill');
+          }
+        }
+      }
+
+      setAssignmentDialog(null);
+    },
+    [assignmentDialog, databases]
   );
 
   // Validate connection attempts - only allow valid edge types
@@ -777,6 +888,18 @@ export function OrgChartCanvas({
         isDeleting={isDeleting}
         itemsToDelete={deleteImpactItems}
       />
+
+      {/* Assignment dialog for data source/skill configuration */}
+      {assignmentDialog && (
+        <AgentAssignmentDialog
+          isOpen={assignmentDialog.isOpen}
+          onClose={() => setAssignmentDialog(null)}
+          onConfirm={handleAssignmentConfirm}
+          mode={assignmentDialog.mode}
+          entityName={assignmentDialog.entityName}
+          agentName={assignmentDialog.targetAgent.name}
+        />
+      )}
     </div>
     </OrgChartDragProvider>
   );

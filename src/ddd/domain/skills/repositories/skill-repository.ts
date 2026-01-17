@@ -47,6 +47,12 @@ export interface ISkillRepository {
   update(id: SkillId, updates: UpdateSkillProps): Promise<Skill>;
 
   /**
+   * Update the agent assignment for a skill
+   * Pass null to make the skill organization-level
+   */
+  updateAgent(id: SkillId, agentId: AgentId | null): Promise<Skill>;
+
+  /**
    * Delete a skill
    */
   delete(id: SkillId): Promise<void>;

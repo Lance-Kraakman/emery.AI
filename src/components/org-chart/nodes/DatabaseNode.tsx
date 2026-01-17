@@ -5,6 +5,7 @@
  *
  * Node representing a database with inline table list.
  * Shows icon, name, and all tables with connection handles.
+ * Org-level databases (agentId === null) can be dragged onto agent panels.
  */
 
 import React, { memo, useCallback } from 'react';
@@ -22,14 +23,43 @@ interface DatabaseNodeProps {
 
 export const DatabaseNode = memo(function DatabaseNode({ data, selected }: DatabaseNodeProps) {
   const router = useRouter();
-  const { name, tables = [] } = data;
+  const { name, tables = [], databaseId, agentId } = data;
+
+  // Org-level databases can be dragged onto agent panels
+  const isOrgLevel = agentId === null || agentId === undefined;
 
   const handleTableClick = useCallback((e: React.MouseEvent, tableId: number) => {
     e.stopPropagation();
     router.push(`/data/${tableId}?returnTo=org-chart%26selected=database-${data.databaseId}`);
   }, [router, data.databaseId]);
 
+  const handleDragStart = useCallback(
+    (e: React.DragEvent) => {
+      if (!isOrgLevel) {
+        e.preventDefault();
+        return;
+      }
+      e.dataTransfer.setData(
+        'application/existing-entity',
+        JSON.stringify({
+          type: 'database',
+          id: databaseId,
+          name: name,
+          agentId: agentId,
+          tables: tables,
+        })
+      );
+      e.dataTransfer.effectAllowed = 'move';
+    },
+    [isOrgLevel, databaseId, name, agentId, tables]
+  );
+
   return (
+    <div
+      draggable={isOrgLevel}
+      onDragStart={handleDragStart}
+      className={isOrgLevel ? 'cursor-grab active:cursor-grabbing' : ''}
+    >
     <BaseOrgChartNode name={name} selected={selected} nodeType="database">
       {tables.length > 0 ? (
         <div className="px-3 pb-2.5 space-y-0.5">
@@ -62,6 +92,7 @@ export const DatabaseNode = memo(function DatabaseNode({ data, selected }: Datab
         </div>
       )}
     </BaseOrgChartNode>
+    </div>
   );
 });
 

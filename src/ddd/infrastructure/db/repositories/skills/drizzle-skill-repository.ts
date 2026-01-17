@@ -185,6 +185,24 @@ export class DrizzleSkillRepository implements ISkillRepository {
     return this.toDomain(result[0]);
   }
 
+  async updateAgent(id: SkillId, agentId: AgentId | null): Promise<Skill> {
+    const result = await this.db
+      .update(skills)
+      .set({
+        agentId: agentId?.value || null,
+        ownerId: agentId ? null : undefined, // Clear ownerId when moving to agent (inherits from agent)
+        updatedAt: new Date(),
+      })
+      .where(eq(skills.id, id.value))
+      .returning();
+
+    if (result.length === 0) {
+      throw new Error(`Skill ${id.value} not found`);
+    }
+
+    return this.toDomain(result[0]);
+  }
+
   async delete(id: SkillId): Promise<void> {
     await this.db
       .delete(skills)
