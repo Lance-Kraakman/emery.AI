@@ -217,21 +217,21 @@ export function PagesSection({ appId, pages, loading, homePageId, onPagesChange 
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => handlePreviewPage(page)}>
+                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handlePreviewPage(page); }}>
                       <Monitor className="h-4 w-4 mr-2" />
                       Preview
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleEditPage(page)}>
+                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleEditPage(page); }}>
                       <Edit className="h-4 w-4 mr-2" />
                       Edit Content
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleEditPageMetadata(page)}>
+                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleEditPageMetadata(page); }}>
                       Edit Details
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     {homePageId === page.id ? (
                       <DropdownMenuItem
-                        onClick={handleRemoveHomePage}
+                        onClick={(e) => { e.stopPropagation(); handleRemoveHomePage(); }}
                         disabled={settingHomePage}
                       >
                         <Home className="h-4 w-4 mr-2" />
@@ -239,7 +239,7 @@ export function PagesSection({ appId, pages, loading, homePageId, onPagesChange 
                       </DropdownMenuItem>
                     ) : (
                       <DropdownMenuItem
-                        onClick={() => handleSetHomePage(page)}
+                        onClick={(e) => { e.stopPropagation(); handleSetHomePage(page); }}
                         disabled={settingHomePage}
                       >
                         <Home className="h-4 w-4 mr-2" />
@@ -249,7 +249,7 @@ export function PagesSection({ appId, pages, loading, homePageId, onPagesChange 
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       className="text-destructive"
-                      onClick={() => setDeletingPage(page)}
+                      onClick={(e) => { e.stopPropagation(); setDeletingPage(page); }}
                     >
                       <Trash2 className="h-4 w-4 mr-2" />
                     </DropdownMenuItem>
