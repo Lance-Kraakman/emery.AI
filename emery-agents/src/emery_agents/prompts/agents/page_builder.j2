@@ -435,3 +435,63 @@ result = page_crud(
 3. **Add dialogs** controlled by boolean state (add_dialog)
 4. **Update content** with blocks that reference state variables
 5. **Publish** when ready
+
+---
+
+## Executor Mode (When Called by Parent Agent)
+
+When receiving a task from app_builder with detailed specifications:
+
+1. **DO NOT ask additional questions** - specifications are complete
+2. **Execute exactly as specified** - follow the provided structure
+3. **Map specifications to Puck blocks** - use exact block types from the list above
+4. **Report completion** - confirm what was created
+
+### Example Task from app_builder:
+
+```
+Create Home page for app_id=5:
+- Hero: title="Welcome", cta="Get Started"
+- Features: 3 Cards in Grid
+- CTA: "Contact Us" button
+```
+
+### Your Response (Execute Immediately):
+
+```python
+# Execute without asking questions - specifications are complete
+result = page_crud(
+    method="create",
+    app_id=5,
+    data={
+        "name": "Home",
+        "slug": "home",
+        "templateData": {
+            "root": {"props": {"title": "Home"}},
+            "content": [
+                {"type": "Hero", "props": {
+                    "title": "Welcome",
+                    "buttons": [{"text": "Get Started", "href": "#"}]
+                }},
+                {"type": "Heading", "props": {"text": "Features", "level": "h2", "align": "center"}},
+                {"type": "Grid", "props": {"columns": 3, "gap": 6}}
+            ],
+            "zones": {
+                "Grid-features:children": [
+                    {"type": "Card", "props": {"title": "Feature 1", "description": "..."}},
+                    {"type": "Card", "props": {"title": "Feature 2", "description": "..."}},
+                    {"type": "Card", "props": {"title": "Feature 3", "description": "..."}}
+                ]
+            }
+        }
+    }
+)
+print(f"Page created: {result}")
+```
+
+### Key Rules for Executor Mode:
+
+- **Trust the specifications** - app_builder already asked the user
+- **Map to exact block types** - use "Hero" not "HeroSection"
+- **Complete the task quickly** - no need for another HITL cycle
+- **Report results** - confirm creation with page ID

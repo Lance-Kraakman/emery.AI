@@ -29,6 +29,7 @@ from ...tools.tool_executor import create_tool_executor
 from ...services.tool_provider import ToolProvider
 from ...services.model_provider import SmolagentsModelProvider
 from ...services.agent_api_service import AgentAPIService
+from ...services.research_tools_provider import get_research_tools
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,27 @@ class ManagedAgentsFactory:
             model_provider: Provider for LLM model instances
         """
         self.model_provider = model_provider
+
+    def _get_research_tools(self) -> List[Any]:
+        """
+        Get research tools for parent/orchestrator agents.
+
+        Returns DuckDuckGoSearchTool and VisitWebpageTool for gathering context
+        before planning. Parent agents use these to analyze reference URLs,
+        research domain patterns, and gather information for comprehensive
+        planning that covers sub-agent work.
+
+        Returns:
+            List of research tools, empty if unavailable
+        """
+        try:
+            research_tools = get_research_tools()
+            if research_tools:
+                logger.debug(f"Research tools available: {[t.name for t in research_tools]}")
+            return research_tools
+        except Exception as e:
+            logger.warning(f"Could not get research tools: {e}")
+            return []
 
     def create_chat_planner(
         self,
@@ -208,9 +230,14 @@ class ManagedAgentsFactory:
 
         This agent uses HITL workflow for designing schemas from requirements:
         - Analyzes unstructured data (questionnaires, forms, specs)
+        - Uses research tools to understand domain patterns
         - Proposes table structure with all fields
         - Waits for user approval
         - Batch creates fields on approval
+
+        AIDEV-NOTE: As an orchestrator agent, schema_builder gets research tools
+        (DuckDuckGoSearchTool, VisitWebpageTool) to gather context before planning.
+        This enables comprehensive planning that covers table_builder work.
         """
         tools = tool_provider.get_schema_builder_tools()
         database_crud_tool, table_crud_tool, field_crud_tool = tools[0], tools[1], tools[2]
@@ -223,13 +250,16 @@ class ManagedAgentsFactory:
             max_steps=8
         )
 
+        # Add research tools for context gathering before planning
+        research_tools = self._get_research_tools()
+
         schema_builder = create_schema_builder_agent(
-            tools=[tool_executor],
+            tools=[tool_executor] + research_tools,
             model=model,
             max_steps=15
         )
 
-        logger.info("Created Schema Builder agent (HITL) with ToolExecutor sub-agent")
+        logger.info(f"Created Schema Builder agent (HITL) with ToolExecutor + {len(research_tools)} research tools")
         return schema_builder
 
     def create_research_agent(
@@ -308,10 +338,10 @@ class ManagedAgentsFactory:
         Includes page_builder as a managed_agent for delegating complex page
         creation tasks (especially when reference URLs are provided).
 
-        AIDEV-NOTE: Even though page_builder is available as managed_agent,
-        the main planner can also route directly to page_builder for proper
-        cascade planning with HITL. The managed_agent relationship provides
-        flexibility for internal delegation.
+        AIDEV-NOTE: As an orchestrator agent, app_builder gets research tools
+        (DuckDuckGoSearchTool, VisitWebpageTool) to gather context before planning.
+        This enables comprehensive planning that covers page_builder work, including
+        analyzing reference URLs and asking HITL questions about page content.
         """
         tools = tool_provider.get_app_builder_tools()
         app_crud_tool, page_crud_tool = tools[0], tools[1]
@@ -324,18 +354,21 @@ class ManagedAgentsFactory:
             max_steps=5
         )
 
+        # Add research tools for context gathering before planning
+        research_tools = self._get_research_tools()
+
         # Create page_builder as managed agent for complex page creation
         # page_builder has research capability and full Puck block knowledge
         page_builder = self.create_page_builder(tool_provider, org_model)
 
         app_builder = create_app_builder_agent(
-            tools=[tool_executor],
+            tools=[tool_executor] + research_tools,
             model=model,
             max_steps=10,
             managed_agents=[page_builder],
         )
 
-        logger.info("Created App Builder agent with ToolExecutor + page_builder sub-agent")
+        logger.info(f"Created App Builder agent with ToolExecutor + {len(research_tools)} research tools + page_builder")
         return app_builder
 
     def create_page_builder(
@@ -648,7 +681,10 @@ class ManagedAgentsFactory:
         model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
 
         def schema_builder_factory(**kwargs: Any) -> Any:
-            """Factory for schema_builder with cascade planning support."""
+            """Factory for schema_builder with cascade planning support.
+
+            AIDEV-NOTE: Includes research tools for comprehensive planning.
+            """
             tools = tool_provider.get_schema_builder_tools()
             database_crud, table_crud, field_crud = tools[0], tools[1], tools[2]
             tool_executor = create_tool_executor(
@@ -656,8 +692,10 @@ class ManagedAgentsFactory:
                 model=model,
                 max_steps=8
             )
+            # Add research tools for context gathering
+            research_tools = self._get_research_tools()
             return create_schema_builder_agent(
-                tools=[tool_executor],
+                tools=[tool_executor] + research_tools,
                 model=model,
                 max_steps=15,
                 **kwargs  # Accept planning_callback, planning_only, extra_tools
@@ -738,7 +776,8 @@ class ManagedAgentsFactory:
         def app_builder_factory(**kwargs: Any) -> Any:
             """Factory for app_builder with cascade planning support.
 
-            AIDEV-NOTE: Includes page_builder as managed_agent for delegation.
+            AIDEV-NOTE: Includes research tools for comprehensive planning
+            and page_builder as managed_agent for delegation.
             """
             tools = tool_provider.get_app_builder_tools()
             app_crud, page_crud = tools[0], tools[1]
@@ -748,11 +787,14 @@ class ManagedAgentsFactory:
                 max_steps=5
             )
 
+            # Add research tools for context gathering
+            research_tools = self._get_research_tools()
+
             # Create page_builder as managed agent
             page_builder = page_builder_factory(**kwargs)
 
             return create_app_builder_agent(
-                tools=[tool_executor],
+                tools=[tool_executor] + research_tools,
                 model=model,
                 max_steps=10,
                 managed_agents=[page_builder],

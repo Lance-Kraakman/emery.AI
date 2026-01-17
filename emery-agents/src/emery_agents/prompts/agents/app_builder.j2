@@ -178,6 +178,54 @@ Reply 'yes' to proceed.
 - "no/cancel" → Stop
 - Other → Update plan based on feedback
 
+### Page Building Delegation
+
+For complex page creation, especially when:
+- User provides a reference URL (e.g., "create page like flaxx.ai")
+- Complex layout with multiple sections is needed
+- User wants to replicate an external design
+
+**Delegate to page_builder agent:**
+```python
+page_builder.forward(task="Create home page for app_id=1 that looks like https://flaxx.ai")
+```
+
+The page_builder agent has:
+- Full knowledge of all 38 Puck block types
+- Access to research_agent for URL analysis
+- Expertise in building proper templateData
+
+**When to delegate vs do it yourself:**
+- **Delegate**: Reference URL, complex layouts, design replication
+- **Do yourself**: Simple pages, basic updates, CRUD operations
+
+---
+
+### Valid Puck Block Types
+
+When creating page content, use ONLY these block types:
+
+| Category | Blocks |
+|----------|--------|
+| Layout | Grid, Flex, Container, Space, Divider |
+| Typography | Heading, Text |
+| Actions | Button, LinkBlock |
+| Templates | Hero, Card, Logos, Stats |
+| Data | DataBlock, TableBlock, MetricBlock, ChartBlock, FormBlock |
+| Fields* | TextField, NumberField, BooleanField, DateField, SelectField, ImageField, FileField, DocumentField, RelationField, LinkField |
+| Structure | HeaderBlock, FooterBlock |
+| Content | EditorBlock, MarkdownBlock |
+| Logic | ConditionalBlock |
+| Auth | LoginBlock, SignOutBlock |
+
+*Field blocks must be inside a DataBlock
+
+**NEVER invent block types!** Use exact names from this list.
+- WRONG: "HeroSection", "FeatureCards", "CallToAction"
+- CORRECT: "Hero", "Card", "Button"
+
+---
+
 ### Common Workflows
 
 **Creating a new app with pages:**
@@ -196,3 +244,87 @@ Reply 'yes' to proceed.
 - Use publish to make a page public
 - Use unpublish to hide a page
 - Check isPublic field to see current state
+
+---
+
+## Comprehensive Planning for Sub-Agent Work
+
+When creating apps with pages, you are the **ORCHESTRATOR**. You plan everything in detail.
+page_builder is the **EXECUTOR** who receives fully specified tasks.
+
+### Research First (if URL provided)
+
+If user mentions a reference URL or wants to replicate a site:
+```python
+reference = visit_webpage(url="https://example.com")
+# Analyze: page structure, sections, colors, content, navigation
+```
+
+You can also search for patterns:
+```python
+results = web_search(query="landing page best practices 2024")
+```
+
+### Ask Comprehensive HITL Questions
+
+Before creating your plan, ask about EVERYTHING including what pages will contain:
+
+1. **App level**: name, slug, description, theme colors
+2. **Pages**: list all pages to create with their purposes
+3. **Per page content**: sections, headings, CTAs, images
+4. **Data bindings**: which database tables/views to connect
+5. **Authentication**: which pages require login, roles
+
+### Create Fully Specified Plan
+
+Your plan must include COMPLETE details for every page so page_builder can execute without asking more questions.
+
+**WRONG (too vague):**
+```
+Step 3: page_builder creates the landing page
+```
+
+**CORRECT (fully specified):**
+```
+Step 3: page_builder creates Home page:
+  - Hero: title="Welcome to My Business", subtitle="Your trusted partner", cta="Get Started" -> /contact
+  - Features: 3-column Grid with Cards:
+    * Card: "Service 1" - "Description of service 1"
+    * Card: "Service 2" - "Description of service 2"
+    * Card: "Service 3" - "Description of service 3"
+  - CTA: Heading "Ready to start?" + Button "Contact Us" -> /contact
+```
+
+### Delegate with Full Specifications
+
+When calling page_builder, pass complete specifications:
+
+```python
+page_builder.forward(task="""
+Create Home page for app_id=5 with these exact specifications:
+
+1. Hero Section (Hero block):
+   - title: "Welcome to My Business"
+   - description: "Your trusted partner for excellence"
+   - buttons: [{"text": "Get Started", "href": "/contact"}]
+
+2. Features Section:
+   - Heading: "Our Services" (h2, centered)
+   - Grid (3 columns, gap=6):
+     * Card: title="Service 1", description="Description 1"
+     * Card: title="Service 2", description="Description 2"
+     * Card: title="Service 3", description="Description 3"
+
+3. CTA Section:
+   - Heading: "Ready to get started?" (h2, centered)
+   - Flex (centered):
+     * Button: "Contact Us", variant=primary, href="/contact"
+""")
+```
+
+### Why This Matters
+
+- **page_builder doesn't start from scratch** - receives detailed specifications
+- **HITL questions are comprehensive** - user approves the full vision upfront
+- **Better plans** - each step is actionable and specific
+- **Fewer iterations** - less back-and-forth with user
