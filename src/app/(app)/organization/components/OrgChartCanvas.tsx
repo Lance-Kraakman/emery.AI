@@ -152,9 +152,12 @@ export function OrgChartCanvas({
     targetAgentData?: AgentContainerNodeData;
   } | null>(null);
 
-  // Template picker for drops
+  // Template picker for drops - stores all drop context so it persists when popover closes
   const [dropTemplatePicker, setDropTemplatePicker] = useState<{
     entityType: 'agent' | 'skill' | 'database';
+    flowPosition: XYPosition;
+    targetAgentId: number | null;
+    targetAgentData?: AgentContainerNodeData;
   } | null>(null);
 
   // Note: We don't pass onSelect to useOrgChart - we handle it in handleSelectionChange
@@ -411,18 +414,20 @@ export function OrgChartCanvas({
   const handleSelectTemplate = useCallback(() => {
     if (!pendingDrop) return;
 
-    const { entityType } = pendingDrop;
+    const { entityType, flowPosition, targetAgentId, targetAgentData } = pendingDrop;
     if (entityType === 'agent' || entityType === 'skill' || entityType === 'database') {
-      setDropTemplatePicker({ entityType });
+      // Store all drop context in dropTemplatePicker so it persists when popover closes
+      setDropTemplatePicker({ entityType, flowPosition, targetAgentId, targetAgentData });
+      setPendingDrop(null); // Close the popover
     }
   }, [pendingDrop]);
 
   // Handle builtin template selection from TemplatePickerDialog
   const handleDropSelectBuiltinTemplate = useCallback(
     async (templateId: string) => {
-      if (!pendingDrop) return;
+      if (!dropTemplatePicker) return;
 
-      const { entityType, flowPosition, targetAgentId, targetAgentData } = pendingDrop;
+      const { entityType, flowPosition, targetAgentId, targetAgentData } = dropTemplatePicker;
 
       switch (entityType) {
         case 'agent': {
@@ -473,18 +478,17 @@ export function OrgChartCanvas({
       }
 
       setDropTemplatePicker(null);
-      setPendingDrop(null);
     },
-    [pendingDrop, addAgentNode, addSkillNode, addDatabaseNode]
+    [dropTemplatePicker, addAgentNode, addSkillNode, addDatabaseNode]
   );
 
   // Handle saved template selection from TemplatePickerDialog
   const handleDropSelectSavedTemplate = useCallback(
     async (templateId: number) => {
-      if (!pendingDrop) return;
+      if (!dropTemplatePicker) return;
 
       // For now, navigate to creation page with template - can be enhanced to apply immediately
-      const { entityType } = pendingDrop;
+      const { entityType } = dropTemplatePicker;
       switch (entityType) {
         case 'skill':
           router.push(`/skills/new?templateId=${templateId}`);
@@ -498,9 +502,8 @@ export function OrgChartCanvas({
       }
 
       setDropTemplatePicker(null);
-      setPendingDrop(null);
     },
-    [pendingDrop, router]
+    [dropTemplatePicker, router]
   );
 
   // Handle assignment dialog confirmation (data source config)
@@ -1181,10 +1184,7 @@ export function OrgChartCanvas({
       {dropTemplatePicker && (
         <TemplatePickerDialog
           isOpen={true}
-          onClose={() => {
-            setDropTemplatePicker(null);
-            setPendingDrop(null);
-          }}
+          onClose={() => setDropTemplatePicker(null)}
           entityType={dropTemplatePicker.entityType}
           onSelectBuiltin={handleDropSelectBuiltinTemplate}
           onSelectSaved={handleDropSelectSavedTemplate}
