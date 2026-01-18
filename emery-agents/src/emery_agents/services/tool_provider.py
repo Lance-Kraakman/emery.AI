@@ -24,6 +24,7 @@ from ..tools.table_tools import load_table_crud
 from ..tools.field_tools import load_field_crud
 from ..tools.row_tools import load_row_crud
 from ..tools.app_tools import load_app_crud, load_page_crud
+from ..tools.view_tools import load_view_crud
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,7 @@ class ToolProvider:
     TOOL_NAMES = [
         "database_crud", "table_crud", "field_crud", "row_crud",
         "skill_crud", "document_crud", "app_crud", "page_crud",
-        "agent_crud",
+        "agent_crud", "view_crud",
     ]
 
     def __init__(self, api_key: str, organization_id: int):
@@ -136,11 +137,20 @@ class ToolProvider:
 
     def get_app_builder_tools(self) -> List[Tool]:
         """Get tools for app builder agent."""
-        return [self.get("app_crud"), self.get("page_crud")]
+        return [self.get("app_crud"), self.get("page_crud"), self.get("view_crud")]
 
     def get_agent_builder_tools(self) -> List[Tool]:
         """Get tools for agent builder agent."""
         return [self.get("agent_crud"), self.get("skill_crud")]
+
+    def get_view_builder_tools(self) -> List[Tool]:
+        """Get tools for view builder agent."""
+        return [
+            self.get("database_crud"),  # Understand database structure
+            self.get("table_crud"),      # List/read tables
+            self.get("field_crud"),      # Understand field types
+            self.get("view_crud"),       # Create/manage views
+        ]
 
     # -------------------------
     # Tool Factory
@@ -169,6 +179,7 @@ class ToolProvider:
             "app_crud": load_app_crud,
             "page_crud": load_page_crud,
             "agent_crud": load_agent_crud,
+            "view_crud": load_view_crud,
         }
 
         if name not in loaders:

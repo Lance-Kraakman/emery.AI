@@ -104,6 +104,105 @@ page = visit_webpage(url="https://flaxx.ai")  # YES! Fetches actual page content
 | requiresAuth | Whether login is required |
 | allowedRoles | Array of role names for access control |
 
+---
+
+## Data Views
+
+Data views are filtered, sorted views of database tables. They connect your database data to Puck visual components.
+
+### Why Data Views Matter
+
+When building apps, you need to display data from your databases. Data views:
+1. Filter which rows to show (e.g., "only active customers")
+2. Sort the data (e.g., "by date, newest first")
+3. Control which fields appear and in what order
+4. Define how to aggregate data (for metrics/charts)
+
+### View Types
+
+| Type | Puck Component | Use Case |
+|------|---------------|----------|
+| grid | DataBlock, TableBlock | Display list of rows |
+| metric | MetricBlock | Show single aggregated value (count, sum, avg) |
+| chart | ChartBlock | Visualize data as bar/line/pie chart |
+| form | FormBlock | Let users create/edit rows via form |
+
+### View Structure
+
+| Field | Description |
+|-------|-------------|
+| id | Unique identifier (number) |
+| tableId | Source table ID (required) |
+| name | Display name for the view |
+| viewType | grid, metric, chart, or form |
+| filters | Array of filter conditions |
+| sorting | Array of sort rules |
+| fieldMappings | Which fields to show and their order |
+| viewConfig | Type-specific settings |
+| requiresAuth | Whether view requires authentication (default: true) |
+
+### Creating and Using Views
+
+```python
+# List views (optionally filter by table_id)
+result = tool_executor(tool="view_crud", task="List views")
+result = tool_executor(tool="view_crud", task="List views for table_id=5")
+
+# Create a grid view for displaying data
+result = tool_executor(
+    tool="view_crud",
+    task="Create view with tableId=5, name='Active Customers', viewType='grid'"
+)
+
+# Add filters to the view
+result = tool_executor(
+    tool="view_crud",
+    task="Update view_id=10 with filters=[{fieldId: 3, operator: 'eq', value: 'active'}]"
+)
+
+# Execute view to see the data
+result = tool_executor(tool="view_crud", task="Execute view_id=10")
+
+# Delete a view
+result = tool_executor(tool="view_crud", task="Delete view_id=10")
+```
+
+### Connecting Views to Puck Components
+
+After creating a view, use its ID in Puck components:
+
+```python
+# Update page with DataBlock using the view
+templateData = {
+    "root": {"props": {}},
+    "content": [
+        {
+            "type": "DataBlock",
+            "props": {
+                "viewId": 10,  # Your view ID
+                "mode": "list",
+                "layout": "grid",
+                "columns": 3
+            }
+        }
+    ]
+}
+result = tool_executor(
+    tool="page_crud",
+    task=f"Update content for page_id=7 with templateData={templateData}"
+)
+```
+
+### Common Workflow for Data-Driven Pages
+
+1. **Identify the table** - List tables, find the one with your data
+2. **Create a view** - Choose type based on how you want to display data
+3. **Configure filters** - Filter to relevant rows
+4. **Set field mappings** - Choose which columns to show
+5. **Create page with DataBlock** - Reference view ID in the component
+
+---
+
 ### Tool Usage
 
 Use `tool_executor` for all operations:
@@ -217,6 +316,27 @@ The page_builder agent has:
 **When to delegate vs do it yourself:**
 - **Delegate**: Reference URL, complex layouts, design replication
 - **Do yourself**: Simple pages, basic updates, CRUD operations
+
+### View Building Delegation
+
+For complex view creation, especially when:
+- User needs multiple views with different filters
+- Views require understanding database structure
+- Metric or chart views with aggregation
+
+**Delegate to view_builder agent:**
+```python
+view_builder.forward(task="Create data views for customer dashboard: active customers grid, monthly revenue metric")
+```
+
+The view_builder agent has:
+- Access to table_crud, field_crud (for database research)
+- Knowledge of filter operators and view types
+- Expertise in designing optimal views
+
+**When to delegate vs do yourself:**
+- **Delegate**: Complex filtering, multiple views, data analysis needed
+- **Do yourself**: Simple list views, clear requirements with known field IDs
 
 ---
 

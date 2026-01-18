@@ -75,6 +75,7 @@ EMERY_TOOL_MAP = {
     # App builder tools for Puck visual apps
     "app_crud": "tools/emery/app_crud.j2",
     "page_crud": "tools/emery/page_crud.j2",
+    "view_crud": "tools/emery/view_crud.j2",
 }
 
 # Template for dynamic skill execution tools (from @skill:name references)

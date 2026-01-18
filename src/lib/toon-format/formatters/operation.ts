@@ -18,7 +18,7 @@ import { escapeToonValue, type ToonConfig } from '../formatter';
  */
 export interface OperationResult {
   action: 'created' | 'updated' | 'deleted' | 'published' | 'unpublished';
-  entity: 'database' | 'table' | 'field' | 'row' | 'app' | 'page' | 'page_content' | 'page_state' | 'page_dialog';
+  entity: 'database' | 'table' | 'field' | 'row' | 'app' | 'page' | 'page_content' | 'page_state' | 'page_dialog' | 'view';
   id: string | number;
   data?: Record<string, unknown>;
 }

@@ -1,0 +1,123 @@
+## view_crud Tool - Data View Management
+
+Data views are filtered, sorted views of database tables that connect to Puck visual components.
+
+### Methods
+| Method | Description | Required Params |
+|--------|-------------|-----------------|
+| list | List views | (optional: table_id) |
+| read | Get view by ID | view_id |
+| create | Create view | data.tableId, data.name, data.viewType |
+| update | Update view config | view_id, data |
+| delete | Delete view | view_id |
+| execute | Run view query | view_id |
+
+### View Fields
+- `id`: Unique view identifier
+- `tableId`: Source table ID (required)
+- `name`: Display name for the view
+- `viewType`: grid, metric, chart, or form
+- `filters`: Array of filter conditions
+- `sorting`: Array of sort rules
+- `fieldMappings`: Which fields to show and their order
+- `viewConfig`: Type-specific settings
+- `requiresAuth`: Whether view requires authentication (default: true)
+
+### View Types
+| Type | Puck Component | Use Case |
+|------|---------------|----------|
+| grid | DataBlock, TableBlock | Display list of rows |
+| metric | MetricBlock | Single aggregated value (count, sum, avg) |
+| chart | ChartBlock | Data visualization (bar, line, pie) |
+| form | FormBlock | Create/edit rows via form |
+
+---
+
+### Filter Format
+```json
+{"fieldId": 5, "operator": "eq", "value": "active"}
+```
+
+**Operators:**
+- `eq` - equals
+- `neq` - not equals
+- `gt` - greater than
+- `gte` - greater than or equal
+- `lt` - less than
+- `lte` - less than or equal
+- `contains` - text contains
+- `starts_with` - text starts with
+- `ends_with` - text ends with
+- `is_null` - value is null
+- `is_not_null` - value is not null
+
+### Sorting Format
+```json
+{"fieldId": 5, "direction": "asc", "priority": 1}
+```
+
+---
+
+### Examples
+
+**List all views:**
+```python
+view_crud(method="list")
+```
+
+**List views for a specific table:**
+```python
+view_crud(method="list", table_id=5)
+```
+
+**Read a view:**
+```python
+view_crud(method="read", view_id=10)
+```
+
+**Create a grid view:**
+```python
+view_crud(method="create", data={
+    "tableId": 5,
+    "name": "Active Customers",
+    "viewType": "grid"
+})
+```
+
+**Create a view with filters:**
+```python
+view_crud(method="create", data={
+    "tableId": 5,
+    "name": "Active Customers",
+    "viewType": "grid",
+    "filters": [{"fieldId": 3, "operator": "eq", "value": "active"}],
+    "sorting": [{"fieldId": 1, "direction": "asc", "priority": 1}]
+})
+```
+
+**Update view filters:**
+```python
+view_crud(method="update", view_id=10, data={
+    "filters": [{"fieldId": 3, "operator": "eq", "value": "inactive"}]
+})
+```
+
+**Execute view to get rows:**
+```python
+view_crud(method="execute", view_id=10)
+```
+
+**Delete a view:**
+```python
+view_crud(method="delete", view_id=10)
+```
+
+---
+
+### Response Format (TOON)
+- Success create: `view:created,10,Active Customers,grid`
+- Success update: `view:updated,10,Active Customers`
+- Success delete: `view:deleted,10,Active Customers`
+- List: `views[3]{id,tableId,name,viewType}:...`
+- Execute: `rows[50/200]{id,name,email}:...`
+- Failure: `FAILED: error message`
