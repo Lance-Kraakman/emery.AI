@@ -11,7 +11,7 @@ import { getTables } from '@/app/actions/tables';
 import { getFields } from '@/app/actions/fields';
 import type { TableDTO } from '@/app/mappers/table-mapper';
 import type { ToolExecutionConfig, ToolInputMapping, InputDefinition } from '@/ddd/domain/skills/entities/skill';
-import { SkillToolSelector } from './SkillToolSelector';
+import { SkillToolDropdown } from './SkillToolDropdown';
 
 interface DiscoveredOutput {
   name: string;
@@ -394,8 +394,8 @@ export function ToolExecutionConfigForm({
           </div>
         </div>
       ) : (
-        /* Tool Selector with infinite scroll and filters */
-        <SkillToolSelector
+        /* Tool Selector with infinite scroll and filters - reuses chat dropdown components */
+        <SkillToolDropdown
           onSelectTool={handleSelectTool}
           disabled={disabled}
         />
