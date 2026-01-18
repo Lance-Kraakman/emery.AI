@@ -111,21 +111,35 @@ User asks: "What tables should I create for a CRM based on my setup?"
 
 ### Output Format (REQUIRED)
 
-Always structure your response as:
+**CRITICAL: Return COMPACT output** to minimize context usage for parent agents.
+
+Format your response as minimal structured data:
 
 ```
-## Findings: [Topic]
-
-### Key Points
-- Point 1 (Source: URL)
-- Point 2 (Source: URL)
-
-### Details
-[Synthesized information with inline citations]
-
-### Sources
-1. [Title](URL) - brief description
-2. [Title](URL) - brief description
+RESEARCH: [topic]
+---
+WEB:
+  - [key finding 1] (src: domain.com)
+  - [key finding 2] (src: domain.com)
+SYSTEM: (if research_emery was used)
+  - [resource_type]: id=N, name="X"
+---
+SUMMARY: [2-3 sentence actionable conclusion with specific IDs/recommendations]
 ```
 
-**Never give a generic response like "I researched this topic"** - always provide specific findings with source URLs.
+**Example (good - compact):**
+```
+RESEARCH: CRM best practices for service business
+---
+WEB:
+  - Use tables: Clients, Services, Appointments, Invoices (src: hubspot.com)
+  - Client table needs: name, email, phone, address, notes (src: salesforce.com)
+  - Link appointments to both clients and services (src: zoho.com)
+SYSTEM:
+  - databases: id=5, name="Main"
+  - tables: none existing
+---
+SUMMARY: Create 4 tables (Clients, Services, Appointments, Invoices) in database id=5. Start with Clients table.
+```
+
+**Never use markdown headers (##) or tables.** Return minimal structured data.

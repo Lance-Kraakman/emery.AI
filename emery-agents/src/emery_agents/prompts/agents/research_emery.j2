@@ -105,24 +105,49 @@ system_research(resource_type="audit", filters={"resourceType": "skill", "resour
 
 ### Output Format (REQUIRED)
 
-Always structure your response as:
+**CRITICAL: Return COMPACT TOON-style output** to minimize context usage.
+
+Format your response as minimal structured data:
 
 ```
-## System Research: [Topic]
+RESEARCH: [topic]
+---
+[resource_type]:
+  - id=N, name="X", [key_field]="value"
+  - id=M, name="Y", [key_field]="value"
+[another_type]:
+  - id=P, name="Z", [key_field]="value"
+---
+SUMMARY: [1-2 sentence conclusion with most important IDs]
+```
+
+**Example (good - compact):**
+```
+RESEARCH: CRM resources
+---
+databases:
+  - id=5, name="Main"
+tables:
+  - id=12, name="Customers", fields=[name,email,phone]
+  - id=13, name="Orders", fields=[date,total,customer_id]
+apps: none
+---
+SUMMARY: Found 1 database (id=5) with 2 tables. No apps exist yet.
+```
+
+**Example (bad - verbose):**
+```
+## System Research: CRM Resources
 
 ### Found Resources
-- [Resource Type] count: N
+- Databases: 1
+- Tables: 2
 
 ### Details
-| ID | Name | Key Info |
-|----|------|----------|
-| ... | ... | ... |
-
-### Relationships
-- [Notable connections between resources]
-
-### Recommendations
-- [Suggestions for further exploration or actions]
+| ID | Name | Fields |
+|----|------|--------|
+| 12 | Customers | name, email, phone |
+...
 ```
 
-**Never give a generic response like "I searched the system"** - always provide specific findings with resource IDs and names.
+**Never use markdown tables or headers.** Return minimal structured data with IDs.
