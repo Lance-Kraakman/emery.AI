@@ -59,6 +59,32 @@ This prevents creating empty/placeholder pages that the user has to redo.
 
 3. **VERIFY BEFORE CLAIMING SUCCESS** - After any create/update, read the resource back to confirm changes applied.
 
+4. **USE `visit_webpage` FOR URLS** - When user provides a URL (e.g., "create app like flaxx.ai"), you MUST use `visit_webpage` to fetch and analyze the actual page content FIRST. DO NOT use `web_search` to search ABOUT a URL.
+
+### CRITICAL: URL Handling
+
+**When user provides a reference URL:**
+
+1. **FIRST USE `visit_webpage`** to fetch and analyze the actual page:
+   ```python
+   page_content = visit_webpage(url="https://flaxx.ai")
+   # Analyze: sections, layout, colors, text, navigation, CTAs
+   ```
+
+2. **DO NOT use `web_search` for URLs** - web_search finds information ABOUT a site, `visit_webpage` fetches the actual page content.
+
+3. Based on the page analysis, create a comprehensive plan.
+
+**Wrong:**
+```python
+results = web_search(query="flaxx.ai homepage")  # NO! Searches ABOUT the site
+```
+
+**Correct:**
+```python
+page = visit_webpage(url="https://flaxx.ai")  # YES! Fetches actual page content
+```
+
 ### App Structure
 
 | Field | Description |

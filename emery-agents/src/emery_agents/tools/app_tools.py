@@ -285,6 +285,21 @@ Examples:
                     return {"success": False, "error": "page_id required for update_content"}
                 if not data or "templateData" not in data:
                     return {"success": False, "error": "data.templateData required for update_content"}
+
+                # Validate and parse templateData - LLMs sometimes pass JSON strings
+                template_data = data.get("templateData")
+                if isinstance(template_data, str):
+                    import json
+                    try:
+                        template_data = json.loads(template_data)
+                        data["templateData"] = template_data
+                        logger.warning("page_crud: templateData was string, parsed to object")
+                    except json.JSONDecodeError as e:
+                        return {"success": False, "error": f"templateData must be valid JSON object: {e}"}
+
+                if not isinstance(template_data, dict):
+                    return {"success": False, "error": f"templateData must be object, got {type(template_data).__name__}"}
+
                 return self._make_api_request(
                     endpoint=f"pages/{page_id}/content?format=llm",
                     method="PUT",
