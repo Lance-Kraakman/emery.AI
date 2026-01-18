@@ -8,6 +8,7 @@ AIDEV-NOTE: Both tools use format=llm for TOON responses to minimize token usage
 """
 
 import logging
+import uuid
 from typing import Any, Dict, Optional, Union
 
 from smolagents import Tool
@@ -15,6 +16,37 @@ from smolagents import Tool
 from .crud_tools import BaseCrudTool
 
 logger = logging.getLogger(__name__)
+
+
+def ensure_block_ids(template_data: Dict) -> Dict:
+    """
+    Auto-generate id for any block missing it in content and zones.
+
+    Puck requires every block to have a unique id prop.
+    LLMs don't generate these, so we add them automatically.
+    """
+    if not isinstance(template_data, dict):
+        return template_data
+
+    # Process content array
+    content = template_data.get("content", [])
+    if isinstance(content, list):
+        for item in content:
+            if isinstance(item, dict) and isinstance(item.get("props"), dict):
+                if "id" not in item["props"] or not item["props"]["id"]:
+                    item["props"]["id"] = str(uuid.uuid4())[:8]
+
+    # Process zones
+    zones = template_data.get("zones", {})
+    if isinstance(zones, dict):
+        for zone_items in zones.values():
+            if isinstance(zone_items, list):
+                for item in zone_items:
+                    if isinstance(item, dict) and isinstance(item.get("props"), dict):
+                        if "id" not in item["props"] or not item["props"]["id"]:
+                            item["props"]["id"] = str(uuid.uuid4())[:8]
+
+    return template_data
 
 
 def load_app_crud(
@@ -263,6 +295,9 @@ Examples:
                     return {"success": False, "error": "app_id required for create"}
                 if not data or not data.get("name"):
                     return {"success": False, "error": "data.name required for create"}
+                # Auto-generate id for blocks if templateData is provided
+                if data.get("templateData"):
+                    data["templateData"] = ensure_block_ids(data["templateData"])
                 return self._make_api_request(
                     endpoint=f"apps/{app_id}/pages?format=llm",
                     method="POST",
@@ -299,6 +334,10 @@ Examples:
 
                 if not isinstance(template_data, dict):
                     return {"success": False, "error": f"templateData must be object, got {type(template_data).__name__}"}
+
+                # Auto-generate id for blocks missing it (LLMs don't generate these)
+                template_data = ensure_block_ids(template_data)
+                data["templateData"] = template_data
 
                 # Validate templateData structure and block types
                 from .validators import validate_page_template
