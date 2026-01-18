@@ -123,9 +123,12 @@ class PlanService:
         planner_tools = [plan_tool]
 
         # Create research_agent for intelligent context gathering
-        # This agent has ResearchEmery as sub-agent for system introspection
+        # EXCEPT for skill templates - they must produce abstract plans without research
         planner_managed_agents = []
-        if api_key and organization_id:
+        if is_skill_template:
+            # Skill templates: NO research - plans must be abstract and reusable
+            logger.info(f"📋 Skill template mode: skipping research_agent (abstract planning)")
+        elif api_key and organization_id:
             research_agent = create_research_agent(
                 model=model,
                 api_key=api_key,

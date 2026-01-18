@@ -122,6 +122,31 @@ This skill must produce these outputs. Your plan MUST include steps that generat
 {% endif %}
 
 ---
+{% if is_skill_template %}
+
+## CRITICAL: Abstract Planning (Skill Template Mode)
+
+**This is a REUSABLE skill template.** The plan will be stored and executed repeatedly in different contexts.
+
+**DO NOT gather context or research the system.** The plan must work in ANY organization with ANY data.
+
+### Your Task: Create Abstract Steps
+
+1. **Analyze the task structure** - What operations are needed?
+2. **Create abstract steps** - Describe WHAT to do, not specific resources
+3. **Use role references** - "the context tables", "available data", "the input"
+4. **Use placeholders** - `{{"{{"}}input_name{{"}}"}}` if skill inputs are defined
+
+### DO NOT:
+- Call research_agent
+- Call database_crud or table_crud
+- Reference specific table names, IDs, or organization names
+- Assume any particular data structure exists
+
+### Call submit_plan() IMMEDIATELY
+
+Do not gather any context. Analyze the task and submit an abstract plan directly.
+{% else %}
 
 ## CRITICAL: Research-Driven Planning
 
@@ -196,6 +221,7 @@ This context is ESSENTIAL for creating a good plan.
 
 ### Step 2: Analyze & Submit Plan
 {% endif %}
+{% endif %}
 
 After gathering context, call **`submit_plan`** with:
 
@@ -263,6 +289,32 @@ Example for "Analyze all tables and give me a summary":
 ```
 
 ---
+{% if is_skill_template %}
+
+## Example: Skill Template Plan
+
+**User Request**: "Summarize all tables in the system"
+
+**You call**: `submit_plan(...)` IMMEDIATELY - NO research
+
+```json
+{
+  "context": "Reusable skill template for table summarization.",
+  "analysis": "The skill needs to:\n1. Access available tables at runtime\n2. Analyze their structure and relationships\n3. Produce a comprehensive summary",
+  "goal": "Summarize all tables available in the execution context",
+  "steps": [
+    {"description": "Analyze all tables available in the context and extract field definitions", "target_agent": null},
+    {"description": "Identify relationships between tables based on field types and naming patterns", "target_agent": null},
+    {"description": "Generate a comprehensive summary of the data structure with insights", "target_agent": null}
+  ]
+}
+```
+
+**Key points:**
+- NO research_agent or database_crud calls
+- NO specific table names or IDs
+- Steps describe abstract operations
+{% else %}
 
 ## Example Flow
 
@@ -289,31 +341,36 @@ Example for "Analyze all tables and give me a summary":
   ]
 }
 ```
+{% endif %}
 
 ---
 
 ## DO:
+{% if is_skill_template %}
+- Call submit_plan() IMMEDIATELY without any research
+- Reference resources by ROLE ("the context tables", "available data") not by IDs
+- Use `{{"{{"}}input_name{{"}}"}}` placeholders for runtime values (if inputs defined)
+- Create abstract, reusable step descriptions
+{% else %}
 {% if has_research_agent %}
 - Delegate research to research_agent FIRST (describe what you need)
 {% else %}
 - Always call database_crud(method="list") and table_crud(method="list_tables") FIRST
 {% endif %}
 - Include specific table names and field names in steps
-{% if is_skill_template %}
-- Reference resources by ROLE ("the input table", "context tables") not by hardcoded IDs
-- Use `{{"{{"}}input_name{{"}}"}}` placeholders for runtime values (if inputs defined)
-{% else %}
 - Use REAL IDs from research/context (never invent IDs)
-{% endif %}
 - Create one step per table (not all tables in one step)
+{% endif %}
 - Show the user exactly what will be created
 
 ## DO NOT:
-- Skip context gathering (NEVER plan blind)
 {% if is_skill_template %}
-- NEVER hardcode table IDs, database IDs, or any specific resource identifiers
-- NEVER use UUIDs or specific values that won't exist at runtime
+- Call research_agent or any context-gathering tools
+- Reference specific table names, database names, or organization names
+- Use UUIDs or specific IDs that won't exist at runtime
+- Assume any particular data structure exists
 {% else %}
+- Skip context gathering (NEVER plan blind)
 - Invent or guess resource IDs
 {% endif %}
 - Use vague steps like "design the schema"
@@ -335,7 +392,9 @@ Never say "no further steps necessary" - the instructions always require executi
 
 ---
 
-{% if has_research_agent %}
+{% if is_skill_template %}
+This is a skill template. Call `submit_plan()` IMMEDIATELY with abstract steps. Do NOT call research_agent or any context-gathering tools.
+{% elif has_research_agent %}
 Now delegate to `research_agent.forward(task="...")` to gather context for this task, then call `submit_plan()` with real IDs from the research.
 {% elif has_research_tools %}
 Now gather context by calling `database_crud(method="list")`, then `table_crud(method="list_tables")`. If the user requested research, use `web_search()` and optionally `visit_webpage()`. Then call `submit_plan()` with your findings.
