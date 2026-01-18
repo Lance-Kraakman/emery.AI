@@ -393,6 +393,7 @@ export class ChatProcessingClient {
     userApiKey?: string;
     timeoutSeconds?: number;
     skillInputs?: Array<{ name: string; type?: string; required?: boolean }>;
+    skillOutputs?: Array<{ name: string; type?: string }>;
     previousPlanJson?: string;
     userFeedback?: string;
   }): Promise<{
@@ -417,6 +418,10 @@ export class ChatProcessingClient {
           name: input.name,
           type: input.type || 'text',
           required: input.required ?? false,
+        })),
+        skillOutputs: (params.skillOutputs || []).map(output => ({
+          name: output.name,
+          type: output.type || 'text',
         })),
         previousPlanJson: params.previousPlanJson || '',
         userFeedback: params.userFeedback || '',

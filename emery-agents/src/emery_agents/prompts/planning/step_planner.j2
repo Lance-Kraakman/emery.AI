@@ -56,6 +56,34 @@ This skill receives runtime inputs. Use `{{"{{"}}input_name{{"}}"}}` placeholder
 
 ---
 {% endif %}
+{% if skill_outputs %}
+
+## Skill Outputs (Required Results)
+
+This skill must produce these outputs. Your plan MUST include steps that generate these results:
+
+{% for output in skill_outputs %}
+- `{{"{{"}}{{ output.name }}{{"}}"}}` - {{ output.type or 'text' }}
+{% endfor %}
+
+**CRITICAL**: Every plan must include steps that produce ALL required outputs. Even if the task is "analysis" or "research", include a final step that formats and returns the required output values.
+
+**Example for analysis skill with `summary` output:**
+```json
+{
+  "goal": "Analyze tables and produce summary output",
+  "steps": [
+    {"description": "Research all tables using research_agent", "target_agent": "research_agent"},
+    {"description": "Analyze table structures and identify data patterns", "target_agent": null},
+    {"description": "Format findings into {{"{{"}}summary{{"}}"}} output with key insights", "target_agent": null}
+  ]
+}
+```
+
+**NEVER** say "no further steps necessary" when outputs are defined. The plan must produce the outputs.
+
+---
+{% endif %}
 
 ## Available Managed Agents
 
@@ -202,6 +230,19 @@ Specific, actionable steps:
 - One step per table creation (include field names)
 - One step per relationship setup
 - Include target_agent for each step
+- **CRITICAL: Plans must ALWAYS have at least one step. NEVER return an empty steps array.**
+
+**For analysis/research tasks:**
+If the task is to analyze, summarize, or report on data, the plan should have at least one step that performs that analysis. Do NOT say "research complete, no steps needed" - the analysis/summary step IS an execution step.
+
+Example for "Analyze all tables and give me a summary":
+```json
+{
+  "steps": [
+    {"description": "Analyze all tables and provide a comprehensive summary including table names, field types, relationships, and data patterns", "target_agent": null}
+  ]
+}
+```
 
 ---
 
@@ -249,6 +290,20 @@ Specific, actionable steps:
 - Invent or guess resource IDs
 - Use vague steps like "design the schema"
 - Combine multiple tables into a single step
+- Return zero steps (plans must ALWAYS have at least one step)
+
+---
+
+## CRITICAL RULES
+
+**Every plan MUST have at least one step. Never return an empty steps array.**
+
+| Task Type | How to Create Steps |
+|-----------|---------------------|
+| Analysis/Summary | Format the instructions as a clear, actionable step description |
+| Building (tables, fields) | Break down into multiple specific steps |
+
+Never say "no further steps necessary" - the instructions always require execution.
 
 ---
 

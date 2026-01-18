@@ -1876,6 +1876,16 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             if skill_inputs:
                 logger.info(f"📋 GeneratePlan: {len(skill_inputs)} skill inputs for variable placeholders")
 
+            # 3a. Extract skill outputs for result-aware planning
+            skill_outputs = []
+            for output_def in request.skill_outputs:
+                skill_outputs.append({
+                    "name": output_def.name,
+                    "type": output_def.type or "text",
+                })
+            if skill_outputs:
+                logger.info(f"📋 GeneratePlan: {len(skill_outputs)} skill outputs for result-aware planning")
+
             # 3b. Extract previous plan and feedback for regeneration
             previous_plan_json = request.previous_plan_json if request.previous_plan_json else None
             user_feedback = request.user_feedback if request.user_feedback else None
@@ -1892,6 +1902,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     org_model=request.model or None,
                     managed_agents=managed_agents,
                     skill_inputs=skill_inputs,  # Pass for variable-aware planning
+                    skill_outputs=skill_outputs,  # Pass for result-aware planning
                     previous_plan_json=previous_plan_json,  # Pass for regeneration
                     user_feedback=user_feedback,  # Pass for regeneration
                     api_key=tool_provider.api_key,  # For research_agent auth

@@ -946,6 +946,8 @@ export interface GeneratePlanRequest {
   previousPlanJson: string;
   /** User feedback for regeneration */
   userFeedback: string;
+  /** Skill outputs for result-aware planning */
+  skillOutputs: OutputDefinition[];
 }
 
 /** Response from plan generation */
@@ -7659,6 +7661,7 @@ function createBaseGeneratePlanRequest(): GeneratePlanRequest {
     skillInputs: [],
     previousPlanJson: "",
     userFeedback: "",
+    skillOutputs: [],
   };
 }
 
@@ -7693,6 +7696,9 @@ export const GeneratePlanRequest: MessageFns<GeneratePlanRequest> = {
     }
     if (message.userFeedback !== "") {
       writer.uint32(82).string(message.userFeedback);
+    }
+    for (const v of message.skillOutputs) {
+      OutputDefinition.encode(v!, writer.uint32(90).fork()).join();
     }
     return writer;
   },
@@ -7784,6 +7790,14 @@ export const GeneratePlanRequest: MessageFns<GeneratePlanRequest> = {
           message.userFeedback = reader.string();
           continue;
         }
+        case 11: {
+          if (tag !== 90) {
+            break;
+          }
+
+          message.skillOutputs.push(OutputDefinition.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -7807,6 +7821,9 @@ export const GeneratePlanRequest: MessageFns<GeneratePlanRequest> = {
         : [],
       previousPlanJson: isSet(object.previousPlanJson) ? globalThis.String(object.previousPlanJson) : "",
       userFeedback: isSet(object.userFeedback) ? globalThis.String(object.userFeedback) : "",
+      skillOutputs: globalThis.Array.isArray(object?.skillOutputs)
+        ? object.skillOutputs.map((e: any) => OutputDefinition.fromJSON(e))
+        : [],
     };
   },
 
@@ -7842,6 +7859,9 @@ export const GeneratePlanRequest: MessageFns<GeneratePlanRequest> = {
     if (message.userFeedback !== "") {
       obj.userFeedback = message.userFeedback;
     }
+    if (message.skillOutputs?.length) {
+      obj.skillOutputs = message.skillOutputs.map((e) => OutputDefinition.toJSON(e));
+    }
     return obj;
   },
 
@@ -7860,6 +7880,7 @@ export const GeneratePlanRequest: MessageFns<GeneratePlanRequest> = {
     message.skillInputs = object.skillInputs?.map((e) => InputDefinition.fromPartial(e)) || [];
     message.previousPlanJson = object.previousPlanJson ?? "";
     message.userFeedback = object.userFeedback ?? "";
+    message.skillOutputs = object.skillOutputs?.map((e) => OutputDefinition.fromPartial(e)) || [];
     return message;
   },
 };

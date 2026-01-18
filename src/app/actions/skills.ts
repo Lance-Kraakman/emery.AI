@@ -1377,6 +1377,11 @@ export async function generateSkillPlan(
         type: input.type,
         required: input.required,
       })),
+      // Pass skill outputs for result-aware planning
+      skillOutputs: (skill.outputs || []).map(output => ({
+        name: output.name,
+        type: output.type,
+      })),
       // Pass previous plan and feedback for regeneration
       previousPlanJson: previousPlan ? JSON.stringify(previousPlan) : undefined,
       userFeedback: userFeedback,

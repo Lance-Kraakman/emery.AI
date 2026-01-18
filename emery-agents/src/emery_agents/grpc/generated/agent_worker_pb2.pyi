@@ -721,7 +721,7 @@ class FileAttachment(_message.Message):
     def __init__(self, type: _Optional[str] = ..., url: _Optional[str] = ..., filename: _Optional[str] = ..., mime_type: _Optional[str] = ...) -> None: ...
 
 class GeneratePlanRequest(_message.Message):
-    __slots__ = ("instructions", "organization_id", "user_id", "skill_id", "model", "user_api_key", "timeout_seconds", "skill_inputs", "previous_plan_json", "user_feedback")
+    __slots__ = ("instructions", "organization_id", "user_id", "skill_id", "model", "user_api_key", "timeout_seconds", "skill_inputs", "previous_plan_json", "user_feedback", "skill_outputs")
     INSTRUCTIONS_FIELD_NUMBER: _ClassVar[int]
     ORGANIZATION_ID_FIELD_NUMBER: _ClassVar[int]
     USER_ID_FIELD_NUMBER: _ClassVar[int]
@@ -732,6 +732,7 @@ class GeneratePlanRequest(_message.Message):
     SKILL_INPUTS_FIELD_NUMBER: _ClassVar[int]
     PREVIOUS_PLAN_JSON_FIELD_NUMBER: _ClassVar[int]
     USER_FEEDBACK_FIELD_NUMBER: _ClassVar[int]
+    SKILL_OUTPUTS_FIELD_NUMBER: _ClassVar[int]
     instructions: str
     organization_id: int
     user_id: str
@@ -742,7 +743,8 @@ class GeneratePlanRequest(_message.Message):
     skill_inputs: _containers.RepeatedCompositeFieldContainer[InputDefinition]
     previous_plan_json: str
     user_feedback: str
-    def __init__(self, instructions: _Optional[str] = ..., organization_id: _Optional[int] = ..., user_id: _Optional[str] = ..., skill_id: _Optional[int] = ..., model: _Optional[str] = ..., user_api_key: _Optional[str] = ..., timeout_seconds: _Optional[int] = ..., skill_inputs: _Optional[_Iterable[_Union[InputDefinition, _Mapping]]] = ..., previous_plan_json: _Optional[str] = ..., user_feedback: _Optional[str] = ...) -> None: ...
+    skill_outputs: _containers.RepeatedCompositeFieldContainer[OutputDefinition]
+    def __init__(self, instructions: _Optional[str] = ..., organization_id: _Optional[int] = ..., user_id: _Optional[str] = ..., skill_id: _Optional[int] = ..., model: _Optional[str] = ..., user_api_key: _Optional[str] = ..., timeout_seconds: _Optional[int] = ..., skill_inputs: _Optional[_Iterable[_Union[InputDefinition, _Mapping]]] = ..., previous_plan_json: _Optional[str] = ..., user_feedback: _Optional[str] = ..., skill_outputs: _Optional[_Iterable[_Union[OutputDefinition, _Mapping]]] = ...) -> None: ...
 
 class GeneratePlanResponse(_message.Message):
     __slots__ = ("plan_json", "plan_id", "planning_time_ms", "token_usage", "status", "error_message")

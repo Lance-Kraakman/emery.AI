@@ -520,6 +520,7 @@ message GeneratePlanRequest {
   repeated InputDefinition skill_inputs = 8;  // Skill input definitions for variable-aware planning
   string previous_plan_json = 9;        // Previous plan as JSON (for regeneration with feedback)
   string user_feedback = 10;            // User feedback for regeneration
+  repeated OutputDefinition skill_outputs = 11;  // Skill outputs for result-aware planning
 }
 
 // Response from plan generation
