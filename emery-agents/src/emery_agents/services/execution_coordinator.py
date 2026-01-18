@@ -531,7 +531,7 @@ class ExecutionCoordinator:
                 action="loaded",
                 plan_id=stored_plan.id,
                 goal=stored_plan.goal,
-                steps=[{"step_id": s.step_id, "description": s.description, "status": s.status.value} for s in stored_plan.steps],
+                steps=[{"step_id": s.step_id, "description": s.description, "status": s.status} for s in stored_plan.steps],
                 context=stored_plan.context,
                 analysis=stored_plan.analysis
             )

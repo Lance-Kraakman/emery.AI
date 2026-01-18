@@ -48,11 +48,19 @@ This skill receives runtime inputs. Use `{{"{{"}}input_name{{"}}"}}` placeholder
 - `{{"{{"}}{{ input.name }}{{"}}"}}` - {{ input.type or 'text' }}{% if input.required %} (required){% endif %}
 
 {% endfor %}
-**IMPORTANT**: Plans are reusable templates. Use variable placeholders like `{{"{{"}}description{{"}}"}}` that will be resolved with actual values at runtime. DO NOT use specific hardcoded values.
+**CRITICAL: Skills are REUSABLE TEMPLATES - NEVER hardcode IDs or specific values**
 
-**Example**:
-- BAD: "Search for 'pizza recipes' in the recipes table"
+Plans for skills are executed repeatedly with different context. You MUST:
+1. Use `{{"{{"}}input_name{{"}}"}}` placeholders for ALL input values
+2. Reference tables/resources by their ROLE (e.g., "the input table", "the target database") NOT by specific IDs
+3. Let the execution context resolve actual resource IDs at runtime
+
+**Examples**:
+- BAD: "Search for 'pizza recipes' in table abc-123-def"
+- BAD: "Analyze table with ID 550e8400-e29b-41d4-a716-446655440000"
 - GOOD: "Search for {{"{{"}}search_term{{"}}"}} in the relevant table"
+- GOOD: "Analyze the tables provided in the skill context"
+- GOOD: "Read data from {{"{{"}}table_id{{"}}"}} input"
 
 ---
 {% endif %}
@@ -195,7 +203,11 @@ After gathering context, call **`submit_plan`** with:
   "analysis": "## Analysis\n\n[Your analysis of what needs to be created/modified]",
   "goal": "[Clear goal statement]",
   "steps": [
-    {"description": "[Specific step with table/field names and REAL IDs]", "target_agent": "[agent_name]"}
+{% if skill_inputs %}
+    {"description": "[Specific step using {{input_name}} placeholders - NO hardcoded IDs]", "target_agent": "[agent_name]"}
+{% else %}
+    {"description": "[Specific step with table/field names and REAL IDs from context]", "target_agent": "[agent_name]"}
+{% endif %}
   ]
 }
 ```
@@ -281,13 +293,23 @@ Example for "Analyze all tables and give me a summary":
 - Always call database_crud(method="list") and table_crud(method="list_tables") FIRST
 {% endif %}
 - Include specific table names and field names in steps
+{% if skill_inputs %}
+- Use `{{"{{"}}input_name{{"}}"}}` placeholders for runtime values
+- Reference resources by ROLE ("the input table") not by hardcoded IDs
+{% else %}
 - Use REAL IDs from research/context (never invent IDs)
+{% endif %}
 - Create one step per table (not all tables in one step)
 - Show the user exactly what will be created
 
 ## DO NOT:
 - Skip context gathering (NEVER plan blind)
+{% if skill_inputs %}
+- NEVER hardcode table IDs, database IDs, or any specific resource identifiers
+- NEVER use UUIDs or specific values that won't exist at runtime
+{% else %}
 - Invent or guess resource IDs
+{% endif %}
 - Use vague steps like "design the schema"
 - Combine multiple tables into a single step
 - Return zero steps (plans must ALWAYS have at least one step)
