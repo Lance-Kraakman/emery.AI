@@ -1152,6 +1152,7 @@ dependencies = [
     { name = "httpx" },
     { name = "huggingface-hub" },
     { name = "jinja2" },
+    { name = "markdownify" },
     { name = "modal" },
     { name = "numpy" },
     { name = "pillow" },
@@ -1168,6 +1169,7 @@ dependencies = [
     { name = "smolagents", extra = ["openai"] },
     { name = "sqlalchemy" },
     { name = "tenacity" },
+    { name = "toon-format" },
     { name = "typing-extensions" },
     { name = "websockets" },
 ]
@@ -1225,6 +1227,7 @@ requires-dist = [
     { name = "huggingface-hub", specifier = ">=0.34.3" },
     { name = "isort", marker = "extra == 'dev'", specifier = ">=5.12.0" },
     { name = "jinja2", specifier = ">=3.1.6" },
+    { name = "markdownify", specifier = ">=0.12.0" },
     { name = "mlx", marker = "sys_platform == 'darwin' and extra == 'full'", specifier = ">=0.28.0" },
     { name = "mlx-lm", marker = "sys_platform == 'darwin' and extra == 'full'", specifier = ">=0.26.1" },
     { name = "modal", specifier = ">=0.64.0" },
@@ -1248,6 +1251,7 @@ requires-dist = [
     { name = "smolagents", extras = ["openai"], specifier = ">=1.20.0" },
     { name = "sqlalchemy", specifier = ">=2.0.0" },
     { name = "tenacity", specifier = ">=8.2.0" },
+    { name = "toon-format", specifier = ">=0.1.0" },
     { name = "typing-extensions", specifier = ">=4.8.0" },
     { name = "websockets", specifier = ">=11.0.0" },
 ]
@@ -4810,6 +4814,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/cc/18/0bbf3884e9eaa38819ebe46a7bd25dcd56b67434402b66a58c4b8e552575/tomlkit-0.13.3.tar.gz", hash = "sha256:430cf247ee57df2b94ee3fbe588e71d362a941ebb545dec29b53961d61add2a1", size = 185207 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/bd/75/8539d011f6be8e29f339c42e633aae3cb73bffa95dd0f9adec09b9c58e85/tomlkit-0.13.3-py3-none-any.whl", hash = "sha256:c89c649d79ee40629a9fda55f8ace8c6a1b42deb912b2a8fd8d942ddadb606b0", size = 38901 },
+]
+
+[[package]]
+name = "toon-format"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d4/5c/f74ab4f7faaa00ffc0c13aea4acfdd5e1fdecf4a1e81196f39203e56dc10/toon_format-0.1.0.tar.gz", hash = "sha256:77303c9b06956fe8b0066d2bca52dfdc63e2b3abba439c3c3545dbbd43a97d48", size = 3078 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ee/ae/c52d28ce93490f82cfbbf49e1b9a85f33449c89fc1a5aa53d476d3a69666/toon_format-0.1.0-py3-none-any.whl", hash = "sha256:f0c7bf3f63f1fc08739127ca895a55922617193f942f84474489770d7cd1ffc2", size = 4803 },
 ]
 
 [[package]]
