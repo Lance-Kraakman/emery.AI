@@ -353,6 +353,7 @@ class ExecutionCoordinator:
         org_model: Optional[str] = None,
         context_tools: Optional[List[Any]] = None,
         api_key: Optional[str] = None,
+        organization_id: Optional[int] = None,
     ):
         """
         Initialize execution coordinator.
@@ -367,6 +368,7 @@ class ExecutionCoordinator:
             org_model: Organization model ID for model resolution hierarchy
             context_tools: Tools for context gathering during planning (database_crud, table_crud)
             api_key: API key for model providers that require authentication (e.g., Gemini)
+            organization_id: Organization ID for RLS context and research agent
         """
         self.plan_service = plan_service or PlanService()
         self.evaluator_factory = evaluator_factory
@@ -376,6 +378,7 @@ class ExecutionCoordinator:
         self._org_model = org_model
         self._context_tools = context_tools or []
         self._api_key = api_key
+        self._organization_id = organization_id
         self._current_phase = ExecutionPhase.PLANNING
         self._current_plan: Optional[Plan] = None
         self._ledger: Optional[TaskLedger] = None
@@ -395,11 +398,29 @@ class ExecutionCoordinator:
         self._execution_paused: bool = False
 
         # LLM-based task classifier (replaces string matching)
+        # Includes research_agent for comprehensive context gathering before classification
         self._task_classifier: Optional[TaskClassifier] = None
         if model_provider:
+            # Create research_agent for classifier to gather context (apps, tables, URLs)
+            research_agent = None
+            if api_key and organization_id:
+                try:
+                    from ..agents.research_agent import create_research_agent
+                    model = model_provider.get_model(model_id=org_model) if org_model else model_provider.get_model()
+                    research_agent = create_research_agent(
+                        model=model,
+                        api_key=api_key,
+                        organization_id=organization_id,
+                        max_steps=6,
+                    )
+                    logger.info("📋 Created research_agent for task classifier")
+                except Exception as e:
+                    logger.warning(f"📋 Could not create research_agent for classifier: {e}")
+
             self._task_classifier = TaskClassifier(
                 model_provider=model_provider,
                 context_tools=self._context_tools,
+                research_agent=research_agent,
             )
 
         # Store model_provider for recovery analysis (via plan_service)
@@ -667,6 +688,7 @@ class ExecutionCoordinator:
                 context_tools=self._context_tools,
                 research_tools=research_tools,
                 api_key=self._api_key,
+                organization_id=self._organization_id,
             )
         except Exception as e:
             logger.error(f"❌ Plan generation failed: {e}")

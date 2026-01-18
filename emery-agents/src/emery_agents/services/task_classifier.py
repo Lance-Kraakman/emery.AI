@@ -61,12 +61,17 @@ class TaskClassifier:
 
     When needs_clarification is True, questions are returned to be shown
     to the user before proceeding with execution.
+
+    AIDEV-NOTE: The classifier can use research_agent as a managed agent for
+    comprehensive context gathering (apps, tables, URLs) before deciding
+    whether clarification is needed.
     """
 
     def __init__(
         self,
         model_provider: ModelProvider,
         context_tools: Optional[List[Any]] = None,
+        research_agent: Optional[Any] = None,
     ):
         """
         Initialize the task classifier.
@@ -74,9 +79,12 @@ class TaskClassifier:
         Args:
             model_provider: Provider for LLM access
             context_tools: Tools for gathering context (database_crud, table_crud)
+            research_agent: Optional research agent for comprehensive context gathering
+                           (web research + system introspection via research_emery)
         """
         self.model_provider = model_provider
         self.context_tools = context_tools or []
+        self.research_agent = research_agent
 
     def classify(
         self,
@@ -114,10 +122,16 @@ class TaskClassifier:
             tools = list(self.context_tools) + [tool]
             logger.info(f"🔍 Classifier has {len(self.context_tools)} context tools")
 
+            # Add research_agent as managed agent if available
+            managed_agents = [self.research_agent] if self.research_agent else None
+            if managed_agents:
+                logger.info(f"🔍 Classifier has research_agent for context gathering")
+
             classifier = ToolCallingAgent(
                 tools=tools,
                 model=model,
-                max_steps=4,  # Allow context gathering + classify
+                max_steps=8,  # Allow research + context gathering + classify
+                managed_agents=managed_agents,
             )
             classifier.run(prompt)
 
