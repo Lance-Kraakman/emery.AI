@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { LucideIcon, Plus } from "lucide-react"
+import { LucideIcon, Plus, LayoutTemplate } from "lucide-react"
 import {
   Collapsible,
   CollapsibleContent,
@@ -17,6 +17,12 @@ import {
   SidebarMenuButton,
 } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { SidebarItemActions } from "./sidebar-item-actions"
 import { InlineRename } from "./inline-rename"
 
@@ -39,6 +45,8 @@ interface GroupedSidebarSectionProps<T> {
   // Actions
   onAdd: () => void
   addButtonLabel?: string
+  /** Optional callback for "From Template" option - if provided, shows dropdown */
+  onAddFromTemplate?: () => void
   // Action callbacks
   onRename?: (item: T, newName: string) => void | Promise<void>
   onDuplicate?: (item: T) => void | Promise<void>
@@ -70,6 +78,7 @@ export function GroupedSidebarSection<T>({
   isUngroupedItem,
   onAdd,
   addButtonLabel = `Add ${label.slice(0, -1)}`, // Remove trailing 's' for singular
+  onAddFromTemplate,
   onRename,
   onDuplicate,
   onShare,
@@ -169,15 +178,40 @@ export function GroupedSidebarSection<T>({
               })}
 
               {/* Add button */}
-              <Button
-                variant="ghost"
-                className="w-full justify-start h-6 px-2 text-sm mt-0.5 group-data-[collapsible=icon]:hidden"
-                onClick={onAdd}
-                disabled={isCreating}
-              >
-                <Plus className="h-4 w-4" />
-                <span className="group-data-[collapsible=icon]:hidden">{addButtonLabel}</span>
-              </Button>
+              {onAddFromTemplate ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      className="w-full justify-start h-6 px-2 text-sm mt-0.5 group-data-[collapsible=icon]:hidden"
+                      disabled={isCreating}
+                    >
+                      <Plus className="h-4 w-4" />
+                      <span className="group-data-[collapsible=icon]:hidden">{addButtonLabel}</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-48">
+                    <DropdownMenuItem onClick={onAdd}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create Blank
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={onAddFromTemplate}>
+                      <LayoutTemplate className="h-4 w-4 mr-2" />
+                      From Template
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start h-6 px-2 text-sm mt-0.5 group-data-[collapsible=icon]:hidden"
+                  onClick={onAdd}
+                  disabled={isCreating}
+                >
+                  <Plus className="h-4 w-4" />
+                  <span className="group-data-[collapsible=icon]:hidden">{addButtonLabel}</span>
+                </Button>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </CollapsibleContent>

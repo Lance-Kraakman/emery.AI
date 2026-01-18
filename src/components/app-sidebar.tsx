@@ -566,6 +566,7 @@ export function AppSidebar({
           isUngroupedItem={(skill) => skill.agentId === null}
           onAdd={handleCreateSkill}
           addButtonLabel="Add Skill"
+          onAddFromTemplate={handleCreateSkillFromTemplate}
           onRename={handleRenameSkill}
           onDuplicate={handleDuplicateSkill}
           onShare={handleShareSkill}
