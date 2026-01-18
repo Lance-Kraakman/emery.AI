@@ -1220,26 +1220,37 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 logger.info("💡 Session preserved for manual retry")
 
             elif error_info.severity == ErrorSeverity.RECOVERABLE:
-                # RECOVERABLE errors: Clear agent memory but keep session
+                # RECOVERABLE errors: Preserve state for retry, just track errors
+                # User can say "retry" or continue naturally
                 if session_id:
-                    logger.info(f"🔄 Recoverable error - clearing agent memory for session {session_id}")
-                    self.session_manager.reset_agent_memory(session_id)
+                    logger.info(f"🔄 Recoverable error - preserving session {session_id} for continuation")
                     self.session_manager.increment_error_count(session_id, error_info.error_type)
 
-                    # Check if error threshold exceeded
-                    if self.session_manager.should_remove_session_on_error(session_id):
-                        logger.warning(f"🚨 Error threshold exceeded - removing session {session_id}")
+                    # Only remove after many consecutive errors (threshold: 5)
+                    if self.session_manager.should_remove_session_on_error(session_id, threshold=5):
+                        logger.warning(f"🚨 Too many consecutive errors - removing session {session_id}")
                         await self.session_manager.remove_session_on_error(session_id, "error_threshold")
                         session_was_reset = True
+                    # DON'T clear agent memory - user can retry
                 else:
                     logger.warning("⚠️ No session_id provided - cannot track errors")
 
             elif error_info.severity == ErrorSeverity.FATAL:
-                # FATAL errors: Remove session entirely
-                if session_id:
-                    logger.error(f"💀 Fatal error - removing session {session_id}")
+                # FATAL errors: Only destroy for truly unrecoverable situations
+                truly_fatal = error_info.error_type in ['AUTH_FAILURE', 'RESOURCE_NOT_FOUND', 'PERMISSION_DENIED']
+
+                if truly_fatal and session_id:
+                    logger.error(f"💀 Truly fatal error - removing session {session_id}")
                     await self.session_manager.remove_session_on_error(session_id, error_info.error_type)
                     session_was_reset = True
+                    # Get state machine and mark as fatal
+                    sm = self.session_manager.get_state_machine(session_id)
+                    if sm:
+                        sm.on_error(error_info.error_type, fatal=True)
+                elif session_id:
+                    # Demote to recoverable - preserve for retry
+                    logger.warning(f"⚠️ Error marked fatal but preserving session for retry: {error_info.error_type}")
+                    self.session_manager.increment_error_count(session_id, error_info.error_type)
 
             # 4. Send user-friendly error (NO technical details)
             error_details: ErrorDetailsDict = {

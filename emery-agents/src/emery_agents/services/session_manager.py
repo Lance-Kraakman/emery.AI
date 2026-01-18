@@ -529,13 +529,13 @@ class SessionManager:
             meta.last_error_type = None
             meta.last_error_timestamp = None
 
-    def should_remove_session_on_error(self, session_id: str, threshold: int = 3) -> bool:
+    def should_remove_session_on_error(self, session_id: str, threshold: int = 5) -> bool:
         """
         Check if session should be removed due to excessive errors.
 
         Args:
             session_id: Session identifier
-            threshold: Maximum consecutive errors before removal (default: 3)
+            threshold: Maximum consecutive errors before removal (default: 5)
 
         Returns:
             True if session should be removed

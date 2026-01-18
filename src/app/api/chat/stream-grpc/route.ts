@@ -364,7 +364,7 @@ export async function POST(req: NextRequest) {
         chatId: currentChatId,
         userId: userId,
         organizationId: organizationId,
-        limit: 10 // Last 10 messages for context
+        limit: parseInt(process.env.CHAT_HISTORY_CONTEXT_LIMIT || '20') // Configurable context for resumed chats
       });
 
       if (historyResult.success && historyResult.data?.messages) {
@@ -588,10 +588,10 @@ export async function POST(req: NextRequest) {
         controller.enqueue(chunk);
       },
 
-      flush() {
+      async flush() {
         console.log('[CHAT-GRPC-API] Response stream complete, saving assistant message');
 
-        // Save the complete assistant response asynchronously
+        // Save the complete assistant response (awaited to ensure persistence)
         if (currentChatId && fullAssistantResponse.trim()) {
           const saveAssistantMessage = async () => {
             try {
@@ -630,7 +630,7 @@ export async function POST(req: NextRequest) {
             }
           };
 
-          saveAssistantMessage();
+          await saveAssistantMessage();
         }
       }
     });

@@ -434,14 +434,25 @@ class CoordinatorStateMachine:
         self.context.clear()
         logger.info(f"📊 State machine [{self.session_id}]: execution complete, state cleared")
 
-    def on_error(self, error_message: str) -> None:
+    def on_error(self, error_message: str, fatal: bool = False) -> None:
         """
-        Error occurred - reset to idle.
+        Error occurred - preserve state by default for retry.
 
         Can be called from any phase.
+
+        Args:
+            error_message: Error description for logging
+            fatal: If True, clears all context (unrecoverable). Default False preserves state.
         """
         logger.error(f"📊 State machine [{self.session_id}]: error - {error_message}")
-        self.context.clear()
+
+        if fatal:
+            # Only clear on truly fatal errors (auth failures, etc.)
+            self.context.clear()
+            logger.info(f"📊 State machine [{self.session_id}]: fatal error, context cleared")
+        else:
+            # Preserve state - user can say "retry" or continue naturally
+            logger.info(f"📊 State machine [{self.session_id}]: non-fatal error, context preserved for retry")
 
     # ============================================================
     # Helpers
