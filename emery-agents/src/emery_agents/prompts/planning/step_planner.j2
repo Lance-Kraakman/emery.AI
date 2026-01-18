@@ -42,17 +42,17 @@ You are regenerating an existing plan based on user feedback. DO NOT start from 
 
 ## Skill Inputs (Use as Variables)
 
-This skill receives runtime inputs. Use `{input_name}` placeholders in your step descriptions instead of hardcoded values:
+This skill receives runtime inputs. Use `{{"{{"}}input_name{{"}}"}}` placeholders in your step descriptions instead of hardcoded values:
 
 {% for input in skill_inputs %}
-- `{{"{"}}{{ input.name }}{{"}"}}` - {{ input.type or 'text' }}{% if input.required %} (required){% endif %}
+- `{{"{{"}}{{ input.name }}{{"}}"}}` - {{ input.type or 'text' }}{% if input.required %} (required){% endif %}
 
 {% endfor %}
-**IMPORTANT**: Plans are reusable templates. Use variable placeholders like `{description}` that will be resolved with actual values at runtime. DO NOT use specific hardcoded values.
+**IMPORTANT**: Plans are reusable templates. Use variable placeholders like `{{"{{"}}description{{"}}"}}` that will be resolved with actual values at runtime. DO NOT use specific hardcoded values.
 
 **Example**:
 - BAD: "Search for 'pizza recipes' in the recipes table"
-- GOOD: "Search for {search_term} in the relevant table"
+- GOOD: "Search for {{"{{"}}search_term{{"}}"}} in the relevant table"
 
 ---
 {% endif %}
