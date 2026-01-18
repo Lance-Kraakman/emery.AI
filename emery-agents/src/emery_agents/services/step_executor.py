@@ -22,6 +22,7 @@ from ..prompts import render_output_instructions
 from ..tools.output_tool import OutputTool
 from ..types import SkillExecutionResult
 from ..utils.error_classifier import classify_error
+from ..utils.toon_format import to_toon
 from .agent_factory import AgentFactory, AgentConfig
 from .tool_loader import UnifiedToolLoader
 
@@ -1608,13 +1609,14 @@ class StepExecutorService:
         logger.debug(f"📤 Captured outputs: {list(output_mappings.values())}")
 
     def _inject_context(self, instruction: str, context: Dict[str, Any]) -> str:
-        """Replace {{var}} placeholders in instruction."""
+        """Replace {{var}} placeholders in instruction with TOON format for token efficiency."""
         result = instruction
         for key, value in context.items():
             placeholder = f"{{{{{key}}}}}"
             if placeholder in result:
                 if isinstance(value, (dict, list)):
-                    value_str = json.dumps(value)
+                    # Use TOON format for structured data - saves ~40-60% tokens
+                    value_str = to_toon(value)
                 else:
                     value_str = str(value)
                 result = result.replace(placeholder, value_str)

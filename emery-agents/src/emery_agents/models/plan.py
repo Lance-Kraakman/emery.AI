@@ -330,7 +330,7 @@ class Plan:
 
     def _step_to_stored(self, step: PlanStep) -> Dict[str, Any]:
         """Convert PlanStep to stored format (no runtime fields)."""
-        result = {
+        result: Dict[str, Any] = {
             "stepId": step.step_id,
             "description": step.description,
         }

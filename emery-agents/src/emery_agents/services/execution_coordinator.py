@@ -351,7 +351,6 @@ class ExecutionCoordinator:
         evaluate_after_steps: int = 1,
         max_replans: int = 3,
         org_model: Optional[str] = None,
-        context_tools: Optional[List[Any]] = None,
         api_key: Optional[str] = None,
         organization_id: Optional[int] = None,
     ):
@@ -366,7 +365,6 @@ class ExecutionCoordinator:
             evaluate_after_steps: Run evaluation after this many steps (default: 1)
             max_replans: Maximum number of replans before stopping (default: 3)
             org_model: Organization model ID for model resolution hierarchy
-            context_tools: Tools for context gathering during planning (database_crud, table_crud)
             api_key: API key for model providers that require authentication (e.g., Gemini)
             organization_id: Organization ID for RLS context and research agent
         """
@@ -376,7 +374,6 @@ class ExecutionCoordinator:
         self.evaluate_after_steps = evaluate_after_steps
         self.max_replans = max_replans
         self._org_model = org_model
-        self._context_tools = context_tools or []
         self._api_key = api_key
         self._organization_id = organization_id
         self._current_phase = ExecutionPhase.PLANNING
@@ -419,7 +416,6 @@ class ExecutionCoordinator:
 
             self._task_classifier = TaskClassifier(
                 model_provider=model_provider,
-                context_tools=self._context_tools,
                 research_agent=research_agent,
             )
 
@@ -674,8 +670,8 @@ class ExecutionCoordinator:
 
         # Generate plan using LLM
         # Pass managed_agents so planner knows available agents for routing
-        # Pass context_tools so planner can list databases/tables before planning
         # Pass research_tools so planner can do web research if needed
+        # Context gathering is done via research_emery (created inside PlanService)
         try:
             plan = await self.plan_service.generate_plan(
                 basic_instructions=instructions,
@@ -685,7 +681,6 @@ class ExecutionCoordinator:
                 org_model=self._org_model,
                 tools=planning_tools,
                 managed_agents=agents,
-                context_tools=self._context_tools,
                 research_tools=research_tools,
                 api_key=self._api_key,
                 organization_id=self._organization_id,
@@ -1343,13 +1338,15 @@ Analyze this state and call the report_evaluation tool with your assessment.
 
         try:
             # Run recovery analysis via PlanService (LLM gathers context and analyzes)
+            # Context gathering is done via research_emery (created inside PlanService)
             recovery = self.plan_service.analyze_step_failure(
                 failed_step=step,
                 error_message=error,
                 plan=self._current_plan,
-                context_tools=self._context_tools,
                 ledger=self._ledger,
                 org_model=self._org_model,
+                api_key=self._api_key,
+                organization_id=self._organization_id,
             )
 
             # Emit analysis result

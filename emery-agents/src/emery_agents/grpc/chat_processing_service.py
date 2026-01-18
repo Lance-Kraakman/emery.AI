@@ -75,6 +75,7 @@ from ..services.execution_coordinator import (
     ExecutionCompletedEvent,
     DirectExecutionStartedEvent,
     AwaitingClarificationEvent,
+    ErrorEvent,  # Plan generation / API errors
     # Recovery events (confidence-based error handling)
     RecoveryAnalysisEvent,
     AutoFixStartedEvent,
@@ -1409,8 +1410,6 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 max_steps=10,
             )
 
-            context_tools = context.tool_provider.get_context_tools() if context.tool_provider else []
-
             # Create agent factories for cascade planning (even if not used for autonomous mode)
             agent_factories = None
             if context.tool_provider:
@@ -1427,8 +1426,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 evaluate_after_steps=1,
                 max_replans=3,
                 org_model=org_model,
-                context_tools=context_tools,
                 api_key=context.tool_provider.api_key,  # For Gemini and other auth-required models
+                organization_id=context.tool_provider.organization_id,  # For research agent
             )
 
             # Execute stored plan directly (no classification, no approval)
@@ -1473,11 +1472,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             # Get context-gathering tools from provider
             # These allow the planner to see existing databases/tables before creating a plan
             if context.tool_provider is None:
-                logger.error("❌ ToolProvider not set on context - cannot create context tools")
+                logger.error("❌ ToolProvider not set on context - cannot create coordinator")
                 yield "FALL_THROUGH"
                 return
-            context_tools = context.tool_provider.get_context_tools()
-            logger.info(f"📋 Using {len(context_tools)} context tools from provider for planner")
 
             # Create agent factories for cascade planning (SubAgentPlanner)
             agent_factories = self.managed_agents_factory.get_agent_factories(
@@ -1494,8 +1491,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 evaluate_after_steps=1,
                 max_replans=3,
                 org_model=org_model,
-                context_tools=context_tools,
                 api_key=context.tool_provider.api_key,  # For Gemini and other auth-required models
+                organization_id=context.tool_provider.organization_id,  # For research agent
             )
 
             # Use smart execute to determine mode and handle accordingly
@@ -1562,6 +1559,17 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     # All sub-plans ready - forward to UI
                     logger.info(f"📋 Cascade: All {event.total_sub_plans} sub-plans complete")
                     yield convert_coordinator_event(event, 0)
+
+                elif isinstance(event, ErrorEvent):
+                    # Plan generation or API error - return error to user, don't fall through
+                    logger.error(f"📋 Coordinator: Plan generation error - {event.error}")
+                    yield self._create_error_response(
+                        "PLAN_GENERATION_FAILED",
+                        event.error,
+                    )
+                    if sm:
+                        sm.on_error(event.error)
+                    return  # Exit, don't fall through to confused agent.run()
 
             if plan and sm:
                 # Update state machine (handles transition + context)
@@ -1823,18 +1831,14 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 organization_id=request.organization_id
             )
 
-            # 2. Get context tools from provider
-            context_tools = tool_provider.get_context_tools()
-            logger.info(f"📋 GeneratePlan: Using {len(context_tools)} context tools")
-
-            # 3. Get managed agents for routing info in plan
+            # 2. Get managed agents for routing info in plan
             managed_agents = self.managed_agents_factory.create_all_agents(
                 tool_provider=tool_provider,
                 org_model=request.model or None
             )
             logger.info(f"📋 GeneratePlan: Using {len(managed_agents)} managed agents")
 
-            # 4. Extract skill inputs for variable-aware planning
+            # 3. Extract skill inputs for variable-aware planning
             skill_inputs = []
             for input_def in request.skill_inputs:
                 skill_inputs.append({
@@ -1845,13 +1849,14 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             if skill_inputs:
                 logger.info(f"📋 GeneratePlan: {len(skill_inputs)} skill inputs for variable placeholders")
 
-            # 4b. Extract previous plan and feedback for regeneration
+            # 3b. Extract previous plan and feedback for regeneration
             previous_plan_json = request.previous_plan_json if request.previous_plan_json else None
             user_feedback = request.user_feedback if request.user_feedback else None
             if previous_plan_json and user_feedback:
                 logger.info(f"📋 GeneratePlan: Regenerating with user feedback")
 
-            # 5. Generate plan (uses PlanOutputTool internally)
+            # 4. Generate plan (uses PlanOutputTool internally)
+            # Context gathering is done via research_agent (created inside plan_service)
             timeout = request.timeout_seconds if request.timeout_seconds > 0 else 60
             plan = await asyncio.wait_for(
                 self.plan_service.generate_plan(
@@ -1859,10 +1864,11 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     context_tables=None,  # Could resolve from skill_id in future
                     org_model=request.model or None,
                     managed_agents=managed_agents,
-                    context_tools=context_tools,
                     skill_inputs=skill_inputs,  # Pass for variable-aware planning
                     previous_plan_json=previous_plan_json,  # Pass for regeneration
                     user_feedback=user_feedback,  # Pass for regeneration
+                    api_key=tool_provider.api_key,  # For research_agent auth
+                    organization_id=tool_provider.organization_id,  # For research_agent RLS
                 ),
                 timeout=timeout
             )

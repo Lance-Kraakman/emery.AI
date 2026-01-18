@@ -226,6 +226,7 @@ async def serve_chat_server(port: int):
             ('grpc.keepalive_timeout_ms', 10000),  # Wait 10s for keepalive response
             ('grpc.keepalive_permit_without_calls', 1),  # Allow keepalive pings when no calls
             ('grpc.http2.max_pings_without_data', 0),  # Allow unlimited pings without data
+            ('grpc.http2.min_recv_ping_interval_without_data_ms', 20000),  # Accept client pings as frequent as 20s
         ]
     )
 
@@ -263,6 +264,7 @@ async def serve_table_server(port: int):
             ('grpc.keepalive_timeout_ms', 10000),  # Wait 10s for keepalive response
             ('grpc.keepalive_permit_without_calls', 1),  # Allow keepalive pings when no calls
             ('grpc.http2.max_pings_without_data', 0),  # Allow unlimited pings without data
+            ('grpc.http2.min_recv_ping_interval_without_data_ms', 20000),  # Accept client pings as frequent as 20s
         ]
     )
 

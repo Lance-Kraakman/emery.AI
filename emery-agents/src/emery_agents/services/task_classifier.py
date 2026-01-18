@@ -70,7 +70,6 @@ class TaskClassifier:
     def __init__(
         self,
         model_provider: ModelProvider,
-        context_tools: Optional[List[Any]] = None,
         research_agent: Optional[Any] = None,
     ):
         """
@@ -78,12 +77,10 @@ class TaskClassifier:
 
         Args:
             model_provider: Provider for LLM access
-            context_tools: Tools for gathering context (database_crud, table_crud)
             research_agent: Optional research agent for comprehensive context gathering
                            (web research + system introspection via research_emery)
         """
         self.model_provider = model_provider
-        self.context_tools = context_tools or []
         self.research_agent = research_agent
 
     def classify(
@@ -118,9 +115,9 @@ class TaskClassifier:
             model_id = self.model_provider.resolve_model_selection(org_model=org_model)
             model = self.model_provider.get_model(model_id=model_id)
 
-            # Build tools list: context tools + classifier tool
-            tools = list(self.context_tools) + [tool]
-            logger.info(f"🔍 Classifier has {len(self.context_tools)} context tools")
+            # Build tools list: just the classifier tool
+            # Context gathering is done via research_agent (managed agent)
+            tools = [tool]
 
             # Add research_agent as managed agent if available
             managed_agents = [self.research_agent] if self.research_agent else None
