@@ -10,6 +10,7 @@ import asyncio
 import json
 import logging
 import re
+import uuid
 from dataclasses import dataclass, field
 from typing import List, Optional, Any, AsyncIterator, Dict, Callable, Tuple, TYPE_CHECKING
 from enum import Enum
@@ -23,6 +24,7 @@ from ..agents.interrupt_classifier import (
 from ..models.plan import Plan, PlanStep, PlanStatus, PlanStepStatus, SubPlan, RecoveryResult, create_plan
 from ..models.task_ledger import TaskLedger, create_ledger_from_plan, LedgerEventType
 from ..utils.toon_format import to_toon
+from ..utils.session_logger import SessionLogger, get_session_logger
 from ..models.context_mapping import ResolvedContext
 from ..models.execution import StepExecutionResult, EvaluatorInput, ReplanContext
 from ..models.planning_questions import BatchedQuestions, QuestionAnswers
@@ -511,6 +513,11 @@ class ExecutionCoordinator:
         self._managed_agents = managed_agents
         self._agent_factories = agent_factories
 
+        # Initialize session logger for this execution (only logs if EMERY_DEBUG_PROMPTS=1)
+        session_id = self._generate_session_id()
+        self._session_logger = SessionLogger.get_or_create(session_id)
+        self._session_logger.log_event("execution_started", {"task_preview": task[:200]})
+
         # === AUTONOMOUS MODE: Execute stored plan directly ===
         if stored_plan:
             logger.info(
@@ -519,6 +526,15 @@ class ExecutionCoordinator:
             )
             self._current_plan = stored_plan
             self._current_phase = ExecutionPhase.EXECUTING
+            self._session_logger.log_state_transition("IDLE", "EXECUTING", "stored_plan")
+            self._session_logger.log_plan(
+                action="loaded",
+                plan_id=stored_plan.id,
+                goal=stored_plan.goal,
+                steps=[{"step_id": s.step_id, "description": s.description, "status": s.status.value} for s in stored_plan.steps],
+                context=stored_plan.context,
+                analysis=stored_plan.analysis
+            )
 
             # Emit events for UI visibility
             yield PlanCreatedEvent(plan_id=stored_plan.id, plan=stored_plan)
@@ -530,7 +546,15 @@ class ExecutionCoordinator:
             return
 
         # Use LLM-based classification
+        self._session_logger.log_state_transition("IDLE", "CLASSIFYING", "task_received")
         classification = self._classify_task(task, managed_agents or [], context)
+        self._session_logger.log_event("task_classified", {
+            "mode": classification.mode,
+            "needs_clarification": classification.needs_clarification,
+            "target_agent": classification.target_agent,
+            "use_cascade_planning": classification.use_cascade_planning,
+            "reasoning": classification.reasoning[:200] if classification.reasoning else ""
+        })
 
         # If clarification questions are needed, ask them first
         if classification.needs_clarification and classification.clarification_questions:
@@ -571,6 +595,10 @@ class ExecutionCoordinator:
             ):
                 yield event
         # Session manager handles approval state
+
+    def _generate_session_id(self) -> str:
+        """Generate a short unique session ID for logging."""
+        return str(uuid.uuid4())[:8]
 
     def _classify_task(
         self,

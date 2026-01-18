@@ -32,6 +32,8 @@ from typing import Optional, Any, List, Dict
 
 from jinja2 import Environment, FileSystemLoader
 
+from ..utils.session_logger import get_session_logger
+
 logger = logging.getLogger(__name__)
 
 # Template directory (relative to this file)
@@ -298,13 +300,25 @@ def get_hitl_templates() -> Dict[str, str]:
 
 
 def _write_debug_prompt(name: str, content: str) -> None:
-    """Write prompt content to /tmp for debugging."""
+    """Write prompt content to /tmp for debugging.
+
+    Also logs to the current session logger if available (set EMERY_DEBUG_PROMPTS=1).
+    """
     try:
         os.makedirs('/tmp/emery_prompts', exist_ok=True)
         filepath = f'/tmp/emery_prompts/{name}.txt'
         with open(filepath, 'w') as f:
             f.write(content)
         logger.info(f"📋 Wrote debug prompt to {filepath}")
+
+        # Also log to session logger if available
+        session_logger = get_session_logger()
+        if session_logger:
+            session_logger.log_prompt_full(
+                agent_name=name,
+                prompt=content,
+                phase="prompt_rendered"
+            )
     except Exception as e:
         logger.warning(f"⚠️ Failed to write debug prompt: {e}")
 

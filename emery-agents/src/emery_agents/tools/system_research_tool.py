@@ -67,6 +67,7 @@ Resource types:
 - tasks: Query task history, get logs/results (id, status, result, logs)
 - tables: List tables, get schema/fields (id, name, fields)
 - apps: List apps, get pages/config (id, name, slug, pages)
+- pages: Get page by ID with content (id, name, templateData), or list pages in app
 - audit: Query audit events, get resource trails (eventType, resource, actor, timestamp)
 
 Examples:
@@ -77,12 +78,14 @@ Examples:
 - Task by ID: system_research(resource_type="tasks", query="task-uuid-here")
 - Audit for skill: system_research(resource_type="audit", filters={"resourceType": "skill", "resourceId": "15"})
 - Tables in database: system_research(resource_type="tables")
+- Page content: system_research(resource_type="pages", query="22", include_details=True)
+- Pages in app: system_research(resource_type="pages", filters={"app_id": 15})
 """
 
         inputs = {
             "resource_type": {
                 "type": "string",
-                "description": "Type to research: 'organization', 'agents', 'skills', 'tasks', 'tables', 'apps', 'audit'"
+                "description": "Type to research: 'organization', 'agents', 'skills', 'tasks', 'tables', 'apps', 'pages', 'audit'"
             },
             "query": {
                 "type": "string",
@@ -135,13 +138,15 @@ Examples:
                 return self._research_tables(query, filters, include_details)
             elif resource_type == "apps":
                 return self._research_apps(query, filters, include_details)
+            elif resource_type == "pages":
+                return self._research_pages(query, filters, include_details)
             elif resource_type == "audit":
                 return self._research_audit(query, filters, include_details)
             else:
                 return {
                     "success": False,
                     "error": f"Unknown resource type: '{resource_type}'. "
-                             f"Supported types: organization, agents, skills, tasks, tables, apps, audit"
+                             f"Supported types: organization, agents, skills, tasks, tables, apps, pages, audit"
                 }
 
         def _research_organization(
@@ -319,6 +324,46 @@ Examples:
             else:
                 # List apps with TOON format
                 endpoint = "apps?format=llm"
+                if filters.get("limit"):
+                    endpoint += f"&limit={filters['limit']}"
+                return self._make_api_request(
+                    endpoint=endpoint,
+                    method="GET",
+                    auth_token=_auth_token,
+                    organization_id=_org_id
+                )
+
+        def _research_pages(
+            self,
+            query: Optional[str],
+            filters: Dict,
+            include_details: bool
+        ) -> Dict[str, Any]:
+            """Research pages - get by ID with content, or list pages in an app."""
+            if query and query.isdigit():
+                # Get specific page by ID with templateData
+                # Use include_details to get full content (templateData)
+                if include_details:
+                    # Full page data with templateData
+                    endpoint = f"pages/{query}"
+                else:
+                    # Summary only (TOON format)
+                    endpoint = f"pages/{query}?format=llm"
+                return self._make_api_request(
+                    endpoint=endpoint,
+                    method="GET",
+                    auth_token=_auth_token,
+                    organization_id=_org_id
+                )
+            else:
+                # List pages for an app
+                app_id = filters.get("app_id")
+                if not app_id:
+                    return {
+                        "success": False,
+                        "error": "app_id filter required to list pages. Example: filters={'app_id': 15}"
+                    }
+                endpoint = f"apps/{app_id}/pages?format=llm"
                 if filters.get("limit"):
                     endpoint += f"&limit={filters['limit']}"
                 return self._make_api_request(
