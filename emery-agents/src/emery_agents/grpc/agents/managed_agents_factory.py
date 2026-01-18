@@ -477,39 +477,40 @@ class ManagedAgentsFactory:
         views -> apps) and designs holistic solutions before delegating.
 
         System Designer has:
-        - research_emery (managed agent) for system introspection
-        - research tools (web_search, visit_webpage) for context gathering
+        - research_agent (managed agent) for web search + system introspection
         - Other builders as managed_agents for delegation
 
         AIDEV-NOTE: System Designer does NOT have CRUD tools directly.
         It delegates to specialized builders via cascade planning.
+
+        AIDEV-NOTE: Uses research_agent instead of separate research tools +
+        research_emery. research_agent already combines both (web search tools +
+        research_emery as its own managed agent).
         """
         model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
 
-        # Get research tools for context gathering
-        research_tools = self._get_research_tools()
-
-        # Create research_emery as managed agent for system introspection
-        research_emery = self.create_research_emery(
+        # Create research_agent for combined web + system research
+        # research_agent has: web_search, visit_webpage tools + research_emery as managed agent
+        research_agent = self.create_research_agent(
             api_key=tool_provider.api_key,
             organization_id=tool_provider.organization_id,
             org_model=org_model
         )
 
-        # Build managed agents list: research_emery + any provided builders
-        all_managed_agents = [research_emery]
+        # Build managed agents list: research_agent + any provided builders
+        all_managed_agents = [research_agent]
         if managed_agents:
             all_managed_agents.extend(managed_agents)
 
         system_designer = create_system_designer_agent(
-            tools=research_tools,  # Only research tools, no CRUD
+            tools=[],  # No direct tools - delegates to research_agent
             model=model,
             max_steps=15,
             managed_agents=all_managed_agents,
         )
 
         agent_names = [a.name for a in all_managed_agents if hasattr(a, 'name')]
-        logger.info(f"Created System Designer agent with {len(research_tools)} research tools + managed agents: {agent_names}")
+        logger.info(f"Created System Designer agent with managed agents: {agent_names}")
         return system_designer
 
     def create_agent_executor(
@@ -914,26 +915,19 @@ class ManagedAgentsFactory:
 
             AIDEV-NOTE: system_designer is the TOP-LEVEL ORCHESTRATOR that
             understands the full Emery ecosystem. It has:
-            - research tools for context gathering
-            - research_emery as managed agent for system introspection
+            - research_agent as managed agent (combines web search + system introspection)
             - NO CRUD tools (delegates to specialized builders)
-            """
-            # Get research tools for context gathering
-            research_tools = self._get_research_tools()
 
-            # Create research_emery for system introspection
-            research_emery = create_research_emery_agent(
-                model=model,
-                api_key=kwargs.pop('api_key', tool_provider.api_key),
-                organization_id=kwargs.pop('organization_id', tool_provider.organization_id),
-                max_steps=10,
-            )
+            Uses research_agent instead of separate research tools + research_emery.
+            """
+            # Create research_agent for combined web + system research
+            research_agent = research_agent_factory(**kwargs)
 
             return create_system_designer_agent(
-                tools=research_tools,  # Only research tools, no CRUD
+                tools=[],  # No direct tools - delegates to research_agent
                 model=model,
                 max_steps=15,
-                managed_agents=[research_emery],
+                managed_agents=[research_agent],
                 **kwargs
             )
 

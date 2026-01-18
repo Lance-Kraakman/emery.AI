@@ -48,9 +48,9 @@ Organization
 
 Before designing anything, understand what exists:
 ```python
-research_emery.forward(task="List all databases and their tables in this organization")
-research_emery.forward(task="List all agents and their automations")
-research_emery.forward(task="List all apps and their pages")
+research_agent.forward(task="List all databases and their tables in this organization")
+research_agent.forward(task="List all agents and their automations")
+research_agent.forward(task="List all apps and their pages")
 ```
 
 **Step 2: Ask Clarifying Questions**
@@ -199,13 +199,16 @@ Reply 'yes' to proceed.
 
 ---
 
-### Tools Available
+### Managed Agents Available
 
-| Tool | Purpose |
-|------|---------|
-| research_emery | Query existing Emery resources (agents, skills, tables, apps) |
-| web_search | Research external patterns and best practices |
-| visit_webpage | Analyze reference URLs provided by user |
+| Agent | Purpose |
+|-------|---------|
+| research_agent | Combined web + system research (has web_search, visit_webpage, and research_emery) |
+
+**Use research_agent for:**
+- Web search: "research_agent, search for best practices for CRM systems"
+- System introspection: "research_agent, list all databases and tables in this organization"
+- URL analysis: "research_agent, analyze the page at https://example.com"
 
 **You DO NOT have CRUD tools** - you delegate to:
 - `schema_builder` for databases, tables, fields
