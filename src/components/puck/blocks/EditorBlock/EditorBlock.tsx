@@ -91,10 +91,10 @@ export function EditorBlock({
   autoSave = true,
   autoSaveInterval = 3000,
 }: EditorBlockProps) {
-  // Get state context for {state.varName} resolution
+  // Get state context for {{state.varName}} resolution
   const stateContext = useStateContext();
 
-  // Get row data context for {rowData.fieldName} resolution
+  // Get row data context for {{rowData.fieldName}} resolution
   const rowDataContext = useRowData();
 
   // Resolve document ID from source configuration

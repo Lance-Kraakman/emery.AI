@@ -23,7 +23,7 @@ export type MarkdownBlockProps = WithLayout<{
 
 /**
  * MarkdownBlock render component - renders markdown with syntax highlighting
- * Supports variable interpolation: "Hello {state.user.name}!" becomes "Hello John!"
+ * Supports variable interpolation: "Hello {{state.userName}}!" becomes "Hello John!"
  */
 function MarkdownBlockRender({
   content,
@@ -31,7 +31,7 @@ function MarkdownBlockRender({
   backgroundColor,
   maxWidth,
 }: MarkdownBlockProps) {
-  // Interpolate variables in content (e.g., {state.x.y}, {rowData.id})
+  // Interpolate variables in content (e.g., {{state.key}}, {{rowData.id}})
   const interpolatedContent = useInterpolatedText(content);
 
   return (

@@ -34,7 +34,7 @@ const levelOptions = [
 
 /**
  * Heading render component - supports variable interpolation
- * Text like "Welcome {state.user.name}!" becomes "Welcome John!"
+ * Text like "Welcome {{state.userName}}!" becomes "Welcome John!"
  */
 function HeadingRender({
   align,

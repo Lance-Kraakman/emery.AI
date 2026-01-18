@@ -2,7 +2,7 @@
  * PageStatePanel - Configure page-level client state
  *
  * AIDEV-NOTE: Allows defining state variables for a page.
- * These are accessible via {state.variableName} in text interpolation
+ * These are accessible via {{state.variableName}} in text interpolation
  * and in ConditionalBlock/DialogBlock configuration.
  *
  * State auto-populates from URL params with matching names.
@@ -362,7 +362,7 @@ export function PageStatePanel({
       {/* Help Text */}
       <p className="text-[10px] text-muted-foreground pt-1">
         Access state with{" "}
-        <code className="bg-muted px-0.5 rounded">{"{state.name}"}</code>
+        <code className="bg-muted px-0.5 rounded">{"{{state.name}}"}</code>
         <br />
         State auto-populates from matching URL params.
       </p>

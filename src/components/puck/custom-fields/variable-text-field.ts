@@ -1,7 +1,7 @@
 /**
  * VariableTextField - Custom Puck field for text with variable support
  *
- * Allows using {fieldName}, {params.name}, and {state.container.key} template syntax
+ * Allows using {{fieldName}}, {{params.name}}, and {{state.key}} template syntax
  * with autocomplete. Supports both single-line and multi-line text inputs.
  *
  * Usage:

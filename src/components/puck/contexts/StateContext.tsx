@@ -5,7 +5,7 @@
  *
  * AIDEV-NOTE: Provides client-side state management using a FLAT namespace.
  * State is defined at the page level via PageStateConfig and accessible
- * via {state.key} syntax in text interpolation.
+ * via {{state.key}} syntax in text interpolation.
  *
  * Features:
  * - Initialize from PageStateConfig (from page DB)

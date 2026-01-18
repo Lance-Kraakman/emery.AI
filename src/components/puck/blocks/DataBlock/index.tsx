@@ -259,7 +259,7 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
     // Row filter field - shown for both single and list modes
     // Tooltip text based on mode
     const filterTooltip = mode === 'single'
-      ? 'Filter to match exactly one row. Use a unique field like ID. Example: id equals {state.selectedId}'
+      ? 'Filter to match exactly one row. Use a unique field like ID. Example: id equals {{state.selectedId}}'
       : 'Filter which rows to display. Leave empty to show all rows. Example: status equals "active"';
 
     const filterLabel = mode === 'single' ? 'Row Selection' : 'Row Filter';

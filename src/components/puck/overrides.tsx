@@ -151,8 +151,8 @@ export const createPuckUIOverrides = (
    * Field Type Overrides - Replace default text inputs with variable-aware inputs
    *
    * All text and textarea fields now support variable interpolation:
-   * - {state.varName} - Page state variables (auto-populated from URL params)
-   * - {rowData.fieldName} - Parent DataBlock row fields
+   * - {{state.varName}} - Page state variables (auto-populated from URL params)
+   * - {{rowData.fieldName}} - Parent DataBlock row fields
    */
   fieldTypes: {
     text: ({ value, onChange, field, readOnly }) => (
