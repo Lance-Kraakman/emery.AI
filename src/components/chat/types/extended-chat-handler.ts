@@ -64,6 +64,12 @@ export interface BatchedQuestion {
 }
 
 /**
+ * User's answers to batched questions (maps questionId → answer)
+ * Sent as JSON to backend for cascade planning resume
+ */
+export type BatchedQuestionAnswers = Record<string, string>
+
+/**
  * Group of questions from a single agent
  */
 export interface QuestionSection {

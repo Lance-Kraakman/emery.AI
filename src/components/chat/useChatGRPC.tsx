@@ -803,6 +803,7 @@ export function useChatGRPC(
       setStreamingSteps([])
       setCurrentStep(null)
       setSelectedModel(undefined)
+      setAwaitingInput(null)
 
       // Clear localStorage for this context
       if (typeof window !== 'undefined') {

@@ -69,6 +69,11 @@ export function ApprovalInputBar({
     if (disabled) return
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Only capture if focus is within the approval bar container
+      if (!containerRef.current?.contains(document.activeElement)) {
+        return
+      }
+
       // Don't intercept if input is focused and has content
       if (document.activeElement === inputRef.current && customInput) {
         if (e.key === 'Enter') {
@@ -128,7 +133,7 @@ export function ApprovalInputBar({
 
       {/* Content (for questions/clarifications) */}
       {awaitingInput.content && !isBatchedQuestions && (
-        <div className="prose prose-sm dark:prose-invert max-w-none mb-3 text-sm">
+        <div className="prose prose-sm dark:prose-invert max-w-none mb-3 text-sm max-h-[50vh] overflow-y-auto">
           <ReactMarkdown>{awaitingInput.content}</ReactMarkdown>
         </div>
       )}

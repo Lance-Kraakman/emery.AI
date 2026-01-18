@@ -357,6 +357,15 @@ function ChatContentWithCanvas({
 
   return (
     <div className="h-full flex flex-col">
+      {/* Tool Panel - under header */}
+      <ToolPanel
+        tools={selectedTools}
+        onToolClick={handleToolClick}
+        onAddTool={onAddTool}
+        onRemoveTool={onRemoveTool}
+        className="border-b border-border/10"
+      />
+
       {/* Messages and suggestions container - scrollable */}
       <div ref={handler.scrollRef} className="flex-1 overflow-y-auto flex flex-col">
         {/* Messages area */}
@@ -399,7 +408,7 @@ function ChatContentWithCanvas({
                         )}
                       >
                         <ChatMessage.Part.Markdown
-                          className="max-w-none w-full text-sm leading-snug [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0 [&_pre]:my-1.5 [&_pre]:p-2 [&_code]:text-xs [&_h1]:mt-2 [&_h1]:mb-1 [&_h2]:mt-2 [&_h2]:mb-1 [&_h3]:mt-2 [&_h3]:mb-1 [&_blockquote]:my-1.5 [&_blockquote]:pl-3"
+                          className="max-w-none text-sm leading-snug [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0 [&_pre]:my-1.5 [&_pre]:p-2 [&_code]:text-xs [&_h1]:mt-2 [&_h1]:mb-1 [&_h2]:mt-2 [&_h2]:mb-1 [&_h3]:mt-2 [&_h3]:mb-1 [&_blockquote]:my-1.5 [&_blockquote]:pl-3"
                         />
                         <ChatMessage.Part.File className="my-2" />
                         <ChatMessage.Part.Source className="my-2" />
@@ -443,15 +452,6 @@ function ChatContentWithCanvas({
           </ChatMessages>
         </div>
       </div>
-
-      {/* Tool Panel - with direct canvas access */}
-      <ToolPanel
-        tools={selectedTools}
-        onToolClick={handleToolClick}
-        onAddTool={onAddTool}
-        onRemoveTool={onRemoveTool}
-        className="border-t border-border/10"
-      />
 
       {/* Input area */}
       <div className="flex-shrink-0 py-2 px-3 bg-card">
