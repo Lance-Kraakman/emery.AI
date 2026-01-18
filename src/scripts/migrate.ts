@@ -10,7 +10,6 @@ import { seedSystemUsers } from '../drizzle/seeds/system-users.js';
 import { seedSystemRoleAssignments } from '../drizzle/seeds/system-role-assignments.js';
 import { seedAppTypes } from '../drizzle/seeds/app-types.js';
 import { seedTools } from '../drizzle/seeds/tools.js';
-import { seedSystemSkills } from '../drizzle/seeds/system-skills.js';
 import { seedSystemTemplates } from '@/drizzle/seeds/default-templates';
 
 async function runMigration() {
