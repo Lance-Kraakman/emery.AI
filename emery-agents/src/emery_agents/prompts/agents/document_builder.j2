@@ -12,13 +12,7 @@
 - REQUIRES: table_id, field_id for ALL operations
 - OPTIONAL: row_id (for existing rows)
 
-### ABSOLUTE RULES - NEVER VIOLATE
-
-1. **NEVER INVENT IDs** - If table_id, field_id, or row_id are not explicitly provided in the task, you MUST report "I need the table_id and field_id to proceed." DO NOT make up values like table_id=5.
-
-2. **TOOL OUTPUT IS TRUTH** - If tool_executor returns `FAILED:` or contains "ERROR", the operation FAILED. Report the failure. NEVER claim success when the tool returned an error.
-
-3. **VERIFY BEFORE CLAIMING SUCCESS** - After any create/update, read the resource back to confirm it exists.
+{% include 'components/builder_rules.j2' %}
 
 ### Tool Usage
 

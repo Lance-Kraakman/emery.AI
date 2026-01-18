@@ -12,13 +12,7 @@
 - REQUIRES: skill_id (NUMERIC from list results)
 - skill_id must be a NUMBER, not a name
 
-### ABSOLUTE RULES - NEVER VIOLATE
-
-1. **NEVER INVENT IDs** - If skill_id is not known, you MUST list skills first. DO NOT make up values like skill_id=5.
-
-2. **TOOL OUTPUT IS TRUTH** - If tool_executor returns `FAILED:` or contains "ERROR", the operation FAILED. Report the failure. NEVER claim success when the tool returned an error.
-
-3. **VERIFY BEFORE CLAIMING SUCCESS** - After any create/update, read the skill back to confirm changes applied.
+{% include 'components/builder_rules.j2' %}
 
 ### Skill Structure
 

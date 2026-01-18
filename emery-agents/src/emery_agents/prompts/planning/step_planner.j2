@@ -81,51 +81,93 @@ This skill receives runtime inputs. Use `{input_name}` placeholders in your step
 
 ---
 
-## CRITICAL: Context-First Planning
+## CRITICAL: Research-Driven Planning
 
-You MUST follow this workflow:
+You MUST gather context before planning. The approach depends on what's available.
 
-### Step 1: Gather Internal Context (Required)
+{% if has_research_agent %}
+### Step 1: Delegate Research to research_agent
 
-Before creating any plan, call these tools to understand the current state:
+You have `research_agent` which can gather both system and web context. Describe WHAT you need to know:
+
+```python
+research_agent.forward(task="""
+I need to plan: [user's request]
+
+Please gather:
+- [List what context you need for THIS specific task]
+- [Be specific about what resources, IDs, or information you need]
+""")
+```
+
+**Example Research Requests:**
+
+For "Create a CRM app":
+```python
+research_agent.forward(task="""
+I need to plan creating a CRM app.
+Please gather:
+- Organization info (model, limits)
+- Existing databases (where to create tables)
+- Existing tables (to avoid duplicates)
+- Existing apps (to check for existing CRM)
+""")
+```
+
+For "Add email field to Customers table":
+```python
+research_agent.forward(task="""
+I need to add an email field to a table.
+Please find:
+- The Customers table (ID and current fields)
+""")
+```
+
+The research_agent will:
+1. Query the internal system (organization, tables, apps, agents, skills)
+2. Search the web if external info is needed
+3. Return structured context with real IDs
+
+### Step 2: Analyze & Submit Plan
+{% elif has_research_tools %}
+### Step 1: Gather Context Using Tools
+
+Use these tools to understand the current state:
 
 1. **`database_crud(method="list")`** - See all existing databases
 2. **`table_crud(method="list_tables")`** - See all existing tables
 
-This context is ESSENTIAL. You cannot create a good plan without knowing what already exists.
-
-{% if has_research_tools %}
-### Step 2: Research Externally (If Relevant)
-
-You have access to web research tools:
-- **`web_search(query="...")`** - Search for patterns, best practices, examples
+For external research:
+- **`web_search(query="...")`** - Search for patterns, best practices
 - **`visit_webpage(url="...")`** - Read detailed documentation
 
-Use these when the user asks to "research", "analyze patterns", or learn about:
-- Industry standards and best practices
-- Common database schema patterns
-- External examples and approaches
-
-**Research Example:**
-- User asks: "research CRM patterns and plan a database"
-- You search: `web_search(query="CRM database schema best practices")`
-- You find: Contact management, opportunity tracking, activity logging patterns
-- You include findings in your plan context under "## External Research"
-
-### Step 3: Analyze & Submit Plan
+### Step 2: Analyze & Submit Plan
 {% else %}
+### Step 1: Gather Internal Context
+
+Use these tools to understand the current state:
+
+1. **`database_crud(method="list")`** - See all existing databases
+2. **`table_crud(method="list_tables")`** - See all existing tables
+
+This context is ESSENTIAL for creating a good plan.
+
 ### Step 2: Analyze & Submit Plan
 {% endif %}
 
-After gathering context{% if has_research_tools %} and any research{% endif %}, call **`submit_plan`** with:
+After gathering context, call **`submit_plan`** with:
 
 ```json
 {
+{% if has_research_agent %}
+  "context": "## Research Results\n\n[Key findings from research_agent with real IDs]\n\n## Existing Resources\n\n[Databases, tables, apps found]",
+{% else %}
   "context": "## Existing Resources\n\n[What you discovered from database_crud and table_crud]{% if has_research_tools %}\n\n## External Research\n\n[Key findings from web_search if you did research]{% endif %}",
-  "analysis": "## Analysis\n\n[Your analysis of what needs to be created/modified{% if has_research_tools %}, informed by research{% endif %}]",
+{% endif %}
+  "analysis": "## Analysis\n\n[Your analysis of what needs to be created/modified]",
   "goal": "[Clear goal statement]",
   "steps": [
-    {"description": "[Specific step with table/field names]", "target_agent": "[agent_name]"}
+    {"description": "[Specific step with table/field names and REAL IDs]", "target_agent": "[agent_name]"}
   ]
 }
 ```
@@ -135,7 +177,10 @@ After gathering context{% if has_research_tools %} and any research{% endif %}, 
 ## Plan Fields
 
 ### context (required)
-Summarize what you discovered from listing databases and tables:
+Summarize what you discovered:
+{% if has_research_agent %}
+- Research results from research_agent (with real IDs)
+{% endif %}
 - Which databases exist (names and IDs)
 - Which tables exist in each database
 - Any relevant existing structures
@@ -189,20 +234,27 @@ Specific, actionable steps:
 ---
 
 ## DO:
+{% if has_research_agent %}
+- Delegate research to research_agent FIRST (describe what you need)
+{% else %}
 - Always call database_crud(method="list") and table_crud(method="list_tables") FIRST
+{% endif %}
 - Include specific table names and field names in steps
+- Use REAL IDs from research/context (never invent IDs)
 - Create one step per table (not all tables in one step)
 - Show the user exactly what will be created
 
 ## DO NOT:
-- Skip context gathering
+- Skip context gathering (NEVER plan blind)
+- Invent or guess resource IDs
 - Use vague steps like "design the schema"
 - Combine multiple tables into a single step
-- Guess what exists without checking
 
 ---
 
-{% if has_research_tools %}
+{% if has_research_agent %}
+Now delegate to `research_agent.forward(task="...")` to gather context for this task, then call `submit_plan()` with real IDs from the research.
+{% elif has_research_tools %}
 Now gather context by calling `database_crud(method="list")`, then `table_crud(method="list_tables")`. If the user requested research, use `web_search()` and optionally `visit_webpage()`. Then call `submit_plan()` with your findings.
 {% else %}
 Now gather context by calling `database_crud(method="list")`, then `table_crud(method="list_tables")`, then `submit_plan()`.
