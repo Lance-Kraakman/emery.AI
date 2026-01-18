@@ -6,7 +6,8 @@ import { CanvasBase } from '@/components/canvas/CanvasBase';
 
 interface PageProps {
   searchParams: Promise<{
-    templateId?: string;
+    templateId?: string;  // Saved template ID (number)
+    builtinId?: string;   // Builtin template ID (e.g., 'skill/table-operations')
   }>;
 }
 
@@ -25,10 +26,15 @@ export default async function NewOrganizationSkillPage({ searchParams }: PagePro
 
   const resolvedParams = await searchParams;
   const templateId = resolvedParams.templateId ? parseInt(resolvedParams.templateId, 10) : undefined;
+  const builtinId = resolvedParams.builtinId;
 
   return (
     <CanvasBase>
-      <NewOrganizationSkillView organizationId={organizationId} templateId={templateId} />
+      <NewOrganizationSkillView
+        organizationId={organizationId}
+        templateId={templateId}
+        builtinId={builtinId}
+      />
     </CanvasBase>
   );
 }
