@@ -71,12 +71,6 @@ export function VariablesPanel({
     <div
       className={cn('p-2.5 bg-muted/50 rounded-lg border overflow-y-auto', className)}
       style={{ maxHeight, position: 'relative', zIndex: 10 }}
-      onMouseDown={(e) => {
-        console.log('🟣 VariablesPanel CONTAINER mousedown, target:', e.target);
-      }}
-      onClick={(e) => {
-        console.log('🟣 VariablesPanel CONTAINER click, target:', e.target);
-      }}
     >
       <div className="space-y-0.5">
         {variables.map((variable) => (
@@ -86,18 +80,13 @@ export function VariablesPanel({
             className="w-full flex items-start gap-2 text-xs cursor-pointer hover:bg-muted/80 p-1.5 rounded transition-colors text-left"
             style={{ position: 'relative', zIndex: 11 }}
             onMouseDown={(e) => {
-              console.log('🟣 VariablesPanel button mousedown for:', variable.name);
               e.preventDefault(); // Prevents input blur so variable can be inserted at cursor
               e.stopPropagation(); // Prevents Puck from capturing this event
-              console.log('🟣 Calling onInsert with:', formatVariable(variable.name));
               onInsert(formatVariable(variable.name));
             }}
             onClick={(e) => {
-              console.log('🟣 VariablesPanel button onClick for:', variable.name);
               e.stopPropagation();
-              // Also call onInsert on click as a fallback
-              console.log('🟣 Calling onInsert from onClick as fallback');
-              onInsert(formatVariable(variable.name));
+              // Don't call onInsert here - already called in onMouseDown
             }}
             title={variable.description || `Click to insert ${formatVariable(variable.name)}`}
           >
