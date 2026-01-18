@@ -68,17 +68,48 @@ Theme is stored as JSON in database (themeConfig), converted to CSS variables at
 **Typography Variables:**
 `--theme-font-family`, `--theme-font-size`, `--theme-heading-font-weight`, `--theme-heading-color`, `--theme-font-xs/sm/base/lg/xl/2xl/3xl/4xl/5xl`
 
-### Page Variables (Dynamic Content)
-Use `{params.varName}` syntax in text fields for dynamic content from URL.
+### Variable Syntax Reference
 
-**Examples:**
-- `{params.product_id}` - URL path parameter
-- `{params.user_id}` - Query string parameter
+**IMPORTANT: Two different syntaxes for different contexts!**
 
-**Supported in:** TextField, NumberField, Button label, LinkBlock href
+#### For Text/Labels (double braces `{{ }}`):
+Use in: Heading text, Button labels, Text content, MarkdownBlock, Link href
+
+```
+{{state.key}}           - Page state value (FLAT namespace)
+{{rowData.fieldName}}   - Field from parent DataBlock row
+```
+
+**Example - Button with dynamic label:**
+```json
+{"type": "Button", "props": {"label": "View {{rowData.name}}", "href": "/products/{{rowData.id}}"}}
+```
+
+#### For Filters/Actions (single braces `{ }`):
+Use in: DataBlock filters, Action parameters, Navigation queries
+
+```
+{params.varName}        - URL parameter (server-side resolution)
+{state.key}             - Page state (client-side, FLAT namespace)
+{rowData.fieldName}     - Parent DataBlock row (client-side)
+{formData.fieldName}    - Form submission data
+```
+
+**Example - DataBlock filter:**
+```json
+{"type": "DataBlock", "props": {"viewId": 10, "mode": "single", "filters": [{"field": "id", "operator": "=", "value": "{params.id}"}]}}
+```
+
+**CRITICAL: State is FLAT namespace**
+- Correct: `{state.selectedId}` or `{{state.selectedId}}`
+- WRONG: `{state.container.key}` (no nesting!)
+
+**Server vs Client Resolution:**
+- `{params.*}` - Resolved server-side (available at request time)
+- `{state.*}`, `{rowData.*}` - Resolved client-side (triggers client-side data fetch)
 
 ### Page State (Interactive Variables)
-Use `{state.varName}` syntax for interactive state managed at runtime.
+Runtime state variables for interactivity.
 
 **Variable types:** `string`, `number`, `boolean`, `object`, `array`
 **Persistence:** `none`, `session`, `localStorage`
@@ -88,7 +119,7 @@ Use `{state.varName}` syntax for interactive state managed at runtime.
 page_crud(method="update_state", page_id=5, data={
     "variables": [
         {"name": "showModal", "type": "boolean", "defaultValue": False},
-        {"name": "userName", "type": "string", "defaultValue": ""}
+        {"name": "selectedId", "type": "number", "defaultValue": None}
     ],
     "persistence": "session"
 })

@@ -23,8 +23,14 @@
 ### Action Blocks
 | Block | Description | Key Props |
 |-------|-------------|-----------|
-| Button | CTA button | label, variant (primary/secondary), actions[] |
-| LinkBlock | Navigation link | label, href (supports {params.x}) |
+| Button | CTA button | label, variant (primary/secondary), href, actions[] |
+| LinkBlock | Navigation link | label, href |
+
+**Text Interpolation in Button/LinkBlock (double braces):**
+- `{{state.key}}` - Page state value
+- `{{rowData.fieldName}}` - Row data (when inside DataBlock)
+
+Example: `{"label": "View {{rowData.name}}", "href": "/products/{{rowData.id}}"}`
 
 ### Authentication Blocks
 | Block | Description | Key Props |
@@ -35,11 +41,23 @@
 ### Data Blocks (connect to database tables/views)
 | Block | Description | Key Props |
 |-------|-------------|-----------|
-| DataBlock | **Parent for Field blocks** | viewId (required), mode (single/list), filters[], sorts[], limit |
+| DataBlock | **Parent for Field blocks** | viewId (required), mode (single/list), filters[], sorts[], limit, onRowClick |
 | TableBlock | Tabular data display | viewId (required), columns[], pageSize |
 | MetricBlock | Single KPI value | viewId, fieldId, label, format |
 | ChartBlock | Data visualization | viewId, chartType (bar/line/pie/area), xField, yField |
 | FormBlock | Create/edit form | tableId (required), fields[], mode (create/edit), submitLabel |
+
+**DataBlock Filter Variables (single braces):**
+- `{params.name}` - URL parameter (server-side resolution)
+- `{state.key}` - Page state (client-side, flat namespace)
+- `{rowData.field}` - Parent DataBlock row (client-side, for nested blocks)
+
+**DataBlock onRowClick Actions:**
+```json
+{"type": "setState", "key": "selectedId", "value": "{{rowData.id}}"}
+{"type": "navigate", "href": "/detail/{{rowData.id}}"}
+{"type": "multi", "actions": [...]}
+```
 
 ### Field Blocks (MUST be inside DataBlock)
 | Block | Description | Key Props |
