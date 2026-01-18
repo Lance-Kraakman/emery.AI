@@ -443,11 +443,15 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                         logger.debug(f"📤 Creating StepProgress protobuf message: type={response_dict.get('step_type')}, name={response_dict.get('step_name')}")
 
                         # Create StepProgress message without metadata
+                        # Ensure step_index is an integer (may come as string from some sources)
+                        raw_step_index = response_dict.get("step_index", 0)
+                        step_index = int(raw_step_index) if raw_step_index is not None else 0
+
                         step_progress_msg = agent_worker_pb2.StepProgress(
                             step_type=step_type_map.get(response_dict.get("step_type"), agent_worker_pb2.STEP_PLANNING),
                             step_name=response_dict.get("step_name", ""),
                             content=response_dict.get("content", ""),
-                            step_index=response_dict.get("step_index", 0)
+                            step_index=step_index
                         )
 
                         # Explicitly populate metadata map field (protobuf requires field-by-field assignment)
