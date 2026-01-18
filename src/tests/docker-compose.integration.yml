@@ -114,6 +114,7 @@ services:
       WORKER_ADDRESS: agent-chat-integration:50051        # Chat service (internal network)
       USE_PIPEDREAM_TOOLS: true
       NEXTJS_BASE_URL: http://app-integration:3000
+      EMERY_DEBUG_PROMPTS: "1"
     depends_on:
       postgres-integration:
         condition: service_healthy
