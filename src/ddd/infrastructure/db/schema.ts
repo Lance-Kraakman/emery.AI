@@ -1102,32 +1102,30 @@ export const skills = pgTable("skills", {
     for: "select",
     to: "public",
     using: sql`
-      is_system = true OR (
-        organization_id = current_setting('app.current_organization_id')::integer
-        AND (
-          (agent_id IS NOT NULL AND EXISTS (
-            SELECT 1 FROM agents a
-            WHERE a.id = agent_id
-            AND (
-              a.owner_id = current_setting('app.current_user_id')::uuid
-              OR user_has_permission(
-                current_setting('app.current_user_id')::uuid,
-                'agents:view',
-                a.organization_id,
-                'agent',
-                a.id
-              )
+      organization_id = current_setting('app.current_organization_id')::integer
+      AND (
+        (agent_id IS NOT NULL AND EXISTS (
+          SELECT 1 FROM agents a
+          WHERE a.id = agent_id
+          AND (
+            a.owner_id = current_setting('app.current_user_id')::uuid
+            OR user_has_permission(
+              current_setting('app.current_user_id')::uuid,
+              'agents:view',
+              a.organization_id,
+              'agent',
+              a.id
             )
-          ))
-          OR
-          (agent_id IS NULL AND user_has_permission(
-            current_setting('app.current_user_id')::uuid,
-            'skills:view',
-            organization_id,
-            'skill',
-            id
-          ))
-        )
+          )
+        ))
+        OR
+        (agent_id IS NULL AND user_has_permission(
+          current_setting('app.current_user_id')::uuid,
+          'skills:view',
+          organization_id,
+          'skill',
+          id
+        ))
       )
     `
   }),
@@ -1136,61 +1134,57 @@ export const skills = pgTable("skills", {
     for: "all",
     to: "public",
     using: sql`
-      is_system = true OR (
-        organization_id = current_setting('app.current_organization_id')::integer
-        AND (
-          (agent_id IS NOT NULL AND EXISTS (
-            SELECT 1 FROM agents a
-            WHERE a.id = agent_id
-            AND (
-              a.owner_id = current_setting('app.current_user_id')::uuid
-              OR user_has_permission(
-                current_setting('app.current_user_id')::uuid,
-                'agents:manage',
-                a.organization_id,
-                'agent',
-                a.id
-              )
+      organization_id = current_setting('app.current_organization_id')::integer
+      AND (
+        (agent_id IS NOT NULL AND EXISTS (
+          SELECT 1 FROM agents a
+          WHERE a.id = agent_id
+          AND (
+            a.owner_id = current_setting('app.current_user_id')::uuid
+            OR user_has_permission(
+              current_setting('app.current_user_id')::uuid,
+              'agents:manage',
+              a.organization_id,
+              'agent',
+              a.id
             )
-          ))
-          OR
-          (agent_id IS NULL AND user_has_permission(
-            current_setting('app.current_user_id')::uuid,
-            'skills:manage',
-            organization_id,
-            'skill',
-            id
-          ))
-        )
+          )
+        ))
+        OR
+        (agent_id IS NULL AND user_has_permission(
+          current_setting('app.current_user_id')::uuid,
+          'skills:manage',
+          organization_id,
+          'skill',
+          id
+        ))
       )
     `,
     withCheck: sql`
-      is_system = true OR (
-        organization_id = current_setting('app.current_organization_id')::integer
-        AND (
-          (agent_id IS NOT NULL AND EXISTS (
-            SELECT 1 FROM agents a
-            WHERE a.id = agent_id
-            AND (
-              a.owner_id = current_setting('app.current_user_id')::uuid
-              OR user_has_permission(
-                current_setting('app.current_user_id')::uuid,
-                'agents:manage',
-                a.organization_id,
-                'agent',
-                a.id
-              )
+      organization_id = current_setting('app.current_organization_id')::integer
+      AND (
+        (agent_id IS NOT NULL AND EXISTS (
+          SELECT 1 FROM agents a
+          WHERE a.id = agent_id
+          AND (
+            a.owner_id = current_setting('app.current_user_id')::uuid
+            OR user_has_permission(
+              current_setting('app.current_user_id')::uuid,
+              'agents:manage',
+              a.organization_id,
+              'agent',
+              a.id
             )
-          ))
-          OR
-          (agent_id IS NULL AND user_has_permission(
-            current_setting('app.current_user_id')::uuid,
-            'skills:manage',
-            organization_id,
-            'skill',
-            id
-          ))
-        )
+          )
+        ))
+        OR
+        (agent_id IS NULL AND user_has_permission(
+          current_setting('app.current_user_id')::uuid,
+          'skills:manage',
+          organization_id,
+          'skill',
+          id
+        ))
       )
     `
   }),
