@@ -602,6 +602,7 @@ class ExecutionCoordinator:
         tools: List[Any],
         managed_agents: Optional[List[ManagedAgent]] = None,
         context: Optional[str] = None,
+        is_skill_template: bool = False,
     ) -> AsyncIterator[Any]:
         """
         Classify task and create plan without execution.
@@ -615,6 +616,7 @@ class ExecutionCoordinator:
             tools: Available tools (for plan context)
             managed_agents: Available managed agents (for classification context)
             context: Additional context (e.g., existing databases)
+            is_skill_template: If True, plan won't hardcode IDs (for reusable skills)
 
         Yields:
             AwaitingClarificationEvent if questions needed (caller should pause)
@@ -657,6 +659,7 @@ class ExecutionCoordinator:
             instructions=task,
             tools=tools,
             managed_agents=managed_agents,
+            is_skill_template=is_skill_template,
         ):
             yield event
 
@@ -722,6 +725,7 @@ class ExecutionCoordinator:
         tools: List[Any],
         context_tables: Optional[ResolvedContext] = None,
         managed_agents: Optional[List[Any]] = None,
+        is_skill_template: bool = False,
     ) -> AsyncIterator[Any]:
         """
         Phase 1: Create a plan using read-only tools.
@@ -735,6 +739,7 @@ class ExecutionCoordinator:
             tools: Available tools (will be filtered to read-only)
             context_tables: Resolved context mappings for available tables
             managed_agents: Available managed agents (for routing decisions)
+            is_skill_template: If True, plan is for a reusable skill (no hardcoded IDs)
 
         Yields:
             PlanCreatedEvent when plan is ready for approval
@@ -778,6 +783,7 @@ class ExecutionCoordinator:
                 research_tools=research_tools,
                 api_key=self._api_key,
                 organization_id=self._organization_id,
+                is_skill_template=is_skill_template,
             )
         except Exception as e:
             logger.error(f"❌ Plan generation failed: {e}")

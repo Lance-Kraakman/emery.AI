@@ -1956,10 +1956,12 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             yield _make_progress("Classifying task...", "analyzing")
 
             # Use coordinator's classify_and_create_plan (same logic as ProcessMessage)
+            # is_skill_template=True ensures plan won't hardcode IDs (skills are reusable)
             async for event in coordinator.classify_and_create_plan(
                 task=task_instructions,
                 tools=[],  # No tools needed for skill plan generation
                 managed_agents=managed_agents,
+                is_skill_template=True,  # Skills are reusable templates - no hardcoded IDs
             ):
                 if isinstance(event, AwaitingClarificationEvent):
                     # Same handling as ProcessMessage - yield questions and pause

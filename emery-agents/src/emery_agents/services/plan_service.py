@@ -74,6 +74,7 @@ class PlanService:
         user_feedback: Optional[str] = None,
         organization_id: Optional[int] = None,
         skill_outputs: Optional[List[dict]] = None,
+        is_skill_template: bool = False,
     ) -> Plan:
         """
         Generate plan using context-first planning pattern.
@@ -98,6 +99,7 @@ class PlanService:
             user_feedback: Optional user feedback for plan regeneration
             organization_id: Optional organization ID for research_agent (RLS context)
             skill_outputs: Optional skill output definitions for result-aware planning
+            is_skill_template: If True, plan is for a reusable skill (no hardcoded IDs)
 
         Returns:
             Plan object with generated steps, context, and analysis
@@ -167,6 +169,7 @@ class PlanService:
             skill_outputs=skill_outputs or [],  # For result-aware planning
             previous_plan_json=previous_plan_json,  # For regeneration with feedback
             user_feedback=user_feedback,  # User feedback for improvement
+            is_skill_template=is_skill_template,  # True = no hardcoded IDs
         )
 
         logger.info(f"📋 Generating plan with research-driven pattern...")
