@@ -124,7 +124,7 @@ export const AgentContainerNode = memo(function AgentContainerNode({
         {/* Expanded content area - unified layout */}
         {isExpanded && (
           <div
-            className="relative px-4 pb-4"
+            className="relative px-4 pb-4 overflow-hidden"
             style={{
               minHeight: orgChartNodeSizes.containerMinHeight - orgChartNodeSizes.containerHeaderHeight,
             }}
