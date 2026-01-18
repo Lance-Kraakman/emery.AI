@@ -474,7 +474,7 @@ export function AgenticSkillEditor({
 
       {/* Scrollable content area for Instructions + Execution Plan */}
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="flex flex-col gap-4 pb-4">
+        <div className="flex flex-col gap-2 pb-4">
           {/* Instructions Section - bounded height */}
           <div className="flex flex-col">
             <Label className="text-sm font-medium mb-2 shrink-0">Instructions</Label>

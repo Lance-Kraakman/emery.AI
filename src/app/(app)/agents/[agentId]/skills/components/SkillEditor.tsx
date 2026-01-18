@@ -11,6 +11,8 @@ import type { FlowToStepsResult } from '@/components/workflow-canvas/utils/flow-
 import type { WorkflowNode, WorkflowNodeData, WorkflowEdge } from '@/components/workflow-canvas/types';
 import type { WorkflowVariable } from '@/components/workflow-canvas/WorkflowVariableInput';
 import { inferVariablesForNode } from '@/components/workflow-canvas/utils/variable-inference';
+import { toast } from 'sonner';
+import { generateSkillPlan } from '@/app/actions/skills';
 import { NodeConfigContent } from './NodeConfigContent';
 import { RootSkillConfig } from './RootSkillConfig';
 import { AgenticSkillEditor } from './AgenticSkillEditor';
@@ -83,6 +85,9 @@ export function SkillEditor({
     valueRef.current = value;
   }, [value]);
 
+  // Node-level plan generation state (for agentic nodes in workflow mode)
+  const [generatingPlanForNode, setGeneratingPlanForNode] = useState<string | null>(null);
+
   const handleCanvasChange = useCallback((result: FlowToStepsResult) => {
     onChange({ ...valueRef.current, steps: result.steps, canvasMetadata: result.canvasMetadata });
   }, [onChange]);
@@ -106,6 +111,36 @@ export function SkillEditor({
   const handleUpdateNode = useCallback((id: string, data: Partial<WorkflowNodeData>) => {
     updateNodeRef.current?.(id, data);
   }, []);
+
+  // Generate plan for a specific agentic node
+  const handleGenerateNodePlan = useCallback(async (nodeId: string, feedback?: string) => {
+    const node = nodes.find(n => n.id === nodeId);
+    if (!node || node.type !== 'agentic' || !skillId) return;
+
+    const data = node.data as { instructions?: string; plan?: StoredPlan };
+    if (!data.instructions?.trim()) {
+      toast.error('Add instructions first');
+      return;
+    }
+
+    setGeneratingPlanForNode(nodeId);
+    try {
+      // Pass previous plan and feedback for regeneration (same API as agentic page)
+      const previousPlan = feedback && data.plan ? data.plan : undefined;
+      const result = await generateSkillPlan(skillId, data.instructions, previousPlan, feedback);
+      if (result.success && result.data) {
+        handleUpdateNode(nodeId, { plan: result.data });
+        toast.success(`Plan ${feedback ? 'regenerated' : 'generated'} with ${result.data.steps?.length || 0} steps`);
+      } else {
+        toast.error(result.error || 'Failed to generate plan');
+      }
+    } catch (error) {
+      console.error('Plan generation failed:', error);
+      toast.error('Failed to generate plan');
+    } finally {
+      setGeneratingPlanForNode(null);
+    }
+  }, [nodes, skillId, handleUpdateNode]);
 
   const handleRenameNodeRef = useCallback((fn: (id: string, newName: string) => void) => {
     renameNodeRef.current = fn;
@@ -252,6 +287,8 @@ export function SkillEditor({
               organizationTier={organizationTier}
               skillId={skillId}
               disabled={isReadOnly}
+              isGeneratingPlan={generatingPlanForNode === selectedNode!.id}
+              onGeneratePlan={(feedback) => handleGenerateNodePlan(selectedNode!.id, feedback)}
             />
           )}
         </div>

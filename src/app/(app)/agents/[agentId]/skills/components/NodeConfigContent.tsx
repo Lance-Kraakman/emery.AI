@@ -42,6 +42,10 @@ interface NodeConfigContentProps {
   organizationTier?: 'free' | 'pro' | 'max' | 'enterprise';
   skillId?: number;
   disabled?: boolean;
+  /** Whether plan is being generated for this node */
+  isGeneratingPlan?: boolean;
+  /** Handler for generating a plan for this node (agentic nodes only). Pass feedback for regeneration. */
+  onGeneratePlan?: (feedback?: string) => void;
 }
 
 /**
@@ -59,6 +63,8 @@ export function NodeConfigContent({
   organizationTier = 'free',
   skillId,
   disabled = false,
+  isGeneratingPlan = false,
+  onGeneratePlan,
 }: NodeConfigContentProps) {
   // Sticky notes don't have config content
   if (node.type === 'sticky') {
@@ -134,6 +140,8 @@ export function NodeConfigContent({
           variables={workflowVariables}
           skillId={skillId}
           disabled={disabled}
+          isGeneratingPlan={isGeneratingPlan}
+          onGeneratePlan={onGeneratePlan}
         />
       )}
 
