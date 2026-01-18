@@ -29,7 +29,7 @@ export interface VariablesPanelProps {
   variables: Variable[];
   /** Called when a variable is clicked, receives formatted string like "{id}" */
   onInsert: (formattedVariable: string) => void;
-  /** Format function for variable insertion. Default: (name) => `{${name}}` */
+  /** Format function for variable insertion. Default: (name) => `{{${name}}}` */
   formatVariable?: (name: string) => string;
   /** Show loading state */
   loading?: boolean;
@@ -44,7 +44,7 @@ export interface VariablesPanelProps {
 export function VariablesPanel({
   variables,
   onInsert,
-  formatVariable = (name) => `{${name}}`,
+  formatVariable = (name) => `{{${name}}}`,
   loading = false,
   className,
   maxHeight = '180px',

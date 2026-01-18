@@ -7,7 +7,7 @@
  * Includes the built-in 'id' field and shows type information.
  *
  * Unlike FieldSelectorField which returns field IDs, this returns field names
- * for use in templates like {rowData.fieldName}.
+ * for use in templates like {{rowData.fieldName}}.
  */
 
 import React from 'react';

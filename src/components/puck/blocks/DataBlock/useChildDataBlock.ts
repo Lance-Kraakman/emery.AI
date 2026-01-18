@@ -4,13 +4,13 @@
  * useChildDataBlock - Hook for child DataBlocks that need dynamic data in filters
  *
  * AIDEV-NOTE: Handles client-side data fetching when filters reference:
- * - {rowData.fieldName} - Parent row data (nested DataBlocks)
- * - {state.key} - State values (flat namespace, dynamic filtering)
+ * - {{rowData.fieldName}} - Parent row data (nested DataBlocks)
+ * - {{state.key}} - State values (flat namespace, dynamic filtering)
  *
  * Also handles client-side sorting when sortConfig includes dynamic state values.
  *
  * Features:
- * - Detects {rowData.fieldName} and {state.key} patterns
+ * - Detects {{rowData.fieldName}} and {{state.key}} patterns
  * - Subscribes to state changes for reactive re-fetch
  * - Uses useParentRowData() for row data resolution
  * - Fetches data client-side via executeView server action
@@ -31,20 +31,20 @@ import type {
   DocumentArrayFieldValue,
 } from '@/ddd/domain/tables/value-objects/field-values';
 
-/** Regex to match {rowData.fieldName} pattern */
-const ROW_DATA_VAR_REGEX = /\{rowData\.(\w+)\}/g;
+/** Regex to match {{rowData.fieldName}} pattern */
+const ROW_DATA_VAR_REGEX = /\{\{rowData\.(\w+)\}\}/g;
 
-/** Regex to match {state.key} pattern (flat namespace) */
-const STATE_VAR_REGEX = /\{state\.([^}]+)\}/g;
+/** Regex to match {{state.key}} pattern (flat namespace) */
+const STATE_VAR_REGEX = /\{\{state\.([^}]+)\}\}/g;
 
 /** Check if a condition has rowData variables */
 function hasRowDataVariable(condition: FilterCondition): boolean {
-  return typeof condition.value === 'string' && condition.value.includes('{rowData.');
+  return typeof condition.value === 'string' && condition.value.includes('{{rowData.');
 }
 
 /** Check if a condition has state variables */
 function hasStateVariable(condition: FilterCondition): boolean {
-  return typeof condition.value === 'string' && condition.value.includes('{state.');
+  return typeof condition.value === 'string' && condition.value.includes('{{state.');
 }
 
 /** Check if any condition in the filter config has rowData variables */
@@ -378,8 +378,8 @@ export function useChildDataBlock({
       if (typeof condition.value === 'string') {
         let valueStr = condition.value;
 
-        // Resolve {rowData.x} variables
-        if (valueStr.includes('{rowData.')) {
+        // Resolve {{rowData.x}} variables
+        if (valueStr.includes('{{rowData.')) {
           if (!ctx) {
             // Need parent context but don't have it
             console.warn(`[useChildDataBlock] No parent context for: ${condition.value}`);
@@ -407,11 +407,11 @@ export function useChildDataBlock({
           }
         }
 
-        // Resolve {state.key} variables (flat namespace)
-        if (valueStr.includes('{state.') && stateContext) {
+        // Resolve {{state.key}} variables (flat namespace)
+        if (valueStr.includes('{{state.') && stateContext) {
           const resolved = resolveStateVariables(valueStr, stateContext.getValue);
           // Check if variable was resolved
-          if (resolved.includes('{state.')) {
+          if (resolved.includes('{{state.')) {
             console.warn(`[useChildDataBlock] Could not resolve state: ${condition.value}`);
             couldNotResolve = true;
           }

@@ -116,7 +116,7 @@ export function TaskInstructionsDialog({
             />
             <p className="text-xs text-muted-foreground">
               Define what should be done. Use @ to reference tools, documents, files, agents, or
-              tables. Use {"${rowData.fieldName}"} to include data from the current row.
+              tables. Use {"{{rowData.fieldName}}"} to include data from the current row.
             </p>
           </div>
         </div>
