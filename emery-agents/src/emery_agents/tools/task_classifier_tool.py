@@ -18,6 +18,7 @@ class ClassificationResult(TypedDict):
     target_agent: Optional[str]
     clarification_questions: List[str]
     reasoning: str
+    use_cascade_planning: bool  # True if task involves multiple agents needing detailed sub-planning
 
 
 class TaskClassifierTool(Tool):  # type: ignore[misc]
@@ -65,6 +66,11 @@ You MUST call this tool with your analysis. Include:
             "type": "string",
             "description": "Brief explanation of why you classified the task this way",
         },
+        "use_cascade_planning": {
+            "type": "boolean",
+            "description": "True if the task involves multiple agents/domains and needs detailed sub-planning with clarifying questions from sub-agents",
+            "nullable": True,
+        },
     }
 
     output_type = "string"
@@ -80,6 +86,7 @@ You MUST call this tool with your analysis. Include:
         target_agent: Optional[str],
         clarification_questions: List[str],
         reasoning: str,
+        use_cascade_planning: bool = False,
     ) -> str:
         """
         Capture the classification result.
@@ -90,6 +97,7 @@ You MUST call this tool with your analysis. Include:
             target_agent: Agent to handle task (or None/none)
             clarification_questions: Questions to ask user
             reasoning: Explanation of classification
+            use_cascade_planning: Whether task needs sub-agent planning
 
         Returns:
             Confirmation message
@@ -109,9 +117,10 @@ You MUST call this tool with your analysis. Include:
             "target_agent": target_agent,
             "clarification_questions": clarification_questions or [],
             "reasoning": reasoning or "",
+            "use_cascade_planning": bool(use_cascade_planning),
         }
 
-        return f"Classification recorded: mode={mode_upper}, needs_clarification={needs_clarification}"
+        return f"Classification recorded: mode={mode_upper}, needs_clarification={needs_clarification}, cascade={use_cascade_planning}"
 
     def get_result(self) -> Optional[ClassificationResult]:
         """Get the captured classification result."""

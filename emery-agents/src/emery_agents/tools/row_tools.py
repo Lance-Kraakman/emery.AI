@@ -70,8 +70,9 @@ def load_row_crud(config: ToolConfig, api_key: Optional[str] = None, organizatio
                 if not data:
                     return {"success": False, "error": "Row data is required for create_row. Provide field values {field_1: value1, field_2: value2}"}
 
+                # Request TOON format for minimal token usage
                 return self._make_api_request_with_deadline(
-                    endpoint="rows",
+                    endpoint="rows?format=llm",
                     method="POST",
                     data={"tableId": int(effective_table_id), "data": data},
                     auth_token=_auth_token,
@@ -82,8 +83,8 @@ def load_row_crud(config: ToolConfig, api_key: Optional[str] = None, organizatio
                 if not effective_table_id:
                     return {"success": False, "error": "Table ID is required for get_rows operation"}
 
-                # Build query parameters
-                query_params = [f"tableId={effective_table_id}"]
+                # Build query parameters with TOON format for minimal tokens
+                query_params = [f"tableId={effective_table_id}", "format=llm"]
 
                 # Add pagination parameters
                 if limit is not None:
@@ -119,8 +120,9 @@ def load_row_crud(config: ToolConfig, api_key: Optional[str] = None, organizatio
                 if not data:
                     return {"success": False, "error": "Row data is required for update_row. Provide updated field values"}
 
+                # Request TOON format for minimal token usage
                 return self._make_api_request_with_deadline(
-                    endpoint="rows",
+                    endpoint="rows?format=llm",
                     method="PUT",
                     data={"tableId": int(effective_table_id), "rowId": row_id, "data": data},
                     auth_token=_auth_token,
@@ -133,7 +135,8 @@ def load_row_crud(config: ToolConfig, api_key: Optional[str] = None, organizatio
                 if not row_id:
                     return {"success": False, "error": "Row ID is required for delete_row operation"}
 
-                endpoint = f"rows?tableId={effective_table_id}&rowId={row_id}"
+                # Request TOON format for minimal token usage
+                endpoint = f"rows?tableId={effective_table_id}&rowId={row_id}&format=llm"
 
                 return self._make_api_request_with_deadline(
                     endpoint=endpoint,

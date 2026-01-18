@@ -966,8 +966,9 @@ def load_database_crud(config: ToolConfig, api_key: Optional[str] = None, organi
                 if not data:
                     return {"success": False, "error": "Database data is required for create operation. Provide {name, description}"}
 
+                # Request TOON format for minimal token usage
                 return self._make_api_request_with_deadline(
-                    endpoint="databases",
+                    endpoint="databases?format=llm",
                     method="POST",
                     data=data,
                     auth_token=_auth_token,
@@ -991,8 +992,9 @@ def load_database_crud(config: ToolConfig, api_key: Optional[str] = None, organi
                 if not data:
                     return {"success": False, "error": "Database data is required for update operation"}
 
+                # Request TOON format for minimal token usage
                 return self._make_api_request_with_deadline(
-                    endpoint=f"databases/{database_id}",
+                    endpoint=f"databases/{database_id}?format=llm",
                     method="PUT",
                     data=data,
                     auth_token=_auth_token,
@@ -1003,21 +1005,20 @@ def load_database_crud(config: ToolConfig, api_key: Optional[str] = None, organi
                 if not database_id:
                     return {"success": False, "error": "Database ID is required for delete operation"}
 
+                # Request TOON format for minimal token usage
                 return self._make_api_request_with_deadline(
-                    endpoint=f"databases/{database_id}",
+                    endpoint=f"databases/{database_id}?format=llm",
                     method="DELETE",
                     auth_token=_auth_token,
                     organization_id=_org_id
                 )
 
             elif method == "list":
-                endpoint = "databases"
+                # Request TOON format for minimal token usage
+                endpoint = "databases?format=llm"
                 if filters:
-                    query_params = []
                     for key, value in filters.items():
-                        query_params.append(f"{key}={value}")
-                    if query_params:
-                        endpoint += "?" + "&".join(query_params)
+                        endpoint += f"&{key}={value}"
 
                 return self._make_api_request_with_deadline(
                     endpoint=endpoint,

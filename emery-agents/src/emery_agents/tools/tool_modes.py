@@ -46,6 +46,8 @@ READ_ONLY_TOOLS: Set[str] = {
     # Query/analysis tools
     "table_query",
     "calculator",
+    # System introspection (ResearchEmery)
+    "system_research",  # Queries Emery platform resources (agents, skills, tasks, etc.)
 }
 
 # Methods within CRUD tools that are read-only
@@ -176,7 +178,8 @@ def filter_tools_for_mode(
             logger.debug(f"Planning mode: including tool {tool_name}")
         elif tool_name.lower() in {"web_search", "web_fetch", "calculator",
                                    "file_reader", "document_reader", "template_reader",
-                                   "table_query", "emery_database", "table_schema", "table_data"}:
+                                   "table_query", "emery_database", "table_schema", "table_data",
+                                   "system_research"}:
             # Explicitly safe read-only tools
             filtered.append(tool)
             logger.debug(f"Planning mode: including safe tool {tool_name}")
@@ -198,6 +201,7 @@ def get_planning_tool_restrictions() -> str:
 - File and document readers
 - Table queries and schema inspection
 - Calculator
+- System research (agents, skills, tasks, apps, audit)
 
 You DO NOT have access to:
 - CRUD operations (create, update, delete)
