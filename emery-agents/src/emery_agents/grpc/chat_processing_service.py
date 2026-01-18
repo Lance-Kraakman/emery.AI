@@ -895,10 +895,13 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             # Coordinator internally decides mode: PASSTHROUGH, DIRECT, or PLAN_AND_APPROVE
             # AIDEV-NOTE: Using CoordinatorStateMachine for unified phase handling
             sm = self.session_manager.get_or_create_state_machine(session_id) if session_id else None
+            skip_coordinator = False  # Flag to skip coordinator for HITL resume
 
             # Handle non-IDLE phases via state machine
             # State machine returns combined_task for clarifications and feedback
             if sm and sm.phase != Phase.IDLE:
+                original_phase = sm.phase  # Capture before handle_input clears it
+
                 # Determine input type based on current phase
                 if sm.phase == Phase.AWAITING_CLARIFICATION:
                     input_type = "clarification"
@@ -911,8 +914,13 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
                 action = sm.handle_input(input_type, current_task)
 
-                # Use combined_task if provided (for clarifications and feedback)
-                if action.combined_task:
+                # AWAITING_QUESTIONS returns FALL_THROUGH - skip coordinator, let agent.run() resume
+                if original_phase == Phase.AWAITING_QUESTIONS and action.action_type == ActionType.FALL_THROUGH:
+                    skip_coordinator = True
+                    if action.combined_task:
+                        current_task = action.combined_task
+                    logger.info("📋 HITL response, skipping coordinator - will resume managed agent")
+                elif action.combined_task:
                     current_task = action.combined_task
                     logger.info("📋 State machine combined task for replan")
 
@@ -977,24 +985,25 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             if agent_config and agent_config.skills:
                 stored_plan = detect_stored_plan_from_skills(list(agent_config.skills))
 
-            # Coordinator handles all execution paths
-            should_fall_through = False
-            async for event in self._stream_coordinator_response(
-                context=context,
-                tools=smolagents_tools,
-                task=current_task,
-                session_id=session_id,
-                org_model=org_model,
-                sm=sm,  # Pass state machine for phase handling
-                managed_agents=managed_agents,
-                stored_plan=stored_plan,  # Pass stored plan for autonomous execution
-            ):
-                if isinstance(event, dict):
-                    # Regular event - yield it
-                    yield event
-                elif event == "FALL_THROUGH":
-                    # Signal to continue with normal agent flow
-                    should_fall_through = True
+            # Coordinator handles all execution paths (skip for HITL resume)
+            should_fall_through = skip_coordinator  # True if resuming managed agent HITL
+            if not skip_coordinator:
+                async for event in self._stream_coordinator_response(
+                    context=context,
+                    tools=smolagents_tools,
+                    task=current_task,
+                    session_id=session_id,
+                    org_model=org_model,
+                    sm=sm,  # Pass state machine for phase handling
+                    managed_agents=managed_agents,
+                    stored_plan=stored_plan,  # Pass stored plan for autonomous execution
+                ):
+                    if isinstance(event, dict):
+                        # Regular event - yield it
+                        yield event
+                    elif event == "FALL_THROUGH":
+                        # Signal to continue with normal agent flow
+                        should_fall_through = True
 
             if not should_fall_through:
                 return  # Coordinator handled everything
