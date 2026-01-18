@@ -397,7 +397,7 @@ export default function DataBlock({
         <Section>
           <div className={styles.empty}>
             <p className={styles.emptyText}>
-              Configure a filter to select a row (e.g., id equals {'{params.id}'})
+              Configure a filter to select a row (e.g., id equals {'{{params.id}}'})
             </p>
           </div>
         </Section>

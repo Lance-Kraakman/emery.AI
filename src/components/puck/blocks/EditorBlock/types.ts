@@ -57,7 +57,7 @@ export const defaultEditorBlockProps: EditorBlockProps = {
   editorType: 'document',
   documentIdSource: {
     valueType: 'variable',
-    value: '{params.documentId}',
+    value: '{{params.documentId}}',
   },
   height: '500px',
   allowEdit: true,

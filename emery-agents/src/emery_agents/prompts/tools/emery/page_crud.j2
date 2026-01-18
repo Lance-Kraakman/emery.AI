@@ -70,14 +70,16 @@ Theme is stored as JSON in database (themeConfig), converted to CSS variables at
 
 ### Variable Syntax Reference
 
-**IMPORTANT: Two different syntaxes for different contexts!**
+**IMPORTANT: Always use double braces `{{ }}` for all variable references!**
 
-#### For Text/Labels (double braces `{{ }}`):
-Use in: Heading text, Button labels, Text content, MarkdownBlock, Link href
+#### Variable Syntax (always use double braces `{{ }}`):
+All variable references use double braces for consistency.
 
 ```
+{{params.varName}}      - URL parameter
 {{state.key}}           - Page state value (FLAT namespace)
 {{rowData.fieldName}}   - Field from parent DataBlock row
+{{formData.fieldName}}  - Form submission data
 ```
 
 **Example - Button with dynamic label:**
@@ -85,28 +87,18 @@ Use in: Heading text, Button labels, Text content, MarkdownBlock, Link href
 {"type": "Button", "props": {"label": "View {{rowData.name}}", "href": "/products/{{rowData.id}}"}}
 ```
 
-#### For Filters/Actions (single braces `{ }`):
-Use in: DataBlock filters, Action parameters, Navigation queries
-
-```
-{params.varName}        - URL parameter (server-side resolution)
-{state.key}             - Page state (client-side, FLAT namespace)
-{rowData.fieldName}     - Parent DataBlock row (client-side)
-{formData.fieldName}    - Form submission data
-```
-
 **Example - DataBlock filter:**
 ```json
-{"type": "DataBlock", "props": {"viewId": 10, "mode": "single", "filters": [{"field": "id", "operator": "=", "value": "{params.id}"}]}}
+{"type": "DataBlock", "props": {"viewId": 10, "mode": "single", "filters": [{"field": "id", "operator": "=", "value": "{{params.id}}"}]}}
 ```
 
 **CRITICAL: State is FLAT namespace**
-- Correct: `{state.selectedId}` or `{{state.selectedId}}`
-- WRONG: `{state.container.key}` (no nesting!)
+- Correct: `{{state.selectedId}}`
+- WRONG: `{{state.container.key}}` (no nesting!)
 
 **Server vs Client Resolution:**
-- `{params.*}` - Resolved server-side (available at request time)
-- `{state.*}`, `{rowData.*}` - Resolved client-side (triggers client-side data fetch)
+- `{{params.*}}` - Resolved server-side (available at request time)
+- `{{state.*}}`, `{{rowData.*}}` - Resolved client-side (triggers client-side data fetch)
 
 ### Page State (Interactive Variables)
 Runtime state variables for interactivity.
@@ -131,7 +123,7 @@ Dialogs are controlled by boolean state variables.
 **Dialog properties:**
 - `name` - Display name (required)
 - `stateKey` - Boolean state key controlling open/close (required)
-- `title` - Dialog title (supports `{state.x}`)
+- `title` - Dialog title (supports `{{state.x}}`)
 - `size` - `sm` | `md` | `lg` | `xl` | `full`
 - `content` - Puck templateData for dialog body
 
@@ -192,7 +184,7 @@ page_crud(method="add_dialog", page_id=5, data={
         "props": {
           "viewId": 123,
           "mode": "single",
-          "filters": [{"field": "id", "operator": "=", "value": "{params.product_id}"}]
+          "filters": [{"field": "id", "operator": "=", "value": "{{params.product_id}}"}]
         }
       }
     ],

@@ -16,7 +16,7 @@ export const LinkBlockConfig: ComponentConfig<LinkBlockProps> = {
     // Link properties
     label: createVariableLabelField({
       label: "Link Text",
-      placeholder: "Link text (use {fieldName} for dynamic values)"
+      placeholder: "Link text (use {{fieldName}} for dynamic values)"
     }),
 
     href: {

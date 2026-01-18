@@ -292,7 +292,7 @@ Pages can have dynamic state variables and modal dialogs for interactive apps.
 
 Define typed variables accessible in text via `{{state.variableName}}` (double braces).
 
-**CRITICAL: State is FLAT namespace** - just `{state.key}`, NOT `{state.nested.key}`
+**CRITICAL: State is FLAT namespace** - just `{{state.key}}`, NOT `{{state.nested.key}}`
 
 **Variable Types:**
 - `string` - Text value
@@ -336,7 +336,7 @@ Create dialogs controlled by boolean state variables.
 **Dialog Properties:**
 - `name` - Display name (required)
 - `stateKey` - Boolean state variable controlling open/close (required)
-- `title` - Dialog title (supports `{state.x}` interpolation)
+- `title` - Dialog title (supports `{{state.x}}` interpolation)
 - `size` - `sm` | `md` | `lg` | `xl` | `full`
 - `closeOnOutsideClick` - Whether clicking outside closes dialog
 - `closeOnEscape` - Whether Escape key closes dialog
@@ -410,11 +410,11 @@ For pages like `/products/[id]` showing one record from URL param:
   "props": {
     "viewId": 123,
     "mode": "single",
-    "filters": [{"field": "id", "operator": "=", "value": "{params.id}"}]
+    "filters": [{"field": "id", "operator": "=", "value": "{{params.id}}"}]
   }
 }
 ```
-Note: `{params.id}` (single braces) in filters - resolved server-side.
+Note: `{{params.id}}` in filters - resolved server-side.
 
 ### Pattern 2: Click Row → Show Detail (State-based)
 
@@ -438,7 +438,7 @@ page_crud(method="update_state", page_id=5, data={
   }
 }
 ```
-Note: `{{rowData.id}}` (double braces) in action value.
+Note: `{{rowData.id}}` in action value.
 
 **Step 3: Detail DataBlock filtered by state**
 ```json
@@ -447,11 +447,11 @@ Note: `{{rowData.id}}` (double braces) in action value.
   "props": {
     "viewId": 11,
     "mode": "single",
-    "filters": [{"field": "id", "operator": "=", "value": "{state.selectedId}"}]
+    "filters": [{"field": "id", "operator": "=", "value": "{{state.selectedId}}"}]
   }
 }
 ```
-Note: `{state.selectedId}` (single braces) in filter - triggers client-side fetch.
+Note: `{{state.selectedId}}` in filter - triggers client-side fetch.
 
 ### Pattern 3: Button with Dynamic Link
 
@@ -498,7 +498,7 @@ page_crud(method="add_dialog", page_id=5, data={
             {"type": "DataBlock", "props": {
                 "viewId": 11,
                 "mode": "single",
-                "filters": [{"field": "id", "operator": "=", "value": "{state.selectedId}"}]
+                "filters": [{"field": "id", "operator": "=", "value": "{{state.selectedId}}"}]
             }}
         ],
         "zones": {"DataBlock-1:children": [

@@ -47,10 +47,10 @@ Example: `{"label": "View {{rowData.name}}", "href": "/products/{{rowData.id}}"}
 | ChartBlock | Data visualization | viewId, chartType (bar/line/pie/area), xField, yField |
 | FormBlock | Create/edit form | tableId (required), fields[], mode (create/edit), submitLabel |
 
-**DataBlock Filter Variables (single braces):**
-- `{params.name}` - URL parameter (server-side resolution)
-- `{state.key}` - Page state (client-side, flat namespace)
-- `{rowData.field}` - Parent DataBlock row (client-side, for nested blocks)
+**DataBlock Filter Variables (always double braces):**
+- `{{params.name}}` - URL parameter (server-side resolution)
+- `{{state.key}}` - Page state (client-side, flat namespace)
+- `{{rowData.field}}` - Parent DataBlock row (client-side, for nested blocks)
 
 **DataBlock onRowClick Actions:**
 ```json
