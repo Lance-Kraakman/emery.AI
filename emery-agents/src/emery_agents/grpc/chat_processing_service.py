@@ -43,6 +43,12 @@ from .mappers.message_types import MessageContentList
 from ..services.model_provider import SmolagentsModelProvider
 from ..services.tool_loader import UnifiedToolLoader
 from ..services.session_manager import SessionManager
+from ..services.coordinator_state_machine import (
+    CoordinatorStateMachine,
+    Phase,
+    ActionType,
+    StateAction,
+)
 from ..services.file_processor import process_file
 from ..utils.error_classifier import classify_error
 from ..utils.error_messages import ErrorSeverity
@@ -887,58 +893,34 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
             # Check coordinator phase FIRST to avoid creating plans for approval messages
             # Coordinator internally decides mode: PASSTHROUGH, DIRECT, or PLAN_AND_APPROVE
-            coordinator_phase = self.session_manager.get_coordinator_phase(session_id) if session_id else "idle"
+            # AIDEV-NOTE: Using CoordinatorStateMachine for unified phase handling
+            sm = self.session_manager.get_or_create_state_machine(session_id) if session_id else None
 
-            # Handle clarification response: combine original task + clarification and re-plan
-            # AIDEV-NOTE: When user answers clarifying questions, we combine their response
-            # with the original task and re-run the coordinator to create a proper plan
-            if coordinator_phase == "awaiting_clarification" and session_id:
-                original_task = self.session_manager.get_original_task(session_id)
-                if original_task:
-                    # Combine original task with user's clarification response
-                    current_task = f"{original_task}\n\nUser's clarification: {current_task}"
-                    logger.info(f"📋 Combined original task with clarification, re-running coordinator")
-                # Reset phase to idle so coordinator will run fresh with combined context
-                self.session_manager.clear_coordinator_state(session_id)
-                coordinator_phase = "idle"
+            # Handle non-IDLE phases via state machine
+            # State machine returns combined_task for clarifications and feedback
+            if sm and sm.phase != Phase.IDLE:
+                # Determine input type based on current phase
+                if sm.phase == Phase.AWAITING_CLARIFICATION:
+                    input_type = "clarification"
+                    logger.info("📋 Processing clarification response via state machine")
+                elif sm.phase == Phase.AWAITING_QUESTIONS:
+                    input_type = "approval" if self._is_approval_response(current_task) else "feedback"
+                    logger.info(f"📋 Processing managed agent HITL response: {input_type}")
+                else:
+                    input_type = "task"
 
-            # Handle managed agent HITL response: prepare task for agent.run() resume
-            # AIDEV-NOTE: When managed agent (app_builder, etc.) pauses for questions/approval,
-            # we prepare the task and let agent.run() resume with reset=False.
-            # The managed agent's _waiting_for_approval flag triggers resume logic.
-            elif coordinator_phase == "awaiting_questions" and session_id:
-                original_task = self.session_manager.get_original_task(session_id)
-                if original_task:
-                    # Check if this is an approval or feedback
-                    if self._is_approval_response(current_task):
-                        # Approval - use "approve" as task for managed agent resume
-                        logger.info("✅ Managed agent HITL: Approved, will resume agent")
-                        current_task = "approve"  # Managed agent checks for this
-                    else:
-                        # Parse answers from JSON (batched questions) or treat as feedback
-                        try:
-                            answers = json.loads(current_task)
-                            if isinstance(answers, dict):
-                                # Store answers and use approval message
-                                self.session_manager.store_question_answers(session_id, answers)
-                                logger.info(f"📝 Managed agent HITL: Stored {len(answers)} answers")
-                                current_task = "approve"  # Resume with answers stored
-                            else:
-                                # Not a dict, treat as feedback
-                                current_task = f"{original_task}\n\nUser feedback: {current_task}"
-                                logger.info("📝 Managed agent HITL: Feedback received")
-                        except json.JSONDecodeError:
-                            # Free-form feedback - combine with original task
-                            current_task = f"{original_task}\n\nUser feedback: {current_task}"
-                            logger.info("📝 Managed agent HITL: Feedback received")
-                # DON'T reset phase here - let _stream_coordinator_response handle it
-                # The phase will be used to trigger FALL_THROUGH to agent.run()
+                action = sm.handle_input(input_type, current_task)
+
+                # Use combined_task if provided (for clarifications and feedback)
+                if action.combined_task:
+                    current_task = action.combined_task
+                    logger.info("📋 State machine combined task for replan")
 
             # Create Plan for tracking this execution
             # AIDEV-NOTE: Plan provides visibility into complex task progress and enables HITL
             # Only create for new tasks (idle phase), not for approvals or ongoing execution
             current_plan: Plan | None = None
-            if agent.managed_agents and coordinator_phase == "idle":  # Only for new tasks
+            if agent.managed_agents and (not sm or sm.phase == Phase.IDLE):  # Only for new tasks
                 current_plan = create_plan(
                     goal=current_task[:200] if len(current_task) > 200 else current_task,
                     basic_instructions=current_task
@@ -983,7 +965,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             logger.info(f"📎 Set execution context: {len(file_attachments or [])} current, {len(session_attachments)} session files")
 
             # Get managed agents for coordinator's mode detection
-            # (coordinator_phase already set earlier, before plan creation)
+            # State machine (sm) handles phase tracking via on_* event handlers
             # Extract agent objects (values) from the managed_agents dict, not keys
             managed_agents = []
             if hasattr(agent, 'managed_agents') and agent.managed_agents:
@@ -1003,7 +985,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 task=current_task,
                 session_id=session_id,
                 org_model=org_model,
-                coordinator_phase=coordinator_phase,
+                sm=sm,  # Pass state machine for phase handling
                 managed_agents=managed_agents,
                 stored_plan=stored_plan,  # Pass stored plan for autonomous execution
             ):
@@ -1197,11 +1179,10 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 }
                 yield awaiting_input_response
 
-                # Preserve state for managed agent HITL flow
+                # Preserve state for managed agent HITL flow via state machine
                 # This enables iterative question answering and context preservation
-                if session_id:
-                    self.session_manager.set_coordinator_phase(session_id, "awaiting_questions")
-                    self.session_manager.set_original_task(session_id, current_task)
+                if sm:
+                    sm.on_managed_agent_hitl(task=current_task)
                     logger.info(f"📊 Session {session_id}: Managed agent HITL, awaiting questions/approval")
                 return
 
@@ -1372,7 +1353,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         task: str,
         session_id: Optional[str],
         org_model: Optional[str],
-        coordinator_phase: str,
+        sm: Optional[CoordinatorStateMachine],
         managed_agents: Optional[List[Any]] = None,
         stored_plan: Optional[Plan] = None,
     ) -> AsyncIterator[Any]:
@@ -1391,12 +1372,12 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             task: Current user message/task
             session_id: Session ID for state persistence
             org_model: Organization model for evaluator
-            coordinator_phase: Current phase from session
+            sm: State machine for phase handling
             managed_agents: Available managed agents for mode detection
             stored_plan: Pre-approved plan from skill's agentic step config (enables autonomous execution)
         """
         # === AUTONOMOUS MODE: Execute stored plan directly ===
-        if stored_plan and coordinator_phase == "idle":
+        if stored_plan and (not sm or sm.phase == Phase.IDLE):
             logger.info(f"📋 Coordinator: AUTONOMOUS mode - executing stored plan '{stored_plan.id}' directly")
 
             # Create coordinator for execution
@@ -1453,7 +1434,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
             return
 
-        if coordinator_phase == "idle":
+        if not sm or sm.phase == Phase.IDLE:
             # === NEW REQUEST - Let coordinator determine mode ===
             logger.info("📋 Coordinator: Analyzing task to determine execution mode...")
 
@@ -1536,11 +1517,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                         }
                     }
 
-                    # Store that we're awaiting clarification (different from plan approval)
-                    # Also store the original task so we can combine with clarification response
-                    if session_id:
-                        self.session_manager.set_coordinator_phase(session_id, "awaiting_clarification")
-                        self.session_manager.set_original_task(session_id, task)
+                    # Update state machine (handles transition + context)
+                    if sm:
+                        sm.on_clarification_needed(task)
                     return
 
                 elif isinstance(event, DirectExecutionStartedEvent):
@@ -1565,10 +1544,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     logger.info(f"📋 Cascade: {len(event.questions.questions)} questions collected from sub-agents")
                     yield convert_coordinator_event(event, 0)
 
-                    # Store coordinator and set phase for answer handling
-                    if session_id:
-                        self.session_manager.set_coordinator(session_id, coordinator, plan)
-                        self.session_manager.set_coordinator_phase(session_id, "awaiting_cascade_questions")
+                    # Update state machine (handles transition + context)
+                    if sm:
+                        sm.on_cascade_questions(coordinator, plan, task)
                     return
 
                 elif isinstance(event, CascadingPlanCompleteEvent):
@@ -1576,10 +1554,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     logger.info(f"📋 Cascade: All {event.total_sub_plans} sub-plans complete")
                     yield convert_coordinator_event(event, 0)
 
-            if plan and session_id:
-                # Store coordinator and plan in session
-                self.session_manager.set_coordinator(session_id, coordinator, plan)
-                self.session_manager.set_coordinator_phase(session_id, "awaiting_approval")
+            if plan and sm:
+                # Update state machine (handles transition + context)
+                sm.on_plan_created(coordinator, plan, task)
 
                 # Send plan for approval via awaiting_input
                 yield self._create_awaiting_input_for_plan(plan)
@@ -1588,37 +1565,37 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 logger.warning("📋 Coordinator: No plan created, falling through to normal flow")
                 yield "FALL_THROUGH"
 
-        elif coordinator_phase == "awaiting_approval":
+        elif sm and sm.phase == Phase.AWAITING_APPROVAL:
             # === CHECK FOR APPROVAL ===
+
             if self._is_approval_response(task):
                 # User approved - switch to execution mode
                 context.tool_mode = ToolMode.EXECUTION
                 AgentExecutor.set_current_context(context)
                 logger.info("✅ Coordinator: User approved, starting execution phase")
 
-                # Get coordinator and plan from session
-                coordinator_from_session: Optional[ExecutionCoordinator] = self.session_manager.get_coordinator(session_id) if session_id else None
-                plan_from_session: Optional[Plan] = self.session_manager.get_current_plan(session_id) if session_id else None
+                # Get coordinator and plan from state machine context
+                coordinator_from_session = sm.context.coordinator
+                plan_from_session = sm.context.plan
 
                 if not coordinator_from_session or not plan_from_session:
-                    logger.error("📋 Coordinator: No coordinator/plan found in session")
+                    logger.error("📋 Coordinator: No coordinator/plan found in state machine")
                     yield self._create_error_response(
                         "SESSION_STATE_ERROR",
                         "Session state lost. Please start over.",
                     )
-                    if session_id:
-                        self.session_manager.clear_coordinator_state(session_id)
+                    sm.on_error("Session state lost")
                     return
 
-                # Update phase
-                if session_id:
-                    self.session_manager.set_coordinator_phase(session_id, "executing")
+                # Transition to EXECUTING
+                sm.on_execution_started()
 
                 # Approve the plan
                 try:
                     await coordinator_from_session.approve_plan(plan_from_session.id)
                 except Exception as e:
                     logger.error(f"📋 Coordinator: Plan approval failed: {e}")
+                    sm.on_error(f"Plan approval failed: {e}")
                     yield self._create_error_response(
                         "PLAN_APPROVAL_FAILED",
                         f"Failed to approve plan: {e}",
@@ -1656,45 +1633,42 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                         "content": "\n\n⚠️ **Execution completed with issues.** Some steps may have failed."
                     }
 
-                # Clear coordinator state
-                if session_id:
-                    self.session_manager.clear_coordinator_state(session_id)
+                # Execution complete, clears state
+                sm.on_execution_complete()
                 logger.info("✅ Coordinator: Execution complete, state cleared")
 
             else:
-                # Feedback (not approval) - clear coordinator state and reprocess as new request
+                # Feedback (not approval) - clear state and reprocess as new request
                 logger.info("📝 Coordinator: Feedback received (not approval), clearing state and reprocessing")
-                if session_id:
-                    self.session_manager.clear_coordinator_state(session_id)
+                sm.context.clear()
 
                 # Fall through to normal agent processing
                 # This treats the feedback as a new task that will trigger re-planning
                 yield "FALL_THROUGH"
                 return
 
-        elif coordinator_phase == "executing":
+        elif sm and sm.phase == Phase.EXECUTING:
             # Execution is typically synchronous, but handle edge cases
             logger.warning("⚠️ Coordinator: Unexpected executing phase on new message")
-            if session_id:
-                self.session_manager.clear_coordinator_state(session_id)
+            sm.on_error("Unexpected message during execution")
 
         # NOTE: awaiting_clarification is now handled early (before coordinator creation)
         # to combine original task with clarification and re-run planning
 
-        elif coordinator_phase == "awaiting_cascade_questions":
+        elif sm and sm.phase == Phase.AWAITING_CASCADE_QUESTIONS:
             # User responded to sub-agent questions from cascade planning
             logger.info(f"📋 Coordinator: Received cascade question answers: {task[:100]}...")
 
-            # Get coordinator from session
-            coordinator_from_session = self.session_manager.get_coordinator(session_id) if session_id else None
+            # Get coordinator from state machine context
+            coordinator_from_session = sm.context.coordinator
+
             if not coordinator_from_session:
-                logger.error("📋 Coordinator: No coordinator found in session for cascade answers")
+                logger.error("📋 Coordinator: No coordinator found in state machine for cascade answers")
                 yield self._create_error_response(
                     "SESSION_STATE_ERROR",
                     "Session state lost. Please start over.",
                 )
-                if session_id:
-                    self.session_manager.clear_coordinator_state(session_id)
+                sm.on_error("Session state lost")
                 return
 
             # Parse answers - expected as JSON object {question_id: answer, ...}
@@ -1706,6 +1680,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 logger.warning("📋 Cascade answers not JSON, treating as free-form text")
                 answers = QuestionAnswers(answers={"default": task})
 
+            # Store answers in state machine context
+            sm.context.question_answers = answers.answers
+
             # Resume cascade planning with answers
             step_index = 0
             async for event in coordinator_from_session.resume_cascading_plan(answers):
@@ -1713,16 +1690,21 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     # More questions needed - present to user
                     logger.info(f"📋 Cascade: More questions needed ({len(event.questions.questions)} questions)")
                     yield convert_coordinator_event(event, step_index)
-                    # Stay in awaiting_cascade_questions phase
+
+                    # Self-transition for more questions
+                    sm.on_more_cascade_questions()
                     return
+
                 elif isinstance(event, CascadingPlanCompleteEvent):
                     # All planning complete - show plan for approval
                     logger.info(f"📋 Cascade: Planning complete ({event.total_sub_plans} sub-plans)")
                     yield convert_coordinator_event(event, step_index)
+
                     # Transition to awaiting_approval
-                    plan = self.session_manager.get_current_plan(session_id) if session_id else None
-                    if plan and session_id:
-                        self.session_manager.set_coordinator_phase(session_id, "awaiting_approval")
+                    sm.on_cascade_complete()
+
+                    plan = sm.context.plan
+                    if plan:
                         yield self._create_awaiting_input_for_plan(plan)
                     return
                 else:
@@ -1732,15 +1714,13 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                         yield converted
                         step_index += 1
 
-        elif coordinator_phase == "awaiting_questions":
+        elif sm and sm.phase == Phase.AWAITING_QUESTIONS:
             # Managed agent HITL response - let agent.run() resume the managed agent
             # The managed agent has _waiting_for_approval=True and will resume with memory intact
             logger.info("📋 Coordinator: Managed agent HITL response, falling through to agent.run()")
 
-            # Clear state after falling through (will be re-set if agent interrupts again)
-            if session_id:
-                self.session_manager.set_coordinator_phase(session_id, "idle")
-                self.session_manager.set_original_task(session_id, None)
+            # Clear state (will be re-set if agent interrupts again)
+            sm.context.clear()
 
             yield "FALL_THROUGH"
 
