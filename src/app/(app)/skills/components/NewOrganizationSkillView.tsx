@@ -1,20 +1,23 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Globe, Save } from 'lucide-react';
+import { Globe, Save, LayoutTemplate, Sparkles, GitBranch } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { ModelSelector } from '@/components/ai/ModelSelector';
-import { createOrganizationSkill, getSkillTemplate } from '@/app/actions/skills';
+import { createOrganizationSkill } from '@/app/actions/skills';
+import { getSkillTemplateData } from '@/app/actions/templates';
 import { toast } from 'sonner';
 import { SkillEditor, type SkillFormData } from '../../agents/[agentId]/skills/components/SkillEditor';
 import { useOrganizationPlan } from '@/stores/app-state.store';
+import { TemplatePickerDialog } from '@/components/templates/TemplatePickerDialog';
 
 interface NewOrganizationSkillViewProps {
   organizationId: number;
-  templateId?: number;
+  templateId?: number;    // Saved template ID (number)
+  builtinId?: string;     // Builtin template ID (e.g., 'skill/table-operations')
 }
 
 /**
@@ -25,12 +28,14 @@ interface NewOrganizationSkillViewProps {
 export function NewOrganizationSkillView({
   organizationId,
   templateId,
+  builtinId,
 }: NewOrganizationSkillViewProps) {
   const router = useRouter();
   const organizationTier = useOrganizationPlan();
   const [isSaving, setIsSaving] = useState(false);
-  const [isLoadingTemplate, setIsLoadingTemplate] = useState(!!templateId);
+  const [isLoadingTemplate, setIsLoadingTemplate] = useState(!!templateId || !!builtinId);
   const [templateName, setTemplateName] = useState<string | null>(null);
+  const [isTemplatePickerOpen, setIsTemplatePickerOpen] = useState(false);
   const [formData, setFormData] = useState<SkillFormData>({
     name: 'Untitled Organization Skill',
     description: '',
@@ -38,28 +43,32 @@ export function NewOrganizationSkillView({
     outputs: [],
     steps: [],
     model: null,
+    executionType: 'agentic',  // Default to agentic mode
   });
 
-  // Load template if templateId is provided
+  // Load template if templateId or builtinId is provided
   useEffect(() => {
-    if (!templateId) return;
+    if (!templateId && !builtinId) return;
 
     async function loadTemplate() {
-      if (!templateId) return;
-
       try {
         setIsLoadingTemplate(true);
-        const result = await getSkillTemplate(templateId);
+
+        // Use the new template system - accepts either number (saved) or string (builtin)
+        const templateIdOrBuiltin = builtinId || templateId;
+        if (!templateIdOrBuiltin) return;
+
+        const result = await getSkillTemplateData(templateIdOrBuiltin);
 
         if (result.success && result.data) {
           setTemplateName(result.data.name);
           setFormData({
             name: `${result.data.name} (Copy)`,
-            description: result.data.description,
-            inputs: result.data.inputs,
-            outputs: result.data.outputs,
+            description: result.data.description || '',
+            inputs: result.data.inputs || [],
+            outputs: result.data.outputs || [],
             steps: result.data.steps || [],
-            model: result.data.model,
+            model: result.data.model || null,
           });
           toast.success('Template loaded successfully');
         } else {
@@ -76,7 +85,16 @@ export function NewOrganizationSkillView({
     }
 
     loadTemplate();
-  }, [templateId, router]);
+  }, [templateId, builtinId, router]);
+
+  // Handle template selection from picker
+  const handleSelectBuiltinTemplate = useCallback((id: string) => {
+    router.push(`/skills/new?builtinId=${encodeURIComponent(id)}`);
+  }, [router]);
+
+  const handleSelectSavedTemplate = useCallback((id: number) => {
+    router.push(`/skills/new?templateId=${id}`);
+  }, [router]);
 
   const handleSave = async () => {
     if (!formData.name.trim()) {
@@ -95,6 +113,10 @@ export function NewOrganizationSkillView({
         outputs: formData.outputs,
         steps: formData.steps,
         model: formData.model,
+        executionType: formData.executionType,
+        instructions: formData.instructions,
+        tools: formData.tools,
+        agentType: formData.agentType,
       });
 
       if (!result.success || !result.data) {
@@ -142,6 +164,18 @@ export function NewOrganizationSkillView({
           </Badge>
         )}
 
+        {!templateName && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsTemplatePickerOpen(true)}
+            className="gap-1.5 h-8"
+          >
+            <LayoutTemplate className="h-3.5 w-3.5" />
+            From Template
+          </Button>
+        )}
+
         <ModelSelector
           value={formData.model}
           onChange={(model) => setFormData({ ...formData, model })}
@@ -152,6 +186,28 @@ export function NewOrganizationSkillView({
           requiredCapabilities={['toolCalling']}
           className="w-[180px] h-8"
         />
+
+        {/* Mode Toggle - Agentic vs Workflow */}
+        <div className="flex items-center gap-0.5 p-0.5 bg-muted rounded-lg h-8">
+          <Button
+            variant={formData.executionType !== 'agent' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => setFormData({ ...formData, executionType: 'agentic' })}
+            className="h-7 px-2.5 gap-1.5"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            Agentic
+          </Button>
+          <Button
+            variant={formData.executionType === 'agent' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => setFormData({ ...formData, executionType: 'agent' })}
+            className="h-7 px-2.5 gap-1.5"
+          >
+            <GitBranch className="h-3.5 w-3.5" />
+            Workflow
+          </Button>
+        </div>
 
         <div className="flex-1" />
 
@@ -175,6 +231,15 @@ export function NewOrganizationSkillView({
           organizationTier={organizationTier}
         />
       </div>
+
+      {/* Template Picker Dialog */}
+      <TemplatePickerDialog
+        isOpen={isTemplatePickerOpen}
+        onClose={() => setIsTemplatePickerOpen(false)}
+        entityType="skill"
+        onSelectBuiltin={handleSelectBuiltinTemplate}
+        onSelectSaved={handleSelectSavedTemplate}
+      />
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Trash2, Globe, Lock, Copy } from 'lucide-react';
+import { Trash2, Globe, Lock, Copy, Sparkles, GitBranch } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -99,6 +99,30 @@ export function EditOrganizationSkillView({ skill, isSystem = false }: EditOrgan
           className="w-[180px] h-8"
           disabled={isSystem}
         />
+
+        {/* Mode Toggle - Agentic vs Workflow */}
+        <div className="flex items-center gap-0.5 p-0.5 bg-muted rounded-lg h-8">
+          <Button
+            variant={formData.executionType !== 'agent' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => setFormData({ ...formData, executionType: 'agentic' })}
+            className="h-7 px-2.5 gap-1.5"
+            disabled={isSystem}
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            Agentic
+          </Button>
+          <Button
+            variant={formData.executionType === 'agent' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => setFormData({ ...formData, executionType: 'agent' })}
+            className="h-7 px-2.5 gap-1.5"
+            disabled={isSystem}
+          >
+            <GitBranch className="h-3.5 w-3.5" />
+            Workflow
+          </Button>
+        </div>
 
         {isSystem ? (
           <>

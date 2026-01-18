@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { Table2, MoreVertical, Loader2, Sparkles, Wand2, CheckCircle2, RefreshCw, X, ChevronDown, ChevronRight, Settings2, MessageSquare } from 'lucide-react';
+import { Table2, MoreVertical, Loader2, Sparkles, Wand2, CheckCircle2, RefreshCw, X, ChevronDown, ChevronRight, Settings2, MessageSquare, Info } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
@@ -26,6 +26,12 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { UnifiedChatInput } from '@/components/shared/UnifiedChatInput';
 import { DataSourcePicker } from '@/components/data-sources';
@@ -74,8 +80,8 @@ export function AgenticSkillEditor({
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
   const [planFeedback, setPlanFeedback] = useState('');
 
-  // Config section collapsed state
-  const [isConfigOpen, setIsConfigOpen] = useState(true);
+  // Config section collapsed state - collapsed by default
+  const [isConfigOpen, setIsConfigOpen] = useState(false);
 
   // Data sources state
   const [dataSources, setDataSources] = useState<ContextMappingDTO[]>([]);
@@ -466,29 +472,32 @@ export function AgenticSkillEditor({
         </div>
       </Collapsible>
 
-      {/* Instructions Section - Main content area */}
-      <div className="flex-1 flex flex-col min-h-0">
-        <Label className="text-sm font-medium mb-2 shrink-0">Instructions</Label>
-        <div className="flex-1 min-h-0">
-          <UnifiedChatInput
-            mode="form"
-            minHeight="100%"
-            value={value.instructions || ''}
-            onChange={(instructions) => handleChange({ instructions })}
-            variables={chatVariables}
-            enableSendButton={false}
-            enableAttachments={true}
-            pendingAttachments={pendingAttachments}
-            onAttachmentAdd={handleAttachmentAdd}
-            onAttachmentRemove={handleAttachmentRemove}
-            disabled={isReadOnly}
-            placeholder="Describe what this skill should do... (@ for tools, { for variables)"
-          />
-        </div>
-      </div>
+      {/* Scrollable content area for Instructions + Execution Plan */}
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="flex flex-col gap-4 pb-4">
+          {/* Instructions Section - bounded height */}
+          <div className="flex flex-col">
+            <Label className="text-sm font-medium mb-2 shrink-0">Instructions</Label>
+            <div className="min-h-[200px] h-[300px]">
+              <UnifiedChatInput
+                mode="form"
+                minHeight="100%"
+                value={value.instructions || ''}
+                onChange={(instructions) => handleChange({ instructions })}
+                variables={chatVariables}
+                enableSendButton={false}
+                enableAttachments={true}
+                pendingAttachments={pendingAttachments}
+                onAttachmentAdd={handleAttachmentAdd}
+                onAttachmentRemove={handleAttachmentRemove}
+                disabled={isReadOnly}
+                placeholder="Describe what this skill should do... (@ for tools, { for variables)"
+              />
+            </div>
+          </div>
 
-      {/* Execution Plan Section */}
-      {isGeneratingPlan ? (
+          {/* Execution Plan Section */}
+          {isGeneratingPlan ? (
         // Generating state
         <div className="border rounded-lg p-4 bg-amber-50/50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800 shrink-0">
           <div className="flex items-center gap-2 mb-2">
@@ -506,6 +515,19 @@ export function AgenticSkillEditor({
             <div className="flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 text-emerald-500" />
               <span className="text-sm font-medium">Execution Plan</span>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-[280px]">
+                    <p className="text-xs">
+                      Execution plans define how the agent carries out your instructions.
+                      Use chat to iteratively design and refine your plan for repeatable results.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
               <Badge variant="outline" className="text-[10px]">
                 {value.plan.steps?.length || 0} steps
               </Badge>
@@ -578,27 +600,42 @@ export function AgenticSkillEditor({
             </Button>
           </div>
         </div>
-      ) : (
-        // No plan state
-        <div className="border rounded-lg p-4 bg-muted/30 shrink-0">
-          <div className="flex items-center gap-2 mb-2">
-            <Sparkles className="h-4 w-4 text-amber-500" />
-            <span className="text-sm font-medium">Execution Plan</span>
-          </div>
-          <p className="text-xs text-muted-foreground mb-3">
-            Pre-generate a plan for repeatable tasks. Without a plan, the agent creates one at runtime and requests approval for each step.
-          </p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handleGeneratePlan(false)}
-            disabled={!value.instructions?.trim() || !skillId || isReadOnly}
-          >
-            <Wand2 className="h-3 w-3 mr-1.5" />
-            Generate Plan
-          </Button>
+          ) : (
+            // No plan state
+            <div className="border rounded-lg p-4 bg-muted/30 shrink-0">
+              <div className="flex items-center gap-2 mb-2">
+                <Sparkles className="h-4 w-4 text-amber-500" />
+                <span className="text-sm font-medium">Execution Plan</span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-[280px]">
+                      <p className="text-xs">
+                        Execution plans define how the agent carries out your instructions.
+                        Use chat to iteratively design and refine your plan for repeatable results.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+              <p className="text-xs text-muted-foreground mb-3">
+                Pre-generate a plan for repeatable tasks. Without a plan, the agent creates one at runtime and requests approval for each step.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleGeneratePlan(false)}
+                disabled={!value.instructions?.trim() || !skillId || isReadOnly}
+              >
+                <Wand2 className="h-3 w-3 mr-1.5" />
+                Generate Plan
+              </Button>
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
