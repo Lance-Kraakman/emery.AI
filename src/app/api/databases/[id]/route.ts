@@ -11,11 +11,12 @@ export const dynamic = 'force-dynamic';
  * AIDEV-NOTE: Created to support Python CRUD tools calling emery-read-database etc.
  */
 
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { withAuthenticatedRoute, parseIntParam, parseJsonBody } from '@/lib/api/base';
 import { getDatabaseApplicationService } from '@/ddd/application/di/container';
 import { DatabaseId, OrganizationId } from '@/ddd/domain/shared/value-objects';
 import { DatabaseMapper } from '@/app/mappers/database-mapper';
+import { operationToToon } from '@/lib/toon-format';
 
 /**
  * GET /api/databases/[id]
@@ -53,6 +54,7 @@ export async function GET(
 /**
  * PUT /api/databases/[id]
  * Update database metadata
+ * ?format=llm → TOON format response
  *
  * Request body fields (all optional):
  * {
@@ -65,7 +67,10 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ): Promise<Response> {
-  return withAuthenticatedRoute(request, async (user) => {
+  const { searchParams } = new URL(request.url);
+  const format = searchParams.get('format');
+
+  const response = await withAuthenticatedRoute(request, async (user) => {
     const { id } = await params;
     const databaseId = parseIntParam(id, 'database id');
     const body = await parseJsonBody(request);
@@ -101,17 +106,42 @@ export async function PUT(
       message: 'Database updated successfully'
     };
   });
+
+  if (format === 'llm') {
+    const body = await response.clone().json();
+    if (body.success) {
+      // Extract ID - handle value object (.value) or plain number
+      const idVal = body.data?.id;
+      const dbId = typeof idVal === 'object' && idVal !== null ? (idVal.value ?? 0) : (idVal ?? 0);
+      const toon = operationToToon({
+        action: 'updated',
+        entity: 'database',
+        id: dbId,
+        data: { name: body.data?.name, slug: body.data?.slug }
+      });
+      return new NextResponse(toon, {
+        status: 200,
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+      });
+    }
+  }
+
+  return response;
 }
 
 /**
  * DELETE /api/databases/[id]
  * Delete database
+ * ?format=llm → TOON format response
  */
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ): Promise<Response> {
-  return withAuthenticatedRoute(request, async (user) => {
+  const { searchParams } = new URL(request.url);
+  const format = searchParams.get('format');
+
+  const response = await withAuthenticatedRoute(request, async (user) => {
     if (!user.organizationId) {
       return { success: false, error: 'Organization ID required', status: 400 };
     }
@@ -151,4 +181,24 @@ export async function DELETE(
       message: 'Database deleted successfully'
     };
   });
+
+  if (format === 'llm') {
+    const body = await response.clone().json();
+    if (body.success) {
+      // Extract ID - handle value object (.value) or plain number
+      const idVal = body.data?.id;
+      const dbId = typeof idVal === 'object' && idVal !== null ? (idVal.value ?? 0) : (idVal ?? 0);
+      const toon = operationToToon({
+        action: 'deleted',
+        entity: 'database',
+        id: dbId
+      });
+      return new NextResponse(toon, {
+        status: 200,
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+      });
+    }
+  }
+
+  return response;
 }

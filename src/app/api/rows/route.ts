@@ -1,108 +1,75 @@
 /**
  * Row Operations API Endpoint
  *
- * RESTful endpoints for table row management:
- * - POST: Create a new row in a table
- * - GET: Get rows with pagination and filtering
- * - PUT: Update an existing row
- * - DELETE: Delete a row
- *
- * Uses standardized base utilities for consistent auth and error handling
- * Delegates to server actions to avoid duplicating business logic
+ * Supports TOON format for LLM-optimized responses:
+ * - ?format=llm → minimal TOON format
+ * - ?format=llm&meta=1 → TOON with metadata
  */
 
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { withAuthenticatedRoute, parseJsonBody, requireParam, parseIntParam, parseOptionalIntParam } from '@/lib/api/base';
 import { createRow, updateRowData, deleteRowData, getRowsDSG } from '@/app/actions/rows';
+import { rowsToToon, operationToToon } from '@/lib/toon-format';
 
 /**
- * POST /api/rows
- * Create a new row in a table
- *
- * Request body:
- * {
- *   tableId: number (required),
- *   data: Record<string, any> (required) - Field values for the row
- * }
+ * POST /api/rows - Create a new row
+ * ?format=llm → TOON format response
  */
 export async function POST(request: NextRequest): Promise<Response> {
-  const requestId = crypto.randomUUID();
-  const startTime = Date.now();
+  const { searchParams } = new URL(request.url);
+  const format = searchParams.get("format");
 
-  // Extract tracking headers
-  const callId = request.headers.get('x-call-id');
-  const source = request.headers.get('x-source');
-
-  console.log(`[ROWS-API] POST - requestId: ${requestId}, callId: ${callId || 'none'}`);
-
-  return withAuthenticatedRoute(request, async (user) => {
+  const response = await withAuthenticatedRoute(request, async (user) => {
     const body = await parseJsonBody(request);
-
     if (!body) {
-      console.log(`[ROWS-API] Invalid body - requestId: ${requestId}`);
-      return {
-        success: false,
-        error: 'Invalid request body',
-        status: 400
-      };
+      return { success: false, error: 'Invalid request body', status: 400 };
     }
 
     const { tableId, data, dataKeyType } = body;
-
-    // Check if this is from Python tool
-    const isFromPythonTool = source === 'python_tool' || callId?.startsWith('http_');
-
-    // Validate required fields
     requireParam(tableId, 'tableId');
     requireParam(data, 'data');
 
-    const actionStart = Date.now();
     const result = await createRow({ tableId, data, dataKeyType });
 
-    const actionTime = Date.now() - actionStart;
-    const totalTime = Date.now() - startTime;
-
     if (!result.success) {
-      console.log(`[ROWS-API] ❌ Create row failed - requestId: ${requestId}, error: ${result.error}, duration: ${totalTime}ms`);
-      return {
-        success: false,
-        error: result.error || 'Failed to create row',
-        status: 400
-      };
+      return { success: false, error: result.error || 'Failed to create row', status: 400 };
     }
 
-    console.log(`[ROWS-API] ✅ Create row success - requestId: ${requestId}, duration: ${totalTime}ms`);
-    
-    return {
-      success: true,
-      data: result.data,
-      message: 'Row created successfully'
-    };
+    return { success: true, data: result.data, message: 'Row created successfully' };
   });
+
+  if (format === "llm") {
+    const body = await response.clone().json();
+    if (body.success) {
+      const toon = operationToToon({
+        action: 'created',
+        entity: 'row',
+        id: body.data?.id || body.data?._id || 0,
+        data: body.data
+      });
+      return new NextResponse(toon, {
+        status: 201,
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+      });
+    }
+  }
+
+  return response;
 }
 
 /**
- * GET /api/rows
- * Get rows with pagination and filtering
- *
- * Query parameters:
- * - tableId: number (required)
- * - limit: number (optional, default: 100)
- * - offset: number (optional, default: 0)
- * - orderBy: string (optional)
- * - orderDirection: 'ASC' | 'DESC' (optional)
+ * GET /api/rows - Get rows with pagination
+ * ?format=llm → TOON format | ?format=llm&meta=1 → with metadata
  */
 export async function GET(request: NextRequest): Promise<Response> {
-  return withAuthenticatedRoute(request, async (user) => {
-    const { searchParams } = new URL(request.url);
-    const tableIdStr = searchParams.get("tableId");
+  const { searchParams } = new URL(request.url);
+  const format = searchParams.get("format");
+  const includeMeta = searchParams.get("meta") === "1";
 
+  const response = await withAuthenticatedRoute(request, async (user) => {
+    const tableIdStr = searchParams.get("tableId");
     if (!tableIdStr) {
-      return {
-        success: false,
-        error: 'tableId is required',
-        status: 400
-      };
+      return { success: false, error: 'tableId is required', status: 400 };
     }
 
     const tableId = parseIntParam(tableIdStr, 'tableId');
@@ -111,110 +78,115 @@ export async function GET(request: NextRequest): Promise<Response> {
     const orderBy = searchParams.get("orderBy") || undefined;
     const orderDirection = (searchParams.get("orderDirection") as 'ASC' | 'DESC') || undefined;
 
-    // Use server action function with pagination
     const result = await getRowsDSG(tableId, limit, offset, orderBy, orderDirection);
 
     return {
       success: true,
-      data: {
-        rows: result.rows,
-        hasMore: result.hasMore,
-        total: result.total,
-        limit,
-        offset
-      }
+      data: { rows: result.rows, hasMore: result.hasMore, total: result.total, limit, offset }
     };
   });
+
+  // Transform to TOON if requested
+  if (format === "llm") {
+    const body = await response.clone().json();
+    if (body.success) {
+      return new NextResponse(rowsToToon(body.data.rows, { includeMeta }), {
+        status: 200,
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+      });
+    }
+  }
+
+  return response;
 }
 
 /**
- * PUT /api/rows
- * Update an existing row
- *
- * Request body:
- * {
- *   tableId: number (required),
- *   rowId: string (required),
- *   data: Record<string, any> (required) - Updated field values
- * }
+ * PUT /api/rows - Update an existing row
+ * ?format=llm → TOON format response
  */
 export async function PUT(request: NextRequest): Promise<Response> {
-  return withAuthenticatedRoute(request, async (user) => {
-    const body = await parseJsonBody(request);
+  const { searchParams } = new URL(request.url);
+  const format = searchParams.get("format");
 
+  const response = await withAuthenticatedRoute(request, async (user) => {
+    const body = await parseJsonBody(request);
     if (!body) {
-      return {
-        success: false,
-        error: 'Invalid request body',
-        status: 400
-      };
+      return { success: false, error: 'Invalid request body', status: 400 };
     }
 
     const { tableId, rowId, data, dataKeyType } = body;
-
-    // Validate required fields
     requireParam(tableId, 'tableId');
     requireParam(rowId, 'rowId');
     requireParam(data, 'data');
 
-    // Use server action function
     const result = await updateRowData({ tableId, rowId, data, dataKeyType });
 
     if (!result.success) {
-      return {
-        success: false,
-        error: result.error || 'Failed to update row',
-        status: 400
-      };
+      return { success: false, error: result.error || 'Failed to update row', status: 400 };
     }
 
-    return {
-      success: true,
-      data: result.data,
-      message: 'Row updated successfully'
-    };
+    return { success: true, data: result.data, message: 'Row updated successfully' };
   });
+
+  if (format === "llm") {
+    const body = await response.clone().json();
+    if (body.success) {
+      const toon = operationToToon({
+        action: 'updated',
+        entity: 'row',
+        id: body.data?.id || body.data?._id || 0,
+        data: body.data
+      });
+      return new NextResponse(toon, {
+        status: 200,
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+      });
+    }
+  }
+
+  return response;
 }
 
 /**
- * DELETE /api/rows
- * Delete a row
- *
- * Query parameters:
- * - tableId: number (required)
- * - rowId: string (required)
+ * DELETE /api/rows - Delete a row
+ * ?format=llm → TOON format response
  */
 export async function DELETE(request: NextRequest): Promise<Response> {
-  return withAuthenticatedRoute(request, async (user) => {
-    const { searchParams } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
+  const format = searchParams.get("format");
+
+  const response = await withAuthenticatedRoute(request, async (user) => {
     const tableIdStr = searchParams.get("tableId");
     const rowId = searchParams.get("rowId");
 
     if (!tableIdStr || !rowId) {
-      return {
-        success: false,
-        error: 'tableId and rowId are required',
-        status: 400
-      };
+      return { success: false, error: 'tableId and rowId are required', status: 400 };
     }
 
     const tableId = parseIntParam(tableIdStr, 'tableId');
-
-    // Use server action function
     const result = await deleteRowData(tableId, rowId);
 
     if (!result.success) {
-      return {
-        success: false,
-        error: result.error || 'Failed to delete row',
-        status: 400
-      };
+      return { success: false, error: result.error || 'Failed to delete row', status: 400 };
     }
 
-    return {
-      success: true,
-      data: { id: rowId },
-      message: 'Row deleted successfully'
-    };
+    return { success: true, data: { id: rowId }, message: 'Row deleted successfully' };
   });
+
+  if (format === "llm") {
+    const body = await response.clone().json();
+    if (body.success) {
+      const toon = operationToToon({
+        action: 'deleted',
+        entity: 'row',
+        id: body.data?.id || 0
+      });
+      return new NextResponse(toon, {
+        status: 200,
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+      });
+    }
+  }
+
+  return response;
 }
