@@ -449,9 +449,16 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
           // Skip empty conditions
           if (!condition.field || !condition.value) continue;
 
-          // Skip rowData variables (need client-side resolution)
-          if (typeof condition.value === 'string' && condition.value.includes('{{rowData.')) {
-            continue;
+          // Skip variables that need client-side resolution
+          if (typeof condition.value === 'string') {
+            // Skip rowData variables
+            if (condition.value.includes('{{rowData.')) {
+              continue;
+            }
+            // Skip state variables
+            if (condition.value.includes('{{state.')) {
+              continue;
+            }
           }
 
           filters.push({

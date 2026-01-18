@@ -706,9 +706,15 @@ export async function executeView(
 
       runtimeFilters = [];
       for (const filter of additionalFilters) {
+        // Skip state variables - they need client-side resolution
+        if (typeof filter.value === 'string' && filter.value.includes('{{state.')) {
+          console.log(`[executeView] Skipping state variable filter for field "${filter.field}" - needs client-side resolution`);
+          continue;
+        }
+
         const domainOperator = uiToDomainOperatorMap[filter.operator] || filter.operator;
 
-        // Substitute variables in the filter value first
+        // Substitute params variables in the filter value
         const substitutedValue = substituteFilterVariable(filter.value, context);
 
         // Skip filters where variable wasn't found (empty string) - but not for no-value operators

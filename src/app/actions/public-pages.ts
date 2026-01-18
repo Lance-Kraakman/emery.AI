@@ -447,7 +447,13 @@ export async function executePublicView(
 
       runtimeFilters = [];
       for (const filter of additionalFilters) {
-        // Substitute variables in the filter value first
+        // Skip state variables - they need client-side resolution
+        if (typeof filter.value === 'string' && filter.value.includes('{{state.')) {
+          console.log(`[executePublicView] Skipping state variable filter for field "${filter.field}" - needs client-side resolution`);
+          continue;
+        }
+
+        // Substitute params variables in the filter value
         const substitutedValue = substituteFilterVariable(filter.value as string, context);
 
         // Skip filters where variable wasn't found (empty string)
