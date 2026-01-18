@@ -1299,9 +1299,12 @@ export async function transferSkillToAgent(
 /**
  * Generate an autonomous execution plan for skill instructions.
  *
- * Uses gRPC to call the Python planning service which creates a structured
+ * Uses gRPC streaming to call the Python planning service which creates a structured
  * plan using context-aware planning. The generated plan can be stored on
  * the skill for autonomous execution (no HITL approval required at runtime).
+ *
+ * AIDEV-NOTE: Uses streaming RPC - collects events and returns final result.
+ * For full streaming with progress updates, use an SSE API route instead.
  *
  * @param skillId - Skill ID (used to get context and org info)
  * @param instructions - The instructions to generate a plan for
@@ -1360,48 +1363,73 @@ export async function generateSkillPlan(
     const organization = await organizationRepository.findById(skill.organizationId);
     const organizationModel = organization?.defaultModel || undefined;
 
-    // Call gRPC to generate the plan
+    // Call streaming gRPC to generate the plan
     const grpcClient = getChatProcessingClient(String(session.user.currentOrganizationId));
 
-    const result = await grpcClient.generatePlan({
-      instructions,
-      organizationId: skill.organizationId.value,
-      userId: session.user.id,
-      skillId,
-      model: organizationModel, // Pass org default model like chat does
-      userApiKey,
-      timeoutSeconds: 90, // Allow more time for complex plans
-      // Pass skill inputs for variable-aware planning
-      skillInputs: (skill.inputs || []).map(input => ({
-        name: input.name,
-        type: input.type,
-        required: input.required,
-      })),
-      // Pass skill outputs for result-aware planning
-      skillOutputs: (skill.outputs || []).map(output => ({
-        name: output.name,
-        type: output.type,
-      })),
-      // Pass previous plan and feedback for regeneration
-      previousPlanJson: previousPlan ? JSON.stringify(previousPlan) : undefined,
-      userFeedback: userFeedback,
-    });
+    // Collect streaming events and return final result
+    // AIDEV-NOTE: Using object wrapper to capture results from callback
+    const result: {
+      plan: { planJson: string; planId: string; planningTimeMs: number } | null;
+      error: string | null;
+    } = { plan: null, error: null };
 
-    if (result.status !== 'success') {
-      console.error('[generateSkillPlan] gRPC error:', result.errorMessage);
-      return { success: false, error: result.errorMessage || 'Plan generation failed' };
+    await grpcClient.streamGeneratePlan(
+      {
+        instructions,
+        organizationId: skill.organizationId.value,
+        userId: session.user.id,
+        skillId,
+        model: organizationModel, // Pass org default model like chat does
+        userApiKey,
+        timeoutSeconds: 90, // Allow more time for complex plans
+        // Pass skill inputs for variable-aware planning
+        skillInputs: (skill.inputs || []).map(input => ({
+          name: input.name,
+          type: input.type,
+          required: input.required,
+        })),
+        // Pass skill outputs for result-aware planning
+        skillOutputs: (skill.outputs || []).map(output => ({
+          name: output.name,
+          type: output.type,
+        })),
+        // Pass previous plan and feedback for regeneration
+        previousPlanJson: previousPlan ? JSON.stringify(previousPlan) : undefined,
+        userFeedback: userFeedback,
+      },
+      (response) => {
+        // Handle streaming events
+        if (response.type === 'plan_complete' && response.planComplete) {
+          result.plan = response.planComplete;
+        } else if (response.type === 'error' && response.error) {
+          result.error = response.error.errorMessage;
+        }
+        // Progress events logged but not exposed to caller (server action limitation)
+        if (response.type === 'progress' && response.progress) {
+          console.log(`[generateSkillPlan] Progress: ${response.progress.message} (${response.progress.phase})`);
+        }
+      }
+    );
+
+    if (result.error) {
+      console.error('[generateSkillPlan] gRPC error:', result.error);
+      return { success: false, error: result.error };
+    }
+
+    if (!result.plan) {
+      return { success: false, error: 'No plan received from generation' };
     }
 
     // Parse the plan JSON
     let plan: StoredPlan;
     try {
-      plan = JSON.parse(result.planJson);
+      plan = JSON.parse(result.plan.planJson);
     } catch (e) {
       console.error('[generateSkillPlan] Failed to parse plan JSON:', e);
       return { success: false, error: 'Invalid plan format returned' };
     }
 
-    console.log(`[generateSkillPlan] Generated plan ${result.planId} with ${plan.steps?.length || 0} steps in ${result.planningTimeMs}ms`);
+    console.log(`[generateSkillPlan] Generated plan ${result.plan.planId} with ${plan.steps?.length || 0} steps in ${result.plan.planningTimeMs}ms`);
 
     return { success: true, data: plan };
   } catch (error) {

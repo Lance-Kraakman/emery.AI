@@ -1838,19 +1838,50 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         self,
         request: agent_worker_pb2.GeneratePlanRequest,
         context: grpc.aio.ServicerContext
-    ) -> agent_worker_pb2.GeneratePlanResponse:
+    ) -> AsyncIterator[agent_worker_pb2.GeneratePlanResponse]:
         """
-        Generate autonomous plan for skill editor using existing patterns.
+        Generate autonomous plan for skill editor with streaming progress.
 
         Creates a plan from skill instructions that can be stored and executed
         autonomously (without HITL approval) when the skill runs.
 
+        Streams:
+        - PlanProgress: Progress updates during generation
+        - AwaitingInput: Clarification questions (pause for user)
+        - PlanComplete: Final plan ready
+        - ProcessingError: If generation fails
+
         Uses the same ToolProvider and planning patterns as ProcessMessage.
         """
+        import uuid
         start_time = time.time()
 
+        # Generate or use provided session ID for potential question/answer flow
+        session_id = request.session_id if request.session_id else str(uuid.uuid4())
+
+        def _make_progress(message: str, phase: str) -> agent_worker_pb2.GeneratePlanResponse:
+            """Create a progress response."""
+            return agent_worker_pb2.GeneratePlanResponse(
+                progress=agent_worker_pb2.PlanProgress(
+                    message=message,
+                    phase=phase
+                ),
+                timestamp=int(time.time() * 1000)
+            )
+
+        def _make_error(error_code: str, error_message: str) -> agent_worker_pb2.GeneratePlanResponse:
+            """Create an error response."""
+            return agent_worker_pb2.GeneratePlanResponse(
+                error=agent_worker_pb2.ProcessingError(
+                    error_code=error_code,
+                    error_message=error_message,
+                    can_retry=True
+                ),
+                timestamp=int(time.time() * 1000)
+            )
+
         try:
-            logger.info(f"📋 GeneratePlan: Starting for skill {request.skill_id}")
+            logger.info(f"📋 GeneratePlan: Starting for skill {request.skill_id} (session: {session_id})")
 
             # 1. Create ToolProvider (same pattern as ProcessMessage)
             tool_provider = ToolProvider(
@@ -1873,8 +1904,6 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     "type": input_def.type or "text",
                     "required": input_def.required,
                 })
-            if skill_inputs:
-                logger.info(f"📋 GeneratePlan: {len(skill_inputs)} skill inputs for variable placeholders")
 
             # 3a. Extract skill outputs for result-aware planning
             skill_outputs = []
@@ -1883,84 +1912,140 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     "name": output_def.name,
                     "type": output_def.type or "text",
                 })
-            if skill_outputs:
-                logger.info(f"📋 GeneratePlan: {len(skill_outputs)} skill outputs for result-aware planning")
 
             # 3b. Extract previous plan and feedback for regeneration
             previous_plan_json = request.previous_plan_json if request.previous_plan_json else None
             user_feedback = request.user_feedback if request.user_feedback else None
-            if previous_plan_json and user_feedback:
-                logger.info(f"📋 GeneratePlan: Regenerating with user feedback")
 
-            # 4. Generate plan (uses PlanOutputTool internally)
-            # Context gathering is done via research_agent (created inside plan_service)
-            timeout = request.timeout_seconds if request.timeout_seconds > 0 else 60
-            plan = await asyncio.wait_for(
-                self.plan_service.generate_plan(
-                    basic_instructions=request.instructions,
-                    context_tables=None,  # Could resolve from skill_id in future
-                    org_model=request.model or None,
-                    managed_agents=managed_agents,
-                    skill_inputs=skill_inputs,  # Pass for variable-aware planning
-                    skill_outputs=skill_outputs,  # Pass for result-aware planning
-                    previous_plan_json=previous_plan_json,  # Pass for regeneration
-                    user_feedback=user_feedback,  # Pass for regeneration
-                    api_key=tool_provider.api_key,  # For research_agent auth
-                    organization_id=tool_provider.organization_id,  # For research_agent RLS
-                ),
-                timeout=timeout
+            # Build the task instructions (potentially enhanced with clarification answers)
+            task_instructions = request.instructions
+
+            # Check if resuming from clarification questions
+            if request.session_id and request.answers:
+                logger.info(f"📋 GeneratePlan: Resuming session {session_id} with {len(request.answers)} answers")
+                yield _make_progress("Resuming with your answers...", "resuming")
+
+                # Get stored session context
+                plan_session = await self.session_manager.get_plan_session(session_id)
+                if not plan_session:
+                    yield _make_error("SESSION_NOT_FOUND", "Planning session expired. Please start over.")
+                    return
+
+                # Enhance instructions with user's clarification answers
+                answers_dict = {a.question_id: a.answer for a in request.answers}
+                if answers_dict:
+                    answers_text = "\n".join([f"- {q}: {a}" for q, a in answers_dict.items()])
+                    task_instructions = f"{plan_session.get('instructions', request.instructions)}\n\nUser clarifications:\n{answers_text}"
+                    logger.info(f"📋 GeneratePlan: Enhanced instructions with {len(answers_dict)} clarifications")
+
+                # Clean up the session
+                await self.session_manager.remove_plan_session(session_id)
+
+            yield _make_progress("Analyzing instructions...", "analyzing")
+
+            # === Use ExecutionCoordinator for classification + planning ===
+            # This reuses the EXACT same code path as chat ProcessMessage
+            coordinator = ExecutionCoordinator(
+                plan_service=self.plan_service,
+                model_provider=self.model_provider,
+                org_model=request.model or None,
+                api_key=tool_provider.api_key,
+                organization_id=tool_provider.organization_id,
             )
 
-            planning_time_ms = int((time.time() - start_time) * 1000)
-            logger.info(f"📋 GeneratePlan: Created plan {plan.id} with {len(plan.steps)} steps in {planning_time_ms}ms")
+            yield _make_progress("Classifying task...", "analyzing")
 
-            # 5. Check for empty plan - return error instead of false positive
-            if not plan.steps:
-                logger.error(f"📋 GeneratePlan: Plan has no steps - generation failed")
-                return agent_worker_pb2.GeneratePlanResponse(
-                    status="error",
-                    error_message="Plan generation failed - no steps were created. Check that the model can access database context."
-                )
+            # Use coordinator's classify_and_create_plan (same logic as ProcessMessage)
+            async for event in coordinator.classify_and_create_plan(
+                task=task_instructions,
+                tools=[],  # No tools needed for skill plan generation
+                managed_agents=managed_agents,
+            ):
+                if isinstance(event, AwaitingClarificationEvent):
+                    # Same handling as ProcessMessage - yield questions and pause
+                    logger.info(f"📋 GeneratePlan: Needs clarification - {len(event.questions)} questions")
 
-            # 6. Convert Plan to StoredPlan JSON format (matches TypeScript StoredPlan type)
-            stored_plan = {
-                "id": plan.id,
-                "goal": plan.goal,
-                "basicInstructions": plan.basic_instructions,
-                "context": plan.context,
-                "analysis": plan.analysis,
-                "steps": [
-                    {
-                        "stepId": step.step_id,
-                        "description": step.description,
-                        "toolCall": step.tool_call,
-                        "parameters": step.parameters or {},
-                        "targetAgent": step.target_agent,
-                    }
-                    for step in plan.steps
-                ],
-                "version": 1,
-                "generatedAt": plan.generated_at.isoformat() if plan.generated_at else None,
-            }
+                    # Store session context for resume
+                    await self.session_manager.store_plan_session(session_id, {
+                        "instructions": request.instructions,
+                        "skill_inputs": skill_inputs,
+                        "skill_outputs": skill_outputs,
+                        "org_model": request.model,
+                        "api_key": tool_provider.api_key,
+                        "organization_id": tool_provider.organization_id,
+                        "previous_plan_json": previous_plan_json,
+                        "user_feedback": user_feedback,
+                    })
 
-            return agent_worker_pb2.GeneratePlanResponse(
-                plan_json=json.dumps(stored_plan),
-                plan_id=plan.id,
-                planning_time_ms=planning_time_ms,
-                status="success"
-            )
+                    # Format questions (same as ProcessMessage)
+                    questions_content = "\n".join(event.questions)
+
+                    yield agent_worker_pb2.GeneratePlanResponse(
+                        awaiting_input=agent_worker_pb2.AwaitingInput(
+                            input_type="question",
+                            title="Clarification Needed",
+                            content=questions_content,
+                            options=[],  # Free-form response expected
+                            session_id=session_id
+                        ),
+                        timestamp=int(time.time() * 1000)
+                    )
+                    return  # Client will call again with answers
+
+                elif isinstance(event, PlanCreatedEvent):
+                    # Got the plan - convert to PlanComplete response
+                    plan = event.plan
+                    planning_time_ms = int((time.time() - start_time) * 1000)
+                    logger.info(f"📋 GeneratePlan: Created plan {plan.id} with {len(plan.steps)} steps in {planning_time_ms}ms")
+
+                    # Check for empty plan
+                    if not plan.steps:
+                        logger.error(f"📋 GeneratePlan: Plan has no steps - generation failed")
+                        yield _make_error(
+                            "PLAN_GENERATION_FAILED",
+                            "Plan generation failed - no steps were created. Check that the model can access database context."
+                        )
+                        return
+
+                    yield self._make_plan_complete_response(plan, planning_time_ms)
 
         except asyncio.TimeoutError:
             logger.error(f"📋 GeneratePlan: Timed out after {request.timeout_seconds}s")
-            return agent_worker_pb2.GeneratePlanResponse(
-                status="error",
-                error_message="Plan generation timed out"
-            )
+            yield _make_error("TIMEOUT", "Plan generation timed out")
 
         except Exception as e:
             logger.error(f"📋 GeneratePlan: Failed with error: {e}", exc_info=True)
-            return agent_worker_pb2.GeneratePlanResponse(
-                status="error",
-                error_message=str(e)
-            )
+            yield _make_error("INTERNAL_ERROR", str(e))
+
+    def _make_plan_complete_response(self, plan, planning_time_ms: int) -> agent_worker_pb2.GeneratePlanResponse:
+        """Create a PlanComplete response from a Plan object."""
+        # Convert Plan to StoredPlan JSON format (matches TypeScript StoredPlan type)
+        stored_plan = {
+            "id": plan.id,
+            "goal": plan.goal,
+            "basicInstructions": plan.basic_instructions,
+            "context": plan.context,
+            "analysis": plan.analysis,
+            "steps": [
+                {
+                    "stepId": step.step_id,
+                    "description": step.description,
+                    "toolCall": step.tool_call,
+                    "parameters": step.parameters or {},
+                    "targetAgent": step.target_agent,
+                }
+                for step in plan.steps
+            ],
+            "version": 1,
+            "generatedAt": plan.generated_at.isoformat() if plan.generated_at else None,
+        }
+
+        return agent_worker_pb2.GeneratePlanResponse(
+            plan_complete=agent_worker_pb2.PlanComplete(
+                plan_json=json.dumps(stored_plan),
+                plan_id=plan.id,
+                planning_time_ms=planning_time_ms
+            ),
+            timestamp=int(time.time() * 1000)
+        )
 

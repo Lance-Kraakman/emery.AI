@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from . import agent_worker_pb2 as agent__worker__pb2
+import agent_worker_pb2 as agent__worker__pb2
 
 GRPC_GENERATED_VERSION = '1.74.0'
 GRPC_VERSION = grpc.__version__
@@ -209,7 +209,7 @@ class ChatProcessingServiceStub(object):
                 request_serializer=agent__worker__pb2.CancelMessageRequest.SerializeToString,
                 response_deserializer=agent__worker__pb2.CancelMessageResponse.FromString,
                 _registered_method=True)
-        self.GeneratePlan = channel.unary_unary(
+        self.GeneratePlan = channel.unary_stream(
                 '/emery.agents.ChatProcessingService/GeneratePlan',
                 request_serializer=agent__worker__pb2.GeneratePlanRequest.SerializeToString,
                 response_deserializer=agent__worker__pb2.GeneratePlanResponse.FromString,
@@ -235,7 +235,8 @@ class ChatProcessingServiceServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def GeneratePlan(self, request, context):
-        """Generate an autonomous execution plan for skill instructions
+        """Generate an autonomous execution plan for skill instructions (streaming)
+        AIDEV-NOTE: Streaming RPC for progress updates and HITL clarification questions
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -254,7 +255,7 @@ def add_ChatProcessingServiceServicer_to_server(servicer, server):
                     request_deserializer=agent__worker__pb2.CancelMessageRequest.FromString,
                     response_serializer=agent__worker__pb2.CancelMessageResponse.SerializeToString,
             ),
-            'GeneratePlan': grpc.unary_unary_rpc_method_handler(
+            'GeneratePlan': grpc.unary_stream_rpc_method_handler(
                     servicer.GeneratePlan,
                     request_deserializer=agent__worker__pb2.GeneratePlanRequest.FromString,
                     response_serializer=agent__worker__pb2.GeneratePlanResponse.SerializeToString,
@@ -336,7 +337,7 @@ class ChatProcessingService(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(
+        return grpc.experimental.unary_stream(
             request,
             target,
             '/emery.agents.ChatProcessingService/GeneratePlan',

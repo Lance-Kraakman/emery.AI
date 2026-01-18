@@ -73,6 +73,8 @@ class SessionManager:
         self.state_machines: Dict[str, CoordinatorStateMachine] = {}
         self.idle_timeout = idle_timeout
         self.max_lifetime = max_lifetime
+        # Plan generation sessions (for HITL question/answer flow)
+        self._plan_sessions: Dict[str, Dict[str, Any]] = {}
         self._cleanup_task: Optional[asyncio.Task] = None
         logger.info(
             f"SessionManager initialized: "
@@ -599,4 +601,51 @@ class SessionManager:
             self.state_machines[session_id] = CoordinatorStateMachine(session_id)
             logger.info(f"📊 Created state machine for session {session_id}")
         return self.state_machines[session_id]
+
+    # ============================================================
+    # Plan Generation Session Methods (for HITL question/answer flow)
+    # ============================================================
+
+    async def store_plan_session(self, session_id: str, context: Dict[str, Any]) -> None:
+        """
+        Store plan generation session context for later resume.
+
+        Used when plan generation pauses to ask clarification questions.
+        The context is stored so generation can resume after user answers.
+
+        Args:
+            session_id: Unique session identifier for the plan generation
+            context: Session context including instructions, partial state, etc.
+        """
+        context["stored_at"] = datetime.now().isoformat()
+        self._plan_sessions[session_id] = context
+        logger.info(f"📋 Stored plan session {session_id} for resume")
+
+    async def get_plan_session(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get stored plan generation session context.
+
+        Args:
+            session_id: Session identifier
+
+        Returns:
+            Session context dict if found, None otherwise
+        """
+        context = self._plan_sessions.get(session_id)
+        if context:
+            logger.info(f"📋 Retrieved plan session {session_id}")
+        else:
+            logger.warning(f"📋 Plan session {session_id} not found (may have expired)")
+        return context
+
+    async def remove_plan_session(self, session_id: str) -> None:
+        """
+        Remove plan generation session after completion or timeout.
+
+        Args:
+            session_id: Session identifier to remove
+        """
+        if session_id in self._plan_sessions:
+            del self._plan_sessions[session_id]
+            logger.info(f"📋 Removed plan session {session_id}")
 

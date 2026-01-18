@@ -9,6 +9,7 @@ The planner calls submit_plan tool with goal and steps - no text parsing.
 Step execution uses ToolExecutor pattern - sub-agent resolves descriptions to tool calls.
 """
 
+import asyncio
 import logging
 from typing import List, Optional, Any
 

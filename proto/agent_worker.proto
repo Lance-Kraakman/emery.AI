@@ -504,8 +504,9 @@ service ChatProcessingService {
   // Cancel an in-progress message processing
   rpc CancelMessage(CancelMessageRequest) returns (CancelMessageResponse);
 
-  // Generate an autonomous execution plan for skill instructions
-  rpc GeneratePlan(GeneratePlanRequest) returns (GeneratePlanResponse);
+  // Generate an autonomous execution plan for skill instructions (streaming)
+  // AIDEV-NOTE: Streaming RPC for progress updates and HITL clarification questions
+  rpc GeneratePlan(GeneratePlanRequest) returns (stream GeneratePlanResponse);
 }
 
 // Request for autonomous plan generation
@@ -521,16 +522,40 @@ message GeneratePlanRequest {
   string previous_plan_json = 9;        // Previous plan as JSON (for regeneration with feedback)
   string user_feedback = 10;            // User feedback for regeneration
   repeated OutputDefinition skill_outputs = 11;  // Skill outputs for result-aware planning
+  string session_id = 12;               // For resuming after clarification questions
+  repeated ClarificationAnswer answers = 13; // Answers to clarification questions
 }
 
-// Response from plan generation
+// Streaming response from plan generation
+// AIDEV-NOTE: Streams progress updates, can pause for clarification questions (HITL)
 message GeneratePlanResponse {
+  oneof response {
+    PlanProgress progress = 1;          // Progress update during generation
+    AwaitingInput awaiting_input = 2;   // HITL: Need clarification from user
+    PlanComplete plan_complete = 3;     // Final plan ready
+    ProcessingError error = 4;          // Error during generation
+  }
+  int64 timestamp = 5;                  // Response timestamp
+}
+
+// Plan generation progress update
+message PlanProgress {
+  string message = 1;                   // Human-readable progress message
+  string phase = 2;                     // Phase: "context_gathering", "analyzing", "planning"
+}
+
+// Plan generation completed successfully
+message PlanComplete {
   string plan_json = 1;                 // StoredPlan as JSON
   string plan_id = 2;                   // Plan UUID
   int32 planning_time_ms = 3;           // Generation time
   TokenUsage token_usage = 4;           // For billing
-  string status = 5;                    // "success" or "error"
-  string error_message = 6;             // If status == "error"
+}
+
+// Answer to a clarification question
+message ClarificationAnswer {
+  string question_id = 1;               // ID of the question being answered
+  string answer = 2;                    // User's answer
 }
 
 // Request for AI message processing
@@ -584,6 +609,7 @@ message AwaitingInput {
   string content = 3;                // Plan markdown or question text
   repeated InputOption options = 4;  // Available options for user to choose
   string plan_json = 5;              // Full plan JSON (for plan_approval type)
+  string session_id = 6;             // Session ID for resuming after user input
 }
 
 // Option for HITL questions/choices

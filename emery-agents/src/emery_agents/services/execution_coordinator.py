@@ -596,6 +596,72 @@ class ExecutionCoordinator:
                 yield event
         # Session manager handles approval state
 
+    async def classify_and_create_plan(
+        self,
+        task: str,
+        tools: List[Any],
+        managed_agents: Optional[List[ManagedAgent]] = None,
+        context: Optional[str] = None,
+    ) -> AsyncIterator[Any]:
+        """
+        Classify task and create plan without execution.
+
+        Used by GeneratePlan RPC for skill editor plan generation.
+        Reuses the exact same classification and planning logic as execute(),
+        but stops after plan creation without executing it.
+
+        Args:
+            task: The skill instructions to generate a plan for
+            tools: Available tools (for plan context)
+            managed_agents: Available managed agents (for classification context)
+            context: Additional context (e.g., existing databases)
+
+        Yields:
+            AwaitingClarificationEvent if questions needed (caller should pause)
+            Events from create_plan() including PlanCreatedEvent
+        """
+        self._managed_agents = managed_agents
+
+        # Initialize session logger
+        session_id = self._generate_session_id()
+        self._session_logger = SessionLogger.get_or_create(session_id)
+        self._session_logger.log_event("classify_and_create_plan_started", {"task_preview": task[:200]})
+
+        # === CLASSIFICATION (same as execute()) ===
+        self._session_logger.log_state_transition("IDLE", "CLASSIFYING", "task_received")
+        classification = self._classify_task(task, managed_agents or [], context)
+        self._session_logger.log_event("task_classified", {
+            "mode": classification.mode,
+            "needs_clarification": classification.needs_clarification,
+            "target_agent": classification.target_agent,
+            "reasoning": classification.reasoning[:200] if classification.reasoning else ""
+        })
+
+        # If clarification questions are needed, ask them first
+        if classification.needs_clarification and classification.clarification_questions:
+            logger.info(
+                f"📋 Coordinator: Task needs clarification - "
+                f"{len(classification.clarification_questions)} questions"
+            )
+            yield AwaitingClarificationEvent(
+                questions=classification.clarification_questions,
+                reasoning=classification.reasoning,
+            )
+            return
+
+        # === PLAN CREATION (same as execute() for PLAN_AND_APPROVE) ===
+        # Always use create_plan for skill generation (no DIRECT mode)
+        logger.info("📋 Coordinator: Creating plan for skill instructions")
+        async for event in self.create_plan(
+            goal=task,
+            instructions=task,
+            tools=tools,
+            managed_agents=managed_agents,
+        ):
+            yield event
+
+        # NOTE: Does NOT call execute_plan() - that's the key difference from execute()
+
     def _generate_session_id(self) -> str:
         """Generate a short unique session ID for logging."""
         return str(uuid.uuid4())[:8]
