@@ -12,7 +12,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateRequest } from '@/lib/auth/test-auth';
+import { withAuthenticatedRoute } from '@/lib/api/base';
 import { getAppApplicationService } from '@/ddd/application/di/getters';
 import { AppId } from '@/ddd/domain/puck/value-objects/app-id';
 import { AppMapper } from '@/app/mappers/puck-app-mapper';
@@ -31,59 +31,46 @@ interface RouteParams {
  * - format: 'llm' for TOON format
  * - meta: '1' to include metadata in TOON format
  */
-export async function GET(request: NextRequest, { params }: RouteParams): Promise<NextResponse> {
-  try {
-    const authResult = await authenticateRequest(request);
+export async function GET(request: NextRequest, { params }: RouteParams): Promise<Response> {
+  const { id } = await params;
+  const appId = parseInt(id, 10);
+  const { searchParams } = new URL(request.url);
+  const format = searchParams.get('format');
+  const includeMeta = searchParams.get('meta') === '1';
 
-    if (!authResult.success || !authResult.user) {
-      return NextResponse.json({ error: authResult.error || 'Unauthorized' }, { status: 401 });
-    }
+  if (isNaN(appId)) {
+    return Response.json({ success: false, error: 'Invalid app ID' }, { status: 400 });
+  }
 
-    const { id } = await params;
-    const appId = parseInt(id, 10);
-
-    if (isNaN(appId)) {
-      return NextResponse.json({ error: 'Invalid app ID' }, { status: 400 });
-    }
-
-    const { searchParams } = new URL(request.url);
-    const format = searchParams.get('format');
-    const includeMeta = searchParams.get('meta') === '1';
-
+  const response = await withAuthenticatedRoute(request, async (user) => {
     const appService = getAppApplicationService();
     const app = await appService.getApp(AppId.fromNumber(appId));
 
     if (!app) {
-      return NextResponse.json({ error: 'App not found' }, { status: 404 });
+      return { success: false, error: 'App not found', status: 404 };
     }
 
     // Verify organization access
-    if (app.organizationId.value !== authResult.user.organizationId) {
-      return NextResponse.json({ error: 'App not found' }, { status: 404 });
+    if (app.organizationId.value !== user.organizationId) {
+      return { success: false, error: 'App not found', status: 404 };
     }
 
-    const dto = AppMapper.toDTO(app);
+    return { success: true, data: AppMapper.toDTO(app) };
+  });
 
-    // Return TOON format if requested
-    if (format === 'llm') {
-      const toon = appToToon(dto, { includeMeta });
+  // Transform to TOON if requested
+  if (format === 'llm') {
+    const body = await response.clone().json();
+    if (body.success) {
+      const toon = appToToon(body.data, { includeMeta });
       return new NextResponse(toon, {
         status: 200,
         headers: { 'Content-Type': 'text/plain; charset=utf-8' },
       });
     }
-
-    return NextResponse.json({
-      success: true,
-      data: dto,
-    });
-  } catch (error) {
-    console.error('Error getting app:', error);
-    return NextResponse.json(
-      { success: false, error: 'Internal server error' },
-      { status: 500 }
-    );
   }
+
+  return response;
 }
 
 /**
@@ -100,35 +87,27 @@ export async function GET(request: NextRequest, { params }: RouteParams): Promis
  * Query parameters:
  * - format: 'llm' for TOON format response
  */
-export async function PUT(request: NextRequest, { params }: RouteParams): Promise<NextResponse> {
-  try {
-    const authResult = await authenticateRequest(request);
+export async function PUT(request: NextRequest, { params }: RouteParams): Promise<Response> {
+  const { id } = await params;
+  const appId = parseInt(id, 10);
+  const { searchParams } = new URL(request.url);
+  const format = searchParams.get('format');
 
-    if (!authResult.success || !authResult.user) {
-      return NextResponse.json({ error: authResult.error || 'Unauthorized' }, { status: 401 });
-    }
+  if (isNaN(appId)) {
+    return Response.json({ success: false, error: 'Invalid app ID' }, { status: 400 });
+  }
 
-    const { id } = await params;
-    const appId = parseInt(id, 10);
-
-    if (isNaN(appId)) {
-      return NextResponse.json({ error: 'Invalid app ID' }, { status: 400 });
-    }
-
-    const { searchParams } = new URL(request.url);
-    const format = searchParams.get('format');
-
+  const response = await withAuthenticatedRoute(request, async (user) => {
     const body = await request.json();
-
     const appService = getAppApplicationService();
 
-    // First verify app exists and belongs to user's organization
+    // Verify app exists and belongs to user's organization
     const existingApp = await appService.getApp(AppId.fromNumber(appId));
     if (!existingApp) {
-      return NextResponse.json({ error: 'App not found' }, { status: 404 });
+      return { success: false, error: 'App not found', status: 404 };
     }
-    if (existingApp.organizationId.value !== authResult.user.organizationId) {
-      return NextResponse.json({ error: 'App not found' }, { status: 404 });
+    if (existingApp.organizationId.value !== user.organizationId) {
+      return { success: false, error: 'App not found', status: 404 };
     }
 
     const result = await appService.updateApp({
@@ -136,44 +115,34 @@ export async function PUT(request: NextRequest, { params }: RouteParams): Promis
       name: body.name,
       slug: body.slug,
       description: body.description,
+      themeConfig: body.themeConfig,
     });
 
     if (!result.success || !result.data) {
-      return NextResponse.json({ error: result.error || 'Failed to update app' }, { status: 400 });
+      return { success: false, error: result.error || 'Failed to update app', status: 400 };
     }
 
-    // Handle theme config update separately if provided
-    if (body.themeConfig !== undefined) {
-      result.data.updateTheme(body.themeConfig);
-    }
+    return { success: true, data: AppMapper.toDTO(result.data) };
+  });
 
-    const dto = AppMapper.toDTO(result.data);
-
-    // Return TOON format if requested
-    if (format === 'llm') {
+  // Transform to TOON if requested
+  if (format === 'llm') {
+    const body = await response.clone().json();
+    if (body.success) {
       const toon = operationToToon({
         action: 'updated',
         entity: 'app',
-        id: dto.id,
-        data: { name: dto.name, slug: dto.slug },
+        id: body.data.id,
+        data: { name: body.data.name, slug: body.data.slug },
       });
       return new NextResponse(toon, {
         status: 200,
         headers: { 'Content-Type': 'text/plain; charset=utf-8' },
       });
     }
-
-    return NextResponse.json({
-      success: true,
-      data: dto,
-    });
-  } catch (error) {
-    console.error('Error updating app:', error);
-    return NextResponse.json(
-      { success: false, error: 'Internal server error' },
-      { status: 500 }
-    );
   }
+
+  return response;
 }
 
 /**
@@ -184,63 +153,58 @@ export async function PUT(request: NextRequest, { params }: RouteParams): Promis
  * Query parameters:
  * - format: 'llm' for TOON format response
  */
-export async function DELETE(request: NextRequest, { params }: RouteParams): Promise<NextResponse> {
-  try {
-    const authResult = await authenticateRequest(request);
+export async function DELETE(request: NextRequest, { params }: RouteParams): Promise<Response> {
+  const { id } = await params;
+  const appId = parseInt(id, 10);
+  const { searchParams } = new URL(request.url);
+  const format = searchParams.get('format');
 
-    if (!authResult.success || !authResult.user) {
-      return NextResponse.json({ error: authResult.error || 'Unauthorized' }, { status: 401 });
-    }
+  if (isNaN(appId)) {
+    return Response.json({ success: false, error: 'Invalid app ID' }, { status: 400 });
+  }
 
-    const { id } = await params;
-    const appId = parseInt(id, 10);
+  // Store app name for TOON response (need it before deletion)
+  let appName = '';
 
-    if (isNaN(appId)) {
-      return NextResponse.json({ error: 'Invalid app ID' }, { status: 400 });
-    }
-
-    const { searchParams } = new URL(request.url);
-    const format = searchParams.get('format');
-
+  const response = await withAuthenticatedRoute(request, async (user) => {
     const appService = getAppApplicationService();
 
-    // First verify app exists and belongs to user's organization
+    // Verify app exists and belongs to user's organization
     const existingApp = await appService.getApp(AppId.fromNumber(appId));
     if (!existingApp) {
-      return NextResponse.json({ error: 'App not found' }, { status: 404 });
+      return { success: false, error: 'App not found', status: 404 };
     }
-    if (existingApp.organizationId.value !== authResult.user.organizationId) {
-      return NextResponse.json({ error: 'App not found' }, { status: 404 });
+    if (existingApp.organizationId.value !== user.organizationId) {
+      return { success: false, error: 'App not found', status: 404 };
     }
+
+    appName = existingApp.name;
 
     const result = await appService.deleteApp(AppId.fromNumber(appId));
 
     if (!result.success) {
-      return NextResponse.json({ error: result.error || 'Failed to delete app' }, { status: 400 });
+      return { success: false, error: result.error || 'Failed to delete app', status: 400 };
     }
 
-    // Return TOON format if requested
-    if (format === 'llm') {
+    return { success: true, data: { id: appId, name: appName }, message: 'App deleted successfully' };
+  });
+
+  // Transform to TOON if requested
+  if (format === 'llm') {
+    const body = await response.clone().json();
+    if (body.success) {
       const toon = operationToToon({
         action: 'deleted',
         entity: 'app',
         id: appId,
+        data: { name: appName },
       });
       return new NextResponse(toon, {
         status: 200,
         headers: { 'Content-Type': 'text/plain; charset=utf-8' },
       });
     }
-
-    return NextResponse.json({
-      success: true,
-      message: 'App deleted successfully',
-    });
-  } catch (error) {
-    console.error('Error deleting app:', error);
-    return NextResponse.json(
-      { success: false, error: 'Internal server error' },
-      { status: 500 }
-    );
   }
+
+  return response;
 }

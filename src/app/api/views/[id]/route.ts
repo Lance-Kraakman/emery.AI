@@ -139,9 +139,13 @@ export async function PUT(request: NextRequest, { params }: RouteParams): Promis
     const result = await viewService.updateView({
       id: ViewId.fromNumber(viewId),
       name: body.name,
+      description: body.description,
       filters: body.filters,
       sorting: body.sorting,
+      pagination: body.pagination,
       fieldMappings: body.fieldMappings,
+      viewConfig: body.viewConfig,
+      requiresAuth: body.requiresAuth,
     });
 
     if (!result.success || !result.data) {

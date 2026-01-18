@@ -48,10 +48,13 @@ export interface CreateViewCommand {
 export interface UpdateViewCommand {
   id: ViewId;
   name?: string;
+  description?: string;
   filters?: FilterConfig[];
   sorting?: SortConfig[];
   pagination?: PaginationConfig;
   fieldMappings?: FieldMapping[];
+  viewConfig?: ViewConfig;
+  requiresAuth?: boolean;
 }
 
 export interface ExecuteViewCommand {
@@ -300,7 +303,22 @@ export class ViewApplicationService {
         dataSource.setFieldMappings(command.fieldMappings);
       }
 
-      // 7. Save updated view
+      // 7. Update description if provided
+      if (command.description !== undefined) {
+        dataSource.updateDescription(command.description);
+      }
+
+      // 8. Update viewConfig if provided
+      if (command.viewConfig !== undefined) {
+        dataSource.updateViewConfig(command.viewConfig);
+      }
+
+      // 9. Update requiresAuth if provided
+      if (command.requiresAuth !== undefined) {
+        dataSource.updateRequiresAuth(command.requiresAuth);
+      }
+
+      // 10. Save updated view
       const updated = await this.dataSourceRepository.save(dataSource);
 
       logger.debug("View updated successfully", { id: updated.id.value });

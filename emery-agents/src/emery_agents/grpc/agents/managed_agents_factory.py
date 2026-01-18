@@ -346,12 +346,12 @@ class ManagedAgentsFactory:
         analyzing reference URLs and asking HITL questions about page content.
         """
         tools = tool_provider.get_app_builder_tools()
-        app_crud_tool, page_crud_tool = tools[0], tools[1]
+        app_crud_tool, page_crud_tool, view_crud_tool = tools[0], tools[1], tools[2]
 
         model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
 
         tool_executor = create_tool_executor(
-            tools=[app_crud_tool, page_crud_tool],
+            tools=[app_crud_tool, page_crud_tool, view_crud_tool],
             model=model,
             max_steps=5
         )
@@ -838,9 +838,9 @@ class ManagedAgentsFactory:
             and page_builder as managed_agent for delegation.
             """
             tools = tool_provider.get_app_builder_tools()
-            app_crud, page_crud = tools[0], tools[1]
+            app_crud, page_crud, view_crud = tools[0], tools[1], tools[2]
             tool_executor = create_tool_executor(
-                tools=[app_crud, page_crud],
+                tools=[app_crud, page_crud, view_crud],
                 model=model,
                 max_steps=5
             )
