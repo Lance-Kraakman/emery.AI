@@ -142,10 +142,10 @@ export function AgenticConfig({
         />
       </div>
 
-      {/* Execution Plan Section */}
+      {/* Plan Section */}
       <div className="space-y-1.5 pt-2 border-t">
         <div className="flex items-center gap-1.5">
-          <Label className="text-xs">Execution Plan</Label>
+          <Label className="text-xs">Plan</Label>
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -153,7 +153,7 @@ export function AgenticConfig({
               </TooltipTrigger>
               <TooltipContent className="max-w-[240px]">
                 <p className="text-xs">
-                  Execution plans define how this step executes autonomously.
+                  Plans define how this step executes autonomously.
                   Without a plan, approval is requested at runtime.
                 </p>
               </TooltipContent>
