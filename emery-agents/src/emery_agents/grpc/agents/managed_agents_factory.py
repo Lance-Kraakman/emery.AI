@@ -25,6 +25,7 @@ from ...agents.app_builder_agent import create_app_builder_agent
 from ...agents.agent_builder_agent import create_agent_builder_agent
 from ...agents.page_builder_agent import create_page_builder_agent
 from ...agents.agent_executor_agent import create_agent_executor
+from ...agents.system_designer_agent import create_system_designer_agent
 from ...tools.tool_executor import create_tool_executor
 from ...tools.block_schema_tool import BlockSchemaTool
 from ...services.tool_provider import ToolProvider
@@ -462,6 +463,55 @@ class ManagedAgentsFactory:
         logger.info("Created Agent Builder agent with ToolExecutor sub-agent")
         return agent_builder
 
+    def create_system_designer(
+        self,
+        tool_provider: ToolProvider,
+        org_model: Optional[str] = None,
+        managed_agents: Optional[List[Any]] = None,
+    ) -> ToolCallingAgent:
+        """
+        Create a System Designer agent for holistic automation system design.
+
+        This is the TOP-LEVEL ORCHESTRATOR that sits above specialized builders.
+        It understands the full Emery ecosystem (agents -> skills -> databases ->
+        views -> apps) and designs holistic solutions before delegating.
+
+        System Designer has:
+        - research_emery (managed agent) for system introspection
+        - research tools (web_search, visit_webpage) for context gathering
+        - Other builders as managed_agents for delegation
+
+        AIDEV-NOTE: System Designer does NOT have CRUD tools directly.
+        It delegates to specialized builders via cascade planning.
+        """
+        model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
+
+        # Get research tools for context gathering
+        research_tools = self._get_research_tools()
+
+        # Create research_emery as managed agent for system introspection
+        research_emery = self.create_research_emery(
+            api_key=tool_provider.api_key,
+            organization_id=tool_provider.organization_id,
+            org_model=org_model
+        )
+
+        # Build managed agents list: research_emery + any provided builders
+        all_managed_agents = [research_emery]
+        if managed_agents:
+            all_managed_agents.extend(managed_agents)
+
+        system_designer = create_system_designer_agent(
+            tools=research_tools,  # Only research tools, no CRUD
+            model=model,
+            max_steps=15,
+            managed_agents=all_managed_agents,
+        )
+
+        agent_names = [a.name for a in all_managed_agents if hasattr(a, 'name')]
+        logger.info(f"Created System Designer agent with {len(research_tools)} research tools + managed agents: {agent_names}")
+        return system_designer
+
     def create_agent_executor(
         self,
         agent_config: Dict[str, Any],
@@ -859,6 +909,34 @@ class ManagedAgentsFactory:
                 **kwargs
             )
 
+        def system_designer_factory(**kwargs: Any) -> Any:
+            """Factory for system_designer with cascade planning support.
+
+            AIDEV-NOTE: system_designer is the TOP-LEVEL ORCHESTRATOR that
+            understands the full Emery ecosystem. It has:
+            - research tools for context gathering
+            - research_emery as managed agent for system introspection
+            - NO CRUD tools (delegates to specialized builders)
+            """
+            # Get research tools for context gathering
+            research_tools = self._get_research_tools()
+
+            # Create research_emery for system introspection
+            research_emery = create_research_emery_agent(
+                model=model,
+                api_key=kwargs.pop('api_key', tool_provider.api_key),
+                organization_id=kwargs.pop('organization_id', tool_provider.organization_id),
+                max_steps=10,
+            )
+
+            return create_system_designer_agent(
+                tools=research_tools,  # Only research tools, no CRUD
+                model=model,
+                max_steps=15,
+                managed_agents=[research_emery],
+                **kwargs
+            )
+
         return {
             "schema_builder": schema_builder_factory,
             "table_builder": table_builder_factory,
@@ -869,4 +947,5 @@ class ManagedAgentsFactory:
             "app_builder": app_builder_factory,
             "agent_builder": agent_builder_factory,
             "page_builder": page_builder_factory,
+            "system_designer": system_designer_factory,
         }

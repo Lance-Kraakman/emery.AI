@@ -152,6 +152,23 @@ class ToolProvider:
             self.get("view_crud"),       # Create/manage views
         ]
 
+    def get_system_designer_tools(self) -> List[Tool]:
+        """
+        Get tools for system designer agent.
+
+        System designer is READ-ONLY - it doesn't have CRUD tools directly.
+        It uses:
+        - research_emery (as managed agent) for system introspection
+        - research tools (web_search, visit_webpage) added separately in factory
+
+        AIDEV-NOTE: System designer delegates mutations to specialized builders
+        (schema_builder, app_builder, agent_builder, skill_builder) via
+        cascade planning. It only needs research capability.
+
+        Returns empty list - actual tools are added in ManagedAgentsFactory.
+        """
+        return []
+
     # -------------------------
     # Tool Factory
     # -------------------------

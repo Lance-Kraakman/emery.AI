@@ -776,6 +776,21 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     tool_provider, org_model
                 )
 
+                # Create system_designer agent (top-level orchestrator for complex systems)
+                # AIDEV-NOTE: system_designer understands the full Emery ecosystem and
+                # designs complete automation flows (agents -> skills -> databases -> views -> apps).
+                # It delegates to specialized builders for actual resource creation.
+                system_designer_agent = self.managed_agents_factory.create_system_designer(
+                    tool_provider=tool_provider,
+                    org_model=org_model,
+                    managed_agents=[
+                        schema_builder_agent,
+                        app_builder_agent,
+                        agent_builder_agent,
+                        skill_builder_agent,
+                    ]
+                )
+
                 # Create ToolCallingAgent with managed agents
                 # InterruptAwareToolCallingAgent sets interrupt_switch=True
                 # when detecting interrupt from managed agent, breaking the loop
@@ -784,7 +799,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 managed_agents = [a for a in [
                     skill_builder_agent, document_builder_agent,
                     table_builder_agent, schema_builder_agent,
-                    app_builder_agent, agent_builder_agent, research_agent
+                    app_builder_agent, agent_builder_agent, research_agent,
+                    system_designer_agent,  # Top-level orchestrator for complex systems
                 ] if a is not None]
 
                 # Add user-defined agent executors to managed agents

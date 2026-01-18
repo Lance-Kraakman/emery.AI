@@ -108,6 +108,27 @@ Do NOT use cascade planning when:
 - Task is simple (DIRECT mode)
 - High-level planning is sufficient
 
+### System-Wide Tasks → system_designer
+
+Route to **system_designer** when the task:
+- Involves MULTIPLE resource types (databases + apps + agents + skills)
+- Describes end-to-end automation ("when X happens, do Y, which updates Z")
+- Mentions "system", "workflow", "automation flow", "complete solution"
+- Requires understanding relationships between components
+- Asks to build something that spans data storage, user interfaces, AND automations
+
+Examples requiring system_designer:
+- "Build a CRM with customer tracking and automated follow-ups"
+- "Create an onboarding workflow: form → database → welcome email → task assignment"
+- "Design a project management system with status tracking and notifications"
+- "Build a customer feedback system with form, storage, and daily digest emails"
+- "Create an inventory system that alerts when stock is low"
+
+Do NOT route to system_designer when:
+- Task is single-domain (just database, just app, just agent)
+- Task is simple/direct (add field, create page, update agent)
+- User explicitly names a specific agent to use
+
 ### Question Guidelines
 
 When asking questions:
