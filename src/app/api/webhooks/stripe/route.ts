@@ -398,8 +398,7 @@ async function handleInvoiceFinalized(invoice: Stripe.Invoice) {
     return;
   }
 
-  // Calculate overage cost
-  const PRICE_PER_CREDIT_USD = 0.0025;
+  // Calculate overage cost (uses imported PRICE_PER_CREDIT_USD from stripe/config.ts)
   const overageCostUsd = overageCredits * PRICE_PER_CREDIT_USD;
 
   // Check spending limit

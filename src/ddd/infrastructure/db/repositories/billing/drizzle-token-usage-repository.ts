@@ -164,13 +164,12 @@ export class DrizzleTokenUsageRepository implements ITokenUsageRepository {
     // Update both token usage AND credit usage for billing
     // tokenUsageCurrentMonth = raw token count for analytics
     // creditsUsedCurrentMonth = calculated credits for billing (NOT tokens!)
-    // Round credits to integer since column is integer type
-    const roundedCredits = Math.round(creditsUsed);
+    // NOTE: creditsUsed is a float - column is doublePrecision to preserve fractional credits
     await this.db
       .update(organizations)
       .set({
         tokenUsageCurrentMonth: sql`${organizations.tokenUsageCurrentMonth} + ${totalTokens}`,
-        creditsUsedCurrentMonth: sql`${organizations.creditsUsedCurrentMonth} + ${roundedCredits}`,
+        creditsUsedCurrentMonth: sql`${organizations.creditsUsedCurrentMonth} + ${creditsUsed}`,
       })
       .where(eq(organizations.id, organizationId.value));
   }
