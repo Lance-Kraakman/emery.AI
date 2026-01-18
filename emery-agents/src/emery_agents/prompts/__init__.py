@@ -128,6 +128,9 @@ class PromptTemplateLoader:
 # Singleton instance for easy access
 _loader: Optional[PromptTemplateLoader] = None
 
+# Cached base instructions (identity + rules + goals) - saves ~2KB per agent
+_cached_base_instructions: Optional[str] = None
+
 
 def get_loader() -> PromptTemplateLoader:
     """Get singleton template loader with registered globals."""
@@ -168,6 +171,32 @@ def compose_templates(templates: List[str], **variables: Any) -> str:
         Combined rendered templates
     """
     return get_loader().compose(templates, **variables)
+
+
+def get_cached_base_instructions(**kwargs: Any) -> str:
+    """
+    Get cached base instructions (identity + rules + goal persistence).
+
+    Base templates are static and don't need to be re-rendered for each agent.
+    This cache saves ~2KB of template rendering per agent instantiation.
+
+    Args:
+        **kwargs: Template variables (passed on first render only)
+
+    Returns:
+        Cached base instructions string
+    """
+    global _cached_base_instructions
+
+    if _cached_base_instructions is None:
+        _cached_base_instructions = compose_templates([
+            "base/identity.j2",
+            "base/critical_rules.j2",
+            "components/goal_persistence.j2",
+        ], **kwargs)
+        logger.debug(f"📝 Cached base instructions ({len(_cached_base_instructions)} chars)")
+
+    return _cached_base_instructions
 
 
 def list_templates(pattern: str = "**/*.j2") -> List[str]:
@@ -442,12 +471,8 @@ def build_agent_instructions(
     from .tools import get_tool_instructions
 
     try:
-        # Base templates (always included for all agents)
-        base_instructions = compose_templates([
-            "base/identity.j2",
-            "base/critical_rules.j2",
-            "components/goal_persistence.j2",
-        ], **kwargs)
+        # Base templates (always included for all agents) - cached for performance
+        base_instructions = get_cached_base_instructions(**kwargs)
 
         # Agent-specific additions (domain content)
         if agent_type != "default":

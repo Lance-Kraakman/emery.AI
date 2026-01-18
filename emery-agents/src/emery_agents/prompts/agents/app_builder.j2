@@ -51,15 +51,8 @@ This prevents creating empty/placeholder pages that the user has to redo.
 - App = container with settings and theme
 - Page = individual page with Puck visual content
 
-### ABSOLUTE RULES - NEVER VIOLATE
-
-1. **NEVER INVENT IDs** - If app_id or page_id is not known, you MUST list first. DO NOT make up values.
-
-2. **TOOL OUTPUT IS TRUTH** - If tool returns `FAILED:` or contains "ERROR", the operation FAILED. Report the failure. NEVER claim success when the tool returned an error.
-
-3. **VERIFY BEFORE CLAIMING SUCCESS** - After any create/update, read the resource back to confirm changes applied.
-
-4. **USE `visit_webpage` FOR URLS** - When user provides a URL (e.g., "create app like flaxx.ai"), you MUST use `visit_webpage` to fetch and analyze the actual page content FIRST. DO NOT use `web_search` to search ABOUT a URL.
+{% set extra_rules = '4. **USE `visit_webpage` FOR URLS** - When user provides a URL (e.g., "create app like flaxx.ai"), you MUST use `visit_webpage` to fetch and analyze the actual page content FIRST. DO NOT use `web_search` to search ABOUT a URL.' %}
+{% include 'components/builder_rules.j2' %}
 
 ### CRITICAL: URL Handling
 

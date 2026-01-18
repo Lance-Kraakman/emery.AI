@@ -300,6 +300,21 @@ Examples:
                 if not isinstance(template_data, dict):
                     return {"success": False, "error": f"templateData must be object, got {type(template_data).__name__}"}
 
+                # Validate templateData structure and block types
+                from .validators import validate_page_template
+                is_valid, validation_errors = validate_page_template(template_data)
+                if not is_valid:
+                    # Format errors for LLM consumption (max 5 errors)
+                    error_messages = [f"- {e['path']}: {e['message']}" for e in validation_errors[:5]]
+                    error_str = "\n".join(error_messages)
+                    if len(validation_errors) > 5:
+                        error_str += f"\n... and {len(validation_errors) - 5} more errors"
+                    return {
+                        "success": False,
+                        "error": f"templateData validation failed:\n{error_str}",
+                        "validation_errors": validation_errors
+                    }
+
                 return self._make_api_request(
                     endpoint=f"pages/{page_id}/content?format=llm",
                     method="PUT",
