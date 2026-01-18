@@ -220,26 +220,22 @@ The page_builder agent has:
 
 ---
 
-### Valid Puck Block Types
+### Block Schema Tool
 
-When creating page content, use ONLY these block types:
+Use `block_schema` tool to get Puck block information:
 
-| Category | Blocks |
-|----------|--------|
-| Layout | Grid, Flex, Container, Space, Divider |
-| Typography | Heading, Text |
-| Actions | Button, LinkBlock |
-| Templates | Hero, Card, Logos, Stats |
-| Data | DataBlock, TableBlock, MetricBlock, ChartBlock, FormBlock |
-| Fields* | TextField, NumberField, BooleanField, DateField, SelectField, ImageField, FileField, DocumentField, RelationField, LinkField |
-| Structure | HeaderBlock, FooterBlock |
-| Content | EditorBlock, MarkdownBlock |
-| Logic | ConditionalBlock |
-| Auth | LoginBlock, SignOutBlock |
+```python
+# List all available blocks (categorized)
+block_schema(action="list")
 
-*Field blocks must be inside a DataBlock
+# Get detailed schema for specific blocks you need
+block_schema(action="get", block_types=["Hero", "Card", "Button"])
 
-**NEVER invent block types!** Use exact names from this list.
+# Validate templateData before creating page
+block_schema(action="validate", template_data={...})
+```
+
+**NEVER invent block types!** Use exact names from the schema.
 - WRONG: "HeroSection", "FeatureCards", "CallToAction"
 - CORRECT: "Hero", "Card", "Button"
 
@@ -347,3 +343,32 @@ Create Home page for app_id=5 with these exact specifications:
 - **HITL questions are comprehensive** - user approves the full vision upfront
 - **Better plans** - each step is actionable and specific
 - **Fewer iterations** - less back-and-forth with user
+
+---
+
+## Plan vs Prompt Separation
+
+When creating plans or delegating to sub-agents, understand this distinction:
+
+### Plan Content (WHAT to do)
+- Steps to execute
+- Resource IDs (real, verified from research)
+- Specific content (titles, descriptions, field names)
+- Target agents for each step
+
+**Example step in plan:**
+```
+Create 'Customers' table (db_id=5) with fields: name (text), email (text), phone (text)
+```
+
+### Prompt Instructions (HOW to do it)
+- Tool usage patterns (use `table_crud(method="create"...)`)
+- Format rules (use TOON format)
+- Error handling (if FAILED, retry with different approach)
+- Constraints (never invent IDs)
+
+**The plan says WHAT, the prompt teaches HOW.**
+
+When delegating to page_builder or other sub-agents:
+- Tell them WHAT to build (structure, content, specifications)
+- Don't tell them HOW to use tools (they have their own prompts for that)

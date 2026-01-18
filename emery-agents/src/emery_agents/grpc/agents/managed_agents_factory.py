@@ -26,6 +26,7 @@ from ...agents.agent_builder_agent import create_agent_builder_agent
 from ...agents.page_builder_agent import create_page_builder_agent
 from ...agents.agent_executor_agent import create_agent_executor
 from ...tools.tool_executor import create_tool_executor
+from ...tools.block_schema_tool import BlockSchemaTool
 from ...services.tool_provider import ToolProvider
 from ...services.model_provider import SmolagentsModelProvider
 from ...services.agent_api_service import AgentAPIService
@@ -357,18 +358,21 @@ class ManagedAgentsFactory:
         # Add research tools for context gathering before planning
         research_tools = self._get_research_tools()
 
+        # Add block_schema tool for on-demand block schema access and validation
+        block_schema_tool = BlockSchemaTool()
+
         # Create page_builder as managed agent for complex page creation
         # page_builder has research capability and full Puck block knowledge
         page_builder = self.create_page_builder(tool_provider, org_model)
 
         app_builder = create_app_builder_agent(
-            tools=[tool_executor] + research_tools,
+            tools=[tool_executor, block_schema_tool] + research_tools,
             model=model,
             max_steps=10,
             managed_agents=[page_builder],
         )
 
-        logger.info(f"Created App Builder agent with ToolExecutor + {len(research_tools)} research tools + page_builder")
+        logger.info(f"Created App Builder agent with ToolExecutor + block_schema + {len(research_tools)} research tools + page_builder")
         return app_builder
 
     def create_page_builder(
@@ -409,16 +413,19 @@ class ManagedAgentsFactory:
         except Exception as e:
             logger.warning(f"   Could not create research_agent: {e}")
 
+        # Add block_schema tool for on-demand block schema access and validation
+        block_schema_tool = BlockSchemaTool()
+
         # Pass page_crud directly so agent gets full block schema in instructions
         managed_agents = [research_agent] if research_agent else None
         page_builder = create_page_builder_agent(
-            tools=[page_crud_tool],  # Direct tool, not wrapped - gets full page_crud.j2
+            tools=[page_crud_tool, block_schema_tool],  # Direct tools with block validation
             model=model,
             max_steps=15,
             managed_agents=managed_agents,
         )
 
-        logger.info("Created Page Builder agent with direct page_crud + research_agent")
+        logger.info("Created Page Builder agent with page_crud + block_schema + research_agent")
         return page_builder
 
     def create_agent_builder(
@@ -790,11 +797,14 @@ class ManagedAgentsFactory:
             # Add research tools for context gathering
             research_tools = self._get_research_tools()
 
+            # Add block_schema tool for on-demand block schema access and validation
+            block_schema_tool = BlockSchemaTool()
+
             # Create page_builder as managed agent
             page_builder = page_builder_factory(**kwargs)
 
             return create_app_builder_agent(
-                tools=[tool_executor] + research_tools,
+                tools=[tool_executor, block_schema_tool] + research_tools,
                 model=model,
                 max_steps=10,
                 managed_agents=[page_builder],
@@ -820,11 +830,13 @@ class ManagedAgentsFactory:
         def page_builder_factory(**kwargs: Any) -> Any:
             """Factory for page_builder with cascade planning support.
 
-            AIDEV-NOTE: Unlike other builders, page_builder gets page_crud DIRECTLY
-            (not via tool_executor) so it receives the full page_crud.j2 instructions
-            with all 38 Puck block types. This prevents block name hallucination.
+            AIDEV-NOTE: page_builder gets page_crud DIRECTLY (not via tool_executor)
+            plus block_schema tool for on-demand schema access and validation.
             """
             page_crud = tool_provider.get("page_crud")
+
+            # Add block_schema tool for on-demand block schema access and validation
+            block_schema_tool = BlockSchemaTool()
 
             # Create research_agent as managed agent for URL analysis
             managed_agents = None
@@ -840,7 +852,7 @@ class ManagedAgentsFactory:
                 pass  # Research is optional
 
             return create_page_builder_agent(
-                tools=[page_crud],  # Direct tool - gets full block schema
+                tools=[page_crud, block_schema_tool],
                 model=model,
                 max_steps=15,
                 managed_agents=managed_agents,

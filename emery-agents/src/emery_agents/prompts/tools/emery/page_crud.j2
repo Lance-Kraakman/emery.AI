@@ -44,82 +44,16 @@ The `page_crud` tool manages pages within Puck apps.
 
 ---
 
-## Available Puck Blocks (38 total)
+## Puck Blocks
 
-### Layout Blocks
-| Block | Description | Props |
-|-------|-------------|-------|
-| Grid | CSS grid container | columns (number), gap (number) |
-| Flex | Flexbox container | direction (row/column), gap, align, justify |
-| Container | Content wrapper | maxWidth (sm/md/lg/xl/full), padding |
-| Space | Vertical spacing | size (xs/sm/md/lg/xl) |
-| Divider | Horizontal line | color (CSS value) |
+38 block types available. Use `block_schema(action="list")` for full list.
 
-### Typography Blocks
-| Block | Description | Props |
-|-------|-------------|-------|
-| Heading | Section heading | text, level (h1-h6), align |
-| Text | Rich text paragraph | text, align |
+**Common blocks:** Hero, Card, Grid, Flex, Container, Button, Text, Heading, DataBlock, TableBlock, FormBlock, LoginBlock
 
-### Action Blocks
-| Block | Description | Props |
-|-------|-------------|-------|
-| Button | CTA button | label (supports {fieldName}), variant, actions[] |
-| LinkBlock | Navigation link | label (supports {fieldName}), href (supports {params.x}) |
-
-### Authentication Blocks
-| Block | Description | Props |
-|-------|-------------|-------|
-| LoginBlock | Sign in/up form | mode (signin/signup/both), redirectUrl |
-| SignOutBlock | Sign out button | label, redirectUrl |
-
-### Data Blocks (connect to database tables/views)
-| Block | Description | Props |
-|-------|-------------|-------|
-| DataBlock | **Parent for Field blocks** - provides row context | viewId (required), mode (single/list), filters[], sorts[], limit |
-| TableBlock | Tabular data display | viewId (required), columns[], pageSize |
-| MetricBlock | Single KPI value | viewId, fieldId, label, format |
-| ChartBlock | Data visualization | viewId, chartType (bar/line/pie/area), xField, yField |
-| FormBlock | Create/edit form | tableId (required), fields[], mode (create/edit), submitLabel |
-
-### Field Blocks (MUST be inside DataBlock)
-| Block | Description | Props |
-|-------|-------------|-------|
-| TextField | Text field value | fieldId (required), label, fallback, labelPosition |
-| NumberField | Number with formatting | fieldId (required), label, format (number/currency/percent) |
-| BooleanField | Boolean as checkbox | fieldId (required), label |
-| DateField | Date with formatting | fieldId (required), label, format |
-| SelectField | Dropdown value | fieldId (required), label |
-| ImageField | Image display | fieldId (required), alt, size |
-| FileField | File download link | fieldId (required), label |
-| DocumentField | Document display | fieldId (required) |
-| RelationField | Linked record | fieldId (required), displayField |
-| LinkField | URL as clickable link | fieldId (required), label |
-
-### Logic Blocks
-| Block | Description | Props |
-|-------|-------------|-------|
-| ConditionalBlock | Show/hide content | condition (expression), showIf (boolean) |
-
-### Content Blocks
-| Block | Description | Props |
-|-------|-------------|-------|
-| EditorBlock | Rich text editor | content (HTML) |
-| MarkdownBlock | Markdown renderer | content (markdown text) |
-
-### Page Structure Blocks
-| Block | Description | Props |
-|-------|-------------|-------|
-| HeaderBlock | Page header with nav | logo, title, showNav |
-| FooterBlock | Page footer | text, links[] |
-
-### Template Blocks (pre-built combinations)
-| Block | Description | Props |
-|-------|-------------|-------|
-| Hero | Hero section | title, description, buttons[], backgroundImage |
-| Card | Card container | title, description, children slot |
-| Logos | Logo grid/carousel | logos[] with {src, alt, href} |
-| Stats | Statistics grid | items[] with {value, label} |
+**CRITICAL:** Validate templateData before update:
+```python
+block_schema(action="validate", template_data={...})
+```
 
 ---
 
