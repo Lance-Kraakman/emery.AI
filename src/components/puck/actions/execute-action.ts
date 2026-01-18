@@ -86,41 +86,30 @@ function resolveDynamicValue(
     return value;
   }
 
-  console.log('🔍 resolveDynamicValue called with value:', value);
-  console.log('🔍 context.rowData:', context.rowData);
-  console.log('🔍 context.rowData keys:', context.rowData ? Object.keys(context.rowData) : 'N/A');
-
   // Replace template variables: {{rowData.id}}, {{formData.email}}, {{fieldName}}, etc.
   return value.replace(/\{\{([^}]+)\}\}/g, (match, path) => {
-    console.log('🔍 Resolving variable:', path);
     // Check for shorthand notation (no dots = assume rowData)
     // e.g., {{name}} -> {{rowData.name}}
     const effectivePath = path.includes('.') ? path : `rowData.${path}`;
-    console.log('🔍 Effective path:', effectivePath);
 
     const parts = effectivePath.split('.');
     let current: any = context;
 
     for (const part of parts) {
-      console.log('🔍 Traversing part:', part, 'current type:', typeof current, 'part in current:', current && typeof current === 'object' ? part in current : 'N/A');
       if (current && typeof current === 'object' && part in current) {
         current = current[part];
-        console.log('🔍 Found! current is now:', current);
       } else {
         // If shorthand failed, try direct context access as fallback
-        // e.g., {userId} should still work directly
+        // e.g., {{userId}} should still work directly
         if (!path.includes('.')) {
           const directValue = (context as any)[path];
           if (directValue !== undefined) {
             return String(directValue);
           }
         }
-        console.warn(`[resolveDynamicValue] Path not found: ${path}`, 'current:', current, 'part:', part);
         return match; // Return original if path not found
       }
     }
-
-    console.log('🔍 Final resolved value:', current);
 
     return extractStringValue(current);
   });

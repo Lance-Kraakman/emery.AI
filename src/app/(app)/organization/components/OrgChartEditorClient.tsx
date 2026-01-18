@@ -528,6 +528,34 @@ export function OrgChartEditorClient({
           )
         : [];
 
+      // Get skill-level data sources
+      const skillDataSources = dataSources.filter(
+        (ds) => ds.targetType === 'skill' && ds.targetId === String(selectedSkill.id)
+      );
+
+      // Refresh data sources callback
+      const handleDataSourcesChange = async () => {
+        // Reload data sources for this skill
+        try {
+          const mappings = await getContextMappings('skill', String(selectedSkill.id));
+          const updatedSkillSources = mappings.map((m) => ({
+            id: m.id,
+            targetType: m.targetType,
+            targetId: m.targetId,
+            tableId: m.tableId,
+            tableName: m.tableName,
+            accessMode: m.accessMode,
+          }));
+          // Update dataSources state by replacing skill's entries
+          setDataSources((prev) => [
+            ...prev.filter((ds) => !(ds.targetType === 'skill' && ds.targetId === String(selectedSkill.id))),
+            ...updatedSkillSources,
+          ]);
+        } catch (error) {
+          console.error('Failed to refresh skill data sources:', error);
+        }
+      };
+
       return (
         <SkillConfigPanel
           skill={selectedSkill}
@@ -537,6 +565,8 @@ export function OrgChartEditorClient({
           databases={connectedDatabases}
           connectedSkills={connectedSkillsList}
           agentDataSources={agentDataSources}
+          skillDataSources={skillDataSources}
+          onDataSourcesChange={handleDataSourcesChange}
         />
       );
     }

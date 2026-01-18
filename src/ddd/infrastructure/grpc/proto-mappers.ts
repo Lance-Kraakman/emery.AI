@@ -13,6 +13,7 @@
 import { Agent, AutomationConfigurationJSON } from '@/ddd/domain/agents/entities/agent';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 import type { ExecutionSkill } from '@/ddd/domain/agents/repositories/agent-execution-repository';
+import type { StoredPlan, StoredPlanStep, StoredSubPlan } from '@/ddd/domain/skills/entities/skill';
 
 import {
   AgentConfig as AgentConfigProto,
@@ -24,7 +25,10 @@ import {
   SkillInputValue,
   InstructionConfig as InstructionConfigProto,
   ContextMappingProto,
-  ResolvedContextProto
+  ResolvedContextProto,
+  StoredPlan as StoredPlanProto,
+  StoredPlanStep as StoredPlanStepProto,
+  StoredSubPlan as StoredSubPlanProto
 } from './generated/agent_worker';
 import { Task, TaskStatus } from '@/ddd/domain/tasks/entities/task';
 
@@ -695,8 +699,66 @@ export function mapSkillToProto(skill: ExecutionSkill): SkillConfigProto {
         )
       } : undefined,
       // UI state
-      isDisabled: step.isDisabled || false
+      isDisabled: step.isDisabled || false,
+      // Agentic step configuration (for nodeType='agentic')
+      agenticConfig: step.agenticConfig ? {
+        instructions: step.agenticConfig.instructions,
+        tools: step.agenticConfig.tools?.map(t => ({
+          name: t.name,
+          version: '',
+          config: t.config || {}
+        })) || [],
+        agentType: step.agenticConfig.agentType || '',
+        model: step.agenticConfig.model || '',
+        plan: step.agenticConfig.plan ? mapStoredPlanToProto(step.agenticConfig.plan) : undefined
+      } : undefined
     })) || []
+  };
+}
+
+/**
+ * Maps StoredPlan to proto format
+ */
+function mapStoredPlanToProto(plan: StoredPlan): StoredPlanProto {
+  return {
+    id: plan.id,
+    goal: plan.goal,
+    basicInstructions: plan.basicInstructions,
+    context: plan.context || '',
+    analysis: plan.analysis || '',
+    steps: plan.steps.map(mapStoredPlanStepToProto),
+    version: plan.version,
+    generatedAt: plan.generatedAt,
+    approvedAt: plan.approvedAt || ''
+  };
+}
+
+/**
+ * Maps StoredPlanStep to proto format
+ */
+function mapStoredPlanStepToProto(step: StoredPlanStep): StoredPlanStepProto {
+  return {
+    stepId: step.stepId,
+    description: step.description,
+    toolCall: step.toolCall || '',
+    parameters: Object.fromEntries(
+      Object.entries(step.parameters || {}).map(([k, v]) => [k, String(v)])
+    ),
+    contextTables: step.contextTables || [],
+    targetAgent: step.targetAgent || '',
+    subPlan: step.subPlan ? mapStoredSubPlanToProto(step.subPlan) : undefined
+  };
+}
+
+/**
+ * Maps StoredSubPlan to proto format
+ */
+function mapStoredSubPlanToProto(subPlan: StoredSubPlan): StoredSubPlanProto {
+  return {
+    agentName: subPlan.agentName,
+    goal: subPlan.goal,
+    steps: subPlan.steps.map(mapStoredPlanStepToProto),
+    planningObservations: subPlan.planningObservations || ''
   };
 }
 

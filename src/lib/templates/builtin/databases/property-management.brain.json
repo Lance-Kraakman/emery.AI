@@ -1,0 +1,165 @@
+{
+  "$format": "brain-template",
+  "$version": 1,
+  "metadata": {
+    "name": "Property Management",
+    "description": "Manage properties, units, tenants, and service requests. Perfect for property managers and landlords.",
+    "category": "Real Estate",
+    "tags": ["property", "real estate", "tenants", "units"],
+    "version": "1.0.0"
+  },
+  "template": {
+    "type": "database",
+    "data": {
+      "name": "Property Management",
+      "slug": "property-management",
+      "description": "Property and tenant management",
+      "tables": [
+        {
+          "name": "Properties",
+          "description": "Property listings",
+          "fields": [
+            { "name": "Name", "slug": "name", "type": "text", "required": true },
+            { "name": "Address", "slug": "address", "type": "text", "required": true },
+            { "name": "City", "slug": "city", "type": "text" },
+            {
+              "name": "Type",
+              "slug": "type",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Residential", "color": "#3B82F6" },
+                  { "id": 2, "value": "Commercial", "color": "#10B981" },
+                  { "id": 3, "value": "Industrial", "color": "#F59E0B" }
+                ]
+              }
+            },
+            { "name": "Units Count", "slug": "units_count", "type": "number" },
+            { "name": "Photos", "slug": "photos", "type": "file" },
+            { "name": "Description", "slug": "description", "type": "text" },
+            { "name": "Created At", "slug": "created_at", "type": "created-at" }
+          ]
+        },
+        {
+          "name": "Tenants",
+          "description": "Tenant information",
+          "fields": [
+            { "name": "Name", "slug": "name", "type": "text", "required": true },
+            { "name": "Email", "slug": "email", "type": "email" },
+            { "name": "Phone", "slug": "phone", "type": "phone" },
+            { "name": "Move In Date", "slug": "move_in_date", "type": "date" },
+            { "name": "Lease End Date", "slug": "lease_end_date", "type": "date" },
+            {
+              "name": "Status",
+              "slug": "status",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Active", "color": "#10B981" },
+                  { "id": 2, "value": "Past", "color": "#6B7280" },
+                  { "id": 3, "value": "Pending", "color": "#F59E0B" }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Units",
+          "description": "Individual units within properties",
+          "fields": [
+            { "name": "Unit Number", "slug": "unit_number", "type": "text", "required": true },
+            {
+              "name": "Property",
+              "slug": "property",
+              "type": "relation",
+              "fieldConfig": {
+                "targetTableRef": "Properties",
+                "relationshipType": "many-to-many"
+              }
+            },
+            { "name": "Floor", "slug": "floor", "type": "number" },
+            { "name": "Size (sqft)", "slug": "size", "type": "number" },
+            { "name": "Monthly Rent", "slug": "monthly_rent", "type": "number" },
+            {
+              "name": "Status",
+              "slug": "status",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Available", "color": "#10B981" },
+                  { "id": 2, "value": "Occupied", "color": "#3B82F6" },
+                  { "id": 3, "value": "Maintenance", "color": "#F59E0B" }
+                ]
+              }
+            },
+            {
+              "name": "Tenant",
+              "slug": "tenant",
+              "type": "relation",
+              "fieldConfig": {
+                "targetTableRef": "Tenants",
+                "relationshipType": "many-to-many"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Service Requests",
+          "description": "Maintenance and service requests",
+          "fields": [
+            { "name": "Title", "slug": "title", "type": "text", "required": true },
+            {
+              "name": "Unit",
+              "slug": "unit",
+              "type": "relation",
+              "fieldConfig": {
+                "targetTableRef": "Units",
+                "relationshipType": "many-to-many"
+              }
+            },
+            {
+              "name": "Category",
+              "slug": "category",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Plumbing", "color": "#3B82F6" },
+                  { "id": 2, "value": "Electrical", "color": "#F59E0B" },
+                  { "id": 3, "value": "HVAC", "color": "#06B6D4" },
+                  { "id": 4, "value": "General", "color": "#6B7280" }
+                ]
+              }
+            },
+            {
+              "name": "Priority",
+              "slug": "priority",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Low", "color": "#6B7280" },
+                  { "id": 2, "value": "Medium", "color": "#F59E0B" },
+                  { "id": 3, "value": "High", "color": "#F97316" },
+                  { "id": 4, "value": "Emergency", "color": "#EF4444" }
+                ]
+              }
+            },
+            {
+              "name": "Status",
+              "slug": "status",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Open", "color": "#3B82F6" },
+                  { "id": 2, "value": "In Progress", "color": "#F59E0B" },
+                  { "id": 3, "value": "Completed", "color": "#10B981" }
+                ]
+              }
+            },
+            { "name": "Description", "slug": "description", "type": "text" },
+            { "name": "Created At", "slug": "created_at", "type": "created-at" }
+          ]
+        }
+      ]
+    }
+  }
+}

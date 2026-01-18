@@ -13,6 +13,7 @@ from ..prompts import render_output_instructions
 from ..tools.output_tool import OutputTool, build_target_field_metadata_from_mappings
 from ..types import SkillExecutionResult
 from ..utils import run_async_in_thread
+from ..utils.step_utils import step_to_progress_dict, RawProgressDict
 from .agent_factory import AgentFactory, AgentConfig
 from .output_mapping_service import MappingContext, OutputMappingService
 from .step_executor import StepExecutorService, execute_steps_sync
@@ -115,7 +116,8 @@ class SkillExecutorService:
         attachments: Optional[List[Any]] = None,
         return_message_parts: bool = False,
         api_key: Optional[str] = None,
-        organization_id: Optional[int] = None
+        organization_id: Optional[int] = None,
+        progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None
     ) -> str: ...
 
     @overload
@@ -128,7 +130,8 @@ class SkillExecutorService:
         attachments: Optional[List[Any]] = None,
         return_message_parts: bool = False,
         api_key: Optional[str] = None,
-        organization_id: Optional[int] = None
+        organization_id: Optional[int] = None,
+        progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None
     ) -> SkillExecutionResult: ...
 
     def execute_skill(
@@ -140,7 +143,8 @@ class SkillExecutorService:
         attachments: Optional[List[Any]] = None,
         return_message_parts: bool = False,
         api_key: Optional[str] = None,
-        organization_id: Optional[int] = None
+        organization_id: Optional[int] = None,
+        progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None
     ) -> Union[str, SkillExecutionResult]:
         """
         Execute a skill via agent or direct operation.
@@ -154,6 +158,7 @@ class SkillExecutorService:
             return_message_parts: If True, return MessageParts JSON (chat mode)
             api_key: API key for output mappings
             organization_id: Organization ID for output mappings
+            progress_callback: Optional callback for step progress visibility
 
         Returns:
             str if capture_outputs=False
@@ -192,7 +197,8 @@ class SkillExecutorService:
                 # Agentic execution (flat instructions, LLM orchestration)
                 return self._execute_agent(
                     skill_config, runtime_inputs, org_model,
-                    capture_outputs, attachments, return_message_parts
+                    capture_outputs, attachments, return_message_parts,
+                    progress_callback=progress_callback
                 )
         except Exception as e:
             error_msg = f"Skill execution error: {str(e)}"
@@ -208,9 +214,15 @@ class SkillExecutorService:
         org_model: Optional[str],
         capture_outputs: bool,
         attachments: Optional[List[Any]],
-        return_message_parts: bool
+        return_message_parts: bool,
+        progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None
     ) -> Union[str, SkillExecutionResult]:
-        """Execute skill via LLM agent orchestration."""
+        """Execute skill via LLM agent orchestration.
+
+        Args:
+            progress_callback: Optional callback for step progress. Called with step dict:
+                {'type': 'planning'|'action'|'final', 'content': str, 'metadata': dict}
+        """
 
         # 1. Load skill's tools
         skill_tools = []
@@ -298,10 +310,34 @@ class SkillExecutorService:
         sub_agent = self.agent_factory.create_agent(agent_config)
         logger.info(f"✨ Created sub-agent for skill {skill_config.name} (has_images={has_images})")
 
-        # 6. Execute
+        # 6. Execute with streaming for progress visibility
+        # AIDEV-NOTE: stream=True allows us to capture intermediate steps for UI feedback
         from smolagents.agent_types import AgentText, AgentImage, AgentAudio
-        result = sub_agent.run(task=task, images=images if images else None, stream=False, reset=True)
-        logger.info(f"🔍 Skill output type: {type(result).__name__}")
+        from smolagents.memory import ActionStep, PlanningStep, FinalAnswerStep
+
+        result = None
+        step_index = 0
+
+        for step in sub_agent.run(task=task, images=images if images else None, stream=True, reset=True):
+            # Emit progress if callback provided
+            if progress_callback:
+                step_dict = self._step_to_progress_dict(step, step_index, skill_config.name)
+                if step_dict:
+                    progress_callback(step_dict)
+
+            # Capture final result
+            if isinstance(step, FinalAnswerStep):
+                result = step.output
+            elif isinstance(step, AgentText):
+                result = step
+
+            step_index += 1
+
+        # Fallback if no explicit final answer
+        if result is None:
+            result = sub_agent.memory.steps[-1] if sub_agent.memory.steps else ""
+
+        logger.info(f"🔍 Skill output type: {type(result).__name__} ({step_index} steps)")
 
         # 7. Build result
         if return_message_parts:
@@ -341,6 +377,15 @@ class SkillExecutorService:
             return SkillExecutionResult(result=result_json, captured_outputs=captured)
         else:
             return result_json
+
+    def _step_to_progress_dict(
+        self,
+        step: Any,
+        index: int,
+        skill_name: str
+    ) -> Optional[RawProgressDict]:
+        """Delegate to shared utility for step-to-dict conversion."""
+        return step_to_progress_dict(step, index, skill_name, name_key="skill_name")
 
     def _execute_operation(
         self,

@@ -246,6 +246,15 @@ def load_table_query_tool(config: ToolConfig) -> Tool:
     return TableQueryTool()
 
 
+def load_web_fetch(config: ToolConfig) -> Tool:
+    """Load web fetch tool - fetches URL and converts to markdown."""
+    try:
+        from smolagents import VisitWebpageTool
+        return VisitWebpageTool(max_output_length=40000)
+    except ImportError:
+        raise ValueError("VisitWebpageTool not available - check smolagents installation")
+
+
 # Registry of base tools
 BASE_TOOLS = {
     "python_repl": load_python_repl,
@@ -254,4 +263,5 @@ BASE_TOOLS = {
     "calculator": load_calculator,
     "document_reader": load_document_reader_tool,
     "table_query": load_table_query_tool,
+    "web_fetch": load_web_fetch,
 }

@@ -8,13 +8,18 @@ Sessions are identified by chat_id and maintain agent memory across messages.
 import asyncio
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, Optional, Any, List
+from typing import Dict, Optional, Any, List, TYPE_CHECKING
 from dataclasses import dataclass, field
 from smolagents import ToolCallingAgent
 from smolagents.memory import FinalAnswerStep
 
-logger = logging.getLogger(__name__)
+from .coordinator_state_machine import CoordinatorStateMachine, Phase
 
+if TYPE_CHECKING:
+    from .execution_coordinator import ExecutionCoordinator
+    from ..models.plan import Plan
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class SessionMetadata:
@@ -65,8 +70,11 @@ class SessionManager:
         self.agents: Dict[str, ToolCallingAgent] = {}
         self.metadata: Dict[str, SessionMetadata] = {}
         self.locks: Dict[str, asyncio.Lock] = {}
+        self.state_machines: Dict[str, CoordinatorStateMachine] = {}
         self.idle_timeout = idle_timeout
         self.max_lifetime = max_lifetime
+        # Plan generation sessions (for HITL question/answer flow)
+        self._plan_sessions: Dict[str, Dict[str, Any]] = {}
         self._cleanup_task: Optional[asyncio.Task] = None
         logger.info(
             f"SessionManager initialized: "
@@ -338,6 +346,8 @@ class SessionManager:
                     f"(reason: {reason}, msgs: {meta.message_count})"
                 )
                 del self.metadata[session_id]
+            if session_id in self.state_machines:
+                del self.state_machines[session_id]
             if session_id in self.locks:
                 del self.locks[session_id]
 
@@ -521,13 +531,13 @@ class SessionManager:
             meta.last_error_type = None
             meta.last_error_timestamp = None
 
-    def should_remove_session_on_error(self, session_id: str, threshold: int = 3) -> bool:
+    def should_remove_session_on_error(self, session_id: str, threshold: int = 5) -> bool:
         """
         Check if session should be removed due to excessive errors.
 
         Args:
             session_id: Session identifier
-            threshold: Maximum consecutive errors before removal (default: 3)
+            threshold: Maximum consecutive errors before removal (default: 5)
 
         Returns:
             True if session should be removed
@@ -558,3 +568,84 @@ class SessionManager:
         """
         reason = f"fatal_error:{error_type}"
         await self.remove_session(session_id, reason)
+
+    # ============================================================
+    # State Machine Methods (Unified coordinator state)
+    # ============================================================
+
+    def get_state_machine(self, session_id: str) -> Optional[CoordinatorStateMachine]:
+        """
+        Get existing state machine for session.
+
+        Args:
+            session_id: Session identifier
+
+        Returns:
+            CoordinatorStateMachine if exists, None otherwise
+        """
+        return self.state_machines.get(session_id)
+
+    def get_or_create_state_machine(self, session_id: str) -> CoordinatorStateMachine:
+        """
+        Get or create state machine for session.
+
+        Creates a new state machine in IDLE phase if one doesn't exist.
+
+        Args:
+            session_id: Session identifier
+
+        Returns:
+            CoordinatorStateMachine (existing or newly created)
+        """
+        if session_id not in self.state_machines:
+            self.state_machines[session_id] = CoordinatorStateMachine(session_id)
+            logger.info(f"📊 Created state machine for session {session_id}")
+        return self.state_machines[session_id]
+
+    # ============================================================
+    # Plan Generation Session Methods (for HITL question/answer flow)
+    # ============================================================
+
+    async def store_plan_session(self, session_id: str, context: Dict[str, Any]) -> None:
+        """
+        Store plan generation session context for later resume.
+
+        Used when plan generation pauses to ask clarification questions.
+        The context is stored so generation can resume after user answers.
+
+        Args:
+            session_id: Unique session identifier for the plan generation
+            context: Session context including instructions, partial state, etc.
+        """
+        context["stored_at"] = datetime.now().isoformat()
+        self._plan_sessions[session_id] = context
+        logger.info(f"📋 Stored plan session {session_id} for resume")
+
+    async def get_plan_session(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get stored plan generation session context.
+
+        Args:
+            session_id: Session identifier
+
+        Returns:
+            Session context dict if found, None otherwise
+        """
+        context = self._plan_sessions.get(session_id)
+        if context:
+            logger.info(f"📋 Retrieved plan session {session_id}")
+        else:
+            logger.warning(f"📋 Plan session {session_id} not found (may have expired)")
+        return context
+
+    async def remove_plan_session(self, session_id: str) -> None:
+        """
+        Remove plan generation session after completion or timeout.
+
+        Args:
+            session_id: Session identifier to remove
+        """
+        if session_id in self._plan_sessions:
+            del self._plan_sessions[session_id]
+            logger.info(f"📋 Removed plan session {session_id}")
+

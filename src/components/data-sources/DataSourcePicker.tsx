@@ -1,9 +1,17 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Check, ChevronsUpDown, Database, Loader2 } from 'lucide-react'
+import { Plus, Table2, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
 import {
   Popover,
   PopoverContent,
@@ -13,22 +21,18 @@ import { getTables } from '@/app/actions/tables'
 import type { TableDTO } from '@/app/mappers/table-mapper'
 
 interface DataSourcePickerProps {
-  selectedTableIds: number[]
-  onChange: (tableIds: number[]) => void
-  /** Called when a table is selected (added), providing full table info */
-  onTableSelect?: (table: { id: number; name: string; description?: string }) => void
+  /** Called when a table is selected */
+  onTableSelect: (table: { id: number; name: string; description?: string }) => void
+  /** Table IDs to exclude from the picker */
   excludeTableIds?: number[]
+  /** Whether the picker is disabled */
   disabled?: boolean
-  placeholder?: string
 }
 
 export function DataSourcePicker({
-  selectedTableIds,
-  onChange,
   onTableSelect,
   excludeTableIds = [],
   disabled = false,
-  placeholder = 'Select tables...'
 }: DataSourcePickerProps) {
   const [open, setOpen] = useState(false)
   const [tables, setTables] = useState<TableDTO[]>([])
@@ -50,93 +54,67 @@ export function DataSourcePicker({
   }, [])
 
   const availableTables = tables.filter(t => !excludeTableIds.includes(t.id))
-  const selectedTables = tables.filter(t => selectedTableIds.includes(t.id))
 
-  const toggleTable = (tableId: number) => {
-    if (selectedTableIds.includes(tableId)) {
-      onChange(selectedTableIds.filter(id => id !== tableId))
-    } else {
-      onChange([...selectedTableIds, tableId])
-      // Call onTableSelect when adding a new table
-      if (onTableSelect) {
-        const table = tables.find(t => t.id === tableId)
-        if (table) {
-          onTableSelect({ id: table.id, name: table.name, description: table.description ?? undefined })
-        }
-      }
+  const handleSelect = (tableId: string) => {
+    const table = tables.find(t => t.id === parseInt(tableId, 10))
+    if (table) {
+      onTableSelect({
+        id: table.id,
+        name: table.name,
+        description: table.description ?? undefined
+      })
     }
+    setOpen(false)
   }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
-          variant="outline"
-          role="combobox"
-          aria-expanded={open}
+          variant="ghost"
+          size="sm"
           disabled={disabled || isLoading}
-          className="w-full justify-between text-sm font-normal"
+          className="h-6 text-[11px] text-muted-foreground hover:text-foreground"
         >
-          <span className="flex items-center gap-2 truncate">
-            <Database className="h-4 w-4 text-gray-400" />
-            {isLoading ? (
-              <span className="flex items-center gap-1 text-gray-400">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                Loading...
-              </span>
-            ) : selectedTables.length > 0 ? (
-              selectedTables.length === 1 ? (
-                selectedTables[0].name
-              ) : (
-                `${selectedTables.length} tables selected`
-              )
-            ) : (
-              <span className="text-gray-400">{placeholder}</span>
-            )}
-          </span>
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          {isLoading ? (
+            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+          ) : (
+            <Plus className="h-3 w-3 mr-1" />
+          )}
+          Add table
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[300px] p-0" align="start">
-        <div className="max-h-[300px] overflow-y-auto">
-          {availableTables.length === 0 ? (
-            <div className="px-3 py-6 text-center text-sm text-gray-500">
-              No tables available
-            </div>
-          ) : (
-            availableTables.map((table) => (
-              <button
-                key={table.id}
-                onClick={() => toggleTable(table.id)}
-                className={cn(
-                  'w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-gray-50',
-                  selectedTableIds.includes(table.id) && 'bg-blue-50'
-                )}
-              >
-                <div className={cn(
-                  'flex items-center justify-center h-4 w-4 rounded border',
-                  selectedTableIds.includes(table.id)
-                    ? 'bg-blue-600 border-blue-600'
-                    : 'border-gray-300'
-                )}>
-                  {selectedTableIds.includes(table.id) && (
-                    <Check className="h-3 w-3 text-white" />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-gray-700 truncate">
-                    {table.name}
-                  </div>
-                  {table.description && (
-                    <div className="text-xs text-gray-500 truncate">
-                      {table.description}
+      <PopoverContent className="w-[240px] p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Search tables..." className="h-8 text-xs" />
+          <CommandList>
+            <CommandEmpty className="py-3 text-xs text-center text-muted-foreground">
+              No tables found
+            </CommandEmpty>
+            <CommandGroup>
+              {availableTables.map((table) => (
+                <CommandItem
+                  key={table.id}
+                  value={String(table.id)}
+                  onSelect={handleSelect}
+                  className="flex items-center gap-2 py-2"
+                >
+                  <Table2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-medium truncate">
+                      {table.name}
                     </div>
-                  )}
-                </div>
-              </button>
-            ))
-          )}
-        </div>
+                    {table.description && (
+                      <div className="text-[10px] text-muted-foreground truncate">
+                        {table.description}
+                      </div>
+                    )}
+                  </div>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
       </PopoverContent>
     </Popover>
   )

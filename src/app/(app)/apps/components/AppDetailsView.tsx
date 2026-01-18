@@ -163,7 +163,7 @@ export function AppDetailsView({ app }: AppDetailsViewProps) {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {/* Header with inline editing */}
       <div className="space-y-1">
         <div className="flex items-center justify-between">

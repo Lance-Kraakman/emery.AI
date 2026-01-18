@@ -1,0 +1,138 @@
+{
+  "$format": "brain-template",
+  "$version": 1,
+  "metadata": {
+    "name": "Content Calendar",
+    "description": "Plan and track content across platforms. Manage authors, campaigns, and publishing schedules.",
+    "category": "Marketing",
+    "tags": ["content", "marketing", "calendar", "social"],
+    "version": "1.0.0"
+  },
+  "template": {
+    "type": "database",
+    "data": {
+      "name": "Content Calendar",
+      "slug": "content-calendar",
+      "description": "Content planning and scheduling",
+      "tables": [
+        {
+          "name": "Authors",
+          "description": "Content creators and editors",
+          "fields": [
+            { "name": "Name", "slug": "name", "type": "text", "required": true },
+            { "name": "Email", "slug": "email", "type": "email" },
+            {
+              "name": "Role",
+              "slug": "role",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Writer", "color": "#3B82F6" },
+                  { "id": 2, "value": "Editor", "color": "#8B5CF6" },
+                  { "id": 3, "value": "Manager", "color": "#10B981" }
+                ]
+              }
+            },
+            { "name": "Bio", "slug": "bio", "type": "text" }
+          ]
+        },
+        {
+          "name": "Campaigns",
+          "description": "Marketing campaigns",
+          "fields": [
+            { "name": "Name", "slug": "name", "type": "text", "required": true },
+            { "name": "Description", "slug": "description", "type": "text" },
+            { "name": "Start Date", "slug": "start_date", "type": "date" },
+            { "name": "End Date", "slug": "end_date", "type": "date" },
+            { "name": "Goals", "slug": "goals", "type": "text" }
+          ]
+        },
+        {
+          "name": "Content",
+          "description": "Content pieces to publish",
+          "fields": [
+            { "name": "Title", "slug": "title", "type": "text", "required": true },
+            { "name": "Description", "slug": "description", "type": "text" },
+            {
+              "name": "Type",
+              "slug": "type",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Blog Post", "color": "#3B82F6" },
+                  { "id": 2, "value": "Social Post", "color": "#EC4899" },
+                  { "id": 3, "value": "Video", "color": "#EF4444" },
+                  { "id": 4, "value": "Podcast", "color": "#8B5CF6" },
+                  { "id": 5, "value": "Newsletter", "color": "#F59E0B" }
+                ]
+              }
+            },
+            {
+              "name": "Platform",
+              "slug": "platform",
+              "type": "multi-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Website", "color": "#3B82F6" },
+                  { "id": 2, "value": "Twitter", "color": "#06B6D4" },
+                  { "id": 3, "value": "LinkedIn", "color": "#0077B5" },
+                  { "id": 4, "value": "Instagram", "color": "#EC4899" },
+                  { "id": 5, "value": "YouTube", "color": "#EF4444" }
+                ]
+              }
+            },
+            {
+              "name": "Author",
+              "slug": "author",
+              "type": "relation",
+              "fieldConfig": {
+                "targetTableRef": "Authors",
+                "relationshipType": "many-to-many"
+              }
+            },
+            {
+              "name": "Campaign",
+              "slug": "campaign",
+              "type": "relation",
+              "fieldConfig": {
+                "targetTableRef": "Campaigns",
+                "relationshipType": "many-to-many"
+              }
+            },
+            {
+              "name": "Status",
+              "slug": "status",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Idea", "color": "#6B7280" },
+                  { "id": 2, "value": "Draft", "color": "#3B82F6" },
+                  { "id": 3, "value": "Review", "color": "#F59E0B" },
+                  { "id": 4, "value": "Scheduled", "color": "#8B5CF6" },
+                  { "id": 5, "value": "Published", "color": "#10B981" }
+                ]
+              }
+            },
+            { "name": "Publish Date", "slug": "publish_date", "type": "date" },
+            { "name": "Attachments", "slug": "attachments", "type": "file" },
+            {
+              "name": "Tags",
+              "slug": "tags",
+              "type": "multi-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Product", "color": "#3B82F6" },
+                  { "id": 2, "value": "Tutorial", "color": "#10B981" },
+                  { "id": 3, "value": "News", "color": "#F59E0B" },
+                  { "id": 4, "value": "Case Study", "color": "#8B5CF6" },
+                  { "id": 5, "value": "Announcement", "color": "#EF4444" }
+                ]
+              }
+            },
+            { "name": "Created At", "slug": "created_at", "type": "created-at" }
+          ]
+        }
+      ]
+    }
+  }
+}

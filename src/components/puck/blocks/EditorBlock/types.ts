@@ -15,7 +15,7 @@ export type EditorType = 'document'; // Extensible: | 'pdf' | 'image' | 'code' |
 export interface DocumentIdSourceConfig {
   /** Whether to use a page variable, parent row field, or static value */
   valueType: 'variable' | 'parentRow' | 'static';
-  /** The value - "{state.varName}", "{rowData.fieldName}", or a static document ID */
+  /** The value - "{{state.varName}}", "{{rowData.fieldName}}", or a static document ID */
   value: string;
 }
 
@@ -57,7 +57,7 @@ export const defaultEditorBlockProps: EditorBlockProps = {
   editorType: 'document',
   documentIdSource: {
     valueType: 'variable',
-    value: '{params.documentId}',
+    value: '{{params.documentId}}',
   },
   height: '500px',
   allowEdit: true,

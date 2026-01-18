@@ -2,6 +2,9 @@
 
 import { revalidatePath } from 'next/cache';
 import { getSkillApplicationService, getAgentApplicationService, getStorageQuotaApplicationService, getAuditApplicationService } from '@/ddd/application/di/container';
+import { getOrganizationRepository, getUserRepository } from '@/ddd/application/di/getters';
+import { UserId } from '@/ddd/domain/shared/value-objects/user-id';
+import { assignApiKeyToUser } from '@/lib/auth/user-api-keys';
 import { OrganizationId } from '@/ddd/domain/shared/value-objects';
 import { SkillMapper } from '@/app/mappers/skill-mapper';
 import { AgentId } from '@/ddd/domain/shared/value-objects/agent-id';
@@ -14,7 +17,8 @@ import type { SkillDTO } from '@/app/mappers/skill-mapper';
 import { s3SkillAttachmentService } from '@/ddd/infrastructure/multimodal/s3-skill-attachment-service';
 import type { AttachmentMetadata, AttachmentType } from '@/ddd/domain/multimodal/value-objects/attachment-metadata';
 import type { MessagePart } from '@/ddd/infrastructure/grpc/generated/agent_worker';
-import type { SkillExecutionType, ToolExecutionConfig, WriteConfig, ReadConfig, SkillStep, CanvasMetadata } from '@/ddd/domain/skills/entities/skill';
+import type { SkillExecutionType, ToolExecutionConfig, WriteConfig, ReadConfig, SkillStep, CanvasMetadata, StoredPlan } from '@/ddd/domain/skills/entities/skill';
+import { getChatProcessingClient } from '@/ddd/infrastructure/grpc/chat-processing-client';
 
 /**
  * Server Actions for Skill Management
@@ -88,6 +92,22 @@ export async function createSkill(command: {
       return { success: false, error: 'Agent not found' };
     }
 
+    // Auto-create agentic step for 'agentic' mode skills
+    // This ensures there's always a place to store the plan
+    let steps = command.steps;
+    if (command.executionType === 'agentic' && (!steps || steps.length === 0)) {
+      steps = [{
+        id: crypto.randomUUID(),
+        name: 'main',
+        nodeType: 'agentic' as const,
+        agenticConfig: {
+          instructions: command.instructions || '',
+          tools: command.tools || [],
+          agentType: (command.agentType || 'tool_calling') as 'tool_calling' | 'code_agent',
+        },
+      }];
+    }
+
     const service = getSkillApplicationService();
     const result = await service.createSkill({
       ...command,
@@ -95,6 +115,7 @@ export async function createSkill(command: {
       outputs: outputs,
       instructions: command.instructions || '',
       tools: command.tools || [],
+      steps,
       organizationId: agent.organizationId.value
     });
 
@@ -193,6 +214,21 @@ export async function createOrganizationSkill(command: {
       return { success: false, error: 'All outputs must have names' };
     }
 
+    // Auto-create agentic step for 'agentic' mode skills
+    let steps = command.steps;
+    if (command.executionType === 'agentic' && (!steps || steps.length === 0)) {
+      steps = [{
+        id: crypto.randomUUID(),
+        name: 'main',
+        nodeType: 'agentic' as const,
+        agenticConfig: {
+          instructions: command.instructions || '',
+          tools: command.tools || [],
+          agentType: (command.agentType || 'tool_calling') as 'tool_calling' | 'code_agent',
+        },
+      }];
+    }
+
     const service = getSkillApplicationService();
 
     // Create organization skill without agentId (null for organization-scoped)
@@ -211,7 +247,7 @@ export async function createOrganizationSkill(command: {
       taskModelConfig: command.taskModelConfig,
       toolExecutionConfig: command.toolExecutionConfig,
       writeConfig: command.writeConfig,
-      steps: command.steps
+      steps,
     });
 
     if (!result.success) {
@@ -300,11 +336,6 @@ export async function updateSkill(
 
     const skill = skillResult.data;
 
-    // Prevent editing of system skills
-    if (skill.isSystem) {
-      return { success: false, error: 'System skills cannot be edited. Duplicate this skill to create your own version.' };
-    }
-
     // Check appropriate permission based on skill type
     if (skill.agentId) {
       // Agent-scoped skill: check agent management permission
@@ -320,7 +351,27 @@ export async function updateSkill(
       stepsLength: command.steps?.length
     });
 
-    const result = await service.updateSkill(skillId, command);
+    // Auto-create agentic step for 'agentic' mode skills without steps
+    // This ensures there's always a place to store the plan
+    const executionType = command.executionType ?? skill.executionType;
+    let steps = command.steps;
+    if (executionType === 'agentic' && (!steps || steps.length === 0) && (!skill.steps || skill.steps.length === 0)) {
+      steps = [{
+        id: crypto.randomUUID(),
+        name: 'main',
+        nodeType: 'agentic' as const,
+        agenticConfig: {
+          instructions: command.instructions ?? skill.instructions ?? '',
+          tools: command.tools ?? skill.tools ?? [],
+          agentType: (command.agentType ?? skill.agentType ?? 'tool_calling') as 'tool_calling' | 'code_agent',
+        },
+      }];
+    }
+
+    const result = await service.updateSkill(skillId, {
+      ...command,
+      steps: steps !== undefined ? steps : command.steps,
+    });
 
     if (!result.success) {
       return { success: false, error: result.error };
@@ -377,7 +428,6 @@ export async function updateSkill(
 
 /**
  * Delete a skill
- * System skills (isSystem=true) cannot be deleted
  */
 export async function deleteSkill(skillId: number): Promise<Result<void>> {
   try {
@@ -396,11 +446,6 @@ export async function deleteSkill(skillId: number): Promise<Result<void>> {
 
     const skill = skillResult.data;
     const agentId = skill.agentId?.value ?? null;
-
-    // Prevent deletion of system skills
-    if (skill.isSystem) {
-      return { success: false, error: 'System skills cannot be deleted. You can duplicate this skill to create your own version.' };
-    }
 
     // Check appropriate permission based on skill type
     if (skill.agentId) {
@@ -914,6 +959,484 @@ export async function generateSkillAttachmentUrl(
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to generate attachment URL'
+    };
+  }
+}
+
+/**
+ * Save a plan to a skill for autonomous execution
+ *
+ * Either updates an existing skill with the plan, or creates a new skill with the plan.
+ * The plan is stored in the skill's first step's agenticConfig.plan field.
+ *
+ * @param skillId - Existing skill ID to update, or null to create new skill
+ * @param planJson - Serialized plan JSON string (from awaiting input)
+ * @param agentId - Agent ID (required when creating new skill)
+ * @param skillName - Name for new skill (required when creating new skill)
+ */
+export async function savePlanToSkill(params: {
+  skillId: number | null;
+  planJson: string;
+  agentId?: number;
+  skillName?: string;
+}): Promise<Result<SkillDTO>> {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const { skillId, planJson, agentId, skillName } = params;
+
+    // Parse the plan JSON
+    let plan: any;
+    try {
+      plan = JSON.parse(planJson);
+    } catch (e) {
+      return { success: false, error: 'Invalid plan JSON' };
+    }
+
+    // Convert to StoredPlan format (strip runtime state like status, result, error)
+    const storedPlan = {
+      id: plan.id || plan.planId || `plan_${Date.now()}`,
+      goal: plan.goal || '',
+      basicInstructions: plan.basicInstructions || plan.goal || '',
+      context: plan.context,
+      analysis: plan.analysis,
+      steps: (plan.steps || []).map((step: any) => ({
+        stepId: step.stepId || step.step_id || `step_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        description: step.description || '',
+        toolCall: step.toolCall || step.tool_call,
+        parameters: step.parameters,
+        contextTables: step.contextTables || step.context_tables,
+        targetAgent: step.targetAgent || step.target_agent,
+        subPlan: step.subPlan || step.sub_plan,
+      })),
+      version: plan.version || 1,
+      generatedAt: plan.generatedAt || new Date().toISOString(),
+      approvedAt: new Date().toISOString(), // Mark as approved when saved
+    };
+
+    const service = getSkillApplicationService();
+
+    if (skillId) {
+      // Update existing skill
+      const skillResult = await service.getSkill(skillId);
+      if (!skillResult.success || !skillResult.data) {
+        return { success: false, error: 'Skill not found' };
+      }
+
+      const skill = skillResult.data;
+
+      // Check permission
+      if (skill.agentId) {
+        await requireResourcePermission("agents:manage", "agent", skill.agentId.value);
+      } else {
+        await requireResourcePermission("skills:manage", "skill", skillId);
+      }
+
+      // Get existing steps or create a default step structure
+      const existingSteps = skill.steps || [];
+      let updatedSteps: SkillStep[];
+
+      if (existingSteps.length > 0) {
+        // Update first step with the plan
+        updatedSteps = existingSteps.map((step, index) => {
+          if (index === 0) {
+            return {
+              ...step,
+              agenticConfig: {
+                ...step.agenticConfig,
+                instructions: step.agenticConfig?.instructions || storedPlan.goal,
+                tools: step.agenticConfig?.tools || [],
+                plan: storedPlan,
+              },
+            };
+          }
+          return step;
+        });
+      } else {
+        // Create a new step with the plan
+        updatedSteps = [{
+          id: `step_${Date.now()}`,
+          name: 'Autonomous Execution',
+          nodeType: 'agentic' as const,
+          agenticConfig: {
+            instructions: storedPlan.goal,
+            tools: [],
+            plan: storedPlan,
+          },
+        }];
+      }
+
+      // Update the skill with the plan
+      const updateResult = await service.updateSkill(skillId, {
+        executionType: 'agentic',
+        steps: updatedSteps,
+      });
+
+      if (!updateResult.success) {
+        return { success: false, error: updateResult.error };
+      }
+
+      // Fetch updated skill
+      const updatedSkillResult = await service.getSkill(skillId);
+      if (!updatedSkillResult.success || !updatedSkillResult.data) {
+        return { success: false, error: 'Failed to fetch updated skill' };
+      }
+
+      // AUDIT: Log plan save
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        skill.organizationId,
+        {
+          eventType: 'agent',
+          eventCategory: 'skill_crud',
+          eventAction: 'update',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'skill',
+          resourceId: String(skillId),
+          resourceName: skill.name,
+          parentResourceType: skill.agentId ? 'agent' : undefined,
+          parentResourceId: skill.agentId ? String(skill.agentId.value) : undefined,
+          eventData: { action: 'save_plan_for_autonomous_execution' },
+          success: true,
+        }
+      );
+
+      // Revalidate
+      if (skill.agentId) {
+        revalidatePath(`/agents/${skill.agentId.value}/skills`);
+      }
+      revalidatePath('/');
+
+      return {
+        success: true,
+        data: SkillMapper.toDTO(updatedSkillResult.data)
+      };
+
+    } else {
+      // Create new skill with the plan
+      if (!agentId) {
+        return { success: false, error: 'Agent ID is required when creating a new skill' };
+      }
+      if (!skillName?.trim()) {
+        return { success: false, error: 'Skill name is required when creating a new skill' };
+      }
+
+      // Check permission to manage the agent
+      await requireResourcePermission("agents:manage", "agent", agentId);
+
+      // Get agent for organizationId
+      const agentService = getAgentApplicationService();
+      const agent = await agentService.getAgent(AgentId.fromNumber(agentId));
+      if (!agent) {
+        return { success: false, error: 'Agent not found' };
+      }
+
+      // Create the skill with the plan
+      const createResult = await service.createSkill({
+        agentId,
+        organizationId: agent.organizationId.value,
+        name: skillName.trim(),
+        description: `Autonomous skill created from plan: ${storedPlan.goal}`,
+        instructions: storedPlan.goal,
+        inputs: [],
+        outputs: [],
+        tools: [],
+        executionType: 'agentic',
+        steps: [{
+          id: `step_${Date.now()}`,
+          name: 'Autonomous Execution',
+          nodeType: 'agentic' as const,
+          agenticConfig: {
+            instructions: storedPlan.goal,
+            tools: [],
+            plan: storedPlan,
+          },
+        }],
+      });
+
+      if (!createResult.success || !createResult.data) {
+        return { success: false, error: createResult.error || 'Failed to create skill' };
+      }
+
+      // Fetch the created skill
+      const newSkillResult = await service.getSkill(createResult.data.value);
+      if (!newSkillResult.success || !newSkillResult.data) {
+        return { success: false, error: 'Failed to fetch created skill' };
+      }
+
+      // AUDIT: Log skill creation with plan
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        OrganizationId.fromNumber(agent.organizationId.value),
+        {
+          eventType: 'agent',
+          eventCategory: 'skill_crud',
+          eventAction: 'create',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'skill',
+          resourceId: String(createResult.data.value),
+          resourceName: skillName,
+          parentResourceType: 'agent',
+          parentResourceId: String(agentId),
+          eventData: { action: 'create_with_autonomous_plan' },
+          success: true,
+        }
+      );
+
+      // Revalidate
+      revalidatePath(`/agents/${agentId}/skills`);
+      revalidatePath('/');
+
+      return {
+        success: true,
+        data: SkillMapper.toDTO(newSkillResult.data)
+      };
+    }
+  } catch (error) {
+    console.error('[savePlanToSkill] error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to save plan to skill'
+    };
+  }
+}
+
+/**
+ * Transfer an organization-level skill to an agent
+ * This changes the skill's scope from org-level to agent-scoped
+ */
+export async function transferSkillToAgent(
+  skillId: number,
+  agentId: number
+): Promise<Result<SkillDTO>> {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const service = getSkillApplicationService();
+
+    // Fetch skill to verify it's org-level
+    const skillResult = await service.getSkill(skillId);
+    if (!skillResult.success || !skillResult.data) {
+      return { success: false, error: 'Skill not found' };
+    }
+
+    const skill = skillResult.data;
+
+    // Verify skill is org-level (not already agent-scoped)
+    if (skill.agentId) {
+      return { success: false, error: 'Skill is already assigned to an agent' };
+    }
+
+    // Check permission to manage the org-level skill
+    await requireResourcePermission("skills:manage", "skill", skillId);
+
+    // Check permission to manage the target agent
+    await requireResourcePermission("agents:manage", "agent", agentId);
+
+    // Update the skill's agentId to transfer ownership
+    const updateResult = await service.updateSkillAgent(skillId, agentId);
+
+    if (!updateResult.success) {
+      return { success: false, error: updateResult.error || 'Failed to transfer skill' };
+    }
+
+    // Fetch updated skill
+    const updatedSkillResult = await service.getSkill(skillId);
+    if (!updatedSkillResult.success || !updatedSkillResult.data) {
+      return { success: false, error: 'Failed to fetch updated skill' };
+    }
+
+    // AUDIT: Log skill transfer
+    const auditService = getAuditApplicationService();
+    auditService.logEvent(
+      skill.organizationId,
+      {
+        eventType: 'agent',
+        eventCategory: 'skill_crud',
+        eventAction: 'update',
+        actorType: 'user',
+        actorId: session.user.id,
+        actorName: session.user.name || undefined,
+        resourceType: 'skill',
+        resourceId: String(skillId),
+        resourceName: skill.name,
+        parentResourceType: 'agent',
+        parentResourceId: String(agentId),
+        eventData: { action: 'transfer_to_agent', previousScope: 'organization' },
+        success: true,
+      }
+    );
+
+    // Revalidate paths
+    revalidatePath('/skills'); // Org skills page
+    revalidatePath(`/agents/${agentId}/skills`); // Agent skills page
+    revalidatePath('/manage'); // Org chart
+    revalidatePath('/');
+
+    return {
+      success: true,
+      data: SkillMapper.toDTO(updatedSkillResult.data)
+    };
+  } catch (error) {
+    console.error('[transferSkillToAgent] error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to transfer skill to agent'
+    };
+  }
+}
+
+/**
+ * Generate an autonomous execution plan for skill instructions.
+ *
+ * Uses gRPC streaming to call the Python planning service which creates a structured
+ * plan using context-aware planning. The generated plan can be stored on
+ * the skill for autonomous execution (no HITL approval required at runtime).
+ *
+ * AIDEV-NOTE: Uses streaming RPC - collects events and returns final result.
+ * For full streaming with progress updates, use an SSE API route instead.
+ *
+ * @param skillId - Skill ID (used to get context and org info)
+ * @param instructions - The instructions to generate a plan for
+ * @param previousPlan - Optional previous plan for regeneration with feedback
+ * @param userFeedback - Optional user feedback for plan regeneration
+ * @returns StoredPlan that can be saved to the skill
+ */
+export async function generateSkillPlan(
+  skillId: number,
+  instructions: string,
+  previousPlan?: StoredPlan,
+  userFeedback?: string
+): Promise<Result<StoredPlan>> {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id || !session?.user?.currentOrganizationId) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    // Get skill to verify access and get model override
+    const service = getSkillApplicationService();
+    const skillResult = await service.getSkill(skillId);
+    if (!skillResult.success || !skillResult.data) {
+      return { success: false, error: 'Skill not found' };
+    }
+
+    const skill = skillResult.data;
+
+    // Check permission based on skill type
+    if (skill.agentId) {
+      await requireResourcePermission("agents:manage", "agent", skill.agentId.value);
+    } else {
+      await requireResourcePermission("skills:manage", "skill", skillId);
+    }
+
+    // Get user API key for managed agents (same pattern as chat route)
+    // AIDEV-NOTE: User API key is stored in users table, not session
+    let userApiKey = '';
+    try {
+      const userRepository = getUserRepository();
+      const user = await userRepository.findById(UserId.fromString(session.user.id));
+
+      if (user && user.apiKey) {
+        userApiKey = user.apiKey.value;
+      } else {
+        // Generate API key if none exists
+        userApiKey = await assignApiKeyToUser(session.user.id);
+      }
+    } catch (error) {
+      console.error('[generateSkillPlan] Error fetching user API key:', error);
+      // Continue without API key - context tools will fail but plan generation might still work
+    }
+
+    // Get organization default model (same pattern as agent-task-application-service)
+    const organizationRepository = getOrganizationRepository();
+    const organization = await organizationRepository.findById(skill.organizationId);
+    const organizationModel = organization?.defaultModel || undefined;
+
+    // Call streaming gRPC to generate the plan
+    const grpcClient = getChatProcessingClient(String(session.user.currentOrganizationId));
+
+    // Collect streaming events and return final result
+    // AIDEV-NOTE: Using object wrapper to capture results from callback
+    const result: {
+      plan: { planJson: string; planId: string; planningTimeMs: number } | null;
+      error: string | null;
+    } = { plan: null, error: null };
+
+    await grpcClient.streamGeneratePlan(
+      {
+        instructions,
+        organizationId: skill.organizationId.value,
+        userId: session.user.id,
+        skillId,
+        model: organizationModel, // Pass org default model like chat does
+        userApiKey,
+        timeoutSeconds: 90, // Allow more time for complex plans
+        // Pass skill inputs for variable-aware planning
+        skillInputs: (skill.inputs || []).map(input => ({
+          name: input.name,
+          type: input.type,
+          required: input.required,
+        })),
+        // Pass skill outputs for result-aware planning
+        skillOutputs: (skill.outputs || []).map(output => ({
+          name: output.name,
+          type: output.type,
+        })),
+        // Pass previous plan and feedback for regeneration
+        previousPlanJson: previousPlan ? JSON.stringify(previousPlan) : undefined,
+        userFeedback: userFeedback,
+      },
+      (response) => {
+        // Handle streaming events
+        if (response.type === 'plan_complete' && response.planComplete) {
+          result.plan = response.planComplete;
+        } else if (response.type === 'error' && response.error) {
+          result.error = response.error.errorMessage;
+        }
+        // Progress events logged but not exposed to caller (server action limitation)
+        if (response.type === 'progress' && response.progress) {
+          console.log(`[generateSkillPlan] Progress: ${response.progress.message} (${response.progress.phase})`);
+        }
+      }
+    );
+
+    if (result.error) {
+      console.error('[generateSkillPlan] gRPC error:', result.error);
+      return { success: false, error: result.error };
+    }
+
+    if (!result.plan) {
+      return { success: false, error: 'No plan received from generation' };
+    }
+
+    // Parse the plan JSON
+    let plan: StoredPlan;
+    try {
+      plan = JSON.parse(result.plan.planJson);
+    } catch (e) {
+      console.error('[generateSkillPlan] Failed to parse plan JSON:', e);
+      return { success: false, error: 'Invalid plan format returned' };
+    }
+
+    console.log(`[generateSkillPlan] Generated plan ${result.plan.planId} with ${plan.steps?.length || 0} steps in ${result.plan.planningTimeMs}ms`);
+
+    return { success: true, data: plan };
+  } catch (error) {
+    console.error('[generateSkillPlan] error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to generate plan'
     };
   }
 }

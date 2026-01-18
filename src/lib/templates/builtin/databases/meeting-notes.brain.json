@@ -1,0 +1,101 @@
+{
+  "$format": "brain-template",
+  "$version": 1,
+  "metadata": {
+    "name": "Meeting Notes",
+    "description": "Track meetings, notes, and action items. Never lose track of important decisions.",
+    "category": "Productivity",
+    "tags": ["meetings", "notes", "action items", "productivity"],
+    "version": "1.0.0"
+  },
+  "template": {
+    "type": "database",
+    "data": {
+      "name": "Meeting Notes",
+      "slug": "meeting-notes",
+      "description": "Meeting and action item tracking",
+      "tables": [
+        {
+          "name": "Meetings",
+          "description": "Meeting records",
+          "fields": [
+            { "name": "Title", "slug": "title", "type": "text", "required": true },
+            { "name": "Date", "slug": "date", "type": "date", "required": true },
+            { "name": "Location", "slug": "location", "type": "text" },
+            {
+              "name": "Attendees",
+              "slug": "attendees",
+              "type": "multi-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Team Lead", "color": "#8B5CF6" },
+                  { "id": 2, "value": "Developer", "color": "#3B82F6" },
+                  { "id": 3, "value": "Designer", "color": "#EC4899" },
+                  { "id": 4, "value": "PM", "color": "#10B981" },
+                  { "id": 5, "value": "Stakeholder", "color": "#F59E0B" }
+                ]
+              }
+            },
+            { "name": "Organizer", "slug": "organizer", "type": "text" },
+            {
+              "name": "Status",
+              "slug": "status",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Scheduled", "color": "#3B82F6" },
+                  { "id": 2, "value": "Completed", "color": "#10B981" },
+                  { "id": 3, "value": "Cancelled", "color": "#EF4444" }
+                ]
+              }
+            },
+            { "name": "Notes", "slug": "notes", "type": "text" },
+            { "name": "Created At", "slug": "created_at", "type": "created-at" }
+          ]
+        },
+        {
+          "name": "Action Items",
+          "description": "Tasks from meetings",
+          "fields": [
+            { "name": "Description", "slug": "description", "type": "text", "required": true },
+            {
+              "name": "Meeting",
+              "slug": "meeting",
+              "type": "relation",
+              "fieldConfig": {
+                "targetTableRef": "Meetings",
+                "relationshipType": "many-to-many"
+              }
+            },
+            { "name": "Assigned To", "slug": "assigned_to", "type": "text" },
+            { "name": "Due Date", "slug": "due_date", "type": "date" },
+            {
+              "name": "Status",
+              "slug": "status",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Open", "color": "#3B82F6" },
+                  { "id": 2, "value": "In Progress", "color": "#F59E0B" },
+                  { "id": 3, "value": "Done", "color": "#10B981" }
+                ]
+              }
+            },
+            {
+              "name": "Priority",
+              "slug": "priority",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Low", "color": "#6B7280" },
+                  { "id": 2, "value": "Medium", "color": "#F59E0B" },
+                  { "id": 3, "value": "High", "color": "#EF4444" }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

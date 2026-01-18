@@ -528,7 +528,7 @@ function WorkflowCanvasInner({
       <div
         className={cn(
           'absolute left-2 z-10',
-          hasFloatingHeader ? 'top-[52px]' : 'top-2'
+          hasFloatingHeader ? 'top-[72px]' : 'top-2'
         )}
       >
         <NodePalette disabled={disabled} />

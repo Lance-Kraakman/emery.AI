@@ -241,7 +241,7 @@ class TaskLedger:
 
     # Serialization for evaluator
     def to_dict() -> Dict[str, Any]
-    def to_json_summary() -> str
+    def to_toon_summary() -> str  # TOON format for minimal LLM tokens
 
 # Wired into ExecutionCoordinator
 # - Ledger created when plan created

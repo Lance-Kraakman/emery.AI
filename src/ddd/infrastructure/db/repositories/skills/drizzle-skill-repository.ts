@@ -1,4 +1,4 @@
-import { eq, and, or, isNull } from 'drizzle-orm';
+import { eq, and, isNull } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { ISkillRepository } from '@/ddd/domain/skills/repositories/skill-repository';
 import { Skill, CreateSkillProps, UpdateSkillProps } from '@/ddd/domain/skills/entities/skill';
@@ -39,12 +39,7 @@ export class DrizzleSkillRepository implements ISkillRepository {
     const results = await this.db
       .select()
       .from(skills)
-      .where(
-        or(
-          eq(skills.agentId, agentId.value),
-          eq(skills.isSystem, true)
-        )
-      );
+      .where(eq(skills.agentId, agentId.value));
 
     return results.map(record => this.toDomain(record));
   }
@@ -54,12 +49,9 @@ export class DrizzleSkillRepository implements ISkillRepository {
       .select()
       .from(skills)
       .where(
-        or(
-          and(
-            eq(skills.organizationId, organizationId.value),
-            isNull(skills.agentId)
-          ),
-          eq(skills.isSystem, true)
+        and(
+          eq(skills.organizationId, organizationId.value),
+          isNull(skills.agentId)
         )
       );
 
@@ -70,12 +62,7 @@ export class DrizzleSkillRepository implements ISkillRepository {
     const results = await this.db
       .select()
       .from(skills)
-      .where(
-        or(
-          eq(skills.organizationId, organizationId.value),
-          eq(skills.isSystem, true)
-        )
-      );
+      .where(eq(skills.organizationId, organizationId.value));
 
     return results.map(record => this.toDomain(record));
   }
@@ -185,6 +172,24 @@ export class DrizzleSkillRepository implements ISkillRepository {
     return this.toDomain(result[0]);
   }
 
+  async updateAgent(id: SkillId, agentId: AgentId | null): Promise<Skill> {
+    const result = await this.db
+      .update(skills)
+      .set({
+        agentId: agentId?.value || null,
+        ownerId: agentId ? null : undefined, // Clear ownerId when moving to agent (inherits from agent)
+        updatedAt: new Date(),
+      })
+      .where(eq(skills.id, id.value))
+      .returning();
+
+    if (result.length === 0) {
+      throw new Error(`Skill ${id.value} not found`);
+    }
+
+    return this.toDomain(result[0]);
+  }
+
   async delete(id: SkillId): Promise<void> {
     await this.db
       .delete(skills)
@@ -221,15 +226,11 @@ export class DrizzleSkillRepository implements ISkillRepository {
       .select()
       .from(skills)
       .where(
-        or(
-          and(
-                eq(skills.organizationId, organizationId.value),
-                isNull(skills.agentId)
-              ),
-          eq(skills.isSystem, true)
+        and(
+          eq(skills.organizationId, organizationId.value),
+          isNull(skills.agentId)
         )
-      )
-      ;
+      );
 
     return results.length;
   }

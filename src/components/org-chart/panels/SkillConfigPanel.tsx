@@ -21,6 +21,7 @@ import {
   Plus,
   ArrowRight,
   ArrowLeft,
+  MoreVertical,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,13 +29,27 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { updateSkill } from '@/app/actions/skills';
+import { DataSourcePicker } from '@/components/data-sources';
+import {
+  attachContextTable,
+  updateContextMapping,
+  detachContextTable,
+} from '@/app/actions/context-mappings';
 import { getFields } from '@/app/actions/fields';
 import type { InputDefinition, OutputDefinition, TableMapping, FieldMapping } from '@/app/mappers/skill-mapper';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
 import type { FieldType } from '@/ddd/domain/tables/value-objects/table-field';
+import type { DataSourceMapping } from '../types';
 
 // Map table field types to skill input types
 const fieldTypeToInputType: Record<FieldType, InputDefinition['type'] | null> = {
@@ -91,16 +106,6 @@ interface ConnectedTable {
   dbName: string;
 }
 
-/** Data source mapping for inheritance display */
-interface DataSourceMapping {
-  id: number;
-  targetType: 'agent' | 'skill' | 'skill_step';
-  targetId: string;
-  tableId: number;
-  tableName: string;
-  accessMode: 'read' | 'write' | 'readwrite';
-}
-
 interface SkillConfigPanelProps {
   skill: {
     id: number;
@@ -121,6 +126,10 @@ interface SkillConfigPanelProps {
   connectedSkills?: Array<{ id: number; name: string }>;
   /** Data sources inherited from parent agent */
   agentDataSources?: DataSourceMapping[];
+  /** Data sources defined at skill level */
+  skillDataSources?: DataSourceMapping[];
+  /** Callback when data sources change (to refresh edges) */
+  onDataSourcesChange?: () => void;
 }
 
 /** Get badge color based on execution type */
@@ -430,6 +439,8 @@ export function SkillConfigPanel({
   edges = [],
   databases = [],
   agentDataSources = [],
+  skillDataSources: initialSkillDataSources = [],
+  onDataSourcesChange,
 }: SkillConfigPanelProps) {
   const router = useRouter();
   const isOrgScoped = skill.agentId === null || skill.agentId === undefined;
@@ -439,6 +450,7 @@ export function SkillConfigPanel({
   const [editName, setEditName] = useState(skill.name);
   const [isSaving, setIsSaving] = useState(false);
   const [localInputs, setLocalInputs] = useState<InputDefinition[]>(skill.inputs ?? []);
+  const [skillDataSources, setSkillDataSources] = useState<DataSourceMapping[]>(initialSkillDataSources);
   const [localOutputs, setLocalOutputs] = useState<OutputDefinition[]>(skill.outputs ?? []);
 
   // Sync local state when skill changes
@@ -446,6 +458,85 @@ export function SkillConfigPanel({
     setLocalInputs(skill.inputs ?? []);
     setLocalOutputs(skill.outputs ?? []);
   }, [skill.id, skill.inputs, skill.outputs]);
+
+  // Sync skill data sources when props change
+  useEffect(() => {
+    setSkillDataSources(initialSkillDataSources);
+  }, [initialSkillDataSources]);
+
+  // Skill data source handlers
+  const handleAddSkillDataSource = useCallback(
+    async (table: { id: number; name: string }) => {
+      try {
+        const result = await attachContextTable({
+          targetType: 'skill',
+          targetId: String(skill.id),
+          tableId: table.id,
+          tableName: table.name,
+          accessMode: 'read',
+          syncMode: 'on_access',
+        });
+
+        if (result.success && result.data) {
+          const newDataSource: DataSourceMapping = {
+            id: result.data.id,
+            targetType: 'skill',
+            targetId: String(skill.id),
+            tableId: result.data.tableId,
+            tableName: result.data.tableName,
+            accessMode: result.data.accessMode as 'read' | 'write' | 'readwrite',
+          };
+          setSkillDataSources((prev) => [...prev, newDataSource]);
+          onDataSourcesChange?.();
+          toast.success(`Added ${table.name} as data source`);
+        } else {
+          toast.error(result.error || `Failed to add ${table.name}`);
+        }
+      } catch {
+        toast.error(`Failed to add ${table.name}`);
+      }
+    },
+    [skill.id, onDataSourcesChange]
+  );
+
+  const handleUpdateSkillDataSource = useCallback(
+    async (id: number, data: { accessMode?: 'read' | 'write' | 'readwrite' }) => {
+      try {
+        const result = await updateContextMapping(id, data);
+        if (result.success && result.data) {
+          setSkillDataSources((prev) =>
+            prev.map((ds) =>
+              ds.id === id ? { ...ds, accessMode: data.accessMode || ds.accessMode } : ds
+            )
+          );
+          onDataSourcesChange?.();
+        } else {
+          toast.error(result.error || 'Failed to update data source');
+        }
+      } catch {
+        toast.error('Failed to update data source');
+      }
+    },
+    [onDataSourcesChange]
+  );
+
+  const handleRemoveSkillDataSource = useCallback(
+    async (id: number) => {
+      try {
+        const result = await detachContextTable(id);
+        if (result.success) {
+          setSkillDataSources((prev) => prev.filter((ds) => ds.id !== id));
+          onDataSourcesChange?.();
+          toast.success('Data source removed');
+        } else {
+          toast.error(result.error || 'Failed to remove data source');
+        }
+      } catch {
+        toast.error('Failed to remove data source');
+      }
+    },
+    [onDataSourcesChange]
+  );
 
   // Parse connected tables from edges + input/output mappings
   const connectedTables = useMemo((): ConnectedTable[] => {
@@ -865,21 +956,23 @@ export function SkillConfigPanel({
         </div>
       )}
 
-      {/* Data Sources Section - inherited from agent */}
-      {agentDataSources.length > 0 && (
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Data Sources
-            </Label>
-            <span className="text-[10px] text-muted-foreground">
-              {agentDataSources.length} {agentDataSources.length === 1 ? 'table' : 'tables'}
-            </span>
-          </div>
-          <div className="text-[10px] text-muted-foreground mb-1">
-            Inherited from: {agentName || `Agent #${skill.agentId}`}
-          </div>
+      {/* Data Sources Section - inherited from agent + skill-level */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            Data Sources
+          </Label>
+          <span className="text-[10px] text-muted-foreground">
+            {agentDataSources.length + skillDataSources.length} {agentDataSources.length + skillDataSources.length === 1 ? 'table' : 'tables'}
+          </span>
+        </div>
+
+        {/* Inherited from agent (read-only) */}
+        {agentDataSources.length > 0 && (
           <div className="space-y-1">
+            <div className="text-[10px] text-muted-foreground">
+              Inherited from: {agentName || `Agent #${skill.agentId}`}
+            </div>
             {agentDataSources.map((ds) => (
               <div
                 key={ds.id}
@@ -898,8 +991,86 @@ export function SkillConfigPanel({
               </div>
             ))}
           </div>
-        </div>
-      )}
+        )}
+
+        {/* Skill-level data sources (editable) */}
+        {skillDataSources.length > 0 && (
+          <div className="space-y-1 mt-2">
+            <div className="text-[10px] text-muted-foreground">
+              Skill-specific:
+            </div>
+            {skillDataSources.map((ds) => (
+              <div
+                key={ds.id}
+                className="flex items-center justify-between p-2 rounded-lg border bg-emerald-50/30 dark:bg-emerald-900/10"
+              >
+                <div className="flex items-center gap-1.5">
+                  <Table2 className="h-3.5 w-3.5 text-emerald-500" />
+                  <span className="text-xs font-medium">{ds.tableName}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] px-1.5 py-0 h-5 bg-emerald-100/50 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700"
+                  >
+                    {ds.accessMode}
+                  </Badge>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-5 w-5">
+                        <MoreVertical className="h-3 w-3" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-32">
+                      <DropdownMenuItem
+                        onClick={() => handleUpdateSkillDataSource(ds.id, { accessMode: 'read' })}
+                        disabled={ds.accessMode === 'read'}
+                      >
+                        Read only
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => handleUpdateSkillDataSource(ds.id, { accessMode: 'write' })}
+                        disabled={ds.accessMode === 'write'}
+                      >
+                        Write only
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => handleUpdateSkillDataSource(ds.id, { accessMode: 'readwrite' })}
+                        disabled={ds.accessMode === 'readwrite'}
+                      >
+                        Read & Write
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => handleRemoveSkillDataSource(ds.id)}
+                        className="text-destructive"
+                      >
+                        Remove
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Empty state when no data sources */}
+        {agentDataSources.length === 0 && skillDataSources.length === 0 && (
+          <div className="text-xs text-muted-foreground py-1">
+            No data sources
+          </div>
+        )}
+
+        {/* Add skill-level data source */}
+        <DataSourcePicker
+          onTableSelect={handleAddSkillDataSource}
+          excludeTableIds={[
+            ...agentDataSources.map((ds) => ds.tableId),
+            ...skillDataSources.map((ds) => ds.tableId),
+          ]}
+        />
+      </div>
 
       {/* INPUTS Section */}
       <div className="space-y-1.5">

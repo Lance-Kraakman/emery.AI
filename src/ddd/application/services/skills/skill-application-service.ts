@@ -145,6 +145,26 @@ export class SkillApplicationService {
   }
 
   /**
+   * Transfer a skill to a different agent (or make it org-level by passing null)
+   * This is a special update that changes the skill's agent assignment
+   */
+  async updateSkillAgent(skillId: number, agentId: number | null): Promise<Result<void>> {
+    try {
+      logger.debug('[SkillApplicationService] updateSkillAgent', { skillId, agentId });
+
+      const id = SkillId.fromNumber(skillId);
+      await this.skillRepository.updateAgent(id, agentId ? AgentId.fromNumber(agentId) : null);
+
+      logger.debug('[SkillApplicationService] skill agent updated', { skillId, agentId });
+
+      return { success: true };
+    } catch (error) {
+      logger.error('[SkillApplicationService] updateSkillAgent error', error);
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to update skill agent' };
+    }
+  }
+
+  /**
    * Delete a skill
    */
   async deleteSkill(skillId: number): Promise<Result<void>> {

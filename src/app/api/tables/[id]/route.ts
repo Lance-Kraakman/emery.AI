@@ -12,11 +12,12 @@ export const dynamic = 'force-dynamic';
  * Uses standardized base utilities for consistent auth and error handling
  */
 
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { withAuthenticatedRoute, parseIntParam, parseJsonBody } from '@/lib/api/base';
 import { getTableApplicationService } from '@/ddd/application/di/container';
 import { TableId } from '@/ddd/domain/shared/value-objects';
 import type { UpdateTableCommand } from '@/ddd/application/services/tables/table-application-service';
+import { operationToToon } from '@/lib/toon-format';
 
 /**
  * GET /api/tables/[id]
@@ -51,6 +52,7 @@ export async function GET(
 /**
  * PUT /api/tables/[id]
  * Update table metadata (name, description, metadata)
+ * ?format=llm → TOON format response
  *
  * Request body:
  * {
@@ -63,7 +65,10 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ): Promise<Response> {
-  return withAuthenticatedRoute(request, async (user) => {
+  const { searchParams } = new URL(request.url);
+  const format = searchParams.get('format');
+
+  const response = await withAuthenticatedRoute(request, async (user) => {
     const { id } = await params;
     const tableId = parseIntParam(id, 'table id');
     const body = await parseJsonBody(request);
@@ -112,17 +117,42 @@ export async function PUT(
       message: 'Table updated successfully'
     };
   });
+
+  if (format === 'llm') {
+    const body = await response.clone().json();
+    if (body.success) {
+      // Extract ID - handle value object (.value) or plain number
+      const idVal = body.data?.id;
+      const tblId = typeof idVal === 'object' && idVal !== null ? (idVal.value ?? 0) : (idVal ?? 0);
+      const toon = operationToToon({
+        action: 'updated',
+        entity: 'table',
+        id: tblId,
+        data: { name: body.data?.name, description: body.data?.description }
+      });
+      return new NextResponse(toon, {
+        status: 200,
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+      });
+    }
+  }
+
+  return response;
 }
 
 /**
  * DELETE /api/tables/[id]
  * Delete table and all associated data (fields, rows, S3 data)
+ * ?format=llm → TOON format response
  */
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ): Promise<Response> {
-  return withAuthenticatedRoute(request, async (user) => {
+  const { searchParams } = new URL(request.url);
+  const format = searchParams.get('format');
+
+  const response = await withAuthenticatedRoute(request, async (user) => {
     const { id } = await params;
     const tableId = parseIntParam(id, 'table id');
     const tableService = getTableApplicationService();
@@ -147,4 +177,24 @@ export async function DELETE(
       message: 'Table deleted successfully'
     };
   });
+
+  if (format === 'llm') {
+    const body = await response.clone().json();
+    if (body.success) {
+      // Extract ID - handle value object (.value) or plain number
+      const idVal = body.data?.id;
+      const tblId = typeof idVal === 'object' && idVal !== null ? (idVal.value ?? 0) : (idVal ?? 0);
+      const toon = operationToToon({
+        action: 'deleted',
+        entity: 'table',
+        id: tblId
+      });
+      return new NextResponse(toon, {
+        status: 200,
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+      });
+    }
+  }
+
+  return response;
 }

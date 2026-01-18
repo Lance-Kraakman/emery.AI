@@ -15,12 +15,13 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { format } from 'date-fns';
-import { ChevronDown, ChevronRight, RefreshCw, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, RefreshCw, Filter } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { getAuditEvents, getRowHistory } from '@/app/actions/audit';
 import type { AuditEvent, RowHistoryEntry } from '@/ddd/domain/audit/types';
 import { cn } from '@/lib/utils';
@@ -153,117 +154,142 @@ export function AuditTable({
   const hasActiveFilters = filters.eventType !== 'all' || filters.actorType !== 'all' ||
     filters.resourceType !== 'all' || filters.after || filters.before;
 
-  if (loading) {
-    return (
-      <div className="space-y-2">
-        <Skeleton className="h-8 w-full" />
-        <Skeleton className="h-8 w-full" />
-        <Skeleton className="h-8 w-full" />
-        <Skeleton className="h-8 w-full" />
+  // Filter popover content
+  const FilterContent = () => (
+    <div className="space-y-3 p-1">
+      <div className="space-y-1.5">
+        <label className="text-xs font-medium text-muted-foreground">Event Type</label>
+        <Select
+          value={filters.eventType}
+          onValueChange={(value) => setFilters((f) => ({ ...f, eventType: value }))}
+        >
+          <SelectTrigger className="h-8 text-xs">
+            <SelectValue placeholder="All Types" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Types</SelectItem>
+            <SelectItem value="database">Database</SelectItem>
+            <SelectItem value="auth">Auth</SelectItem>
+            <SelectItem value="admin">Admin</SelectItem>
+            <SelectItem value="agent">Agent</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-        <span className="text-2xl mb-2">⚠️</span>
-        <p className="text-sm mb-2">{error}</p>
-        <Button onClick={fetchData} variant="outline" size="sm">
-          <RefreshCw className="h-3 w-3 mr-1" />
-          Retry
-        </Button>
+      <div className="space-y-1.5">
+        <label className="text-xs font-medium text-muted-foreground">Actor</label>
+        <Select
+          value={filters.actorType}
+          onValueChange={(value) => setFilters((f) => ({ ...f, actorType: value }))}
+        >
+          <SelectTrigger className="h-8 text-xs">
+            <SelectValue placeholder="All Actors" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Actors</SelectItem>
+            <SelectItem value="user">User</SelectItem>
+            <SelectItem value="agent">Agent</SelectItem>
+            <SelectItem value="system">System</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
-    );
-  }
-
-  return (
-    <div className="space-y-3">
-      {/* Filters */}
-      {showFilters && mode === 'audit' && (
-        <div className="flex flex-wrap items-center gap-2">
-          <Select
-            value={filters.eventType}
-            onValueChange={(value) => setFilters((f) => ({ ...f, eventType: value }))}
-          >
-            <SelectTrigger className="h-8 w-[120px] text-xs">
-              <SelectValue placeholder="Event Type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              <SelectItem value="database">Database</SelectItem>
-              <SelectItem value="auth">Auth</SelectItem>
-              <SelectItem value="admin">Admin</SelectItem>
-              <SelectItem value="agent">Agent</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Select
-            value={filters.actorType}
-            onValueChange={(value) => setFilters((f) => ({ ...f, actorType: value }))}
-          >
-            <SelectTrigger className="h-8 w-[120px] text-xs">
-              <SelectValue placeholder="Actor" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Actors</SelectItem>
-              <SelectItem value="user">User</SelectItem>
-              <SelectItem value="agent">Agent</SelectItem>
-              <SelectItem value="system">System</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Select
-            value={filters.resourceType}
-            onValueChange={(value) => setFilters((f) => ({ ...f, resourceType: value }))}
-          >
-            <SelectTrigger className="h-8 w-[120px] text-xs">
-              <SelectValue placeholder="Resource" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Resources</SelectItem>
-              <SelectItem value="row">Row</SelectItem>
-              <SelectItem value="table">Table</SelectItem>
-              <SelectItem value="agent">Agent</SelectItem>
-              <SelectItem value="skill">Skill</SelectItem>
-            </SelectContent>
-          </Select>
-
+      <div className="space-y-1.5">
+        <label className="text-xs font-medium text-muted-foreground">Resource</label>
+        <Select
+          value={filters.resourceType}
+          onValueChange={(value) => setFilters((f) => ({ ...f, resourceType: value }))}
+        >
+          <SelectTrigger className="h-8 text-xs">
+            <SelectValue placeholder="All Resources" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Resources</SelectItem>
+            <SelectItem value="row">Row</SelectItem>
+            <SelectItem value="table">Table</SelectItem>
+            <SelectItem value="agent">Agent</SelectItem>
+            <SelectItem value="skill">Skill</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-muted-foreground">After</label>
           <Input
             type="date"
-            placeholder="After"
             value={filters.after}
             onChange={(e) => setFilters((f) => ({ ...f, after: e.target.value }))}
-            className="h-8 w-[130px] text-xs"
+            className="h-8 text-xs"
           />
-
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-muted-foreground">Before</label>
           <Input
             type="date"
-            placeholder="Before"
             value={filters.before}
             onChange={(e) => setFilters((f) => ({ ...f, before: e.target.value }))}
-            className="h-8 w-[130px] text-xs"
+            className="h-8 text-xs"
           />
+        </div>
+      </div>
+      {hasActiveFilters && (
+        <Button variant="ghost" size="sm" onClick={clearFilters} className="w-full h-8 text-xs">
+          Clear filters
+        </Button>
+      )}
+    </div>
+  );
 
-          {hasActiveFilters && (
-            <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 px-2">
-              <X className="h-3 w-3 mr-1" />
-              Clear
-            </Button>
+  return (
+    <div className="h-full flex flex-col">
+      {/* Header bar */}
+      <div className="flex items-center justify-between px-4 py-2 border-b border-border/50">
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-sm">Audit Log</span>
+          {!loading && (
+            <span className="text-xs text-muted-foreground">
+              {data.length} {data.length === 1 ? 'event' : 'events'}
+            </span>
           )}
-
-          <Button variant="outline" size="sm" onClick={fetchData} className="h-8 px-2">
-            <RefreshCw className="h-3 w-3 mr-1" />
-            Refresh
+        </div>
+        <div className="flex items-center gap-1">
+          {showFilters && mode === 'audit' && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8 relative">
+                  <Filter className="h-4 w-4" />
+                  {hasActiveFilters && (
+                    <span className="absolute -top-0.5 -right-0.5 h-2 w-2 bg-primary rounded-full" />
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-64" align="end">
+                <FilterContent />
+              </PopoverContent>
+            </Popover>
+          )}
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={fetchData} disabled={loading}>
+            <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
           </Button>
         </div>
-      )}
+      </div>
 
-      {/* Table */}
-      <div className="overflow-x-auto">
-        {data.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-            <span className="text-2xl mb-2 opacity-40">📭</span>
+      {/* Table container */}
+      <div className="flex-1 overflow-auto">
+        {loading ? (
+          <div className="p-4 space-y-2">
+            <Skeleton className="h-8 w-full" />
+            <Skeleton className="h-8 w-full" />
+            <Skeleton className="h-8 w-full" />
+          </div>
+        ) : error ? (
+          <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+            <p className="text-sm mb-2">{error}</p>
+            <Button onClick={fetchData} variant="outline" size="sm">
+              <RefreshCw className="h-3 w-3 mr-1" />
+              Retry
+            </Button>
+          </div>
+        ) : data.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
             <p className="text-sm">
               {mode === 'history'
                 ? 'No history available for this row'
@@ -277,8 +303,8 @@ export function AuditTable({
           </div>
         ) : (
           <table className="w-full text-sm">
-            <thead className="bg-muted/50 border-b border-border">
-              <tr>
+            <thead className="sticky top-0 bg-background z-10">
+              <tr className="border-b border-border/50">
                 <th className="w-8 px-2 py-2"></th>
                 {columns.map((col) => (
                   <th
@@ -293,7 +319,7 @@ export function AuditTable({
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-border">
+            <tbody>
               {mode === 'audit'
                 ? (data as AuditEvent[]).map((event) => (
                     <AuditEventRow
@@ -317,13 +343,6 @@ export function AuditTable({
           </table>
         )}
       </div>
-
-      {/* Count */}
-      {data.length > 0 && (
-        <div className="text-xs text-muted-foreground text-right">
-          {data.length} {data.length === 1 ? 'event' : 'events'}
-        </div>
-      )}
     </div>
   );
 }
@@ -368,16 +387,58 @@ function AuditEventRow({
           <ActionBadge action={event.eventAction} success={event.success ?? true} />
         </td>
         <td className="px-3 py-1.5">
-          <span className="text-xs font-medium">{event.resourceType}</span>
-          {event.resourceName && (
-            <span className="text-xs text-muted-foreground ml-1 truncate">- {event.resourceName}</span>
-          )}
+          <div className="flex flex-col">
+            <div className="flex items-center gap-1">
+              <span className="text-xs font-medium">{event.resourceType}</span>
+              {event.resourceName && (
+                <span className="text-xs text-muted-foreground truncate max-w-[100px]">- {event.resourceName}</span>
+              )}
+            </div>
+            {/* Show parent context (e.g., table name for row operations) */}
+            {event.parentResourceType && (
+              <span className="text-[10px] text-muted-foreground/70">
+                in {String(event.eventData?.tableName || event.parentResourceType)}
+              </span>
+            )}
+          </div>
         </td>
         <td className="px-3 py-1.5">
-          <span className="text-xs text-muted-foreground">{event.eventCategory}</span>
-          {!event.success && event.error && (
-            <span className="text-xs text-destructive ml-1">- {event.error}</span>
-          )}
+          <div className="flex flex-col gap-0.5">
+            {/* Triggered-by context for agent actions */}
+            {(() => {
+              const triggeredBy = getTriggeredByContext(event);
+              if (triggeredBy) {
+                return (
+                  <span className="text-[10px] text-blue-600 dark:text-blue-400">
+                    via {triggeredBy.type}: {triggeredBy.name}
+                  </span>
+                );
+              }
+              return null;
+            })()}
+            {/* Smart preview of event data */}
+            {(() => {
+              const preview = getEventPreview(event);
+              if (preview) {
+                return (
+                  <span className="text-xs text-muted-foreground truncate max-w-[200px]" title={preview}>
+                    {preview}
+                  </span>
+                );
+              }
+              // Fall back to human-readable category/action description
+              const readableDesc = getReadableEventDescription(event.eventCategory, event.eventAction);
+              return (
+                <span className="text-xs text-muted-foreground">{readableDesc}</span>
+              );
+            })()}
+            {/* Error display */}
+            {!event.success && event.error && (
+              <span className="text-[10px] text-destructive truncate max-w-[200px]" title={event.error}>
+                {event.error}
+              </span>
+            )}
+          </div>
         </td>
       </tr>
       {expanded && (
@@ -581,6 +642,145 @@ function formatValue(value: unknown): string {
   if (typeof value === 'string') return value || '(empty)';
   if (typeof value === 'object') return JSON.stringify(value);
   return String(value);
+}
+
+// Human-readable labels for event categories
+const EVENT_CATEGORY_LABELS: Record<string, string> = {
+  // Database operations
+  row_crud: 'Row operation',
+  table_crud: 'Table operation',
+  field_crud: 'Field operation',
+  // Agent/Skill operations
+  skill_crud: 'Skill operation',
+  agent_crud: 'Agent operation',
+  definition: 'Definition change',
+  task_execution: 'Task execution',
+  // Auth
+  auth_login: 'User login',
+  auth_logout: 'User logout',
+  auth_register: 'User registration',
+  // Billing
+  subscription: 'Subscription',
+  payment: 'Payment',
+  // App
+  webhook: 'Webhook',
+  integration: 'Integration',
+};
+
+// Get human-readable description for an event
+function getReadableEventDescription(category: string, action: string): string {
+  // Build action-specific descriptions
+  const actionLabels: Record<string, string> = {
+    create: 'Created',
+    update: 'Updated',
+    delete: 'Deleted',
+    execute: 'Executed',
+    read: 'Viewed',
+  };
+
+  const resourceLabels: Record<string, string> = {
+    row_crud: 'row',
+    table_crud: 'table',
+    field_crud: 'field',
+    skill_crud: 'skill',
+    agent_crud: 'agent',
+    definition: 'definition',
+    task_execution: 'task',
+  };
+
+  // Try to build "Action + Resource" format
+  const actionLabel = actionLabels[action];
+  const resourceLabel = resourceLabels[category];
+  if (actionLabel && resourceLabel) {
+    return `${actionLabel} ${resourceLabel}`;
+  }
+
+  // Fall back to category label
+  if (EVENT_CATEGORY_LABELS[category]) {
+    return EVENT_CATEGORY_LABELS[category];
+  }
+
+  // Last resort: humanize the category string
+  return category
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+// Helper to generate smart preview from event data
+function getEventPreview(event: AuditEvent): string | null {
+  const { eventAction, eventData, previousData } = event;
+
+  // For updates with previous data, show what changed
+  if (eventAction === 'update' && previousData && eventData) {
+    const changedFields: string[] = [];
+    for (const key of Object.keys(eventData)) {
+      if (key !== 'tableName' && key !== 'tableId' && previousData[key] !== undefined) {
+        const oldVal = formatValue(previousData[key]);
+        const newVal = formatValue(eventData[key]);
+        if (oldVal !== newVal) {
+          changedFields.push(`${key}: ${oldVal} → ${newVal}`);
+        }
+      }
+    }
+    if (changedFields.length > 0) {
+      return changedFields.length <= 2
+        ? changedFields.join(', ')
+        : `${changedFields[0]} (+${changedFields.length - 1} more)`;
+    }
+  }
+
+  // For creates, show field count or key fields
+  if (eventAction === 'create' && eventData) {
+    const dataKeys = Object.keys(eventData).filter(k => !['tableName', 'tableId', 'rowId'].includes(k));
+    if (dataKeys.length > 0) {
+      return `Created with ${dataKeys.length} field${dataKeys.length !== 1 ? 's' : ''}`;
+    }
+  }
+
+  // For deletes, indicate what was removed
+  if (eventAction === 'delete') {
+    return 'Permanently removed';
+  }
+
+  // For executions, show duration if available
+  if (eventAction === 'execute' && event.durationMs) {
+    return `Completed in ${event.durationMs}ms`;
+  }
+
+  return null;
+}
+
+// Helper to extract triggered-by context from metadata/eventData
+function getTriggeredByContext(event: AuditEvent): { type: string; name: string } | null {
+  const { actorType, metadata, eventData } = event;
+
+  // Only relevant for agent actions
+  if (actorType !== 'agent') return null;
+
+  // Check metadata for task/user context
+  if (metadata) {
+    if (metadata.triggeredByUser && metadata.triggeredByUserName) {
+      return { type: 'user', name: String(metadata.triggeredByUserName) };
+    }
+    if (metadata.taskId && metadata.taskName) {
+      return { type: 'task', name: String(metadata.taskName) };
+    }
+    if (metadata.triggeredBy) {
+      return { type: 'request', name: String(metadata.triggeredBy) };
+    }
+  }
+
+  // Check eventData as fallback
+  if (eventData) {
+    if (eventData.requestedByUser) {
+      return { type: 'user', name: String(eventData.requestedByUser) };
+    }
+    if (eventData.taskName) {
+      return { type: 'task', name: String(eventData.taskName) };
+    }
+  }
+
+  return null;
 }
 
 export default AuditTable;

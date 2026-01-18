@@ -20,6 +20,7 @@ export interface TemplateVariant {
 import type { ChatMessageMetadata } from '@/ddd/domain/chat/entities/chat-message';
 import type { MessagePart } from '@/ddd/infrastructure/grpc/generated/agent_worker';
 import type { SkillParameterType, OutputDefinition, ToolExecutionConfig, WriteConfig, ReadConfig, InputMappingConfig } from '@/ddd/domain/skills/entities/skill';
+import type { TemplateContent, TemplateEntityType } from '@/ddd/domain/templates/types';
 
 // AIDEV-NOTE: Authenticated user role for RLS policies
 export const authenticatedRole = pgRole('authenticated', {
@@ -473,8 +474,9 @@ export const organizations = pgTable("organizations", {
 
   // Credit system fields (1 credit = 1,000 tokens for user-facing billing)
   // AIDEV-NOTE: Credits provide user-friendly billing units. Different models cost different credits per 1K tokens.
+  // AIDEV-NOTE: creditsUsedCurrentMonth uses doublePrecision to track fractional credits accurately (small API calls can be < 1 credit)
   creditBalance: integer("credit_balance").default(0).notNull(), // Current available credits
-  creditsUsedCurrentMonth: integer("credits_used_current_month").default(0).notNull(), // Credits used this month
+  creditsUsedCurrentMonth: doublePrecision("credits_used_current_month").default(0).notNull(), // Credits used this month (float for precision)
   creditsResetAt: timestamp("credits_reset_at"), // When credits were last reset (for monthly free tier)
 
   // Pay-as-you-go subscription billing fields (Free/Pro/Max/Enterprise tiers)
@@ -1081,6 +1083,10 @@ export const skills = pgTable("skills", {
     }>;
   }>(),
 
+  // NOTE: Stored plans for autonomous execution are stored in steps[].agenticConfig.plan
+  // When saving a plan to executionType='agentic' skills, they are auto-converted to
+  // single-node DAGs (executionType='agent') with the plan in the agentic step.
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
@@ -1096,32 +1102,30 @@ export const skills = pgTable("skills", {
     for: "select",
     to: "public",
     using: sql`
-      is_system = true OR (
-        organization_id = current_setting('app.current_organization_id')::integer
-        AND (
-          (agent_id IS NOT NULL AND EXISTS (
-            SELECT 1 FROM agents a
-            WHERE a.id = agent_id
-            AND (
-              a.owner_id = current_setting('app.current_user_id')::uuid
-              OR user_has_permission(
-                current_setting('app.current_user_id')::uuid,
-                'agents:view',
-                a.organization_id,
-                'agent',
-                a.id
-              )
+      organization_id = current_setting('app.current_organization_id')::integer
+      AND (
+        (agent_id IS NOT NULL AND EXISTS (
+          SELECT 1 FROM agents a
+          WHERE a.id = agent_id
+          AND (
+            a.owner_id = current_setting('app.current_user_id')::uuid
+            OR user_has_permission(
+              current_setting('app.current_user_id')::uuid,
+              'agents:view',
+              a.organization_id,
+              'agent',
+              a.id
             )
-          ))
-          OR
-          (agent_id IS NULL AND user_has_permission(
-            current_setting('app.current_user_id')::uuid,
-            'skills:view',
-            organization_id,
-            'skill',
-            id
-          ))
-        )
+          )
+        ))
+        OR
+        (agent_id IS NULL AND user_has_permission(
+          current_setting('app.current_user_id')::uuid,
+          'skills:view',
+          organization_id,
+          'skill',
+          id
+        ))
       )
     `
   }),
@@ -1130,61 +1134,57 @@ export const skills = pgTable("skills", {
     for: "all",
     to: "public",
     using: sql`
-      is_system = true OR (
-        organization_id = current_setting('app.current_organization_id')::integer
-        AND (
-          (agent_id IS NOT NULL AND EXISTS (
-            SELECT 1 FROM agents a
-            WHERE a.id = agent_id
-            AND (
-              a.owner_id = current_setting('app.current_user_id')::uuid
-              OR user_has_permission(
-                current_setting('app.current_user_id')::uuid,
-                'agents:manage',
-                a.organization_id,
-                'agent',
-                a.id
-              )
+      organization_id = current_setting('app.current_organization_id')::integer
+      AND (
+        (agent_id IS NOT NULL AND EXISTS (
+          SELECT 1 FROM agents a
+          WHERE a.id = agent_id
+          AND (
+            a.owner_id = current_setting('app.current_user_id')::uuid
+            OR user_has_permission(
+              current_setting('app.current_user_id')::uuid,
+              'agents:manage',
+              a.organization_id,
+              'agent',
+              a.id
             )
-          ))
-          OR
-          (agent_id IS NULL AND user_has_permission(
-            current_setting('app.current_user_id')::uuid,
-            'skills:manage',
-            organization_id,
-            'skill',
-            id
-          ))
-        )
+          )
+        ))
+        OR
+        (agent_id IS NULL AND user_has_permission(
+          current_setting('app.current_user_id')::uuid,
+          'skills:manage',
+          organization_id,
+          'skill',
+          id
+        ))
       )
     `,
     withCheck: sql`
-      is_system = true OR (
-        organization_id = current_setting('app.current_organization_id')::integer
-        AND (
-          (agent_id IS NOT NULL AND EXISTS (
-            SELECT 1 FROM agents a
-            WHERE a.id = agent_id
-            AND (
-              a.owner_id = current_setting('app.current_user_id')::uuid
-              OR user_has_permission(
-                current_setting('app.current_user_id')::uuid,
-                'agents:manage',
-                a.organization_id,
-                'agent',
-                a.id
-              )
+      organization_id = current_setting('app.current_organization_id')::integer
+      AND (
+        (agent_id IS NOT NULL AND EXISTS (
+          SELECT 1 FROM agents a
+          WHERE a.id = agent_id
+          AND (
+            a.owner_id = current_setting('app.current_user_id')::uuid
+            OR user_has_permission(
+              current_setting('app.current_user_id')::uuid,
+              'agents:manage',
+              a.organization_id,
+              'agent',
+              a.id
             )
-          ))
-          OR
-          (agent_id IS NULL AND user_has_permission(
-            current_setting('app.current_user_id')::uuid,
-            'skills:manage',
-            organization_id,
-            'skill',
-            id
-          ))
-        )
+          )
+        ))
+        OR
+        (agent_id IS NULL AND user_has_permission(
+          current_setting('app.current_user_id')::uuid,
+          'skills:manage',
+          organization_id,
+          'skill',
+          id
+        ))
       )
     `
   }),
@@ -2274,4 +2274,97 @@ export const contextSyncState = pgTable("context_sync_state", {
   index("context_sync_state_mapping_idx").on(table.mappingId),
   // Unique constraint: one sync state per session-mapping pair
   unique("context_sync_state_session_mapping_unique").on(table.sessionId, table.mappingId),
+]);
+
+// ============================================================================
+// ENTITY TEMPLATES
+// ============================================================================
+
+/**
+ * Entity Templates - Stores user-created and imported templates
+ * Builtin templates are loaded from JSON files at runtime, not stored here.
+ *
+ * Supports templates for: skill, database, table, agent, app, organization, org_section
+ * - Single entity templates: export one skill/agent/etc.
+ * - Composite templates (org_section): export multiple agents with their resources
+ */
+export const entityTemplates = pgTable("entity_templates", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  ownerId: uuid("owner_id").references(() => users.id, { onDelete: 'set null' }),
+
+  // Template metadata
+  name: text("name").notNull(),
+  description: text("description").default(''),
+  category: text("category"),
+  tags: jsonb("tags").$type<string[]>().default([]),
+
+  // Template type and data
+  entityType: text("entity_type").$type<TemplateEntityType>().notNull(), // 'skill', 'database', 'table', 'agent', 'app', 'organization', 'org_section'
+  templateData: jsonb("template_data").$type<TemplateContent>().notNull(), // Full template content as JSON
+
+  // Versioning
+  version: text("version").default('1.0.0'),
+
+  // Source tracking
+  isBuiltin: boolean("is_builtin").default(false), // True if created from a builtin template
+  sourceBuiltinId: text("source_builtin_id"), // Reference to builtin file ID if imported from builtin
+
+  // Timestamps
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  // Index for fast lookups by organization and type
+  index("entity_templates_org_type_idx").on(table.organizationId, table.entityType),
+  // Index for category filtering
+  index("entity_templates_category_idx").on(table.organizationId, table.category),
+  // Index for owner lookups
+  index("entity_templates_owner_idx").on(table.ownerId),
+  // Unique constraint: one template name per type per organization
+  unique("entity_templates_org_name_type_unique").on(table.organizationId, table.name, table.entityType),
+
+  // RLS: Tenant isolation
+  pgPolicy("entity_templates_tenant_isolation", {
+    as: "permissive",
+    for: "all",
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
+  }),
+
+  // RLS: View permission - users can view templates in their organization
+  pgPolicy("entity_templates_view_permission", {
+    as: "permissive",
+    for: "select",
+    to: "public",
+    using: sql`
+      organization_id = current_setting('app.current_organization_id')::integer
+      AND user_has_permission(
+        current_setting('app.current_user_id')::uuid,
+        'templates:view',
+        organization_id,
+        'template',
+        id
+      )
+    `,
+  }),
+
+  // RLS: Manage permission - users can manage their own templates or with manage permission
+  pgPolicy("entity_templates_manage_permission", {
+    as: "permissive",
+    for: "all",
+    to: "public",
+    using: sql`
+      organization_id = current_setting('app.current_organization_id')::integer
+      AND (
+        owner_id = current_setting('app.current_user_id')::uuid
+        OR user_has_permission(
+          current_setting('app.current_user_id')::uuid,
+          'templates:manage',
+          organization_id,
+          'template',
+          id
+        )
+      )
+    `,
+  }),
 ]);

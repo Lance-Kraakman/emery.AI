@@ -5,6 +5,8 @@
  *
  * Node representing a database with inline table list.
  * Shows icon, name, and all tables with connection handles.
+ * Org-level databases (agentId === null) can be dragged onto agent panels
+ * using React Flow's native drag - handled by onNodeDragStop in OrgChartCanvas.
  */
 
 import React, { memo, useCallback } from 'react';

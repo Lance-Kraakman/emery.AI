@@ -241,6 +241,23 @@ export interface UseOrgChartCanvasReturn {
 }
 
 // =============================================================================
+// Data Source Types
+// =============================================================================
+
+/**
+ * Data source mapping from context_mappings table
+ * Used for both edge generation and UI display
+ */
+export interface DataSourceMapping {
+  id: number;
+  targetType: 'agent' | 'skill' | 'skill_step';
+  targetId: string;
+  tableId: number;
+  tableName: string;
+  accessMode: 'read' | 'write' | 'readwrite';
+}
+
+// =============================================================================
 // Persisted Metadata
 // =============================================================================
 

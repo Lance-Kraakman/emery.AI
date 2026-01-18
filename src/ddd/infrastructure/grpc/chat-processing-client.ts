@@ -22,7 +22,8 @@ import type {
   ProcessingComplete,
   ProcessingError,
   StepProgress,
-  MessagePart
+  MessagePart,
+  AwaitingInput
 } from './generated/agent_worker';
 import { toProtoMessageParts } from './mappers/message-part-mapper';
 import { mapSkillToProto } from './proto-mappers';
@@ -50,13 +51,40 @@ export interface ChatProcessingOptions {
 }
 
 export interface StreamingChatResponse {
-  type: 'content' | 'complete' | 'error' | 'step_progress';
+  type: 'content' | 'complete' | 'error' | 'step_progress' | 'awaiting_input';
   content?: string;
   sequence?: number;
   complete?: ProcessingComplete;
   error?: ProcessingError;
   stepProgress?: StepProgress;
+  awaitingInput?: AwaitingInput;  // HITL: Plan approval or question
   timestamp: number;
+}
+
+// AIDEV-NOTE: Streaming plan generation response types (GeneratePlan is now streaming RPC)
+export interface StreamingPlanResponse {
+  type: 'progress' | 'plan_complete' | 'error' | 'awaiting_input';
+  progress?: {
+    message: string;
+    phase: string;  // "context_gathering" | "analyzing" | "planning"
+  };
+  planComplete?: {
+    planJson: string;
+    planId: string;
+    planningTimeMs: number;
+  };
+  error?: {
+    errorCode: string;
+    errorMessage: string;
+    canRetry: boolean;
+  };
+  awaitingInput?: AwaitingInput;  // HITL: Clarification questions
+  timestamp: number;
+}
+
+export interface ClarificationAnswer {
+  questionId: string;
+  answer: string;
 }
 
 /**
@@ -202,6 +230,7 @@ export class ChatProcessingClient {
           hasComplete: !!response.complete,
           hasError: !!response.error,
           hasStepProgress: !!response.stepProgress,
+          hasAwaitingInput: !!response.awaitingInput,
           timestamp: response.timestamp
         });
 
@@ -214,6 +243,13 @@ export class ChatProcessingClient {
           streamingResponse = {
             type: 'step_progress',
             stepProgress: response.stepProgress,
+            timestamp: response.timestamp
+          };
+        } else if (response.awaitingInput) {
+          // HITL: Agent needs user input (plan approval or question)
+          streamingResponse = {
+            type: 'awaiting_input',
+            awaitingInput: response.awaitingInput,
             timestamp: response.timestamp
           };
         } else if (response.contentChunk) {
@@ -361,6 +397,151 @@ export class ChatProcessingClient {
             message: response.message
           });
         }
+      });
+    });
+  }
+
+  /**
+   * Generate an autonomous execution plan for skill instructions with streaming.
+   *
+   * AIDEV-NOTE: GeneratePlan is now a streaming RPC that yields:
+   * - progress: Real-time generation updates
+   * - awaiting_input: HITL clarification questions
+   * - plan_complete: Final plan ready
+   * - error: Generation failed
+   *
+   * @param params - Plan generation parameters
+   * @param onResponse - Callback for streaming responses
+   * @returns Promise that resolves when stream completes
+   */
+  async streamGeneratePlan(
+    params: {
+      instructions: string;
+      organizationId: number;
+      userId: string;
+      skillId: number;
+      model?: string;
+      userApiKey?: string;
+      timeoutSeconds?: number;
+      skillInputs?: Array<{ name: string; type?: string; required?: boolean }>;
+      skillOutputs?: Array<{ name: string; type?: string }>;
+      previousPlanJson?: string;
+      userFeedback?: string;
+      sessionId?: string;  // For resuming after clarification questions
+      answers?: ClarificationAnswer[];  // Answers to previous questions
+    },
+    onResponse: (response: StreamingPlanResponse) => void
+  ): Promise<void> {
+    console.log(`[CHAT-GRPC-CLIENT] Streaming GeneratePlan for skill ${params.skillId}${params.sessionId ? ' (resuming session)' : ''}`);
+
+    return new Promise((resolve, reject) => {
+      const request = {
+        instructions: params.instructions,
+        organizationId: params.organizationId,
+        userId: params.userId,
+        skillId: params.skillId,
+        model: params.model || '',
+        userApiKey: params.userApiKey || '',
+        timeoutSeconds: params.timeoutSeconds || 60,
+        skillInputs: (params.skillInputs || []).map(input => ({
+          name: input.name,
+          type: input.type || 'text',
+          required: input.required ?? false,
+        })),
+        skillOutputs: (params.skillOutputs || []).map(output => ({
+          name: output.name,
+          type: output.type || 'text',
+        })),
+        previousPlanJson: params.previousPlanJson || '',
+        userFeedback: params.userFeedback || '',
+        sessionId: params.sessionId || '',
+        answers: (params.answers || []).map(a => ({
+          questionId: a.questionId,
+          answer: a.answer,
+        })),
+      };
+
+      console.log(`[CHAT-GRPC-CLIENT] Starting GeneratePlan stream`);
+      const call = this.client.GeneratePlan(request);
+
+      call.on('data', (response: any) => {
+        console.log(`[CHAT-GRPC-CLIENT] GeneratePlan stream data:`, {
+          hasProgress: !!response.progress,
+          hasAwaitingInput: !!response.awaitingInput,
+          hasPlanComplete: !!response.planComplete,
+          hasError: !!response.error,
+          timestamp: response.timestamp
+        });
+
+        let streamingResponse: StreamingPlanResponse;
+
+        if (response.progress) {
+          streamingResponse = {
+            type: 'progress',
+            progress: {
+              message: response.progress.message,
+              phase: response.progress.phase
+            },
+            timestamp: response.timestamp
+          };
+        } else if (response.awaitingInput) {
+          streamingResponse = {
+            type: 'awaiting_input',
+            awaitingInput: response.awaitingInput,
+            timestamp: response.timestamp
+          };
+        } else if (response.planComplete) {
+          streamingResponse = {
+            type: 'plan_complete',
+            planComplete: {
+              planJson: response.planComplete.planJson || '',
+              planId: response.planComplete.planId || '',
+              planningTimeMs: response.planComplete.planningTimeMs || 0
+            },
+            timestamp: response.timestamp
+          };
+        } else if (response.error) {
+          streamingResponse = {
+            type: 'error',
+            error: {
+              errorCode: response.error.errorCode || 'UNKNOWN',
+              errorMessage: response.error.errorMessage || 'Unknown error',
+              canRetry: response.error.canRetry ?? true
+            },
+            timestamp: response.timestamp
+          };
+        } else {
+          console.warn(`[CHAT-GRPC-CLIENT] Unknown GeneratePlan response type`);
+          return;
+        }
+
+        onResponse(streamingResponse);
+      });
+
+      call.on('end', () => {
+        console.log(`[CHAT-GRPC-CLIENT] GeneratePlan stream ended`);
+        resolve();
+      });
+
+      call.on('error', (error: grpc.ServiceError) => {
+        console.error(`[CHAT-GRPC-CLIENT] GeneratePlan stream error:`, {
+          code: error.code,
+          codeName: grpc.status[error.code] || 'UNKNOWN',
+          message: error.message
+        });
+
+        // Send error through callback
+        onResponse({
+          type: 'error',
+          error: {
+            errorCode: 'GRPC_ERROR',
+            errorMessage: error.message || 'Connection error',
+            canRetry: error.code !== grpc.status.CANCELLED
+          },
+          timestamp: Date.now()
+        });
+
+        reject(error);
       });
     });
   }

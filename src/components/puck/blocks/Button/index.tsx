@@ -43,7 +43,7 @@ function ButtonRender({
 export const Button: ComponentConfig<ButtonProps> = {
   label: "Button",
   fields: {
-    label: createVariableLabelField({ placeholder: "Button text (use {fieldName} for dynamic values)" }),
+    label: createVariableLabelField({ placeholder: "Button text (use {{fieldName}} for dynamic values)" }),
     actions: createActionsField(),
     variant: {
       type: "radio",

@@ -5,6 +5,8 @@
  *
  * Compact node representing a skill.
  * Shows icon, name, and execution type badge.
+ * Org-level skills (agentId === null) can be dragged onto agent panels
+ * using React Flow's native drag - handled by onNodeDragStop in OrgChartCanvas.
  */
 
 import React, { memo } from 'react';

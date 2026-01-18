@@ -25,7 +25,7 @@ export function VariableLabelFieldRenderer({
   onChange,
   field,
   readOnly = false,
-  placeholder = 'Type { for variables...',
+  placeholder = 'Type {{ for variables...',
 }: VariableLabelFieldRendererProps) {
   return (
     <FieldLabel label={field.label || 'Label'}>

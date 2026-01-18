@@ -1185,10 +1185,38 @@ export const HUGGINGFACE_MODELS: Record<string, ModelMetadata> = {
 };
 
 /**
+ * Normalize model ID to match registry format.
+ *
+ * Handles cases where model ID might be missing provider prefix:
+ * - "gemini-2.0-flash" → "google/gemini-2.0-flash"
+ * - "google/gemini-2.0-flash" → "google/gemini-2.0-flash" (no change)
+ *
+ * AIDEV-NOTE: This is needed because smolagents OpenAIModel stores the short
+ * model name (without provider prefix) in token_usage, but the registry uses
+ * the full prefixed format for Google models.
+ */
+export function normalizeModelId(modelId: string): string {
+  // If already has a provider prefix, return as-is
+  if (modelId.includes('/')) {
+    return modelId;
+  }
+
+  // Check if this is a Gemini model without prefix
+  if (modelId.startsWith('gemini-')) {
+    return `google/${modelId}`;
+  }
+
+  // Return as-is for other models
+  return modelId;
+}
+
+/**
  * Get model metadata by ID
  */
 export function getModelMetadata(modelId: string): ModelMetadata | undefined {
-  return HUGGINGFACE_MODELS[modelId];
+  // Normalize model ID to handle missing prefixes (e.g., Gemini models)
+  const normalizedId = normalizeModelId(modelId);
+  return HUGGINGFACE_MODELS[normalizedId];
 }
 
 /**

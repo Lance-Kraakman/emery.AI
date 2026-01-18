@@ -11,6 +11,8 @@ import uuid
 from typing import Any, Dict, List, Optional, Union
 from smolagents import Tool
 from ..grpc.generated.agent_worker_pb2 import ToolConfig
+from .tool_modes import ToolMode, MUTATION_METHODS
+from ..services.context_manager import get_current_context
 
 logger = logging.getLogger(__name__)
 
@@ -191,6 +193,28 @@ class BaseCrudTool(Tool):
         # AIDEV-NOTE: Use Next.js base URL from environment, append /api path
         nextjs_base = os.getenv("NEXTJS_BASE_URL", "http://localhost:3000")
         self.base_url = f"{nextjs_base}/api"
+
+    def _check_mutation_allowed(self, method: str) -> Optional[Dict[str, Any]]:
+        """
+        Check if mutation is allowed based on current execution context mode.
+
+        AIDEV-NOTE: During PLANNING phase, only read operations are allowed.
+        Mutations (create, update, delete) are blocked until user approval.
+
+        Returns:
+            None if mutation is allowed, error dict if blocked
+        """
+        ctx = get_current_context()
+        if ctx and ctx.tool_mode == ToolMode.PLANNING:
+            method_lower = method.lower()
+            if method_lower in MUTATION_METHODS:
+                return {
+                    "success": False,
+                    "error": f"❌ Cannot {method} during planning phase. Present your plan first, wait for user approval, then execute.",
+                    "hint": f"Describe what you WILL {method} in your plan. After approval, you can execute.",
+                    "blocked_by": "planning_mode"
+                }
+        return None
 
     def _make_api_request(self, endpoint: str, method: str = "GET", data: Optional[Dict] = None,
                          auth_token: Optional[str] = None, organization_id: Optional[str] = None) -> Dict[str, Any]:
@@ -375,6 +399,11 @@ def load_agent_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
         def forward(self, method: str, agent_id: Optional[str] = None,
                    data: Optional[Dict] = None, filters: Optional[Dict] = None) -> Dict[str, Any]:
             """Execute agent CRUD operation."""
+
+            # Check if mutation is allowed during planning phase
+            blocked = self._check_mutation_allowed(method)
+            if blocked:
+                return blocked
 
             if method == "create":
                 if not data:
@@ -574,6 +603,11 @@ def load_document_crud(config: ToolConfig, api_key: Optional[str] = None, organi
                    data: Optional[Dict] = None) -> Dict[str, Any]:
             """Execute document CRUD operation."""
 
+            # Check if mutation is allowed during planning phase
+            blocked = self._check_mutation_allowed(method)
+            if blocked:
+                return blocked
+
             # AIDEV-NOTE: Coerce table_id and field_id to strings for URL params
             table_id_str = str(table_id) if table_id is not None else None
             field_id_str = str(field_id) if field_id is not None else None
@@ -720,6 +754,11 @@ def load_file_crud(config: ToolConfig, api_key: Optional[str] = None, organizati
                    field_id: Optional[str] = None, data: Optional[Dict] = None) -> Dict[str, Any]:
             """Execute file CRUD operation."""
 
+            # Check if mutation is allowed during planning phase
+            blocked = self._check_mutation_allowed(method)
+            if blocked:
+                return blocked
+
             if method == "create":
                 if not data:
                     return {"success": False, "error": "File data is required for create operation"}
@@ -811,6 +850,11 @@ def load_team_crud(config: ToolConfig, api_key: Optional[str] = None, organizati
         def forward(self, method: str, team_id: Optional[str] = None,
                    data: Optional[Dict] = None, filters: Optional[Dict] = None) -> Dict[str, Any]:
             """Execute team CRUD operation."""
+
+            # Check if mutation is allowed during planning phase
+            blocked = self._check_mutation_allowed(method)
+            if blocked:
+                return blocked
 
             if method == "create":
                 if not data:
@@ -913,12 +957,18 @@ def load_database_crud(config: ToolConfig, api_key: Optional[str] = None, organi
                    data: Optional[Dict] = None, filters: Optional[Dict] = None) -> Dict[str, Any]:
             """Execute database CRUD operation."""
 
+            # Check if mutation is allowed during planning phase
+            blocked = self._check_mutation_allowed(method)
+            if blocked:
+                return blocked
+
             if method == "create":
                 if not data:
                     return {"success": False, "error": "Database data is required for create operation. Provide {name, description}"}
 
+                # Request TOON format for minimal token usage
                 return self._make_api_request_with_deadline(
-                    endpoint="databases",
+                    endpoint="databases?format=llm",
                     method="POST",
                     data=data,
                     auth_token=_auth_token,
@@ -942,8 +992,9 @@ def load_database_crud(config: ToolConfig, api_key: Optional[str] = None, organi
                 if not data:
                     return {"success": False, "error": "Database data is required for update operation"}
 
+                # Request TOON format for minimal token usage
                 return self._make_api_request_with_deadline(
-                    endpoint=f"databases/{database_id}",
+                    endpoint=f"databases/{database_id}?format=llm",
                     method="PUT",
                     data=data,
                     auth_token=_auth_token,
@@ -954,21 +1005,20 @@ def load_database_crud(config: ToolConfig, api_key: Optional[str] = None, organi
                 if not database_id:
                     return {"success": False, "error": "Database ID is required for delete operation"}
 
+                # Request TOON format for minimal token usage
                 return self._make_api_request_with_deadline(
-                    endpoint=f"databases/{database_id}",
+                    endpoint=f"databases/{database_id}?format=llm",
                     method="DELETE",
                     auth_token=_auth_token,
                     organization_id=_org_id
                 )
 
             elif method == "list":
-                endpoint = "databases"
+                # Request TOON format for minimal token usage
+                endpoint = "databases?format=llm"
                 if filters:
-                    query_params = []
                     for key, value in filters.items():
-                        query_params.append(f"{key}={value}")
-                    if query_params:
-                        endpoint += "?" + "&".join(query_params)
+                        endpoint += f"&{key}={value}"
 
                 return self._make_api_request_with_deadline(
                     endpoint=endpoint,
@@ -1034,6 +1084,11 @@ Only include fields you want to change (partial updates allowed).""",
         def forward(self, method: str, skill_id: Optional[Union[str, int]] = None,
                    agent_id: Optional[Union[str, int]] = None, data: Optional[Dict] = None) -> Dict[str, Any]:
             """Execute skill CRUD operation."""
+
+            # Check if mutation is allowed during planning phase
+            blocked = self._check_mutation_allowed(method)
+            if blocked:
+                return blocked
 
             # AIDEV-NOTE: Coerce skill_id and agent_id to strings - LLMs often pass integers
             if skill_id is not None:

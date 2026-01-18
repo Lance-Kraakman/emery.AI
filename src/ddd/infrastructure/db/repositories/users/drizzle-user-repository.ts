@@ -1,7 +1,7 @@
 // AIDEV-NOTE: Drizzle implementation of IUserRepository - handles user authentication and management
 // User business operations with organization relationships and role management
 
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, ne, sql } from 'drizzle-orm';
 import type { InferSelectModel } from 'drizzle-orm';
 import { randomBytes } from 'crypto';
 
@@ -19,6 +19,7 @@ import type { Organization } from '@/ddd/domain/organizations/entities/organizat
 import { UserId, EmailAddress, ApiKey, OrganizationId, OrganizationName } from '@/ddd/domain/shared/value-objects';
 import { SystemRoleType, SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
 import type { DbClient } from '@/ddd/infrastructure/db/client';
+import { SYSTEM_USER_ID_VALUE } from '@/ddd/infrastructure/db/system-context';
 
 type UserRow = InferSelectModel<typeof users>;
 
@@ -271,7 +272,12 @@ export class DrizzleUserRepository
       })
       .from(userOrganizations)
       .innerJoin(users, eq(userOrganizations.userId, users.id))
-      .where(eq(userOrganizations.organizationId, organizationId.value));
+      .where(
+        and(
+          eq(userOrganizations.organizationId, organizationId.value),
+          ne(users.id, SYSTEM_USER_ID_VALUE) // Exclude system scheduler user from UI
+        )
+      );
 
     return result.map((r: { user: UserRow }) => this.fromPersistence(r.user));
   }
@@ -286,7 +292,7 @@ export class DrizzleUserRepository
       .where(
         and(
           eq(userOrganizations.organizationId, organizationId.value),
-          sql`true` /* organizationRole filtering removed in RBAC system */
+          ne(users.id, SYSTEM_USER_ID_VALUE) // Exclude system scheduler user from UI
         )
       );
 

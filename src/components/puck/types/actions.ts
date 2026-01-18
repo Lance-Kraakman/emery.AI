@@ -67,7 +67,7 @@ export interface SetStateAction {
   type: 'setState';
   /** Variable key (flat namespace - no container) */
   key: string;
-  /** Value to set (can use templates like {rowData.field}). null clears the value. */
+  /** Value to set (can use templates like {{rowData.field}}). null clears the value. */
   value: string | number | boolean | null;
   /** Whether to also update the URL param (default: true) */
   updateUrl?: boolean;

@@ -1,0 +1,113 @@
+{
+  "$format": "brain-template",
+  "$version": 1,
+  "metadata": {
+    "name": "Employee Directory",
+    "description": "Manage employee information, departments, titles, and office locations. Perfect for HR teams.",
+    "category": "HR",
+    "tags": ["employees", "hr", "directory", "team"],
+    "version": "1.0.0"
+  },
+  "template": {
+    "type": "database",
+    "data": {
+      "name": "Employee Directory",
+      "slug": "employee-directory",
+      "description": "Employee and organizational management",
+      "tables": [
+        {
+          "name": "Departments",
+          "description": "Company departments",
+          "fields": [
+            { "name": "Name", "slug": "name", "type": "text", "required": true },
+            { "name": "Description", "slug": "description", "type": "text" }
+          ]
+        },
+        {
+          "name": "Titles",
+          "description": "Job titles and levels",
+          "fields": [
+            { "name": "Name", "slug": "name", "type": "text", "required": true },
+            {
+              "name": "Level",
+              "slug": "level",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Entry", "color": "#6B7280" },
+                  { "id": 2, "value": "Mid", "color": "#3B82F6" },
+                  { "id": 3, "value": "Senior", "color": "#8B5CF6" },
+                  { "id": 4, "value": "Lead", "color": "#F59E0B" },
+                  { "id": 5, "value": "Manager", "color": "#10B981" },
+                  { "id": 6, "value": "Director", "color": "#EC4899" }
+                ]
+              }
+            },
+            { "name": "Description", "slug": "description", "type": "text" }
+          ]
+        },
+        {
+          "name": "Locations",
+          "description": "Office locations",
+          "fields": [
+            { "name": "Name", "slug": "name", "type": "text", "required": true },
+            { "name": "Address", "slug": "address", "type": "text" },
+            { "name": "City", "slug": "city", "type": "text" },
+            { "name": "Country", "slug": "country", "type": "text" }
+          ]
+        },
+        {
+          "name": "Employees",
+          "description": "Employee records",
+          "fields": [
+            { "name": "Name", "slug": "name", "type": "text", "required": true },
+            { "name": "Email", "slug": "email", "type": "email", "required": true },
+            { "name": "Phone", "slug": "phone", "type": "phone" },
+            {
+              "name": "Department",
+              "slug": "department",
+              "type": "relation",
+              "fieldConfig": {
+                "targetTableRef": "Departments",
+                "relationshipType": "many-to-many"
+              }
+            },
+            {
+              "name": "Title",
+              "slug": "title",
+              "type": "relation",
+              "fieldConfig": {
+                "targetTableRef": "Titles",
+                "relationshipType": "many-to-many"
+              }
+            },
+            {
+              "name": "Location",
+              "slug": "location",
+              "type": "relation",
+              "fieldConfig": {
+                "targetTableRef": "Locations",
+                "relationshipType": "many-to-many"
+              }
+            },
+            { "name": "Start Date", "slug": "start_date", "type": "date" },
+            {
+              "name": "Status",
+              "slug": "status",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Active", "color": "#10B981" },
+                  { "id": 2, "value": "On Leave", "color": "#F59E0B" },
+                  { "id": 3, "value": "Terminated", "color": "#EF4444" }
+                ]
+              }
+            },
+            { "name": "Photo", "slug": "photo", "type": "file" },
+            { "name": "Bio", "slug": "bio", "type": "text" }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,11 +1,13 @@
 """Stateful gRPC chat service. DB operations handled by Next.js."""
 
+import json
 import logging
 import os
+import re
 import time
 import asyncio
 import concurrent.futures
-from typing import AsyncIterator, Optional, List, Dict, Any, TypedDict, Literal, TypeVar, Coroutine
+from typing import AsyncIterator, Optional, List, Dict, Any, TypedDict, Literal, TypeVar, Coroutine, TYPE_CHECKING
 
 import grpc
 from grpc import aio
@@ -22,8 +24,10 @@ from emery_agents.agents.skill_builder_agent import create_skill_builder_agent
 from emery_agents.agents.document_builder_agent import create_document_builder_agent
 from emery_agents.agents.table_builder_agent import create_table_builder_agent
 from emery_agents.agents.schema_builder_agent import create_schema_builder_agent
+from emery_agents.agents.research_agent import create_research_agent
 from emery_agents.clients import HuggingFaceInferenceClient
 from emery_agents.tools.crud_tools import load_skill_crud, load_document_crud
+from emery_agents.services.tool_provider import ToolProvider
 from emery_agents.tools.skill_tool import SkillTool
 from emery_agents.tools.tool_executor import create_tool_executor
 from .generated import agent_worker_pb2, agent_worker_pb2_grpc
@@ -39,80 +43,90 @@ from .mappers.message_types import MessageContentList
 from ..services.model_provider import SmolagentsModelProvider
 from ..services.tool_loader import UnifiedToolLoader
 from ..services.session_manager import SessionManager
+from ..services.coordinator_state_machine import (
+    CoordinatorStateMachine,
+    Phase,
+    ActionType,
+    StateAction,
+)
 from ..services.file_processor import process_file
 from ..utils.error_classifier import classify_error
 from ..utils.error_messages import ErrorSeverity
+from ..utils.mention_parser import parse_agent_mention
+from .mention_routing import handle_agent_mention_routing
 from ..services.image_processor import ImageProcessor
 from ..services.agent_factory import AgentFactory, AgentConfig
 from ..services.token_usage_extractor import TokenUsageExtractor
 from ..services.agent_executor import AgentExecutor
 from ..services.skill_executor import SkillExecutorService
+from ..services.plan_service import PlanService
+from ..services.plan_step_executor import PlanStepExecutor
+from ..services.execution_coordinator import (
+    ExecutionCoordinator,
+    CoordinatorMode,
+    PlanCreatedEvent,
+    StepStartedEvent,
+    StepCompletedEvent,
+    StepFailedEvent,
+    EvaluationCompletedEvent,
+    ReplanTriggeredEvent,
+    ExecutionBlockedEvent,
+    GoalAchievedEvent,
+    ExecutionCompletedEvent,
+    DirectExecutionStartedEvent,
+    AwaitingClarificationEvent,
+    ErrorEvent,  # Plan generation / API errors
+    # Recovery events (confidence-based error handling)
+    RecoveryAnalysisEvent,
+    AutoFixStartedEvent,
+    AutoFixCompletedEvent,
+    RecoveryPlanProposedEvent,
+    # Cascade planning events
+    QuestionsCollectedEvent,
+    SubPlanCreatedEvent,
+    CascadingPlanCompleteEvent,
+)
+from ..models.planning_questions import QuestionAnswers
+from ..agents.evaluator_agent import create_evaluator_factory
+from ..models.plan import Plan, PlanStatus, create_plan
 from ..entities.execution_context import ExecutionContext
 from ..types import ExecutionMode
+from ..tools.tool_modes import ToolMode, filter_tools_for_mode
+from .message_processor import (
+    extract_user_api_key_from_tools,
+    extract_file_attachments,
+    extract_images_from_message,
+    extract_text_from_message,
+    build_task_with_conversation_context,
+)
+from .step_converter import (
+    extract_planning_step,
+    extract_action_step,
+    extract_final_step,
+    build_skill_message,
+)
+from .coordinator_event_converter import convert_coordinator_event
+from .response_types import (
+    StepType,
+    StepMetadata,
+    StepProgressDict,
+    ContentChunkDict,
+    ErrorDetailsDict,
+    ErrorDataDict,
+    ErrorResponseDict,
+    InterruptedResponseDict,
+    InputOptionDict,
+    AwaitingInputDataDict,
+    AwaitingInputResponseDict,
+    StreamResponseDict,
+)
+from .agents import ManagedAgentsFactory
+
+if TYPE_CHECKING:
+    from .generated.agent_worker_pb2 import AgentConfig, SkillConfig
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-
-
-# Type definitions for step progress
-StepType = Literal["PLANNING", "ACTION", "REASONING", "FINAL"]
-
-class StepMetadata(TypedDict, total=False):
-    """Metadata for execution steps."""
-    tool: str
-    arguments: str
-    observations: str
-    error: str
-    skill_name: str  # Name of executing skill/managed agent
-    skill_status: str  # "executing" | "completed" | "failed"
-    skill_message: str  # Detailed message about skill execution (can be multi-line)
-
-class StepProgressDict(TypedDict):
-    """Typed structure for step progress events."""
-    type: Literal["step_progress"]
-    step_type: StepType
-    step_name: str
-    content: str
-    metadata: StepMetadata
-    step_index: int
-
-
-class ContentChunkDict(TypedDict):
-    """Typed structure for content chunk events."""
-    type: Literal["content_chunk"]
-    content: str
-
-
-class ErrorDetailsDict(TypedDict, total=False):
-    """Error details metadata."""
-    severity: str
-
-
-class ErrorDataDict(TypedDict):
-    """Error data structure."""
-    error_code: str
-    error_message: str
-    error_details: ErrorDetailsDict
-    hint: str
-    can_retry: bool
-    auto_retry: bool
-    session_reset: bool
-
-
-class ErrorResponseDict(TypedDict):
-    """Typed structure for error response events."""
-    type: Literal["error"]
-    error: ErrorDataDict
-
-
-class InterruptedResponseDict(TypedDict):
-    """Typed structure for HITL interrupt events (not an error - pause for user approval)."""
-    type: Literal["interrupted"]
-    message: str
-
-
-# Union type for all possible stream response types
-StreamResponseDict = StepProgressDict | ContentChunkDict | ErrorResponseDict | InterruptedResponseDict
 
 
 # Type variable for generic async function return type
@@ -148,6 +162,53 @@ def _cleanup_thread_pool():
     logger.info("Chat processing thread pool shut down")
 
 atexit.register(_cleanup_thread_pool)
+
+
+def detect_stored_plan_from_skills(
+    skills: Optional[List['agent_worker_pb2.SkillConfig']]
+) -> Optional[Plan]:
+    """
+    Detect stored plan from skill configurations.
+
+    Scans skills for agentic steps that have pre-approved execution plans.
+    When found, the plan enables autonomous execution without HITL approval.
+
+    Args:
+        skills: List of SkillConfig proto messages from agent config
+
+    Returns:
+        Hydrated Plan object if found, None otherwise
+    """
+    if not skills:
+        return None
+
+    for skill in skills:
+        # Check if skill has steps (DAG-based execution)
+        if not skill.steps:
+            continue
+
+        for step in skill.steps:
+            # Check if step has agentic config with a plan
+            if not step.HasField('agentic_config'):
+                continue
+
+            agentic_config = step.agentic_config
+            if not agentic_config.HasField('plan'):
+                continue
+
+            # Check if plan has an ID (empty proto message means no plan)
+            if not agentic_config.plan.id:
+                continue
+
+            # Found a stored plan - hydrate it
+            stored_plan = Plan.from_stored_proto(agentic_config.plan)
+            logger.info(
+                f"📋 Found stored plan '{stored_plan.id}' in skill '{skill.name}' "
+                f"step '{step.name}' - enabling AUTONOMOUS mode"
+            )
+            return stored_plan
+
+    return None
 
 
 class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingServiceServicer):
@@ -204,7 +265,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             # Model provider and AgentFactory (shared utilities)
             self.model_provider = SmolagentsModelProvider()
             self.agent_factory = AgentFactory(self.model_provider)
-            logger.info("✅ AgentFactory initialized successfully")
+            self.managed_agents_factory = ManagedAgentsFactory(self.model_provider)
+            logger.info("✅ AgentFactory and ManagedAgentsFactory initialized successfully")
 
             # SkillExecutorService for shared skill execution logic
             self.skill_executor_service = SkillExecutorService(
@@ -212,6 +274,14 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 agent_factory=self.agent_factory
             )
             logger.info("✅ SkillExecutorService initialized successfully")
+
+            # PlanService for goal/plan tracking and persistence
+            # AIDEV-NOTE: Plans track complex task execution with nested sub-goals
+            self.plan_service = PlanService(
+                grpc_client=None,  # TODO: Wire gRPC client for persistence
+                model_provider=self.model_provider,
+            )
+            logger.info("✅ PlanService initialized (in-memory mode)")
 
             # Inference client for operation skills (lazy initialization)
             self._inference_client: Optional[HuggingFaceInferenceClient] = None
@@ -261,7 +331,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         # Extract file attachments (audio, PDFs) for skill context injection
         # AIDEV-NOTE: Don't add to session here - session may not exist yet (created lazily)
         # Attachments are passed to _stream_tool_calling_agent_response and added after session creation
-        file_attachments = self._extract_file_attachments(message_parts)
+        file_attachments = extract_file_attachments(message_parts)
         if file_attachments:
             logger.info(f"📎 Extracted {len(file_attachments)} file attachments")
 
@@ -291,6 +361,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             # 3. Generate AI Response using ToolCallingAgent (always)
             sequence = 0
             total_content = ""
+            current_plan_data: Dict[str, Any] | None = None  # Plan metadata from _stream_tool_calling_agent_response
 
             # Extract tools from AgentConfig
             tools_to_use = []
@@ -454,6 +525,43 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                         # Don't break - let it fall through to completion marker
                         # Session remains active for user to respond and resume
 
+                    elif response_type == "awaiting_input":
+                        # HITL: Agent needs user input (plan approval or question)
+                        # AIDEV-NOTE: This is the unified HITL mechanism for all agents
+                        awaiting_resp = response_dict  # type: AwaitingInputResponseDict
+                        data = awaiting_resp["data"]
+                        logger.info(f"⏸️ Agent awaiting input: type={data.get('input_type')}, title={data.get('title')}")
+
+                        # Build InputOption messages for proto
+                        input_options = []
+                        for opt in data.get("options", []):
+                            input_options.append(agent_worker_pb2.InputOption(
+                                id=opt.get("id", ""),
+                                label=opt.get("label", ""),
+                                description=opt.get("description", "")
+                            ))
+
+                        # Send AwaitingInput response
+                        awaiting_input_response = agent_worker_pb2.ProcessMessageResponse(
+                            awaiting_input=agent_worker_pb2.AwaitingInput(
+                                input_type=data.get("input_type", "question"),
+                                title=data.get("title", ""),
+                                content=data.get("content", ""),
+                                options=input_options,
+                                plan_json=data.get("plan_json", "")
+                            ),
+                            timestamp=int(time.time() * 1000)
+                        )
+                        yield awaiting_input_response
+                        # Don't break - session remains active for user response
+
+                    elif response_type == "plan_metadata":
+                        # Capture plan metadata yielded from _stream_tool_calling_agent_response
+                        # AIDEV-NOTE: Plan is defined inside the generator, so it yields plan data
+                        # for inclusion in completion metadata
+                        current_plan_data = response_dict.get("plan")
+                        logger.info(f"📋 Captured plan metadata: {current_plan_data.get('id') if current_plan_data else 'None'}")
+
                     else:
                         # Unknown response type - log warning
                         logger.warning(f"⚠️ Unknown response type: {response_type}, ignoring")
@@ -467,16 +575,26 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             # Get model name from token usage if available
             model_used = getattr(self.last_token_usage, 'model_name', '') if self.last_token_usage else ''
 
+            # Build completion metadata
+            completion_metadata = {
+                'content_length': str(len(total_content)),
+                'domain_type': request.context.domain_type if request.context else 'none'
+            }
+
+            # Include plan JSON if plan was created (for UI persistence)
+            # AIDEV-NOTE: Plan stored in message metadata for history/audit trail
+            # current_plan_data was captured from plan_metadata response yielded by _stream_tool_calling_agent_response
+            if current_plan_data:
+                completion_metadata['plan'] = json.dumps(current_plan_data)
+                logger.info(f"📋 Including plan {current_plan_data.get('id')} in completion metadata")
+
             complete_response = agent_worker_pb2.ProcessMessageResponse(
                 complete=agent_worker_pb2.ProcessingComplete(
                     model_used=model_used,
                     total_tokens=sequence,
                     processing_time_ms=processing_time,
                     token_usage=token_usage_proto,
-                    metadata={
-                        'content_length': str(len(total_content)),
-                        'domain_type': request.context.domain_type if request.context else 'none'
-                    }
+                    metadata=completion_metadata
                 ),
                 timestamp=int(time.time() * 1000)
             )
@@ -582,6 +700,17 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             logger.info(f"🔍 [SESSION-DEBUG] Checking for existing session: {session_id}")
             logger.info(f"🔍 [SESSION-DEBUG] Conversation history length: {len(conversation_history) if conversation_history else 0}")
 
+            # Get effective API key BEFORE hot/cold path split
+            # This is needed for tool provider regardless of hot/cold path
+            effective_api_key = user_api_key or extract_user_api_key_from_tools(tools)
+            if effective_api_key:
+                logger.info(f"🔑 Using API key for tools (source: {'request' if user_api_key else 'tools'})")
+            else:
+                logger.warning("⚠️ No API key available for tools")
+
+            # Create centralized tool provider - creates tools lazily with consistent auth
+            tool_provider = ToolProvider(effective_api_key or "", org_id or 0)
+
             agent = self.session_manager.get_agent(session_id) if session_id else None
 
             if agent:
@@ -602,45 +731,89 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 # Agent doesn't exist - COLD PATH (create + restore from history)
                 logger.info(f"✨ [COLD-PATH] Creating new agent for session {session_id}")
 
-                # Use user API key from request for managed agents
-                effective_api_key = user_api_key or self._extract_user_api_key_from_tools(tools)
-                if effective_api_key:
-                    logger.info(f"🔑 Using API key for managed agents (source: {'request' if user_api_key else 'tools'})")
-                else:
-                    logger.warning("⚠️ No API key available for managed agents - skill_builder/document_builder may fail")
+                # Create managed agents using factory with centralized tool provider
+                skill_builder_agent = self.managed_agents_factory.create_skill_builder(
+                    tool_provider=tool_provider,
+                    org_model=org_model
+                )
+                document_builder_agent = self.managed_agents_factory.create_document_builder(
+                    tool_provider=tool_provider,
+                    org_model=org_model
+                )
+                table_builder_agent = self.managed_agents_factory.create_table_builder(
+                    tool_provider=tool_provider,
+                    org_model=org_model
+                )
+                schema_builder_agent = self.managed_agents_factory.create_schema_builder(
+                    tool_provider=tool_provider,
+                    org_model=org_model
+                )
+                app_builder_agent = self.managed_agents_factory.create_app_builder(
+                    tool_provider=tool_provider,
+                    org_model=org_model
+                )
+                agent_builder_agent = self.managed_agents_factory.create_agent_builder(
+                    tool_provider=tool_provider,
+                    org_model=org_model
+                )
+                # Research agent may fail if ddgs package is missing - make it optional
+                # Pass api_key and org_id so ResearchEmery is created as managed agent
+                research_agent = None
+                try:
+                    research_agent = self.managed_agents_factory.create_research_agent(
+                        api_key=tool_provider.api_key,
+                        organization_id=tool_provider.organization_id,
+                        org_model=org_model
+                    )
+                except ImportError as e:
+                    logger.warning(f"Research agent unavailable (missing dependency): {e}")
 
-                # Create managed agents (routes automatically via smolagents)
-                skill_builder_agent = self._create_skill_builder_agent(
-                    api_key=effective_api_key or "",
-                    org_id=org_id,
-                    org_model=org_model
+                # Load user-defined agents (dynamically created from DB)
+                # AIDEV-NOTE: This enables ChatPlanner to route to user agents via:
+                # 1. Natural language ("use my sales bot") via managed_agents
+                # 2. Template display (user_agents_metadata shows them in instructions)
+                user_agent_executors, user_agents_metadata = await self.managed_agents_factory.load_user_agents(
+                    tool_provider, org_model
                 )
-                document_builder_agent = self._create_document_builder_agent(
-                    api_key=effective_api_key or "",
-                    org_id=org_id,
-                    org_model=org_model
-                )
-                table_builder_agent = self._create_table_builder_agent(
-                    api_key=effective_api_key or "",
-                    org_id=org_id,
-                    org_model=org_model
-                )
-                schema_builder_agent = self._create_schema_builder_agent(
-                    api_key=effective_api_key or "",
-                    org_id=org_id,
-                    org_model=org_model
+
+                # Create system_designer agent (top-level orchestrator for complex systems)
+                # AIDEV-NOTE: system_designer understands the full Emery ecosystem and
+                # designs complete automation flows (agents -> skills -> databases -> views -> apps).
+                # It delegates to specialized builders for actual resource creation.
+                system_designer_agent = self.managed_agents_factory.create_system_designer(
+                    tool_provider=tool_provider,
+                    org_model=org_model,
+                    managed_agents=[
+                        schema_builder_agent,
+                        app_builder_agent,
+                        agent_builder_agent,
+                        skill_builder_agent,
+                    ]
                 )
 
                 # Create ToolCallingAgent with managed agents
-                # AIDEV-NOTE: InterruptAwareToolCallingAgent sets interrupt_switch=True
+                # InterruptAwareToolCallingAgent sets interrupt_switch=True
                 # when detecting interrupt from managed agent, breaking the loop
                 # Pass file_attachments so chat agent can see available files in session
-                agent = self._create_agent_with_model_provider(
+                # Filter None values in case research_agent failed to create
+                managed_agents = [a for a in [
+                    skill_builder_agent, document_builder_agent,
+                    table_builder_agent, schema_builder_agent,
+                    app_builder_agent, agent_builder_agent, research_agent,
+                    system_designer_agent,  # Top-level orchestrator for complex systems
+                ] if a is not None]
+
+                # Add user-defined agent executors to managed agents
+                managed_agents.extend(user_agent_executors)
+                logger.info(f"📋 Total managed agents: {len(managed_agents)} ({len(user_agent_executors)} user-defined)")
+
+                agent = self.managed_agents_factory.create_chat_planner(
                     smolagents_tools,
                     org_model=org_model,
                     has_images=has_images,
-                    managed_agents=[skill_builder_agent, document_builder_agent, table_builder_agent, schema_builder_agent],
-                    session_attachments=file_attachments  # Current message files for initial agent context
+                    managed_agents=managed_agents,
+                    user_agents=user_agents_metadata,  # For template display
+                    session_attachments=file_attachments
                 )
 
                 logger.info(f"🧠 [MEMORY-DEBUG] New agent created, memory steps: {len(agent.memory.steps)}")
@@ -701,14 +874,31 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             last_message = conversation_messages[-1] if conversation_messages else None
 
             # Extract images from last message (smolagents limitation - only last message images)
-            images = self._extract_images_from_message(last_message) if last_message else []
+            images = extract_images_from_message(last_message) if last_message else []
 
             # Extract current user message text (agent.memory has conversation history)
-            current_task = self._extract_text_from_message(last_message) if last_message else "Continue the conversation"
+            current_task = extract_text_from_message(last_message) if last_message else "Continue the conversation"
 
             logger.info(f"🖼️ Extracted {len(images)} images from last message")
             logger.info(f"💬 Current task: {len(current_task)} chars")
             logger.info(f"🧠 Agent memory: {len(agent.memory.steps)} steps")
+
+            # === @AGENT MENTION DETECTION ===
+            # Parse @agent:name mention to route directly to user-defined agents
+            cleaned_task, agent_mention = parse_agent_mention(current_task)
+            if agent_mention:
+                logger.info(f"🎯 Detected @agent mention: '{agent_mention}'")
+                async for event in handle_agent_mention_routing(
+                    agent_mention=agent_mention,
+                    task=cleaned_task,
+                    tool_provider=tool_provider,
+                    model_provider=self.model_provider,
+                    skill_executor_service=self.skill_executor_service,
+                    org_model=org_model,
+                    images=images,
+                ):
+                    yield event
+                return  # Agent mention handled - don't continue to normal flow
 
             # 6. Execute with ToolCallingAgent with real streaming
             # AIDEV-NOTE: skill_builder is a managed_agent - smolagents routes automatically
@@ -717,6 +907,50 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
             step_index = 0
             final_answer_text = ""
+
+            # Check coordinator phase FIRST to avoid creating plans for approval messages
+            # Coordinator internally decides mode: PASSTHROUGH, DIRECT, or PLAN_AND_APPROVE
+            # AIDEV-NOTE: Using CoordinatorStateMachine for unified phase handling
+            sm = self.session_manager.get_or_create_state_machine(session_id) if session_id else None
+            skip_coordinator = False  # Flag to skip coordinator for HITL resume
+
+            # Handle non-IDLE phases via state machine
+            # State machine returns combined_task for clarifications and feedback
+            if sm and sm.phase != Phase.IDLE:
+                original_phase = sm.phase  # Capture before handle_input clears it
+
+                # Determine input type based on current phase
+                if sm.phase == Phase.AWAITING_CLARIFICATION:
+                    input_type = "clarification"
+                    logger.info("📋 Processing clarification response via state machine")
+                elif sm.phase == Phase.AWAITING_QUESTIONS:
+                    input_type = "approval" if self._is_approval_response(current_task) else "feedback"
+                    logger.info(f"📋 Processing managed agent HITL response: {input_type}")
+                else:
+                    input_type = "task"
+
+                action = sm.handle_input(input_type, current_task)
+
+                # AWAITING_QUESTIONS returns FALL_THROUGH - skip coordinator, let agent.run() resume
+                if original_phase == Phase.AWAITING_QUESTIONS and action.action_type == ActionType.FALL_THROUGH:
+                    skip_coordinator = True
+                    if action.combined_task:
+                        current_task = action.combined_task
+                    logger.info("📋 HITL response, skipping coordinator - will resume managed agent")
+                elif action.combined_task:
+                    current_task = action.combined_task
+                    logger.info("📋 State machine combined task for replan")
+
+            # Create Plan for tracking this execution
+            # AIDEV-NOTE: Plan provides visibility into complex task progress and enables HITL
+            # Only create for new tasks (idle phase), not for approvals or ongoing execution
+            current_plan: Plan | None = None
+            if agent.managed_agents and (not sm or sm.phase == Phase.IDLE):  # Only for new tasks
+                current_plan = create_plan(
+                    goal=current_task[:200] if len(current_task) > 200 else current_task,
+                    basic_instructions=current_task
+                )
+                logger.info(f"📋 Created plan {current_plan.id} for task: {current_plan.goal[:100]}...")
 
             # Set execution context for skill tools to access file attachments
             # This enables _inject_context_inputs() in SkillTool to inject audio/image bytes
@@ -728,6 +962,17 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             # When LLM doesn't specify a filename → uses current message file
             # When LLM specifies a filename → searches session_attachments by name
             session_attachments = self.session_manager.get_attachments(session_id) if session_id else []
+
+            # Collect nested skill steps for streaming to UI after skill completes
+            # AIDEV-NOTE: Steps collected during synchronous skill execution, yielded after
+            collected_nested_steps: List[Dict[str, Any]] = []
+
+            def progress_callback(step_dict: Dict[str, Any]) -> None:
+                """Callback for nested skill progress - collects steps for later yielding."""
+                step_dict['nested'] = True  # Mark as nested for UI rendering
+                collected_nested_steps.append(step_dict)
+                logger.info(f"📥 Collected nested step: {step_dict.get('step_name', 'unknown')}")
+
             context = ExecutionContext(
                 mode=ExecutionMode.INTERACTIVE,  # Chat = interactive (with HITL)
                 task=current_task,
@@ -735,9 +980,50 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 images=[],  # Images already passed via smolagents images param
                 attachments=file_attachments or [],  # Current message files (default)
                 session_attachments=session_attachments,  # All session files (for explicit lookup)
+                progress_callback=progress_callback,  # For nested skill step visibility
+                tool_mode=ToolMode.EXECUTION,  # Default: allow mutations
+                api_key=tool_provider.api_key,  # For any direct auth needs
+                organization_id=str(tool_provider.organization_id),  # For RLS context (str type)
+                tool_provider=tool_provider,  # Centralized tool creation
             )
             AgentExecutor.set_current_context(context)
             logger.info(f"📎 Set execution context: {len(file_attachments or [])} current, {len(session_attachments)} session files")
+
+            # Get managed agents for coordinator's mode detection
+            # State machine (sm) handles phase tracking via on_* event handlers
+            # Extract agent objects (values) from the managed_agents dict, not keys
+            managed_agents = []
+            if hasattr(agent, 'managed_agents') and agent.managed_agents:
+                managed_agents = list(agent.managed_agents.values())
+
+            # Detect stored plan from agent config skills
+            # If found, enables autonomous execution (skip HITL approval)
+            stored_plan = None
+            if agent_config and agent_config.skills:
+                stored_plan = detect_stored_plan_from_skills(list(agent_config.skills))
+
+            # Coordinator handles all execution paths (skip for HITL resume)
+            should_fall_through = skip_coordinator  # True if resuming managed agent HITL
+            if not skip_coordinator:
+                async for event in self._stream_coordinator_response(
+                    context=context,
+                    tools=smolagents_tools,
+                    task=current_task,
+                    session_id=session_id,
+                    org_model=org_model,
+                    sm=sm,  # Pass state machine for phase handling
+                    managed_agents=managed_agents,
+                    stored_plan=stored_plan,  # Pass stored plan for autonomous execution
+                ):
+                    if isinstance(event, dict):
+                        # Regular event - yield it
+                        yield event
+                    elif event == "FALL_THROUGH":
+                        # Signal to continue with normal agent flow
+                        should_fall_through = True
+
+            if not should_fall_through:
+                return  # Coordinator handled everything
 
             # Use stream=True for real-time step-by-step progress
             # Pass images via official smolagents API (images parameter)
@@ -755,16 +1041,39 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 step_data: StepProgressDict | None = None
 
                 if isinstance(step, PlanningStep):
-                    step_data = self._extract_planning_step(step, step_index)
+                    step_data = extract_planning_step(step, step_index)
                     logger.info(f"🧠 Planning: {step_data['content'][:100]}...")
 
                 elif isinstance(step, ActionStep):
-                    step_data = self._extract_action_step(step, step_index)
+                    # Skip showing final_answer tool call - it's internal machinery
+                    # The FinalAnswerStep will show the actual content
+                    if step.tool_calls and len(step.tool_calls) > 0:
+                        if step.tool_calls[0].name == "final_answer":
+                            step_index += 1
+                            continue
+
+                    step_data = extract_action_step(step, step_index)
                     logger.info(f"🔧 Action: {step_data['step_name']}")
+
+                    # Yield collected nested steps from skill execution (if any)
+                    # AIDEV-NOTE: Nested steps were collected during synchronous skill.forward()
+                    if collected_nested_steps:
+                        logger.info(f"📤 Yielding {len(collected_nested_steps)} nested steps from skill execution")
+                        for nested_step in collected_nested_steps:
+                            nested_step_data: StepProgressDict = {
+                                "type": "step_progress",
+                                "step_type": nested_step.get('type', 'ACTION').upper(),
+                                "step_name": nested_step.get('step_name', 'Nested step'),
+                                "content": nested_step.get('content', ''),
+                                "metadata": nested_step.get('metadata', {}),
+                                "step_index": step_index  # Use parent step index for ordering
+                            }
+                            yield nested_step_data
+                        collected_nested_steps.clear()
 
                 elif isinstance(step, (FinalAnswerStep, AgentText)):
                     # Extract final step indicator
-                    step_data = self._extract_final_step(step_index)
+                    step_data = extract_final_step(step_index)
 
                     # Extract final answer text
                     if isinstance(step, FinalAnswerStep):
@@ -818,6 +1127,35 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
             logger.info(f"✅ Completed streaming with {step_index} steps")
 
+            # Yield plan metadata for ProcessMessage to include in completion
+            # AIDEV-NOTE: current_plan is defined in this method but completion code
+            # is in ProcessMessage - yield it as a special response type
+            if current_plan:
+                # AIDEV-NOTE: Plan.status and PlanStep.status are already strings (not enums)
+                # See models/plan.py: status: str = PlanStatus.DRAFT.value
+                plan_metadata: Dict[str, Any] = {
+                    "type": "plan_metadata",
+                    "plan": {
+                        'id': current_plan.id,
+                        'goal': current_plan.goal,
+                        'status': current_plan.status,
+                        'steps': [
+                            {
+                                'id': step.step_id,
+                                'description': step.description,
+                                'status': step.status,
+                                'tool_call': step.tool_call,
+                                'result': step.result
+                            }
+                            for step in current_plan.steps
+                        ],
+                        'generated_at': current_plan.generated_at.isoformat() if current_plan.generated_at else None,
+                        'approved_at': current_plan.approved_at.isoformat() if current_plan.approved_at else None
+                    }
+                }
+                yield plan_metadata
+                logger.info(f"📋 Yielded plan metadata for {current_plan.id}")
+
         except Exception as e:
             # ============================================================
             # Check for HITL Interrupt (not an error - pause for user approval)
@@ -850,19 +1188,28 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                         if plan_content:
                             break
 
-                # Build descriptive message with plan content
-                if plan_content:
-                    message = f"## Proposed Plan\n\n{plan_content}\n\n---\n\n**Reply 'yes' or 'approve' to proceed, or provide feedback.**"
-                else:
-                    logger.warning("⚠️ No plan found in agent memory for interrupt message")
-                    message = "Waiting for your approval to proceed."
-
-                # Session preserved with reset=False for resumption on next message
-                interrupted_response: InterruptedResponseDict = {
-                    "type": "interrupted",
-                    "message": message
+                # Build structured awaiting_input response for UI
+                # AIDEV-NOTE: Use awaiting_input instead of interrupted to render
+                # structured approval UI with keyboard navigation
+                awaiting_input_response: AwaitingInputResponseDict = {
+                    "type": "awaiting_input",
+                    "data": {
+                        "input_type": "plan_approval",
+                        "title": "Proposed Plan",
+                        "content": plan_content or "Waiting for your approval to proceed.",
+                        "options": [
+                            {"id": "approve", "label": "Approve", "description": "Execute the plan as-is"}
+                        ],
+                        "plan_json": ""
+                    }
                 }
-                yield interrupted_response
+                yield awaiting_input_response
+
+                # Preserve state for managed agent HITL flow via state machine
+                # This enables iterative question answering and context preservation
+                if sm:
+                    sm.on_managed_agent_hitl(task=current_task)
+                    logger.info(f"📊 Session {session_id}: Managed agent HITL, awaiting questions/approval")
                 return
 
             # ============================================================
@@ -889,26 +1236,37 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 logger.info("💡 Session preserved for manual retry")
 
             elif error_info.severity == ErrorSeverity.RECOVERABLE:
-                # RECOVERABLE errors: Clear agent memory but keep session
+                # RECOVERABLE errors: Preserve state for retry, just track errors
+                # User can say "retry" or continue naturally
                 if session_id:
-                    logger.info(f"🔄 Recoverable error - clearing agent memory for session {session_id}")
-                    self.session_manager.reset_agent_memory(session_id)
+                    logger.info(f"🔄 Recoverable error - preserving session {session_id} for continuation")
                     self.session_manager.increment_error_count(session_id, error_info.error_type)
 
-                    # Check if error threshold exceeded
-                    if self.session_manager.should_remove_session_on_error(session_id):
-                        logger.warning(f"🚨 Error threshold exceeded - removing session {session_id}")
+                    # Only remove after many consecutive errors (threshold: 5)
+                    if self.session_manager.should_remove_session_on_error(session_id, threshold=5):
+                        logger.warning(f"🚨 Too many consecutive errors - removing session {session_id}")
                         await self.session_manager.remove_session_on_error(session_id, "error_threshold")
                         session_was_reset = True
+                    # DON'T clear agent memory - user can retry
                 else:
                     logger.warning("⚠️ No session_id provided - cannot track errors")
 
             elif error_info.severity == ErrorSeverity.FATAL:
-                # FATAL errors: Remove session entirely
-                if session_id:
-                    logger.error(f"💀 Fatal error - removing session {session_id}")
+                # FATAL errors: Only destroy for truly unrecoverable situations
+                truly_fatal = error_info.error_type in ['AUTH_FAILURE', 'RESOURCE_NOT_FOUND', 'PERMISSION_DENIED']
+
+                if truly_fatal and session_id:
+                    logger.error(f"💀 Truly fatal error - removing session {session_id}")
                     await self.session_manager.remove_session_on_error(session_id, error_info.error_type)
                     session_was_reset = True
+                    # Get state machine and mark as fatal
+                    sm = self.session_manager.get_state_machine(session_id)
+                    if sm:
+                        sm.on_error(error_info.error_type, fatal=True)
+                elif session_id:
+                    # Demote to recoverable - preserve for retry
+                    logger.warning(f"⚠️ Error marked fatal but preserving session for retry: {error_info.error_type}")
+                    self.session_manager.increment_error_count(session_id, error_info.error_type)
 
             # 4. Send user-friendly error (NO technical details)
             error_details: ErrorDetailsDict = {
@@ -1009,559 +1367,6 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             self._inference_client = HuggingFaceInferenceClient()
         return self._inference_client
 
-    def _create_agent_with_model_provider(
-        self,
-        smolagents_tools: List[Any],
-        org_model: Optional[str] = None,
-        has_images: bool = False,
-        managed_agents: Optional[List[Any]] = None,
-        session_attachments: Optional[List[Any]] = None
-    ) -> InterruptAwareToolCallingAgent:
-        """
-        Create Chat Planner orchestrator agent with managed agents.
-
-        Uses create_chat_planner_agent for proper template-based instructions
-        and interrupt propagation from managed agents.
-
-        Args:
-            session_attachments: Optional list of file attachments available in session
-                                (displayed to agent for file reference awareness)
-        """
-        # Get model with smart vision selection
-        model = self.model_provider.get_model(
-            model_id=self.model_provider.resolve_model_selection(
-                org_model=org_model,
-                has_images=has_images
-            )
-        )
-
-        return create_chat_planner_agent(
-            tools=smolagents_tools,
-            model=model,
-            managed_agents=managed_agents,
-            context_type="interactive",
-            max_steps=10,
-            session_attachments=session_attachments
-        )
-
-    def _create_skill_builder_agent(
-        self,
-        api_key: str,
-        org_id: Optional[int],
-        org_model: Optional[str] = None
-    ) -> ToolCallingAgent:
-        """
-        Create a Skill Builder agent with native planning for HITL workflow.
-
-        This agent runs as a TOP-LEVEL agent (not managed agent) so that
-        interrupt() works natively for human-in-the-loop approval.
-
-        AIDEV-NOTE: Changed from managed agent to top-level agent because
-        smolagents wraps managed agent interrupts as errors, breaking HITL.
-
-        AIDEV-NOTE: Uses native planning_interval + step_callbacks for human-in-the-loop:
-        - planning_interval=1: Plan after first action (reading skill)
-        - step_callbacks: Interrupt after planning for user approval
-        - reset=False: Memory preserved between messages for resumption
-
-        AIDEV-NOTE: Uses ToolExecutorTool to delegate tool calls to a sub-agent with
-        proper instructions. The sub-agent gets tool-specific docs from build_agent_instructions
-        and executor rules from tool_executor.j2 template.
-        """
-        # Create the CRUD tool (will be wrapped by tool_executor)
-        skill_crud_tool = load_skill_crud(None, api_key, org_id)
-
-        # Get model for the agent and sub-agent
-        model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
-
-        # Create tool_executor that wraps the CRUD tool
-        # Sub-agent gets proper instructions via build_agent_instructions
-        tool_executor = create_tool_executor(
-            tools=[skill_crud_tool],
-            model=model,
-            max_steps=3
-        )
-
-        # Use factory function with native planning support
-        # CodeAgent calls tool_executor which delegates to sub-agent
-        skill_builder = create_skill_builder_agent(
-            tools=[tool_executor],
-            model=model,
-            max_steps=10
-        )
-
-        logger.info("✨ Created Skill Builder agent with ToolExecutor sub-agent")
-        return skill_builder
-
-    def _create_document_builder_agent(
-        self,
-        api_key: str,
-        org_id: Optional[int],
-        org_model: Optional[str] = None
-    ) -> ToolCallingAgent:
-        """
-        Create a Document Builder agent with native planning for HITL workflow.
-
-        This agent runs as a TOP-LEVEL agent (not managed agent) so that
-        interrupt() works natively for human-in-the-loop approval.
-
-        AIDEV-NOTE: Uses native planning_interval + step_callbacks for human-in-the-loop:
-        - planning_interval=1: Plan after first action (reading document)
-        - step_callbacks: Interrupt after planning for user approval
-        - reset=False: Memory preserved between messages for resumption
-
-        AIDEV-NOTE: Uses ToolExecutorTool to delegate tool calls to a sub-agent with
-        proper instructions. The sub-agent gets tool-specific docs from build_agent_instructions
-        and executor rules from tool_executor.j2 template.
-        """
-        # Create the CRUD tool (will be wrapped by tool_executor)
-        document_crud_tool = load_document_crud(None, api_key, org_id)
-
-        # Get model for the agent and sub-agent
-        model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
-
-        # Create tool_executor that wraps the CRUD tool
-        # Sub-agent gets proper instructions via build_agent_instructions
-        tool_executor = create_tool_executor(
-            tools=[document_crud_tool],
-            model=model,
-            max_steps=3
-        )
-
-        # Use factory function with native planning support
-        # CodeAgent calls tool_executor which delegates to sub-agent
-        document_builder = create_document_builder_agent(
-            tools=[tool_executor],
-            model=model,
-            max_steps=10
-        )
-
-        logger.info("✨ Created Document Builder agent with ToolExecutor sub-agent")
-        return document_builder
-
-    def _create_table_builder_agent(
-        self,
-        api_key: str,
-        org_id: Optional[int],
-        org_model: Optional[str] = None
-    ) -> ToolCallingAgent:
-        """
-        Create a Table Builder agent for single table operations (autonomous).
-
-        This agent executes directly without HITL approval - designed for
-        quick schema changes like adding/deleting fields.
-
-        AIDEV-NOTE: Unlike skill_builder/document_builder which use HITL workflow,
-        table_builder is autonomous because single field operations are low-risk.
-        """
-        from emery_agents.tools.crud_tools import load_field_crud, load_table_crud
-
-        # Load CRUD tools for table/field operations
-        field_crud_tool = load_field_crud(None, api_key, org_id)
-        table_crud_tool = load_table_crud(None, api_key, org_id)
-
-        # Get model for the agent and sub-agent
-        model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
-
-        # Create tool_executor that wraps the CRUD tools
-        tool_executor = create_tool_executor(
-            tools=[field_crud_tool, table_crud_tool],
-            model=model,
-            max_steps=3
-        )
-
-        # Use factory function - autonomous agent (no HITL)
-        table_builder = create_table_builder_agent(
-            tools=[tool_executor],
-            model=model,
-            max_steps=6  # Smaller for single operations
-        )
-
-        logger.info("✨ Created Table Builder agent (autonomous) with ToolExecutor sub-agent")
-        return table_builder
-
-    def _create_schema_builder_agent(
-        self,
-        api_key: str,
-        org_id: Optional[int],
-        org_model: Optional[str] = None
-    ) -> ToolCallingAgent:
-        """
-        Create a Schema Builder agent for complex schema design (HITL).
-
-        This agent uses HITL workflow for designing schemas from requirements:
-        - Analyzes unstructured data (questionnaires, forms, specs)
-        - Proposes table structure with all fields
-        - Waits for user approval
-        - Batch creates fields on approval
-
-        AIDEV-NOTE: Uses native planning_interval + step_callbacks for human-in-the-loop:
-        - planning_interval=2: Plan after 2 actions (gathers context first)
-        - step_callbacks: Interrupt after planning for user approval
-        - reset=False: Memory preserved between messages for resumption
-        """
-        from emery_agents.tools.crud_tools import load_field_crud, load_table_crud, load_database_crud
-
-        # Load CRUD tools for table/field/database operations
-        # database_crud needed for list_databases to find existing databases
-        field_crud_tool = load_field_crud(None, api_key, org_id)
-        table_crud_tool = load_table_crud(None, api_key, org_id)
-        database_crud_tool = load_database_crud(None, api_key, org_id)
-
-        # Get model for the agent and sub-agent
-        model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
-
-        # Create tool_executor that wraps the CRUD tools
-        tool_executor = create_tool_executor(
-            tools=[field_crud_tool, table_crud_tool, database_crud_tool],
-            model=model,
-            max_steps=8  # More steps for database listing + batch field creation
-        )
-
-        # Use factory function with native planning support (HITL)
-        schema_builder = create_schema_builder_agent(
-            tools=[tool_executor],
-            model=model,
-            max_steps=15  # More steps for analyzing and batch creating
-        )
-
-        logger.info("✨ Created Schema Builder agent (HITL) with ToolExecutor sub-agent")
-        return schema_builder
-
-    def _extract_user_api_key_from_tools(self, tools: List['agent_worker_pb2.ToolConfig']) -> Optional[str]:
-        """
-        Extract user API key from enriched tool configs.
-
-        The Next.js layer enriches tool configs with user API keys for authentication.
-        This extracts the key so managed agents (like skill_builder) can reuse it.
-
-        Args:
-            tools: List of ToolConfig proto objects with config maps
-
-        Returns:
-            User API key string if found, None otherwise
-        """
-        for tool in tools:
-            if tool.config:
-                api_key = tool.config.get('api_key')
-                if api_key and api_key.startswith('user_'):
-                    logger.debug(f"🔑 Extracted user API key from tool {tool.name}")
-                    return api_key
-        logger.warning("⚠️ No user API key found in tool configs")
-        return None
-
-    def _extract_file_attachments(self, message_parts: List['agent_worker_pb2.MessagePart']) -> List['agent_worker_pb2.FileAttachment']:
-        """
-        Extract file attachments (audio, PDFs, etc.) from message parts.
-
-        Used to pass file context to skills that need raw file bytes (e.g., speech-to-text).
-
-        Args:
-            message_parts: List of MessagePart from the request
-
-        Returns:
-            List of FileAttachment protos with url and mime_type
-        """
-        attachments = []
-        for part in message_parts:
-            if part.HasField('file'):
-                # Create FileAttachment from the file part
-                attachment = agent_worker_pb2.FileAttachment(
-                    url=part.file.url,
-                    mime_type=part.file.mime_type
-                )
-                attachments.append(attachment)
-        return attachments
-
-    def _extract_images_from_message(self, message: ChatMessage) -> list[Image.Image]:
-        """Extract PIL Image objects from ChatMessage content using shared utility."""
-        return ImageProcessor.extract_images_from_message(message)
-
-    def _extract_text_from_message(self, message: ChatMessage) -> str:
-        """
-        Extract text content from ChatMessage.
-
-        Args:
-            message: ChatMessage object with content as MessageContentList
-
-        Returns:
-            Combined text string (empty string if no text content)
-
-        AIDEV-NOTE: Used to extract text for agent.run() task parameter.
-        Content is always MessageContentList (list of content parts).
-        """
-        if not message or not message.content:
-            return ""
-
-        content: MessageContentList = message.content
-
-        # Extract all text from content parts
-        text_parts: list[str] = []
-        for part in content:
-            if part.get("type") == "text":
-                text_parts.append(part["text"])
-
-        return " ".join(text_parts).strip()
-
-    def _build_task_with_conversation_context(
-        self,
-        conversation_messages: List[ChatMessage],
-        system_prompt: str
-    ) -> str:
-        """
-        Build task prompt with full conversation history.
-
-        Since we create a NEW agent per request, agent.memory doesn't persist
-        between requests. Instead, we include the full conversation history
-        in the task prompt itself.
-
-        Args:
-            conversation_messages: List of ChatMessage objects (user and assistant)
-            system_prompt: System prompt to include as context
-
-        Returns:
-            Formatted task string with conversation history
-
-        AIDEV-NOTE: This is the key to context persistence - we manually format
-        conversation history into the task prompt instead of relying on agent.memory
-        which doesn't persist across agent instances.
-        """
-        if not conversation_messages:
-            return "Continue the conversation"
-
-        # Build conversation history as text
-        history_parts = []
-
-        # Add system context at the beginning
-        if system_prompt:
-            history_parts.append(f"SYSTEM CONTEXT:\n{system_prompt}\n")
-
-        # Add previous conversation (all but last message)
-        if len(conversation_messages) > 1:
-            history_parts.append("CONVERSATION HISTORY:")
-            for msg in conversation_messages[:-1]:
-                role = msg.role.value.upper()
-                text = self._extract_text_from_message(msg)
-                if text:
-                    history_parts.append(f"{role}: {text}")
-
-        # Add current message as the task
-        last_message = conversation_messages[-1]
-        current_text = self._extract_text_from_message(last_message)
-
-        if history_parts:
-            # If we have history, format with clear separation
-            history_str = "\n".join(history_parts)
-            return f"{history_str}\n\nCURRENT USER MESSAGE:\n{current_text}"
-        else:
-            # First message in conversation
-            return current_text
-
-    def _extract_planning_step(self, step: PlanningStep, index: int) -> StepProgressDict:
-        """
-        Extract typed data from PlanningStep.
-
-        PlanningStep has 'plan' attribute containing the planning text.
-        No hasattr checks needed - smolagents guarantees this structure.
-        """
-        return StepProgressDict(
-            type="step_progress",
-            step_type="PLANNING",
-            step_name="Planning",
-            content=step.plan,
-            metadata=StepMetadata(),
-            step_index=index
-        )
-
-    def _extract_action_step(self, step: ActionStep, index: int) -> StepProgressDict:
-        """
-        Extract typed data from ActionStep.
-
-        ActionStep has 'tool_calls' (list of ToolCall objects), 'code_action' (for CodeAgent),
-        and 'observations'. When tool_calls is empty/None, checks for code_action (CodeAgent),
-        then falls back to model_output for raw LLM response.
-
-        AIDEV-NOTE: CodeAgent populates step.code_action with Python code, not tool_calls.
-        We now handle this as a CODE_EXECUTION step type for proper UI display.
-        """
-        # Extract tool info from tool_calls
-        tool_name = "unknown"
-        tool_args = "{}"
-        step_type = "ACTION"
-        step_name = "Tool: unknown"
-        content = ""
-
-        if step.tool_calls and len(step.tool_calls) > 0:
-            # Has valid tool calls (ToolCallingAgent)
-            tool_call = step.tool_calls[0]
-            tool_name = tool_call.name
-            tool_args = str(tool_call.arguments)
-            step_name = f"Tool: {tool_name}"
-
-            # Format observations (truncate if too long)
-            if step.observations:
-                obs = str(step.observations)
-                MAX_LENGTH = 500
-                content = obs[:MAX_LENGTH] + "..." if len(obs) > MAX_LENGTH else obs
-
-        elif step.code_action:
-            # CodeAgent: has Python code execution instead of tool_calls
-            # AIDEV-NOTE: code_action contains the Python code that was executed
-            step_type = "CODE_EXECUTION"
-            step_name = "Code Execution"
-            tool_name = "python_interpreter"
-
-            # Format the code (truncate if too long)
-            code = str(step.code_action)
-            MAX_CODE_LENGTH = 1000
-            content = code[:MAX_CODE_LENGTH] + "..." if len(code) > MAX_CODE_LENGTH else code
-            tool_args = code[:500]  # Store truncated code in args
-
-            # Append observations/output if available
-            if step.observations:
-                obs = str(step.observations)
-                MAX_OUTPUT_LENGTH = 500
-                output_truncated = obs[:MAX_OUTPUT_LENGTH] + "..." if len(obs) > MAX_OUTPUT_LENGTH else obs
-                content += f"\n\n--- Output ---\n{output_truncated}"
-
-            logger.info(f"📜 CodeAgent step: code_action detected, {len(code)} chars")
-
-        else:
-            # No tool calls or code - check for raw model output
-            logger.debug(f"ActionStep without tool_calls/code_action: model_output={'exists' if step.model_output else 'None'}")
-
-            if step.model_output:
-                # Use model's raw output as reasoning step
-                step_type = "REASONING"
-                step_name = "Model Reasoning (No Tool Call)"
-                raw_output = str(step.model_output)
-                MAX_LENGTH = 500
-                content = raw_output[:MAX_LENGTH] + "..." if len(raw_output) > MAX_LENGTH else raw_output
-            else:
-                # Fallback: use observations if available
-                step_name = "Agent Step"
-                if step.observations:
-                    obs = str(step.observations)
-                    MAX_LENGTH = 500
-                    content = obs[:MAX_LENGTH] + "..." if len(obs) > MAX_LENGTH else obs
-
-        # Build metadata dict with only non-None string values (protobuf requires map<string, string>)
-        metadata_dict: Dict[str, str] = {}
-        if tool_name != "unknown":
-            metadata_dict["tool"] = tool_name
-        if tool_args != "{}":
-            metadata_dict["arguments"] = tool_args
-        if content:
-            metadata_dict["observations"] = content
-
-        # Add skill metadata for managed agents and skill-related tools
-        # This enables UI to show skill execution progress
-        MANAGED_AGENTS = {"skill_builder", "document_builder", "table_builder", "schema_builder"}
-        SKILL_TOOLS = {"tool_executor"}
-
-        if tool_name in MANAGED_AGENTS or tool_name in SKILL_TOOLS or tool_name.startswith("skill-"):
-            metadata_dict["skill_name"] = tool_name
-            # Determine status based on observations (completed if we have output)
-            metadata_dict["skill_status"] = "completed" if content else "executing"
-
-            # Build descriptive message from tool arguments and observations
-            skill_message = self._build_skill_message(tool_name, tool_args, content)
-            if skill_message:
-                metadata_dict["skill_message"] = skill_message
-
-        return StepProgressDict(
-            type="step_progress",
-            step_type=step_type,
-            step_name=step_name,
-            content=content,
-            metadata=metadata_dict,
-            step_index=index
-        )
-
-    def _build_skill_message(self, tool_name: str, tool_args: str, observations: str) -> str:
-        """
-        Build a descriptive message for skill execution.
-
-        Extracts meaningful information from tool arguments and observations
-        to provide user-friendly progress messages.
-        """
-        import json as json_module
-
-        messages = []
-
-        # Try to parse tool_args as JSON for structured extraction
-        try:
-            args = json_module.loads(tool_args) if tool_args and tool_args != "{}" else {}
-        except json_module.JSONDecodeError:
-            args = {}
-
-        # Build message based on tool type
-        if tool_name == "tool_executor":
-            # Extract task description from tool_executor args
-            task = args.get("task", "")
-            tool = args.get("tool", "")
-            if task:
-                messages.append(f"Running: {task[:100]}{'...' if len(task) > 100 else ''}")
-            if tool:
-                messages.append(f"Using tool: {tool}")
-
-        elif tool_name == "schema_builder":
-            # Schema builder working on database schema
-            task = args.get("task", args.get("request", ""))
-            if task:
-                messages.append(f"Schema task: {task[:100]}{'...' if len(task) > 100 else ''}")
-
-        elif tool_name == "table_builder":
-            task = args.get("task", "")
-            if task:
-                messages.append(f"Table task: {task[:100]}{'...' if len(task) > 100 else ''}")
-
-        elif tool_name == "skill_builder":
-            task = args.get("task", "")
-            if task:
-                messages.append(f"Building skill: {task[:100]}{'...' if len(task) > 100 else ''}")
-
-        elif tool_name == "document_builder":
-            task = args.get("task", "")
-            if task:
-                messages.append(f"Document task: {task[:100]}{'...' if len(task) > 100 else ''}")
-
-        elif tool_name.startswith("skill-"):
-            # Generic skill call
-            skill_id = tool_name.replace("skill-", "")
-            messages.append(f"Executing skill: {skill_id}")
-
-        # Add observation summary if available
-        if observations:
-            # Check for success/failure indicators
-            obs_lower = observations.lower()
-            if "success" in obs_lower or "created" in obs_lower:
-                # Extract key success info
-                lines = observations.split('\n')
-                for line in lines[:3]:  # First 3 lines
-                    if line.strip():
-                        messages.append(f"✓ {line.strip()[:80]}")
-                        break
-            elif "error" in obs_lower or "failed" in obs_lower:
-                messages.append(f"✗ {observations[:100]}{'...' if len(observations) > 100 else ''}")
-
-        return "\n".join(messages) if messages else ""
-
-    def _extract_final_step(self, index: int) -> StepProgressDict:
-        """
-        Extract typed data for final step.
-
-        Final step is just a marker indicating response generation.
-        """
-        return StepProgressDict(
-            type="step_progress",
-            step_type="FINAL",
-            step_name="Final Answer",
-            content="Generating final response...",
-            metadata=StepMetadata(),
-            step_index=index
-        )
-
     async def _stream_text_chunks(self, text: str, chunk_size: int = 5) -> AsyncIterator[str]:
         """Stream text by word chunks to simulate streaming."""
         words = text.split()
@@ -1573,3 +1378,674 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
     def _extract_token_usage_from_agent(self, agent) -> Optional[Any]:
         """Extract accumulated token usage from agent's memory steps using shared utility."""
         return TokenUsageExtractor.extract_from_agent_memory(agent=agent)
+
+    # ============================================================
+    # ExecutionCoordinator Integration - Two-Phase Execution
+    # ============================================================
+
+    async def _stream_coordinator_response(
+        self,
+        context: ExecutionContext,
+        tools: List[Any],
+        task: str,
+        session_id: Optional[str],
+        org_model: Optional[str],
+        sm: Optional[CoordinatorStateMachine],
+        managed_agents: Optional[List[Any]] = None,
+        stored_plan: Optional[Plan] = None,
+    ) -> AsyncIterator[Any]:
+        """
+        Coordinator-driven execution path.
+
+        The coordinator internally decides the mode:
+        - PASSTHROUGH: Single managed agent task (agent has own HITL)
+        - DIRECT: Simple task, execute without plan
+        - PLAN_AND_APPROVE: Complex task, create plan and await approval
+        - AUTONOMOUS: Pre-approved stored plan, execute directly (skip HITL)
+
+        Args:
+            context: Execution context with tool_mode
+            tools: Available smolagents tools
+            task: Current user message/task
+            session_id: Session ID for state persistence
+            org_model: Organization model for evaluator
+            sm: State machine for phase handling
+            managed_agents: Available managed agents for mode detection
+            stored_plan: Pre-approved plan from skill's agentic step config (enables autonomous execution)
+        """
+        # === AUTONOMOUS MODE: Execute stored plan directly ===
+        if stored_plan and (not sm or sm.phase == Phase.IDLE):
+            logger.info(f"📋 Coordinator: AUTONOMOUS mode - executing stored plan '{stored_plan.id}' directly")
+
+            # Create coordinator for execution
+            model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
+            evaluator_factory = create_evaluator_factory(model)
+
+            # Get managed agents as list for step executor
+            if managed_agents:
+                if isinstance(managed_agents, dict):
+                    managed_agents_list = list(managed_agents.values())
+                else:
+                    managed_agents_list = list(managed_agents)
+            else:
+                managed_agents_list = []
+
+            plan_step_executor = PlanStepExecutor(
+                tools=tools,
+                managed_agents=managed_agents_list,
+                model=model,
+                max_steps=10,
+            )
+
+            # Create agent factories for cascade planning (even if not used for autonomous mode)
+            agent_factories = None
+            if context.tool_provider:
+                agent_factories = self.managed_agents_factory.get_agent_factories(
+                    tool_provider=context.tool_provider,
+                    org_model=org_model
+                )
+
+            coordinator = ExecutionCoordinator(
+                plan_service=self.plan_service,
+                model_provider=self.model_provider,
+                evaluator_factory=evaluator_factory,
+                plan_step_executor=plan_step_executor,
+                evaluate_after_steps=1,
+                max_replans=3,
+                org_model=org_model,
+                api_key=context.tool_provider.api_key,  # For Gemini and other auth-required models
+                organization_id=context.tool_provider.organization_id,  # For research agent
+            )
+
+            # Execute stored plan directly (no classification, no approval)
+            async for event in coordinator.execute(
+                task=task,
+                tools=tools,
+                managed_agents=managed_agents,
+                stored_plan=stored_plan,  # Pass stored plan for direct execution
+                agent_factories=agent_factories,
+            ):
+                yield convert_coordinator_event(event, session_id)
+
+            return
+
+        if not sm or sm.phase == Phase.IDLE:
+            # === NEW REQUEST - Let coordinator determine mode ===
+            logger.info("📋 Coordinator: Analyzing task to determine execution mode...")
+
+            # Create coordinator with evaluator and step executor
+            # PlanService already has model_provider, org_model passed for hierarchy resolution
+            model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
+            evaluator_factory = create_evaluator_factory(model)
+
+            # Get managed agents as list for step executor
+            # managed_agents may be a dict {name: agent} or already a list
+            if managed_agents:
+                if isinstance(managed_agents, dict):
+                    managed_agents_list = list(managed_agents.values())
+                else:
+                    managed_agents_list = list(managed_agents)
+            else:
+                managed_agents_list = []
+
+            # Create step executor with smolagents native routing
+            plan_step_executor = PlanStepExecutor(
+                tools=tools,
+                managed_agents=managed_agents_list,
+                model=model,
+                max_steps=10,
+            )
+
+            # Get context-gathering tools from provider
+            # These allow the planner to see existing databases/tables before creating a plan
+            if context.tool_provider is None:
+                logger.error("❌ ToolProvider not set on context - cannot create coordinator")
+                yield "FALL_THROUGH"
+                return
+
+            # Create agent factories for cascade planning (SubAgentPlanner)
+            agent_factories = self.managed_agents_factory.get_agent_factories(
+                tool_provider=context.tool_provider,
+                org_model=org_model
+            )
+            logger.info(f"📋 Created {len(agent_factories)} agent factories for cascade planning")
+
+            coordinator = ExecutionCoordinator(
+                plan_service=self.plan_service,
+                model_provider=self.model_provider,  # For LLM-based TaskClassifier
+                evaluator_factory=evaluator_factory,
+                plan_step_executor=plan_step_executor,
+                evaluate_after_steps=1,
+                max_replans=3,
+                org_model=org_model,
+                api_key=context.tool_provider.api_key,  # For Gemini and other auth-required models
+                organization_id=context.tool_provider.organization_id,  # For research agent
+            )
+
+            # Use smart execute to determine mode and handle accordingly
+            plan: Optional[Plan] = None
+            async for event in coordinator.execute(
+                task=task,
+                tools=tools,
+                managed_agents=managed_agents,
+                agent_factories=agent_factories,
+            ):
+                if isinstance(event, AwaitingClarificationEvent):
+                    # Clarification needed: Show questions to user before proceeding
+                    logger.info(f"📋 Coordinator: Task needs clarification - {len(event.questions)} questions")
+
+                    # Format questions as markdown (don't show internal reasoning to users)
+                    questions_content = ""
+                    for q in event.questions:
+                        questions_content += f"{q}\n"
+
+                    yield {
+                        "type": "awaiting_input",
+                        "data": {
+                            "input_type": "question",  # Use 'question' - frontend doesn't have 'clarifying_questions'
+                            "title": "Clarification Needed",
+                            "content": questions_content,
+                            "options": [],  # Free-form response expected
+                            "plan_json": ""
+                        }
+                    }
+
+                    # Update state machine (handles transition + context)
+                    if sm:
+                        sm.on_clarification_needed(task)
+                    return
+
+                elif isinstance(event, DirectExecutionStartedEvent):
+                    # DIRECT: Simple task, let normal agent flow handle
+                    logger.info("📋 Coordinator: DIRECT mode - executing without plan")
+                    yield "FALL_THROUGH"
+                    return
+
+                elif isinstance(event, PlanCreatedEvent):
+                    # PLAN_AND_APPROVE: Complex task, show plan for approval
+                    plan = event.plan
+                    logger.info(f"📋 Coordinator: PLAN_AND_APPROVE mode - plan {plan.id} with {len(plan.steps)} steps")
+
+                # Cascade planning events
+                elif isinstance(event, SubPlanCreatedEvent):
+                    # Sub-agent created its detailed plan - forward to UI
+                    logger.info(f"📋 Cascade: {event.agent_name} created sub-plan ({event.sub_plan_step_count} steps)")
+                    yield convert_coordinator_event(event, 0)
+
+                elif isinstance(event, QuestionsCollectedEvent):
+                    # Sub-agents have questions - present to user
+                    logger.info(f"📋 Cascade: {len(event.questions.questions)} questions collected from sub-agents")
+                    yield convert_coordinator_event(event, 0)
+
+                    # Update state machine (handles transition + context)
+                    if sm:
+                        sm.on_cascade_questions(coordinator, plan, task)
+                    return
+
+                elif isinstance(event, CascadingPlanCompleteEvent):
+                    # All sub-plans ready - forward to UI
+                    logger.info(f"📋 Cascade: All {event.total_sub_plans} sub-plans complete")
+                    yield convert_coordinator_event(event, 0)
+
+                elif isinstance(event, ErrorEvent):
+                    # Plan generation or API error - return error to user, don't fall through
+                    logger.error(f"📋 Coordinator: Plan generation error - {event.error}")
+                    yield self._create_error_response(
+                        "PLAN_GENERATION_FAILED",
+                        event.error,
+                    )
+                    if sm:
+                        sm.on_error(event.error)
+                    return  # Exit, don't fall through to confused agent.run()
+
+            if plan and sm:
+                # Update state machine (handles transition + context)
+                sm.on_plan_created(coordinator, plan, task)
+
+                # Send plan for approval via awaiting_input
+                yield self._create_awaiting_input_for_plan(plan)
+            elif plan is None:
+                # No plan created - this shouldn't happen for PLAN_AND_APPROVE
+                logger.warning("📋 Coordinator: No plan created, falling through to normal flow")
+                yield "FALL_THROUGH"
+
+        elif sm and sm.phase == Phase.AWAITING_APPROVAL:
+            # === CHECK FOR APPROVAL ===
+
+            if self._is_approval_response(task):
+                # User approved - switch to execution mode
+                context.tool_mode = ToolMode.EXECUTION
+                AgentExecutor.set_current_context(context)
+                logger.info("✅ Coordinator: User approved, starting execution phase")
+
+                # Get coordinator and plan from state machine context
+                coordinator_from_session = sm.context.coordinator
+                plan_from_session = sm.context.plan
+
+                if not coordinator_from_session or not plan_from_session:
+                    logger.error("📋 Coordinator: No coordinator/plan found in state machine")
+                    yield self._create_error_response(
+                        "SESSION_STATE_ERROR",
+                        "Session state lost. Please start over.",
+                    )
+                    sm.on_error("Session state lost")
+                    return
+
+                # Transition to EXECUTING
+                sm.on_execution_started()
+
+                # Approve the plan
+                try:
+                    await coordinator_from_session.approve_plan(plan_from_session.id)
+                except Exception as e:
+                    logger.error(f"📋 Coordinator: Plan approval failed: {e}")
+                    sm.on_error(f"Plan approval failed: {e}")
+                    yield self._create_error_response(
+                        "PLAN_APPROVAL_FAILED",
+                        f"Failed to approve plan: {e}",
+                    )
+                    return
+
+                # === PHASE 2: EXECUTION ===
+                step_index = 0
+                last_step_result: Optional[str] = None
+                execution_success = False
+
+                async for event in coordinator_from_session.execute_plan(plan_from_session.id, tools):
+                    converted = convert_coordinator_event(event, step_index)
+                    if converted:
+                        yield converted
+                        step_index += 1
+
+                    # Capture step results for final summary
+                    if isinstance(event, StepCompletedEvent) and event.result:
+                        last_step_result = event.result
+                    elif isinstance(event, ExecutionCompletedEvent):
+                        execution_success = event.success
+
+                # Send final summary as content_chunk so user sees a message
+                # AIDEV-NOTE: This is critical - without this, user only sees step progress
+                if execution_success:
+                    summary = last_step_result or f"Plan executed successfully with {step_index} steps."
+                    yield {
+                        "type": "content_chunk",
+                        "content": f"\n\n✅ **Execution Complete**\n\n{summary}"
+                    }
+                else:
+                    yield {
+                        "type": "content_chunk",
+                        "content": "\n\n⚠️ **Execution completed with issues.** Some steps may have failed."
+                    }
+
+                # Execution complete, clears state
+                sm.on_execution_complete()
+                logger.info("✅ Coordinator: Execution complete, state cleared")
+
+            else:
+                # Feedback (not approval) - clear state and reprocess as new request
+                logger.info("📝 Coordinator: Feedback received (not approval), clearing state and reprocessing")
+                sm.context.clear()
+
+                # Fall through to normal agent processing
+                # This treats the feedback as a new task that will trigger re-planning
+                yield "FALL_THROUGH"
+                return
+
+        elif sm and sm.phase == Phase.EXECUTING:
+            # Execution is typically synchronous, but handle edge cases
+            logger.warning("⚠️ Coordinator: Unexpected executing phase on new message")
+            sm.on_error("Unexpected message during execution")
+
+        # NOTE: awaiting_clarification is now handled early (before coordinator creation)
+        # to combine original task with clarification and re-run planning
+
+        elif sm and sm.phase == Phase.AWAITING_CASCADE_QUESTIONS:
+            # User responded to sub-agent questions from cascade planning
+            logger.info(f"📋 Coordinator: Received cascade question answers: {task[:100]}...")
+
+            # Get coordinator from state machine context
+            coordinator_from_session = sm.context.coordinator
+
+            if not coordinator_from_session:
+                logger.error("📋 Coordinator: No coordinator found in state machine for cascade answers")
+                yield self._create_error_response(
+                    "SESSION_STATE_ERROR",
+                    "Session state lost. Please start over.",
+                )
+                sm.on_error("Session state lost")
+                return
+
+            # Parse answers - expected as JSON object {question_id: answer, ...}
+            try:
+                answers_data = json.loads(task)
+                answers = QuestionAnswers(answers=answers_data if isinstance(answers_data, dict) else {})
+            except json.JSONDecodeError:
+                # Treat as free-form text answer to first question
+                logger.warning("📋 Cascade answers not JSON, treating as free-form text")
+                answers = QuestionAnswers(answers={"default": task})
+
+            # Store answers in state machine context
+            sm.context.question_answers = answers.answers
+
+            # Resume cascade planning with answers
+            step_index = 0
+            async for event in coordinator_from_session.resume_cascading_plan(answers):
+                if isinstance(event, QuestionsCollectedEvent):
+                    # More questions needed - present to user
+                    logger.info(f"📋 Cascade: More questions needed ({len(event.questions.questions)} questions)")
+                    yield convert_coordinator_event(event, step_index)
+
+                    # Self-transition for more questions
+                    sm.on_more_cascade_questions()
+                    return
+
+                elif isinstance(event, CascadingPlanCompleteEvent):
+                    # All planning complete - show plan for approval
+                    logger.info(f"📋 Cascade: Planning complete ({event.total_sub_plans} sub-plans)")
+                    yield convert_coordinator_event(event, step_index)
+
+                    # Transition to awaiting_approval
+                    sm.on_cascade_complete()
+
+                    plan = sm.context.plan
+                    if plan:
+                        yield self._create_awaiting_input_for_plan(plan)
+                    return
+                else:
+                    # Forward other events
+                    converted = convert_coordinator_event(event, step_index)
+                    if converted:
+                        yield converted
+                        step_index += 1
+
+        elif sm and sm.phase == Phase.AWAITING_QUESTIONS:
+            # Managed agent HITL response - let agent.run() resume the managed agent
+            # The managed agent has _waiting_for_approval=True and will resume with memory intact
+            logger.info("📋 Coordinator: Managed agent HITL response, falling through to agent.run()")
+
+            # Clear state (will be re-set if agent interrupts again)
+            sm.context.clear()
+
+            yield "FALL_THROUGH"
+
+    def _is_approval_response(self, task: str) -> bool:
+        """
+        Check if the user response is an approval.
+
+        Only accepts structured 'approve' from UI button.
+        Any other text is feedback that routes to orchestrator.
+        """
+        return task.lower().strip() == "approve"
+
+    def _create_awaiting_input_for_plan(self, plan: Plan) -> AwaitingInputResponseDict:
+        """Create awaiting_input event for plan approval."""
+        # Format plan steps as markdown
+        plan_content = f"## Plan: {plan.goal}\n\n"
+
+        # Include context section if available
+        if plan.context:
+            plan_content += f"### Current State\n{plan.context}\n\n"
+
+        # Include analysis section if available
+        if plan.analysis:
+            plan_content += f"### Analysis\n{plan.analysis}\n\n"
+
+        # Add steps
+        plan_content += "### Steps\n"
+        for i, step in enumerate(plan.steps, 1):
+            plan_content += f"{i}. {step.description}\n"
+            if step.tool_call:
+                plan_content += f"   - Tool: `{step.tool_call}`\n"
+
+        return {
+            "type": "awaiting_input",
+            "data": {
+                "input_type": "plan_approval",
+                "title": "Review Plan",
+                "content": plan_content,
+                "options": [
+                    {"id": "approve", "label": "Approve", "description": "Execute the plan"}
+                ],
+                "plan_json": json.dumps({
+                    "id": plan.id,
+                    "goal": plan.goal,
+                    "context": plan.context,
+                    "analysis": plan.analysis,
+                    "steps": [
+                        {"step_id": s.step_id, "description": s.description, "tool_call": s.tool_call}
+                        for s in plan.steps
+                    ]
+                })
+            }
+        }
+
+    def _create_error_response(self, error_code: str, error_message: str) -> ErrorResponseDict:
+        """Create a typed error response dict."""
+        return {
+            "type": "error",
+            "error": {
+                "error_code": error_code,
+                "error_message": error_message,
+                "error_details": {"severity": "recoverable"},
+                "hint": "",
+                "can_retry": True,
+                "auto_retry": False,
+                "session_reset": False
+            }
+        }
+
+    async def GeneratePlan(
+        self,
+        request: agent_worker_pb2.GeneratePlanRequest,
+        context: grpc.aio.ServicerContext
+    ) -> AsyncIterator[agent_worker_pb2.GeneratePlanResponse]:
+        """
+        Generate autonomous plan for skill editor with streaming progress.
+
+        Creates a plan from skill instructions that can be stored and executed
+        autonomously (without HITL approval) when the skill runs.
+
+        Streams:
+        - PlanProgress: Progress updates during generation
+        - AwaitingInput: Clarification questions (pause for user)
+        - PlanComplete: Final plan ready
+        - ProcessingError: If generation fails
+
+        Uses the same ToolProvider and planning patterns as ProcessMessage.
+        """
+        import uuid
+        start_time = time.time()
+
+        # Generate or use provided session ID for potential question/answer flow
+        session_id = request.session_id if request.session_id else str(uuid.uuid4())
+
+        def _make_progress(message: str, phase: str) -> agent_worker_pb2.GeneratePlanResponse:
+            """Create a progress response."""
+            return agent_worker_pb2.GeneratePlanResponse(
+                progress=agent_worker_pb2.PlanProgress(
+                    message=message,
+                    phase=phase
+                ),
+                timestamp=int(time.time() * 1000)
+            )
+
+        def _make_error(error_code: str, error_message: str) -> agent_worker_pb2.GeneratePlanResponse:
+            """Create an error response."""
+            return agent_worker_pb2.GeneratePlanResponse(
+                error=agent_worker_pb2.ProcessingError(
+                    error_code=error_code,
+                    error_message=error_message,
+                    can_retry=True
+                ),
+                timestamp=int(time.time() * 1000)
+            )
+
+        try:
+            logger.info(f"📋 GeneratePlan: Starting for skill {request.skill_id} (session: {session_id})")
+
+            # 1. Create ToolProvider (same pattern as ProcessMessage)
+            tool_provider = ToolProvider(
+                api_key=request.user_api_key or "",
+                organization_id=request.organization_id
+            )
+
+            # 2. Get managed agents for routing info in plan
+            managed_agents = self.managed_agents_factory.create_all_agents(
+                tool_provider=tool_provider,
+                org_model=request.model or None
+            )
+            logger.info(f"📋 GeneratePlan: Using {len(managed_agents)} managed agents")
+
+            # 3. Extract skill inputs for variable-aware planning
+            skill_inputs = []
+            for input_def in request.skill_inputs:
+                skill_inputs.append({
+                    "name": input_def.name,
+                    "type": input_def.type or "text",
+                    "required": input_def.required,
+                })
+
+            # 3a. Extract skill outputs for result-aware planning
+            skill_outputs = []
+            for output_def in request.skill_outputs:
+                skill_outputs.append({
+                    "name": output_def.name,
+                    "type": output_def.type or "text",
+                })
+
+            # 3b. Extract previous plan and feedback for regeneration
+            previous_plan_json = request.previous_plan_json if request.previous_plan_json else None
+            user_feedback = request.user_feedback if request.user_feedback else None
+
+            # Build the task instructions (potentially enhanced with clarification answers)
+            task_instructions = request.instructions
+
+            # Check if resuming from clarification questions
+            if request.session_id and request.answers:
+                logger.info(f"📋 GeneratePlan: Resuming session {session_id} with {len(request.answers)} answers")
+                yield _make_progress("Resuming with your answers...", "resuming")
+
+                # Get stored session context
+                plan_session = await self.session_manager.get_plan_session(session_id)
+                if not plan_session:
+                    yield _make_error("SESSION_NOT_FOUND", "Planning session expired. Please start over.")
+                    return
+
+                # Enhance instructions with user's clarification answers
+                answers_dict = {a.question_id: a.answer for a in request.answers}
+                if answers_dict:
+                    answers_text = "\n".join([f"- {q}: {a}" for q, a in answers_dict.items()])
+                    task_instructions = f"{plan_session.get('instructions', request.instructions)}\n\nUser clarifications:\n{answers_text}"
+                    logger.info(f"📋 GeneratePlan: Enhanced instructions with {len(answers_dict)} clarifications")
+
+                # Clean up the session
+                await self.session_manager.remove_plan_session(session_id)
+
+            yield _make_progress("Analyzing instructions...", "analyzing")
+
+            # === Use ExecutionCoordinator for classification + planning ===
+            # This reuses the EXACT same code path as chat ProcessMessage
+            coordinator = ExecutionCoordinator(
+                plan_service=self.plan_service,
+                model_provider=self.model_provider,
+                org_model=request.model or None,
+                api_key=tool_provider.api_key,
+                organization_id=tool_provider.organization_id,
+            )
+
+            yield _make_progress("Classifying task...", "analyzing")
+
+            # Use coordinator's classify_and_create_plan (same logic as ProcessMessage)
+            async for event in coordinator.classify_and_create_plan(
+                task=task_instructions,
+                tools=[],  # No tools needed for skill plan generation
+                managed_agents=managed_agents,
+            ):
+                if isinstance(event, AwaitingClarificationEvent):
+                    # Same handling as ProcessMessage - yield questions and pause
+                    logger.info(f"📋 GeneratePlan: Needs clarification - {len(event.questions)} questions")
+
+                    # Store session context for resume
+                    await self.session_manager.store_plan_session(session_id, {
+                        "instructions": request.instructions,
+                        "skill_inputs": skill_inputs,
+                        "skill_outputs": skill_outputs,
+                        "org_model": request.model,
+                        "api_key": tool_provider.api_key,
+                        "organization_id": tool_provider.organization_id,
+                        "previous_plan_json": previous_plan_json,
+                        "user_feedback": user_feedback,
+                    })
+
+                    # Format questions (same as ProcessMessage)
+                    questions_content = "\n".join(event.questions)
+
+                    yield agent_worker_pb2.GeneratePlanResponse(
+                        awaiting_input=agent_worker_pb2.AwaitingInput(
+                            input_type="question",
+                            title="Clarification Needed",
+                            content=questions_content,
+                            options=[],  # Free-form response expected
+                            session_id=session_id
+                        ),
+                        timestamp=int(time.time() * 1000)
+                    )
+                    return  # Client will call again with answers
+
+                elif isinstance(event, PlanCreatedEvent):
+                    # Got the plan - convert to PlanComplete response
+                    plan = event.plan
+                    planning_time_ms = int((time.time() - start_time) * 1000)
+                    logger.info(f"📋 GeneratePlan: Created plan {plan.id} with {len(plan.steps)} steps in {planning_time_ms}ms")
+
+                    # Check for empty plan
+                    if not plan.steps:
+                        logger.error(f"📋 GeneratePlan: Plan has no steps - generation failed")
+                        yield _make_error(
+                            "PLAN_GENERATION_FAILED",
+                            "Plan generation failed - no steps were created. Check that the model can access database context."
+                        )
+                        return
+
+                    yield self._make_plan_complete_response(plan, planning_time_ms)
+
+        except asyncio.TimeoutError:
+            logger.error(f"📋 GeneratePlan: Timed out after {request.timeout_seconds}s")
+            yield _make_error("TIMEOUT", "Plan generation timed out")
+
+        except Exception as e:
+            logger.error(f"📋 GeneratePlan: Failed with error: {e}", exc_info=True)
+            yield _make_error("INTERNAL_ERROR", str(e))
+
+    def _make_plan_complete_response(self, plan, planning_time_ms: int) -> agent_worker_pb2.GeneratePlanResponse:
+        """Create a PlanComplete response from a Plan object."""
+        # Convert Plan to StoredPlan JSON format (matches TypeScript StoredPlan type)
+        stored_plan = {
+            "id": plan.id,
+            "goal": plan.goal,
+            "basicInstructions": plan.basic_instructions,
+            "context": plan.context,
+            "analysis": plan.analysis,
+            "steps": [
+                {
+                    "stepId": step.step_id,
+                    "description": step.description,
+                    "toolCall": step.tool_call,
+                    "parameters": step.parameters or {},
+                    "targetAgent": step.target_agent,
+                }
+                for step in plan.steps
+            ],
+            "version": 1,
+            "generatedAt": plan.generated_at.isoformat() if plan.generated_at else None,
+        }
+
+        return agent_worker_pb2.GeneratePlanResponse(
+            plan_complete=agent_worker_pb2.PlanComplete(
+                plan_json=json.dumps(stored_plan),
+                plan_id=plan.id,
+                planning_time_ms=planning_time_ms
+            ),
+            timestamp=int(time.time() * 1000)
+        )
+

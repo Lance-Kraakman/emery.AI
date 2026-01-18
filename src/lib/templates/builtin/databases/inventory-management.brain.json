@@ -1,0 +1,152 @@
+{
+  "$format": "brain-template",
+  "$version": 1,
+  "metadata": {
+    "name": "Inventory Management",
+    "description": "Track products, suppliers, stock levels, and purchase orders. Manage your inventory efficiently.",
+    "category": "Operations",
+    "tags": ["inventory", "stock", "products", "warehouse"],
+    "version": "1.0.0"
+  },
+  "template": {
+    "type": "database",
+    "data": {
+      "name": "Inventory",
+      "slug": "inventory",
+      "description": "Inventory management system",
+      "tables": [
+        {
+          "name": "Suppliers",
+          "description": "Supplier information",
+          "fields": [
+            { "name": "Name", "slug": "name", "type": "text", "required": true },
+            { "name": "Contact Name", "slug": "contact_name", "type": "text" },
+            { "name": "Email", "slug": "email", "type": "email" },
+            { "name": "Phone", "slug": "phone", "type": "phone" },
+            { "name": "Address", "slug": "address", "type": "text" },
+            { "name": "Notes", "slug": "notes", "type": "text" }
+          ]
+        },
+        {
+          "name": "Products",
+          "description": "Product inventory",
+          "fields": [
+            { "name": "Name", "slug": "name", "type": "text", "required": true },
+            { "name": "SKU", "slug": "sku", "type": "text", "required": true },
+            { "name": "Description", "slug": "description", "type": "text" },
+            {
+              "name": "Category",
+              "slug": "category",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Electronics", "color": "#3B82F6" },
+                  { "id": 2, "value": "Clothing", "color": "#EC4899" },
+                  { "id": 3, "value": "Food", "color": "#10B981" },
+                  { "id": 4, "value": "Office Supplies", "color": "#6B7280" },
+                  { "id": 5, "value": "Other", "color": "#F59E0B" }
+                ]
+              }
+            },
+            { "name": "Quantity", "slug": "quantity", "type": "number" },
+            { "name": "Unit Price", "slug": "unit_price", "type": "number" },
+            { "name": "Reorder Level", "slug": "reorder_level", "type": "number" },
+            {
+              "name": "Supplier",
+              "slug": "supplier",
+              "type": "relation",
+              "fieldConfig": {
+                "targetTableRef": "Suppliers",
+                "relationshipType": "many-to-many"
+              }
+            },
+            { "name": "Image", "slug": "image", "type": "file" },
+            {
+              "name": "Status",
+              "slug": "status",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Active", "color": "#10B981" },
+                  { "id": 2, "value": "Discontinued", "color": "#EF4444" }
+                ]
+              }
+            },
+            { "name": "Created At", "slug": "created_at", "type": "created-at" }
+          ]
+        },
+        {
+          "name": "Purchase Orders",
+          "description": "Orders placed with suppliers",
+          "fields": [
+            {
+              "name": "PO Number",
+              "slug": "po_number",
+              "type": "autonumber",
+              "fieldConfig": {
+                "prefix": "PO-",
+                "digits": 5
+              }
+            },
+            {
+              "name": "Supplier",
+              "slug": "supplier",
+              "type": "relation",
+              "fieldConfig": {
+                "targetTableRef": "Suppliers",
+                "relationshipType": "many-to-many"
+              }
+            },
+            { "name": "Order Date", "slug": "order_date", "type": "date" },
+            {
+              "name": "Status",
+              "slug": "status",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Draft", "color": "#6B7280" },
+                  { "id": 2, "value": "Ordered", "color": "#3B82F6" },
+                  { "id": 3, "value": "Received", "color": "#10B981" },
+                  { "id": 4, "value": "Cancelled", "color": "#EF4444" }
+                ]
+              }
+            },
+            { "name": "Total", "slug": "total", "type": "number" },
+            { "name": "Notes", "slug": "notes", "type": "text" }
+          ]
+        },
+        {
+          "name": "Stock Movements",
+          "description": "Track inventory changes",
+          "fields": [
+            {
+              "name": "Product",
+              "slug": "product",
+              "type": "relation",
+              "fieldConfig": {
+                "targetTableRef": "Products",
+                "relationshipType": "many-to-many"
+              }
+            },
+            {
+              "name": "Type",
+              "slug": "type",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "In", "color": "#10B981" },
+                  { "id": 2, "value": "Out", "color": "#EF4444" },
+                  { "id": 3, "value": "Adjustment", "color": "#F59E0B" }
+                ]
+              }
+            },
+            { "name": "Quantity", "slug": "quantity", "type": "number" },
+            { "name": "Date", "slug": "date", "type": "date" },
+            { "name": "Notes", "slug": "notes", "type": "text" },
+            { "name": "Created At", "slug": "created_at", "type": "created-at" }
+          ]
+        }
+      ]
+    }
+  }
+}

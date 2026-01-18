@@ -339,6 +339,39 @@ export class AgentApplicationService {
   }
 
   /**
+   * Get agent by name within an organization
+   * Used for @agent:name mention resolution
+   */
+  async getAgentByName(name: string, organizationId: number): Promise<Result<AgentDTO>> {
+    try {
+      const orgId = OrganizationId.fromNumber(organizationId);
+      const agents = await this.agentRepository.findByOrganization(orgId);
+
+      // Case-insensitive name match
+      const nameLower = name.toLowerCase();
+      const found = agents.find(agent => agent.name.toLowerCase() === nameLower);
+
+      if (!found) {
+        return {
+          success: false,
+          error: `Agent '${name}' not found`
+        };
+      }
+
+      return {
+        success: true,
+        data: AgentMapper.toDTO(found)
+      };
+    } catch (error) {
+      logger.error("Error finding agent by name", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to find agent"
+      };
+    }
+  }
+
+  /**
    * Activate/deactivate agent
    * AIDEV-NOTE: Now returns DTO for consistent serialization
    */

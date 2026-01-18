@@ -29,7 +29,7 @@ export function VariableTextFieldRenderer({
   onChange,
   field,
   readOnly = false,
-  placeholder = 'Type { for variables...',
+  placeholder = 'Type {{ for variables...',
   multiline = false,
   rows = 3,
 }: VariableTextFieldRendererProps) {

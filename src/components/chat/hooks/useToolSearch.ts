@@ -11,6 +11,7 @@ interface UseToolSearchOptions {
   connectedOnly: boolean;
   requiresConnection: boolean | undefined;
   showReferenceTools: boolean;
+  toolCategories?: string[]; // Filter by tool categories (e.g., ['apps'] for Pipedream tools only)
   isOpen: boolean;
   isClient: boolean;
 }
@@ -27,6 +28,7 @@ export function useToolSearch(options: UseToolSearchOptions) {
     connectedOnly,
     requiresConnection,
     showReferenceTools,
+    toolCategories,
     isOpen,
     isClient,
   } = options;
@@ -42,7 +44,7 @@ export function useToolSearch(options: UseToolSearchOptions) {
     isLoading,
     error
   } = useQuery({
-    queryKey: ['search-all-tools-initial', query, selectedCategories, selectedApps, connectedOnly, requiresConnection, showReferenceTools],
+    queryKey: ['search-all-tools-initial', query, selectedCategories, selectedApps, connectedOnly, requiresConnection, showReferenceTools, toolCategories],
     queryFn: async () => {
       const categories = selectedCategories.length > 0 ? selectedCategories : undefined;
       const appIds = selectedApps.length > 0 ? selectedApps : undefined;
@@ -54,6 +56,7 @@ export function useToolSearch(options: UseToolSearchOptions) {
         connectedOnly,
         ...(requiresConnection !== undefined && { requiresConnection }),
         showReferenceTools,
+        ...(toolCategories && toolCategories.length > 0 && { toolCategories }),
         limit: 20,
         offset: 0
       });
@@ -94,6 +97,7 @@ export function useToolSearch(options: UseToolSearchOptions) {
         connectedOnly,
         ...(requiresConnection !== undefined && { requiresConnection }),
         showReferenceTools,
+        ...(toolCategories && toolCategories.length > 0 && { toolCategories }),
         limit: 20,
         offset
       });
@@ -109,7 +113,7 @@ export function useToolSearch(options: UseToolSearchOptions) {
     } finally {
       setIsLoadingMore(false);
     }
-  }, [isLoadingMore, hasMore, isClient, query, selectedCategories, selectedApps, connectedOnly, requiresConnection, showReferenceTools, offset]);
+  }, [isLoadingMore, hasMore, isClient, query, selectedCategories, selectedApps, connectedOnly, requiresConnection, showReferenceTools, toolCategories, offset]);
 
   return {
     allTools,

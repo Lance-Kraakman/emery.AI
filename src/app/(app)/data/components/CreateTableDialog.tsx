@@ -51,6 +51,7 @@ export function CreateTableDialog({ isOpen, onClose, onTableCreated, selectedDat
           // Navigate to the new table page (include returnTo if provided)
           const returnParam = returnTo ? `?returnTo=${returnTo}` : ''
           router.push(`/data/${result.data.id}${returnParam}`)
+          router.refresh() // Force server re-fetch to ensure fresh state
 
           // Reset form and close dialog
           form.reset()

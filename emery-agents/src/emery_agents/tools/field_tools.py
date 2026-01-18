@@ -72,6 +72,11 @@ def load_field_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
                    field_config: Optional[Dict] = None) -> Dict[str, Any]:
             """Execute field CRUD operation."""
 
+            # Check if mutation is allowed during planning phase
+            blocked = self._check_mutation_allowed(method)
+            if blocked:
+                return blocked
+
             # Pre-configured table_id takes priority over LLM-provided (for reference tools)
             effective_table_id = _preconfigured_table_id or table_id
 
@@ -136,8 +141,9 @@ def load_field_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
                 if field_config:
                     create_data["metadata"] = field_config
 
+                # Request TOON format for minimal token usage
                 return self._make_api_request_with_deadline(
-                    endpoint="fields",
+                    endpoint="fields?format=llm",
                     method="POST",
                     data=create_data,
                     auth_token=_auth_token,
@@ -148,8 +154,9 @@ def load_field_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
                 if not effective_table_id:
                     return {"success": False, "error": "table_id is required for list_fields operation"}
 
+                # Request TOON format for minimal token usage
                 return self._make_api_request_with_deadline(
-                    endpoint=f"fields?tableId={effective_table_id}",
+                    endpoint=f"fields?tableId={effective_table_id}&format=llm",
                     method="GET",
                     auth_token=_auth_token,
                     organization_id=_org_id
@@ -164,8 +171,9 @@ def load_field_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
                 # URL encode field_name in case it contains special characters
                 encoded_field_name = urllib.parse.quote(field_name)
 
+                # Request TOON format for minimal token usage
                 return self._make_api_request_with_deadline(
-                    endpoint=f"fields?tableId={effective_table_id}&fieldName={encoded_field_name}",
+                    endpoint=f"fields?tableId={effective_table_id}&fieldName={encoded_field_name}&format=llm",
                     method="DELETE",
                     auth_token=_auth_token,
                     organization_id=_org_id

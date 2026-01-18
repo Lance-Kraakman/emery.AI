@@ -15,7 +15,7 @@ import type { Result } from "./types";
 import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import { ToolMapper, type ToolDTO, type ToolSearchResultDTO } from '@/app/mappers/tool-mapper';
 import { ReferenceToolMapper } from '@/app/mappers/reference-tool-mapper';
-import { getToolSearchApplicationService } from '@/ddd/application/di/container';
+import { getToolSearchApplicationService, getConnectionApplicationService } from '@/ddd/application/di/container';
 import { ReferenceCategory } from '@/ddd/domain/chat/value-objects/reference-types';
 import { ToolCategory } from '@/ddd/domain/tools/value-objects/tool-metadata';
 import { db } from '@/ddd/infrastructure/db/client';
@@ -353,19 +353,29 @@ export async function getPipedreamTools(): Promise<Result<PipedreamToolsGrouped>
 export async function searchPipedreamTools(options: {
   query?: string;
   appId?: string;
+  appIds?: string[]; // Multi-select app filtering
+  connectedOnly?: boolean; // Only show tools for connected apps
   limit?: number;
   offset?: number;
 }): Promise<Result<{ tools: PipedreamToolMetadata[]; hasMore: boolean; totalCount: number }>> {
   try {
-    await requireAuth();
+    const session = await requireAuth();
 
-    const { query = '', appId, limit = 20, offset = 0 } = options;
+    const { query = '', appId, appIds, connectedOnly, limit = 20, offset = 0 } = options;
 
     // Build WHERE conditions
     const conditions = [sql`${tools.config}->>'type' = 'oauth'`];
 
-    if (appId) {
-      conditions.push(eq(tools.appId, appId));
+    // Support both single appId and multiple appIds
+    const effectiveAppIds = appIds && appIds.length > 0 ? appIds : (appId ? [appId] : []);
+
+    if (effectiveAppIds.length > 0) {
+      if (effectiveAppIds.length === 1) {
+        conditions.push(eq(tools.appId, effectiveAppIds[0]));
+      } else {
+        // Use IN clause for multiple apps
+        conditions.push(sql`${tools.appId} IN (${sql.join(effectiveAppIds.map(id => sql`${id}`), sql`, `)})`);
+      }
     }
 
     if (query.trim()) {
@@ -396,7 +406,7 @@ export async function searchPipedreamTools(options: {
       .offset(offset);
 
     // Convert to PipedreamToolMetadata
-    const toolsData: PipedreamToolMetadata[] = rows.map((row: typeof rows[number]) => {
+    let toolsData: PipedreamToolMetadata[] = rows.map((row: typeof rows[number]) => {
       const config = row.config as OAuthToolDefinitionData;
       return {
         id: row.id,
@@ -416,6 +426,23 @@ export async function searchPipedreamTools(options: {
         ) : {},
       };
     });
+
+    // Apply connected-only filter if requested
+    if (connectedOnly) {
+      const connectionService = getConnectionApplicationService();
+      const userIdVO = UserId.fromString(session.user.id);
+
+      const connectionsResult = await connectionService.getUserConnections(userIdVO);
+      if (connectionsResult.success && connectionsResult.data) {
+        const connectedAppIds = new Set(
+          connectionsResult.data
+            .filter(conn => conn.status === 'active')
+            .map(conn => conn.appName.value)
+        );
+
+        toolsData = toolsData.filter(tool => connectedAppIds.has(tool.app));
+      }
+    }
 
     return {
       success: true,

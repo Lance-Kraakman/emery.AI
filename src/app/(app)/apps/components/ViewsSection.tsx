@@ -2,7 +2,6 @@
 
 import React, { useState } from 'react';
 import type { ViewDTO } from '@/app/mappers/view-mapper';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Plus, Database, Edit, Trash2, MoreVertical, Filter, ArrowUpDown } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -79,95 +78,89 @@ export function ViewsSection({ views, loading, onViewsChange }: ViewsSectionProp
 
   return (
     <>
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Views</CardTitle>
-              <CardDescription>
-                Manage filtered and sorted views of your tables
-              </CardDescription>
-            </div>
+      <div className="pt-4 border-t">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h3 className="text-sm font-semibold">Views</h3>
+            <p className="text-xs text-muted-foreground">Filtered and sorted views of your tables</p>
+          </div>
+          <Button size="sm" onClick={handleAddView}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add View
+          </Button>
+        </div>
+        {loading ? (
+          <Loading text="Loading views..." />
+        ) : views.length === 0 ? (
+          <div className="text-center py-6">
+            <Database className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
+            <h3 className="text-sm font-medium mb-1">No views yet</h3>
+            <p className="text-xs text-muted-foreground mb-3">
+              Create custom views of your tables with filters and sorting for use in TableBlock components
+            </p>
             <Button size="sm" onClick={handleAddView}>
               <Plus className="h-4 w-4 mr-2" />
-              Add View
+              Create First View
             </Button>
           </div>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <Loading text="Loading views..." />
-          ) : views.length === 0 ? (
-            <div className="text-center py-8">
-              <Database className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
-              <h3 className="text-sm font-medium mb-1">No views yet</h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                Create custom views of your tables with filters and sorting for use in TableBlock components
-              </p>
-              <Button size="sm" onClick={handleAddView}>
-                <Plus className="h-4 w-4 mr-2" />
-                Create First View
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-1">
-              {views.map((view) => (
-                <div
-                  key={view.id}
-                  className="flex items-center justify-between p-2 border rounded hover:bg-secondary/50 transition-colors"
-                >
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <Database className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                    <span className="text-sm font-medium truncate">{view.name}</span>
-                    {view.tableName && (
-                      <Link
-                        href={`/data/${view.tableId}`}
-                        className="text-xs text-primary hover:underline inline-flex items-center gap-1 flex-shrink-0"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {view.tableName}
-                      </Link>
-                    )}
-                    {view.filters.length > 0 && (
-                      <Badge variant="secondary" className="flex-shrink-0 text-xs h-5">
-                        <Filter className="h-2.5 w-2.5 mr-1" />
-                        {view.filters.length}
-                      </Badge>
-                    )}
-                    {view.sorting.length > 0 && (
-                      <Badge variant="secondary" className="flex-shrink-0 text-xs h-5">
-                        <ArrowUpDown className="h-2.5 w-2.5 mr-1" />
-                        {view.sorting.length}
-                      </Badge>
-                    )}
-                  </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                        <MoreVertical className="h-3.5 w-3.5" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => handleEditView(view)}>
-                        <Edit className="h-4 w-4 mr-2" />
-                        Configure
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        className="text-destructive"
-                        onClick={() => setDeletingView(view)}
-                      >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+        ) : (
+          <div className="space-y-1">
+            {views.map((view) => (
+              <div
+                key={view.id}
+                className="flex items-center justify-between p-2 border rounded hover:bg-secondary/50 transition-colors"
+              >
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <Database className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                  <span className="text-sm font-medium truncate">{view.name}</span>
+                  {view.tableName && (
+                    <Link
+                      href={`/data/${view.tableId}`}
+                      className="text-xs text-primary hover:underline inline-flex items-center gap-1 flex-shrink-0"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {view.tableName}
+                    </Link>
+                  )}
+                  {view.filters.length > 0 && (
+                    <Badge variant="secondary" className="flex-shrink-0 text-xs h-5">
+                      <Filter className="h-2.5 w-2.5 mr-1" />
+                      {view.filters.length}
+                    </Badge>
+                  )}
+                  {view.sorting.length > 0 && (
+                    <Badge variant="secondary" className="flex-shrink-0 text-xs h-5">
+                      <ArrowUpDown className="h-2.5 w-2.5 mr-1" />
+                      {view.sorting.length}
+                    </Badge>
+                  )}
                 </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                      <MoreVertical className="h-3.5 w-3.5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => handleEditView(view)}>
+                      <Edit className="h-4 w-4 mr-2" />
+                      Configure
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="text-destructive"
+                      onClick={() => setDeletingView(view)}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Create/Edit Dialog */}
       <ViewFormDialog

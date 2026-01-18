@@ -30,6 +30,7 @@ export interface UpdateAppCommand {
   name?: string;
   slug?: string;
   description?: string;
+  themeConfig?: Record<string, unknown>;
 }
 
 // Response DTOs
@@ -134,6 +135,10 @@ export class AppApplicationService {
 
       if (command.description !== undefined) {
         app.updateDescription(command.description);
+      }
+
+      if (command.themeConfig !== undefined) {
+        app.updateTheme(command.themeConfig);
       }
 
       // 3. Save updates

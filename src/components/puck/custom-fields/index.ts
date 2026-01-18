@@ -60,3 +60,9 @@ export {
   createStateKeyField,
   type StateKeyFieldOptions,
 } from "./state-key-field";
+
+// Role Selector (for sign-up default role assignment)
+export {
+  createRoleSelectorField,
+  type RoleSelectorFieldValue,
+} from "./role-selector-field";

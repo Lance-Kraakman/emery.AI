@@ -28,6 +28,8 @@ export { useOrgChartHistory } from './useOrgChartHistory';
 export { useOrgChartSelection } from './useOrgChartSelection';
 export { useOrgChartPersistence } from './useOrgChartPersistence';
 export { useOrgChartSession } from './useOrgChartSession';
+export { useOrgChartExport, buildOrgSectionTemplate, buildSkillTemplate, buildDatabaseTemplate } from './useOrgChartExport';
+export type { ExportableEntity, ExportPreview, UseOrgChartExportReturn } from './useOrgChartExport';
 
 export interface UseOrgChartProps {
   agents: Agent[];

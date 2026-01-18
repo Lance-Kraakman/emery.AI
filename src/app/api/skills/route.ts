@@ -7,14 +7,19 @@ export const dynamic = 'force-dynamic';
  * RESTful endpoint for listing skills:
  * - GET: List skills with optional agent filter
  *
- * Uses standardized base utilities for consistent auth and error handling
+ * Query params:
+ * - agent_id: Filter skills for a specific agent
+ * - format: 'llm' for TOON format output
+ * - meta: '1' to include metadata in TOON format
+ *
  * AIDEV-NOTE: Created to support Python CRUD tools calling emery-list-skills
  */
 
 import { NextRequest } from 'next/server';
-import { withAuthenticatedRoute } from '@/lib/api/base';
+import { authenticateRequest } from '@/lib/auth/test-auth';
 import { getSkillApplicationService } from '@/ddd/application/di/container';
 import { SkillMapper } from '@/app/mappers/skill-mapper';
+import { skillsToToon } from '@/lib/toon-format';
 
 /**
  * GET /api/skills
@@ -22,20 +27,28 @@ import { SkillMapper } from '@/app/mappers/skill-mapper';
  *
  * Query params:
  * - agent_id: Filter skills for a specific agent
- * - organization_id: Filter skills for a specific organization (uses user's org if not provided)
+ * - format: 'llm' for TOON format output
+ * - meta: '1' to include metadata in TOON format
  */
 export async function GET(request: NextRequest): Promise<Response> {
-  return withAuthenticatedRoute(request, async (user) => {
+  try {
+    const authResult = await authenticateRequest(request);
+
+    if (!authResult.success || !authResult.user) {
+      return Response.json({ error: authResult.error || 'Unauthorized' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const agentIdParam = searchParams.get('agent_id');
-    const organizationId = user.organizationId;
+    const format = searchParams.get('format');
+    const includeMeta = searchParams.get('meta') === '1';
+    const organizationId = authResult.user.organizationId;
 
     if (!organizationId) {
-      return {
+      return Response.json({
         success: false,
-        error: 'No organization context',
-        status: 400
-      };
+        error: 'No organization context'
+      }, { status: 400 });
     }
 
     const skillService = getSkillApplicationService();
@@ -44,43 +57,67 @@ export async function GET(request: NextRequest): Promise<Response> {
     if (agentIdParam) {
       const agentId = parseInt(agentIdParam, 10);
       if (isNaN(agentId)) {
-        return {
+        return Response.json({
           success: false,
-          error: 'Invalid agent_id parameter',
-          status: 400
-        };
+          error: 'Invalid agent_id parameter'
+        }, { status: 400 });
       }
 
       const result = await skillService.getSkillsByAgent(agentId);
 
       if (!result.success) {
-        return {
+        return Response.json({
           success: false,
-          error: result.error || 'Failed to fetch skills',
-          status: 400
-        };
+          error: result.error || 'Failed to fetch skills'
+        }, { status: 400 });
       }
 
-      return {
+      const skills = SkillMapper.toDTOList(result.data || []);
+
+      // TOON format for LLM consumption
+      if (format === 'llm') {
+        const toon = skillsToToon(skills, { includeMeta });
+        return new Response(toon, {
+          headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+        });
+      }
+
+      return Response.json({
         success: true,
-        data: SkillMapper.toDTOList(result.data || [])
-      };
+        data: skills
+      });
     }
 
     // Otherwise, get all organization skills
     const result = await skillService.getSkillsByOrganization(organizationId);
 
     if (!result.success) {
-      return {
+      return Response.json({
         success: false,
-        error: result.error || 'Failed to fetch skills',
-        status: 400
-      };
+        error: result.error || 'Failed to fetch skills'
+      }, { status: 400 });
     }
 
-    return {
+    const skills = SkillMapper.toDTOList(result.data || []);
+
+    // TOON format for LLM consumption
+    if (format === 'llm') {
+      const toon = skillsToToon(skills, { includeMeta });
+      return new Response(toon, {
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+      });
+    }
+
+    return Response.json({
       success: true,
-      data: SkillMapper.toDTOList(result.data || [])
-    };
-  });
+      data: skills
+    });
+
+  } catch (error) {
+    console.error('Error fetching skills:', error);
+    return Response.json({
+      success: false,
+      error: 'Internal server error'
+    }, { status: 500 });
+  }
 }

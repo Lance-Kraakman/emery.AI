@@ -71,8 +71,21 @@ const nextConfig = {
   // these by setting their own headers in the route handler response.
   async headers() {
     return [
+      // Allow preview frames to be embedded (same-origin only for iframe preview)
       {
-        source: '/:path*',
+        source: '/apps/:id/pages/:pageId/preview/frame',
+        headers: [
+          { key: 'X-Accel-Buffering', value: 'no' },
+          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+          { key: 'X-Powered-By', value: '' },
+        ],
+      },
+      // Default security headers for all other routes (excludes preview/frame for iframe embedding)
+      {
+        source: '/((?!apps/.*?/pages/.*?/preview/frame).*)',
         headers: [
           { key: 'X-Accel-Buffering', value: 'no' },
           // Security headers (OWASP recommended)

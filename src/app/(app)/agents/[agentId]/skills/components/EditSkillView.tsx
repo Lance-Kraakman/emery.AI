@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Trash2, Bot } from 'lucide-react';
+import { ArrowLeft, Trash2, Bot, Sparkles, GitBranch } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ShareButton } from '@/components/permissions/ShareButton';
@@ -60,8 +60,8 @@ export function EditSkillView({ agent, skill }: EditSkillViewProps) {
 
   return (
     <div className="h-full relative">
-      {/* Floating Header - centered in canvas area (between side panels) */}
-      <div className="absolute top-2 left-56 right-[21.5rem] z-20 flex justify-center">
+      {/* Floating Header - centered, fits content */}
+      <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20">
         <div className="flex items-center gap-2 px-4 py-2 bg-background/50 backdrop-blur-sm border rounded-full shadow-sm">
         {/* Back button when navigated from org chart */}
         {returnTo?.startsWith('org-chart') && (
@@ -97,6 +97,28 @@ export function EditSkillView({ agent, skill }: EditSkillViewProps) {
           requiredCapabilities={['toolCalling']}
           className="w-[180px] h-8"
         />
+
+        {/* Mode Toggle - non-destructive switching */}
+        <div className="flex items-center gap-0.5 p-0.5 bg-muted rounded-lg h-8">
+          <Button
+            variant={formData.executionType !== 'agent' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => setFormData({ ...formData, executionType: 'agentic' })}
+            className="h-7 px-2.5 gap-1.5"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            Agentic
+          </Button>
+          <Button
+            variant={formData.executionType === 'agent' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => setFormData({ ...formData, executionType: 'agent' })}
+            className="h-7 px-2.5 gap-1.5"
+          >
+            <GitBranch className="h-3.5 w-3.5" />
+            Workflow
+          </Button>
+        </div>
 
         <Button
           variant="outline"

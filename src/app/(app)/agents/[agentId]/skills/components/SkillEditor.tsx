@@ -5,18 +5,23 @@ import { WorkflowCanvas } from '@/components/workflow-canvas';
 import { X, Settings2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import type { InputDefinition, OutputDefinition } from '@/app/mappers/skill-mapper';
-import type { SkillStep, CanvasMetadata } from '@/ddd/domain/skills/entities/skill';
+import type { InputDefinition, OutputDefinition, ToolConfigDTO } from '@/app/mappers/skill-mapper';
+import type { SkillStep, CanvasMetadata, SkillExecutionType, StoredPlan } from '@/ddd/domain/skills/entities/skill';
 import type { FlowToStepsResult } from '@/components/workflow-canvas/utils/flow-converters';
 import type { WorkflowNode, WorkflowNodeData, WorkflowEdge } from '@/components/workflow-canvas/types';
 import type { WorkflowVariable } from '@/components/workflow-canvas/WorkflowVariableInput';
 import { inferVariablesForNode } from '@/components/workflow-canvas/utils/variable-inference';
+import { toast } from 'sonner';
+import { generateSkillPlan } from '@/app/actions/skills';
 import { NodeConfigContent } from './NodeConfigContent';
 import { RootSkillConfig } from './RootSkillConfig';
+import { AgenticSkillEditor } from './AgenticSkillEditor';
 
 /**
- * Simplified SkillFormData - all skills are now workflows
- * Node-specific configs live inside the steps (SkillStep[])
+ * SkillFormData - supports both workflow (DAG) and agentic (single-step) modes
+ *
+ * - executionType: 'agent' = workflow mode (uses steps[])
+ * - executionType: 'agentic' = agentic mode (uses instructions, tools, agentType)
  */
 export interface SkillFormData {
   name: string;
@@ -26,6 +31,14 @@ export interface SkillFormData {
   steps: SkillStep[];
   canvasMetadata?: CanvasMetadata; // Canvas annotations (sticky notes)
   model?: string | null;
+  // Execution mode
+  executionType?: SkillExecutionType;
+  // Agentic mode fields
+  instructions?: string;
+  tools?: ToolConfigDTO[];
+  agentType?: string | null;
+  // Stored plan (for autonomous execution)
+  plan?: StoredPlan;
 }
 
 interface SkillEditorProps {
@@ -72,6 +85,9 @@ export function SkillEditor({
     valueRef.current = value;
   }, [value]);
 
+  // Node-level plan generation state (for agentic nodes in workflow mode)
+  const [generatingPlanForNode, setGeneratingPlanForNode] = useState<string | null>(null);
+
   const handleCanvasChange = useCallback((result: FlowToStepsResult) => {
     onChange({ ...valueRef.current, steps: result.steps, canvasMetadata: result.canvasMetadata });
   }, [onChange]);
@@ -95,6 +111,36 @@ export function SkillEditor({
   const handleUpdateNode = useCallback((id: string, data: Partial<WorkflowNodeData>) => {
     updateNodeRef.current?.(id, data);
   }, []);
+
+  // Generate plan for a specific agentic node
+  const handleGenerateNodePlan = useCallback(async (nodeId: string, feedback?: string) => {
+    const node = nodes.find(n => n.id === nodeId);
+    if (!node || node.type !== 'agentic' || !skillId) return;
+
+    const data = node.data as { instructions?: string; plan?: StoredPlan };
+    if (!data.instructions?.trim()) {
+      toast.error('Add instructions first');
+      return;
+    }
+
+    setGeneratingPlanForNode(nodeId);
+    try {
+      // Pass previous plan and feedback for regeneration (same API as agentic page)
+      const previousPlan = feedback && data.plan ? data.plan : undefined;
+      const result = await generateSkillPlan(skillId, data.instructions, previousPlan, feedback);
+      if (result.success && result.data) {
+        handleUpdateNode(nodeId, { plan: result.data });
+        toast.success(`Plan ${feedback ? 'regenerated' : 'generated'} with ${result.data.steps?.length || 0} steps`);
+      } else {
+        toast.error(result.error || 'Failed to generate plan');
+      }
+    } catch (error) {
+      console.error('Plan generation failed:', error);
+      toast.error('Failed to generate plan');
+    } finally {
+      setGeneratingPlanForNode(null);
+    }
+  }, [nodes, skillId, handleUpdateNode]);
 
   const handleRenameNodeRef = useCallback((fn: (id: string, newName: string) => void) => {
     renameNodeRef.current = fn;
@@ -143,6 +189,21 @@ export function SkillEditor({
   // For I/O nodes, show RootSkillConfig (treat as if no regular node selected)
   const showRootConfig = !selectedNode || isIONode;
 
+  // Agentic mode: show simplified single-step editor
+  if (value.executionType !== 'agent') {
+    return (
+      <AgenticSkillEditor
+        value={value}
+        onChange={onChange}
+        skillId={skillId}
+        organizationTier={organizationTier}
+        isReadOnly={isReadOnly}
+        hasFloatingHeader={hasFloatingHeader}
+      />
+    );
+  }
+
+  // Workflow mode: show DAG canvas with config panel
   return (
     <div className="relative h-full w-full">
       {/* Full-height Canvas - uncontrolled mode */}
@@ -169,7 +230,7 @@ export function SkillEditor({
         className={cn(
           'absolute right-2 z-10 w-80 bg-background/50 backdrop-blur-sm border rounded-lg shadow-lg overflow-hidden flex flex-col',
           'transition-all duration-200',
-          hasFloatingHeader ? 'top-[52px] max-h-[calc(100%-60px)]' : 'top-2 max-h-[calc(100%-1rem)]'
+          hasFloatingHeader ? 'top-[72px] max-h-[calc(100%-80px)]' : 'top-2 max-h-[calc(100%-1rem)]'
         )}
       >
         {/* Panel Header */}
@@ -226,6 +287,8 @@ export function SkillEditor({
               organizationTier={organizationTier}
               skillId={skillId}
               disabled={isReadOnly}
+              isGeneratingPlan={generatingPlanForNode === selectedNode!.id}
+              onGeneratePlan={(feedback) => handleGenerateNodePlan(selectedNode!.id, feedback)}
             />
           )}
         </div>

@@ -36,7 +36,6 @@ import type { SignOutBlockProps } from "./blocks/SignOutBlock";
 import type { EditorBlockProps } from "./blocks/EditorBlock/types";
 import type { MarkdownBlockProps } from "./blocks/MarkdownBlock";
 import type { ConditionalBlockProps } from "./blocks/ConditionalBlock";
-import type { DialogBlockProps } from "./blocks/DialogBlock";
 
 import { RootProps } from "./root";
 
@@ -81,7 +80,6 @@ export type Components = {
   FooterBlock: FooterBlockProps;
   DataBlock: DataBlockProps;
   ConditionalBlock: ConditionalBlockProps;
-  DialogBlock: DialogBlockProps;
   TableBlock: TableBlockProps;
   MetricBlock: MetricBlockProps;
   ChartBlock: ChartBlockProps;

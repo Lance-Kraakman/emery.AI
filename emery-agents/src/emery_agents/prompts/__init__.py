@@ -32,6 +32,8 @@ from typing import Optional, Any, List, Dict
 
 from jinja2 import Environment, FileSystemLoader
 
+from ..utils.session_logger import get_session_logger
+
 logger = logging.getLogger(__name__)
 
 # Template directory (relative to this file)
@@ -128,6 +130,9 @@ class PromptTemplateLoader:
 # Singleton instance for easy access
 _loader: Optional[PromptTemplateLoader] = None
 
+# Cached base instructions (identity + rules + goals) - saves ~2KB per agent
+_cached_base_instructions: Optional[str] = None
+
 
 def get_loader() -> PromptTemplateLoader:
     """Get singleton template loader with registered globals."""
@@ -170,6 +175,32 @@ def compose_templates(templates: List[str], **variables: Any) -> str:
     return get_loader().compose(templates, **variables)
 
 
+def get_cached_base_instructions(**kwargs: Any) -> str:
+    """
+    Get cached base instructions (identity + rules + goal persistence).
+
+    Base templates are static and don't need to be re-rendered for each agent.
+    This cache saves ~2KB of template rendering per agent instantiation.
+
+    Args:
+        **kwargs: Template variables (passed on first render only)
+
+    Returns:
+        Cached base instructions string
+    """
+    global _cached_base_instructions
+
+    if _cached_base_instructions is None:
+        _cached_base_instructions = compose_templates([
+            "base/identity.j2",
+            "base/critical_rules.j2",
+            "components/goal_persistence.j2",
+        ], **kwargs)
+        logger.debug(f"📝 Cached base instructions ({len(_cached_base_instructions)} chars)")
+
+    return _cached_base_instructions
+
+
 def list_templates(pattern: str = "**/*.j2") -> List[str]:
     """
     List all available templates.
@@ -183,7 +214,39 @@ def list_templates(pattern: str = "**/*.j2") -> List[str]:
     return get_loader().list_templates(pattern)
 
 
-def get_managed_agent_templates() -> dict:
+def render_capabilities(agent_type: str) -> str:
+    """
+    Render just the capabilities block from an agent template.
+
+    Agent templates can define a {% block capabilities %}...{% endblock %}
+    section that summarizes the agent's key abilities for planner context.
+
+    Args:
+        agent_type: Agent type (e.g., "schema_builder", "skill_builder")
+
+    Returns:
+        Rendered capabilities string, or empty string if not found
+    """
+    template_name = f"agents/{agent_type}.j2"
+    try:
+        loader = get_loader()
+        template = loader.env.get_template(template_name)
+
+        # Access the capabilities block if it exists
+        if "capabilities" in template.blocks:
+            # Render the block with an empty context
+            ctx = template.new_context()
+            content = "".join(template.blocks["capabilities"](ctx))
+            return content.strip()
+
+        logger.debug(f"📝 No capabilities block in {template_name}")
+        return ""
+    except Exception as e:
+        logger.warning(f"⚠️ Could not load capabilities for {agent_type}: {e}")
+        return ""
+
+
+def get_managed_agent_templates() -> Dict[str, str]:
     """
     Get managed agent task/report templates for smolagents.
 
@@ -199,7 +262,7 @@ def get_managed_agent_templates() -> dict:
     }
 
 
-def get_planning_templates() -> dict:
+def get_planning_templates() -> Dict[str, str]:
     """
     Get planning templates for smolagents.
 
@@ -221,7 +284,7 @@ def get_planning_templates() -> dict:
     }
 
 
-def get_hitl_templates() -> dict:
+def get_hitl_templates() -> Dict[str, str]:
     """
     Get Human-in-the-Loop resume templates.
 
@@ -237,13 +300,25 @@ def get_hitl_templates() -> dict:
 
 
 def _write_debug_prompt(name: str, content: str) -> None:
-    """Write prompt content to /tmp for debugging."""
+    """Write prompt content to /tmp for debugging.
+
+    Also logs to the current session logger if available (set EMERY_DEBUG_PROMPTS=1).
+    """
     try:
         os.makedirs('/tmp/emery_prompts', exist_ok=True)
         filepath = f'/tmp/emery_prompts/{name}.txt'
         with open(filepath, 'w') as f:
             f.write(content)
         logger.info(f"📋 Wrote debug prompt to {filepath}")
+
+        # Also log to session logger if available
+        session_logger = get_session_logger()
+        if session_logger:
+            session_logger.log_prompt_full(
+                agent_name=name,
+                prompt=content,
+                phase="prompt_rendered"
+            )
     except Exception as e:
         logger.warning(f"⚠️ Failed to write debug prompt: {e}")
 
@@ -383,12 +458,12 @@ def render_output_instructions(
 
 
 def build_agent_instructions(
-    tools: List[Any] = None,
+    tools: Optional[List[Any]] = None,
     agent_type: str = "default",
     context_type: str = "interactive",
-    skill_outputs: List[Any] = None,
-    session_attachments: List[Any] = None,
-    **kwargs
+    skill_outputs: Optional[List[Any]] = None,
+    session_attachments: Optional[List[Any]] = None,
+    **kwargs: Any
 ) -> str:
     """
     Build agent instructions from Jinja2 templates.
@@ -410,12 +485,8 @@ def build_agent_instructions(
     from .tools import get_tool_instructions
 
     try:
-        # Base templates (always included for all agents)
-        base_instructions = compose_templates([
-            "base/identity.j2",
-            "base/critical_rules.j2",
-            "components/goal_persistence.j2",
-        ], **kwargs)
+        # Base templates (always included for all agents) - cached for performance
+        base_instructions = get_cached_base_instructions(**kwargs)
 
         # Agent-specific additions (domain content)
         if agent_type != "default":

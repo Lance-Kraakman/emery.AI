@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { LucideIcon, Plus, Lock, ChevronRight } from "lucide-react"
+import { LucideIcon, Plus, LayoutTemplate } from "lucide-react"
 import {
   Collapsible,
   CollapsibleContent,
@@ -17,6 +17,12 @@ import {
   SidebarMenuButton,
 } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { SidebarItemActions } from "./sidebar-item-actions"
 import { InlineRename } from "./inline-rename"
 
@@ -36,10 +42,11 @@ interface GroupedSidebarSectionProps<T> {
   getGroupKey: (item: T) => string | number | null
   getGroupName: (item: T) => string | undefined
   isUngroupedItem: (item: T) => boolean
-  isSystemItem?: (item: T) => boolean  // For system items (read-only, grouped separately)
   // Actions
   onAdd: () => void
   addButtonLabel?: string
+  /** Optional callback for "From Template" option - if provided, shows dropdown */
+  onAddFromTemplate?: () => void
   // Action callbacks
   onRename?: (item: T, newName: string) => void | Promise<void>
   onDuplicate?: (item: T) => void | Promise<void>
@@ -69,16 +76,15 @@ export function GroupedSidebarSection<T>({
   getGroupKey,
   getGroupName,
   isUngroupedItem,
-  isSystemItem = () => false,  // Default to no system items
   onAdd,
   addButtonLabel = `Add ${label.slice(0, -1)}`, // Remove trailing 's' for singular
+  onAddFromTemplate,
   onRename,
   onDuplicate,
   onShare,
   onDelete,
 }: GroupedSidebarSectionProps<T>) {
   const [renamingItemId, setRenamingItemId] = React.useState<number | null>(null)
-  const [systemSectionOpen, setSystemSectionOpen] = React.useState(false)
 
   const hasActions = onRename || onDuplicate || onShare || onDelete
 
@@ -89,22 +95,18 @@ export function GroupedSidebarSection<T>({
     setRenamingItemId(null)
   }
 
-  // Separate items into three categories:
-  // 1. System items (read-only, shown in collapsible section at bottom)
-  const systemItems = items.filter(item => isSystemItem(item))
+  // Separate items into two categories:
+  // 1. Ungrouped items (organization skills, shown at top)
+  const ungroupedItems = items.filter(item => isUngroupedItem(item))
 
-  // 2. Ungrouped items (organization skills, shown at top)
-  const ungroupedItems = items.filter(item => !isSystemItem(item) && isUngroupedItem(item))
-
-  // 3. Grouped items (agent skills, shown grouped by agent)
-  const groupedItems = items.filter(item => !isSystemItem(item) && !isUngroupedItem(item))
+  // 2. Grouped items (agent skills, shown grouped by agent)
+  const groupedItems = items.filter(item => !isUngroupedItem(item))
   const uniqueGroupKeys = Array.from(new Set(groupedItems.map(getGroupKey)))
 
   // Helper function to render an item with actions
   const renderItem = (item: T, className = "") => {
     const itemId = getItemId(item)
     const isRenaming = renamingItemId === itemId
-    const isSystem = isSystemItem(item)
 
     return (
       <SidebarMenuItem key={itemId} className="group">
@@ -130,10 +132,7 @@ export function GroupedSidebarSection<T>({
                   </span>
                 </Link>
               </SidebarMenuButton>
-              {/* System items: show lock icon instead of actions */}
-              {isSystem ? (
-                <Lock className="h-3 w-3 mr-2 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-              ) : hasActions && (
+              {hasActions && (
                 <SidebarItemActions
                   onRename={onRename ? () => setRenamingItemId(itemId) : undefined}
                   onDuplicate={onDuplicate ? () => onDuplicate(item) : undefined}
@@ -178,31 +177,41 @@ export function GroupedSidebarSection<T>({
                 )
               })}
 
-              {/* System items section */}
-              {systemItems.length > 0 && (
-                <Collapsible open={systemSectionOpen} onOpenChange={setSystemSectionOpen} className="mt-2">
-                  <CollapsibleTrigger className="flex items-center gap-1 px-2 py-1 w-full text-xs text-muted-foreground font-medium hover:text-foreground transition-colors">
-                    <ChevronRight className={`h-3 w-3 transition-transform duration-200 ${systemSectionOpen ? 'rotate-90' : ''}`} />
-                    <Lock className="h-3 w-3" />
-                    <span>System</span>
-                    <span className="ml-auto text-[10px] opacity-60">{systemItems.length}</span>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    {systemItems.map(item => renderItem(item, "pl-4"))}
-                  </CollapsibleContent>
-                </Collapsible>
-              )}
-
               {/* Add button */}
-              <Button
-                variant="ghost"
-                className="w-full justify-start h-6 px-2 text-sm mt-0.5 group-data-[collapsible=icon]:hidden"
-                onClick={onAdd}
-                disabled={isCreating}
-              >
-                <Plus className="h-4 w-4" />
-                <span className="group-data-[collapsible=icon]:hidden">{addButtonLabel}</span>
-              </Button>
+              {onAddFromTemplate ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      className="w-full justify-start h-6 px-2 text-sm mt-0.5 group-data-[collapsible=icon]:hidden"
+                      disabled={isCreating}
+                    >
+                      <Plus className="h-4 w-4" />
+                      <span className="group-data-[collapsible=icon]:hidden">{addButtonLabel}</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-48">
+                    <DropdownMenuItem onClick={onAdd}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create Blank
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={onAddFromTemplate}>
+                      <LayoutTemplate className="h-4 w-4 mr-2" />
+                      From Template
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start h-6 px-2 text-sm mt-0.5 group-data-[collapsible=icon]:hidden"
+                  onClick={onAdd}
+                  disabled={isCreating}
+                >
+                  <Plus className="h-4 w-4" />
+                  <span className="group-data-[collapsible=icon]:hidden">{addButtonLabel}</span>
+                </Button>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </CollapsibleContent>

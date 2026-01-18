@@ -12,6 +12,10 @@ interface SignInButtonProps {
   buttonTextColor?: string
   borderColor?: string
   borderRadius?: string
+  // Sign-up mode changes button text
+  isSignUp?: boolean
+  // Default role ID for sign-up mode
+  signUpRoleId?: number
 }
 
 export function SignInButton({
@@ -20,19 +24,30 @@ export function SignInButton({
   buttonColor,
   buttonTextColor,
   borderColor,
-  borderRadius
+  borderRadius,
+  isSignUp = false,
+  signUpRoleId
 }: SignInButtonProps) {
   const handleSignIn = () => {
-    signIn(provider, { callbackUrl })
+    // If signUpRoleId is provided, append it to the callback URL
+    let finalCallbackUrl = callbackUrl;
+    if (signUpRoleId) {
+      const url = new URL(callbackUrl, window.location.origin);
+      url.searchParams.set('signupRole', String(signUpRoleId));
+      finalCallbackUrl = url.pathname + url.search;
+    }
+    signIn(provider, { callbackUrl: finalCallbackUrl })
   }
+
+  const actionText = isSignUp ? "Sign up with" : "Continue with";
 
   const buttonConfig = {
     github: {
-      text: "Continue with GitHub",
+      text: `${actionText} GitHub`,
       icon: <Github className="w-4 h-4 mr-2" />,
     },
     google: {
-      text: "Continue with Google",
+      text: `${actionText} Google`,
       icon: (
         <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24">
           <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>

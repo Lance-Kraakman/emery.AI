@@ -1,0 +1,80 @@
+{
+  "$format": "brain-template",
+  "$version": 1,
+  "metadata": {
+    "name": "Expense Tracking",
+    "description": "Track expenses, categories, and budgets. Monitor spending and manage receipts.",
+    "category": "Finance",
+    "tags": ["expenses", "finance", "budget", "tracking"],
+    "version": "1.0.0"
+  },
+  "template": {
+    "type": "database",
+    "data": {
+      "name": "Expense Tracking",
+      "slug": "expense-tracking",
+      "description": "Expense management system",
+      "tables": [
+        {
+          "name": "Categories",
+          "description": "Expense categories",
+          "fields": [
+            { "name": "Name", "slug": "name", "type": "text", "required": true },
+            { "name": "Description", "slug": "description", "type": "text" },
+            { "name": "Monthly Budget", "slug": "monthly_budget", "type": "number" },
+            {
+              "name": "Color",
+              "slug": "color",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Blue", "color": "#3B82F6" },
+                  { "id": 2, "value": "Green", "color": "#10B981" },
+                  { "id": 3, "value": "Purple", "color": "#8B5CF6" },
+                  { "id": 4, "value": "Orange", "color": "#F59E0B" },
+                  { "id": 5, "value": "Red", "color": "#EF4444" },
+                  { "id": 6, "value": "Pink", "color": "#EC4899" }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Expenses",
+          "description": "Individual expenses",
+          "fields": [
+            { "name": "Description", "slug": "description", "type": "text", "required": true },
+            { "name": "Amount", "slug": "amount", "type": "number", "required": true },
+            {
+              "name": "Category",
+              "slug": "category",
+              "type": "relation",
+              "fieldConfig": {
+                "targetTableRef": "Categories",
+                "relationshipType": "many-to-many"
+              }
+            },
+            { "name": "Date", "slug": "date", "type": "date", "required": true },
+            {
+              "name": "Payment Method",
+              "slug": "payment_method",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Cash", "color": "#10B981" },
+                  { "id": 2, "value": "Credit Card", "color": "#3B82F6" },
+                  { "id": 3, "value": "Debit Card", "color": "#8B5CF6" },
+                  { "id": 4, "value": "Bank Transfer", "color": "#F59E0B" }
+                ]
+              }
+            },
+            { "name": "Receipt", "slug": "receipt", "type": "file" },
+            { "name": "Notes", "slug": "notes", "type": "text" },
+            { "name": "Approved", "slug": "approved", "type": "boolean" },
+            { "name": "Created At", "slug": "created_at", "type": "created-at" }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -49,6 +49,11 @@ def load_table_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
                    data: Optional[Dict] = None, filters: Optional[Dict] = None) -> Dict[str, Any]:
             """Execute table CRUD operation."""
 
+            # Check if mutation is allowed during planning phase
+            blocked = self._check_mutation_allowed(method)
+            if blocked:
+                return blocked
+
             # Pre-configured table_id takes priority over LLM-provided (for reference tools)
             effective_table_id = _preconfigured_table_id or table_id
 
@@ -56,8 +61,9 @@ def load_table_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
                 if not data:
                     return {"success": False, "error": "Table data is required for create_table. Provide {name, databaseId, description}"}
 
+                # Request TOON format for minimal token usage
                 return self._make_api_request_with_deadline(
-                    endpoint="tables",
+                    endpoint="tables?format=llm",
                     method="POST",
                     data=data,
                     auth_token=_auth_token,
@@ -81,8 +87,9 @@ def load_table_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
                 if not data:
                     return {"success": False, "error": "Table data is required for update_table. Provide {name, description, metadata}"}
 
+                # Request TOON format for minimal token usage
                 return self._make_api_request_with_deadline(
-                    endpoint=f"tables/{effective_table_id}",
+                    endpoint=f"tables/{effective_table_id}?format=llm",
                     method="PUT",
                     data=data,
                     auth_token=_auth_token,
@@ -93,21 +100,20 @@ def load_table_crud(config: ToolConfig, api_key: Optional[str] = None, organizat
                 if not effective_table_id:
                     return {"success": False, "error": "Table ID is required for delete_table operation"}
 
+                # Request TOON format for minimal token usage
                 return self._make_api_request_with_deadline(
-                    endpoint=f"tables/{effective_table_id}",
+                    endpoint=f"tables/{effective_table_id}?format=llm",
                     method="DELETE",
                     auth_token=_auth_token,
                     organization_id=_org_id
                 )
 
             elif method == "list_tables":
-                endpoint = "tables"
+                # Request TOON format for minimal token usage
+                endpoint = "tables?format=llm"
                 if filters:
-                    query_params = []
                     for key, value in filters.items():
-                        query_params.append(f"{key}={value}")
-                    if query_params:
-                        endpoint += "?" + "&".join(query_params)
+                        endpoint += f"&{key}={value}"
 
                 return self._make_api_request_with_deadline(
                     endpoint=endpoint,

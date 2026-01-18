@@ -1,0 +1,146 @@
+{
+  "$format": "brain-template",
+  "$version": 1,
+  "metadata": {
+    "name": "Lightweight CRM",
+    "description": "Track contacts, companies, and sales pipeline. Perfect for small teams managing customer relationships.",
+    "category": "Business",
+    "tags": ["crm", "sales", "contacts", "business"],
+    "version": "1.0.0"
+  },
+  "template": {
+    "type": "database",
+    "data": {
+      "name": "CRM",
+      "slug": "crm",
+      "description": "Customer Relationship Management",
+      "tables": [
+        {
+          "name": "Companies",
+          "description": "Organizations and businesses",
+          "fields": [
+            { "name": "Name", "slug": "name", "type": "text", "required": true },
+            { "name": "Website", "slug": "website", "type": "text" },
+            {
+              "name": "Industry",
+              "slug": "industry",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Technology", "color": "#3B82F6" },
+                  { "id": 2, "value": "Healthcare", "color": "#10B981" },
+                  { "id": 3, "value": "Finance", "color": "#8B5CF6" },
+                  { "id": 4, "value": "Retail", "color": "#F59E0B" },
+                  { "id": 5, "value": "Manufacturing", "color": "#06B6D4" },
+                  { "id": 6, "value": "Other", "color": "#6B7280" }
+                ]
+              }
+            },
+            { "name": "Address", "slug": "address", "type": "text" },
+            { "name": "Notes", "slug": "notes", "type": "text" },
+            { "name": "Created At", "slug": "created_at", "type": "created-at" }
+          ]
+        },
+        {
+          "name": "Contacts",
+          "description": "Individual contacts and leads",
+          "fields": [
+            { "name": "Name", "slug": "name", "type": "text", "required": true },
+            { "name": "Email", "slug": "email", "type": "email" },
+            { "name": "Phone", "slug": "phone", "type": "phone" },
+            {
+              "name": "Company",
+              "slug": "company",
+              "type": "relation",
+              "fieldConfig": {
+                "targetTableRef": "Companies",
+                "relationshipType": "many-to-many"
+              }
+            },
+            {
+              "name": "Status",
+              "slug": "status",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Lead", "color": "#3B82F6" },
+                  { "id": 2, "value": "Contacted", "color": "#F59E0B" },
+                  { "id": 3, "value": "Qualified", "color": "#10B981" },
+                  { "id": 4, "value": "Lost", "color": "#EF4444" }
+                ]
+              }
+            },
+            { "name": "Last Contact", "slug": "last_contact", "type": "date" },
+            { "name": "Notes", "slug": "notes", "type": "text" },
+            { "name": "Created At", "slug": "created_at", "type": "created-at" }
+          ]
+        },
+        {
+          "name": "Pipeline",
+          "description": "Sales pipeline and deals",
+          "fields": [
+            { "name": "Deal Name", "slug": "deal_name", "type": "text", "required": true },
+            {
+              "name": "Contact",
+              "slug": "contact",
+              "type": "relation",
+              "fieldConfig": {
+                "targetTableRef": "Contacts",
+                "relationshipType": "many-to-many"
+              }
+            },
+            {
+              "name": "Stage",
+              "slug": "stage",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Prospect", "color": "#6B7280" },
+                  { "id": 2, "value": "Qualified", "color": "#3B82F6" },
+                  { "id": 3, "value": "Proposal", "color": "#F59E0B" },
+                  { "id": 4, "value": "Negotiation", "color": "#8B5CF6" },
+                  { "id": 5, "value": "Closed Won", "color": "#10B981" },
+                  { "id": 6, "value": "Closed Lost", "color": "#EF4444" }
+                ]
+              }
+            },
+            { "name": "Value", "slug": "value", "type": "number" },
+            { "name": "Close Date", "slug": "close_date", "type": "date" },
+            { "name": "Notes", "slug": "notes", "type": "text" }
+          ]
+        },
+        {
+          "name": "Activities",
+          "description": "Logged activities and interactions",
+          "fields": [
+            {
+              "name": "Type",
+              "slug": "type",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Call", "color": "#3B82F6" },
+                  { "id": 2, "value": "Email", "color": "#10B981" },
+                  { "id": 3, "value": "Meeting", "color": "#8B5CF6" },
+                  { "id": 4, "value": "Note", "color": "#6B7280" }
+                ]
+              }
+            },
+            {
+              "name": "Contact",
+              "slug": "contact",
+              "type": "relation",
+              "fieldConfig": {
+                "targetTableRef": "Contacts",
+                "relationshipType": "many-to-many"
+              }
+            },
+            { "name": "Date", "slug": "date", "type": "date" },
+            { "name": "Description", "slug": "description", "type": "text" },
+            { "name": "Created At", "slug": "created_at", "type": "created-at" }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -251,6 +251,58 @@ message SkillStep {
   TaskModelConfig task_model_config = 19; // For operation steps
   // UI state
   bool is_disabled = 21;               // Step can be disabled without deletion
+  // Agentic step configuration (for nodeType='agentic')
+  AgenticStepConfig agentic_config = 22;
+}
+
+// Configuration for agentic step execution (nodeType='agentic')
+// AIDEV-NOTE: plan field enables autonomous execution - when present, HITL is bypassed
+message AgenticStepConfig {
+  string instructions = 1;             // Instructions for the agent
+  repeated ToolConfig tools = 2;       // Tools available for this agentic step
+  string agent_type = 3;               // "tool_calling" (default) or "code_agent"
+  string model = 4;                    // Optional model override
+  StoredPlan plan = 5;                 // Stored execution plan for autonomous execution
+}
+
+// =============================================================================
+// Stored Plan Types (for autonomous execution)
+// =============================================================================
+
+// Stored execution plan for autonomous execution
+// AIDEV-NOTE: When present on agentic step, execution skips HITL and runs autonomously.
+// Contains execution blueprint from successful HITL planning session.
+message StoredPlan {
+  string id = 1;                       // Plan identifier
+  string goal = 2;                     // High-level goal from user request
+  string basic_instructions = 3;       // Original instructions
+  string context = 4;                  // Discovered context (databases, tables)
+  string analysis = 5;                 // LLM reasoning about approach
+  repeated StoredPlanStep steps = 6;   // Execution steps
+  int32 version = 7;                   // Plan version
+  string generated_at = 8;             // When plan was generated (ISO timestamp)
+  string approved_at = 9;              // When plan was approved (ISO timestamp)
+}
+
+// Individual step within a stored plan
+// Contains execution details without runtime state (status, result, error)
+message StoredPlanStep {
+  string step_id = 1;                  // Step identifier
+  string description = 2;              // Step description
+  string tool_call = 3;                // Tool to call (e.g., "row_crud:read")
+  map<string, string> parameters = 4;  // Tool parameters
+  repeated string context_tables = 5;  // Tables this step needs access to
+  string target_agent = 6;             // Managed agent for routing (e.g., "schema_builder")
+  StoredSubPlan sub_plan = 7;          // Sub-plan from cascading planning
+}
+
+// Sub-plan from cascading planning
+// Generated when a managed agent creates detailed execution steps
+message StoredSubPlan {
+  string agent_name = 1;               // Target agent name
+  string goal = 2;                     // Sub-goal for this agent
+  repeated StoredPlanStep steps = 3;   // Sub-plan steps
+  string planning_observations = 4;    // Observations from planning phase
 }
 
 // Configuration for operation execution (direct model invocation without LLM orchestration)
@@ -451,6 +503,59 @@ service ChatProcessingService {
 
   // Cancel an in-progress message processing
   rpc CancelMessage(CancelMessageRequest) returns (CancelMessageResponse);
+
+  // Generate an autonomous execution plan for skill instructions (streaming)
+  // AIDEV-NOTE: Streaming RPC for progress updates and HITL clarification questions
+  rpc GeneratePlan(GeneratePlanRequest) returns (stream GeneratePlanResponse);
+}
+
+// Request for autonomous plan generation
+message GeneratePlanRequest {
+  string instructions = 1;              // Task instructions (required)
+  int32 organization_id = 2;            // For ToolProvider context
+  string user_id = 3;                   // For auth context
+  int32 skill_id = 4;                   // To resolve skill's data sources
+  string model = 5;                     // Optional model override
+  string user_api_key = 6;              // For ToolProvider auth
+  int32 timeout_seconds = 7;            // Default: 60
+  repeated InputDefinition skill_inputs = 8;  // Skill input definitions for variable-aware planning
+  string previous_plan_json = 9;        // Previous plan as JSON (for regeneration with feedback)
+  string user_feedback = 10;            // User feedback for regeneration
+  repeated OutputDefinition skill_outputs = 11;  // Skill outputs for result-aware planning
+  string session_id = 12;               // For resuming after clarification questions
+  repeated ClarificationAnswer answers = 13; // Answers to clarification questions
+}
+
+// Streaming response from plan generation
+// AIDEV-NOTE: Streams progress updates, can pause for clarification questions (HITL)
+message GeneratePlanResponse {
+  oneof response {
+    PlanProgress progress = 1;          // Progress update during generation
+    AwaitingInput awaiting_input = 2;   // HITL: Need clarification from user
+    PlanComplete plan_complete = 3;     // Final plan ready
+    ProcessingError error = 4;          // Error during generation
+  }
+  int64 timestamp = 5;                  // Response timestamp
+}
+
+// Plan generation progress update
+message PlanProgress {
+  string message = 1;                   // Human-readable progress message
+  string phase = 2;                     // Phase: "context_gathering", "analyzing", "planning"
+}
+
+// Plan generation completed successfully
+message PlanComplete {
+  string plan_json = 1;                 // StoredPlan as JSON
+  string plan_id = 2;                   // Plan UUID
+  int32 planning_time_ms = 3;           // Generation time
+  TokenUsage token_usage = 4;           // For billing
+}
+
+// Answer to a clarification question
+message ClarificationAnswer {
+  string question_id = 1;               // ID of the question being answered
+  string answer = 2;                    // User's answer
 }
 
 // Request for AI message processing
@@ -488,9 +593,30 @@ message ProcessMessageResponse {
     ProcessingComplete complete = 3;   // Processing finished marker
     ProcessingError error = 4;        // Processing error
     StepProgress step_progress = 5;   // Real-time step execution progress
+    AwaitingInput awaiting_input = 7; // HITL: Agent needs user approval/input
   }
 
   int64 timestamp = 6;               // Response timestamp
+}
+
+// HITL: Agent awaiting user input (plan approval or question)
+// AIDEV-NOTE: Used for both plan approval and agent questions.
+// - plan_approval: Shows plan + Approve/Reject/Modify buttons
+// - question: Shows question + option buttons for user choice
+message AwaitingInput {
+  string input_type = 1;             // "plan_approval" or "question"
+  string title = 2;                  // Display title
+  string content = 3;                // Plan markdown or question text
+  repeated InputOption options = 4;  // Available options for user to choose
+  string plan_json = 5;              // Full plan JSON (for plan_approval type)
+  string session_id = 6;             // Session ID for resuming after user input
+}
+
+// Option for HITL questions/choices
+message InputOption {
+  string id = 1;                     // Unique option identifier
+  string label = 2;                  // Display text
+  string description = 3;            // Optional description
 }
 
 // Multimodal message part (text, image, or file attachment)

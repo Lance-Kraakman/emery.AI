@@ -1,0 +1,1 @@
+ALTER TABLE "organizations" ALTER COLUMN "credits_used_current_month" SET DATA TYPE double precision;

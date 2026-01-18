@@ -4,8 +4,11 @@
  * Functions for creating and normalizing org chart edges.
  */
 
-import type { OrgChartEdge } from './types';
+import type { OrgChartEdge, DataSourceMapping } from './types';
 import { makeNodeId } from './nodeId';
+
+// Re-export DataSourceMapping for consumers
+export type { DataSourceMapping };
 
 // =============================================================================
 // Types
@@ -280,18 +283,6 @@ export function extractSkillEdges(
 // =============================================================================
 // Data Source Edge Extraction
 // =============================================================================
-
-/**
- * Data source mapping from context_mappings table
- */
-export interface DataSourceMapping {
-  id: number;
-  targetType: 'agent' | 'skill' | 'skill_step';
-  targetId: string;
-  tableId: number;
-  tableName: string;
-  accessMode: 'read' | 'write' | 'readwrite';
-}
 
 /**
  * Create an edge for data source connections.

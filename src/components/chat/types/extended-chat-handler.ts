@@ -1,7 +1,7 @@
 import type { ChatHandler, Message } from '@llamaindex/chat-ui'
 import type { ToolDTO } from '@/app/mappers/tool-mapper'
 import type { ExecutionStep } from '@/ddd/domain/chat/value-objects/execution-step'
-import type { PlanStepData } from '@/lib/chat/types/sse-events'
+import type { PlanStepData, InputOption } from '@/lib/chat/types/sse-events'
 
 /**
  * ChatMessage with ID and metadata support for execution steps
@@ -32,6 +32,8 @@ export interface PendingPlanApproval {
   steps: PlanStepData[]
   estimatedActions?: number
   contextTables?: string[]
+  context?: string   // What was discovered (existing databases, tables, etc.)
+  analysis?: string  // Analysis/reasoning about what will be done
 }
 
 /**
@@ -49,6 +51,49 @@ export interface ActivePlanExecution {
   completedSteps: number[]
   failedSteps: number[]
   error?: string
+}
+
+/**
+ * Question from a sub-agent during cascading planning
+ */
+export interface BatchedQuestion {
+  questionId: string
+  question: string
+  options?: string[]  // For multiple choice
+  context?: string    // Why the agent needs this info
+}
+
+/**
+ * User's answers to batched questions (maps questionId → answer)
+ * Sent as JSON to backend for cascade planning resume
+ */
+export type BatchedQuestionAnswers = Record<string, string>
+
+/**
+ * Group of questions from a single agent
+ */
+export interface QuestionSection {
+  agentName: string
+  stepId: string
+  questions: BatchedQuestion[]
+}
+
+/**
+ * Awaiting input state for HITL (plan approval or questions)
+ *
+ * AIDEV-NOTE: Unified HITL state supporting:
+ * - plan_approval: Shows plan + Approve/Reject/Modify buttons
+ * - question: Shows question + option buttons for user choice
+ * - batched_questions: Shows questions from multiple sub-agents grouped together
+ */
+export interface AwaitingInputState {
+  inputType: 'plan_approval' | 'question' | 'batched_questions'
+  title: string
+  content: string
+  options: InputOption[]
+  planJson?: string
+  // For batched_questions input type
+  questionSections?: QuestionSection[]
 }
 
 /**
@@ -104,4 +149,8 @@ export interface ExtendedChatHandler extends ChatHandler {
   activePlanExecution: ActivePlanExecution | null
   approvePlan?: () => Promise<void>
   rejectPlan?: () => Promise<void>
+
+  // Unified HITL awaiting input (plan approval or questions)
+  awaitingInput: AwaitingInputState | null
+  respondToInput?: (response: string) => Promise<void>
 }

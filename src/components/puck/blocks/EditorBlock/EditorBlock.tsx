@@ -20,19 +20,19 @@ import { useStateContext, type StateContextValue } from '../../contexts/StateCon
 import { useRowData, type RowDataContextValue } from '../../contexts/RowDataContext';
 import type { EditorBlockProps, DocumentIdSourceConfig } from './types';
 
-/** Regex to extract variable name from {state.varName} format */
-const STATE_VAR_REGEX = /\{state\.(\w+)\}/;
+/** Regex to extract variable name from {{state.varName}} format */
+const STATE_VAR_REGEX = /\{\{state\.(\w+)\}\}/;
 
-/** Regex to extract field name from {rowData.fieldName} format */
-const ROW_DATA_VAR_REGEX = /\{rowData\.(\w+)\}/;
+/** Regex to extract field name from {{rowData.fieldName}} format */
+const ROW_DATA_VAR_REGEX = /\{\{rowData\.(\w+)\}\}/;
 
-/** Parse variable name from {state.varName} format */
+/** Parse variable name from {{state.varName}} format */
 function parseStateVariable(value: string): string {
   const match = value.match(STATE_VAR_REGEX);
   return match?.[1] || '';
 }
 
-/** Parse field name from {rowData.fieldName} format */
+/** Parse field name from {{rowData.fieldName}} format */
 function parseRowDataVariable(value: string): string {
   const match = value.match(ROW_DATA_VAR_REGEX);
   return match?.[1] || '';

@@ -10,6 +10,7 @@ import asyncio
 import os
 import logging
 import base64
+import re
 from io import BytesIO
 from typing import Optional, List, Dict, Any, Union
 from dataclasses import dataclass
@@ -99,6 +100,22 @@ class CustomInferenceModel(Model):
         mime_type = f"image/{image_format.lower()}"
         return f"data:{mime_type};base64,{base64_image}"
 
+    def _sanitize_urls(self, text: str) -> str:
+        """
+        Strip https:// and http:// prefixes from URLs in text.
+
+        Gemini API rejects requests containing full URL protocols,
+        likely detecting them as potential RCE/injection vectors.
+        Removing the protocol prefix allows requests to succeed.
+
+        Args:
+            text: Text potentially containing URLs
+
+        Returns:
+            Text with URL protocols removed (e.g., 'example.com' instead of 'https://example.com')
+        """
+        return re.sub(r'https?://', '', text)
+
     def _process_message_content(self, content: MessageContentList) -> list[dict]:
         """
         Convert smolagents content format to HuggingFace API format.
@@ -119,7 +136,7 @@ class CustomInferenceModel(Model):
             if part_type == "text":
                 processed.append({
                     "type": "text",
-                    "text": part["text"]
+                    "text": self._sanitize_urls(part["text"])
                 })
             elif part_type == "image":
                 # Convert PIL Image to base64 data URL
@@ -158,7 +175,7 @@ class CustomInferenceModel(Model):
                 json_type = "string" if raw_type in ("any", "image", "audio") else raw_type
                 properties[name] = {
                     "type": json_type,
-                    "description": spec.get("description", "")
+                    "description": self._sanitize_urls(spec.get("description", ""))
                 }
                 # smolagents uses 'nullable' or checks if required
                 if not spec.get("nullable", False):
@@ -168,7 +185,7 @@ class CustomInferenceModel(Model):
                 "type": "function",
                 "function": {
                     "name": tool.name,
-                    "description": tool.description or f"Execute {tool.name}",
+                    "description": self._sanitize_urls(tool.description or f"Execute {tool.name}"),
                     "parameters": {
                         "type": "object",
                         "properties": properties,
@@ -363,7 +380,6 @@ class SmolagentsModelProvider:
         self,
         model_id: Optional[str] = None,
         model_type: str = 'default',
-        api_key: Optional[str] = None,
     ) -> Model:
         """
         Get model instance by ID or type.
@@ -371,7 +387,6 @@ class SmolagentsModelProvider:
         Args:
             model_id: Specific model ID to use (e.g., 'ibm-granite/granite-3.3-8b-instruct')
             model_type: Fallback type if no model_id provided ('chat', 'tool_calling', 'default')
-            api_key: Optional API key for providers that need it (e.g., Gemini)
 
         Returns:
             Configured model instance ready for generation
@@ -391,10 +406,13 @@ class SmolagentsModelProvider:
 
         logger.info(f"🔧 Creating model: {metadata.name} ({metadata.category.value})")
 
+        # Use the actual model ID from metadata (handles aliases like gemini-1.5-pro -> gemini-1.5-pro-latest)
+        actual_model_id = metadata.id
+
         # Handle Google Gemini models via OpenAI-compatible API
-        if model_id.startswith("google/"):
-            gemini_model_id = model_id.replace("google/", "")  # e.g., "gemini-2.0-flash"
-            gemini_api_key = api_key or os.environ.get("GEMINI_API_KEY")
+        if actual_model_id.startswith("google/"):
+            gemini_model_id = actual_model_id.replace("google/", "")  # e.g., "gemini-1.5-pro-latest"
+            gemini_api_key = os.environ.get("GEMINI_API_KEY")
             if not gemini_api_key:
                 raise EnvironmentError(
                     "GEMINI_API_KEY is required for Google Gemini models. "
@@ -417,12 +435,12 @@ class SmolagentsModelProvider:
             # HF Inference API - pass model ID directly (InferenceClient handles routing to router.huggingface.co)
             # AIDEV-NOTE: As of Nov 2025, old api-inference.huggingface.co is deprecated (404)
             # InferenceClient automatically routes to router.huggingface.co/hf-inference/ when given model ID
-            endpoint_url = model_id
-            logger.info(f"🔧 Using HF Inference API for model: {model_id}")
+            endpoint_url = actual_model_id
+            logger.info(f"🔧 Using HF Inference API for model: {actual_model_id}")
 
         model = CustomInferenceModel(
             endpoint_url=endpoint_url,
-            model_name=model_id,
+            model_name=actual_model_id,
             token=self.hf_token
         )
 

@@ -12,7 +12,7 @@ import { Settings, Plus, Search, TableIcon as Table, Database } from "lucide-rea
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { DynamicDataSheetGrid } from "./components/DynamicDataSheetGrid"
 import { FieldManagerDialog } from "./components/FieldManagerDialog"
-import { useEmery } from "@/contexts/EmeryStoreProvider"
+import { useEmery, useEmeryTable } from "@/contexts/EmeryStoreProvider"
 import { dataStore, dataSelectors } from '@/stores/data-management.store'
 import { storeActions, dataActions } from '@/stores/actions'
 import type { TableDTO } from "@/app/mappers/table-mapper"
@@ -124,15 +124,6 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
     }
   }
 
-  // Find the initial table across all databases
-  const findTableById = (id: number): TableDTO | undefined => {
-    for (const database of (data?.databases || [])) {
-      const table = database.tables.find(t => t.id === id)
-      if (table) return table
-    }
-    return undefined
-  }
-
   // Use TanStack Store for data management state
   const selectedTableId = useStore(dataStore, dataSelectors.selectedTableId)
   const selectedViewId = useStore(dataStore, dataSelectors.selectedViewId)
@@ -160,21 +151,25 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
     }
   }, [tableId])
 
-  const selectedTable = selectedTableId ? findTableById(selectedTableId) : undefined
+  // AIDEV-NOTE: Use tableId prop directly (from URL) OR selectedTableId from store
+  // This fixes the race condition where navigation happens before store is updated
+  // useEmeryTable subscribes directly to the specific table in appStateStore
+  const effectiveTableId = tableId ?? selectedTableId
+  const selectedTable = useEmeryTable(effectiveTableId ?? 0) ?? undefined
 
   // TanStack Query for fields
   const fieldsQuery = useQuery({
-    queryKey: selectedTableId ? fieldQueryKeys.all(selectedTableId) : ['fields', null],
-    queryFn: () => selectedTableId ? getFields(selectedTableId) : Promise.resolve([]),
-    enabled: !!selectedTableId,
+    queryKey: effectiveTableId ? fieldQueryKeys.all(effectiveTableId) : ['fields', null],
+    queryFn: () => effectiveTableId ? getFields(effectiveTableId) : Promise.resolve([]),
+    enabled: !!effectiveTableId,
     staleTime: GRID_CONFIG.FIELD_STALE_TIME,
   })
 
   // TanStack Query for views list (for table)
   const viewsQuery = useQuery({
-    queryKey: ['views', 'table', selectedTableId],
-    queryFn: () => selectedTableId ? getViewsForTable(selectedTableId) : Promise.resolve([]),
-    enabled: !!selectedTableId,
+    queryKey: ['views', 'table', effectiveTableId],
+    queryFn: () => effectiveTableId ? getViewsForTable(effectiveTableId) : Promise.resolve([]),
+    enabled: !!effectiveTableId,
     staleTime: 5 * 60 * 1000, // 5 minutes - views change less frequently than data
   })
 
@@ -192,14 +187,14 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
 
   // TanStack Infinite Query for rows (supports pagination)
   const infiniteRowsQuery = useInfiniteQuery({
-    queryKey: selectedTableId
-      ? rowQueryKeys.infinite(selectedTableId, sortBy, activeFilters ?? [])
+    queryKey: effectiveTableId
+      ? rowQueryKeys.infinite(effectiveTableId, sortBy, activeFilters ?? [])
       : ['rows', null, 'infinite'],
     initialPageParam: 0,
     queryFn: ({ pageParam }: { pageParam: number }) =>
-      selectedTableId
+      effectiveTableId
         ? getRowsDSG(
-            selectedTableId,
+            effectiveTableId,
             GRID_CONFIG.PAGE_SIZE,
             pageParam,
             sortBy.field,
@@ -211,20 +206,20 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
       if (!lastPage.hasMore) return undefined
       return allPages.length * GRID_CONFIG.PAGE_SIZE // Offset for next page
     },
-    enabled: !!selectedTableId && !searchTerm && fieldsQuery.isSuccess, // Wait for field metadata
+    enabled: !!effectiveTableId && !searchTerm && fieldsQuery.isSuccess, // Wait for field metadata
     staleTime: GRID_CONFIG.ROW_STALE_TIME,
   })
 
   // TanStack Query for server-side search
   const searchQuery = useQuery({
-    queryKey: selectedTableId && searchTerm
-      ? rowQueryKeys.search(selectedTableId, searchTerm)
+    queryKey: effectiveTableId && searchTerm
+      ? rowQueryKeys.search(effectiveTableId, searchTerm)
       : ['rows', null, 'search'],
     queryFn: () =>
-      selectedTableId && searchTerm
-        ? searchRowsDSG(selectedTableId, searchTerm, 1000) // Higher limit for search results
+      effectiveTableId && searchTerm
+        ? searchRowsDSG(effectiveTableId, searchTerm, 1000) // Higher limit for search results
         : Promise.resolve({ rows: [], total: 0 }),
-    enabled: !!selectedTableId && !!searchTerm && searchTerm.trim().length > 0 && fieldsQuery.isSuccess, // Wait for field metadata
+    enabled: !!effectiveTableId && !!searchTerm && searchTerm.trim().length > 0 && fieldsQuery.isSuccess, // Wait for field metadata
     staleTime: GRID_CONFIG.SEARCH_STALE_TIME,
   })
 
@@ -358,8 +353,8 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
   // Handles optimistic updates, batching, and server synchronization
   const bulkUpdateMutation = useMutation({
     mutationFn: async (updates: Array<{ rowId: string; data: Record<string, any> }>) => {
-      if (!selectedTableId) throw new Error('No table selected')
-      return updateRowsData(selectedTableId, updates)
+      if (!effectiveTableId) throw new Error('No table selected')
+      return updateRowsData(effectiveTableId, updates)
     },
     onError: (err) => {
       logger.error("Failed to bulk update rows:", err)
@@ -368,8 +363,8 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
       })
 
       // Invalidate to refetch correct data on error
-      if (selectedTableId) {
-        queryClient.invalidateQueries({ queryKey: rowQueryKeys.all(selectedTableId) })
+      if (effectiveTableId) {
+        queryClient.invalidateQueries({ queryKey: rowQueryKeys.all(effectiveTableId) })
       }
     },
     onSuccess: (data, variables) => {
@@ -378,8 +373,8 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
       // AIDEV-NOTE: Merge server response into cache to show auto-field values immediately
       // Server generates auto-fields (last-updated, created-at) that aren't in optimistic update
       // Without this merge, users must refresh to see last-updated timestamps
-      if (data?.success && data?.data && selectedTableId) {
-        const queryKey = rowQueryKeys.infinite(selectedTableId, sortBy, activeFilters ?? [])
+      if (data?.success && data?.data && effectiveTableId) {
+        const queryKey = rowQueryKeys.infinite(effectiveTableId, sortBy, activeFilters ?? [])
 
         // Create map of updated rows by ID for quick lookup
         const updatedRowsMap = new Map(
@@ -415,14 +410,14 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
   const { handleUpdateRow } = useBulkRowUpdate({
     fields,
     bulkUpdateMutation,
-    selectedTableId,
+    selectedTableId: effectiveTableId,
     sortBy,
     activeFilters
   })
 
   const addRowsMutation = useMutation({
     mutationFn: async (rowsData: Record<string, any>[]) => {
-      if (!selectedTableId) throw new Error('No table selected')
+      if (!effectiveTableId) throw new Error('No table selected')
 
       // Apply field defaults to each row
       const processedRows = rowsData.map(initialData => {
@@ -452,14 +447,14 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
         return rowData
       })
 
-      return createRows({ tableId: selectedTableId, rows: processedRows })
+      return createRows({ tableId: effectiveTableId, rows: processedRows })
     },
     onMutate: async (rowsData) => {
       // Cancel any outgoing refetches to prevent race conditions
-      await queryClient.cancelQueries({ queryKey: rowQueryKeys.all(selectedTableId!) })
+      await queryClient.cancelQueries({ queryKey: rowQueryKeys.all(effectiveTableId!) })
 
       // Snapshot current data for rollback
-      const queryKey = rowQueryKeys.infinite(selectedTableId!, sortBy, activeFilters ?? [])
+      const queryKey = rowQueryKeys.infinite(effectiveTableId!, sortBy, activeFilters ?? [])
       const previousData = queryClient.getQueryData(queryKey)
 
       // Create temporary rows with temp IDs (will be replaced by server response)
@@ -486,8 +481,8 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
     },
     onSuccess: (data, variables, context) => {
       // Replace temp rows with server-returned rows (with real IDs)
-      if (data?.success && data?.data && selectedTableId) {
-        const queryKey = rowQueryKeys.infinite(selectedTableId, sortBy, activeFilters ?? [])
+      if (data?.success && data?.data && effectiveTableId) {
+        const queryKey = rowQueryKeys.infinite(effectiveTableId, sortBy, activeFilters ?? [])
         const serverRows = data.data as DSGRow[]
         const tempIds = context?.tempRows?.map((r: DSGRow) => r.id) || []
 
@@ -515,8 +510,8 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
     },
     onError: (err, variables, context) => {
       // Rollback to previous data on error
-      if (context?.previousData && selectedTableId) {
-        const queryKey = rowQueryKeys.infinite(selectedTableId, sortBy, activeFilters ?? [])
+      if (context?.previousData && effectiveTableId) {
+        const queryKey = rowQueryKeys.infinite(effectiveTableId, sortBy, activeFilters ?? [])
         queryClient.setQueryData(queryKey, context.previousData)
       }
       logger.error("Failed to add rows:", err)
@@ -529,15 +524,15 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
 
   const deleteRowMutation = useMutation({
     mutationFn: async (rowId: string) => {
-      if (!selectedTableId) throw new Error('No table selected')
-      return deleteRowData(selectedTableId, rowId)
+      if (!effectiveTableId) throw new Error('No table selected')
+      return deleteRowData(effectiveTableId, rowId)
     },
     onMutate: async (rowId) => {
       // Cancel any outgoing refetches to prevent race conditions
-      await queryClient.cancelQueries({ queryKey: rowQueryKeys.all(selectedTableId!) })
+      await queryClient.cancelQueries({ queryKey: rowQueryKeys.all(effectiveTableId!) })
 
       // Snapshot current data for rollback
-      const queryKey = rowQueryKeys.infinite(selectedTableId!, sortBy, activeFilters ?? [])
+      const queryKey = rowQueryKeys.infinite(effectiveTableId!, sortBy, activeFilters ?? [])
       const previousData = queryClient.getQueryData(queryKey)
 
       // Optimistically remove the row from cache
@@ -559,8 +554,8 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
     },
     onError: (err, rowId, context) => {
       // Rollback to previous data on error
-      if (context?.previousData && selectedTableId) {
-        const queryKey = rowQueryKeys.infinite(selectedTableId, sortBy, activeFilters ?? [])
+      if (context?.previousData && effectiveTableId) {
+        const queryKey = rowQueryKeys.infinite(effectiveTableId, sortBy, activeFilters ?? [])
         queryClient.setQueryData(queryKey, context.previousData)
       }
       logger.error("Failed to delete row:", err)
@@ -604,12 +599,12 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
 
   // Refresh data using TanStack Query refetch (forces immediate refetch, bypassing staleTime)
   const refreshTableData = useCallback(() => {
-    if (selectedTableId) {
+    if (effectiveTableId) {
       // Use refetchQueries to force immediate refetch (ignores staleTime)
-      queryClient.refetchQueries({ queryKey: fieldQueryKeys.all(selectedTableId) })
-      queryClient.refetchQueries({ queryKey: rowQueryKeys.all(selectedTableId) })
+      queryClient.refetchQueries({ queryKey: fieldQueryKeys.all(effectiveTableId) })
+      queryClient.refetchQueries({ queryKey: rowQueryKeys.all(effectiveTableId) })
     }
-  }, [selectedTableId, queryClient])
+  }, [effectiveTableId, queryClient])
 
   const renderEmptyState = () => (
     <div className="flex-1 flex items-center justify-center">

@@ -97,7 +97,7 @@ function StateValueInput({
         <VariableAutocompleteInput
           value={value ?? ''}
           onChange={(val) => onChange(val)}
-          placeholder="Enter number or {rowData.field}"
+          placeholder="Enter number or {{rowData.field}}"
           disabled={disabled}
         />
       );
@@ -113,7 +113,7 @@ function StateValueInput({
           disabled={disabled}
         />
         <p className="text-[10px] text-muted-foreground">
-          Type {"{"} for variable reference
+          Type {"{{"} for variable reference
         </p>
       </div>
     );
@@ -124,7 +124,7 @@ function StateValueInput({
     <VariableAutocompleteInput
       value={value ?? ''}
       onChange={(val) => onChange(val)}
-      placeholder="Enter value or {rowData.field}"
+      placeholder="Enter value or {{rowData.field}}"
       disabled={disabled}
     />
   );
@@ -327,7 +327,7 @@ function PageVariablesEditor({
               onFocus={() => {
                 lastFocusedIndexRef.current = index;
               }}
-              placeholder="{id}"
+              placeholder="{{id}}"
               className="flex-1 text-xs font-mono"
               disabled={disabled}
             />
@@ -600,7 +600,7 @@ function ActionItem({
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Tip: Use {"{fieldName}"} to include data from the current row
+              Tip: Use {"{{fieldName}}"} to include data from the current row
             </p>
           </div>
         </>
@@ -624,7 +624,7 @@ function ActionItem({
                     const varNameLower = variable.name.toLowerCase();
                     // Check if there's a matching field name (e.g., "id" -> "{rowData.id}")
                     // This handles common cases like id, client_id, etc.
-                    queryParams[variable.name] = `{rowData.${varNameLower}}`;
+                    queryParams[variable.name] = `{{rowData.${varNameLower}}}`;
                   }
                 }
 
@@ -679,11 +679,11 @@ function ActionItem({
             <VariableAutocompleteInput
               value={action.url || ''}
               onChange={(url) => onChange({ ...action, url })}
-              placeholder="https://example.com/{id}"
+              placeholder="https://example.com/{{id}}"
               disabled={readOnly}
             />
             <p className="text-xs text-muted-foreground">
-              Type {"{"} to insert row data or page variables
+              Type {"{{"} to insert row data or page variables
             </p>
           </div>
           <div className="flex items-center space-x-2">
@@ -757,7 +757,7 @@ function ActionItem({
             />
             {stateContext?.getConfig()?.variables?.find(v => v.name === action.key)?.type !== 'boolean' && (
               <p className="text-xs text-muted-foreground">
-                Type {"{"} to insert row data or other variables
+                Type {"{{"} to insert row data or other variables
               </p>
             )}
           </div>

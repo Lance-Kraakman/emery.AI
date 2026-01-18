@@ -12,6 +12,62 @@ import { ChatId, ChatMessageId } from "../../shared/value-objects";
 import type { AnyAttachmentMetadata } from "../../../domain/multimodal/value-objects/attachment-metadata";
 import type { ExecutionStep } from "../value-objects/execution-step";
 
+/**
+ * Plan step status for tracking execution progress
+ */
+export type PlanStepStatus = 'pending' | 'in_progress' | 'completed' | 'failed';
+
+/**
+ * Individual step within a plan
+ */
+export interface MessagePlanStep {
+  id: string;
+  description: string;
+  status: PlanStepStatus;
+  tool_call?: string;
+  result?: string;
+}
+
+/**
+ * Plan persisted in message metadata
+ *
+ * AIDEV-NOTE: Plans are stored in message metadata for history/audit trail.
+ * Supports nested plans via nested_plans array for sub-skill execution tracking.
+ */
+export interface MessagePlan {
+  id: string;
+  goal: string;
+  status: 'draft' | 'awaiting_approval' | 'approved' | 'executing' | 'completed' | 'failed';
+  steps: MessagePlanStep[];
+  nested_plans?: MessagePlan[];  // For sub-skill plans (StepPlan)
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Option for HITL questions/choices
+ */
+export interface InputOption {
+  id: string;
+  label: string;
+  description?: string;
+}
+
+/**
+ * Awaiting input state for HITL (plan approval or questions)
+ *
+ * AIDEV-NOTE: Used for both plan approval and agent questions.
+ * - plan_approval: Shows plan + Approve/Reject/Modify buttons
+ * - question: Shows question + option buttons for user choice
+ */
+export interface AwaitingInput {
+  type: 'plan_approval' | 'question';
+  title: string;
+  content: string;  // Plan markdown or question text
+  options: InputOption[];
+  plan_json?: string;  // Full plan JSON for approval type
+}
+
 export interface ChatMessageMetadata {
   modelUsed?: string;
   processingTime?: number;
@@ -21,6 +77,10 @@ export interface ChatMessageMetadata {
   attachments?: AnyAttachmentMetadata[];
   // Agent execution steps (planning, actions, reasoning)
   executionSteps?: ExecutionStep[];
+  // Plan tracking for goal breakdown and progress
+  plan?: MessagePlan;
+  // HITL state when awaiting user input (approval or question)
+  awaitingInput?: AwaitingInput;
 }
 
 export interface ChatMessage {

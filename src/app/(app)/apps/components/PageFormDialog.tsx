@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { PageDTO } from '@/app/mappers/puck-page-mapper';
 import { useForm } from '@tanstack/react-form';
 import { Button } from '@/components/ui/button';
@@ -36,9 +36,9 @@ export function PageFormDialog({ isOpen, onClose, appId, page, onSuccess }: Page
 
   const form = useForm({
     defaultValues: {
-      name: page?.name || '',
-      slug: page?.slug || '',
-      description: page?.description || '',
+      name: '',
+      slug: '',
+      description: '',
     },
     onSubmit: async ({ value }) => {
       try {
@@ -77,6 +77,16 @@ export function PageFormDialog({ isOpen, onClose, appId, page, onSuccess }: Page
       }
     },
   });
+
+  // Reset form when page changes or dialog opens
+  useEffect(() => {
+    if (isOpen) {
+      form.reset();
+      form.setFieldValue('name', page?.name || '');
+      form.setFieldValue('slug', page?.slug || '');
+      form.setFieldValue('description', page?.description || '');
+    }
+  }, [page, isOpen]);
 
   // Auto-generate slug from name when creating new page
   const handleNameChange = async (name: string) => {

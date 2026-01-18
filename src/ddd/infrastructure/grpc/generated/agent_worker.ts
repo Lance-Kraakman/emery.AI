@@ -520,6 +520,8 @@ export interface SkillStep {
     | undefined;
   /** UI state */
   isDisabled: boolean;
+  /** Agentic step configuration (for nodeType='agentic') */
+  agenticConfig: AgenticStepConfig | undefined;
 }
 
 export interface SkillStep_InputsEntry {
@@ -530,6 +532,90 @@ export interface SkillStep_InputsEntry {
 export interface SkillStep_OutputsEntry {
   key: string;
   value: string;
+}
+
+/**
+ * Configuration for agentic step execution (nodeType='agentic')
+ * AIDEV-NOTE: plan field enables autonomous execution - when present, HITL is bypassed
+ */
+export interface AgenticStepConfig {
+  /** Instructions for the agent */
+  instructions: string;
+  /** Tools available for this agentic step */
+  tools: ToolConfig[];
+  /** "tool_calling" (default) or "code_agent" */
+  agentType: string;
+  /** Optional model override */
+  model: string;
+  /** Stored execution plan for autonomous execution */
+  plan: StoredPlan | undefined;
+}
+
+/**
+ * Stored execution plan for autonomous execution
+ * AIDEV-NOTE: When present on agentic step, execution skips HITL and runs autonomously.
+ * Contains execution blueprint from successful HITL planning session.
+ */
+export interface StoredPlan {
+  /** Plan identifier */
+  id: string;
+  /** High-level goal from user request */
+  goal: string;
+  /** Original instructions */
+  basicInstructions: string;
+  /** Discovered context (databases, tables) */
+  context: string;
+  /** LLM reasoning about approach */
+  analysis: string;
+  /** Execution steps */
+  steps: StoredPlanStep[];
+  /** Plan version */
+  version: number;
+  /** When plan was generated (ISO timestamp) */
+  generatedAt: string;
+  /** When plan was approved (ISO timestamp) */
+  approvedAt: string;
+}
+
+/**
+ * Individual step within a stored plan
+ * Contains execution details without runtime state (status, result, error)
+ */
+export interface StoredPlanStep {
+  /** Step identifier */
+  stepId: string;
+  /** Step description */
+  description: string;
+  /** Tool to call (e.g., "row_crud:read") */
+  toolCall: string;
+  /** Tool parameters */
+  parameters: { [key: string]: string };
+  /** Tables this step needs access to */
+  contextTables: string[];
+  /** Managed agent for routing (e.g., "schema_builder") */
+  targetAgent: string;
+  /** Sub-plan from cascading planning */
+  subPlan: StoredSubPlan | undefined;
+}
+
+export interface StoredPlanStep_ParametersEntry {
+  key: string;
+  value: string;
+}
+
+/**
+ * Sub-plan from cascading planning
+ * Generated when a managed agent creates detailed execution steps
+ */
+export interface StoredSubPlan {
+  /** Target agent name */
+  agentName: string;
+  /** Sub-goal for this agent */
+  goal: string;
+  /** Sub-plan steps */
+  steps: StoredPlanStep[];
+  /** Observations from planning phase */
+  planningObservations: string;
 }
 
 /** Configuration for operation execution (direct model invocation without LLM orchestration) */
@@ -838,6 +924,89 @@ export interface FileAttachment {
   mimeType: string;
 }
 
+/** Request for autonomous plan generation */
+export interface GeneratePlanRequest {
+  /** Task instructions (required) */
+  instructions: string;
+  /** For ToolProvider context */
+  organizationId: number;
+  /** For auth context */
+  userId: string;
+  /** To resolve skill's data sources */
+  skillId: number;
+  /** Optional model override */
+  model: string;
+  /** For ToolProvider auth */
+  userApiKey: string;
+  /** Default: 60 */
+  timeoutSeconds: number;
+  /** Skill input definitions for variable-aware planning */
+  skillInputs: InputDefinition[];
+  /** Previous plan as JSON (for regeneration with feedback) */
+  previousPlanJson: string;
+  /** User feedback for regeneration */
+  userFeedback: string;
+  /** Skill outputs for result-aware planning */
+  skillOutputs: OutputDefinition[];
+  /** For resuming after clarification questions */
+  sessionId: string;
+  /** Answers to clarification questions */
+  answers: ClarificationAnswer[];
+}
+
+/**
+ * Streaming response from plan generation
+ * AIDEV-NOTE: Streams progress updates, can pause for clarification questions (HITL)
+ */
+export interface GeneratePlanResponse {
+  /** Progress update during generation */
+  progress?:
+    | PlanProgress
+    | undefined;
+  /** HITL: Need clarification from user */
+  awaitingInput?:
+    | AwaitingInput
+    | undefined;
+  /** Final plan ready */
+  planComplete?:
+    | PlanComplete
+    | undefined;
+  /** Error during generation */
+  error?:
+    | ProcessingError
+    | undefined;
+  /** Response timestamp */
+  timestamp: number;
+}
+
+/** Plan generation progress update */
+export interface PlanProgress {
+  /** Human-readable progress message */
+  message: string;
+  /** Phase: "context_gathering", "analyzing", "planning" */
+  phase: string;
+}
+
+/** Plan generation completed successfully */
+export interface PlanComplete {
+  /** StoredPlan as JSON */
+  planJson: string;
+  /** Plan UUID */
+  planId: string;
+  /** Generation time */
+  planningTimeMs: number;
+  /** For billing */
+  tokenUsage: TokenUsage | undefined;
+}
+
+/** Answer to a clarification question */
+export interface ClarificationAnswer {
+  /** ID of the question being answered */
+  questionId: string;
+  /** User's answer */
+  answer: string;
+}
+
 /** Request for AI message processing */
 export interface ProcessMessageRequest {
   /** Input message for AI processing (multimodal support) */
@@ -884,8 +1053,43 @@ export interface ProcessMessageResponse {
   stepProgress?:
     | StepProgress
     | undefined;
+  /** HITL: Agent needs user approval/input */
+  awaitingInput?:
+    | AwaitingInput
+    | undefined;
   /** Response timestamp */
   timestamp: number;
+}
+
+/**
+ * HITL: Agent awaiting user input (plan approval or question)
+ * AIDEV-NOTE: Used for both plan approval and agent questions.
+ * - plan_approval: Shows plan + Approve/Reject/Modify buttons
+ * - question: Shows question + option buttons for user choice
+ */
+export interface AwaitingInput {
+  /** "plan_approval" or "question" */
+  inputType: string;
+  /** Display title */
+  title: string;
+  /** Plan markdown or question text */
+  content: string;
+  /** Available options for user to choose */
+  options: InputOption[];
+  /** Full plan JSON (for plan_approval type) */
+  planJson: string;
+  /** Session ID for resuming after user input */
+  sessionId: string;
+}
+
+/** Option for HITL questions/choices */
+export interface InputOption {
+  /** Unique option identifier */
+  id: string;
+  /** Display text */
+  label: string;
+  /** Optional description */
+  description: string;
 }
 
 /**
@@ -3535,6 +3739,7 @@ function createBaseSkillStep(): SkillStep {
     toolExecutionConfig: undefined,
     taskModelConfig: undefined,
     isDisabled: false,
+    agenticConfig: undefined,
   };
 }
 
@@ -3602,6 +3807,9 @@ export const SkillStep: MessageFns<SkillStep> = {
     }
     if (message.isDisabled !== false) {
       writer.uint32(168).bool(message.isDisabled);
+    }
+    if (message.agenticConfig !== undefined) {
+      AgenticStepConfig.encode(message.agenticConfig, writer.uint32(178).fork()).join();
     }
     return writer;
   },
@@ -3787,6 +3995,14 @@ export const SkillStep: MessageFns<SkillStep> = {
           message.isDisabled = reader.bool();
           continue;
         }
+        case 22: {
+          if (tag !== 178) {
+            break;
+          }
+
+          message.agenticConfig = AgenticStepConfig.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -3837,6 +4053,7 @@ export const SkillStep: MessageFns<SkillStep> = {
         : undefined,
       taskModelConfig: isSet(object.taskModelConfig) ? TaskModelConfig.fromJSON(object.taskModelConfig) : undefined,
       isDisabled: isSet(object.isDisabled) ? globalThis.Boolean(object.isDisabled) : false,
+      agenticConfig: isSet(object.agenticConfig) ? AgenticStepConfig.fromJSON(object.agenticConfig) : undefined,
     };
   },
 
@@ -3917,6 +4134,9 @@ export const SkillStep: MessageFns<SkillStep> = {
     if (message.isDisabled !== false) {
       obj.isDisabled = message.isDisabled;
     }
+    if (message.agenticConfig !== undefined) {
+      obj.agenticConfig = AgenticStepConfig.toJSON(message.agenticConfig);
+    }
     return obj;
   },
 
@@ -3970,6 +4190,9 @@ export const SkillStep: MessageFns<SkillStep> = {
       ? TaskModelConfig.fromPartial(object.taskModelConfig)
       : undefined;
     message.isDisabled = object.isDisabled ?? false;
+    message.agenticConfig = (object.agenticConfig !== undefined && object.agenticConfig !== null)
+      ? AgenticStepConfig.fromPartial(object.agenticConfig)
+      : undefined;
     return message;
   },
 };
@@ -4122,6 +4345,706 @@ export const SkillStep_OutputsEntry: MessageFns<SkillStep_OutputsEntry> = {
     const message = createBaseSkillStep_OutputsEntry();
     message.key = object.key ?? "";
     message.value = object.value ?? "";
+    return message;
+  },
+};
+
+function createBaseAgenticStepConfig(): AgenticStepConfig {
+  return { instructions: "", tools: [], agentType: "", model: "", plan: undefined };
+}
+
+export const AgenticStepConfig: MessageFns<AgenticStepConfig> = {
+  encode(message: AgenticStepConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.instructions !== "") {
+      writer.uint32(10).string(message.instructions);
+    }
+    for (const v of message.tools) {
+      ToolConfig.encode(v!, writer.uint32(18).fork()).join();
+    }
+    if (message.agentType !== "") {
+      writer.uint32(26).string(message.agentType);
+    }
+    if (message.model !== "") {
+      writer.uint32(34).string(message.model);
+    }
+    if (message.plan !== undefined) {
+      StoredPlan.encode(message.plan, writer.uint32(42).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AgenticStepConfig {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseAgenticStepConfig();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.instructions = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.tools.push(ToolConfig.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.agentType = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.model = reader.string();
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.plan = StoredPlan.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): AgenticStepConfig {
+    return {
+      instructions: isSet(object.instructions) ? globalThis.String(object.instructions) : "",
+      tools: globalThis.Array.isArray(object?.tools) ? object.tools.map((e: any) => ToolConfig.fromJSON(e)) : [],
+      agentType: isSet(object.agentType) ? globalThis.String(object.agentType) : "",
+      model: isSet(object.model) ? globalThis.String(object.model) : "",
+      plan: isSet(object.plan) ? StoredPlan.fromJSON(object.plan) : undefined,
+    };
+  },
+
+  toJSON(message: AgenticStepConfig): unknown {
+    const obj: any = {};
+    if (message.instructions !== "") {
+      obj.instructions = message.instructions;
+    }
+    if (message.tools?.length) {
+      obj.tools = message.tools.map((e) => ToolConfig.toJSON(e));
+    }
+    if (message.agentType !== "") {
+      obj.agentType = message.agentType;
+    }
+    if (message.model !== "") {
+      obj.model = message.model;
+    }
+    if (message.plan !== undefined) {
+      obj.plan = StoredPlan.toJSON(message.plan);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<AgenticStepConfig>, I>>(base?: I): AgenticStepConfig {
+    return AgenticStepConfig.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AgenticStepConfig>, I>>(object: I): AgenticStepConfig {
+    const message = createBaseAgenticStepConfig();
+    message.instructions = object.instructions ?? "";
+    message.tools = object.tools?.map((e) => ToolConfig.fromPartial(e)) || [];
+    message.agentType = object.agentType ?? "";
+    message.model = object.model ?? "";
+    message.plan = (object.plan !== undefined && object.plan !== null)
+      ? StoredPlan.fromPartial(object.plan)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseStoredPlan(): StoredPlan {
+  return {
+    id: "",
+    goal: "",
+    basicInstructions: "",
+    context: "",
+    analysis: "",
+    steps: [],
+    version: 0,
+    generatedAt: "",
+    approvedAt: "",
+  };
+}
+
+export const StoredPlan: MessageFns<StoredPlan> = {
+  encode(message: StoredPlan, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    if (message.goal !== "") {
+      writer.uint32(18).string(message.goal);
+    }
+    if (message.basicInstructions !== "") {
+      writer.uint32(26).string(message.basicInstructions);
+    }
+    if (message.context !== "") {
+      writer.uint32(34).string(message.context);
+    }
+    if (message.analysis !== "") {
+      writer.uint32(42).string(message.analysis);
+    }
+    for (const v of message.steps) {
+      StoredPlanStep.encode(v!, writer.uint32(50).fork()).join();
+    }
+    if (message.version !== 0) {
+      writer.uint32(56).int32(message.version);
+    }
+    if (message.generatedAt !== "") {
+      writer.uint32(66).string(message.generatedAt);
+    }
+    if (message.approvedAt !== "") {
+      writer.uint32(74).string(message.approvedAt);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): StoredPlan {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseStoredPlan();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.id = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.goal = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.basicInstructions = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.context = reader.string();
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.analysis = reader.string();
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.steps.push(StoredPlanStep.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 7: {
+          if (tag !== 56) {
+            break;
+          }
+
+          message.version = reader.int32();
+          continue;
+        }
+        case 8: {
+          if (tag !== 66) {
+            break;
+          }
+
+          message.generatedAt = reader.string();
+          continue;
+        }
+        case 9: {
+          if (tag !== 74) {
+            break;
+          }
+
+          message.approvedAt = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): StoredPlan {
+    return {
+      id: isSet(object.id) ? globalThis.String(object.id) : "",
+      goal: isSet(object.goal) ? globalThis.String(object.goal) : "",
+      basicInstructions: isSet(object.basicInstructions) ? globalThis.String(object.basicInstructions) : "",
+      context: isSet(object.context) ? globalThis.String(object.context) : "",
+      analysis: isSet(object.analysis) ? globalThis.String(object.analysis) : "",
+      steps: globalThis.Array.isArray(object?.steps) ? object.steps.map((e: any) => StoredPlanStep.fromJSON(e)) : [],
+      version: isSet(object.version) ? globalThis.Number(object.version) : 0,
+      generatedAt: isSet(object.generatedAt) ? globalThis.String(object.generatedAt) : "",
+      approvedAt: isSet(object.approvedAt) ? globalThis.String(object.approvedAt) : "",
+    };
+  },
+
+  toJSON(message: StoredPlan): unknown {
+    const obj: any = {};
+    if (message.id !== "") {
+      obj.id = message.id;
+    }
+    if (message.goal !== "") {
+      obj.goal = message.goal;
+    }
+    if (message.basicInstructions !== "") {
+      obj.basicInstructions = message.basicInstructions;
+    }
+    if (message.context !== "") {
+      obj.context = message.context;
+    }
+    if (message.analysis !== "") {
+      obj.analysis = message.analysis;
+    }
+    if (message.steps?.length) {
+      obj.steps = message.steps.map((e) => StoredPlanStep.toJSON(e));
+    }
+    if (message.version !== 0) {
+      obj.version = Math.round(message.version);
+    }
+    if (message.generatedAt !== "") {
+      obj.generatedAt = message.generatedAt;
+    }
+    if (message.approvedAt !== "") {
+      obj.approvedAt = message.approvedAt;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<StoredPlan>, I>>(base?: I): StoredPlan {
+    return StoredPlan.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<StoredPlan>, I>>(object: I): StoredPlan {
+    const message = createBaseStoredPlan();
+    message.id = object.id ?? "";
+    message.goal = object.goal ?? "";
+    message.basicInstructions = object.basicInstructions ?? "";
+    message.context = object.context ?? "";
+    message.analysis = object.analysis ?? "";
+    message.steps = object.steps?.map((e) => StoredPlanStep.fromPartial(e)) || [];
+    message.version = object.version ?? 0;
+    message.generatedAt = object.generatedAt ?? "";
+    message.approvedAt = object.approvedAt ?? "";
+    return message;
+  },
+};
+
+function createBaseStoredPlanStep(): StoredPlanStep {
+  return {
+    stepId: "",
+    description: "",
+    toolCall: "",
+    parameters: {},
+    contextTables: [],
+    targetAgent: "",
+    subPlan: undefined,
+  };
+}
+
+export const StoredPlanStep: MessageFns<StoredPlanStep> = {
+  encode(message: StoredPlanStep, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.stepId !== "") {
+      writer.uint32(10).string(message.stepId);
+    }
+    if (message.description !== "") {
+      writer.uint32(18).string(message.description);
+    }
+    if (message.toolCall !== "") {
+      writer.uint32(26).string(message.toolCall);
+    }
+    Object.entries(message.parameters).forEach(([key, value]) => {
+      StoredPlanStep_ParametersEntry.encode({ key: key as any, value }, writer.uint32(34).fork()).join();
+    });
+    for (const v of message.contextTables) {
+      writer.uint32(42).string(v!);
+    }
+    if (message.targetAgent !== "") {
+      writer.uint32(50).string(message.targetAgent);
+    }
+    if (message.subPlan !== undefined) {
+      StoredSubPlan.encode(message.subPlan, writer.uint32(58).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): StoredPlanStep {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseStoredPlanStep();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.stepId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.description = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.toolCall = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          const entry4 = StoredPlanStep_ParametersEntry.decode(reader, reader.uint32());
+          if (entry4.value !== undefined) {
+            message.parameters[entry4.key] = entry4.value;
+          }
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.contextTables.push(reader.string());
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.targetAgent = reader.string();
+          continue;
+        }
+        case 7: {
+          if (tag !== 58) {
+            break;
+          }
+
+          message.subPlan = StoredSubPlan.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): StoredPlanStep {
+    return {
+      stepId: isSet(object.stepId) ? globalThis.String(object.stepId) : "",
+      description: isSet(object.description) ? globalThis.String(object.description) : "",
+      toolCall: isSet(object.toolCall) ? globalThis.String(object.toolCall) : "",
+      parameters: isObject(object.parameters)
+        ? Object.entries(object.parameters).reduce<{ [key: string]: string }>((acc, [key, value]) => {
+          acc[key] = String(value);
+          return acc;
+        }, {})
+        : {},
+      contextTables: globalThis.Array.isArray(object?.contextTables)
+        ? object.contextTables.map((e: any) => globalThis.String(e))
+        : [],
+      targetAgent: isSet(object.targetAgent) ? globalThis.String(object.targetAgent) : "",
+      subPlan: isSet(object.subPlan) ? StoredSubPlan.fromJSON(object.subPlan) : undefined,
+    };
+  },
+
+  toJSON(message: StoredPlanStep): unknown {
+    const obj: any = {};
+    if (message.stepId !== "") {
+      obj.stepId = message.stepId;
+    }
+    if (message.description !== "") {
+      obj.description = message.description;
+    }
+    if (message.toolCall !== "") {
+      obj.toolCall = message.toolCall;
+    }
+    if (message.parameters) {
+      const entries = Object.entries(message.parameters);
+      if (entries.length > 0) {
+        obj.parameters = {};
+        entries.forEach(([k, v]) => {
+          obj.parameters[k] = v;
+        });
+      }
+    }
+    if (message.contextTables?.length) {
+      obj.contextTables = message.contextTables;
+    }
+    if (message.targetAgent !== "") {
+      obj.targetAgent = message.targetAgent;
+    }
+    if (message.subPlan !== undefined) {
+      obj.subPlan = StoredSubPlan.toJSON(message.subPlan);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<StoredPlanStep>, I>>(base?: I): StoredPlanStep {
+    return StoredPlanStep.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<StoredPlanStep>, I>>(object: I): StoredPlanStep {
+    const message = createBaseStoredPlanStep();
+    message.stepId = object.stepId ?? "";
+    message.description = object.description ?? "";
+    message.toolCall = object.toolCall ?? "";
+    message.parameters = Object.entries(object.parameters ?? {}).reduce<{ [key: string]: string }>(
+      (acc, [key, value]) => {
+        if (value !== undefined) {
+          acc[key] = globalThis.String(value);
+        }
+        return acc;
+      },
+      {},
+    );
+    message.contextTables = object.contextTables?.map((e) => e) || [];
+    message.targetAgent = object.targetAgent ?? "";
+    message.subPlan = (object.subPlan !== undefined && object.subPlan !== null)
+      ? StoredSubPlan.fromPartial(object.subPlan)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseStoredPlanStep_ParametersEntry(): StoredPlanStep_ParametersEntry {
+  return { key: "", value: "" };
+}
+
+export const StoredPlanStep_ParametersEntry: MessageFns<StoredPlanStep_ParametersEntry> = {
+  encode(message: StoredPlanStep_ParametersEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.key !== "") {
+      writer.uint32(10).string(message.key);
+    }
+    if (message.value !== "") {
+      writer.uint32(18).string(message.value);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): StoredPlanStep_ParametersEntry {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseStoredPlanStep_ParametersEntry();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.key = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.value = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): StoredPlanStep_ParametersEntry {
+    return {
+      key: isSet(object.key) ? globalThis.String(object.key) : "",
+      value: isSet(object.value) ? globalThis.String(object.value) : "",
+    };
+  },
+
+  toJSON(message: StoredPlanStep_ParametersEntry): unknown {
+    const obj: any = {};
+    if (message.key !== "") {
+      obj.key = message.key;
+    }
+    if (message.value !== "") {
+      obj.value = message.value;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<StoredPlanStep_ParametersEntry>, I>>(base?: I): StoredPlanStep_ParametersEntry {
+    return StoredPlanStep_ParametersEntry.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<StoredPlanStep_ParametersEntry>, I>>(
+    object: I,
+  ): StoredPlanStep_ParametersEntry {
+    const message = createBaseStoredPlanStep_ParametersEntry();
+    message.key = object.key ?? "";
+    message.value = object.value ?? "";
+    return message;
+  },
+};
+
+function createBaseStoredSubPlan(): StoredSubPlan {
+  return { agentName: "", goal: "", steps: [], planningObservations: "" };
+}
+
+export const StoredSubPlan: MessageFns<StoredSubPlan> = {
+  encode(message: StoredSubPlan, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.agentName !== "") {
+      writer.uint32(10).string(message.agentName);
+    }
+    if (message.goal !== "") {
+      writer.uint32(18).string(message.goal);
+    }
+    for (const v of message.steps) {
+      StoredPlanStep.encode(v!, writer.uint32(26).fork()).join();
+    }
+    if (message.planningObservations !== "") {
+      writer.uint32(34).string(message.planningObservations);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): StoredSubPlan {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseStoredSubPlan();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.agentName = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.goal = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.steps.push(StoredPlanStep.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.planningObservations = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): StoredSubPlan {
+    return {
+      agentName: isSet(object.agentName) ? globalThis.String(object.agentName) : "",
+      goal: isSet(object.goal) ? globalThis.String(object.goal) : "",
+      steps: globalThis.Array.isArray(object?.steps) ? object.steps.map((e: any) => StoredPlanStep.fromJSON(e)) : [],
+      planningObservations: isSet(object.planningObservations) ? globalThis.String(object.planningObservations) : "",
+    };
+  },
+
+  toJSON(message: StoredSubPlan): unknown {
+    const obj: any = {};
+    if (message.agentName !== "") {
+      obj.agentName = message.agentName;
+    }
+    if (message.goal !== "") {
+      obj.goal = message.goal;
+    }
+    if (message.steps?.length) {
+      obj.steps = message.steps.map((e) => StoredPlanStep.toJSON(e));
+    }
+    if (message.planningObservations !== "") {
+      obj.planningObservations = message.planningObservations;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<StoredSubPlan>, I>>(base?: I): StoredSubPlan {
+    return StoredSubPlan.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<StoredSubPlan>, I>>(object: I): StoredSubPlan {
+    const message = createBaseStoredSubPlan();
+    message.agentName = object.agentName ?? "";
+    message.goal = object.goal ?? "";
+    message.steps = object.steps?.map((e) => StoredPlanStep.fromPartial(e)) || [];
+    message.planningObservations = object.planningObservations ?? "";
     return message;
   },
 };
@@ -6767,6 +7690,672 @@ export const FileAttachment: MessageFns<FileAttachment> = {
   },
 };
 
+function createBaseGeneratePlanRequest(): GeneratePlanRequest {
+  return {
+    instructions: "",
+    organizationId: 0,
+    userId: "",
+    skillId: 0,
+    model: "",
+    userApiKey: "",
+    timeoutSeconds: 0,
+    skillInputs: [],
+    previousPlanJson: "",
+    userFeedback: "",
+    skillOutputs: [],
+    sessionId: "",
+    answers: [],
+  };
+}
+
+export const GeneratePlanRequest: MessageFns<GeneratePlanRequest> = {
+  encode(message: GeneratePlanRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.instructions !== "") {
+      writer.uint32(10).string(message.instructions);
+    }
+    if (message.organizationId !== 0) {
+      writer.uint32(16).int32(message.organizationId);
+    }
+    if (message.userId !== "") {
+      writer.uint32(26).string(message.userId);
+    }
+    if (message.skillId !== 0) {
+      writer.uint32(32).int32(message.skillId);
+    }
+    if (message.model !== "") {
+      writer.uint32(42).string(message.model);
+    }
+    if (message.userApiKey !== "") {
+      writer.uint32(50).string(message.userApiKey);
+    }
+    if (message.timeoutSeconds !== 0) {
+      writer.uint32(56).int32(message.timeoutSeconds);
+    }
+    for (const v of message.skillInputs) {
+      InputDefinition.encode(v!, writer.uint32(66).fork()).join();
+    }
+    if (message.previousPlanJson !== "") {
+      writer.uint32(74).string(message.previousPlanJson);
+    }
+    if (message.userFeedback !== "") {
+      writer.uint32(82).string(message.userFeedback);
+    }
+    for (const v of message.skillOutputs) {
+      OutputDefinition.encode(v!, writer.uint32(90).fork()).join();
+    }
+    if (message.sessionId !== "") {
+      writer.uint32(98).string(message.sessionId);
+    }
+    for (const v of message.answers) {
+      ClarificationAnswer.encode(v!, writer.uint32(106).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GeneratePlanRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGeneratePlanRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.instructions = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.organizationId = reader.int32();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.userId = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.skillId = reader.int32();
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.model = reader.string();
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.userApiKey = reader.string();
+          continue;
+        }
+        case 7: {
+          if (tag !== 56) {
+            break;
+          }
+
+          message.timeoutSeconds = reader.int32();
+          continue;
+        }
+        case 8: {
+          if (tag !== 66) {
+            break;
+          }
+
+          message.skillInputs.push(InputDefinition.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 9: {
+          if (tag !== 74) {
+            break;
+          }
+
+          message.previousPlanJson = reader.string();
+          continue;
+        }
+        case 10: {
+          if (tag !== 82) {
+            break;
+          }
+
+          message.userFeedback = reader.string();
+          continue;
+        }
+        case 11: {
+          if (tag !== 90) {
+            break;
+          }
+
+          message.skillOutputs.push(OutputDefinition.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 12: {
+          if (tag !== 98) {
+            break;
+          }
+
+          message.sessionId = reader.string();
+          continue;
+        }
+        case 13: {
+          if (tag !== 106) {
+            break;
+          }
+
+          message.answers.push(ClarificationAnswer.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GeneratePlanRequest {
+    return {
+      instructions: isSet(object.instructions) ? globalThis.String(object.instructions) : "",
+      organizationId: isSet(object.organizationId) ? globalThis.Number(object.organizationId) : 0,
+      userId: isSet(object.userId) ? globalThis.String(object.userId) : "",
+      skillId: isSet(object.skillId) ? globalThis.Number(object.skillId) : 0,
+      model: isSet(object.model) ? globalThis.String(object.model) : "",
+      userApiKey: isSet(object.userApiKey) ? globalThis.String(object.userApiKey) : "",
+      timeoutSeconds: isSet(object.timeoutSeconds) ? globalThis.Number(object.timeoutSeconds) : 0,
+      skillInputs: globalThis.Array.isArray(object?.skillInputs)
+        ? object.skillInputs.map((e: any) => InputDefinition.fromJSON(e))
+        : [],
+      previousPlanJson: isSet(object.previousPlanJson) ? globalThis.String(object.previousPlanJson) : "",
+      userFeedback: isSet(object.userFeedback) ? globalThis.String(object.userFeedback) : "",
+      skillOutputs: globalThis.Array.isArray(object?.skillOutputs)
+        ? object.skillOutputs.map((e: any) => OutputDefinition.fromJSON(e))
+        : [],
+      sessionId: isSet(object.sessionId) ? globalThis.String(object.sessionId) : "",
+      answers: globalThis.Array.isArray(object?.answers)
+        ? object.answers.map((e: any) => ClarificationAnswer.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: GeneratePlanRequest): unknown {
+    const obj: any = {};
+    if (message.instructions !== "") {
+      obj.instructions = message.instructions;
+    }
+    if (message.organizationId !== 0) {
+      obj.organizationId = Math.round(message.organizationId);
+    }
+    if (message.userId !== "") {
+      obj.userId = message.userId;
+    }
+    if (message.skillId !== 0) {
+      obj.skillId = Math.round(message.skillId);
+    }
+    if (message.model !== "") {
+      obj.model = message.model;
+    }
+    if (message.userApiKey !== "") {
+      obj.userApiKey = message.userApiKey;
+    }
+    if (message.timeoutSeconds !== 0) {
+      obj.timeoutSeconds = Math.round(message.timeoutSeconds);
+    }
+    if (message.skillInputs?.length) {
+      obj.skillInputs = message.skillInputs.map((e) => InputDefinition.toJSON(e));
+    }
+    if (message.previousPlanJson !== "") {
+      obj.previousPlanJson = message.previousPlanJson;
+    }
+    if (message.userFeedback !== "") {
+      obj.userFeedback = message.userFeedback;
+    }
+    if (message.skillOutputs?.length) {
+      obj.skillOutputs = message.skillOutputs.map((e) => OutputDefinition.toJSON(e));
+    }
+    if (message.sessionId !== "") {
+      obj.sessionId = message.sessionId;
+    }
+    if (message.answers?.length) {
+      obj.answers = message.answers.map((e) => ClarificationAnswer.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GeneratePlanRequest>, I>>(base?: I): GeneratePlanRequest {
+    return GeneratePlanRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GeneratePlanRequest>, I>>(object: I): GeneratePlanRequest {
+    const message = createBaseGeneratePlanRequest();
+    message.instructions = object.instructions ?? "";
+    message.organizationId = object.organizationId ?? 0;
+    message.userId = object.userId ?? "";
+    message.skillId = object.skillId ?? 0;
+    message.model = object.model ?? "";
+    message.userApiKey = object.userApiKey ?? "";
+    message.timeoutSeconds = object.timeoutSeconds ?? 0;
+    message.skillInputs = object.skillInputs?.map((e) => InputDefinition.fromPartial(e)) || [];
+    message.previousPlanJson = object.previousPlanJson ?? "";
+    message.userFeedback = object.userFeedback ?? "";
+    message.skillOutputs = object.skillOutputs?.map((e) => OutputDefinition.fromPartial(e)) || [];
+    message.sessionId = object.sessionId ?? "";
+    message.answers = object.answers?.map((e) => ClarificationAnswer.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseGeneratePlanResponse(): GeneratePlanResponse {
+  return { progress: undefined, awaitingInput: undefined, planComplete: undefined, error: undefined, timestamp: 0 };
+}
+
+export const GeneratePlanResponse: MessageFns<GeneratePlanResponse> = {
+  encode(message: GeneratePlanResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.progress !== undefined) {
+      PlanProgress.encode(message.progress, writer.uint32(10).fork()).join();
+    }
+    if (message.awaitingInput !== undefined) {
+      AwaitingInput.encode(message.awaitingInput, writer.uint32(18).fork()).join();
+    }
+    if (message.planComplete !== undefined) {
+      PlanComplete.encode(message.planComplete, writer.uint32(26).fork()).join();
+    }
+    if (message.error !== undefined) {
+      ProcessingError.encode(message.error, writer.uint32(34).fork()).join();
+    }
+    if (message.timestamp !== 0) {
+      writer.uint32(40).int64(message.timestamp);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GeneratePlanResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGeneratePlanResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.progress = PlanProgress.decode(reader, reader.uint32());
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.awaitingInput = AwaitingInput.decode(reader, reader.uint32());
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.planComplete = PlanComplete.decode(reader, reader.uint32());
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.error = ProcessingError.decode(reader, reader.uint32());
+          continue;
+        }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.timestamp = longToNumber(reader.int64());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GeneratePlanResponse {
+    return {
+      progress: isSet(object.progress) ? PlanProgress.fromJSON(object.progress) : undefined,
+      awaitingInput: isSet(object.awaitingInput) ? AwaitingInput.fromJSON(object.awaitingInput) : undefined,
+      planComplete: isSet(object.planComplete) ? PlanComplete.fromJSON(object.planComplete) : undefined,
+      error: isSet(object.error) ? ProcessingError.fromJSON(object.error) : undefined,
+      timestamp: isSet(object.timestamp) ? globalThis.Number(object.timestamp) : 0,
+    };
+  },
+
+  toJSON(message: GeneratePlanResponse): unknown {
+    const obj: any = {};
+    if (message.progress !== undefined) {
+      obj.progress = PlanProgress.toJSON(message.progress);
+    }
+    if (message.awaitingInput !== undefined) {
+      obj.awaitingInput = AwaitingInput.toJSON(message.awaitingInput);
+    }
+    if (message.planComplete !== undefined) {
+      obj.planComplete = PlanComplete.toJSON(message.planComplete);
+    }
+    if (message.error !== undefined) {
+      obj.error = ProcessingError.toJSON(message.error);
+    }
+    if (message.timestamp !== 0) {
+      obj.timestamp = Math.round(message.timestamp);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GeneratePlanResponse>, I>>(base?: I): GeneratePlanResponse {
+    return GeneratePlanResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GeneratePlanResponse>, I>>(object: I): GeneratePlanResponse {
+    const message = createBaseGeneratePlanResponse();
+    message.progress = (object.progress !== undefined && object.progress !== null)
+      ? PlanProgress.fromPartial(object.progress)
+      : undefined;
+    message.awaitingInput = (object.awaitingInput !== undefined && object.awaitingInput !== null)
+      ? AwaitingInput.fromPartial(object.awaitingInput)
+      : undefined;
+    message.planComplete = (object.planComplete !== undefined && object.planComplete !== null)
+      ? PlanComplete.fromPartial(object.planComplete)
+      : undefined;
+    message.error = (object.error !== undefined && object.error !== null)
+      ? ProcessingError.fromPartial(object.error)
+      : undefined;
+    message.timestamp = object.timestamp ?? 0;
+    return message;
+  },
+};
+
+function createBasePlanProgress(): PlanProgress {
+  return { message: "", phase: "" };
+}
+
+export const PlanProgress: MessageFns<PlanProgress> = {
+  encode(message: PlanProgress, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.message !== "") {
+      writer.uint32(10).string(message.message);
+    }
+    if (message.phase !== "") {
+      writer.uint32(18).string(message.phase);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): PlanProgress {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBasePlanProgress();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.message = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.phase = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): PlanProgress {
+    return {
+      message: isSet(object.message) ? globalThis.String(object.message) : "",
+      phase: isSet(object.phase) ? globalThis.String(object.phase) : "",
+    };
+  },
+
+  toJSON(message: PlanProgress): unknown {
+    const obj: any = {};
+    if (message.message !== "") {
+      obj.message = message.message;
+    }
+    if (message.phase !== "") {
+      obj.phase = message.phase;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<PlanProgress>, I>>(base?: I): PlanProgress {
+    return PlanProgress.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<PlanProgress>, I>>(object: I): PlanProgress {
+    const message = createBasePlanProgress();
+    message.message = object.message ?? "";
+    message.phase = object.phase ?? "";
+    return message;
+  },
+};
+
+function createBasePlanComplete(): PlanComplete {
+  return { planJson: "", planId: "", planningTimeMs: 0, tokenUsage: undefined };
+}
+
+export const PlanComplete: MessageFns<PlanComplete> = {
+  encode(message: PlanComplete, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.planJson !== "") {
+      writer.uint32(10).string(message.planJson);
+    }
+    if (message.planId !== "") {
+      writer.uint32(18).string(message.planId);
+    }
+    if (message.planningTimeMs !== 0) {
+      writer.uint32(24).int32(message.planningTimeMs);
+    }
+    if (message.tokenUsage !== undefined) {
+      TokenUsage.encode(message.tokenUsage, writer.uint32(34).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): PlanComplete {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBasePlanComplete();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.planJson = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.planId = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.planningTimeMs = reader.int32();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.tokenUsage = TokenUsage.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): PlanComplete {
+    return {
+      planJson: isSet(object.planJson) ? globalThis.String(object.planJson) : "",
+      planId: isSet(object.planId) ? globalThis.String(object.planId) : "",
+      planningTimeMs: isSet(object.planningTimeMs) ? globalThis.Number(object.planningTimeMs) : 0,
+      tokenUsage: isSet(object.tokenUsage) ? TokenUsage.fromJSON(object.tokenUsage) : undefined,
+    };
+  },
+
+  toJSON(message: PlanComplete): unknown {
+    const obj: any = {};
+    if (message.planJson !== "") {
+      obj.planJson = message.planJson;
+    }
+    if (message.planId !== "") {
+      obj.planId = message.planId;
+    }
+    if (message.planningTimeMs !== 0) {
+      obj.planningTimeMs = Math.round(message.planningTimeMs);
+    }
+    if (message.tokenUsage !== undefined) {
+      obj.tokenUsage = TokenUsage.toJSON(message.tokenUsage);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<PlanComplete>, I>>(base?: I): PlanComplete {
+    return PlanComplete.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<PlanComplete>, I>>(object: I): PlanComplete {
+    const message = createBasePlanComplete();
+    message.planJson = object.planJson ?? "";
+    message.planId = object.planId ?? "";
+    message.planningTimeMs = object.planningTimeMs ?? 0;
+    message.tokenUsage = (object.tokenUsage !== undefined && object.tokenUsage !== null)
+      ? TokenUsage.fromPartial(object.tokenUsage)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseClarificationAnswer(): ClarificationAnswer {
+  return { questionId: "", answer: "" };
+}
+
+export const ClarificationAnswer: MessageFns<ClarificationAnswer> = {
+  encode(message: ClarificationAnswer, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.questionId !== "") {
+      writer.uint32(10).string(message.questionId);
+    }
+    if (message.answer !== "") {
+      writer.uint32(18).string(message.answer);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ClarificationAnswer {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseClarificationAnswer();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.questionId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.answer = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ClarificationAnswer {
+    return {
+      questionId: isSet(object.questionId) ? globalThis.String(object.questionId) : "",
+      answer: isSet(object.answer) ? globalThis.String(object.answer) : "",
+    };
+  },
+
+  toJSON(message: ClarificationAnswer): unknown {
+    const obj: any = {};
+    if (message.questionId !== "") {
+      obj.questionId = message.questionId;
+    }
+    if (message.answer !== "") {
+      obj.answer = message.answer;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ClarificationAnswer>, I>>(base?: I): ClarificationAnswer {
+    return ClarificationAnswer.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ClarificationAnswer>, I>>(object: I): ClarificationAnswer {
+    const message = createBaseClarificationAnswer();
+    message.questionId = object.questionId ?? "";
+    message.answer = object.answer ?? "";
+    return message;
+  },
+};
+
 function createBaseProcessMessageRequest(): ProcessMessageRequest {
   return {
     messageParts: [],
@@ -6991,7 +8580,14 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
 };
 
 function createBaseProcessMessageResponse(): ProcessMessageResponse {
-  return { contentChunk: undefined, complete: undefined, error: undefined, stepProgress: undefined, timestamp: 0 };
+  return {
+    contentChunk: undefined,
+    complete: undefined,
+    error: undefined,
+    stepProgress: undefined,
+    awaitingInput: undefined,
+    timestamp: 0,
+  };
 }
 
 export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
@@ -7007,6 +8603,9 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
     }
     if (message.stepProgress !== undefined) {
       StepProgress.encode(message.stepProgress, writer.uint32(42).fork()).join();
+    }
+    if (message.awaitingInput !== undefined) {
+      AwaitingInput.encode(message.awaitingInput, writer.uint32(58).fork()).join();
     }
     if (message.timestamp !== 0) {
       writer.uint32(48).int64(message.timestamp);
@@ -7053,6 +8652,14 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
           message.stepProgress = StepProgress.decode(reader, reader.uint32());
           continue;
         }
+        case 7: {
+          if (tag !== 58) {
+            break;
+          }
+
+          message.awaitingInput = AwaitingInput.decode(reader, reader.uint32());
+          continue;
+        }
         case 6: {
           if (tag !== 48) {
             break;
@@ -7076,6 +8683,7 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
       complete: isSet(object.complete) ? ProcessingComplete.fromJSON(object.complete) : undefined,
       error: isSet(object.error) ? ProcessingError.fromJSON(object.error) : undefined,
       stepProgress: isSet(object.stepProgress) ? StepProgress.fromJSON(object.stepProgress) : undefined,
+      awaitingInput: isSet(object.awaitingInput) ? AwaitingInput.fromJSON(object.awaitingInput) : undefined,
       timestamp: isSet(object.timestamp) ? globalThis.Number(object.timestamp) : 0,
     };
   },
@@ -7093,6 +8701,9 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
     }
     if (message.stepProgress !== undefined) {
       obj.stepProgress = StepProgress.toJSON(message.stepProgress);
+    }
+    if (message.awaitingInput !== undefined) {
+      obj.awaitingInput = AwaitingInput.toJSON(message.awaitingInput);
     }
     if (message.timestamp !== 0) {
       obj.timestamp = Math.round(message.timestamp);
@@ -7117,7 +8728,242 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
     message.stepProgress = (object.stepProgress !== undefined && object.stepProgress !== null)
       ? StepProgress.fromPartial(object.stepProgress)
       : undefined;
+    message.awaitingInput = (object.awaitingInput !== undefined && object.awaitingInput !== null)
+      ? AwaitingInput.fromPartial(object.awaitingInput)
+      : undefined;
     message.timestamp = object.timestamp ?? 0;
+    return message;
+  },
+};
+
+function createBaseAwaitingInput(): AwaitingInput {
+  return { inputType: "", title: "", content: "", options: [], planJson: "", sessionId: "" };
+}
+
+export const AwaitingInput: MessageFns<AwaitingInput> = {
+  encode(message: AwaitingInput, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.inputType !== "") {
+      writer.uint32(10).string(message.inputType);
+    }
+    if (message.title !== "") {
+      writer.uint32(18).string(message.title);
+    }
+    if (message.content !== "") {
+      writer.uint32(26).string(message.content);
+    }
+    for (const v of message.options) {
+      InputOption.encode(v!, writer.uint32(34).fork()).join();
+    }
+    if (message.planJson !== "") {
+      writer.uint32(42).string(message.planJson);
+    }
+    if (message.sessionId !== "") {
+      writer.uint32(50).string(message.sessionId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AwaitingInput {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseAwaitingInput();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.inputType = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.title = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.content = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.options.push(InputOption.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.planJson = reader.string();
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.sessionId = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): AwaitingInput {
+    return {
+      inputType: isSet(object.inputType) ? globalThis.String(object.inputType) : "",
+      title: isSet(object.title) ? globalThis.String(object.title) : "",
+      content: isSet(object.content) ? globalThis.String(object.content) : "",
+      options: globalThis.Array.isArray(object?.options) ? object.options.map((e: any) => InputOption.fromJSON(e)) : [],
+      planJson: isSet(object.planJson) ? globalThis.String(object.planJson) : "",
+      sessionId: isSet(object.sessionId) ? globalThis.String(object.sessionId) : "",
+    };
+  },
+
+  toJSON(message: AwaitingInput): unknown {
+    const obj: any = {};
+    if (message.inputType !== "") {
+      obj.inputType = message.inputType;
+    }
+    if (message.title !== "") {
+      obj.title = message.title;
+    }
+    if (message.content !== "") {
+      obj.content = message.content;
+    }
+    if (message.options?.length) {
+      obj.options = message.options.map((e) => InputOption.toJSON(e));
+    }
+    if (message.planJson !== "") {
+      obj.planJson = message.planJson;
+    }
+    if (message.sessionId !== "") {
+      obj.sessionId = message.sessionId;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<AwaitingInput>, I>>(base?: I): AwaitingInput {
+    return AwaitingInput.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AwaitingInput>, I>>(object: I): AwaitingInput {
+    const message = createBaseAwaitingInput();
+    message.inputType = object.inputType ?? "";
+    message.title = object.title ?? "";
+    message.content = object.content ?? "";
+    message.options = object.options?.map((e) => InputOption.fromPartial(e)) || [];
+    message.planJson = object.planJson ?? "";
+    message.sessionId = object.sessionId ?? "";
+    return message;
+  },
+};
+
+function createBaseInputOption(): InputOption {
+  return { id: "", label: "", description: "" };
+}
+
+export const InputOption: MessageFns<InputOption> = {
+  encode(message: InputOption, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    if (message.label !== "") {
+      writer.uint32(18).string(message.label);
+    }
+    if (message.description !== "") {
+      writer.uint32(26).string(message.description);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): InputOption {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseInputOption();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.id = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.label = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.description = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): InputOption {
+    return {
+      id: isSet(object.id) ? globalThis.String(object.id) : "",
+      label: isSet(object.label) ? globalThis.String(object.label) : "",
+      description: isSet(object.description) ? globalThis.String(object.description) : "",
+    };
+  },
+
+  toJSON(message: InputOption): unknown {
+    const obj: any = {};
+    if (message.id !== "") {
+      obj.id = message.id;
+    }
+    if (message.label !== "") {
+      obj.label = message.label;
+    }
+    if (message.description !== "") {
+      obj.description = message.description;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<InputOption>, I>>(base?: I): InputOption {
+    return InputOption.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<InputOption>, I>>(object: I): InputOption {
+    const message = createBaseInputOption();
+    message.id = object.id ?? "";
+    message.label = object.label ?? "";
+    message.description = object.description ?? "";
     return message;
   },
 };
@@ -8938,6 +10784,20 @@ export const ChatProcessingServiceService = {
       Buffer.from(CancelMessageResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): CancelMessageResponse => CancelMessageResponse.decode(value),
   },
+  /**
+   * Generate an autonomous execution plan for skill instructions (streaming)
+   * AIDEV-NOTE: Streaming RPC for progress updates and HITL clarification questions
+   */
+  generatePlan: {
+    path: "/emery.agents.ChatProcessingService/GeneratePlan",
+    requestStream: false,
+    responseStream: true,
+    requestSerialize: (value: GeneratePlanRequest): Buffer => Buffer.from(GeneratePlanRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GeneratePlanRequest => GeneratePlanRequest.decode(value),
+    responseSerialize: (value: GeneratePlanResponse): Buffer =>
+      Buffer.from(GeneratePlanResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GeneratePlanResponse => GeneratePlanResponse.decode(value),
+  },
 } as const;
 
 export interface ChatProcessingServiceServer extends UntypedServiceImplementation {
@@ -8945,6 +10805,11 @@ export interface ChatProcessingServiceServer extends UntypedServiceImplementatio
   processMessage: handleServerStreamingCall<ProcessMessageRequest, ProcessMessageResponse>;
   /** Cancel an in-progress message processing */
   cancelMessage: handleUnaryCall<CancelMessageRequest, CancelMessageResponse>;
+  /**
+   * Generate an autonomous execution plan for skill instructions (streaming)
+   * AIDEV-NOTE: Streaming RPC for progress updates and HITL clarification questions
+   */
+  generatePlan: handleServerStreamingCall<GeneratePlanRequest, GeneratePlanResponse>;
 }
 
 export interface ChatProcessingServiceClient extends Client {
@@ -8974,6 +10839,19 @@ export interface ChatProcessingServiceClient extends Client {
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: CancelMessageResponse) => void,
   ): ClientUnaryCall;
+  /**
+   * Generate an autonomous execution plan for skill instructions (streaming)
+   * AIDEV-NOTE: Streaming RPC for progress updates and HITL clarification questions
+   */
+  generatePlan(
+    request: GeneratePlanRequest,
+    options?: Partial<CallOptions>,
+  ): ClientReadableStream<GeneratePlanResponse>;
+  generatePlan(
+    request: GeneratePlanRequest,
+    metadata?: Metadata,
+    options?: Partial<CallOptions>,
+  ): ClientReadableStream<GeneratePlanResponse>;
 }
 
 export const ChatProcessingServiceClient = makeGenericClientConstructor(

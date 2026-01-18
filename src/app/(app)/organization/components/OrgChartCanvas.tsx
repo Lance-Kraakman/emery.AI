@@ -8,6 +8,7 @@
  */
 
 import React, { useCallback, useRef, useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   ReactFlow,
   Background,
@@ -23,13 +24,13 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { cn } from '@/lib/utils';
-import { Undo2, Redo2, StickyNote, Search, Maximize, LayoutGrid } from 'lucide-react';
+import { Undo2, Redo2, StickyNote, Search, Maximize, LayoutGrid, FileDown, FileUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { orgChartNodeTypes } from '@/components/org-chart/nodes';
 import { orgChartEdgeTypes } from '@/components/org-chart/edges';
 import { orgChartNodeSizes } from '@/components/org-chart/theme';
-import { useOrgChart } from '@/components/org-chart/hooks';
+import { useOrgChart, useOrgChartExport } from '@/components/org-chart/hooks';
 import {
   getNodeDimensions,
   arrangeNodesInRow,
@@ -39,12 +40,23 @@ import {
   getNextGridSlotPosition,
   normalizeEdgeConnection,
 } from '@/components/org-chart/utils';
-import { DeleteConfirmationDialog, buildDeleteImpactItems } from '@/components/org-chart/dialogs';
+import { DeleteConfirmationDialog, buildDeleteImpactItems, AgentAssignmentDialog, ExportTemplateDialog, type AssignmentConfig } from '@/components/org-chart/dialogs';
+import { ImportTemplateDialog } from '@/components/templates/ImportTemplateDialog';
+import { TemplatePickerDialog } from '@/components/templates/TemplatePickerDialog';
+import { DropChoicePopover } from '@/components/org-chart/DropChoicePopover';
+import {
+  applyBuiltinAgentTemplate,
+  applyBuiltinSkillTemplate,
+  applyBuiltinDatabaseTemplate,
+} from '@/app/actions/templates';
 import { extractDataSourceEdges, type DataSourceMapping } from '@/components/org-chart/edgeUtils';
 import { EntityPalette } from './EntityPalette';
 import { SearchDialog } from './SearchDialog';
 import { StickyNoteProvider } from '@/components/shared/StickyNoteContext';
 import { OrgChartDragProvider } from '@/components/org-chart/context';
+import { attachContextTable } from '@/app/actions/context-mappings';
+import { transferSkillToAgent, duplicateSkill } from '@/app/actions/skills';
+import { toast } from 'sonner';
 import type { OrgChartCanvasMetadata, OrgChartNodeType, AgentContainerNodeData, OrgChartEdge } from '@/components/org-chart/types';
 
 interface OrgChartCanvasProps {
@@ -110,11 +122,43 @@ export function OrgChartCanvas({
   initialViewport,
   onViewportChange,
 }: OrgChartCanvasProps) {
+  const router = useRouter();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+
+  // Assignment dialog state for database/skill drops
+  const [assignmentDialog, setAssignmentDialog] = useState<{
+    isOpen: boolean;
+    mode: 'database' | 'org_skill';
+    entityId: number;
+    entityName: string;
+    targetAgent: { id: number; name: string };
+    pendingPosition: XYPosition;
+    // For database mode: tables from the database
+    tables?: Array<{ id: number; name: string }>;
+  } | null>(null);
+
+  // Pending drop state - stores context while user makes blank/template choice
+  const [pendingDrop, setPendingDrop] = useState<{
+    entityType: OrgChartNodeType;
+    flowPosition: XYPosition;
+    screenPosition: { x: number; y: number };
+    targetAgentId: number | null;
+    targetAgentData?: AgentContainerNodeData;
+  } | null>(null);
+
+  // Template picker for drops - stores all drop context so it persists when popover closes
+  const [dropTemplatePicker, setDropTemplatePicker] = useState<{
+    entityType: 'agent' | 'skill' | 'database';
+    flowPosition: XYPosition;
+    targetAgentId: number | null;
+    targetAgentData?: AgentContainerNodeData;
+  } | null>(null);
 
   // Note: We don't pass onSelect to useOrgChart - we handle it in handleSelectionChange
   // so we have access to edges at selection time
@@ -129,6 +173,7 @@ export function OrgChartCanvas({
     selectedNodeId,
     setSelectedNodeId,
     selectedNodeIds,
+    setSelectedNodeIds,
     addStickyNote,
     updateNode,
     deleteNodes,
@@ -147,6 +192,28 @@ export function OrgChartCanvas({
     canvasMetadata,
     // onSelect is handled in handleSelectionChange where we have access to edges
   });
+
+  // Export hook for selected items
+  const { exportPreview, canExport } = useOrgChartExport(nodes, selectedNodeIds, skills, databases);
+
+  // Build selection for export
+  const exportSelection = useMemo(() => {
+    const agentIds: number[] = [];
+    const skillIds: number[] = [];
+    const databaseIds: number[] = [];
+
+    for (const entity of exportPreview.agents) {
+      agentIds.push(entity.id);
+    }
+    for (const entity of exportPreview.standaloneSkills) {
+      skillIds.push(entity.id);
+    }
+    for (const entity of exportPreview.standaloneDatabases) {
+      databaseIds.push(entity.id);
+    }
+
+    return { agentIds, skillIds, databaseIds };
+  }, [exportPreview]);
 
   // Merge skill edges with data source edges
   const allEdges = useMemo(() => {
@@ -179,33 +246,82 @@ export function OrgChartCanvas({
     event.dataTransfer.dropEffect = 'move';
   }, []);
 
-  // Handle drop from entity palette
+  // Helper to find agent container at a given position
+  const findAgentAtPosition = useCallback((position: XYPosition, excludeNodeId?: string) => {
+    const agentNodes = nodes.filter(n => n.type === 'agent' && n.id !== excludeNodeId);
+    return agentNodes.find((agentNode) => {
+      const nodeAny = agentNode as any;
+      const nodeWidth = nodeAny.width ?? nodeAny.measured?.width ?? (agentNode.style?.width as number) ?? 400;
+      const nodeHeight = nodeAny.height ?? nodeAny.measured?.height ?? (agentNode.style?.height as number) ?? 140;
+      return (
+        position.x >= agentNode.position.x &&
+        position.x <= agentNode.position.x + nodeWidth &&
+        position.y >= agentNode.position.y &&
+        position.y <= agentNode.position.y + nodeHeight
+      );
+    });
+  }, [nodes]);
+
+  // Handle node drag stop - detect org-level nodes dropped on agents
+  const handleNodeDragStop = useCallback(
+    (_event: React.MouseEvent, node: any) => {
+      // Only handle skill or database nodes
+      if (node.type !== 'skill' && node.type !== 'database') return;
+
+      // Check if this is an org-level node (no agentId)
+      const nodeData = node.data;
+      const isOrgLevel = nodeData.agentId === null || nodeData.agentId === undefined;
+      if (!isOrgLevel) return;
+
+      // Check if dropped over an agent container
+      const targetAgent = findAgentAtPosition(node.position);
+      if (!targetAgent) return;
+
+      const agentData = targetAgent.data as AgentContainerNodeData;
+      const agentId = agentData.agentId;
+
+      // Show assignment dialog
+      setAssignmentDialog({
+        isOpen: true,
+        mode: node.type === 'skill' ? 'org_skill' : 'database',
+        entityId: node.type === 'skill' ? nodeData.skillId : nodeData.databaseId,
+        entityName: nodeData.name,
+        targetAgent: { id: agentId, name: agentData.name || '' },
+        pendingPosition: node.position,
+        tables: nodeData.tables,
+      });
+    },
+    [findAgentAtPosition]
+  );
+
+  // Handle drop from entity palette - show choice popover
   const handleDrop = useCallback(
-    async (event: React.DragEvent) => {
+    (event: React.DragEvent) => {
       event.preventDefault();
 
-      const entityType = event.dataTransfer.getData('application/orgchart-entity') as OrgChartNodeType;
-      if (!entityType || !onCreateEntity) return;
-
       // Get drop position in flow coordinates
-      // screenToFlowPosition expects screen/client coordinates directly
-      const position = reactFlowInstance.screenToFlowPosition({
+      const flowPosition = reactFlowInstance.screenToFlowPosition({
         x: event.clientX,
         y: event.clientY,
       });
 
-      // Check if dropping inside an agent container by checking bounds directly
-      // React Flow stores resized dimensions in node.width/height or node.measured, not node.style
+      // Screen position for popover (offset slightly from cursor)
+      const screenPosition = {
+        x: event.clientX + 10,
+        y: event.clientY + 10,
+      };
+
+      // Check if dropping inside an agent container
       const agentNodes = nodes.filter((n) => n.type === 'agent');
       const targetAgent = agentNodes.find((agentNode) => {
         const nodeAny = agentNode as any;
         const nodeWidth = nodeAny.width ?? nodeAny.measured?.width ?? (agentNode.style?.width as number) ?? 400;
         const nodeHeight = nodeAny.height ?? nodeAny.measured?.height ?? (agentNode.style?.height as number) ?? 140;
         return (
-          position.x >= agentNode.position.x &&
-          position.x <= agentNode.position.x + nodeWidth &&
-          position.y >= agentNode.position.y &&
-          position.y <= agentNode.position.y + nodeHeight
+          flowPosition.x >= agentNode.position.x &&
+          flowPosition.x <= agentNode.position.x + nodeWidth &&
+          flowPosition.y >= agentNode.position.y &&
+          flowPosition.y <= agentNode.position.y + nodeHeight
         );
       });
       const agentId = targetAgent
@@ -213,51 +329,240 @@ export function OrgChartCanvas({
         : null;
       const agentData = targetAgent?.data as AgentContainerNodeData | undefined;
 
-      // Create entity on server first, then add node at drop position
+      // Handle new entity from palette (existing entity drags handled by onNodeDragStop)
+      const entityType = event.dataTransfer.getData('application/orgchart-entity') as OrgChartNodeType;
+      if (!entityType || !onCreateEntity) return;
+
+      // Store pending drop and show choice popover
+      setPendingDrop({
+        entityType,
+        flowPosition,
+        screenPosition,
+        targetAgentId: agentId,
+        targetAgentData: agentData,
+      });
+    },
+    [reactFlowInstance, onCreateEntity, nodes]
+  );
+
+  // Handle "Blank" selection from drop choice popover
+  const handleSelectBlank = useCallback(
+    async () => {
+      if (!pendingDrop || !onCreateEntity) return;
+
+      const { entityType, flowPosition, targetAgentId, targetAgentData } = pendingDrop;
+
       switch (entityType) {
         case 'agent': {
           const createdAgent = await onCreateEntity('agent');
           if (createdAgent) {
             addAgentNode(
               { id: createdAgent.id, name: createdAgent.name, role: createdAgent.role },
-              position // Agents use absolute position
+              flowPosition
             );
           }
           break;
         }
         case 'skill': {
-          // Skills can be agent-scoped or org-level (null agentId)
-          const createdSkill = await onCreateEntity('skill', agentId ?? undefined);
+          const createdSkill = await onCreateEntity('skill', targetAgentId ?? undefined);
           if (createdSkill) {
-            // If dropping inside agent, snap to grid slot; otherwise use drop position
-            const nodePosition = targetAgent
-              ? getNextGridSlotPosition('skill', agentData?.skillCount ?? 0)
-              : position;
+            const nodePosition = targetAgentId
+              ? getNextGridSlotPosition('skill', targetAgentData?.skillCount ?? 0)
+              : flowPosition;
             addSkillNode(
-              { id: createdSkill.id, name: createdSkill.name, agentId },
+              { id: createdSkill.id, name: createdSkill.name, agentId: targetAgentId },
               nodePosition
             );
           }
           break;
         }
         case 'database': {
-          // Databases can be org-level (null) or agent-scoped
-          const createdDb = await onCreateEntity('database', agentId ?? undefined);
+          const createdDb = await onCreateEntity('database', targetAgentId ?? undefined);
           if (createdDb) {
-            // If dropping inside agent, snap to grid slot; otherwise use drop position
-            const nodePosition = targetAgent
-              ? getNextGridSlotPosition('database', agentData?.databaseCount ?? 0)
-              : position;
+            const nodePosition = targetAgentId
+              ? getNextGridSlotPosition('database', targetAgentData?.databaseCount ?? 0)
+              : flowPosition;
             addDatabaseNode(
-              { id: createdDb.id, name: createdDb.name, slug: createdDb.slug || 'db', agentId },
+              { id: createdDb.id, name: createdDb.name, slug: createdDb.slug || 'db', agentId: targetAgentId },
               nodePosition
             );
+
+            // If dropped onto an agent, show config dialog for data source settings
+            if (targetAgentId) {
+              const dbData = databases.find((d) => d.id === createdDb.id);
+              setAssignmentDialog({
+                isOpen: true,
+                mode: 'database',
+                entityId: createdDb.id,
+                entityName: createdDb.name,
+                targetAgent: { id: targetAgentId, name: targetAgentData?.name || '' },
+                pendingPosition: nodePosition,
+                tables: dbData?.tables,
+              });
+            }
           }
           break;
         }
       }
+
+      setPendingDrop(null);
     },
-    [reactFlowInstance, onCreateEntity, addAgentNode, addSkillNode, addDatabaseNode, nodes]
+    [pendingDrop, onCreateEntity, addAgentNode, addSkillNode, addDatabaseNode, databases]
+  );
+
+  // Handle "From Template" selection from drop choice popover
+  const handleSelectTemplate = useCallback(() => {
+    if (!pendingDrop) return;
+
+    const { entityType, flowPosition, targetAgentId, targetAgentData } = pendingDrop;
+    if (entityType === 'agent' || entityType === 'skill' || entityType === 'database') {
+      // Store all drop context in dropTemplatePicker so it persists when popover closes
+      setDropTemplatePicker({ entityType, flowPosition, targetAgentId, targetAgentData });
+      setPendingDrop(null); // Close the popover
+    }
+  }, [pendingDrop]);
+
+  // Handle builtin template selection from TemplatePickerDialog
+  const handleDropSelectBuiltinTemplate = useCallback(
+    async (templateId: string) => {
+      if (!dropTemplatePicker) return;
+
+      const { entityType, flowPosition, targetAgentId, targetAgentData } = dropTemplatePicker;
+
+      switch (entityType) {
+        case 'agent': {
+          const result = await applyBuiltinAgentTemplate(templateId);
+          if (result.success && result.data) {
+            addAgentNode(
+              { id: result.data.id, name: result.data.name },
+              flowPosition
+            );
+            toast.success(`Created "${result.data.name}" from template`);
+          } else {
+            toast.error(result.error || 'Failed to create agent from template');
+          }
+          break;
+        }
+        case 'skill': {
+          const result = await applyBuiltinSkillTemplate(templateId, { agentId: targetAgentId ?? undefined });
+          if (result.success && result.data) {
+            const nodePosition = targetAgentId
+              ? getNextGridSlotPosition('skill', targetAgentData?.skillCount ?? 0)
+              : flowPosition;
+            addSkillNode(
+              { id: result.data.skillId, name: result.data.skillName, agentId: targetAgentId },
+              nodePosition
+            );
+            toast.success(`Created "${result.data.skillName}" from template`);
+          } else {
+            toast.error(result.error || 'Failed to create skill from template');
+          }
+          break;
+        }
+        case 'database': {
+          const result = await applyBuiltinDatabaseTemplate(templateId);
+          if (result.success && result.data) {
+            const nodePosition = targetAgentId
+              ? getNextGridSlotPosition('database', targetAgentData?.databaseCount ?? 0)
+              : flowPosition;
+            addDatabaseNode(
+              { id: result.data.id, name: result.data.name, slug: 'db', agentId: targetAgentId },
+              nodePosition
+            );
+            toast.success(`Created "${result.data.name}" from template`);
+          } else {
+            toast.error(result.error || 'Failed to create database from template');
+          }
+          break;
+        }
+      }
+
+      setDropTemplatePicker(null);
+    },
+    [dropTemplatePicker, addAgentNode, addSkillNode, addDatabaseNode]
+  );
+
+  // Handle saved template selection from TemplatePickerDialog
+  const handleDropSelectSavedTemplate = useCallback(
+    async (templateId: number) => {
+      if (!dropTemplatePicker) return;
+
+      // For now, navigate to creation page with template - can be enhanced to apply immediately
+      const { entityType } = dropTemplatePicker;
+      switch (entityType) {
+        case 'skill':
+          router.push(`/skills/new?templateId=${templateId}`);
+          break;
+        case 'agent':
+          router.push(`/organization?templatePicker=agent&templateId=${templateId}`);
+          break;
+        case 'database':
+          router.push(`/organization?templatePicker=database&templateId=${templateId}`);
+          break;
+      }
+
+      setDropTemplatePicker(null);
+    },
+    [dropTemplatePicker, router]
+  );
+
+  // Handle assignment dialog confirmation (data source config)
+  const handleAssignmentConfirm = useCallback(
+    async (config: AssignmentConfig) => {
+      if (!assignmentDialog) return;
+
+      const { mode, entityId, targetAgent } = assignmentDialog;
+
+      if (mode === 'database') {
+        // Attach database tables as agent-level data sources
+        const db = databases.find((d) => d.id === entityId);
+        if (db?.tables && db.tables.length > 0) {
+          // Attach each table as an agent data source
+          for (const table of db.tables) {
+            try {
+              await attachContextTable({
+                targetType: 'agent',
+                targetId: String(targetAgent.id),
+                tableId: table.id,
+                tableName: table.name,
+                accessMode: config.accessMode || 'readwrite',
+                syncMode: config.syncMode || 'on_access',
+              });
+            } catch (error) {
+              console.error('Failed to attach table:', error);
+              toast.error(`Failed to attach table ${table.name}`);
+            }
+          }
+          toast.success(`Database "${db.name}" configured as data source for ${targetAgent.name}`);
+        }
+      } else if (mode === 'org_skill') {
+        // Handle org skill transfer or clone
+        if (config.action === 'convert') {
+          const result = await transferSkillToAgent(entityId, targetAgent.id);
+          if (result.success) {
+            toast.success(`Skill transferred to ${targetAgent.name}`);
+          } else {
+            toast.error(result.error || 'Failed to transfer skill');
+          }
+        } else if (config.action === 'clone') {
+          const result = await duplicateSkill(entityId);
+          if (result.success && result.data) {
+            // The duplicated skill is org-level, we need to transfer it to the agent
+            const transferResult = await transferSkillToAgent(result.data.id, targetAgent.id);
+            if (transferResult.success) {
+              toast.success(`Skill copied to ${targetAgent.name}`);
+            } else {
+              toast.error(transferResult.error || 'Failed to copy skill');
+            }
+          } else {
+            toast.error(result.error || 'Failed to duplicate skill');
+          }
+        }
+      }
+
+      setAssignmentDialog(null);
+    },
+    [assignmentDialog, databases]
   );
 
   // Validate connection attempts - only allow valid edge types
@@ -363,14 +668,30 @@ export function OrgChartCanvas({
 
           onSelect(node.id, node.type as OrgChartNodeType, entityId, connectedEdges);
         }
+      } else {
+        // Multi-selection: update selectedNodeIds Set directly
+        const ids = new Set(selectedNodes.map(n => n.id));
+        setSelectedNodeIds(ids);
+        // Clear single selection callback for multi-select
+        onSelect?.(null);
       }
     },
-    [setSelectedNodeId, onSelect, allEdges]
+    [setSelectedNodeId, setSelectedNodeIds, onSelect, allEdges]
   );
 
   // Handle keyboard shortcuts
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent) => {
+      // Don't handle shortcuts when typing in inputs/textareas
+      const target = event.target as HTMLElement;
+      if (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable
+      ) {
+        return;
+      }
+
       // Cmd/Ctrl + K = Open search
       if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
         event.preventDefault();
@@ -589,6 +910,7 @@ export function OrgChartCanvas({
         isValidConnection={isValidConnection}
         onSelectionChange={handleSelectionChange}
         onNodeDoubleClick={handleNodeDoubleClick}
+        onNodeDragStop={disabled ? undefined : handleNodeDragStop}
         onDragOver={disabled ? undefined : handleDragOver}
         onDrop={disabled ? undefined : handleDrop}
         nodeTypes={orgChartNodeTypes}
@@ -733,6 +1055,42 @@ export function OrgChartCanvas({
                       <p>Search <kbd className="ml-1 text-[10px] opacity-60">⌘K</kbd></p>
                     </TooltipContent>
                   </Tooltip>
+                  <div className="w-px h-6 bg-border mx-0.5" />
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => setIsImportDialogOpen(true)}
+                      >
+                        <FileUp className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      <p>Import Template</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  {canExport && (
+                    <>
+                      <div className="w-px h-6 bg-border mx-0.5" />
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => setIsExportDialogOpen(true)}
+                          >
+                            <FileDown className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom">
+                          <p>Export as Template</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </>
+                  )}
                 </>
               )}
             </TooltipProvider>
@@ -777,6 +1135,61 @@ export function OrgChartCanvas({
         isDeleting={isDeleting}
         itemsToDelete={deleteImpactItems}
       />
+
+      {/* Assignment dialog for data source/skill configuration */}
+      {assignmentDialog && (
+        <AgentAssignmentDialog
+          isOpen={assignmentDialog.isOpen}
+          onClose={() => setAssignmentDialog(null)}
+          onConfirm={handleAssignmentConfirm}
+          mode={assignmentDialog.mode}
+          entityName={assignmentDialog.entityName}
+          agentName={assignmentDialog.targetAgent.name}
+        />
+      )}
+
+      {/* Export template dialog */}
+      <ExportTemplateDialog
+        isOpen={isExportDialogOpen}
+        onClose={() => setIsExportDialogOpen(false)}
+        exportPreview={exportPreview}
+        selection={exportSelection}
+      />
+
+      {/* Import template dialog - applies immediately for org chart */}
+      <ImportTemplateDialog
+        isOpen={isImportDialogOpen}
+        onClose={() => setIsImportDialogOpen(false)}
+        applyImmediately={true}
+        onEntitiesCreated={(result) => {
+          // Entities created - soft refresh to reload server data
+          router.refresh();
+        }}
+        onImportComplete={() => setIsImportDialogOpen(false)}
+      />
+
+      {/* Drop choice popover - shown when dropping entity from palette */}
+      {pendingDrop && (
+        <DropChoicePopover
+          isOpen={true}
+          position={pendingDrop.screenPosition}
+          entityType={pendingDrop.entityType}
+          onClose={() => setPendingDrop(null)}
+          onSelectBlank={handleSelectBlank}
+          onSelectTemplate={handleSelectTemplate}
+        />
+      )}
+
+      {/* Template picker dialog for drops */}
+      {dropTemplatePicker && (
+        <TemplatePickerDialog
+          isOpen={true}
+          onClose={() => setDropTemplatePicker(null)}
+          entityType={dropTemplatePicker.entityType}
+          onSelectBuiltin={handleDropSelectBuiltinTemplate}
+          onSelectSaved={handleDropSelectSavedTemplate}
+        />
+      )}
     </div>
     </OrgChartDragProvider>
   );

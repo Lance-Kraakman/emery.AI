@@ -1,0 +1,1598 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "1.0.0",
+  "generated": "2026-01-18T02:50:34.799Z",
+  "generator": "scripts/generate-blocks-schema.ts",
+  "blocks": {
+    "Text": {
+      "description": "Rich text paragraph content",
+      "props": {
+        "align": {
+          "type": "enum",
+          "required": true,
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "size": {
+          "type": "object",
+          "required": true
+        },
+        "textColor": {
+          "type": "string"
+        },
+        "backgroundColor": {
+          "type": "string"
+        },
+        "fontFamily": {
+          "type": "string"
+        },
+        "fontWeight": {
+          "type": "string"
+        },
+        "maxWidth": {
+          "type": "string"
+        }
+      }
+    },
+    "Template": {
+      "description": "Reusable template component",
+      "props": {
+        "template": {
+          "type": "string",
+          "required": true
+        },
+        "selectedVariant": {
+          "type": "string"
+        }
+      },
+      "slots": [
+        "children"
+      ]
+    },
+    "TextField": {
+      "description": "Display text field value from DataBlock context",
+      "props": {
+        "fieldId": {
+          "type": "number"
+        },
+        "label": {
+          "type": "string"
+        },
+        "labelPosition": {
+          "type": "enum",
+          "enum": [
+            "top",
+            "inline"
+          ]
+        },
+        "size": {
+          "type": "enum",
+          "enum": [
+            "xs",
+            "sm",
+            "base",
+            "lg",
+            "xl",
+            "2xl",
+            "3xl",
+            "4xl",
+            "5xl"
+          ]
+        },
+        "textColor": {
+          "type": "string"
+        },
+        "fontFamily": {
+          "type": "string"
+        },
+        "fontWeight": {
+          "type": "string"
+        },
+        "maxLength": {
+          "type": "number"
+        },
+        "fallback": {
+          "type": "string"
+        }
+      },
+      "requires": "DataBlock parent"
+    },
+    "TableBlock": {
+      "description": "Display tabular data from a view",
+      "props": {
+        "viewId": {
+          "type": "number"
+        },
+        "fieldMappings": {
+          "type": "array"
+        },
+        "showHeader": {
+          "type": "boolean"
+        },
+        "striped": {
+          "type": "boolean"
+        },
+        "bordered": {
+          "type": "boolean"
+        },
+        "compact": {
+          "type": "boolean"
+        }
+      }
+    },
+    "Stats": {
+      "description": "Statistics display grid",
+      "props": {
+        "items": {
+          "type": "array",
+          "required": true
+        },
+        "labelColor": {
+          "type": "string"
+        },
+        "valueColor": {
+          "type": "string"
+        },
+        "backgroundColor": {
+          "type": "string"
+        },
+        "labelFontFamily": {
+          "type": "string"
+        },
+        "labelFontWeight": {
+          "type": "string"
+        },
+        "valueFontFamily": {
+          "type": "string"
+        },
+        "valueFontWeight": {
+          "type": "string"
+        },
+        "radius": {
+          "type": "object"
+        },
+        "padding": {
+          "type": "object"
+        }
+      }
+    },
+    "Space": {
+      "description": "Vertical spacing element",
+      "props": {
+        "direction": {
+          "type": "enum",
+          "enum": [
+            "",
+            "vertical",
+            "horizontal"
+          ]
+        },
+        "size": {
+          "type": "string",
+          "required": true
+        }
+      }
+    },
+    "SignOutBlock": {
+      "description": "Sign out button",
+      "props": {
+        "buttonText": {
+          "type": "string",
+          "required": true
+        },
+        "showUserInfo": {
+          "type": "boolean",
+          "required": true
+        },
+        "showAvatar": {
+          "type": "boolean",
+          "required": true
+        },
+        "redirectAction": {
+          "type": "array",
+          "required": true
+        },
+        "variant": {
+          "type": "enum",
+          "required": true,
+          "enum": [
+            "default",
+            "destructive",
+            "outline",
+            "secondary",
+            "ghost"
+          ]
+        },
+        "popoverSide": {
+          "type": "enum",
+          "required": true,
+          "enum": [
+            "top",
+            "bottom",
+            "left",
+            "right"
+          ]
+        },
+        "popoverAlign": {
+          "type": "enum",
+          "required": true,
+          "enum": [
+            "start",
+            "center",
+            "end"
+          ]
+        },
+        "backgroundColor": {
+          "type": "string"
+        },
+        "textColor": {
+          "type": "string"
+        },
+        "buttonColor": {
+          "type": "string"
+        },
+        "buttonTextColor": {
+          "type": "string"
+        },
+        "borderColor": {
+          "type": "string"
+        },
+        "radius": {
+          "type": "object"
+        }
+      }
+    },
+    "SelectField": {
+      "description": "Display select/dropdown field value",
+      "props": {
+        "fieldId": {
+          "type": "number"
+        },
+        "label": {
+          "type": "string"
+        },
+        "labelPosition": {
+          "type": "enum",
+          "enum": [
+            "top",
+            "inline"
+          ]
+        },
+        "size": {
+          "type": "enum",
+          "enum": [
+            "xs",
+            "sm",
+            "base",
+            "lg",
+            "xl",
+            "2xl",
+            "3xl",
+            "4xl",
+            "5xl"
+          ]
+        },
+        "textColor": {
+          "type": "string"
+        },
+        "fontFamily": {
+          "type": "string"
+        },
+        "fontWeight": {
+          "type": "string"
+        },
+        "backgroundColor": {
+          "type": "string"
+        },
+        "fallback": {
+          "type": "string"
+        }
+      },
+      "requires": "DataBlock parent"
+    },
+    "RelationField": {
+      "description": "Display linked record",
+      "props": {
+        "fieldId": {
+          "type": "number"
+        },
+        "label": {
+          "type": "string"
+        },
+        "labelPosition": {
+          "type": "enum",
+          "enum": [
+            "top",
+            "inline"
+          ]
+        },
+        "displayStyle": {
+          "type": "enum",
+          "enum": [
+            "badge",
+            "list",
+            "comma"
+          ]
+        },
+        "maxItems": {
+          "type": "number"
+        },
+        "size": {
+          "type": "enum",
+          "enum": [
+            "sm",
+            "base",
+            "lg"
+          ]
+        },
+        "showIcon": {
+          "type": "boolean"
+        },
+        "textColor": {
+          "type": "string"
+        },
+        "fontFamily": {
+          "type": "string"
+        }
+      },
+      "requires": "DataBlock parent"
+    },
+    "MetricBlock": {
+      "description": "Display a single metric/KPI value",
+      "props": {
+        "viewId": {
+          "type": "number"
+        },
+        "showLabel": {
+          "type": "boolean"
+        },
+        "showChange": {
+          "type": "boolean"
+        },
+        "size": {
+          "type": "object"
+        },
+        "labelColor": {
+          "type": "string"
+        },
+        "valueColor": {
+          "type": "string"
+        },
+        "backgroundColor": {
+          "type": "string"
+        },
+        "labelFontFamily": {
+          "type": "string"
+        },
+        "labelFontWeight": {
+          "type": "string"
+        },
+        "valueFontFamily": {
+          "type": "string"
+        },
+        "valueFontWeight": {
+          "type": "string"
+        },
+        "radius": {
+          "type": "object"
+        },
+        "borderWidth": {
+          "type": "string"
+        },
+        "padding": {
+          "type": "object"
+        }
+      }
+    },
+    "NumberField": {
+      "description": "Display number field with formatting",
+      "props": {
+        "fieldId": {
+          "type": "number"
+        },
+        "label": {
+          "type": "string"
+        },
+        "labelPosition": {
+          "type": "enum",
+          "enum": [
+            "top",
+            "inline"
+          ]
+        },
+        "size": {
+          "type": "enum",
+          "enum": [
+            "xs",
+            "sm",
+            "base",
+            "lg",
+            "xl",
+            "2xl",
+            "3xl",
+            "4xl",
+            "5xl"
+          ]
+        },
+        "textColor": {
+          "type": "string"
+        },
+        "fontFamily": {
+          "type": "string"
+        },
+        "fontWeight": {
+          "type": "string"
+        },
+        "decimalPlaces": {
+          "type": "number"
+        },
+        "prefix": {
+          "type": "string"
+        },
+        "suffix": {
+          "type": "string"
+        },
+        "useGrouping": {
+          "type": "boolean"
+        },
+        "fallback": {
+          "type": "string"
+        }
+      },
+      "requires": "DataBlock parent"
+    },
+    "LoginBlock": {
+      "description": "Sign in / sign up form",
+      "props": {
+        "mode": {
+          "type": "enum",
+          "required": true,
+          "enum": [
+            "sign_in",
+            "sign_up",
+            "dual"
+          ]
+        },
+        "title": {
+          "type": "string",
+          "required": true
+        },
+        "description": {
+          "type": "string",
+          "required": true
+        },
+        "showGithub": {
+          "type": "boolean",
+          "required": true
+        },
+        "showGoogle": {
+          "type": "boolean",
+          "required": true
+        },
+        "showEmail": {
+          "type": "boolean",
+          "required": true
+        },
+        "redirectAction": {
+          "type": "array",
+          "required": true
+        },
+        "defaultSignUpRole": {
+          "type": "object",
+          "required": true
+        },
+        "backgroundColor": {
+          "type": "string"
+        },
+        "textColor": {
+          "type": "string"
+        },
+        "buttonColor": {
+          "type": "string"
+        },
+        "buttonTextColor": {
+          "type": "string"
+        },
+        "borderColor": {
+          "type": "string"
+        },
+        "radius": {
+          "type": "object"
+        }
+      }
+    },
+    "Logos": {
+      "description": "Logo grid/carousel",
+      "props": {
+        "logos": {
+          "type": "array",
+          "required": true
+        }
+      }
+    },
+    "LinkField": {
+      "description": "Display URL as clickable link",
+      "props": {
+        "fieldId": {
+          "type": "number"
+        },
+        "label": {
+          "type": "string"
+        },
+        "labelPosition": {
+          "type": "enum",
+          "enum": [
+            "top",
+            "inline"
+          ]
+        },
+        "displayStyle": {
+          "type": "enum",
+          "enum": [
+            "text",
+            "button",
+            "icon"
+          ]
+        },
+        "linkText": {
+          "type": "string"
+        },
+        "openInNewTab": {
+          "type": "boolean"
+        },
+        "showIcon": {
+          "type": "boolean"
+        },
+        "size": {
+          "type": "enum",
+          "enum": [
+            "sm",
+            "base",
+            "lg"
+          ]
+        },
+        "fallback": {
+          "type": "string"
+        },
+        "textColor": {
+          "type": "string"
+        },
+        "fontFamily": {
+          "type": "string"
+        }
+      },
+      "requires": "DataBlock parent"
+    },
+    "LinkBlock": {
+      "description": "Navigation link with variable support",
+      "props": {
+        "label": {
+          "type": "string",
+          "required": true
+        },
+        "href": {
+          "type": "string",
+          "required": true
+        },
+        "openInNewTab": {
+          "type": "boolean",
+          "required": true
+        },
+        "style": {
+          "type": "enum",
+          "required": true,
+          "enum": [
+            "inline",
+            "button",
+            "nav"
+          ]
+        },
+        "variant": {
+          "type": "enum",
+          "required": true,
+          "enum": [
+            "default",
+            "secondary",
+            "outline",
+            "ghost",
+            "link"
+          ]
+        },
+        "size": {
+          "type": "enum",
+          "required": true,
+          "enum": [
+            "sm",
+            "default",
+            "lg"
+          ]
+        },
+        "underline": {
+          "type": "boolean",
+          "required": true
+        },
+        "actions": {
+          "type": "array"
+        }
+      }
+    },
+    "MarkdownBlock": {
+      "description": "Markdown content renderer",
+      "props": {
+        "content": {
+          "type": "string"
+        },
+        "textColor": {
+          "type": "string"
+        },
+        "backgroundColor": {
+          "type": "string"
+        },
+        "maxWidth": {
+          "type": "string"
+        }
+      }
+    },
+    "Hero": {
+      "description": "Hero section with title, description, and CTA",
+      "props": {
+        "quote": {
+          "type": "object"
+        },
+        "title": {
+          "type": "string",
+          "required": true
+        },
+        "description": {
+          "type": "string",
+          "required": true
+        },
+        "align": {
+          "type": "string"
+        },
+        "padding": {
+          "type": "object"
+        },
+        "buttons": {
+          "type": "array",
+          "required": true
+        },
+        "titleColor": {
+          "type": "string"
+        },
+        "subtitleColor": {
+          "type": "string"
+        },
+        "backgroundColor": {
+          "type": "string"
+        },
+        "titleFontFamily": {
+          "type": "string"
+        },
+        "titleFontWeight": {
+          "type": "string"
+        },
+        "subtitleFontFamily": {
+          "type": "string"
+        },
+        "subtitleFontWeight": {
+          "type": "string"
+        }
+      },
+      "slots": [
+        "image"
+      ]
+    },
+    "ImageField": {
+      "description": "Display image from field",
+      "props": {
+        "fieldId": {
+          "type": "number"
+        },
+        "label": {
+          "type": "string"
+        },
+        "labelPosition": {
+          "type": "enum",
+          "enum": [
+            "top",
+            "inline"
+          ]
+        },
+        "size": {
+          "type": "enum",
+          "enum": [
+            "small",
+            "medium",
+            "large",
+            "full"
+          ]
+        },
+        "shape": {
+          "type": "enum",
+          "enum": [
+            "square",
+            "circle",
+            "rounded"
+          ]
+        },
+        "radius": {
+          "type": "object"
+        },
+        "borderWidth": {
+          "type": "string"
+        },
+        "borderColor": {
+          "type": "string"
+        },
+        "alt": {
+          "type": "string"
+        },
+        "fallbackUrl": {
+          "type": "string"
+        },
+        "maxItems": {
+          "type": "number"
+        }
+      },
+      "requires": "DataBlock parent"
+    },
+    "Heading": {
+      "description": "Section heading (h1-h6)",
+      "props": {
+        "align": {
+          "type": "enum",
+          "required": true,
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "level": {
+          "type": "object"
+        },
+        "size": {
+          "type": "object",
+          "required": true
+        },
+        "textColor": {
+          "type": "string"
+        },
+        "backgroundColor": {
+          "type": "string"
+        },
+        "fontFamily": {
+          "type": "string"
+        },
+        "fontWeight": {
+          "type": "string"
+        }
+      }
+    },
+    "HeaderBlock": {
+      "description": "Page header with navigation",
+      "props": {
+        "layout": {
+          "type": "enum",
+          "enum": [
+            "left-nav",
+            "centered",
+            "split",
+            "minimal"
+          ]
+        },
+        "sticky": {
+          "type": "boolean"
+        },
+        "backgroundColor": {
+          "type": "string"
+        }
+      },
+      "slots": [
+        "logo",
+        "navigation",
+        "actions"
+      ]
+    },
+    "Grid": {
+      "description": "CSS grid layout container",
+      "props": {
+        "numColumns": {
+          "type": "number",
+          "required": true
+        },
+        "justifyItems": {
+          "type": "enum",
+          "required": true,
+          "enum": [
+            "start",
+            "center",
+            "end",
+            "stretch"
+          ]
+        },
+        "alignItems": {
+          "type": "enum",
+          "required": true,
+          "enum": [
+            "start",
+            "center",
+            "end",
+            "stretch"
+          ]
+        },
+        "gap": {
+          "type": "string",
+          "required": true
+        },
+        "itemStyle": {
+          "type": "object"
+        },
+        "itemPadding": {
+          "type": "object"
+        }
+      },
+      "slots": [
+        "items"
+      ]
+    },
+    "FormBlock": {
+      "description": "Input form for creating/editing rows",
+      "props": {
+        "value": {
+          "type": "number",
+          "required": true
+        },
+        "max": {
+          "type": "number"
+        },
+        "label": {
+          "type": "string"
+        },
+        "showPercentage": {
+          "type": "boolean"
+        }
+      }
+    },
+    "Flex": {
+      "description": "Flexbox container for flexible layouts",
+      "props": {
+        "justifyContent": {
+          "type": "enum",
+          "required": true,
+          "enum": [
+            "start",
+            "center",
+            "end"
+          ]
+        },
+        "alignItems": {
+          "type": "enum",
+          "required": true,
+          "enum": [
+            "start",
+            "center",
+            "end",
+            "stretch"
+          ]
+        },
+        "direction": {
+          "type": "enum",
+          "required": true,
+          "enum": [
+            "row",
+            "column"
+          ]
+        },
+        "gap": {
+          "type": "string",
+          "required": true
+        },
+        "wrap": {
+          "type": "enum",
+          "required": true,
+          "enum": [
+            "wrap",
+            "nowrap"
+          ]
+        },
+        "itemStyle": {
+          "type": "object"
+        },
+        "itemPadding": {
+          "type": "object"
+        }
+      },
+      "slots": [
+        "items"
+      ]
+    },
+    "FooterBlock": {
+      "description": "Page footer",
+      "props": {
+        "layout": {
+          "type": "enum",
+          "enum": [
+            "columns",
+            "centered",
+            "minimal"
+          ]
+        },
+        "numColumns": {
+          "type": "object"
+        },
+        "backgroundColor": {
+          "type": "string"
+        }
+      },
+      "slots": [
+        "column1",
+        "column2",
+        "column3",
+        "column4",
+        "bottomBar"
+      ]
+    },
+    "Divider": {
+      "description": "Horizontal divider line",
+      "props": {
+        "direction": {
+          "type": "enum",
+          "required": true,
+          "enum": [
+            "horizontal",
+            "vertical"
+          ]
+        },
+        "thickness": {
+          "type": "string"
+        },
+        "color": {
+          "type": "string"
+        },
+        "lineStyle": {
+          "type": "enum",
+          "enum": [
+            "solid",
+            "dashed",
+            "dotted"
+          ]
+        },
+        "spacing": {
+          "type": "string"
+        },
+        "width": {
+          "type": "enum",
+          "enum": [
+            "full",
+            "75%",
+            "50%",
+            "25%"
+          ]
+        }
+      }
+    },
+    "DialogBlock": {
+      "description": "DialogBlock block component",
+      "props": {
+        "stateKey": {
+          "type": "string",
+          "required": true
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "size": {
+          "type": "object",
+          "required": true
+        },
+        "closeOnOutsideClick": {
+          "type": "boolean",
+          "required": true
+        },
+        "closeOnEscape": {
+          "type": "boolean",
+          "required": true
+        }
+      },
+      "slots": [
+        "children"
+      ]
+    },
+    "DateField": {
+      "description": "Display date field with formatting",
+      "props": {
+        "fieldId": {
+          "type": "number"
+        },
+        "label": {
+          "type": "string"
+        },
+        "labelPosition": {
+          "type": "enum",
+          "enum": [
+            "top",
+            "inline"
+          ]
+        },
+        "format": {
+          "type": "enum",
+          "enum": [
+            "short",
+            "long",
+            "relative",
+            "time"
+          ]
+        },
+        "size": {
+          "type": "enum",
+          "enum": [
+            "xs",
+            "sm",
+            "base",
+            "lg",
+            "xl",
+            "2xl",
+            "3xl",
+            "4xl",
+            "5xl"
+          ]
+        },
+        "textColor": {
+          "type": "string"
+        },
+        "fontFamily": {
+          "type": "string"
+        },
+        "fontWeight": {
+          "type": "string"
+        },
+        "fallback": {
+          "type": "string"
+        }
+      },
+      "requires": "DataBlock parent"
+    },
+    "Container": {
+      "description": "Content wrapper with max-width constraints",
+      "props": {
+        "variant": {
+          "type": "enum",
+          "required": true,
+          "enum": [
+            "card",
+            "bordered",
+            "subtle",
+            "none"
+          ]
+        },
+        "shadow": {
+          "type": "enum",
+          "enum": [
+            "none",
+            "sm",
+            "md",
+            "lg"
+          ]
+        },
+        "sticky": {
+          "type": "boolean"
+        },
+        "stickyPosition": {
+          "type": "enum",
+          "enum": [
+            "top",
+            "bottom"
+          ]
+        },
+        "backgroundColor": {
+          "type": "string"
+        },
+        "borderColor": {
+          "type": "string"
+        },
+        "radius": {
+          "type": "object"
+        },
+        "padding": {
+          "type": "object"
+        },
+        "margin": {
+          "type": "object"
+        }
+      },
+      "slots": [
+        "children"
+      ]
+    },
+    "DataBlock": {
+      "description": "Data container that provides row context to children. Required parent for Field blocks.",
+      "props": {
+        "mode": {
+          "type": "enum",
+          "required": true,
+          "enum": [
+            "single",
+            "list"
+          ]
+        },
+        "viewId": {
+          "type": "number"
+        },
+        "rowFilter": {
+          "type": "array"
+        },
+        "sortConfig": {
+          "type": "array"
+        },
+        "layout": {
+          "type": "enum",
+          "enum": [
+            "vertical",
+            "grid",
+            "horizontal"
+          ]
+        },
+        "columns": {
+          "type": "number"
+        },
+        "gap": {
+          "type": "string"
+        },
+        "itemsPerPage": {
+          "type": "number"
+        },
+        "paginationStyle": {
+          "type": "enum",
+          "enum": [
+            "none",
+            "load-more",
+            "pages"
+          ]
+        },
+        "maxHeight": {
+          "type": "number"
+        },
+        "showCarouselArrows": {
+          "type": "boolean"
+        },
+        "editEnabled": {
+          "type": "boolean"
+        },
+        "allowCreate": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "slots": [
+        "children"
+      ]
+    },
+    "ChartBlock": {
+      "description": "Data visualization chart",
+      "props": {
+        "viewId": {
+          "type": "number"
+        },
+        "width": {
+          "type": "string"
+        },
+        "height": {
+          "type": "number"
+        },
+        "showLegend": {
+          "type": "boolean"
+        },
+        "showGrid": {
+          "type": "boolean"
+        }
+      }
+    },
+    "Card": {
+      "description": "Card container with optional header/footer",
+      "props": {
+        "title": {
+          "type": "string",
+          "required": true
+        },
+        "description": {
+          "type": "string",
+          "required": true
+        },
+        "icon": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "enum",
+          "required": true,
+          "enum": [
+            "flat",
+            "card"
+          ]
+        },
+        "titleColor": {
+          "type": "string"
+        },
+        "textColor": {
+          "type": "string"
+        },
+        "backgroundColor": {
+          "type": "string"
+        },
+        "titleFontFamily": {
+          "type": "string"
+        },
+        "titleFontWeight": {
+          "type": "string"
+        },
+        "textFontFamily": {
+          "type": "string"
+        },
+        "textFontWeight": {
+          "type": "string"
+        },
+        "radius": {
+          "type": "object"
+        },
+        "borderWidth": {
+          "type": "string"
+        },
+        "padding": {
+          "type": "object"
+        }
+      }
+    },
+    "Button": {
+      "description": "CTA button with configurable actions",
+      "props": {
+        "label": {
+          "type": "string",
+          "required": true
+        },
+        "actions": {
+          "type": "array"
+        },
+        "variant": {
+          "type": "enum",
+          "required": true,
+          "enum": [
+            "primary",
+            "secondary"
+          ]
+        }
+      }
+    },
+    "ConditionalBlock": {
+      "description": "Show/hide content based on conditions",
+      "props": {
+        "sourceType": {
+          "type": "object",
+          "required": true
+        },
+        "stateKey": {
+          "type": "string"
+        },
+        "paramName": {
+          "type": "string"
+        },
+        "fieldName": {
+          "type": "string"
+        },
+        "operator": {
+          "type": "object",
+          "required": true
+        },
+        "compareValue": {
+          "type": "string"
+        },
+        "invert": {
+          "type": "boolean",
+          "required": true
+        }
+      },
+      "slots": [
+        "children",
+        "elseContent"
+      ]
+    },
+    "BooleanField": {
+      "description": "Display boolean as checkbox/toggle",
+      "props": {
+        "fieldId": {
+          "type": "number"
+        },
+        "label": {
+          "type": "string"
+        },
+        "labelPosition": {
+          "type": "enum",
+          "enum": [
+            "top",
+            "inline"
+          ]
+        },
+        "displayStyle": {
+          "type": "enum",
+          "enum": [
+            "text",
+            "badge",
+            "icon"
+          ]
+        },
+        "trueText": {
+          "type": "string"
+        },
+        "falseText": {
+          "type": "string"
+        },
+        "iconStyle": {
+          "type": "enum",
+          "enum": [
+            "check",
+            "circle"
+          ]
+        },
+        "size": {
+          "type": "enum",
+          "enum": [
+            "sm",
+            "base",
+            "lg"
+          ]
+        },
+        "textColor": {
+          "type": "string"
+        },
+        "fontFamily": {
+          "type": "string"
+        }
+      },
+      "requires": "DataBlock parent"
+    },
+    "FileField": {
+      "description": "Display file download link",
+      "props": {
+        "fieldId": {
+          "type": "number"
+        },
+        "label": {
+          "type": "string"
+        },
+        "labelPosition": {
+          "type": "enum",
+          "enum": [
+            "top",
+            "inline"
+          ]
+        },
+        "displayStyle": {
+          "type": "enum",
+          "enum": [
+            "list",
+            "compact",
+            "card"
+          ]
+        },
+        "size": {
+          "type": "object"
+        },
+        "mode": {
+          "type": "object"
+        },
+        "onEditAction": {
+          "type": "array"
+        },
+        "maxItems": {
+          "type": "number"
+        },
+        "showSize": {
+          "type": "boolean"
+        },
+        "showDownload": {
+          "type": "boolean"
+        },
+        "textColor": {
+          "type": "string"
+        },
+        "fontFamily": {
+          "type": "string"
+        }
+      },
+      "requires": "DataBlock parent"
+    },
+    "EditorBlock": {
+      "description": "Rich text editor content",
+      "props": {
+        "editorType": {
+          "type": "object",
+          "required": true
+        },
+        "viewId": {
+          "type": "number"
+        },
+        "fieldId": {
+          "type": "number"
+        },
+        "documentIdSource": {
+          "type": "object"
+        },
+        "height": {
+          "type": "string"
+        },
+        "allowEdit": {
+          "type": "boolean"
+        },
+        "autoSave": {
+          "type": "boolean"
+        },
+        "autoSaveInterval": {
+          "type": "number"
+        }
+      }
+    },
+    "DocumentField": {
+      "description": "Display document field",
+      "props": {
+        "fieldId": {
+          "type": "number"
+        },
+        "label": {
+          "type": "string"
+        },
+        "labelPosition": {
+          "type": "enum",
+          "enum": [
+            "top",
+            "inline"
+          ]
+        },
+        "displayStyle": {
+          "type": "enum",
+          "enum": [
+            "list",
+            "card"
+          ]
+        },
+        "size": {
+          "type": "object"
+        },
+        "mode": {
+          "type": "object"
+        },
+        "onEditAction": {
+          "type": "array"
+        },
+        "maxItems": {
+          "type": "number"
+        },
+        "showMetadata": {
+          "type": "boolean"
+        },
+        "showStatus": {
+          "type": "boolean"
+        },
+        "textColor": {
+          "type": "string"
+        },
+        "fontFamily": {
+          "type": "string"
+        }
+      },
+      "requires": "DataBlock parent"
+    }
+  },
+  "categories": {
+    "layout": {
+      "title": "Layout",
+      "description": "Structural containers for organizing content",
+      "blocks": [
+        "Space",
+        "Grid",
+        "Flex",
+        "Divider",
+        "Container"
+      ]
+    },
+    "typography": {
+      "title": "Typography",
+      "description": "Text display components",
+      "blocks": [
+        "Text",
+        "Heading"
+      ]
+    },
+    "interactive": {
+      "title": "Actions",
+      "description": "Clickable elements with configurable actions",
+      "blocks": [
+        "LinkBlock",
+        "Button"
+      ]
+    },
+    "authentication": {
+      "title": "Authentication",
+      "description": "User auth components",
+      "blocks": [
+        "SignOutBlock",
+        "LoginBlock"
+      ]
+    },
+    "data": {
+      "title": "Data",
+      "description": "Data-aware blocks that connect to database tables/views",
+      "blocks": [
+        "TableBlock",
+        "MetricBlock",
+        "FormBlock",
+        "DataBlock",
+        "ChartBlock"
+      ]
+    },
+    "fields": {
+      "title": "Fields",
+      "description": "Display individual field values from DataBlock context",
+      "blocks": [
+        "TextField",
+        "SelectField",
+        "RelationField",
+        "NumberField",
+        "LinkField",
+        "ImageField",
+        "DateField",
+        "BooleanField",
+        "FileField",
+        "DocumentField"
+      ]
+    },
+    "logic": {
+      "title": "Logic",
+      "description": "Conditional rendering",
+      "blocks": [
+        "ConditionalBlock"
+      ]
+    },
+    "content": {
+      "title": "Content",
+      "description": "Rich content blocks",
+      "blocks": [
+        "MarkdownBlock",
+        "EditorBlock"
+      ]
+    },
+    "structure": {
+      "title": "Page Structure",
+      "description": "Page-level layout components",
+      "blocks": [
+        "HeaderBlock",
+        "FooterBlock"
+      ]
+    },
+    "templates": {
+      "title": "Templates",
+      "description": "Pre-built component combinations",
+      "blocks": [
+        "Template",
+        "Stats",
+        "Logos",
+        "Hero",
+        "DialogBlock",
+        "Card"
+      ]
+    }
+  }
+}

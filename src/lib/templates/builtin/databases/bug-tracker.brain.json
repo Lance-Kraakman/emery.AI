@@ -1,0 +1,158 @@
+{
+  "$format": "brain-template",
+  "$version": 1,
+  "metadata": {
+    "name": "Bug Tracker",
+    "description": "Track bugs, issues, and feature requests. Manage team assignments and monitor progress.",
+    "category": "Development",
+    "tags": ["bugs", "issues", "development", "tracking"],
+    "version": "1.0.0"
+  },
+  "template": {
+    "type": "database",
+    "data": {
+      "name": "Bug Tracker",
+      "slug": "bug-tracker",
+      "description": "Issue tracking system",
+      "tables": [
+        {
+          "name": "Team",
+          "description": "Development team members",
+          "fields": [
+            { "name": "Name", "slug": "name", "type": "text", "required": true },
+            { "name": "Email", "slug": "email", "type": "email" },
+            {
+              "name": "Role",
+              "slug": "role",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Developer", "color": "#3B82F6" },
+                  { "id": 2, "value": "QA", "color": "#10B981" },
+                  { "id": 3, "value": "Designer", "color": "#EC4899" },
+                  { "id": 4, "value": "PM", "color": "#8B5CF6" }
+                ]
+              }
+            },
+            {
+              "name": "Skills",
+              "slug": "skills",
+              "type": "multi-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Frontend", "color": "#3B82F6" },
+                  { "id": 2, "value": "Backend", "color": "#10B981" },
+                  { "id": 3, "value": "Mobile", "color": "#F59E0B" },
+                  { "id": 4, "value": "DevOps", "color": "#8B5CF6" },
+                  { "id": 5, "value": "Database", "color": "#06B6D4" }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Features",
+          "description": "Product features and modules",
+          "fields": [
+            { "name": "Name", "slug": "name", "type": "text", "required": true },
+            { "name": "Description", "slug": "description", "type": "text" },
+            {
+              "name": "Status",
+              "slug": "status",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Planned", "color": "#6B7280" },
+                  { "id": 2, "value": "In Development", "color": "#3B82F6" },
+                  { "id": 3, "value": "Completed", "color": "#10B981" }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Issues",
+          "description": "Bugs and issues to resolve",
+          "fields": [
+            { "name": "Title", "slug": "title", "type": "text", "required": true },
+            { "name": "Description", "slug": "description", "type": "text" },
+            {
+              "name": "Type",
+              "slug": "type",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Bug", "color": "#EF4444" },
+                  { "id": 2, "value": "Feature", "color": "#3B82F6" },
+                  { "id": 3, "value": "Task", "color": "#6B7280" },
+                  { "id": 4, "value": "Improvement", "color": "#10B981" }
+                ]
+              }
+            },
+            {
+              "name": "Severity",
+              "slug": "severity",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Critical", "color": "#EF4444" },
+                  { "id": 2, "value": "Major", "color": "#F97316" },
+                  { "id": 3, "value": "Minor", "color": "#F59E0B" },
+                  { "id": 4, "value": "Trivial", "color": "#6B7280" }
+                ]
+              }
+            },
+            {
+              "name": "Priority",
+              "slug": "priority",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "P1", "color": "#EF4444" },
+                  { "id": 2, "value": "P2", "color": "#F97316" },
+                  { "id": 3, "value": "P3", "color": "#F59E0B" },
+                  { "id": 4, "value": "P4", "color": "#6B7280" }
+                ]
+              }
+            },
+            {
+              "name": "Status",
+              "slug": "status",
+              "type": "single-select",
+              "fieldConfig": {
+                "options": [
+                  { "id": 1, "value": "Open", "color": "#3B82F6" },
+                  { "id": 2, "value": "In Progress", "color": "#F59E0B" },
+                  { "id": 3, "value": "Review", "color": "#8B5CF6" },
+                  { "id": 4, "value": "Testing", "color": "#06B6D4" },
+                  { "id": 5, "value": "Closed", "color": "#10B981" }
+                ]
+              }
+            },
+            {
+              "name": "Assigned To",
+              "slug": "assigned_to",
+              "type": "relation",
+              "fieldConfig": {
+                "targetTableRef": "Team",
+                "relationshipType": "many-to-many"
+              }
+            },
+            { "name": "Reporter", "slug": "reporter", "type": "text" },
+            {
+              "name": "Feature",
+              "slug": "feature",
+              "type": "relation",
+              "fieldConfig": {
+                "targetTableRef": "Features",
+                "relationshipType": "many-to-many"
+              }
+            },
+            { "name": "Created At", "slug": "created_at", "type": "created-at" },
+            { "name": "Updated At", "slug": "updated_at", "type": "last-updated" }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -32,6 +32,7 @@ from .result_storage import (
     ResultStorageServiceFactory,
     StoredResult,
 )
+from .agent_api_service import AgentAPIService, AgentData, SkillData
 
 from ..models.task_ledger import TaskLedger, create_ledger_from_plan
 
@@ -65,4 +66,7 @@ __all__ = [
     "StoredResult",
     "TaskLedger",
     "create_ledger_from_plan",
+    "AgentAPIService",
+    "AgentData",
+    "SkillData",
 ]

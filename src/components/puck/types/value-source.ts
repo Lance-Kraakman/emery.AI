@@ -147,26 +147,26 @@ export function resolveValueSource(
  * Convert a string pattern to ValueSource
  *
  * Handles patterns like:
- * - "{rowData.field}" -> RowDataValueSource
- * - "{state.key}" -> StateValueSource (flat namespace)
- * - "{formData.field}" -> FormDataValueSource
+ * - "{{rowData.field}}" -> RowDataValueSource
+ * - "{{state.key}}" -> StateValueSource (flat namespace)
+ * - "{{formData.field}}" -> FormDataValueSource
  * - Plain strings -> StaticValueSource
  */
 export function stringPatternToValueSource(pattern: string): ValueSource {
-  // Match {rowData.field}
-  const rowDataMatch = pattern.match(/^\{rowData\.(\w+)\}$/);
+  // Match {{rowData.field}}
+  const rowDataMatch = pattern.match(/^\{\{rowData\.(\w+)\}\}$/);
   if (rowDataMatch) {
     return rowDataValue(rowDataMatch[1]);
   }
 
-  // Match {state.key} (flat namespace - just one key)
-  const stateMatch = pattern.match(/^\{state\.(\w+)\}$/);
+  // Match {{state.key}} (flat namespace - just one key)
+  const stateMatch = pattern.match(/^\{\{state\.(\w+)\}\}$/);
   if (stateMatch) {
     return stateValue(stateMatch[1]);
   }
 
-  // Match {formData.field}
-  const formDataMatch = pattern.match(/^\{formData\.(\w+)\}$/);
+  // Match {{formData.field}}
+  const formDataMatch = pattern.match(/^\{\{formData\.(\w+)\}\}$/);
   if (formDataMatch) {
     return formDataValue(formDataMatch[1]);
   }

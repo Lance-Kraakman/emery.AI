@@ -19,6 +19,7 @@ import type {
   ReadConfig,
   ToolConfig,
   WorkflowNodeType,
+  StoredPlan,
 } from '@/ddd/domain/skills/entities/skill';
 
 // =============================================================================
@@ -98,6 +99,8 @@ export interface AgenticNodeData extends BaseNodeData {
     size?: number;
     s3Key?: string;
   }>;
+  /** Stored plan for autonomous execution */
+  plan?: StoredPlan;
 }
 
 /**

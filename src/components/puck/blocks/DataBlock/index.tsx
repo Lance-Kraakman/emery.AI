@@ -220,7 +220,7 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
         field: "id",
         operator: "eq",
         valueType: "variable",
-        value: "{params.id}",
+        value: "{{params.id}}",
       }],
       logic: "and",
     },

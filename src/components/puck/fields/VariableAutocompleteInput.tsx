@@ -254,7 +254,7 @@ export function VariableAutocompleteInput({
     value: value || '',
     onChange: handleChange,
     onKeyDown: handleKeyDown,
-    placeholder: placeholder || 'Type { for variables...',
+    placeholder: placeholder || 'Type {{ for variables...',
     className: cn('font-mono text-sm', className),
     disabled,
   };

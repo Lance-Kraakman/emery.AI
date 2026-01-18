@@ -23,6 +23,10 @@ export function useSkillEditor({ skill, agentId, onDeleteRedirect }: UseSkillEdi
   const [availableSkills, setAvailableSkills] = useState<{ id: number; name: string }[]>([]);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
 
+  // Extract plan from first agentic step if present (for workflow mode)
+  // For agentic mode, plan can be stored at skill level or in steps[0].agenticConfig.plan
+  const initialPlan = skill.steps?.[0]?.agenticConfig?.plan;
+
   const [formData, setFormData] = useState<SkillFormData>({
     name: skill.name,
     description: skill.description,
@@ -30,7 +34,15 @@ export function useSkillEditor({ skill, agentId, onDeleteRedirect }: UseSkillEdi
     outputs: skill.outputs,
     steps: skill.steps || [],
     canvasMetadata: skill.canvasMetadata,
-    model: skill.model
+    model: skill.model,
+    // Execution mode - default to 'agentic' for new skills, respect existing for loaded skills
+    executionType: skill.executionType || 'agentic',
+    // Agentic mode fields
+    instructions: skill.instructions,
+    tools: skill.tools,
+    agentType: skill.agentType,
+    // Stored plan (from first agentic step)
+    plan: initialPlan,
   });
 
   // Ref to always have current formData (fixes stale closure in auto-save)
@@ -104,14 +116,33 @@ export function useSkillEditor({ skill, agentId, onDeleteRedirect }: UseSkillEdi
       setSaveStatus('saving');
 
       try {
+        // Build steps with plan stored in first agentic step's config
+        const stepsWithPlan = dataToSave.plan && dataToSave.steps?.[0]?.agenticConfig
+          ? [
+              {
+                ...dataToSave.steps[0],
+                agenticConfig: {
+                  ...dataToSave.steps[0].agenticConfig,
+                  plan: dataToSave.plan,
+                },
+              },
+              ...dataToSave.steps.slice(1),
+            ]
+          : dataToSave.steps;
+
         const result = await updateSkill(skill.id, {
           name: dataToSave.name,
           description: dataToSave.description,
           inputs: dataToSave.inputs,
           outputs: dataToSave.outputs,
-          steps: dataToSave.steps,
+          steps: stepsWithPlan,
           canvasMetadata: dataToSave.canvasMetadata,
           model: dataToSave.model,
+          // Execution mode and agentic fields
+          executionType: dataToSave.executionType,
+          instructions: dataToSave.instructions,
+          tools: dataToSave.tools,
+          agentType: dataToSave.agentType,
         });
 
         if (result.success) {
@@ -154,14 +185,33 @@ export function useSkillEditor({ skill, agentId, onDeleteRedirect }: UseSkillEdi
     setSaveStatus('saving');
 
     try {
+      // Build steps with plan stored in first agentic step's config
+      const stepsWithPlan = currentFormData.plan && currentFormData.steps?.[0]?.agenticConfig
+        ? [
+            {
+              ...currentFormData.steps[0],
+              agenticConfig: {
+                ...currentFormData.steps[0].agenticConfig,
+                plan: currentFormData.plan,
+              },
+            },
+            ...currentFormData.steps.slice(1),
+          ]
+        : currentFormData.steps;
+
       const result = await updateSkill(skill.id, {
         name: currentFormData.name,
         description: currentFormData.description,
         inputs: currentFormData.inputs,
         outputs: currentFormData.outputs,
-        steps: currentFormData.steps,
+        steps: stepsWithPlan,
         canvasMetadata: currentFormData.canvasMetadata,
         model: currentFormData.model,
+        // Execution mode and agentic fields
+        executionType: currentFormData.executionType,
+        instructions: currentFormData.instructions,
+        tools: currentFormData.tools,
+        agentType: currentFormData.agentType,
       });
 
       if (!result.success) {

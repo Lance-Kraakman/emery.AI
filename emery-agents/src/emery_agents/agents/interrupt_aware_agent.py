@@ -1,7 +1,7 @@
 """Agents that propagate interrupts from managed agents for HITL workflows."""
 
 import logging
-from typing import Any
+from typing import Any, Dict, Union
 
 from smolagents import ToolCallingAgent, CodeAgent
 from smolagents.utils import AgentError, AgentToolExecutionError
@@ -12,20 +12,20 @@ from ._hitl_mixin import HITLMixin
 logger = logging.getLogger(__name__)
 
 
-class InterruptAwareToolCallingAgent(HITLMixin, ToolCallingAgent):
+class InterruptAwareToolCallingAgent(HITLMixin, ToolCallingAgent):  # type: ignore[misc]
     """ToolCallingAgent that propagates interrupts and handles HITL resume via mixin."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
 
-    def run(self, task: str, **kwargs) -> RunResult | str:
+    def run(self, task: str, **kwargs: Any) -> Union[RunResult, str]:
         """Try HITL resume first, then normal flow."""
         resume_result = self._handle_hitl_resume(task, stream=kwargs.get('stream', False))
         if resume_result is not None:
             return resume_result
         return super().run(task, **kwargs)
 
-    def execute_tool_call(self, tool_name: str, arguments: dict[str, str] | str) -> Any:
+    def execute_tool_call(self, tool_name: str, arguments: Union[Dict[str, str], str]) -> Any:
         """Execute tool, re-raising interrupts as AgentError for HITL propagation."""
         try:
             return super().execute_tool_call(tool_name, arguments)
@@ -37,20 +37,20 @@ class InterruptAwareToolCallingAgent(HITLMixin, ToolCallingAgent):
             raise
 
 
-class InterruptAwareCodeAgent(HITLMixin, CodeAgent):
+class InterruptAwareCodeAgent(HITLMixin, CodeAgent):  # type: ignore[misc]
     """CodeAgent that propagates interrupts and handles HITL resume via mixin."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
 
-    def run(self, task: str, **kwargs) -> RunResult | str:
+    def run(self, task: str, **kwargs: Any) -> Union[RunResult, str]:
         """Try HITL resume first, then normal flow."""
         resume_result = self._handle_hitl_resume(task, stream=kwargs.get('stream', False))
         if resume_result is not None:
             return resume_result
         return super().run(task, **kwargs)
 
-    def python_executor(self, code: str, **kwargs) -> Any:
+    def python_executor(self, code: str, **kwargs: Any) -> Any:
         """Execute code, re-raising interrupts as AgentError for HITL propagation."""
         try:
             return super().python_executor(code, **kwargs)

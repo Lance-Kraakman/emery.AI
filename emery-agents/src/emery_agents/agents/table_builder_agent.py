@@ -13,12 +13,13 @@ schema_builder instead which has HITL approval workflow.
 """
 
 import logging
-from typing import List, Any
+from typing import List, Any, Callable, Optional
 
 from smolagents import Tool, CodeAgent
+from smolagents.memory import PlanningStep
 from smolagents.monitoring import LogLevel
 
-from ..prompts import build_agent_instructions
+from ..prompts import build_agent_instructions, render_capabilities
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,11 @@ logger = logging.getLogger(__name__)
 def create_table_builder_agent(
     tools: List[Tool],
     model: Any,
-    max_steps: int = 6
+    max_steps: int = 6,
+    # Optional overrides for cascade planning (SubAgentPlanner)
+    planning_callback: Optional[Callable[[PlanningStep, CodeAgent], None]] = None,
+    planning_only: bool = False,
+    extra_tools: Optional[List[Tool]] = None,
 ) -> CodeAgent:
     """
     Create a Table Builder agent for single table operations.
@@ -50,20 +55,32 @@ def create_table_builder_agent(
         Configured CodeAgent for autonomous execution
     """
     # Get instructions from centralized function
+    # Use planning_only context for cascade sub-planning
+    context_type = "planning_only" if planning_only else "autonomous"
     instructions = build_agent_instructions(
         tools=tools,
         agent_type="table_builder",
-        context_type="autonomous"  # No HITL
+        context_type=context_type
     )
+
+    # Merge extra_tools if provided (for cascade planning question tool)
+    effective_tools = list(tools)
+    if extra_tools:
+        effective_tools.extend(extra_tools)
+
+    # Build step_callbacks if planning_callback provided
+    step_callbacks = {PlanningStep: planning_callback} if planning_callback else None
 
     # Use CodeAgent directly - no StatefulManagedAgent needed
     # since we don't need memory preservation between calls
     agent = CodeAgent(
-        tools=tools,
+        tools=effective_tools,
         model=model,
         max_steps=max_steps,
         instructions=instructions,
         verbosity_level=LogLevel.OFF,
+        step_callbacks=step_callbacks,
+        planning_interval=3 if planning_callback else None,  # Enable planning if callback
     )
 
     # Set attributes for ManagedAgent identification
@@ -73,6 +90,7 @@ def create_table_builder_agent(
         "Use for quick schema changes to a specific table. "
         "Does NOT design schemas - use schema_builder for complex design."
     )
+    agent.capabilities = render_capabilities("table_builder")
 
     logger.info(f"✨ Created Table Builder agent (autonomous CodeAgent)")
     logger.info(f"   Tools: {[t.name for t in tools]}")

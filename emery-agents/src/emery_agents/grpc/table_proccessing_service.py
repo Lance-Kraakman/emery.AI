@@ -649,9 +649,26 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             current_field = next((f for f in current_schema if f.name == field_column_name), None)
 
             if not current_field:
+                # SYNC BEHAVIOR NOTE:
+                # Field may not exist in Delta Lake schema yet due to timing:
+                #
+                # 1. TypeScript creates field in Postgres → assigns field ID (e.g., 463)
+                # 2. TypeScript calls addField to Delta Lake → schema evolution starts
+                # 3. TypeScript calls updateField to Delta Lake → runs before step 2 completes
+                #
+                # Result: Column doesn't exist in Delta Lake schema yet.
+                #
+                # Resolution: Return success since Postgres is the source of truth for field
+                # metadata. Delta Lake schema will be consistent after addField completes.
+                # This prevents cascade of retry failures that cause gRPC RESOURCE_EXHAUSTED.
+                logger.warning(
+                    f"[UpdateField] Field ID {request.field_id} not in Delta Lake schema yet "
+                    f"(column '{field_column_name}' not found). This is expected if AddField "
+                    f"is still in progress. Postgres is source of truth - skipping update."
+                )
                 return table_service_pb2.FieldResponse(
-                    success=False,
-                    message=f"Field with ID {request.field_id} not found in table"
+                    success=True,
+                    message=f"Field {request.field_id} not in Delta Lake schema yet, update skipped"
                 )
 
             # Get current and new field types

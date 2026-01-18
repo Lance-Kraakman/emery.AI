@@ -257,6 +257,9 @@ importers:
       '@tiptap/starter-kit':
         specifier: ^3.4.2
         version: 3.4.2
+      '@toon-format/toon':
+        specifier: ^2.1.0
+        version: 2.1.0
       '@types/multer':
         specifier: ^2.0.0
         version: 2.0.0
@@ -3897,6 +3900,9 @@ packages:
 
   '@tiptap/starter-kit@3.4.2':
     resolution: {integrity: sha512-qfw9RljtZNLpqj+lnkgxok+ksCV/OR4rBX7QSJXaQYVJuid2tXejFj7vqsJQaf1Z6zT9swdk7js92qlwjCO0BQ==}
+
+  '@toon-format/toon@2.1.0':
+    resolution: {integrity: sha512-JwWptdF5eOA0HaQxbKAzkpQtR4wSWTEfDlEy/y3/4okmOAX1qwnpLZMmtEWr+ncAhTTY1raCKH0kteHhSXnQqg==}
 
   '@tootallnate/once@2.0.0':
     resolution: {integrity: sha512-XCuKFP5PS55gnMVu3dty8KPatLqUoy/ZYzDzAGCQ8JNFCkLXzmI7vNHCR+XpbZaMWQK/vQubr7PkYq8g470J/A==}
@@ -13555,6 +13561,8 @@ snapshots:
       '@tiptap/extension-underline': 3.4.3(@tiptap/core@3.14.0(@tiptap/pm@3.4.2))
       '@tiptap/extensions': 3.4.2(@tiptap/core@3.14.0(@tiptap/pm@3.4.2))(@tiptap/pm@3.4.2)
       '@tiptap/pm': 3.4.2
+
+  '@toon-format/toon@2.1.0': {}
 
   '@tootallnate/once@2.0.0': {}
 

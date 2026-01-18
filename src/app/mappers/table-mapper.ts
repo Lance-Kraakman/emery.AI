@@ -8,6 +8,7 @@ export interface TableDTO {
   storageLocation: string;
   description?: string;
   metadata?: Record<string, unknown> | null;
+  fieldCount: number;
   createdBy: string;
   createdAt: Date | null;
   updatedAt: Date | null;
@@ -23,6 +24,7 @@ export class TableMapper {
       storageLocation: table.storageLocation,
       description: table.description,
       metadata: table.metadata?.toDatabaseJson() || null,
+      fieldCount: table.fields.length,
       createdBy: table.createdBy.value,
       createdAt: table.createdAt,
       updatedAt: table.updatedAt
