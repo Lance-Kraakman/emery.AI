@@ -514,7 +514,7 @@ class PlanService:
 
         # Build prompt using recovery template
         prompt = render_template(
-            "planning/step_recovery.j2",
+            "execution/step_recovery.j2",
             failed_step=failed_step,
             error_message=error_message,
             plan_goal=plan.goal,

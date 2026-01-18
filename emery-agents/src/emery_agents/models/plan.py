@@ -109,6 +109,10 @@ class PlanStep:
 
     Represents a single action to be taken during plan execution.
     Can optionally contain a sub_plan from cascading planning.
+
+    For skill templates (autonomous execution):
+    - prompt_template: Jinja2 template for the execution prompt, with {{ variables }}
+    - required_context: List of variable names needed at runtime
     """
     step_id: str
     description: str
@@ -121,6 +125,9 @@ class PlanStep:
     # Cascading planning fields
     sub_plan: Optional["SubPlan"] = None  # Detailed plan from sub-agent
     target_agent: Optional[str] = None  # Detected agent for this step
+    # Prompt template fields for autonomous execution
+    prompt_template: Optional[str] = None  # Jinja2 template with {{ variables }}
+    required_context: List[str] = field(default_factory=list)  # Variables needed at runtime
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -135,6 +142,8 @@ class PlanStep:
             "error": self.error,
             "subPlan": self.sub_plan.to_dict() if self.sub_plan else None,
             "targetAgent": self.target_agent,
+            "promptTemplate": self.prompt_template,
+            "requiredContext": self.required_context,
         }
 
     @classmethod
@@ -152,6 +161,8 @@ class PlanStep:
             error=data.get("error"),
             sub_plan=SubPlan.from_dict(sub_plan_data) if sub_plan_data else None,
             target_agent=data.get("targetAgent", data.get("target_agent")),
+            prompt_template=data.get("promptTemplate", data.get("prompt_template")),
+            required_context=data.get("requiredContext", data.get("required_context", [])),
         )
 
     @classmethod
@@ -182,6 +193,8 @@ class PlanStep:
             error=None,  # No error yet
             sub_plan=SubPlan.from_stored_proto(proto.sub_plan) if proto.sub_plan.agent_name else None,
             target_agent=proto.target_agent or None,
+            prompt_template=proto.prompt_template or None,
+            required_context=list(proto.required_context) if proto.required_context else [],
         )
 
     def mark_in_progress(self) -> "PlanStep":
@@ -197,6 +210,8 @@ class PlanStep:
             error=self.error,
             sub_plan=self.sub_plan,
             target_agent=self.target_agent,
+            prompt_template=self.prompt_template,
+            required_context=self.required_context,
         )
 
     def mark_completed(self, result: Optional[str] = None) -> "PlanStep":
@@ -212,6 +227,8 @@ class PlanStep:
             error=None,
             sub_plan=self.sub_plan,
             target_agent=self.target_agent,
+            prompt_template=self.prompt_template,
+            required_context=self.required_context,
         )
 
     def mark_failed(self, error: str) -> "PlanStep":
@@ -227,6 +244,8 @@ class PlanStep:
             error=error,
             sub_plan=self.sub_plan,
             target_agent=self.target_agent,
+            prompt_template=self.prompt_template,
+            required_context=self.required_context,
         )
 
     def with_sub_plan(self, sub_plan: "SubPlan") -> "PlanStep":
@@ -242,6 +261,8 @@ class PlanStep:
             error=self.error,
             sub_plan=sub_plan,
             target_agent=sub_plan.agent_name,
+            prompt_template=self.prompt_template,
+            required_context=self.required_context,
         )
 
     def with_target_agent(self, agent_name: str) -> "PlanStep":
@@ -257,6 +278,8 @@ class PlanStep:
             error=self.error,
             sub_plan=self.sub_plan,
             target_agent=agent_name,
+            prompt_template=self.prompt_template,
+            required_context=self.required_context,
         )
 
     def with_parameters(self, parameters: Dict[str, Any]) -> "PlanStep":
@@ -272,6 +295,8 @@ class PlanStep:
             error=None,
             sub_plan=self.sub_plan,
             target_agent=self.target_agent,
+            prompt_template=self.prompt_template,
+            required_context=self.required_context,
         )
 
 
@@ -342,6 +367,10 @@ class Plan:
             result["contextTables"] = step.context_tables
         if step.target_agent:
             result["targetAgent"] = step.target_agent
+        if step.prompt_template:
+            result["promptTemplate"] = step.prompt_template
+        if step.required_context:
+            result["requiredContext"] = step.required_context
         if step.sub_plan:
             result["subPlan"] = {
                 "agentName": step.sub_plan.agent_name,
@@ -611,6 +640,8 @@ def create_step(
     parameters: Optional[Dict[str, Any]] = None,
     context_tables: Optional[List[str]] = None,
     target_agent: Optional[str] = None,
+    prompt_template: Optional[str] = None,
+    required_context: Optional[List[str]] = None,
 ) -> PlanStep:
     """
     Factory function to create a new plan step.
@@ -621,6 +652,8 @@ def create_step(
         parameters: Parameters for the tool call
         context_tables: Tables this step needs access to
         target_agent: Name of managed agent to handle this step
+        prompt_template: Jinja2 template for autonomous execution
+        required_context: Variables needed at runtime for the template
 
     Returns:
         A new PlanStep instance in pending status
@@ -634,6 +667,8 @@ def create_step(
         context_tables=context_tables or [],
         status=PlanStepStatus.PENDING.value,
         target_agent=target_agent,
+        prompt_template=prompt_template,
+        required_context=required_context or [],
     )
 
 

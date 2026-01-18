@@ -1462,6 +1462,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             )
 
             # Execute stored plan directly (no classification, no approval)
+            step_index = 0
             async for event in coordinator.execute(
                 task=task,
                 tools=tools,
@@ -1469,7 +1470,10 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 stored_plan=stored_plan,  # Pass stored plan for direct execution
                 agent_factories=agent_factories,
             ):
-                yield convert_coordinator_event(event, session_id)
+                converted = convert_coordinator_event(event, step_index)
+                if converted:
+                    yield converted
+                    step_index += 1
 
             return
 

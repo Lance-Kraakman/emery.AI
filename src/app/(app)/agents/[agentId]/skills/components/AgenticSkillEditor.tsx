@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { Table2, MoreVertical, Loader2, Settings2 } from 'lucide-react';
+import { Table2, MoreVertical, Loader2 } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
@@ -198,22 +198,11 @@ export function AgenticSkillEditor({
 
   return (
     <div className={cn(
-      'h-full flex flex-col p-4 gap-4',
+      'h-full flex flex-col p-4 gap-6',
       hasFloatingHeader && 'pt-24'
     )}>
-      {/* Skill Config Section - Always expanded */}
-      <div className="border rounded-lg bg-muted/20 shrink-0">
-        <div className="flex items-center justify-between px-3 py-2 border-b">
-          <div className="flex items-center gap-2">
-            <Settings2 className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium">Skill Config</span>
-          </div>
-          <span className="text-xs text-muted-foreground">
-            {value.inputs.length} input{value.inputs.length !== 1 ? 's' : ''}, {value.outputs.length} output{value.outputs.length !== 1 ? 's' : ''}
-          </span>
-        </div>
-
-        <div className="px-3 pb-3 pt-3 space-y-4">
+      {/* Skill Config Section - No border, unified layout */}
+      <div className="shrink-0 space-y-4">
           {/* Description - compact, 1-2 lines */}
           <div className="space-y-1">
             <Label className="text-xs">Description</Label>
@@ -408,9 +397,8 @@ export function AgenticSkillEditor({
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Plan Builder Section - Instructions + Plan Generation */}
+      {/* Plan Builder Section */}
       <div className="flex-1 min-h-0 overflow-y-auto">
         <PlanBuilderSection
           instructions={value.instructions || ''}

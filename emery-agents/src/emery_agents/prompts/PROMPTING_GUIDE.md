@@ -339,7 +339,7 @@ tables[3]{id,name,fields_count}:42,Customers,5|43,Orders,8|44,Products,6
 
 ### Template Inheritance
 ```jinja2
-{% extends 'base/agent_base.j2' %}
+{% extends 'shared/agent_base.j2' %}
 
 {% block agent_specific %}
 ## Agent-specific content here

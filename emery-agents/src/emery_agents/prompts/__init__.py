@@ -5,9 +5,11 @@ Load and compose Jinja2 templates for agent instructions.
 Supports template inheritance and composition via {% include %}.
 
 AIDEV-NOTE: Templates are stored in subdirectories:
-- base/: Core templates (identity, rules, tool usage)
+- shared/: Core templates (identity, rules, tool usage)
 - agents/: Agent-specific templates (skill_builder, chat_agent, etc.)
 - components/: Reusable components (hitl_approval, planning, etc.)
+- planning/: Plan generation templates
+- execution/: Plan execution templates
 
 Usage:
     from emery_agents.prompts import render_template, compose_templates, build_agent_instructions
@@ -17,8 +19,8 @@ Usage:
 
     # Compose multiple templates
     instructions = compose_templates([
-        "base/identity.j2",
-        "base/critical_rules.j2"
+        "shared/identity.j2",
+        "shared/critical_rules.j2"
     ], knowledge_cutoff="January 2025")
 
     # Build instructions for an agent type
@@ -192,8 +194,8 @@ def get_cached_base_instructions(**kwargs: Any) -> str:
 
     if _cached_base_instructions is None:
         _cached_base_instructions = compose_templates([
-            "base/identity.j2",
-            "base/critical_rules.j2",
+            "shared/identity.j2",
+            "shared/critical_rules.j2",
             "components/goal_persistence.j2",
         ], **kwargs)
         logger.debug(f"📝 Cached base instructions ({len(_cached_base_instructions)} chars)")
@@ -257,8 +259,8 @@ def get_managed_agent_templates() -> Dict[str, str]:
         Dict with 'task' and 'report' keys containing template strings
     """
     return {
-        "task": render_template("base/managed_agent_task.j2"),
-        "report": render_template("base/managed_agent_report.j2")
+        "task": render_template("shared/managed_agent_task.j2"),
+        "report": render_template("shared/managed_agent_report.j2")
     }
 
 
@@ -501,7 +503,7 @@ def build_agent_instructions(
 
         # Context mode (interactive vs autonomous)
         try:
-            context_content = render_template("base/context.j2", context_type=context_type)
+            context_content = render_template("shared/context.j2", context_type=context_type)
             if context_content.strip():
                 base_instructions = f"{base_instructions}\n\n{context_content}"
         except Exception as e:

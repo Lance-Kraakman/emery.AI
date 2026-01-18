@@ -3,7 +3,6 @@
 import React, { useState, useCallback } from 'react';
 import {
   Loader2,
-  Sparkles,
   Wand2,
   CheckCircle2,
   RefreshCw,
@@ -214,9 +213,9 @@ export function PlanBuilderSection({
       <p className="text-xs text-muted-foreground mb-2">{displayPlan.goal}</p>
 
       {displayPlan.steps && displayPlan.steps.length > 0 && (
-        <Collapsible>
+        <Collapsible defaultOpen>
           <CollapsibleTrigger className="text-xs text-blue-600 hover:text-blue-800 flex items-center">
-            View steps <ChevronDown className="h-3 w-3 ml-1" />
+            Steps <ChevronDown className="h-3 w-3 ml-1" />
           </CollapsibleTrigger>
           <CollapsibleContent>
             <ol className="text-xs space-y-1 mt-2 pl-4 list-decimal text-muted-foreground">
@@ -231,76 +230,84 @@ export function PlanBuilderSection({
   );
 
   return (
-    <div className="border rounded-lg bg-muted/10">
-      {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b">
-        <Sparkles className="h-4 w-4 text-amber-500" />
-        <span className="text-sm font-medium">Plan</span>
-      </div>
-
-      <div className="p-4">
-        {/* Instructions - always show in idle, generating, ready states, or when editing */}
-        {(state === 'idle' || state === 'generating' || state === 'ready' || isEditing) && (
-          <div className="flex flex-col">
-            <Label className="text-xs font-medium mb-2 text-muted-foreground">
-              Instructions
-            </Label>
-            <div className="min-h-[150px] h-[200px]">
-              <UnifiedChatInput
-                mode="form"
-                minHeight="100%"
-                value={instructions}
-                onChange={onInstructionsChange}
-                variables={chatVariables}
-                enableSendButton={false}
-                enableAttachments={true}
-                pendingAttachments={pendingAttachments}
-                onAttachmentAdd={onAttachmentAdd}
-                onAttachmentRemove={onAttachmentRemove}
-                disabled={isReadOnly || isGenerating}
-                placeholder="Describe what this skill should do... (@ for tools, { for variables)"
-              />
-            </div>
-
-            {/* Generate button or status */}
-            <div className="mt-3">
-              {state === 'generating' ? (
-                <div className="flex items-center gap-2 text-amber-600">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span className="text-sm">Generating plan...</span>
-                </div>
-              ) : state === 'idle' || isEditing ? (
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleGeneratePlan}
-                    disabled={!instructions?.trim() || !skillId || isReadOnly}
-                  >
-                    <Wand2 className="h-3 w-3 mr-1.5" />
-                    Generate Plan
-                  </Button>
-                  {isEditing && plan && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleCancelEdit}
-                    >
-                      Cancel
-                    </Button>
-                  )}
-                </div>
-              ) : null}
-            </div>
+    <div className="space-y-3">
+      {/* Instructions - full editor when not in saved state */}
+      {(state === 'idle' || state === 'generating' || state === 'ready' || isEditing) && (
+        <div className="flex flex-col">
+          <Label className="text-xs font-medium mb-2 text-muted-foreground">
+            Instructions
+          </Label>
+          <div className="min-h-[120px] max-h-[300px] overflow-y-auto">
+            <UnifiedChatInput
+              mode="form"
+              minHeight="100%"
+              value={instructions}
+              onChange={onInstructionsChange}
+              variables={chatVariables}
+              enableSendButton={false}
+              enableAttachments={true}
+              pendingAttachments={pendingAttachments}
+              onAttachmentAdd={onAttachmentAdd}
+              onAttachmentRemove={onAttachmentRemove}
+              disabled={isReadOnly || isGenerating}
+              placeholder="Describe what this skill should do... (@ for tools, { for variables)"
+            />
           </div>
-        )}
 
-        {/* Saved plan display (when not editing) */}
-        {state === 'saved' && plan && renderPlanDisplay(plan, true)}
+          {/* Generate button or status */}
+          <div className="mt-3">
+            {state === 'generating' ? (
+              <div className="flex items-center gap-2 text-amber-600">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span className="text-sm">Generating plan...</span>
+              </div>
+            ) : state === 'idle' || isEditing ? (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGeneratePlan}
+                  disabled={!instructions?.trim() || !skillId || isReadOnly}
+                >
+                  <Wand2 className="h-3 w-3 mr-1.5" />
+                  Generate Plan
+                </Button>
+                {isEditing && plan && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleCancelEdit}
+                  >
+                    Cancel
+                  </Button>
+                )}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      )}
 
-        {/* Pending plan display (ready state) */}
-        {state === 'ready' && pendingPlan && renderPlanDisplay(pendingPlan, false)}
-      </div>
+      {/* Instructions - collapsed read-only view when plan is saved */}
+      {state === 'saved' && instructions && (
+        <Collapsible>
+          <CollapsibleTrigger className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground">
+            <FileText className="h-3 w-3" />
+            Instructions
+            <ChevronDown className="h-3 w-3" />
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="mt-2 p-3 rounded bg-muted/30 text-xs whitespace-pre-wrap text-muted-foreground max-h-[200px] overflow-y-auto">
+              {instructions}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      )}
+
+      {/* Saved plan display (when not editing) */}
+      {state === 'saved' && plan && renderPlanDisplay(plan, true)}
+
+      {/* Pending plan display (ready state) */}
+      {state === 'ready' && pendingPlan && renderPlanDisplay(pendingPlan, false)}
     </div>
   );
 }

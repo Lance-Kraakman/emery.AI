@@ -411,7 +411,7 @@ class StoredPlan(_message.Message):
     def __init__(self, id: _Optional[str] = ..., goal: _Optional[str] = ..., basic_instructions: _Optional[str] = ..., context: _Optional[str] = ..., analysis: _Optional[str] = ..., steps: _Optional[_Iterable[_Union[StoredPlanStep, _Mapping]]] = ..., version: _Optional[int] = ..., generated_at: _Optional[str] = ..., approved_at: _Optional[str] = ...) -> None: ...
 
 class StoredPlanStep(_message.Message):
-    __slots__ = ("step_id", "description", "tool_call", "parameters", "context_tables", "target_agent", "sub_plan")
+    __slots__ = ("step_id", "description", "tool_call", "parameters", "context_tables", "target_agent", "sub_plan", "prompt_template", "required_context")
     class ParametersEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -426,6 +426,8 @@ class StoredPlanStep(_message.Message):
     CONTEXT_TABLES_FIELD_NUMBER: _ClassVar[int]
     TARGET_AGENT_FIELD_NUMBER: _ClassVar[int]
     SUB_PLAN_FIELD_NUMBER: _ClassVar[int]
+    PROMPT_TEMPLATE_FIELD_NUMBER: _ClassVar[int]
+    REQUIRED_CONTEXT_FIELD_NUMBER: _ClassVar[int]
     step_id: str
     description: str
     tool_call: str
@@ -433,7 +435,9 @@ class StoredPlanStep(_message.Message):
     context_tables: _containers.RepeatedScalarFieldContainer[str]
     target_agent: str
     sub_plan: StoredSubPlan
-    def __init__(self, step_id: _Optional[str] = ..., description: _Optional[str] = ..., tool_call: _Optional[str] = ..., parameters: _Optional[_Mapping[str, str]] = ..., context_tables: _Optional[_Iterable[str]] = ..., target_agent: _Optional[str] = ..., sub_plan: _Optional[_Union[StoredSubPlan, _Mapping]] = ...) -> None: ...
+    prompt_template: str
+    required_context: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, step_id: _Optional[str] = ..., description: _Optional[str] = ..., tool_call: _Optional[str] = ..., parameters: _Optional[_Mapping[str, str]] = ..., context_tables: _Optional[_Iterable[str]] = ..., target_agent: _Optional[str] = ..., sub_plan: _Optional[_Union[StoredSubPlan, _Mapping]] = ..., prompt_template: _Optional[str] = ..., required_context: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class StoredSubPlan(_message.Message):
     __slots__ = ("agent_name", "goal", "steps", "planning_observations")

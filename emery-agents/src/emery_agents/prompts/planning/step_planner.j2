@@ -311,7 +311,14 @@ Example for "Analyze all tables and give me a summary":
 
 **User Instructions**: "Manage documents - read, create, or update based on request"
 
-**You MAY research** to understand available tools, then **submit_plan** with variable placeholders:
+**You MAY research** to understand available tools, then **submit_plan** with variable placeholders.
+
+### Prompt Template Mode (Required for Skills)
+
+For each step, provide BOTH:
+1. **description**: Brief human-readable summary (shown in UI)
+2. **prompt_template**: Detailed Jinja2 execution prompt with `{{"{{"}}variable{{"}}"}}` placeholders
+3. **required_context**: List of variables the template needs at runtime
 
 ```json
 {
@@ -319,19 +326,33 @@ Example for "Analyze all tables and give me a summary":
   "analysis": "The skill needs to:\n1. Parse {{"{{"}}request{{"}}"}} to determine action\n2. Use appropriate document tool with {{"{{"}}table_id{{"}}"}}, {{"{{"}}document_id{{"}}"}}\n3. Set {{"{{"}}result{{"}}"}} with confirmation",
   "goal": "Handle document operations based on {{"{{"}}request{{"}}"}}",
   "steps": [
-    {"description": "Parse {{"{{"}}request{{"}}"}} to determine action type (read/create/update)", "target_agent": null},
-    {"description": "If reading: call read_document(document_id={{"{{"}}document_id{{"}}"}}, table_id={{"{{"}}table_id{{"}}"}}) to get content", "target_agent": null},
-    {"description": "If creating: call create_document(table_id={{"{{"}}table_id{{"}}"}}) with provided content", "target_agent": null},
-    {"description": "If updating: call update_document(document_id={{"{{"}}document_id{{"}}"}}, table_id={{"{{"}}table_id{{"}}"}}) with changes", "target_agent": null},
-    {"description": "Set {{"{{"}}result{{"}}"}} = confirmation message describing what was done", "target_agent": null}
+    {
+      "description": "Parse request and determine action type",
+      "prompt_template": "Analyze the user request: {{"{{"}}request{{"}}"}}\n\nDetermine the action type:\n- If user wants to read/view: action = 'read'\n- If user wants to create/new: action = 'create'\n- If user wants to edit/update: action = 'update'\n\nReturn the determined action.",
+      "required_context": ["request"],
+      "target_agent": null
+    },
+    {
+      "description": "Execute document operation based on action",
+      "prompt_template": "Based on the action determined:\n\n**If reading:**\nCall emery-read-document with:\n- document_id: {{"{{"}}document_id{{"}}"}}\n- table_id: {{"{{"}}table_id{{"}}"}}\n\n**If creating:**\nCall emery-create-document with:\n- table_id: {{"{{"}}table_id{{"}}"}}\n- title: Extract from {{"{{"}}request{{"}}"}}\n\n**If updating:**\nCall emery-update-document with:\n- document_id: {{"{{"}}document_id{{"}}"}}\n- table_id: {{"{{"}}table_id{{"}}"}}\n- content: Changes from {{"{{"}}request{{"}}"}}",
+      "required_context": ["request", "document_id", "table_id"],
+      "target_agent": null
+    },
+    {
+      "description": "Set result confirmation",
+      "prompt_template": "Set the {{"{{"}}result{{"}}"}} output to a confirmation message:\n\nFormat: 'Document [action] successfully: [details]'\n\nInclude:\n- What action was performed\n- Document title or ID affected\n- Any relevant details from the operation",
+      "required_context": ["result"],
+      "target_agent": null
+    }
   ]
 }
 ```
 
 **Key points:**
+- **description**: Short UI display (what the step does)
+- **prompt_template**: Detailed execution instructions with `{{"{{"}}var{{"}}"}}` placeholders for runtime values
+- **required_context**: Variables needed from skill inputs or discovery
 - Research is OK to understand tools
-- Use `{{"{{"}}input_name{{"}}"}}` (double braces) for all dynamic values
-- Include actual tool names and parameters
 - NO hardcoded IDs, table names, or org-specific values
 {% else %}
 
