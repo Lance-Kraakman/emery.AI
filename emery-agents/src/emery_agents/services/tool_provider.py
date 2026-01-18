@@ -18,10 +18,12 @@ from ..tools.crud_tools import (
     load_database_crud,
     load_skill_crud,
     load_document_crud,
+    load_agent_crud,
 )
 from ..tools.table_tools import load_table_crud
 from ..tools.field_tools import load_field_crud
 from ..tools.row_tools import load_row_crud
+from ..tools.app_tools import load_app_crud, load_page_crud
 
 logger = logging.getLogger(__name__)
 
@@ -40,14 +42,14 @@ class ToolProvider:
         db_tool = provider.get("database_crud")
 
         # Get category of tools
-        context_tools = provider.get_context_tools()
         schema_tools = provider.get_schema_builder_tools()
     """
 
     # Supported tool names
     TOOL_NAMES = [
         "database_crud", "table_crud", "field_crud", "row_crud",
-        "skill_crud", "document_crud",
+        "skill_crud", "document_crud", "app_crud", "page_crud",
+        "agent_crud",
     ]
 
     def __init__(self, api_key: str, organization_id: int):
@@ -101,16 +103,6 @@ class ToolProvider:
     # Category Helpers
     # -------------------------
 
-    def get_context_tools(self) -> List[Tool]:
-        """
-        Get read-only tools for planning/context gathering.
-
-        These are used by the planner to understand what exists
-        before generating a plan. The tools support read operations
-        (list, get) but mutations are blocked by ToolMode.PLANNING.
-        """
-        return [self.get("database_crud"), self.get("table_crud")]
-
     def get_schema_builder_tools(self) -> List[Tool]:
         """
         Get tools for schema builder agent.
@@ -142,6 +134,14 @@ class ToolProvider:
         """Get tools for document builder agent."""
         return [self.get("document_crud")]
 
+    def get_app_builder_tools(self) -> List[Tool]:
+        """Get tools for app builder agent."""
+        return [self.get("app_crud"), self.get("page_crud")]
+
+    def get_agent_builder_tools(self) -> List[Tool]:
+        """Get tools for agent builder agent."""
+        return [self.get("agent_crud"), self.get("skill_crud")]
+
     # -------------------------
     # Tool Factory
     # -------------------------
@@ -166,6 +166,9 @@ class ToolProvider:
             "row_crud": load_row_crud,
             "skill_crud": load_skill_crud,
             "document_crud": load_document_crud,
+            "app_crud": load_app_crud,
+            "page_crud": load_page_crud,
+            "agent_crud": load_agent_crud,
         }
 
         if name not in loaders:

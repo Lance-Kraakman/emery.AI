@@ -32,6 +32,7 @@ from .interrupt_classifier import (
 from .research_agent import create_research_agent
 from .research_emery_agent import create_research_emery_agent
 from .app_builder_agent import create_app_builder_agent
+from .page_builder_agent import create_page_builder_agent
 from .agent_builder_agent import create_agent_builder_agent
 from .agent_executor_agent import create_agent_executor
 from .stateful_managed_agent import StatefulManagedAgent
@@ -52,6 +53,7 @@ __all__ = [
     "create_research_agent",
     "create_research_emery_agent",
     "create_app_builder_agent",
+    "create_page_builder_agent",
     "create_agent_builder_agent",
     "create_agent_executor",
     "StatefulManagedAgent",

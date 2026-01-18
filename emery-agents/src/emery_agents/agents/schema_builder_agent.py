@@ -85,7 +85,11 @@ def create_schema_builder_agent(
     tools: List[Tool],
     model: Any,
     max_steps: int = 20,
-    progress_callback: Any = None
+    progress_callback: Any = None,
+    # Optional overrides for cascade planning (SubAgentPlanner)
+    planning_callback: Callable[[PlanningStep, CodeAgent], None] | None = None,
+    planning_only: bool = False,
+    extra_tools: List[Tool] | None = None,
 ) -> StatefulManagedAgent:
     """
     Create Schema Builder agent with proper native HITL workflow.
@@ -115,25 +119,32 @@ def create_schema_builder_agent(
         Configured StatefulManagedAgent with HITL planning
     """
     # Get instructions from centralized function (base + agent-specific + tools)
+    # Use planning_only context for cascade sub-planning
+    context_type = "planning_only" if planning_only else "interactive"
     instructions = build_agent_instructions(
         tools=tools,
         agent_type="schema_builder",
-        context_type="interactive"  # HITL
+        context_type=context_type
     )
 
-    # Create the STATEFUL callback for planning interruption
+    # Use provided callback or create default STATEFUL callback for planning interruption
     # This callback skips the first plan and interrupts on the second
-    planning_callback = create_planning_callback()
+    effective_callback = planning_callback if planning_callback is not None else create_planning_callback()
+
+    # Merge extra_tools if provided (for cascade planning question tool)
+    effective_tools = list(tools)
+    if extra_tools:
+        effective_tools.extend(extra_tools)
 
     # Use StatefulManagedAgent (CodeAgent-based) to preserve memory between calls
     # This is critical for HITL - regular agents reset memory on each __call__
     agent = StatefulManagedAgent(
-        tools=tools,
+        tools=effective_tools,
         model=model,
         max_steps=max_steps,
         instructions=instructions,
         planning_interval=3,  # Plan at step 1, then step 4 (after 3 action steps)
-        step_callbacks={PlanningStep: planning_callback},
+        step_callbacks={PlanningStep: effective_callback},
         verbosity_level=LogLevel.OFF,
         progress_callback=progress_callback,  # For streaming nested steps to parent
     )

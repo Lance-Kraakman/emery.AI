@@ -28,6 +28,7 @@ from emery_agents.models.context_mapping import ResolvedContext
 from emery_agents.tools.plan_output_tool import PlanOutputTool
 from emery_agents.tools.recovery_output_tool import RecoveryOutputTool
 from emery_agents.prompts import render_template
+from emery_agents.agents import create_research_agent
 from .protocols import ModelProvider, GRPCClient, Tool
 
 logger = logging.getLogger(__name__)
@@ -65,18 +66,18 @@ class PlanService:
         org_model: Optional[str] = None,
         tools: Optional[List[Tool]] = None,
         managed_agents: Optional[List[Any]] = None,
-        context_tools: Optional[List[Any]] = None,
         research_tools: Optional[List[Any]] = None,
         api_key: Optional[str] = None,
         skill_inputs: Optional[List[dict]] = None,
         previous_plan_json: Optional[str] = None,
         user_feedback: Optional[str] = None,
+        organization_id: Optional[int] = None,
     ) -> Plan:
         """
         Generate plan using context-first planning pattern.
 
         The planner:
-        1. Gathers context using database_list() and table_list()
+        1. Delegates research to research_agent (web + system)
         2. Analyzes the request with gathered context
         3. Calls submit_plan with context, analysis, goal, and steps
 
@@ -88,12 +89,12 @@ class PlanService:
             org_model: Organization model ID for model resolution hierarchy
             tools: Actual tool objects (for prompt template)
             managed_agents: Available managed agents (planner sees their descriptions)
-            context_tools: Optional context-gathering tools (database_list, table_list)
             research_tools: Optional web research tools (web_search, visit_webpage)
             api_key: Optional API key for model providers (e.g., Gemini)
             skill_inputs: Optional skill input definitions for variable-aware planning
             previous_plan_json: Optional previous plan JSON for regeneration with feedback
             user_feedback: Optional user feedback for plan regeneration
+            organization_id: Optional organization ID for research_agent (RLS context)
 
         Returns:
             Plan object with generated steps, context, and analysis
@@ -105,24 +106,36 @@ class PlanService:
             return create_plan(goal=fallback_goal, basic_instructions=basic_instructions)
 
         model_id = self.model_provider.resolve_model_selection(org_model=org_model)
-        model = self.model_provider.get_model(model_id=model_id, api_key=api_key)
+        # AIDEV-NOTE: Don't pass api_key here - that's the Emery internal API key for CRUD tools,
+        # not the Gemini API key. Model provider will use GEMINI_API_KEY env var for Google models.
+        model = self.model_provider.get_model(model_id=model_id)
 
         # Create plan output tool
         plan_tool = PlanOutputTool()
 
-        # Build list of planner tools: context tools + research tools + submit_plan
-        planner_tools = []
-        if context_tools:
-            planner_tools.extend(context_tools)
-            logger.info(f"📋 Planner has {len(context_tools)} context-gathering tools")
-        if research_tools:
+        # Build list of planner tools: just submit_plan
+        # Context gathering is done via research_agent (managed agent) which has research_emery
+        planner_tools = [plan_tool]
+
+        # Create research_agent for intelligent context gathering
+        # This agent has ResearchEmery as sub-agent for system introspection
+        planner_managed_agents = []
+        if api_key and organization_id:
+            research_agent = create_research_agent(
+                model=model,
+                api_key=api_key,
+                organization_id=organization_id,
+                max_steps=8,  # Allow multiple research queries
+            )
+            planner_managed_agents.append(research_agent)
+            logger.info(f"🔬 Planner has research_agent for context gathering (web + system)")
+        elif research_tools:
+            # Fallback: use research tools directly if no org context
             planner_tools.extend(research_tools)
-            logger.info(f"🔬 Planner has {len(research_tools)} research tools")
-        planner_tools.append(plan_tool)
+            logger.info(f"🔬 Planner has {len(research_tools)} direct research tools (fallback)")
 
         # Extract agent info for template (names + descriptions + capabilities)
-        # We pass info to template but NOT actual agents to planner
-        # This prevents planner from trying to execute agents
+        # Include both execution agents (for routing info) and planner's research_agent
         agent_info = []
         for agent in (managed_agents or []):
             agent_info.append({
@@ -130,36 +143,45 @@ class PlanService:
                 "description": getattr(agent, "description", ""),
                 "capabilities": getattr(agent, "capabilities", ""),
             })
+        # Also include research_agent info so planner prompt knows to use it
+        for agent in planner_managed_agents:
+            agent_info.append({
+                "name": getattr(agent, "name", "unknown"),
+                "description": getattr(agent, "description", ""),
+                "capabilities": getattr(agent, "capabilities", ""),
+            })
 
         # Build prompt using Jinja template
+        # has_research_agent tells template that research_agent is available for delegation
         prompt = render_template(
             "planning/step_planner.j2",
             task=basic_instructions,
             tools=tools or [],
-            managed_agents=agent_info,  # Pass info, not actual agents
-            has_research_tools=bool(research_tools),
+            managed_agents=agent_info,  # Pass info for template (includes research_agent)
+            has_research_agent=bool(planner_managed_agents),  # research_agent available
+            has_research_tools=bool(research_tools) and not planner_managed_agents,  # Direct tools fallback
             skill_inputs=skill_inputs or [],  # For variable-aware planning
             previous_plan_json=previous_plan_json,  # For regeneration with feedback
             user_feedback=user_feedback,  # User feedback for improvement
         )
 
-        logger.info(f"📋 Generating plan with context-first pattern...")
+        logger.info(f"📋 Generating plan with research-driven pattern...")
         logger.debug(f"📋 Planning prompt ({len(prompt)} chars)")
 
-        # Generate plan via LLM with context tools + submit_plan
-        # max_steps allows: database_list + table_list + submit_plan + some thinking
+        # Generate plan via LLM with context tools + research_agent + submit_plan
         plan_goal: Optional[str] = None
         plan_context: Optional[str] = None
         plan_analysis: Optional[str] = None
         steps: List[PlanStep] = []
 
         try:
-            # Allow more steps when research tools are available
-            max_steps = 10 if research_tools else 6
+            # Allow more steps when research_agent is available (delegate + synthesize)
+            max_steps = 12 if planner_managed_agents else (10 if research_tools else 6)
             planner = ToolCallingAgent(
                 tools=planner_tools,
                 model=model,
-                max_steps=max_steps,  # Context + research + submit_plan
+                max_steps=max_steps,
+                managed_agents=planner_managed_agents if planner_managed_agents else None,
             )
             planner.run(prompt)
 
@@ -443,14 +465,15 @@ class PlanService:
         failed_step: PlanStep,
         error_message: str,
         plan: Plan,
-        context_tools: List[Any],
         ledger: TaskLedger,
         org_model: Optional[str] = None,
+        api_key: Optional[str] = None,
+        organization_id: Optional[int] = None,
     ) -> RecoveryResult:
         """
         Analyze a failed step and determine how to fix it.
 
-        Uses LLM with context_tools to:
+        Uses LLM with research_emery to:
         1. Gather fresh context based on the error
         2. Determine what parameters are missing or wrong
         3. Return corrected parameters with confidence
@@ -462,9 +485,10 @@ class PlanService:
             failed_step: The step that failed
             error_message: The error from execution
             plan: The original plan (for context)
-            context_tools: Tools to gather fresh context
             ledger: Current execution state
             org_model: Organization model ID for model resolution hierarchy
+            api_key: API key for research_emery auth
+            organization_id: Organization ID for research_emery RLS context
 
         Returns:
             RecoveryResult with corrected_parameters and confidence
@@ -497,10 +521,25 @@ class PlanService:
             # LLM gathers context and analyzes using resolved model
             model_id = self.model_provider.resolve_model_selection(org_model=org_model)
             model = self.model_provider.get_model(model_id=model_id)
+
+            # Create research_emery for context gathering
+            managed_agents = []
+            if api_key and organization_id:
+                from ..agents.research_emery_agent import create_research_emery_agent
+                research_emery = create_research_emery_agent(
+                    model=model,
+                    api_key=api_key,
+                    organization_id=organization_id,
+                    max_steps=6,
+                )
+                managed_agents.append(research_emery)
+                logger.info("🔬 Recovery analyzer has research_emery for context gathering")
+
             analyzer = ToolCallingAgent(
-                tools=[recovery_tool] + context_tools,
+                tools=[recovery_tool],
                 model=model,
-                max_steps=10,  # Allow multiple context tool calls
+                max_steps=10,  # Allow multiple context gathering steps
+                managed_agents=managed_agents if managed_agents else None,
             )
             analyzer.run(prompt)
 
