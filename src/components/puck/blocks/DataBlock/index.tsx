@@ -450,7 +450,7 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
           if (!condition.field || !condition.value) continue;
 
           // Skip rowData variables (need client-side resolution)
-          if (typeof condition.value === 'string' && condition.value.includes('{rowData.')) {
+          if (typeof condition.value === 'string' && condition.value.includes('{{rowData.')) {
             continue;
           }
 

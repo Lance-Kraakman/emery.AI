@@ -573,12 +573,12 @@ export async function getViewsForOrganization(): Promise<ViewDTO[]> {
 /**
  * Substitutes page variable placeholders in filter values
  *
- * @param value - Filter value that may contain {params.varName} placeholders
+ * @param value - Filter value that may contain {{params.varName}} placeholders
  * @param context - Context containing params from URL query parameters
  * @returns Value with variables substituted
  *
  * @example
- * substituteVariables("{params.product_id}", { product_id: "123" }) // returns "123"
+ * substituteVariables("{{params.product_id}}", { product_id: "123" }) // returns "123"
  * substituteVariables("static_value", { product_id: "123" }) // returns "static_value"
  */
 function substituteFilterVariable(
@@ -589,8 +589,8 @@ function substituteFilterVariable(
     return value;
   }
 
-  // Match {params.varName} pattern
-  const paramMatch = value.match(/^\{params\.(\w+)\}$/);
+  // Match {{params.varName}} pattern (double braces)
+  const paramMatch = value.match(/^\{\{params\.(\w+)\}\}$/);
   if (paramMatch && context) {
     const paramName = paramMatch[1];
     const paramValue = context[paramName];
@@ -605,9 +605,9 @@ function substituteFilterVariable(
     return '';
   }
 
-  // For partial substitutions (e.g., "prefix_{params.id}_suffix"), do inline replacement
-  if (value.includes('{params.') && context) {
-    return value.replace(/\{params\.(\w+)\}/g, (_, name) => {
+  // For partial substitutions (e.g., "prefix_{{params.id}}_suffix"), do inline replacement
+  if (value.includes('{{params.') && context) {
+    return value.replace(/\{\{params\.(\w+)\}\}/g, (_, name) => {
       const paramValue = context[name];
       return paramValue !== undefined ? String(paramValue) : '';
     });
