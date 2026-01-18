@@ -83,9 +83,9 @@ const nextConfig = {
           { key: 'X-Powered-By', value: '' },
         ],
       },
-      // Default security headers for all other routes
+      // Default security headers for all other routes (excludes preview/frame for iframe embedding)
       {
-        source: '/:path*',
+        source: '/((?!apps/.*?/pages/.*?/preview/frame).*)',
         headers: [
           { key: 'X-Accel-Buffering', value: 'no' },
           // Security headers (OWASP recommended)

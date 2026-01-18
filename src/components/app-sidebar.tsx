@@ -53,6 +53,8 @@ import { createDefaultTeam, updateTeam, deleteTeam, duplicateTeam } from "@/app/
 import { createDefaultOrganizationSkill, updateSkill, deleteSkill, duplicateSkill } from "@/app/actions/skills"
 import { createDatabase, updateDatabase, deleteDatabase, duplicateDatabase } from "@/app/actions/databases"
 import { createTable, updateTable, deleteTable, duplicateTable } from "@/app/actions/tables"
+import { applyBuiltinSkillTemplate, applyBuiltinDatabaseTemplate, applyBuiltinAgentTemplate, applyBuiltinTableTemplate } from "@/app/actions/templates"
+import { toast } from "sonner"
 import type { AppSidebarProps, AppData, PageData, AgentData, TeamData, SkillData, DatabaseData, TableData } from "./app-sidebar-types"
 import {
   AlertDialog,
@@ -316,20 +318,47 @@ export function AppSidebar({
 
   const handleSelectBuiltinTemplate = async (templateId: string) => {
     if (!templatePicker) return
-    // Navigate to the appropriate creation page with template param
     switch (templatePicker.type) {
-      case 'skill':
-        router.push(`/skills/new?builtinId=${encodeURIComponent(templateId)}`)
+      case 'skill': {
+        const result = await applyBuiltinSkillTemplate(templateId)
+        if (result.success && result.data) {
+          toast.success(`Created "${result.data.skillName}" skill`)
+        } else {
+          toast.error(result.error || 'Failed to create skill')
+        }
         break
-      case 'agent':
-        router.push(`/organization?templatePicker=agent&builtinId=${encodeURIComponent(templateId)}`)
+      }
+      case 'agent': {
+        const result = await applyBuiltinAgentTemplate(templateId)
+        if (result.success && result.data) {
+          toast.success(`Created "${result.data.name}" agent`)
+        } else {
+          toast.error(result.error || 'Failed to create agent')
+        }
         break
-      case 'database':
-        router.push(`/organization?templatePicker=database&builtinId=${encodeURIComponent(templateId)}`)
+      }
+      case 'database': {
+        const result = await applyBuiltinDatabaseTemplate(templateId)
+        if (result.success && result.data) {
+          toast.success(`Created "${result.data.name}" database`)
+        } else {
+          toast.error(result.error || 'Failed to create database')
+        }
         break
-      case 'table':
-        router.push(`/data?templatePicker=table&databaseId=${templatePicker.parentId}&builtinId=${encodeURIComponent(templateId)}`)
+      }
+      case 'table': {
+        if (!templatePicker.parentId) {
+          toast.error('No database selected')
+          break
+        }
+        const result = await applyBuiltinTableTemplate(templateId, templatePicker.parentId)
+        if (result.success && result.data) {
+          toast.success(`Created "${result.data.name}" table`)
+        } else {
+          toast.error(result.error || 'Failed to create table')
+        }
         break
+      }
     }
     setTemplatePicker(null)
   }
@@ -510,7 +539,7 @@ export function AppSidebar({
         />
         */}
 
-        {/* Skills - Grouped by Organization and Agents, System skills at bottom */}
+        {/* Skills - Grouped by Organization and Agents */}
         <GroupedSidebarSection
           icon={Workflow}
           label="Skills"
@@ -534,8 +563,7 @@ export function AppSidebar({
           }}
           getGroupKey={(skill) => skill.agentId}
           getGroupName={(skill) => skill.agentName}
-          isUngroupedItem={(skill) => skill.agentId === null && !skill.isSystem}
-          isSystemItem={(skill) => skill.isSystem}
+          isUngroupedItem={(skill) => skill.agentId === null}
           onAdd={handleCreateSkill}
           addButtonLabel="Add Skill"
           onRename={handleRenameSkill}
@@ -681,11 +709,11 @@ export function AppSidebar({
                     "U"}
                 </AvatarFallback>
               </Avatar>
-              <div className="flex flex-col items-start text-left group-data-[collapsible=icon]:hidden">
+              <div className="flex flex-col items-start text-left overflow-hidden min-w-0 group-data-[collapsible=icon]:hidden">
                 <span className="text-base font-semibold text-foreground">
                   {sessionData?.user?.name || "User"}
                 </span>
-                <span className="text-sm text-muted-foreground">
+                <span className="text-sm text-muted-foreground truncate max-w-full">
                   {sessionData?.user?.email}
                 </span>
               </div>
@@ -705,11 +733,11 @@ export function AppSidebar({
                       "U"}
                   </AvatarFallback>
                 </Avatar>
-                <div className="flex flex-col">
+                <div className="flex flex-col min-w-0">
                   <span className="text-sm font-medium">
                     {sessionData?.user?.name || "User"}
                   </span>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-xs text-muted-foreground truncate">
                     {sessionData?.user?.email}
                   </span>
                 </div>
