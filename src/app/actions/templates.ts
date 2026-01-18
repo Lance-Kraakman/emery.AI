@@ -29,6 +29,7 @@ import { getTablesForDatabase, createTable, type TableWithFieldsDTO } from './ta
 import { createField } from './fields';
 import { isBrainTemplate, isOrgSectionTemplateData } from '@/ddd/domain/templates/types';
 import type { TableTemplateData, FieldTemplateData, TemplateContent } from '@/ddd/domain/templates/types';
+import type { FieldType } from '@/ddd/domain/tables/value-objects/table-field';
 
 /**
  * Server Actions for Template Management
@@ -1025,6 +1026,215 @@ export async function applyBuiltinSkillTemplate(
     };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to apply template' };
+  }
+}
+
+// =============================================================================
+// APPLY BUILTIN DATABASE TEMPLATE
+// =============================================================================
+
+/**
+ * Apply a builtin database template to create a new database with tables
+ * Used when creating a database from the sidebar template picker
+ */
+export async function applyBuiltinDatabaseTemplate(
+  builtinId: string
+): Promise<Result<{ id: number; name: string }>> {
+  try {
+    const sessionInfo = await getSessionInfo();
+    if (!sessionInfo) {
+      return { success: false, error: 'Not authenticated' };
+    }
+
+    // Get the builtin template
+    const service = getTemplateService();
+    const template = service.getBuiltinTemplate(builtinId);
+    if (!template) {
+      return { success: false, error: `Builtin template not found: ${builtinId}` };
+    }
+
+    if (template.template.type !== 'database') {
+      return { success: false, error: 'Template is not a database template' };
+    }
+
+    const dbData = template.template.data as DatabaseTemplateData;
+
+    // Create the database
+    const dbResult = await createDatabase({
+      name: dbData.name,
+      description: dbData.description,
+      metadata: dbData.metadata,
+      agentId: null, // org-level database
+    });
+
+    if (!dbResult.success || !dbResult.data) {
+      return { success: false, error: dbResult.error || 'Failed to create database' };
+    }
+
+    // Create tables from template
+    await createTablesFromTemplate(dbResult.data.id, dbData.tables);
+
+    revalidatePath('/data');
+    revalidatePath('/organization');
+
+    return { success: true, data: { id: dbResult.data.id, name: dbResult.data.name } };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to apply database template' };
+  }
+}
+
+// =============================================================================
+// APPLY BUILTIN AGENT TEMPLATE
+// =============================================================================
+
+/**
+ * Apply a builtin agent template to create a new agent with skills and databases
+ * Used when creating an agent from the sidebar template picker
+ */
+export async function applyBuiltinAgentTemplate(
+  builtinId: string
+): Promise<Result<{ id: number; name: string }>> {
+  try {
+    const sessionInfo = await getSessionInfo();
+    if (!sessionInfo) {
+      return { success: false, error: 'Not authenticated' };
+    }
+
+    // Get the builtin template
+    const service = getTemplateService();
+    const template = service.getBuiltinTemplate(builtinId);
+    if (!template) {
+      return { success: false, error: `Builtin template not found: ${builtinId}` };
+    }
+
+    if (template.template.type !== 'agent') {
+      return { success: false, error: 'Template is not an agent template' };
+    }
+
+    const agentData = template.template.data as AgentTemplateData;
+
+    // Create the agent
+    const agentResult = await createAgentFromClient({
+      name: agentData.name,
+      role: agentData.role,
+      description: agentData.description,
+      persona: agentData.persona,
+      defaultModel: agentData.defaultModel,
+      avatarConfig: agentData.avatarConfig,
+    });
+
+    if (!agentResult.success || !agentResult.data) {
+      return { success: false, error: agentResult.error || 'Failed to create agent' };
+    }
+
+    const agentId = agentResult.data.id;
+
+    // Create agent's skills from template
+    if (agentData.skills?.length) {
+      for (const skillData of agentData.skills) {
+        await createSkill({
+          agentId,
+          name: skillData.name,
+          description: skillData.description,
+          instructions: skillData.instructions,
+          inputs: skillData.inputs,
+          outputs: skillData.outputs,
+          tools: skillData.tools,
+          executionType: skillData.executionType,
+          model: skillData.model,
+          agentType: skillData.agentType,
+          taskModelConfig: skillData.taskModelConfig,
+          toolExecutionConfig: skillData.toolExecutionConfig,
+          writeConfig: skillData.writeConfig,
+          readConfig: skillData.readConfig,
+          steps: skillData.steps,
+          canvasMetadata: skillData.canvasMetadata,
+        });
+      }
+    }
+
+    // Create agent's databases from template
+    if (agentData.databases?.length) {
+      for (const dbData of agentData.databases) {
+        const dbResult = await createDatabase({
+          name: dbData.name,
+          description: dbData.description,
+          metadata: dbData.metadata,
+          agentId,
+        });
+
+        if (dbResult.success && dbResult.data) {
+          await createTablesFromTemplate(dbResult.data.id, dbData.tables);
+        }
+      }
+    }
+
+    revalidatePath('/organization');
+    return { success: true, data: { id: agentId, name: agentResult.data.name } };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to apply agent template' };
+  }
+}
+
+// =============================================================================
+// APPLY BUILTIN TABLE TEMPLATE
+// =============================================================================
+
+/**
+ * Apply a builtin table template to create a new table with fields
+ * Used when creating a table from the sidebar template picker
+ */
+export async function applyBuiltinTableTemplate(
+  builtinId: string,
+  databaseId: number
+): Promise<Result<{ id: number; name: string }>> {
+  try {
+    const sessionInfo = await getSessionInfo();
+    if (!sessionInfo) {
+      return { success: false, error: 'Not authenticated' };
+    }
+
+    // Get the builtin template
+    const service = getTemplateService();
+    const template = service.getBuiltinTemplate(builtinId);
+    if (!template) {
+      return { success: false, error: `Builtin template not found: ${builtinId}` };
+    }
+
+    if (template.template.type !== 'table') {
+      return { success: false, error: 'Template is not a table template' };
+    }
+
+    const tableData = template.template.data as TableTemplateData;
+
+    // Create the table
+    const tableResult = await createTable({
+      name: tableData.name,
+      databaseId,
+      description: tableData.description,
+    });
+
+    if (!tableResult.success || !tableResult.data) {
+      return { success: false, error: tableResult.error || 'Failed to create table' };
+    }
+
+    // Create fields from template
+    if (tableData.fields?.length) {
+      for (const fieldData of tableData.fields) {
+        await createField({
+          tableId: tableResult.data.id,
+          name: fieldData.name,
+          type: fieldData.type as FieldType,
+          required: fieldData.required,
+          metadata: fieldData.fieldConfig,
+        });
+      }
+    }
+
+    revalidatePath('/data');
+    return { success: true, data: { id: tableResult.data.id, name: tableResult.data.name } };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to apply table template' };
   }
 }
 
