@@ -18,34 +18,59 @@ This document describes the complete orchestration flow for the Emery agent syst
 
 ## 1. Execution Coordinator State Machine
 
-The main state machine that controls the orchestration phases.
+The orchestration uses two complementary phase systems:
+
+1. **CoordinatorStateMachine** (`coordinator_state_machine.py`) - Persistent phases that survive across message boundaries
+2. **ExecutionCoordinator** (`execution_coordinator.py`) - Internal phases during execute() calls
+
+### Persistent State Machine (CoordinatorStateMachine)
+
+These phases are persisted in the session and determine how the next user message is routed:
 
 ```mermaid
 stateDiagram-v2
     [*] --> IDLE
 
-    IDLE --> CLASSIFYING: User sends message
+    IDLE --> AWAITING_CLARIFICATION: Task classifier needs info
+    IDLE --> AWAITING_APPROVAL: Plan ready for approval
+    IDLE --> AWAITING_CASCADE_QUESTIONS: Cascade planning needs answers
+    IDLE --> AWAITING_QUESTIONS: Managed agent HITL
+    IDLE --> EXECUTING: Direct execution started
 
-    CLASSIFYING --> DIRECT: Simple task
-    CLASSIFYING --> PLANNING: Complex task
-    CLASSIFYING --> AWAITING_CLARIFICATION: Needs info
-
-    DIRECT --> COMPLETED: Execute directly
-
-    AWAITING_CLARIFICATION --> CLASSIFYING: User answers
-
-    PLANNING --> AWAITING_CASCADE_QUESTIONS: Multi-agent planning
-    PLANNING --> AWAITING_APPROVAL: Plan ready
+    AWAITING_CLARIFICATION --> IDLE: User answers
 
     AWAITING_CASCADE_QUESTIONS --> AWAITING_CASCADE_QUESTIONS: More questions
     AWAITING_CASCADE_QUESTIONS --> AWAITING_APPROVAL: All answered
+    AWAITING_CASCADE_QUESTIONS --> IDLE: Cancelled
 
     AWAITING_APPROVAL --> IDLE: Rejected
-    AWAITING_APPROVAL --> PLANNING: Feedback (replan)
     AWAITING_APPROVAL --> EXECUTING: Approved
 
+    AWAITING_QUESTIONS --> IDLE: User responds to managed agent
+
+    EXECUTING --> IDLE: Completed or failed
+    EXECUTING --> AWAITING_QUESTIONS: Managed agent HITL during execution
+```
+
+### Internal Execution Phases (ExecutionCoordinator)
+
+These phases are internal to a single execute() call and not persisted:
+
+```mermaid
+stateDiagram-v2
+    [*] --> CLASSIFYING
+
+    CLASSIFYING --> DIRECT: Simple task
+    CLASSIFYING --> PLANNING: Complex task
+
+    DIRECT --> COMPLETED: Execute directly
+
+    PLANNING --> AWAITING_APPROVAL: Plan ready
+
+    AWAITING_APPROVAL --> EXECUTING: Approved
+    AWAITING_APPROVAL --> PLANNING: Feedback (replan)
+
     EXECUTING --> EXECUTING: Step completed
-    EXECUTING --> EXECUTING: Replan triggered
     EXECUTING --> COMPLETED: All steps done
     EXECUTING --> FAILED: Blocking error
 
@@ -55,15 +80,18 @@ stateDiagram-v2
 
 ### Phase Details
 
-| Phase | Description | Tools Available |
-|-------|-------------|-----------------|
-| IDLE | Waiting for user input | N/A |
-| CLASSIFYING | LLM determines task complexity | N/A |
-| PLANNING | Generating execution plan | Read-only |
-| AWAITING_APPROVAL | Waiting for user to approve plan | N/A |
-| EXECUTING | Running plan steps | All tools |
-| COMPLETED | Task finished successfully | N/A |
-| FAILED | Task failed with error | N/A |
+| Phase | Persistence | Description | Tools Available |
+|-------|-------------|-------------|-----------------|
+| IDLE | Persistent | Waiting for user input | N/A |
+| CLASSIFYING | Internal | LLM determines task complexity | N/A |
+| PLANNING | Internal | Generating execution plan | Read-only |
+| AWAITING_CLARIFICATION | Persistent | Task classifier needs more info | N/A |
+| AWAITING_CASCADE_QUESTIONS | Persistent | Cascade planning needs answers | N/A |
+| AWAITING_APPROVAL | Persistent | Waiting for user to approve plan | N/A |
+| AWAITING_QUESTIONS | Persistent | Managed agent HITL (e.g., skill_builder) | N/A |
+| EXECUTING | Persistent | Running plan steps | All tools |
+| COMPLETED | Internal | Task finished successfully | N/A |
+| FAILED | Internal | Task failed with error | N/A |
 
 ---
 
@@ -602,6 +630,7 @@ flowchart TD
 | File | Purpose |
 |------|---------|
 | `execution_coordinator.py` | Main state machine, phases, event emission |
+| `coordinator_state_machine.py` | Persistent phase transitions, context storage |
 | `chat_processing_service.py` | gRPC entry point, streaming, session routing |
 | `session_manager.py` | Agent lifecycle, memory persistence |
 | `coordinator_event_converter.py` | Event → gRPC response conversion |
@@ -629,13 +658,23 @@ flowchart TD
 | `evaluator_agent.py` | Goal/progress evaluation agent |
 | `skill_builder_agent.py` | HITL agent for skill modifications |
 | `document_builder_agent.py` | HITL agent for document operations |
-| `table_builder_agent.py` | HITL agent for table modifications |
+| `table_builder_agent.py` | Autonomous agent for single table operations |
 | `schema_builder_agent.py` | HITL agent for complex schema design |
 | `app_builder_agent.py` | HITL agent for Puck app management (has page_builder as managed agent) |
 | `page_builder_agent.py` | HITL agent for Puck page creation with full block schema |
+| `agent_builder_agent.py` | HITL agent for configuring agents (persona, automations, skills) |
 | `research_agent.py` | Web search and research agent |
 | `research_emery_agent.py` | System introspection agent |
 | `planning_utils.py` | Shared count-based planning callback for HITL workflows |
+
+### Cascade Planning
+
+| File | Purpose |
+|------|---------|
+| `sub_agent_planner.py` | Orchestrates cascade planning with gap analysis and recursive nesting |
+| `task_classifier.py` | Task classification and step → agent classification for cascade detection |
+| `plan_step_executor.py` | Executes plan steps including recursive nested sub-plans |
+| `managed_agents_factory.py` | Central factory for creating all agents with consistent configuration |
 
 ---
 
@@ -969,4 +1008,232 @@ flowchart LR
     TC -->|Complex| PLAN[Plan & Approve]
     EXEC --> STREAM
     PLAN --> STREAM
+```
+
+---
+
+## 11. Recursive Cascade Planning
+
+The SubAgentPlanner enables nested planning where a parent agent's plan can reference managed agents, triggering recursive planning to create detailed sub-plans at each level.
+
+### Overview
+
+```mermaid
+flowchart TB
+    subgraph TopLevel["Top-Level Planning"]
+        TASK[User Task] --> CLASSIFY[Task Classification]
+        CLASSIFY --> PLAN[Generate High-Level Plan]
+        PLAN --> STEPS[Plan Steps]
+    end
+
+    subgraph CascadePlanning["Cascade Planning (SubAgentPlanner)"]
+        STEPS --> CHECK{Step targets agent?}
+        CHECK -->|No| KEEP[Keep as-is]
+        CHECK -->|Yes| SUBPLAN[Run Sub-Agent Planning]
+        SUBPLAN --> NESTED{Sub-plan step targets agent?}
+        NESTED -->|Yes, depth < 3| RECURSE[Recursive Planning]
+        NESTED -->|No or depth >= 3| ATTACH[Attach Sub-Plan]
+        RECURSE --> NESTED
+        ATTACH --> ENHANCED[Enhanced Plan with Nested Sub-Plans]
+    end
+
+    KEEP --> FINAL[Final Plan]
+    ENHANCED --> FINAL
+```
+
+### Cascade Planning Flow
+
+```mermaid
+sequenceDiagram
+    participant EC as ExecutionCoordinator
+    participant SAP as SubAgentPlanner
+    participant TC as TaskClassifier
+    participant AB as app_builder
+    participant PB as page_builder
+
+    EC->>SAP: run_planning(step, "app_builder", depth=0)
+
+    SAP->>AB: Create agent, run planning
+    AB-->>SAP: Sub-plan with steps
+
+    loop For each step in sub-plan
+        SAP->>TC: classify_step(step.description)
+        TC-->>SAP: StepClassification(agent="page_builder", confidence=0.85)
+
+        alt confidence > 0.7 and depth < max_depth
+            SAP->>SAP: run_planning(step, "page_builder", depth=1)
+            SAP->>PB: Create agent, run planning
+            PB-->>SAP: Nested sub-plan
+            SAP->>SAP: Attach nested sub-plan to step
+        end
+    end
+
+    SAP-->>EC: Enhanced SubAgentPlanningResult
+```
+
+### Managed Agent Detection
+
+Two methods are used to detect when a step should trigger nested agent planning:
+
+**1. LLM Classification (Primary)**
+```python
+classification = task_classifier.classify_step(
+    step_description="page_builder creates Home page with Hero section",
+    available_agents=["page_builder", "table_builder", "research_agent"],
+)
+# Returns: StepClassification(target_agent="page_builder", confidence=0.85)
+```
+
+**2. Pattern Matching (Fallback)**
+- Checks for agent name in step description (e.g., "page_builder creates...")
+- Looks for delegation phrases: "delegate to X", "X builds", "using X"
+
+### Configuration
+
+| Setting | Value | Purpose |
+|---------|-------|---------|
+| `max_depth` | 3 | Maximum recursion depth (prevents infinite loops) |
+| `confidence_threshold` | 0.7 | Minimum LLM classification confidence |
+| `max_planning_rounds` | 3 | Maximum question rounds per agent |
+
+### Example: app_builder → page_builder Recursion
+
+**User Request:** "Create a CRM app with a customer portal"
+
+```
+1. Top-Level Plan:
+   - Step 1: app_builder creates CRM app
+   - Step 2: app_builder creates database schema
+
+2. SubAgentPlanner processes Step 1 (app_builder):
+   app_builder plans:
+   ├─ Step 1: Create app container
+   ├─ Step 2: page_builder creates Dashboard page  ← DETECTED
+   ├─ Step 3: page_builder creates Customer list   ← DETECTED
+   └─ Step 4: Publish app
+
+3. RECURSIVE: Plan page_builder for Step 2 (depth=1):
+   page_builder plans:
+   ├─ Step 2a: Add Hero section
+   ├─ Step 2b: Add Stats grid
+   └─ Step 2c: Add DataBlock with recent customers
+
+4. RECURSIVE: Plan page_builder for Step 3 (depth=1):
+   page_builder plans:
+   ├─ Step 3a: Add TableBlock with customer data
+   └─ Step 3b: Add filters and pagination
+
+5. Final Enhanced Plan:
+   app_builder sub-plan:
+   ├─ Step 1: Create app container
+   ├─ Step 2: page_builder creates Dashboard
+   │          └─ sub_plan: [Hero, Stats, DataBlock]
+   ├─ Step 3: page_builder creates Customer list
+   │          └─ sub_plan: [TableBlock, filters]
+   └─ Step 4: Publish app
+```
+
+### Question Collection
+
+Questions from all planning levels are collected and batched together:
+
+```mermaid
+flowchart LR
+    subgraph Level0["Depth 0: app_builder"]
+        Q1[Theme color?]
+        Q2[App name?]
+    end
+
+    subgraph Level1["Depth 1: page_builder"]
+        Q3[Hero style?]
+        Q4[Show customer photos?]
+    end
+
+    Q1 --> BATCH[Batched Questions]
+    Q2 --> BATCH
+    Q3 --> BATCH
+    Q4 --> BATCH
+
+    BATCH --> USER[User answers all at once]
+    USER --> RESUME[Planning resumes]
+```
+
+### Context Passing
+
+Parent agent's planning observations are passed to nested agents:
+
+```python
+def run_planning(step, agent_name, depth, parent_context):
+    # Merge parent context with gathered context
+    full_context = f"{gathered_context}\n\n## Parent Agent Context\n{parent_context}"
+
+    # Nested agents inherit parent's observations
+    nested_result = self.run_planning(
+        step=step,
+        agent_name=nested_agent,
+        depth=depth + 1,
+        parent_context=result.sub_plan.planning_observations,
+    )
+```
+
+### Execution of Nested Plans
+
+```mermaid
+sequenceDiagram
+    participant PSE as PlanStepExecutor
+    participant AB as app_builder
+    participant PB as page_builder
+
+    PSE->>PSE: _execute_sub_plan(app_builder sub-plan, depth=0)
+
+    loop For each step
+        alt Step has nested sub_plan
+            PSE->>PSE: _execute_sub_plan(page_builder sub-plan, depth=1)
+            PSE->>PB: Execute page creation steps
+            PB-->>PSE: Page created
+        else Regular step
+            PSE->>AB: Execute step
+            AB-->>PSE: Step result
+        end
+    end
+
+    PSE-->>PSE: Combined results
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `sub_agent_planner.py` | Orchestrates cascade planning with recursion |
+| `task_classifier.py` | LLM-based step → agent classification |
+| `plan_step_executor.py` | Recursive execution of nested sub-plans |
+| `execution_coordinator.py` | Configures SubAgentPlanner with max_depth |
+
+### Architecture Diagram
+
+```mermaid
+flowchart TB
+    subgraph SubAgentPlanner
+        RUN[run_planning]
+        GAP[Gap Analysis]
+        PLAN[Agent Planning]
+        ENHANCE[_enhance_with_nested_plans]
+        DETECT[_detect_managed_agent]
+    end
+
+    subgraph TaskClassifier
+        CLASSIFY[classify_step]
+        LLM[LLM Classification]
+        PATTERN[Pattern Matching]
+    end
+
+    RUN --> GAP
+    GAP -->|No gaps| PLAN
+    PLAN --> ENHANCE
+    ENHANCE --> DETECT
+    DETECT --> CLASSIFY
+    CLASSIFY --> LLM
+    LLM -->|Low confidence| PATTERN
+
+    DETECT -->|Agent found| RUN
 ```

@@ -19,8 +19,8 @@
 │  │  ┌───────────────────────┴────────────────┴────────────────┴────────────────────────┐  │    │
 │  │  │                        INFRASTRUCTURE LAYER                                       │  │    │
 │  │  │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐                   │  │    │
-│  │  │  │  gRPC Client    │  │   Supabase DB   │  │   Auth (Clerk)  │                   │  │    │
-│  │  │  │  (Node.js)      │  │   PostgreSQL    │  │   Session Mgmt  │                   │  │    │
+│  │  │  │  gRPC Client    │  │  PostgreSQL DB  │  │   Auth (Clerk)  │                   │  │    │
+│  │  │  │  (Node.js)      │  │                 │  │   Session Mgmt  │                   │  │    │
 │  │  │  └────────┬────────┘  └─────────────────┘  └─────────────────┘                   │  │    │
 │  │  └───────────┼──────────────────────────────────────────────────────────────────────┘  │    │
 │  └──────────────┼─────────────────────────────────────────────────────────────────────────┘    │
@@ -113,18 +113,29 @@
 │  │                     InterruptAwareToolCallingAgent                                       │   │
 │  │                  (Parent Agent - Routes to Managed Agents)                               │   │
 │  │                                                                                          │   │
-│  │  Built-in Tools:                      Managed Agents:                                    │   │
+│  │  Built-in Tools:                      Managed Agents (via ManagedAgentsFactory):        │   │
 │  │  - Standard tools from config         ┌──────────────────────────────────────────────┐  │   │
 │  │  - SkillTools (skill-as-tool)         │  ┌─────────────┐  ┌─────────────┐            │  │   │
 │  │                                        │  │skill_builder│  │schema_builder│            │  │   │
 │  │                                        │  │   (HITL)    │  │    (HITL)   │            │  │   │
 │  │                                        │  └─────────────┘  └─────────────┘            │  │   │
 │  │                                        │  ┌─────────────┐  ┌─────────────┐            │  │   │
-│  │                                        │  │document_    │  │table_builder│            │  │   │
-│  │                                        │  │  builder    │  │ (Autonomous)│            │  │   │
-│  │                                        │  │   (HITL)    │  └─────────────┘            │  │   │
-│  │                                        │  └─────────────┘                             │  │   │
+│  │                                        │  │document_    │  │ app_builder │            │  │   │
+│  │                                        │  │  builder    │  │    (HITL)   │            │  │   │
+│  │                                        │  │   (HITL)    │  └──────┬──────┘            │  │   │
+│  │                                        │  └─────────────┘         │                   │  │   │
+│  │                                        │  ┌─────────────┐  ┌──────▼──────┐            │  │   │
+│  │                                        │  │table_builder│  │page_builder │            │  │   │
+│  │                                        │  │ (Autonomous)│  │    (HITL)   │            │  │   │
+│  │                                        │  └─────────────┘  └─────────────┘            │  │   │
+│  │                                        │  ┌─────────────┐  ┌─────────────┐            │  │   │
+│  │                                        │  │agent_builder│  │  research   │            │  │   │
+│  │                                        │  │   (HITL)    │  │ (read-only) │            │  │   │
+│  │                                        │  └─────────────┘  └─────────────┘            │  │   │
 │  │                                        └──────────────────────────────────────────────┘  │   │
+│  │                                                                                          │   │
+│  │  Note: app_builder → page_builder shows cascade planning hierarchy                      │   │
+│  │  See AGENT_ARCHITECTURE.md for full agent catalog                                       │   │
 │  └─────────────────────────────────────────────────────────────────────────────────────────┘   │
 │                                          │                                                      │
 │                                          ▼                                                      │
@@ -275,11 +286,17 @@
 │  │   │  - delete      │  │  - delete      │  │  - delete      │  │                │         │  │
 │  │   └────────────────┘  └────────────────┘  └────────────────┘  └────────────────┘         │  │
 │  │                                                                                           │  │
-│  │   ┌────────────────┐                                                                      │  │
-│  │   │ database_crud  │                                                                      │  │
-│  │   │  - list        │                                                                      │  │
-│  │   │  - read        │                                                                      │  │
-│  │   └────────────────┘                                                                      │  │
+│  │   ┌────────────────┐  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐         │  │
+│  │   │ database_crud  │  │   app_crud     │  │   page_crud    │  │  agent_crud    │         │  │
+│  │   │  - list        │  │  - list        │  │  - list        │  │  - list        │         │  │
+│  │   │  - read        │  │  - read        │  │  - read        │  │  - read        │         │  │
+│  │   │                │  │  - create      │  │  - create      │  │  - update      │         │  │
+│  │   │                │  │  - update      │  │  - update      │  │                │         │  │
+│  │   │                │  │  - delete      │  │  - delete      │  │                │         │  │
+│  │   │                │  │                │  │  - update_cont │  │                │         │  │
+│  │   │                │  │                │  │  - publish     │  │                │         │  │
+│  │   │                │  │                │  │  - add_dialog  │  │                │         │  │
+│  │   └────────────────┘  └────────────────┘  └────────────────┘  └────────────────┘         │  │
 │  └──────────────────────────────────────────────────────────────────────────────────────────┘  │
 │                                                                                                 │
 └────────────────────────────────────────────────────────────────────────────────────────────────┘
@@ -332,6 +349,54 @@
 │  └─────────────────────────────────────────────────────────────────────────────────────────┘   │
 │                                                                                                 │
 │  ┌─────────────────────────────────────────────────────────────────────────────────────────┐   │
+│  │                            app_builder_agent.py                                          │   │
+│  │                                                                                          │   │
+│  │  Purpose: Create/manage Puck visual apps                                                │   │
+│  │  Tools: app_crud, page_crud (via tool_executor) + research tools                        │   │
+│  │  Managed Agents: page_builder (for complex page creation)                               │   │
+│  │  HITL: Plan approval before creating/modifying apps                                     │   │
+│  │  Flow: List apps → Create plan → INTERRUPT → User approves → Execute                   │   │
+│  └─────────────────────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                                 │
+│  ┌─────────────────────────────────────────────────────────────────────────────────────────┐   │
+│  │                           page_builder_agent.py                                          │   │
+│  │                                                                                          │   │
+│  │  Purpose: Create/edit Puck pages with 38 block types                                    │   │
+│  │  Tools: page_crud (DIRECT - not wrapped), research tools                                │   │
+│  │  Managed Agents: research_agent (for content research)                                  │   │
+│  │  HITL: Plan approval before page modifications                                          │   │
+│  │  Note: Receives page_crud directly to preserve full Puck block schema                   │   │
+│  └─────────────────────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                                 │
+│  ┌─────────────────────────────────────────────────────────────────────────────────────────┐   │
+│  │                          agent_builder_agent.py                                          │   │
+│  │                                                                                          │   │
+│  │  Purpose: Configure agent personas, automations, and skills                             │   │
+│  │  Tools: agent_crud, skill_crud (via tool_executor)                                      │   │
+│  │  HITL: Plan approval before modifying agent configurations                              │   │
+│  │  Flow: List agents → Read agent → Create plan → INTERRUPT → Execute                    │   │
+│  └─────────────────────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                                 │
+│  ┌─────────────────────────────────────────────────────────────────────────────────────────┐   │
+│  │                            research_agent.py                                             │   │
+│  │                                                                                          │   │
+│  │  Purpose: Web search and external content research                                      │   │
+│  │  Tools: DuckDuckGoSearchTool, VisitWebpageTool                                          │   │
+│  │  Managed Agents: research_emery (for Emery-specific context)                            │   │
+│  │  HITL: NONE (read-only operations)                                                      │   │
+│  │  Flow: Search web → Visit pages → Return consolidated findings                          │   │
+│  └─────────────────────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                                 │
+│  ┌─────────────────────────────────────────────────────────────────────────────────────────┐   │
+│  │                         research_emery_agent.py                                          │   │
+│  │                                                                                          │   │
+│  │  Purpose: Internal Emery system introspection                                           │   │
+│  │  Tools: system_research_tool                                                            │   │
+│  │  HITL: NONE (read-only operations)                                                      │   │
+│  │  Flow: Query system → Return context about tables, fields, skills, etc.                │   │
+│  └─────────────────────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                                 │
+│  ┌─────────────────────────────────────────────────────────────────────────────────────────┐   │
 │  │                           HITL Interrupt Flow                                            │   │
 │  │                                                                                          │   │
 │  │   Agent creates plan (PlanningStep)                                                      │   │
@@ -375,7 +440,7 @@
 │   │  │  3. Build ProcessMessageRequest                                              │    │     │
 │   │  │  4. Call gRPC ChatProcessingService.ProcessMessage()                         │    │     │
 │   │  │  5. Stream responses as Server-Sent Events (SSE)                             │    │     │
-│   │  │  6. Save messages to Supabase                                                │    │     │
+│   │  │  6. Save messages to database                                                 │    │     │
 │   │  └─────────────────────────────────────────────────────────────────────────────┘    │     │
 │   └──────────────────────────────────────────────────────────────────────────────────────┘     │
 │          │                                                                                     │
@@ -538,15 +603,43 @@
 | **Skill Executor** | `emery-agents/.../services/skill_executor.py` | Skill execution types |
 | **Context Manager** | `emery-agents/.../services/context_manager.py` | Async-safe context vars |
 | **Session Manager** | `emery-agents/.../services/session_manager.py` | State persistence |
+| **Execution Coordinator** | `emery-agents/.../services/execution_coordinator.py` | Two-phase orchestration (plan → execute) |
+| **Coordinator State Machine** | `emery-agents/.../services/coordinator_state_machine.py` | Phase transitions and context |
 | **Execution Context** | `emery-agents/.../entities/execution_context.py` | Runtime state |
 | **Plan** | `emery-agents/.../models/plan.py` | Plan tracking |
 | **Tool Loader** | `emery-agents/.../services/tool_loader.py` | Tool instantiation |
 | **Skill Tool** | `emery-agents/.../tools/skill_tool.py` | Skill-as-tool wrapper |
 | **Step Utils** | `emery-agents/.../utils/step_utils.py` | Progress dict conversion |
-| **Managed Agents** | `emery-agents/.../agents/skill_builder_agent.py` | Skill builder |
-| **Managed Agents** | `emery-agents/.../agents/schema_builder_agent.py` | Schema builder |
-| **Managed Agents** | `emery-agents/.../agents/document_builder_agent.py` | Document builder |
-| **Managed Agents** | `emery-agents/.../agents/table_builder_agent.py` | Table builder |
-| **Managed Agent Base** | `emery-agents/.../agents/stateful_managed_agent.py` | HITL state preservation |
+| **Managed Agents** | `emery-agents/.../agents/skill_builder_agent.py` | Skill builder (HITL) |
+| **Managed Agents** | `emery-agents/.../agents/schema_builder_agent.py` | Schema builder (HITL) |
+| **Managed Agents** | `emery-agents/.../agents/document_builder_agent.py` | Document builder (HITL) |
+| **Managed Agents** | `emery-agents/.../agents/table_builder_agent.py` | Table builder (autonomous) |
+| **Managed Agents** | `emery-agents/.../agents/app_builder_agent.py` | App builder (HITL) |
+| **Managed Agents** | `emery-agents/.../agents/page_builder_agent.py` | Page builder (HITL) |
+| **Managed Agents** | `emery-agents/.../agents/agent_builder_agent.py` | Agent builder (HITL) |
+| **Managed Agents** | `emery-agents/.../agents/research_agent.py` | Web research (read-only) |
+| **Managed Agents** | `emery-agents/.../agents/research_emery_agent.py` | Emery system research |
+| **Agent Factory** | `emery-agents/.../grpc/agents/managed_agents_factory.py` | Central agent factory |
+| **Managed Agent Base** | `emery-agents/.../agents/stateful_managed_agent.py` | HITL state preservation (extends CodeAgent) |
+| **Cascade Planning** | `emery-agents/.../services/sub_agent_planner.py` | Recursive cascade planning |
+| **Plan Execution** | `emery-agents/.../services/plan_step_executor.py` | Execute plan steps |
+| **Task Classifier** | `emery-agents/.../services/task_classifier.py` | LLM step classification |
 | **Frontend** | `src/components/chat/useChatGRPC.tsx` | React chat hook |
-| **Frontend** | `src/components/chat/AwaitingInputCard.tsx` | HITL approval UI |
+| **Frontend** | `src/components/chat/ApprovalInputBar.tsx` | HITL approval UI |
+
+---
+
+## Related Documentation
+
+| Document | Focus | Key Sections |
+|----------|-------|--------------|
+| **[ORCHESTRATION_FLOW.md](./ORCHESTRATION_FLOW.md)** | State machines, event flows | HITL callbacks, cascade planning, error recovery |
+| **[AGENT_ARCHITECTURE.md](./AGENT_ARCHITECTURE.md)** | Full agent catalog | Agent hierarchy, tool assignments, HITL configs |
+
+### Cross-Reference Guide
+
+- **For state machine details** → ORCHESTRATION_FLOW.md Section 3-6
+- **For cascade planning flows** → ORCHESTRATION_FLOW.md Section 11
+- **For individual agent details** → AGENT_ARCHITECTURE.md Section 3
+- **For tool wrapping patterns** → AGENT_ARCHITECTURE.md Section 4
+- **For HITL configuration** → AGENT_ARCHITECTURE.md Section 5
