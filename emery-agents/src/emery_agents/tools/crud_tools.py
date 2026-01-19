@@ -13,6 +13,10 @@ from smolagents import Tool
 from ..grpc.generated.agent_worker_pb2 import ToolConfig
 from .tool_modes import ToolMode, MUTATION_METHODS
 from ..services.context_manager import get_current_context
+from ..utils.permission_error_parser import (
+    parse_permission_error,
+    format_permission_error_for_user,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +128,7 @@ class AsyncHTTPManager:
             # Handle HTTP errors - return explicit error STRING so model can't miss it
             if response.status_code >= 400:
                 error_detail = f"HTTP {response.status_code}"
+                error_body = None
                 try:
                     error_body = response.json()
                     if "error" in error_body:
@@ -134,6 +139,28 @@ class AsyncHTTPManager:
                     error_detail = response.text[:200] if response.text else error_detail
 
                 logger.error(f"[TOOL-HTTP] ❌ {method} {endpoint} - call_id: {call_id}, status: {response.status_code}, duration: {total_time:.2f}s")
+
+                # Special handling for 403 permission errors
+                # Return structured dict so coordinator can emit permission events
+                if response.status_code == 403:
+                    perm_error = parse_permission_error(error_body or {"error": error_detail})
+                    if perm_error:
+                        user_message = format_permission_error_for_user(perm_error)
+                        logger.warning(
+                            f"[TOOL-HTTP] Permission denied - permission: {perm_error.permission}, "
+                            f"resource: {perm_error.resource}, resource_id: {perm_error.resource_id}"
+                        )
+                        return {
+                            "success": False,
+                            "error_type": "PERMISSION_DENIED",
+                            "error": f"❌ ERROR: {user_message}. This operation FAILED. Do NOT claim success.",
+                            "permission": perm_error.permission,
+                            "resource": perm_error.resource,
+                            "resource_id": perm_error.resource_id,
+                            "action": perm_error.action,
+                            "call_id": call_id,
+                        }
+
                 # AIDEV-NOTE: Return explicit error STRING instead of dict so small models can't miss it
                 # The model kept hallucinating success when seeing {"success": False, "error": "..."}
                 return f"❌ ERROR: {error_detail}. This operation FAILED. Do NOT claim success - report this error to the user."

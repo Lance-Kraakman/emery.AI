@@ -1,5 +1,6 @@
 """Stateful gRPC chat service. DB operations handled by Next.js."""
 
+import ast
 import json
 import logging
 import os
@@ -119,6 +120,8 @@ from .response_types import (
     AwaitingInputDataDict,
     AwaitingInputResponseDict,
     StreamResponseDict,
+    create_permission_request_event,
+    create_permission_denied_event,
 )
 from .agents import ManagedAgentsFactory
 
@@ -1072,6 +1075,33 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
                     step_data = extract_action_step(step, step_index)
                     logger.info(f"🔧 Action: {step_data['step_name']}")
+
+                    # Check for permission errors in tool observations
+                    # AIDEV-NOTE: Tools return structured permission errors as dicts in observations
+                    # Chat mode is always interactive, so emit permission_request events
+                    if step.observations and "PERMISSION_DENIED" in str(step.observations):
+                        try:
+                            # Observations may be dict or dict-like string
+                            obs = step.observations
+                            if isinstance(obs, str):
+                                # Try to parse as Python literal (dict string)
+                                obs = ast.literal_eval(obs)
+                            if isinstance(obs, dict) and obs.get("error_type") == "PERMISSION_DENIED":
+                                logger.warning(
+                                    f"🔒 Permission denied detected - permission: {obs.get('permission')}, "
+                                    f"resource: {obs.get('resource')}"
+                                )
+                                # Emit permission request event for UI to show inline access prompt
+                                yield create_permission_request_event(
+                                    permission=obs.get("permission", "unknown"),
+                                    resource=obs.get("resource"),
+                                    resource_id=obs.get("resource_id"),
+                                    action=obs.get("action", "access"),
+                                    context=f"Agent needs '{obs.get('permission', 'access')}' permission to continue",
+                                )
+                        except (ValueError, SyntaxError) as e:
+                            # Not parseable as dict, continue with normal flow
+                            logger.debug(f"Could not parse observations as dict: {e}")
 
                     # Yield collected nested steps from skill execution (if any)
                     # AIDEV-NOTE: Nested steps were collected during synchronous skill.forward()

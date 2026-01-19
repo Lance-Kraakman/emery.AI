@@ -1,7 +1,7 @@
 import type { ChatHandler, Message } from '@llamaindex/chat-ui'
 import type { ToolDTO } from '@/app/mappers/tool-mapper'
 import type { ExecutionStep } from '@/ddd/domain/chat/value-objects/execution-step'
-import type { PlanStepData, InputOption } from '@/lib/chat/types/sse-events'
+import type { PlanStepData, InputOption, PermissionRequestEvent } from '@/lib/chat/types/sse-events'
 
 /**
  * ChatMessage with ID and metadata support for execution steps
@@ -153,4 +153,8 @@ export interface ExtendedChatHandler extends ChatHandler {
   // Unified HITL awaiting input (plan approval or questions)
   awaitingInput: AwaitingInputState | null
   respondToInput?: (response: string) => Promise<void>
+
+  // Permission request (RBAC errors)
+  permissionRequest: PermissionRequestEvent | null
+  clearPermissionRequest?: () => void
 }

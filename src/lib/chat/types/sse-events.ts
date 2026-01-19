@@ -100,6 +100,27 @@ export interface AwaitingInputEvent {
 }
 
 /**
+ * Permission request event
+ * Emitted when agent encounters a permission error and needs user to grant access
+ *
+ * AIDEV-NOTE: This event is emitted by the Python agent layer when a tool
+ * receives a 403 permission error from the API. The UI shows an inline
+ * permission request allowing the user to grant or deny access.
+ */
+export interface PermissionRequestEvent {
+  type: 'permission_request'
+  permission: string        // Full permission string (e.g., "database:view")
+  resource?: string         // Resource type (e.g., "database")
+  resourceId?: number       // Specific resource ID if applicable
+  action: string            // Action being attempted (e.g., "view")
+  context?: string          // Description of what agent was trying to do
+  metadata?: {
+    requires_user_action: boolean
+    can_continue_without: boolean
+  }
+}
+
+/**
  * Union type for all SSE chat events
  */
 export type SSEChatEvent =
@@ -109,6 +130,7 @@ export type SSEChatEvent =
   | PlanApprovalRequestEvent
   | PlanStatusUpdateEvent
   | AwaitingInputEvent
+  | PermissionRequestEvent
 
 /**
  * Type guards for event discrimination
@@ -135,4 +157,8 @@ export function isPlanStatusUpdateEvent(event: any): event is PlanStatusUpdateEv
 
 export function isAwaitingInputEvent(event: any): event is AwaitingInputEvent {
   return event?.type === 'awaiting_input'
+}
+
+export function isPermissionRequestEvent(event: any): event is PermissionRequestEvent {
+  return event?.type === 'permission_request'
 }

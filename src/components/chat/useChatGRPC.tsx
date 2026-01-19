@@ -22,7 +22,9 @@ import {
   isMessageCompleteEvent,
   isPlanApprovalRequestEvent,
   isPlanStatusUpdateEvent,
-  isAwaitingInputEvent
+  isAwaitingInputEvent,
+  isPermissionRequestEvent,
+  type PermissionRequestEvent
 } from '@/lib/chat/types/sse-events'
 import type { PendingPlanApproval, ActivePlanExecution, PlanExecutionStatus, AwaitingInputState } from './types/extended-chat-handler'
 
@@ -159,6 +161,9 @@ export function useChatGRPC(
 
   // Unified HITL awaiting input state (plan approval or questions)
   const [awaitingInput, setAwaitingInput] = useState<AwaitingInputState | null>(null)
+
+  // Permission request state (when agent encounters RBAC errors)
+  const [permissionRequest, setPermissionRequest] = useState<PermissionRequestEvent | null>(null)
 
   // Generate domain-specific storage key for this chat session
   const chatStorageKey = `emery-chat-${contextOptions?.domainType || chatContext?.domainType || 'general'}-${contextOptions?.domainId || chatContext?.domainId || 'default'}`
@@ -686,6 +691,37 @@ export function useChatGRPC(
                   inputType: eventData.inputType,
                   title: eventData.title
                 });
+
+              } else if (isPermissionRequestEvent(eventData)) {
+                // Permission request: Agent encountered RBAC error, needs user to grant access
+                logger.debug('Permission request', {
+                  permission: eventData.permission,
+                  resource: eventData.resource,
+                  resourceId: eventData.resourceId
+                });
+
+                // Set permission request state for UI to render access request card
+                setPermissionRequest(eventData);
+
+                // Display permission request in chat message
+                const permissionMessage = `\n\n**Permission Required**\n\n${eventData.context || `Agent needs '${eventData.permission}' permission to continue.`}`;
+                assistantMessage += permissionMessage;
+
+                if (!messageCreated) {
+                  setMessages((prev) => [...prev, createTextMessage(assistantMessage, 'assistant', assistantId)]);
+                  messageCreated = true;
+                } else {
+                  setMessages((prev) => prev.map((msg) =>
+                    msg.id === assistantId
+                      ? createTextMessage(assistantMessage, 'assistant', assistantId)
+                      : msg
+                  ));
+                }
+
+                logger.summary('Permission request set', {
+                  permission: eventData.permission,
+                  resource: eventData.resource
+                });
               }
             } catch (e) {
               logger.debug('Failed to parse SSE event', e)
@@ -1009,6 +1045,9 @@ export function useChatGRPC(
     // Unified HITL awaiting input
     awaitingInput,
     respondToInput,
+    // Permission request (RBAC errors)
+    permissionRequest,
+    clearPermissionRequest: () => setPermissionRequest(null),
   }
 }
 

@@ -77,13 +77,15 @@ def sanitize_user_content(
         logger.warning(
             f"[SECURITY] Truncating {field_name} from {len(sanitized)} to {max_length} chars"
         )
-        # Find last space before max_length for clean truncation
-        truncated = sanitized[:max_length]
+        # Account for "..." suffix in truncation length
+        suffix = "..."
+        truncate_to = max_length - len(suffix)
+        truncated = sanitized[:truncate_to]
         last_space = truncated.rfind(' ')
-        if last_space > max_length * 0.8:  # Only use space if it's not too far back
-            sanitized = truncated[:last_space] + "..."
+        if last_space > truncate_to * 0.8:  # Only use space if it's not too far back
+            sanitized = truncated[:last_space] + suffix
         else:
-            sanitized = truncated + "..."
+            sanitized = truncated + suffix
 
     # 6. Log suspicious patterns (monitoring only - don't block)
     for pattern in SUSPICIOUS_PATTERNS:

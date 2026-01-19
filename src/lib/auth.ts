@@ -12,6 +12,7 @@ import { getSession, signIn as nextAuthSignIn, signOut as nextAuthSignOut } from
 import { Permission, type PermissionCheck } from '@/ddd/domain/shared/value-objects/permission'
 import { UserId, OrganizationId } from '@/ddd/domain/shared/value-objects'
 import { getRBACRepository } from "@/ddd/application/di/container"
+import { PermissionDeniedError } from '@/lib/errors'
 import { apps } from "@/ddd/infrastructure/db/schema"
 
 // AIDEV-NOTE: Helper function to extract app context from public URL
@@ -309,6 +310,7 @@ export async function requirePermission(userId: string, permission: PermissionCh
       requiredPermission: permissionString,
       error: error instanceof Error ? error.message : 'Unknown error'
     });
-    throw new Error(`Permission denied: ${permissionString}`);
+    // Throw structured error that Python agent layer can parse
+    throw PermissionDeniedError.fromPermission(permissionString);
   }
 }
