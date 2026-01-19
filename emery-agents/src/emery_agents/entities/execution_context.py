@@ -60,6 +60,8 @@ class ExecutionContext:
     org_model: Optional[str] = None
 
     # API authentication for output mappings and managed agents
+    # DEPRECATED: Use tool_provider.http_client for authenticated requests instead.
+    # This field will be removed in a future version.
     api_key: Optional[str] = None
 
     # OutputTool reference for capturing agent outputs (set at runtime)

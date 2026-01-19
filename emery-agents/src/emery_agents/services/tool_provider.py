@@ -7,9 +7,13 @@ Tools are cached for reuse. Works with ToolMode filtering system.
 The ToolProvider is configured once at request start with api_key and org_id.
 All managed agents and the coordinator get tools from this provider,
 ensuring consistent auth configuration across the entire request.
+
+SECURITY: The ToolProvider exposes an http_client property for authenticated
+requests, NOT the raw api_key. This prevents credential exposure to skills/agents.
 """
 
-from typing import Dict, List, Optional, Any
+import warnings
+from typing import Dict, List, Optional, Any, TYPE_CHECKING
 import logging
 
 from smolagents import Tool
@@ -25,6 +29,7 @@ from ..tools.field_tools import load_field_crud
 from ..tools.row_tools import load_row_crud
 from ..tools.app_tools import load_app_crud, load_page_crud
 from ..tools.view_tools import load_view_crud
+from .authenticated_http_client import AuthenticatedHttpClient
 
 logger = logging.getLogger(__name__)
 
@@ -64,11 +69,34 @@ class ToolProvider:
         self._api_key = api_key
         self._organization_id = organization_id
         self._cache: Dict[str, Tool] = {}
-        logger.info(f"🔧 ToolProvider initialized (api_key present: {bool(api_key)}, org_id: {organization_id})")
+        self._http_client = AuthenticatedHttpClient(api_key, organization_id)
+        logger.info(f"[TOOL-PROVIDER] Initialized (api_key present: {bool(api_key)}, org_id: {organization_id})")
+
+    @property
+    def http_client(self) -> AuthenticatedHttpClient:
+        """
+        Get authenticated HTTP client for making API requests.
+
+        SECURITY: Use this instead of accessing api_key directly.
+        The http_client provides authenticated requests without
+        exposing raw credentials.
+        """
+        return self._http_client
 
     @property
     def api_key(self) -> str:
-        """Get the API key (for passing to ExecutionContext)."""
+        """
+        Get the API key.
+
+        DEPRECATED: Use http_client for authenticated requests instead.
+        This property will be removed in a future version.
+        """
+        # TODO: Add deprecation warning once all usages are migrated
+        # warnings.warn(
+        #     "api_key property is deprecated. Use http_client for authenticated requests.",
+        #     DeprecationWarning,
+        #     stacklevel=2
+        # )
         return self._api_key
 
     @property
