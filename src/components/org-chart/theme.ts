@@ -114,7 +114,7 @@ export const orgChartNodeSizes = {
   /** Container node minimum width */
   containerMinWidth: 400,
   /** Container node minimum height */
-  containerMinHeight: 140,
+  containerMinHeight: 180,
   /** Padding inside container nodes */
   containerPadding: 16,
   /** Gap between child nodes inside container */
