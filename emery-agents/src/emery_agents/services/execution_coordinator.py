@@ -1146,13 +1146,13 @@ class ExecutionCoordinator:
                             logger.info(f"📊 Running context curation for {len(recent_step_ids)} steps")
                             self._ledger.execution_context = self._execution_context_service.curate(
                                 execution_context=self._ledger.execution_context,
-                                raw_step_results=self.plan_step_executor._step_results,
+                                raw_step_results=self.plan_step_executor.step_results,
                                 recent_step_ids=recent_step_ids,
                             )
                             curated_step_ids.extend(recent_step_ids)
                             steps_since_curation = 0
 
-                            # Take snapshot after curation
+                            # Take snapshot after curation and check for degradation
                             if self._ledger.evolution_tracker:
                                 self._ledger.evolution_tracker.take_snapshot(
                                     step_id=step.step_id,
@@ -1160,9 +1160,9 @@ class ExecutionCoordinator:
                                     summary=self._ledger.execution_context.get_relevant_context(500),
                                 )
 
-                            # Check for degradation
-                            if self._ledger.evolution_tracker.detect_degradation():
-                                logger.warning("📊 Context degradation detected during execution")
+                                # Check for degradation
+                                if self._ledger.evolution_tracker.detect_degradation():
+                                    logger.warning("📊 Context degradation detected during execution")
 
                     # Evaluate progress periodically
                     steps_since_eval += 1

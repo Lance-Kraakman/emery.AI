@@ -65,6 +65,16 @@ class PlanStepExecutor:
         agent_names = [getattr(a, 'name', '?') for a in managed_agents]
         logger.info(f"✨ Created PlanStepExecutor with {len(tools)} tools, agents: {agent_names}")
 
+    @property
+    def step_results(self) -> Dict[str, Any]:
+        """
+        Get results from all executed steps.
+
+        Returns dict of step_id -> {result, description}.
+        Used by ExecutionContextService for context curation (ACE pattern).
+        """
+        return self._step_results
+
     def execute(
         self,
         plan: Plan,

@@ -89,11 +89,15 @@ class ExecutionSnapshot:
     Full snapshot of execution context at a point in time.
 
     Used for recovery when context degradation is detected.
+
+    Note: While this dataclass is frozen, context_state is a Dict which
+    is mutable. Callers should not modify the dict after creation.
+    For true immutability, make a deep copy before modifying.
     """
     snapshot_id: str
     step_id: str                 # Step after which snapshot was taken
     timestamp: datetime
-    context_state: Dict[str, Any]  # Full context dump (frozen via tuple conversion)
+    context_state: Dict[str, Any]  # Full context dump (treat as immutable)
     summary: str                 # Token-efficient summary
 
     def to_dict(self) -> Dict[str, Any]:

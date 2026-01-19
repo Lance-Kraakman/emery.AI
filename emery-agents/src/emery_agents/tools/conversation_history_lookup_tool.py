@@ -137,7 +137,7 @@ Example:
         if hasattr(msg, 'role'):
             return str(msg.role)
         if isinstance(msg, dict):
-            return msg.get('role', 'unknown')
+            return str(msg.get('role', 'unknown'))
         return 'unknown'
 
     def _extract_text(self, msg: Any) -> str:

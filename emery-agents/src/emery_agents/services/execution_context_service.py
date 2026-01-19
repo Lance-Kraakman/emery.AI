@@ -10,9 +10,7 @@ Used during EXECUTION to:
 - Provide token-efficient context to evaluator and subsequent steps
 """
 
-import json
 import logging
-import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional
