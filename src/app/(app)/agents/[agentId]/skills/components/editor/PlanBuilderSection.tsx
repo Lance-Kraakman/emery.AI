@@ -25,8 +25,22 @@ import { UnifiedChatInput } from '@/components/shared/UnifiedChatInput';
 import { generateSkillPlan } from '@/app/actions/skills';
 import type { StoredPlan, StoredPlanStep } from '@/ddd/domain/skills/entities/skill';
 import type { ChatVariable } from '../hooks/useChatVariables';
+import { PlanStepCard } from './PlanStepCard';
+import type { KnownVariable } from './TemplateRenderer';
 
 type PlanState = 'idle' | 'generating' | 'ready' | 'saved';
+
+/**
+ * Builds KnownVariable array from chatVariables for template rendering.
+ * Maps skill inputs to 'input' source and data sources to 'context' source.
+ */
+function buildKnownVariables(chatVariables: ChatVariable[]): KnownVariable[] {
+  return chatVariables.map((v) => ({
+    name: v.name,
+    // If description contains "Data Source", treat as context, otherwise as input
+    source: v.description?.includes('Data Source') ? 'context' : 'input',
+  }));
+}
 
 interface PlanBuilderSectionProps {
   instructions: string;
@@ -218,11 +232,17 @@ export function PlanBuilderSection({
             Steps <ChevronDown className="h-3 w-3 ml-1" />
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <ol className="text-xs space-y-1 mt-2 pl-4 list-decimal text-muted-foreground">
-              {displayPlan.steps.map((step: StoredPlanStep) => (
-                <li key={step.stepId}>{step.description}</li>
+            <div className="space-y-2 mt-2">
+              {displayPlan.steps.map((step: StoredPlanStep, index: number) => (
+                <PlanStepCard
+                  key={step.stepId}
+                  step={step}
+                  stepNumber={index + 1}
+                  knownVariables={buildKnownVariables(chatVariables)}
+                  compact
+                />
               ))}
-            </ol>
+            </div>
           </CollapsibleContent>
         </Collapsible>
       )}

@@ -1011,6 +1011,8 @@ export async function savePlanToSkill(params: {
         contextTables: step.contextTables || step.context_tables,
         targetAgent: step.targetAgent || step.target_agent,
         subPlan: step.subPlan || step.sub_plan,
+        promptTemplate: step.promptTemplate || step.prompt_template,
+        requiredContext: step.requiredContext || step.required_context || [],
       })),
       version: plan.version || 1,
       generatedAt: plan.generatedAt || new Date().toISOString(),
