@@ -548,6 +548,15 @@ class ExecutionCoordinator:
                 analysis=stored_plan.analysis
             )
 
+            # Create task ledger for evaluator (same as interactive mode)
+            self._ledger = create_ledger_from_plan(
+                task_id=stored_plan.id,
+                goal=stored_plan.goal,
+                plan_steps=[{"step_id": s.step_id, "description": s.description} for s in stored_plan.steps],
+            )
+            self._ledger.record_plan_created({"plan_id": stored_plan.id, "step_count": len(stored_plan.steps)})
+            self._ledger.record_plan_approved()  # Pre-approved for autonomous mode
+
             # Emit events for UI visibility
             yield PlanCreatedEvent(plan_id=stored_plan.id, plan=stored_plan)
             yield PlanApprovedEvent(plan_id=stored_plan.id)
