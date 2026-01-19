@@ -101,6 +101,49 @@ class InterruptedResponseDict(TypedDict):
     message: str
 
 
+class PermissionRequestMetadata(TypedDict, total=False):
+    """Metadata for permission request events."""
+    requires_user_action: bool
+    can_continue_without: bool
+
+
+class PermissionRequestResponseDict(TypedDict):
+    """
+    Permission request event structure.
+
+    Emitted when agent encounters a permission error in interactive mode,
+    allowing the UI to prompt the user for access approval.
+    """
+    type: Literal["permission_request"]
+    permission: str
+    resource: str
+    resource_id: int
+    action: str
+    context: str
+    metadata: PermissionRequestMetadata
+
+
+class PermissionDeniedMetadata(TypedDict, total=False):
+    """Metadata for permission denied events."""
+    error_type: str
+    recoverable: bool
+
+
+class PermissionDeniedResponseDict(TypedDict):
+    """
+    Permission denied event structure.
+
+    Emitted when agent encounters a permission error in autonomous mode,
+    providing guidance on what permission is needed.
+    """
+    type: Literal["permission_denied"]
+    permission: str
+    resource: str
+    resource_id: int
+    guidance: str
+    metadata: PermissionDeniedMetadata
+
+
 # Union of all response types
 StreamResponseDict = Union[
     StepProgressDict,
@@ -108,6 +151,8 @@ StreamResponseDict = Union[
     ErrorResponseDict,
     InterruptedResponseDict,
     AwaitingInputResponseDict,
+    PermissionRequestResponseDict,
+    PermissionDeniedResponseDict,
 ]
 
 
@@ -149,5 +194,78 @@ def create_error_response(
             "can_retry": can_retry,
             "auto_retry": auto_retry,
             "session_reset": session_reset
+        }
+    }
+
+
+def create_permission_request_event(
+    permission: str,
+    resource: str = "",
+    resource_id: int = 0,
+    action: str = "access",
+    context: str = "",
+) -> PermissionRequestResponseDict:
+    """
+    Create event to trigger permission request UI in interactive mode.
+
+    The frontend will display: "Agent needs [permission] access to continue. [Allow] [Deny]"
+
+    Args:
+        permission: Required permission string (e.g., "database:view")
+        resource: Resource type (e.g., "database")
+        resource_id: Specific resource ID if applicable
+        action: Action being attempted (e.g., "view")
+        context: Description of what the agent was trying to do
+
+    Returns:
+        PermissionRequestResponseDict ready to yield from streaming handlers
+    """
+    return {
+        "type": "permission_request",
+        "permission": permission,
+        "resource": resource,
+        "resource_id": resource_id,
+        "action": action,
+        "context": context or f"Agent needs '{permission}' permission to continue",
+        "metadata": {
+            "requires_user_action": True,
+            "can_continue_without": False,
+        }
+    }
+
+
+def create_permission_denied_event(
+    permission: str,
+    resource: str = "",
+    resource_id: int = 0,
+    guidance: str = "",
+) -> PermissionDeniedResponseDict:
+    """
+    Create event for permission denied in autonomous mode.
+
+    The agent receives this and can report to user what permission is needed.
+
+    Args:
+        permission: Required permission string (e.g., "database:view")
+        resource: Resource type (e.g., "database")
+        resource_id: Specific resource ID if applicable
+        guidance: Guidance text for resolving the permission issue
+
+    Returns:
+        PermissionDeniedResponseDict ready to yield from streaming handlers
+    """
+    default_guidance = (
+        f"This operation requires '{permission}' permission. "
+        f"Ask an administrator to grant access."
+    )
+    return {
+        "type": "permission_denied",
+        "permission": permission,
+        "resource": resource,
+        "resource_id": resource_id,
+        "guidance": guidance or default_guidance,
+        "metadata": {
+            "error_type": "PERMISSION_DENIED",
+            "recoverable": False,
         }
     }
