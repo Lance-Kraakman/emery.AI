@@ -1463,6 +1463,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
             # Execute stored plan directly (no classification, no approval)
             step_index = 0
+            last_step_result = None  # Track last step result for final summary
+            execution_success = False  # Track execution success
+
             async for event in coordinator.execute(
                 task=task,
                 tools=tools,
@@ -1474,6 +1477,25 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 if converted:
                     yield converted
                     step_index += 1
+
+                # Capture step results for final summary (same as interactive mode)
+                if isinstance(event, StepCompletedEvent) and event.result:
+                    last_step_result = event.result
+                elif isinstance(event, ExecutionCompletedEvent):
+                    execution_success = event.success
+
+            # Send final summary as content_chunk so user sees the result
+            if execution_success:
+                summary = last_step_result or f"Plan executed successfully with {step_index} steps."
+                yield {
+                    "type": "content_chunk",
+                    "content": f"\n\n{summary}"
+                }
+            else:
+                yield {
+                    "type": "content_chunk",
+                    "content": "\n\nExecution completed with issues. Some steps may have failed."
+                }
 
             return
 
