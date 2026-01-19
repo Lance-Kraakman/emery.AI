@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
-import { getAppApplicationService, getPuckPageApplicationService } from '@/ddd/application/di/getters';
+import { getAppApplicationService, getPuckPageApplicationService, getPuckPageRepository } from '@/ddd/application/di/getters';
 import { PageId } from '@/ddd/domain/puck/value-objects/page-id';
 import { PuckPageMapper } from '@/app/mappers/puck-page-mapper';
 import { operationToToon } from '@/lib/toon-format';
@@ -112,7 +112,6 @@ export async function POST(request: NextRequest, { params }: RouteParams): Promi
     existingPage.setPageDialogs(pageDialogs);
 
     // Save using repository
-    const { getPuckPageRepository } = await import('@/ddd/application/di/container');
     const pageRepository = getPuckPageRepository();
     const updatedPage = await pageRepository.update(existingPage);
 
