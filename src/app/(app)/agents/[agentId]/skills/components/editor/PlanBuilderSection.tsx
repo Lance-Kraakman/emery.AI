@@ -257,10 +257,10 @@ export function PlanBuilderSection({
           <Label className="text-xs font-medium mb-2 text-muted-foreground">
             Instructions
           </Label>
-          <div className="min-h-[120px] max-h-[300px] overflow-y-auto">
+          <div className="min-h-[120px] max-h-[250px] overflow-y-auto border rounded-md">
             <UnifiedChatInput
               mode="form"
-              minHeight="100%"
+              minHeight="120px"
               value={instructions}
               onChange={onInstructionsChange}
               variables={chatVariables}
