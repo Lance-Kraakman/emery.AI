@@ -2368,3 +2368,97 @@ export const entityTemplates = pgTable("entity_templates", {
     `,
   }),
 ]);
+
+// ============================================================================
+// SECURITY ANALYSIS TABLES
+// ============================================================================
+
+/**
+ * Security Reports - Stores security analysis reports for organizations
+ * Based on OWASP LLM Top 10 (2025), Agentic AI Top 10 (2026), and Web Top 10 (2025)
+ */
+export const securityReports = pgTable("security_reports", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  createdBy: uuid("created_by").notNull().references(() => users.id),
+
+  // Status
+  status: text("status").notNull().default('generating'), // 'generating' | 'completed' | 'failed'
+
+  // Report data as JSONB (matches existing patterns like agents.plan)
+  reportData: jsonb("report_data").notNull().$type<{
+    reportType: 'full' | 'agent' | 'skill' | 'incremental';
+    version: number;
+    overallScore: number;
+    riskGrade: 'A' | 'B' | 'C' | 'D' | 'F';
+    findingCounts: { critical: number; high: number; medium: number; low: number; info: number };
+    owaspViolations: { llm2025: string[]; agentic2026: string[]; web2025: string[] };
+    agentProfiles: Array<{ agentId: number; agentName: string; riskScore: number; findingCount: number }>;
+    authorizedAccess: {
+      approvedPlans: Array<{ skillId: number; skillName: string; approvedAt: string; approvedBy: string }>;
+      delegations: Array<{ agentId: number; agentName: string; services: string[]; ownerId: string }>;
+      apiTokens: Array<{ agentId: number; agentName: string; hasApiKey: boolean; hasWebhook: boolean }>;
+    };
+    strengths: Array<{ category: string; title: string; description: string; resourceType: string; resourceId?: string }>;
+    topRecommendations: string[];
+  }>(),
+
+  // Timestamps
+  generatedAt: timestamp("generated_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+}, (table) => [
+  index("security_reports_org_idx").on(table.organizationId),
+  index("security_reports_status_idx").on(table.status),
+  index("security_reports_generated_idx").on(table.generatedAt),
+
+  // RLS: Tenant isolation
+  pgPolicy("security_reports_tenant_isolation", {
+    as: "permissive",
+    for: "all",
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
+  }),
+]);
+
+/**
+ * Security Findings - Individual security issues found during analysis
+ * Linked to security reports, can be updated (acknowledged, resolved, etc.)
+ */
+export const securityFindings = pgTable("security_findings", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  reportId: integer("report_id").notNull().references(() => securityReports.id, { onDelete: 'cascade' }),
+
+  // Indexed columns for filtering
+  riskLevel: text("risk_level").notNull(), // 'critical' | 'high' | 'medium' | 'low' | 'info'
+  status: text("status").notNull().default('open'), // 'open' | 'acknowledged' | 'mitigated' | 'false_positive'
+
+  // Finding data as JSONB
+  findingData: jsonb("finding_data").notNull().$type<{
+    ruleId: string;
+    title: string;
+    description: string;
+    owaspRefs: Array<{ category: 'LLM_2025' | 'AGENTIC_2026' | 'WEB_2025'; code: string; name: string }>;
+    resource: { type: 'agent' | 'skill' | 'automation' | 'delegation'; id: string; name: string; path?: string };
+    evidence: { affectedComponents: string[]; attackVector?: string; rawData?: Record<string, unknown> };
+    remediation: { recommendation: string; steps?: string[]; priority: number };
+    statusHistory?: Array<{ status: string; changedBy: string; changedAt: string; reason?: string }>;
+  }>(),
+
+  // Timestamps
+  detectedAt: timestamp("detected_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("security_findings_org_idx").on(table.organizationId),
+  index("security_findings_report_idx").on(table.reportId),
+  index("security_findings_risk_level_idx").on(table.riskLevel),
+  index("security_findings_status_idx").on(table.status),
+
+  // RLS: Tenant isolation
+  pgPolicy("security_findings_tenant_isolation", {
+    as: "permissive",
+    for: "all",
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
+  }),
+]);

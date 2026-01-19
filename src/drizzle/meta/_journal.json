@@ -428,6 +428,13 @@
       "when": 1768700000000,
       "tag": "0060_remove_system_skills",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1768806026897,
+      "tag": "0061_lying_vermin",
+      "breakpoints": true
     }
   ]
 }
