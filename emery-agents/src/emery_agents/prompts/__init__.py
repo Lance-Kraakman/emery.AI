@@ -462,9 +462,11 @@ def render_output_instructions(
 def build_agent_instructions(
     tools: Optional[List[Any]] = None,
     agent_type: str = "default",
-    context_type: str = "interactive",
+    execution_mode: Optional[str] = None,
+    phase: Optional[str] = None,
     skill_outputs: Optional[List[Any]] = None,
     session_attachments: Optional[List[Any]] = None,
+    context_type: Optional[str] = None,  # DEPRECATED: Use execution_mode instead
     **kwargs: Any
 ) -> str:
     """
@@ -476,15 +478,21 @@ def build_agent_instructions(
     Args:
         tools: List of tool objects (for dynamic tool instructions)
         agent_type: Type of agent ("default", "document_builder", "skill_builder", "skill_executor")
-        context_type: Execution context ("interactive" or "autonomous")
+        execution_mode: Execution mode ("interactive" or "autonomous")
+        phase: Optional execution phase ("planning" or "execution")
         skill_outputs: Optional list of skill outputs for output capture instructions
         session_attachments: Optional list of session file attachments (for chat agent visibility)
+        context_type: DEPRECATED - use execution_mode instead
         **kwargs: Template variables (e.g., restricted_tools)
 
     Returns:
         Rendered instructions string
     """
     from .tools import get_tool_instructions
+
+    # Handle backward compatibility: context_type -> execution_mode
+    if execution_mode is None:
+        execution_mode = context_type or "interactive"
 
     try:
         # Base templates (always included for all agents) - cached for performance
@@ -501,13 +509,24 @@ def build_agent_instructions(
             except Exception as e:
                 logger.warning(f"⚠️ Agent template {agent_type}.j2 not found: {e}")
 
-        # Context mode (interactive vs autonomous)
+        # Mode-specific behavior (interactive vs autonomous) - separate template files
         try:
-            context_content = render_template("shared/context.j2", context_type=context_type)
-            if context_content.strip():
-                base_instructions = f"{base_instructions}\n\n{context_content}"
+            mode_content = render_template(f"modes/{execution_mode}.j2")
+            if mode_content.strip():
+                base_instructions = f"{base_instructions}\n\n{mode_content}"
+                logger.debug(f"📝 Added mode template: modes/{execution_mode}.j2")
         except Exception as e:
-            logger.debug(f"📝 Context template not rendered: {e}")
+            logger.debug(f"📝 Mode template not rendered: {e}")
+
+        # Phase-specific behavior (planning vs execution) - optional
+        if phase:
+            try:
+                phase_content = render_template(f"phases/{phase}.j2")
+                if phase_content.strip():
+                    base_instructions = f"{base_instructions}\n\n{phase_content}"
+                    logger.debug(f"📝 Added phase template: phases/{phase}.j2")
+            except Exception as e:
+                logger.debug(f"📝 Phase template not rendered: {e}")
 
         # Tool-specific instructions (dynamic based on available tools)
         if tools:

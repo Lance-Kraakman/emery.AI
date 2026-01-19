@@ -201,7 +201,7 @@ class PlanService:
                 plan_context = captured.get("context")
                 plan_analysis = captured.get("analysis")
 
-                # Steps are now objects with description and optional target_agent
+                # Steps are now objects with description, target_agent, and optional prompt_template
                 steps = []
                 for step_data in captured["steps"]:
                     if isinstance(step_data, dict):
@@ -210,6 +210,8 @@ class PlanService:
                             tool_call=None,
                             parameters=None,
                             target_agent=step_data.get("target_agent"),
+                            prompt_template=step_data.get("prompt_template"),
+                            required_context=step_data.get("required_context", []),
                         ))
                     else:
                         # Legacy string format
