@@ -16,6 +16,7 @@ import {
   CreditCard,
   ScrollText,
   LayoutTemplate,
+  Globe,
 } from "lucide-react"
 
 import {
@@ -669,6 +670,18 @@ export function AppSidebar({
                       <Link href="/organization/settings/audit-log">
                         <ScrollText className="h-4 w-4" />
                         <span className="group-data-[collapsible=icon]:hidden">Audit Log</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={pathname === "/organization/settings/published-agents"}
+                      className="h-6"
+                    >
+                      <Link href="/organization/settings/published-agents">
+                        <Globe className="h-4 w-4" />
+                        <span className="group-data-[collapsible=icon]:hidden">Published Agents</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>

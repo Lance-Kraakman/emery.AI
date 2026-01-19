@@ -19,6 +19,7 @@ import type {
 import type { Result } from '@/ddd/domain/shared/result';
 import { AgentId } from '@/ddd/domain/shared/value-objects';
 import { createDebugLogger } from '@/lib/utils/debug-logger';
+import { getAgentTaskApplicationService } from '@/ddd/application/di/container';
 
 const logger = createDebugLogger('ExternalExecutionService');
 
@@ -155,27 +156,32 @@ export class ExternalExecutionService {
         return { success: false, error: 'Agent not found' };
       }
 
-      // 5. Execute task
-      // NOTE: This is a placeholder. In a full implementation, this would:
-      // - Create a task via AgentTaskApplicationService
-      // - Wait for execution to complete
-      // - Return the result
-      //
-      // For now, we'll return a placeholder response indicating the
-      // execution would be queued.
-      logger.debug(`[ExternalExecution] Task queued for agent ${publishedAgent.slug}: ${task.substring(0, 100)}...`);
+      // 5. Execute task via AgentTaskApplicationService
+      logger.debug(`[ExternalExecution] Executing task for agent ${publishedAgent.slug}: ${task.substring(0, 100)}...`);
+
+      const taskService = getAgentTaskApplicationService();
+      const taskResult = await taskService.createAndExecuteTask({
+        organizationId,
+        agentId: publishedAgent.agentId,
+        name: `External: ${task.substring(0, 100)}`,
+        instructions: { task },
+        timeoutSeconds: 300, // 5 minute timeout
+      });
+
+      if (!taskResult.success || !taskResult.data) {
+        await this.logUsage(publishedAgent.id, apiKeyId, 'task', null, 500, startTime, context);
+        return { success: false, error: taskResult.error ?? 'Task execution failed' };
+      }
 
       const executionResult: ExecutionResult = {
-        success: true,
-        output: {
-          status: 'queued',
-          message: `Task has been queued for execution by agent "${agent.name}"`,
-          task: task.substring(0, 200),
-        },
+        success: taskResult.data.executionResult.success,
+        output: taskResult.data.executionResult.outputData,
+        error: taskResult.data.executionResult.error,
         executionTimeMs: Date.now() - startTime,
       };
 
-      await this.logUsage(publishedAgent.id, apiKeyId, 'task', null, 200, startTime, context);
+      const statusCode = taskResult.data.executionResult.success ? 200 : 500;
+      await this.logUsage(publishedAgent.id, apiKeyId, 'task', null, statusCode, startTime, context);
 
       return { success: true, data: executionResult };
     } catch (error) {
@@ -250,25 +256,36 @@ export class ExternalExecutionService {
         return { success: false, error: `Invalid inputs: ${inputValidation.errors.join(', ')}` };
       }
 
-      // 6. Execute skill
-      // NOTE: This is a placeholder. In a full implementation, this would:
-      // - Create a task with skillId set
-      // - Execute via the worker
-      // - Return the typed output
-      logger.debug(`[ExternalExecution] Skill "${skillName}" queued for agent ${publishedAgent.slug}`);
+      // 6. Execute skill via AgentTaskApplicationService
+      logger.debug(`[ExternalExecution] Executing skill "${skillName}" for agent ${publishedAgent.slug}`);
+
+      const taskService = getAgentTaskApplicationService();
+      const taskResult = await taskService.createAndExecuteTask({
+        organizationId,
+        agentId: publishedAgent.agentId,
+        skillId: skill.id.value,
+        name: `Skill: ${skillName}`,
+        instructions: {
+          task: `Execute skill: ${skillName}`,
+          metadata: { skillInputs: inputs },
+        },
+        timeoutSeconds: 300, // 5 minute timeout
+      });
+
+      if (!taskResult.success || !taskResult.data) {
+        await this.logUsage(publishedAgent.id, apiKeyId, 'skill', skillName, 500, startTime, context);
+        return { success: false, error: taskResult.error ?? 'Skill execution failed' };
+      }
 
       const executionResult: ExecutionResult = {
-        success: true,
-        output: {
-          status: 'queued',
-          message: `Skill "${skillName}" has been queued for execution`,
-          skillName,
-          inputs,
-        },
+        success: taskResult.data.executionResult.success,
+        output: taskResult.data.executionResult.outputData,
+        error: taskResult.data.executionResult.error,
         executionTimeMs: Date.now() - startTime,
       };
 
-      await this.logUsage(publishedAgent.id, apiKeyId, 'skill', skillName, 200, startTime, context);
+      const statusCode = taskResult.data.executionResult.success ? 200 : 500;
+      await this.logUsage(publishedAgent.id, apiKeyId, 'skill', skillName, statusCode, startTime, context);
 
       return { success: true, data: executionResult };
     } catch (error) {
