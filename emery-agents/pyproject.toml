@@ -18,7 +18,7 @@ dependencies = [
     "grpcio>=1.60.0",
     "grpcio-tools>=1.60.0",
     "protobuf>=4.25.0",
-    "smolagents[openai]>=1.20.0",
+    "smolagents[openai]>=1.24.0",
     "modal>=0.64.0",
     "jinja2>=3.1.6",
     "python-dotenv>=1.1.1",
@@ -54,11 +54,11 @@ dev = [
 ]
 # MLX features only available on macOS (Apple Silicon)
 macos = [
-    "smolagents[dev]>=1.20.0",
+    "smolagents[dev]>=1.24.0",
 ]
 # Full smolagents with all features for compatible platforms
 full = [
-    "smolagents[dev]>=1.20.0",
+    "smolagents[dev]>=1.24.0",
     "mlx>=0.28.0; sys_platform == 'darwin'",
     "mlx-lm>=0.26.1; sys_platform == 'darwin'",
 ]

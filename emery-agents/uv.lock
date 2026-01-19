@@ -450,6 +450,27 @@ wheels = [
 ]
 
 [[package]]
+name = "blaxel"
+version = "0.2.35"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "attrs" },
+    { name = "httpx" },
+    { name = "mcp" },
+    { name = "pydantic" },
+    { name = "pyjwt" },
+    { name = "python-dateutil" },
+    { name = "pyyaml" },
+    { name = "requests" },
+    { name = "tomli" },
+    { name = "websockets" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/63/c5/f6e8bfce9e7adb0b6fc6b83f9ebd32093eb47a2e96e606b9f37d2380fb27/blaxel-0.2.35.tar.gz", hash = "sha256:36062eccc68a376b314a409ae27b06f2af038a14c57a4276095555ef50014bb6", size = 418363 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/aa/92/02bceb572042fb14f80dd74f8dc4aa377e9d22c6438b1d4570237dde47af/blaxel-0.2.35-py3-none-any.whl", hash = "sha256:b3516b7c478495e4045794e0e7e5faf9789cf7f0357d5e5bc69848f43d46cbd0", size = 494480 },
+]
+
+[[package]]
 name = "boltons"
 version = "25.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1079,20 +1100,6 @@ wheels = [
 ]
 
 [[package]]
-name = "duckduckgo-search"
-version = "8.1.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "click" },
-    { name = "lxml" },
-    { name = "primp" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/10/ef/07791a05751e6cc9de1dd49fb12730259ee109b18e6d097e25e6c32d5617/duckduckgo_search-8.1.1.tar.gz", hash = "sha256:9da91c9eb26a17e016ea1da26235d40404b46b0565ea86d75a9f78cc9441f935", size = 22868 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/db/72/c027b3b488b1010cf71670032fcf7e681d44b81829d484bb04e31a949a8d/duckduckgo_search-8.1.1-py3-none-any.whl", hash = "sha256:f48adbb06626ee05918f7e0cef3a45639e9939805c4fc179e68c48a12f1b5062", size = 18932 },
-]
-
-[[package]]
 name = "e2b"
 version = "2.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1246,9 +1253,9 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.1.1" },
     { name = "requests", specifier = ">=2.30.0" },
     { name = "schedule", specifier = ">=1.2.0" },
-    { name = "smolagents", extras = ["dev"], marker = "extra == 'full'", specifier = ">=1.20.0" },
-    { name = "smolagents", extras = ["dev"], marker = "extra == 'macos'", specifier = ">=1.20.0" },
-    { name = "smolagents", extras = ["openai"], specifier = ">=1.20.0" },
+    { name = "smolagents", extras = ["dev"], marker = "extra == 'full'", specifier = ">=1.24.0" },
+    { name = "smolagents", extras = ["dev"], marker = "extra == 'macos'", specifier = ">=1.24.0" },
+    { name = "smolagents", extras = ["openai"], specifier = ">=1.24.0" },
     { name = "sqlalchemy", specifier = ">=2.0.0" },
     { name = "tenacity", specifier = ">=8.2.0" },
     { name = "toon-format", specifier = ">=0.1.0" },
@@ -2509,6 +2516,19 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/7e/4a/39609e5e3fea14c429e8a61f9754e61e4ed5289422223ad213df9116fd55/mlx-0.28.0-cp313-cp313-macosx_14_0_arm64.whl", hash = "sha256:0b7a57a584ea5e807ec0a17c4eb179a71e01eeff9f25dff6950abad1e30443c2", size = 540205 },
     { url = "https://files.pythonhosted.org/packages/43/af/738ea855df6742a4ac4ee1c72f298ff6cf50f0af7e553e89a1a41060c12c/mlx-0.28.0-cp313-cp313-macosx_15_0_arm64.whl", hash = "sha256:a7cdcbd3faff45c18e9f51f95e9aa9410c71bbb4d5d86878a97eb996a0467505", size = 540201 },
     { url = "https://files.pythonhosted.org/packages/ae/23/3cb550734765e136147ac8e05851cc9b64c2397518148367ed1db346d09c/mlx-0.28.0-cp313-cp313-manylinux_2_35_x86_64.whl", hash = "sha256:91f76bea8a192b423fa2b458a4c293c6b36e2b4b7f13a15eea94f0dc6ae03f13", size = 633209 },
+]
+
+[package.optional-dependencies]
+cpu = [
+    { name = "mlx-cpu", marker = "sys_platform == 'linux'" },
+]
+
+[[package]]
+name = "mlx-cpu"
+version = "0.28.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/48/78/ead24ce3330cff79c0bd34e5199b04c4b821fdc5e4f075392a98ec632f3d/mlx_cpu-0.28.0-py3-none-manylinux_2_35_x86_64.whl", hash = "sha256:8c803965f2fe48b837de1ac201890ca8a47f09f13773a23842c39d7132ac0b00", size = 10106338 },
 ]
 
 [[package]]
@@ -3773,6 +3793,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pyjwt"
+version = "2.10.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e7/46/bd74733ff231675599650d3e47f361794b22ef3e3770998dda30d3b63726/pyjwt-2.10.1.tar.gz", hash = "sha256:3cc5772eb20009233caf06e9d8a0577824723b44e6648ee0a2aedb6cf9381953", size = 87785 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/61/ad/689f02752eeec26aed679477e80e632ef1b682313be70793d798c1d5fc8f/PyJWT-2.10.1-py3-none-any.whl", hash = "sha256:dcdd193e30abefd5debf142f9adfcdd2b58004e644f25406ffaebd50bd98dacb", size = 22997 },
+]
+
+[[package]]
 name = "pymupdf"
 version = "1.26.6"
 source = { registry = "https://pypi.org/simple" }
@@ -3865,6 +3894,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/b4/46/db060b291999ca048edd06d6fa9ee95945d088edc38b1172c59eeb46ec45/pytest_datadir-1.8.0.tar.gz", hash = "sha256:7a15faed76cebe87cc91941dd1920a9a38eba56a09c11e9ddf1434d28a0f78eb", size = 11848 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8f/7a/33895863aec26ac3bb5068a73583f935680d6ab6af2a9567d409430c3ee1/pytest_datadir-1.8.0-py3-none-any.whl", hash = "sha256:5c677bc097d907ac71ca418109adc3abe34cf0bddfe6cf78aecfbabd96a15cf0", size = 6512 },
+]
+
+[[package]]
+name = "pytest-timeout"
+version = "2.4.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pytest" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ac/82/4c9ecabab13363e72d880f2fb504c5f750433b2b6f16e99f4ec21ada284c/pytest_timeout-2.4.0.tar.gz", hash = "sha256:7e68e90b01f9eff71332b25001f85c75495fc4e3a836701876183c4bcfd0540a", size = 17973 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fa/b6/3127540ecdf1464a00e5a01ee60a1b09175f6913f0644ac748494d9c4b21/pytest_timeout-2.4.0-py3-none-any.whl", hash = "sha256:c42667e5cdadb151aeb5b26d114aff6bdf5a907f176a007a30b940d3d865b5c2", size = 14382 },
 ]
 
 [[package]]
@@ -4430,7 +4471,7 @@ wheels = [
 
 [[package]]
 name = "smolagents"
-version = "1.20.0"
+version = "1.24.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "huggingface-hub" },
@@ -4440,18 +4481,19 @@ dependencies = [
     { name = "requests" },
     { name = "rich" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/35/ee/1733f20e8d181afc8acadb52ee8457e9c142735456d715ff47b25320341c/smolagents-1.20.0.tar.gz", hash = "sha256:b59950b7f6d4e51930bb651793046d9aea6856f8680651680c51a9202bec35ff", size = 196149 }
+sdist = { url = "https://files.pythonhosted.org/packages/0a/1c/8d8e7f39f3586dc85a7f96681b08b7c1cfbd734b258a025f368632f2d666/smolagents-1.24.0.tar.gz", hash = "sha256:4d5028ffbd72aca85fb2e8daac52d03fb7d4290a9bf99dbc311dd65980f6b5de", size = 225246 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/04/f2/ea0dd074db7ef6e437e0ae8785529ce816d3b331c40d21cbe76a6f548816/smolagents-1.20.0-py3-none-any.whl", hash = "sha256:a838fcee1c06bae8f6c907992d2f08385f4a3a33938bb578e3c4f42111f9bd21", size = 145354 },
+    { url = "https://files.pythonhosted.org/packages/76/7a/461ead649c088d30f7847ef1c70f245a9c188381ed09a264633831050497/smolagents-1.24.0-py3-none-any.whl", hash = "sha256:54853759d07a92a939f1ff59238b757fb1a153204c90b69324c8e9709025aa86", size = 155727 },
 ]
 
 [package.optional-dependencies]
 dev = [
     { name = "accelerate" },
     { name = "arize-phoenix" },
+    { name = "blaxel" },
     { name = "boto3" },
+    { name = "ddgs" },
     { name = "docker" },
-    { name = "duckduckgo-search" },
     { name = "e2b-code-interpreter" },
     { name = "gradio" },
     { name = "helium" },
@@ -4460,7 +4502,9 @@ dev = [
     { name = "markdownify" },
     { name = "mcp" },
     { name = "mcpadapt" },
+    { name = "mlx", extra = ["cpu"] },
     { name = "mlx-lm" },
+    { name = "modal" },
     { name = "numpy" },
     { name = "openai" },
     { name = "openinference-instrumentation-smolagents" },
@@ -4469,6 +4513,7 @@ dev = [
     { name = "pandas" },
     { name = "pytest" },
     { name = "pytest-datadir" },
+    { name = "pytest-timeout" },
     { name = "python-dotenv" },
     { name = "rank-bm25" },
     { name = "ruff" },

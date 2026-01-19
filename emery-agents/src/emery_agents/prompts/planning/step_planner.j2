@@ -284,11 +284,13 @@ Clear statement of what will be achieved:
 - BAD: "Create a database"
 
 ### steps
-Specific, actionable steps:
-- One step per table creation (include field names)
-- One step per relationship setup
-- Include target_agent for each step
-- **CRITICAL: Plans must ALWAYS have at least one step. NEVER return an empty steps array.**
+Specific, actionable steps. Each step object should include:
+- **description**: Brief human-readable summary (shown in UI)
+- **prompt_template**: Detailed execution instructions for the step executor
+- **required_context**: List of variables/inputs the template needs
+- **target_agent**: Which agent handles this step (or null for direct execution)
+
+**CRITICAL: Plans must ALWAYS have at least one step. NEVER return an empty steps array.**
 
 **For analysis/research tasks:**
 If the task is to analyze, summarize, or report on data, the plan should have at least one step that performs that analysis. Do NOT say "research complete, no steps needed" - the analysis/summary step IS an execution step.
@@ -297,7 +299,12 @@ Example for "Analyze all tables and give me a summary":
 ```json
 {
   "steps": [
-    {"description": "Analyze all tables and provide a comprehensive summary including table names, field types, relationships, and data patterns", "target_agent": null}
+    {
+      "description": "Analyze all tables and provide a comprehensive summary",
+      "prompt_template": "Analyze all tables in the system and provide a comprehensive summary including:\n- Table names and their purposes\n- Field types and configurations\n- Relationships between tables\n- Data patterns and insights\n\nUse the research_agent to gather table information, then synthesize into a clear summary.",
+      "required_context": [],
+      "target_agent": "research_agent"
+    }
   ]
 }
 ```
