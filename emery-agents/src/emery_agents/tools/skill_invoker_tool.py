@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional
 from smolagents import Tool
 
 from ..services.context_manager import get_current_context
+from ..services.skill_permission_validator import SkillPermissionValidator
 from .tool_modes import ToolMode, MUTATION_METHODS
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,7 @@ def create_skill_invoker_tool(
     api_key: Optional[str] = None,
     organization_id: Optional[int] = None,
     skill_executor_callback: Optional[Any] = None,
+    permission_validator: Optional[SkillPermissionValidator] = None,
 ) -> Tool:
     """
     Create a SkillInvokerTool for a specific skill.
@@ -45,6 +47,7 @@ def create_skill_invoker_tool(
         api_key: API key for skill execution
         organization_id: Organization ID for RLS context
         skill_executor_callback: Callback to execute skill (from SkillExecutorService)
+        permission_validator: Optional validator to enforce skill whitelist
 
     Returns:
         Configured Tool for skill invocation
@@ -55,6 +58,7 @@ def create_skill_invoker_tool(
     _skill_id = skill_id
     _skill_inputs = skill_inputs or []
     _executor = skill_executor_callback
+    _validator = permission_validator
 
     # Build inputs schema from skill inputs
     tool_inputs_schema = {
@@ -143,7 +147,19 @@ If unsure about inputs, call with gather_missing=True to get prompts.
                 }
 
             # Execute the skill
-            logger.info(f"🎯 Invoking skill {skill_name} (id={_skill_id}) with inputs: {list(provided_inputs.keys())}")
+            logger.info(f"[SKILL-INVOKER] Invoking skill {skill_name} (id={_skill_id}) with inputs: {list(provided_inputs.keys())}")
+
+            # SECURITY: Validate permission before execution
+            if _validator is not None:
+                try:
+                    _validator.validate_execution(_skill_id, skill_name)
+                except PermissionError as e:
+                    logger.warning(f"[SECURITY] Skill execution blocked: {e}")
+                    return {
+                        "success": False,
+                        "error": str(e),
+                        "blocked_by": "skill_permission_validator"
+                    }
 
             if _executor is None:
                 return {
@@ -160,14 +176,14 @@ If unsure about inputs, call with gather_missing=True to get prompts.
                     organization_id=_org_id
                 )
 
-                logger.info(f"✅ Skill {skill_name} completed successfully")
+                logger.info(f"[SKILL-INVOKER] Skill {skill_name} completed successfully")
                 return {
                     "success": True,
                     "result": result
                 }
 
             except Exception as e:
-                logger.error(f"❌ Skill {skill_name} failed: {e}")
+                logger.error(f"[SKILL-INVOKER] Skill {skill_name} failed: {e}")
                 return {
                     "success": False,
                     "error": str(e)
@@ -181,6 +197,7 @@ def create_skill_invoker_tools(
     api_key: Optional[str] = None,
     organization_id: Optional[int] = None,
     skill_executor_callback: Optional[Any] = None,
+    permission_validator: Optional[SkillPermissionValidator] = None,
 ) -> List[Tool]:
     """
     Create SkillInvokerTools for a list of skills.
@@ -190,6 +207,7 @@ def create_skill_invoker_tools(
         api_key: API key for skill execution
         organization_id: Organization ID for RLS context
         skill_executor_callback: Callback to execute skills
+        permission_validator: Optional validator to enforce skill whitelist
 
     Returns:
         List of configured Tools
@@ -205,8 +223,9 @@ def create_skill_invoker_tools(
             api_key=api_key,
             organization_id=organization_id,
             skill_executor_callback=skill_executor_callback,
+            permission_validator=permission_validator,
         )
         tools.append(tool)
-        logger.debug(f"Created SkillInvokerTool: {tool.name}")
+        logger.debug(f"[SKILL-INVOKER] Created SkillInvokerTool: {tool.name}")
 
     return tools

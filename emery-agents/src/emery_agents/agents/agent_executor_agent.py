@@ -23,6 +23,8 @@ from smolagents.monitoring import LogLevel
 
 from ..prompts import build_agent_instructions, render_capabilities
 from ..tools.skill_invoker_tool import create_skill_invoker_tools
+from ..utils.persona_sanitizer import sanitize_persona, sanitize_description
+from ..services.skill_permission_validator import create_validator_from_skills
 
 logger = logging.getLogger(__name__)
 
@@ -60,20 +62,34 @@ def create_agent_executor(
     """
     agent_id = agent_config.get("id")
     agent_name = agent_config.get("name", "Agent")
-    agent_persona = agent_config.get("persona", "")
-    agent_description = agent_config.get("description", "")
     agent_database_id = agent_config.get("databaseId")
 
-    logger.info(f"🤖 Creating AgentExecutor for agent: {agent_name} (id={agent_id})")
+    # SECURITY: Sanitize user-provided content to mitigate prompt injection
+    agent_persona = sanitize_persona(agent_config.get("persona", ""))
+    agent_description = sanitize_description(agent_config.get("description", ""))
 
-    # 1. Create SkillInvokerTools for each skill
+    # Sanitize skill descriptions as well
+    safe_skills = []
+    for skill in skills:
+        safe_skill = skill.copy()
+        safe_skill["description"] = sanitize_description(skill.get("description", ""))
+        safe_skills.append(safe_skill)
+
+    logger.info(f"[AGENT-EXECUTOR] Creating AgentExecutor for agent: {agent_name} (id={agent_id})")
+
+    # SECURITY: Create skill permission validator to enforce skill whitelist
+    skill_validator = create_validator_from_skills(skills, agent_id=agent_id)
+    logger.info(f"[AGENT-EXECUTOR] Created skill validator with {len(skill_validator.allowed_skill_ids)} allowed skills")
+
+    # 1. Create SkillInvokerTools for each skill (with permission validation)
     skill_tools = create_skill_invoker_tools(
         skills=skills,
         api_key=api_key,
         organization_id=organization_id,
         skill_executor_callback=skill_executor_callback,
+        permission_validator=skill_validator,
     )
-    logger.info(f"   Created {len(skill_tools)} skill tools")
+    logger.info(f"[AGENT-EXECUTOR] Created {len(skill_tools)} skill tools")
 
     # 2. Combine with additional tools
     all_tools = list(skill_tools)
@@ -83,15 +99,16 @@ def create_agent_executor(
 
     # 3. Build instructions from agent persona + template
     # Pass agent context variables directly to the template builder
+    # NOTE: Using sanitized persona/description/skills to mitigate injection
     instructions = build_agent_instructions(
         tools=all_tools,
         agent_type="agent_executor",
         context_type="interactive",
         # Template variables (passed via **kwargs to Jinja2)
         agent_name=agent_name,
-        agent_persona=agent_persona,
-        agent_description=agent_description,
-        skills=skills,
+        agent_persona=agent_persona,        # Sanitized
+        agent_description=agent_description,  # Sanitized
+        skills=safe_skills,                   # Skill descriptions sanitized
         database_id=agent_database_id,
     )
 
