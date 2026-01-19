@@ -135,7 +135,7 @@ class AsyncHTTPManager:
                         error_detail = error_body["error"]
                     elif "message" in error_body:
                         error_detail = error_body["message"]
-                except:
+                except (json.JSONDecodeError, KeyError, TypeError):
                     error_detail = response.text[:200] if response.text else error_detail
 
                 logger.error(f"[TOOL-HTTP] ❌ {method} {endpoint} - call_id: {call_id}, status: {response.status_code}, duration: {total_time:.2f}s")
@@ -330,7 +330,7 @@ class BaseCrudTool(Tool):
                             error_detail = error_body["error"]
                         elif "message" in error_body:
                             error_detail = error_body["message"]
-                    except:
+                    except (json.JSONDecodeError, KeyError, TypeError):
                         error_detail = response.text[:200] if response.text else error_detail
 
                     logger.error(f"[ASYNC_HTTP] HTTP error response - call_id: {call_id}, status: {response.status_code}, error: {error_detail}")

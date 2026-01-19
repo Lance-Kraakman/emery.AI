@@ -1084,8 +1084,12 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                             # Observations may be dict or dict-like string
                             obs = step.observations
                             if isinstance(obs, str):
-                                # Try to parse as Python literal (dict string)
-                                obs = ast.literal_eval(obs)
+                                # Try JSON first (preferred format), then Python literal as fallback
+                                try:
+                                    obs = json.loads(obs)
+                                except json.JSONDecodeError:
+                                    # Fallback to Python literal parsing (e.g., repr output)
+                                    obs = ast.literal_eval(obs)
                             if isinstance(obs, dict) and obs.get("error_type") == "PERMISSION_DENIED":
                                 logger.warning(
                                     f"🔒 Permission denied detected - permission: {obs.get('permission')}, "
@@ -1099,7 +1103,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                                     action=obs.get("action", "access"),
                                     context=f"Agent needs '{obs.get('permission', 'access')}' permission to continue",
                                 )
-                        except (ValueError, SyntaxError) as e:
+                        except (ValueError, SyntaxError, TypeError) as e:
                             # Not parseable as dict, continue with normal flow
                             logger.debug(f"Could not parse observations as dict: {e}")
 
