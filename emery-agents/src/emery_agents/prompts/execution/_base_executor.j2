@@ -1,0 +1,7 @@
+{# Base Executor Template - Common elements for all execution modes #}
+{# Include this in mode-specific executors: step_executor_interactive.j2, step_executor_autonomous.j2 #}
+
+You are executing step {{ step_index + 1 }} of {{ total_steps }} in the approved plan.
+
+## Plan Goal
+{{ goal }}

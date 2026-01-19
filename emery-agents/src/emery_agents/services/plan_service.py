@@ -157,10 +157,18 @@ class PlanService:
                 "capabilities": getattr(agent, "capabilities", ""),
             })
 
+        # Select template based on planning mode
+        # - skill_template_planner.j2: For stored/reusable skills (uses prompt_template)
+        # - interactive_planner.j2: For chat-based tasks (uses description only)
+        if is_skill_template:
+            template_name = "planning/skill_template_planner.j2"
+        else:
+            template_name = "planning/interactive_planner.j2"
+
         # Build prompt using Jinja template
         # has_research_agent tells template that research_agent is available for delegation
         prompt = render_template(
-            "planning/step_planner.j2",
+            template_name,
             task=basic_instructions,
             tools=tools or [],
             managed_agents=agent_info,  # Pass info for template (includes research_agent)
@@ -170,7 +178,6 @@ class PlanService:
             skill_outputs=skill_outputs or [],  # For result-aware planning
             previous_plan_json=previous_plan_json,  # For regeneration with feedback
             user_feedback=user_feedback,  # User feedback for improvement
-            is_skill_template=is_skill_template,  # True = no hardcoded IDs
         )
 
         logger.info(f"📋 Generating plan with research-driven pattern...")

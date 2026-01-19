@@ -262,23 +262,39 @@ class PlanStepExecutor:
             if s.status == PlanStepStatus.PENDING.value
         ]
 
-        # Determine prompt: use template resolver if prompt_template exists
+        # Determine prompt and template based on execution mode
+        # - Autonomous mode: uses prompt_template with resolved variables
+        # - Interactive mode: uses description field with HITL context
         if current_step.prompt_template:
-            # Resolve prompt template with runtime context
-            prompt = resolve_prompt_template(
+            # Autonomous mode: resolve template variables and use autonomous executor
+            resolved_prompt = resolve_prompt_template(
                 template=current_step.prompt_template,
                 skill_inputs=self.skill_inputs,
                 discovered_context={},  # TODO: Implement context discovery
                 previous_results=self._step_results,
             )
             logger.info(
-                f"📝 Using resolved prompt template for step {step_index + 1} "
-                f"({len(prompt)} chars)"
+                f"📝 Autonomous mode: resolved prompt template for step {step_index + 1} "
+                f"({len(resolved_prompt)} chars)"
+            )
+            prompt = render_template(
+                "execution/step_executor_autonomous.j2",
+                goal=plan.goal,
+                current_step=current_step,
+                step_index=step_index,
+                total_steps=len(plan.steps),
+                completed_steps=completed_steps,
+                remaining_steps=remaining_steps,
+                managed_agents=self.managed_agents,
+                resolved_prompt=resolved_prompt,
             )
         else:
-            # Fall back to step_executor.j2 template
+            # Interactive mode: use description with interactive executor
+            logger.info(
+                f"📝 Interactive mode: using description for step {step_index + 1}"
+            )
             prompt = render_template(
-                "execution/step_executor.j2",
+                "execution/step_executor_interactive.j2",
                 goal=plan.goal,
                 current_step=current_step,
                 step_index=step_index,

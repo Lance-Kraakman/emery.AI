@@ -1,0 +1,31 @@
+{# Interactive Step Executor - For chat-based execution with user approval #}
+{# Uses description field from step. HITL-friendly output. #}
+
+{% include 'execution/_base_executor.j2' %}
+
+## Current Step
+{{ current_step.description }}
+
+{% if completed_steps %}
+## Previously Completed Steps
+{% for step in completed_steps %}
+- Step {{ loop.index }}: {{ step.description }}
+  Result: {{ step.result or 'completed' }}
+{% endfor %}
+{% endif %}
+
+{% if remaining_steps %}
+## Remaining Steps After This
+{% for step in remaining_steps %}
+- {{ step.description }}
+{% endfor %}
+{% endif %}
+
+## Available Agents
+{% for agent in managed_agents %}
+- **{{ agent.name }}**: {{ agent.description }}
+{% endfor %}
+
+---
+
+Execute the current step. Use the appropriate agent or tool based on what the step requires.
