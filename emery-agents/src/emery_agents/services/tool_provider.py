@@ -29,6 +29,7 @@ from ..tools.field_tools import load_field_crud
 from ..tools.row_tools import load_row_crud
 from ..tools.app_tools import load_app_crud, load_page_crud
 from ..tools.view_tools import load_view_crud
+from ..tools.security_report_tool import load_security_report_tool
 from .authenticated_http_client import AuthenticatedHttpClient
 
 logger = logging.getLogger(__name__)
@@ -55,7 +56,7 @@ class ToolProvider:
     TOOL_NAMES = [
         "database_crud", "table_crud", "field_crud", "row_crud",
         "skill_crud", "document_crud", "app_crud", "page_crud",
-        "agent_crud", "view_crud",
+        "agent_crud", "view_crud", "security_report",
     ]
 
     def __init__(self, api_key: str, organization_id: int):
@@ -188,14 +189,24 @@ class ToolProvider:
         It uses:
         - research_emery (as managed agent) for system introspection
         - research tools (web_search, visit_webpage) added separately in factory
+        - security_report tool for security analysis
 
         AIDEV-NOTE: System designer delegates mutations to specialized builders
         (schema_builder, app_builder, agent_builder, skill_builder) via
-        cascade planning. It only needs research capability.
+        cascade planning. It only needs research capability and security analysis.
 
-        Returns empty list - actual tools are added in ManagedAgentsFactory.
+        Returns security_report tool - other tools added in ManagedAgentsFactory.
         """
-        return []
+        return [self.get("security_report")]
+
+    def get_security_tools(self) -> List[Tool]:
+        """
+        Get security-related tools.
+
+        Currently includes security_report for generating security analysis.
+        Can be used by system_designer and via tool_executor.
+        """
+        return [self.get("security_report")]
 
     # -------------------------
     # Tool Factory
@@ -225,6 +236,7 @@ class ToolProvider:
             "page_crud": load_page_crud,
             "agent_crud": load_agent_crud,
             "view_crud": load_view_crud,
+            "security_report": load_security_report_tool,
         }
 
         if name not in loaders:
