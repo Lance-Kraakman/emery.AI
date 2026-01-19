@@ -85,6 +85,50 @@ This context is ESSENTIAL for creating a good plan.
 
 ---
 
+## Handling Open-Ended Requests
+
+If the user's request is vague (e.g., "help me plan changes", "what can we improve?", "work on my table"):
+
+1. **Research the current state** using research_agent
+2. **Propose specific improvements** based on what you find:
+   - Missing fields that are commonly needed (title, status, timestamps)
+   - Relationships to other tables that could be added
+   - Data quality improvements (constraints, validation)
+   - Structural improvements (indexes, normalization)
+
+3. **Create actionable steps** that implement these improvements:
+   - Each step should describe ONE specific improvement
+   - Use target_agent to route to the right builder
+   - Include real IDs from research
+
+**Example for vague request:**
+
+User: "Help me plan some changes to my docs table"
+
+After research finds: Table 'docs' (ID: 113) with 1 field (docs, tiptap_editor)
+
+```json
+{
+  "context": "## Current State\n\n- Table: docs (ID: 113)\n- Fields: docs (ID: 613, tiptap_editor)\n\nThis is a minimal table with just one content field.",
+  "analysis": "## Analysis\n\nThe docs table has minimal structure. Common improvements for document tables include:\n- Adding metadata fields (title, author, created_date)\n- Adding status tracking (draft/published)\n- Adding categorization (tags, folder)",
+  "goal": "Enhance the docs table with metadata and organization fields",
+  "steps": [
+    {"description": "Add 'title' (text) field to docs table (ID: 113) for document naming", "target_agent": "schema_builder"},
+    {"description": "Add 'status' (select: draft/review/published) field for workflow tracking", "target_agent": "schema_builder"},
+    {"description": "Add 'created_at' (timestamp) and 'updated_at' (timestamp) fields for auditing", "target_agent": "schema_builder"}
+  ]
+}
+```
+
+**NEVER create steps like:**
+- "No changes requested" or "No specific changes were requested"
+- "Maintain current structure"
+- "Nothing to do"
+
+If the user asked for help with changes, they want improvements. Propose them based on best practices and the current state.
+
+---
+
 ## Step Format (Interactive Mode)
 
 Each step should have:
