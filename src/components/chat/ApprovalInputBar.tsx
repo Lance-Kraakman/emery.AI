@@ -69,13 +69,13 @@ export function ApprovalInputBar({
     if (disabled) return
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Only capture if focus is within the approval bar container
-      if (!containerRef.current?.contains(document.activeElement)) {
-        return
-      }
+      // When approval bar is visible and main input is hidden,
+      // capture Enter globally (not just when focused inside)
+      const focusInContainer = containerRef.current?.contains(document.activeElement)
+      const focusInInput = document.activeElement === inputRef.current
 
-      // Don't intercept if input is focused and has content
-      if (document.activeElement === inputRef.current && customInput) {
+      // If typing in the custom input and has content, handle Enter for custom input
+      if (focusInInput && customInput) {
         if (e.key === 'Enter') {
           e.preventDefault()
           onRespond(customInput.trim())
@@ -84,19 +84,31 @@ export function ApprovalInputBar({
         return
       }
 
-      if (e.key === 'ArrowDown') {
-        e.preventDefault()
-        setSelectedIndex(prev => Math.min(prev + 1, options.length - 1))
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault()
-        setSelectedIndex(prev => Math.max(prev - 1, 0))
-      } else if (e.key === 'Enter') {
+      // Arrow navigation only works when focused in container
+      if (focusInContainer) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault()
+          setSelectedIndex(prev => Math.min(prev + 1, options.length - 1))
+          return
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault()
+          setSelectedIndex(prev => Math.max(prev - 1, 0))
+          return
+        }
+      }
+
+      // Enter key - works globally when approval bar is active
+      // This allows pressing Enter immediately after approval bar appears
+      if (e.key === 'Enter' && !customInput) {
         e.preventDefault()
         if (options[selectedIndex]) {
           onRespond(options[selectedIndex].id)
         }
-      } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        // Any printable character - focus input and type
+        return
+      }
+
+      // Any printable character - focus input (only if container is focused)
+      if (focusInContainer && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
         inputRef.current?.focus()
       }
     }
