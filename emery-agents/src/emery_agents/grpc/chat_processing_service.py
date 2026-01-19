@@ -569,6 +569,44 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                         current_plan_data = response_dict.get("plan")
                         logger.info(f"📋 Captured plan metadata: {current_plan_data.get('id') if current_plan_data else 'None'}")
 
+                    elif response_type == "permission_request":
+                        # RBAC permission error - send as awaiting_input with special type
+                        # AIDEV-NOTE: Uses awaiting_input proto since no dedicated permission proto exists.
+                        # Frontend checks input_type="permission_request" to render permission UI.
+                        logger.info(f"🔒 Permission request: {response_dict.get('permission')}")
+
+                        # Build awaiting_input with permission data in planJson field (as JSON)
+                        permission_data = json.dumps({
+                            "permission": response_dict.get("permission", "unknown"),
+                            "resource": response_dict.get("resource", ""),
+                            "resourceId": response_dict.get("resource_id", 0),  # Convert to camelCase
+                            "action": response_dict.get("action", "access"),
+                            "context": response_dict.get("context", ""),
+                        })
+
+                        permission_response = agent_worker_pb2.ProcessMessageResponse(
+                            awaiting_input=agent_worker_pb2.AwaitingInput(
+                                input_type="permission_request",
+                                title="Permission Required",
+                                content=response_dict.get("context", "Agent needs permission to continue"),
+                                options=[
+                                    agent_worker_pb2.InputOption(
+                                        id="allow",
+                                        label="Allow Access",
+                                        description="Grant the requested permission"
+                                    ),
+                                    agent_worker_pb2.InputOption(
+                                        id="deny",
+                                        label="Deny",
+                                        description="Deny the request"
+                                    ),
+                                ],
+                                plan_json=permission_data  # Store permission details for frontend
+                            ),
+                            timestamp=int(time.time() * 1000)
+                        )
+                        yield permission_response
+
                     else:
                         # Unknown response type - log warning
                         logger.warning(f"⚠️ Unknown response type: {response_type}, ignoring")
