@@ -25,7 +25,7 @@ export type TextProps = WithLayout<{
 
 /**
  * Text render component - supports variable interpolation
- * Text like "Hello {state.user.name}!" becomes "Hello John!"
+ * Text like "Hello {{state.userName}}!" becomes "Hello John!"
  */
 function TextRender({
   align,
@@ -37,7 +37,7 @@ function TextRender({
   size,
   maxWidth,
 }: TextProps) {
-  // Interpolate variables in text (e.g., {state.x.y}, {params.id})
+  // Interpolate variables in text (e.g., {{state.key}}, {{params.id}})
   const interpolatedText = useInterpolatedText(text);
 
   return (

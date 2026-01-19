@@ -80,7 +80,7 @@ class AgentAPIService:
         self.api_key = api_key
         self.organization_id = organization_id
         self.timeout = timeout
-        self.base_url = os.getenv("NEXT_API_URL", "http://localhost:3000")
+        self.base_url = os.getenv("NEXTJS_BASE_URL", "http://localhost:3000")
 
     def _build_headers(self, call_id: str) -> Dict[str, str]:
         """Build request headers with auth, RLS, and observability."""

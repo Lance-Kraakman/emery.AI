@@ -857,3 +857,17 @@ class AppStack(Stack):
                 "AWS_REGION",
                 aws_region
             )
+
+        # Add S3 and AWS configuration to scheduler service
+        scheduler_container.add_environment(
+            "S3_BUCKET_NAME",
+            data_stack.storage_bucket.bucket_name
+        )
+        scheduler_container.add_environment(
+            "AWS_ENDPOINT_URL",
+            f"https://s3.{aws_region}.amazonaws.com"
+        )
+        scheduler_container.add_environment(
+            "AWS_REGION",
+            aws_region
+        )

@@ -327,7 +327,7 @@ export async function checkPageAccess(
 }
 
 /**
- * Substitute filter variables like {params.user_id} with values from context
+ * Substitute filter variables like {{params.user_id}} with values from context
  * Used by executePublicView for dynamic filtering
  */
 function substituteFilterVariable(
@@ -338,8 +338,8 @@ function substituteFilterVariable(
     return value;
   }
 
-  // Match {params.varName} pattern - full match
-  const paramMatch = value.match(/^\{params\.(\w+)\}$/);
+  // Match {{params.varName}} pattern - full match (double braces)
+  const paramMatch = value.match(/^\{\{params\.(\w+)\}\}$/);
   if (paramMatch && context) {
     const paramName = paramMatch[1];
     const paramValue = context[paramName];
@@ -354,9 +354,9 @@ function substituteFilterVariable(
     return '';
   }
 
-  // For partial substitutions (e.g., "prefix_{params.id}_suffix"), do inline replacement
-  if (value.includes('{params.') && context) {
-    return value.replace(/\{params\.(\w+)\}/g, (_, name) => {
+  // For partial substitutions (e.g., "prefix_{{params.id}}_suffix"), do inline replacement
+  if (value.includes('{{params.') && context) {
+    return value.replace(/\{\{params\.(\w+)\}\}/g, (_, name) => {
       const paramValue = context[name];
       return paramValue !== undefined ? String(paramValue) : '';
     });
@@ -447,7 +447,13 @@ export async function executePublicView(
 
       runtimeFilters = [];
       for (const filter of additionalFilters) {
-        // Substitute variables in the filter value first
+        // Skip state variables - they need client-side resolution
+        if (typeof filter.value === 'string' && filter.value.includes('{{state.')) {
+          console.log(`[executePublicView] Skipping state variable filter for field "${filter.field}" - needs client-side resolution`);
+          continue;
+        }
+
+        // Substitute params variables in the filter value
         const substitutedValue = substituteFilterVariable(filter.value as string, context);
 
         // Skip filters where variable wasn't found (empty string)

@@ -153,7 +153,7 @@ function resolveRowDataVariables(
 }
 
 /**
- * Resolve all {state.key} variables in a string value (flat namespace)
+ * Resolve all {{state.key}} variables in a string value (flat namespace)
  */
 function resolveStateVariables(
   value: string,

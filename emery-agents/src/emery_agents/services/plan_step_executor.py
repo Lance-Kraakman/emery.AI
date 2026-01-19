@@ -16,13 +16,14 @@ This is different from StepExecutorService which handles DAG workflow steps.
 """
 
 import logging
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from smolagents import ToolCallingAgent
 
 from ..models.plan import Plan, PlanStep, PlanStepStatus, SubPlan
 from ..prompts import render_template
 from .protocols import ModelProvider
+from .prompt_template_resolver import resolve_prompt_template
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,7 @@ class PlanStepExecutor:
         managed_agents: List[Any],
         model: Any,
         max_steps: int = 10,
+        skill_inputs: Optional[Dict[str, Any]] = None,
     ):
         """
         Initialize PlanStepExecutor.
@@ -50,11 +52,15 @@ class PlanStepExecutor:
             managed_agents: Managed agents for routing (skill_builder, etc.)
             model: LLM model for sub-agent
             max_steps: Max steps for sub-agent execution
+            skill_inputs: Runtime inputs for skill execution (used with prompt templates)
         """
         self.tools = tools
         self.managed_agents = managed_agents
         self.model = model
         self.max_steps = max_steps
+        self.skill_inputs = skill_inputs or {}
+        # Track results from previous steps for prompt template resolution
+        self._step_results: Dict[str, Any] = {}
 
         agent_names = [getattr(a, 'name', '?') for a in managed_agents]
         logger.info(f"✨ Created PlanStepExecutor with {len(tools)} tools, agents: {agent_names}")
@@ -80,10 +86,18 @@ class PlanStepExecutor:
         """
         # Check for pre-planned sub-plan from cascading planning
         if current_step.sub_plan:
-            return self._execute_sub_plan(plan, current_step, current_step.sub_plan)
+            result = self._execute_sub_plan(plan, current_step, current_step.sub_plan)
+        else:
+            # Standard execution path
+            result = self._execute_with_routing(plan, current_step)
 
-        # Standard execution path
-        return self._execute_with_routing(plan, current_step)
+        # Store result for use in subsequent step templates
+        self._step_results[current_step.step_id] = {
+            "result": result,
+            "description": current_step.description,
+        }
+
+        return result
 
     def _execute_sub_plan(
         self,
@@ -172,7 +186,7 @@ class PlanStepExecutor:
 
         # Generate execution-mode prompt (no replanning)
         prompt = render_template(
-            "planning/sub_plan_executor.j2",
+            "execution/sub_plan_executor.j2",
             goal=plan.goal,
             sub_plan_goal=sub_plan.goal,
             parent_step=parent_step,
@@ -224,6 +238,8 @@ class PlanStepExecutor:
         Execute step with normal smolagents routing.
 
         Used when step doesn't have a pre-planned sub_plan.
+        If the step has a prompt_template, uses the resolver with runtime context.
+        Otherwise falls back to step_executor.j2 template.
 
         Args:
             plan: The approved Plan object
@@ -246,17 +262,31 @@ class PlanStepExecutor:
             if s.status == PlanStepStatus.PENDING.value
         ]
 
-        # Generate execution prompt from plan
-        prompt = render_template(
-            "planning/step_executor.j2",
-            goal=plan.goal,
-            current_step=current_step,
-            step_index=step_index,
-            total_steps=len(plan.steps),
-            completed_steps=completed_steps,
-            remaining_steps=remaining_steps,
-            managed_agents=self.managed_agents,
-        )
+        # Determine prompt: use template resolver if prompt_template exists
+        if current_step.prompt_template:
+            # Resolve prompt template with runtime context
+            prompt = resolve_prompt_template(
+                template=current_step.prompt_template,
+                skill_inputs=self.skill_inputs,
+                discovered_context={},  # TODO: Implement context discovery
+                previous_results=self._step_results,
+            )
+            logger.info(
+                f"📝 Using resolved prompt template for step {step_index + 1} "
+                f"({len(prompt)} chars)"
+            )
+        else:
+            # Fall back to step_executor.j2 template
+            prompt = render_template(
+                "execution/step_executor.j2",
+                goal=plan.goal,
+                current_step=current_step,
+                step_index=step_index,
+                total_steps=len(plan.steps),
+                completed_steps=completed_steps,
+                remaining_steps=remaining_steps,
+                managed_agents=self.managed_agents,
+            )
 
         logger.info(
             f"🔧 Executing step {step_index + 1}/{len(plan.steps)}: "

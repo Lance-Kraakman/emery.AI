@@ -1,11 +1,10 @@
-{% include 'base/identity.j2' %}
+{% include 'shared/identity.j2' %}
 
-{% include 'base/platform_context.j2' %}
+{% include 'shared/platform_context.j2' %}
 
-{% include 'base/critical_rules.j2' %}
+{% include 'shared/critical_rules.j2' %}
 
-{% set context_type = "interactive" %}
-{% include 'base/context.j2' %}
+{% include 'modes/interactive.j2' %}
 
 {% include 'components/goal_persistence.j2' %}
 

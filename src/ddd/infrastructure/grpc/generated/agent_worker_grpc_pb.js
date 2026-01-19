@@ -204,11 +204,12 @@ cancelMessage: {
     responseSerialize: serialize_emery_agents_CancelMessageResponse,
     responseDeserialize: deserialize_emery_agents_CancelMessageResponse,
   },
-  // Generate an autonomous execution plan for skill instructions
+  // Generate an autonomous execution plan for skill instructions (streaming)
+// AIDEV-NOTE: Streaming RPC for progress updates and HITL clarification questions
 generatePlan: {
     path: '/emery.agents.ChatProcessingService/GeneratePlan',
     requestStream: false,
-    responseStream: false,
+    responseStream: true,
     requestType: agent_worker_pb.GeneratePlanRequest,
     responseType: agent_worker_pb.GeneratePlanResponse,
     requestSerialize: serialize_emery_agents_GeneratePlanRequest,

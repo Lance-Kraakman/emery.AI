@@ -573,12 +573,12 @@ export async function getViewsForOrganization(): Promise<ViewDTO[]> {
 /**
  * Substitutes page variable placeholders in filter values
  *
- * @param value - Filter value that may contain {params.varName} placeholders
+ * @param value - Filter value that may contain {{params.varName}} placeholders
  * @param context - Context containing params from URL query parameters
  * @returns Value with variables substituted
  *
  * @example
- * substituteVariables("{params.product_id}", { product_id: "123" }) // returns "123"
+ * substituteVariables("{{params.product_id}}", { product_id: "123" }) // returns "123"
  * substituteVariables("static_value", { product_id: "123" }) // returns "static_value"
  */
 function substituteFilterVariable(
@@ -589,8 +589,8 @@ function substituteFilterVariable(
     return value;
   }
 
-  // Match {params.varName} pattern
-  const paramMatch = value.match(/^\{params\.(\w+)\}$/);
+  // Match {{params.varName}} pattern (double braces)
+  const paramMatch = value.match(/^\{\{params\.(\w+)\}\}$/);
   if (paramMatch && context) {
     const paramName = paramMatch[1];
     const paramValue = context[paramName];
@@ -605,9 +605,9 @@ function substituteFilterVariable(
     return '';
   }
 
-  // For partial substitutions (e.g., "prefix_{params.id}_suffix"), do inline replacement
-  if (value.includes('{params.') && context) {
-    return value.replace(/\{params\.(\w+)\}/g, (_, name) => {
+  // For partial substitutions (e.g., "prefix_{{params.id}}_suffix"), do inline replacement
+  if (value.includes('{{params.') && context) {
+    return value.replace(/\{\{params\.(\w+)\}\}/g, (_, name) => {
       const paramValue = context[name];
       return paramValue !== undefined ? String(paramValue) : '';
     });
@@ -706,9 +706,15 @@ export async function executeView(
 
       runtimeFilters = [];
       for (const filter of additionalFilters) {
+        // Skip state variables - they need client-side resolution
+        if (typeof filter.value === 'string' && filter.value.includes('{{state.')) {
+          console.log(`[executeView] Skipping state variable filter for field "${filter.field}" - needs client-side resolution`);
+          continue;
+        }
+
         const domainOperator = uiToDomainOperatorMap[filter.operator] || filter.operator;
 
-        // Substitute variables in the filter value first
+        // Substitute params variables in the filter value
         const substitutedValue = substituteFilterVariable(filter.value, context);
 
         // Skip filters where variable wasn't found (empty string) - but not for no-value operators

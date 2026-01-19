@@ -3,7 +3,7 @@
  *
  * AIDEV-NOTE: Page State provides client-side state management for Puck pages.
  * State is defined at the page level (not in blocks) and accessible
- * page-wide via {state.key} syntax.
+ * page-wide via {{state.key}} syntax.
  *
  * The state system uses a flat namespace - no containers.
  * All state (including booleans for dialogs/toggles) are just variables.
@@ -19,7 +19,7 @@ export type StateVariableType = 'string' | 'number' | 'boolean' | 'object' | 'ar
  * A state variable definition (configured in PageStatePanel)
  */
 export interface StateVariable {
-  /** Variable name (used in references like {state.variableName}) */
+  /** Variable name (used in references like {{state.variableName}}) */
   name: string;
   /** Variable type for validation */
   type: StateVariableType;

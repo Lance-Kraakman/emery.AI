@@ -78,7 +78,7 @@ class StatefulManagedAgent(CodeAgent):  # type: ignore[misc]
 
         # Override managed_agent templates to use plain text instead of verbose markdown
         # smolagents default forces "### 1. Task outcome (short version):" etc. which is too verbose
-        # Templates are in prompts/base/managed_agent_task.j2 and managed_agent_report.j2
+        # Templates are in prompts/shared/managed_agent_task.j2 and managed_agent_report.j2
         self.prompt_templates["managed_agent"] = get_managed_agent_templates()
 
         # Override planning templates with concise format

@@ -6,7 +6,10 @@ Handles conversion of ExecutionCoordinator events to frontend SSE events.
 """
 
 import json
+import logging
 from typing import Any, Optional, Union
+
+logger = logging.getLogger(__name__)
 
 from ..services.execution_coordinator import (
     StepStartedEvent,
@@ -41,7 +44,19 @@ CoordinatorResponseDict = Union[StepProgressDict, ErrorResponseDict, AwaitingInp
 
 
 def convert_coordinator_event(event: Any, step_index: int) -> Optional[CoordinatorResponseDict]:
-    """Convert ExecutionCoordinator events to frontend SSE events."""
+    """Convert ExecutionCoordinator events to frontend SSE events.
+
+    Args:
+        event: Coordinator event to convert
+        step_index: Current step index (must be int)
+
+    Returns:
+        Converted event dict or None if event type not recognized
+    """
+    # Defensive: ensure step_index is int (protects against accidental string passing)
+    if not isinstance(step_index, int):
+        logger.warning(f"step_index should be int, got {type(step_index).__name__}: {step_index}")
+        step_index = 0
 
     if isinstance(event, StepStartedEvent):
         return {

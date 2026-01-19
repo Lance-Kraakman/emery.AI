@@ -9,7 +9,7 @@
  * @example
  * ```tsx
  * function MyComponent({ text }) {
- *   // Text like "Hello {state.userName}!" becomes "Hello John!"
+ *   // Text like "Hello {{state.userName}}!" becomes "Hello John!"
  *   // Re-renders when state changes
  *   const interpolated = useInterpolatedText(text);
  *   return <span>{interpolated}</span>;
@@ -33,7 +33,7 @@ import {
  *
  * Automatically subscribes to state changes for reactive updates.
  *
- * @param text - Text with optional variable references like {state.key}
+ * @param text - Text with optional variable references like {{state.key}}
  * @returns Interpolated text with all variables resolved
  */
 export function useInterpolatedText(text: string | undefined | null): string {

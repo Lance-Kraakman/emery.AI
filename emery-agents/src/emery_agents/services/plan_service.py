@@ -74,6 +74,7 @@ class PlanService:
         user_feedback: Optional[str] = None,
         organization_id: Optional[int] = None,
         skill_outputs: Optional[List[dict]] = None,
+        is_skill_template: bool = False,
     ) -> Plan:
         """
         Generate plan using context-first planning pattern.
@@ -98,6 +99,7 @@ class PlanService:
             user_feedback: Optional user feedback for plan regeneration
             organization_id: Optional organization ID for research_agent (RLS context)
             skill_outputs: Optional skill output definitions for result-aware planning
+            is_skill_template: If True, plan is for a reusable skill (no hardcoded IDs)
 
         Returns:
             Plan object with generated steps, context, and analysis
@@ -121,7 +123,8 @@ class PlanService:
         planner_tools = [plan_tool]
 
         # Create research_agent for intelligent context gathering
-        # This agent has ResearchEmery as sub-agent for system introspection
+        # For skill templates: research is allowed (to understand tools/capabilities)
+        # but the OUTPUT must use {input_variables} instead of hardcoded values
         planner_managed_agents = []
         if api_key and organization_id:
             research_agent = create_research_agent(
@@ -167,6 +170,7 @@ class PlanService:
             skill_outputs=skill_outputs or [],  # For result-aware planning
             previous_plan_json=previous_plan_json,  # For regeneration with feedback
             user_feedback=user_feedback,  # User feedback for improvement
+            is_skill_template=is_skill_template,  # True = no hardcoded IDs
         )
 
         logger.info(f"📋 Generating plan with research-driven pattern...")
@@ -197,7 +201,7 @@ class PlanService:
                 plan_context = captured.get("context")
                 plan_analysis = captured.get("analysis")
 
-                # Steps are now objects with description and optional target_agent
+                # Steps are now objects with description, target_agent, and optional prompt_template
                 steps = []
                 for step_data in captured["steps"]:
                     if isinstance(step_data, dict):
@@ -206,6 +210,8 @@ class PlanService:
                             tool_call=None,
                             parameters=None,
                             target_agent=step_data.get("target_agent"),
+                            prompt_template=step_data.get("prompt_template"),
+                            required_context=step_data.get("required_context", []),
                         ))
                     else:
                         # Legacy string format
@@ -510,7 +516,7 @@ class PlanService:
 
         # Build prompt using recovery template
         prompt = render_template(
-            "planning/step_recovery.j2",
+            "execution/step_recovery.j2",
             failed_step=failed_step,
             error_message=error_message,
             plan_goal=plan.goal,

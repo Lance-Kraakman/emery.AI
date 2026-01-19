@@ -35,6 +35,7 @@ from .sub_agent_planner import SubAgentPlanner, SubAgentPlanningResult
 from .protocols import EvaluatorAgent, Tool, ModelProvider, ManagedAgent
 from .task_classifier import TaskClassifier, TaskClassification
 from .research_tools_provider import get_research_tools, detect_research_intent
+from ..types import ExecutionMode
 
 logger = logging.getLogger(__name__)
 
@@ -389,6 +390,8 @@ class ExecutionCoordinator:
 
         # Unified phase for handle_message() routing (replaces session_manager's coordinator_phase)
         self._unified_phase: Phase = Phase.IDLE
+        # Execution mode (interactive vs autonomous) - set in execute() based on stored_plan
+        self._execution_mode: Optional[ExecutionMode] = None
         # Pending context for resumption after user input (replaces session_manager's original_task)
         self._pending_context: Optional[PendingContext] = None
 
@@ -458,6 +461,14 @@ class ExecutionCoordinator:
         return self._unified_phase
 
     @property
+    def execution_mode(self) -> Optional[ExecutionMode]:
+        """Get current execution mode (autonomous or interactive).
+
+        Returns None if execute() hasn't been called yet.
+        """
+        return self._execution_mode
+
+    @property
     def is_terminal_state(self) -> bool:
         """Check if coordinator is in a terminal state (completed or failed)."""
         return self._unified_phase in (Phase.COMPLETED, Phase.FAILED)
@@ -520,6 +531,7 @@ class ExecutionCoordinator:
 
         # === AUTONOMOUS MODE: Execute stored plan directly ===
         if stored_plan:
+            self._execution_mode = ExecutionMode.AUTONOMOUS
             logger.info(
                 f"📋 Coordinator: Executing stored plan '{stored_plan.id}' "
                 f"with {len(stored_plan.steps)} steps (autonomous mode)"
@@ -531,7 +543,7 @@ class ExecutionCoordinator:
                 action="loaded",
                 plan_id=stored_plan.id,
                 goal=stored_plan.goal,
-                steps=[{"step_id": s.step_id, "description": s.description, "status": s.status.value} for s in stored_plan.steps],
+                steps=[{"step_id": s.step_id, "description": s.description, "status": s.status} for s in stored_plan.steps],
                 context=stored_plan.context,
                 analysis=stored_plan.analysis
             )
@@ -544,6 +556,9 @@ class ExecutionCoordinator:
             async for event in self.execute_plan(stored_plan.id, tools):
                 yield event
             return
+
+        # === INTERACTIVE MODE: Planning → Approval → Execution ===
+        self._execution_mode = ExecutionMode.INTERACTIVE
 
         # Use LLM-based classification
         self._session_logger.log_state_transition("IDLE", "CLASSIFYING", "task_received")
@@ -602,6 +617,7 @@ class ExecutionCoordinator:
         tools: List[Any],
         managed_agents: Optional[List[ManagedAgent]] = None,
         context: Optional[str] = None,
+        is_skill_template: bool = False,
     ) -> AsyncIterator[Any]:
         """
         Classify task and create plan without execution.
@@ -615,6 +631,7 @@ class ExecutionCoordinator:
             tools: Available tools (for plan context)
             managed_agents: Available managed agents (for classification context)
             context: Additional context (e.g., existing databases)
+            is_skill_template: If True, plan won't hardcode IDs (for reusable skills)
 
         Yields:
             AwaitingClarificationEvent if questions needed (caller should pause)
@@ -657,6 +674,7 @@ class ExecutionCoordinator:
             instructions=task,
             tools=tools,
             managed_agents=managed_agents,
+            is_skill_template=is_skill_template,
         ):
             yield event
 
@@ -722,6 +740,7 @@ class ExecutionCoordinator:
         tools: List[Any],
         context_tables: Optional[ResolvedContext] = None,
         managed_agents: Optional[List[Any]] = None,
+        is_skill_template: bool = False,
     ) -> AsyncIterator[Any]:
         """
         Phase 1: Create a plan using read-only tools.
@@ -735,6 +754,7 @@ class ExecutionCoordinator:
             tools: Available tools (will be filtered to read-only)
             context_tables: Resolved context mappings for available tables
             managed_agents: Available managed agents (for routing decisions)
+            is_skill_template: If True, plan is for a reusable skill (no hardcoded IDs)
 
         Yields:
             PlanCreatedEvent when plan is ready for approval
@@ -778,6 +798,7 @@ class ExecutionCoordinator:
                 research_tools=research_tools,
                 api_key=self._api_key,
                 organization_id=self._organization_id,
+                is_skill_template=is_skill_template,
             )
         except Exception as e:
             logger.error(f"❌ Plan generation failed: {e}")

@@ -4,11 +4,11 @@
  * VariableAutocompleteInput
  *
  * A text input with inline autocomplete for template variables.
- * Shows suggestions when user types `{` and allows inserting variables.
+ * Shows suggestions when user types `{{` and allows inserting variables.
  *
  * Supports:
- * - {fieldName} - Row data fields from DataBlock context
- * - {state.variableName} - State variables from page-level state (auto-populate from URL params)
+ * - {{fieldName}} - Row data fields from DataBlock context
+ * - {{state.variableName}} - State variables from page-level state (auto-populate from URL params)
  *
  * Uses DataLayoutContext to get available fields and sample values.
  * Uses StateContext to get page-level state config.

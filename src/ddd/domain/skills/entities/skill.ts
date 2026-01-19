@@ -108,6 +108,8 @@ export interface StoredPlanStep {
   contextTables?: string[];
   targetAgent?: string;        // Managed agent for routing
   subPlan?: StoredSubPlan;     // From cascading planning
+  promptTemplate?: string;     // Jinja2 template for autonomous execution ({{ variables }})
+  requiredContext?: string[];  // Variables needed at runtime from skill inputs/discovery
 }
 
 /**

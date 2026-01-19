@@ -4,7 +4,7 @@
  * ConditionalBlock - Conditionally render children based on state, params, or row data
  *
  * AIDEV-NOTE: Uses flat namespace for state - no containers.
- * State variables are accessed directly by key via {state.key}.
+ * State variables are accessed directly by key via {{state.key}}.
  * Boolean variables are just regular state with type 'boolean'.
  *
  * In editor mode: Shows condition badge and always renders children

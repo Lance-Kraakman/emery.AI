@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { Table2, MoreVertical, Loader2, Settings2 } from 'lucide-react';
+import { Table2, MoreVertical, Loader2, ChevronDown, Settings2 } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
@@ -20,6 +20,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { DataSourcePicker } from '@/components/data-sources';
@@ -196,24 +201,25 @@ export function AgenticSkillEditor({
     onChange({ ...value, ...updates });
   };
 
+  // Track collapsible state
+  const [isConfigOpen, setIsConfigOpen] = useState(true);
+
   return (
     <div className={cn(
-      'h-full flex flex-col p-4 gap-4',
+      'h-full flex flex-col p-4 overflow-y-auto',
       hasFloatingHeader && 'pt-24'
     )}>
-      {/* Skill Config Section - Always expanded */}
-      <div className="border rounded-lg bg-muted/20 shrink-0">
-        <div className="flex items-center justify-between px-3 py-2 border-b">
-          <div className="flex items-center gap-2">
-            <Settings2 className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium">Skill Config</span>
-          </div>
-          <span className="text-xs text-muted-foreground">
-            {value.inputs.length} input{value.inputs.length !== 1 ? 's' : ''}, {value.outputs.length} output{value.outputs.length !== 1 ? 's' : ''}
-          </span>
-        </div>
-
-        <div className="px-3 pb-3 pt-3 space-y-4">
+      {/* Skill Config Section - Collapsible */}
+      <Collapsible open={isConfigOpen} onOpenChange={setIsConfigOpen}>
+        <CollapsibleTrigger className="flex items-center gap-2 w-full text-left mb-3 group">
+          <Settings2 className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm font-medium">Skill Config</span>
+          <ChevronDown className={cn(
+            "h-4 w-4 text-muted-foreground transition-transform",
+            !isConfigOpen && "-rotate-90"
+          )} />
+        </CollapsibleTrigger>
+        <CollapsibleContent className="space-y-4">
           {/* Description - compact, 1-2 lines */}
           <div className="space-y-1">
             <Label className="text-xs">Description</Label>
@@ -407,11 +413,11 @@ export function AgenticSkillEditor({
               )}
             </div>
           </div>
-        </div>
-      </div>
+        </CollapsibleContent>
+      </Collapsible>
 
-      {/* Plan Builder Section - Instructions + Plan Generation */}
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      {/* Plan Builder Section - Always visible */}
+      <div className="mt-4">
         <PlanBuilderSection
           instructions={value.instructions || ''}
           onInstructionsChange={(instructions) => handleChange({ instructions })}

@@ -746,7 +746,9 @@ function mapStoredPlanStepToProto(step: StoredPlanStep): StoredPlanStepProto {
     ),
     contextTables: step.contextTables || [],
     targetAgent: step.targetAgent || '',
-    subPlan: step.subPlan ? mapStoredSubPlanToProto(step.subPlan) : undefined
+    subPlan: step.subPlan ? mapStoredSubPlanToProto(step.subPlan) : undefined,
+    promptTemplate: step.promptTemplate || '',
+    requiredContext: step.requiredContext || [],
   };
 }
 

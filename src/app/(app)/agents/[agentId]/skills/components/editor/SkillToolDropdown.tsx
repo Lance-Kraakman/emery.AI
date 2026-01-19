@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp, Search } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import type { ToolDTO } from '@/app/mappers/tool-mapper';
 import type { PipedreamToolMetadata } from '@/app/actions/tools';
 import { AdvancedFilters } from '@/components/chat/tool-dropdown/AdvancedFilters';
@@ -21,12 +22,21 @@ interface SkillToolDropdownProps {
 export function SkillToolDropdown({ onSelectTool, disabled }: SkillToolDropdownProps) {
   const [isClient, setIsClient] = useState(false);
   const [filtersExpanded, setFiltersExpanded] = useState(false);
-  const [searchQuery] = useState(''); // Empty search to load all tools
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
 
   // Filter state - default connectedOnly to false so tools show immediately
   const [selectedApps, setSelectedApps] = useState<string[]>([]);
   const [connectedOnly, setConnectedOnly] = useState(false);
   const [requiresConnection, setRequiresConnection] = useState<boolean | undefined>(undefined);
+
+  // Debounce search query
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setDebouncedQuery(searchQuery);
+    }, 300);
+    return () => clearTimeout(timeout);
+  }, [searchQuery]);
 
   // Fix hydration mismatch
   useEffect(() => {
@@ -38,7 +48,7 @@ export function SkillToolDropdown({ onSelectTool, disabled }: SkillToolDropdownP
 
   // Tool search with infinite scroll - fixed to only show app tools
   const search = useToolSearch({
-    query: searchQuery,
+    query: debouncedQuery,
     selectedCategories: [], // No reference categories
     selectedApps,
     connectedOnly,
@@ -100,17 +110,38 @@ export function SkillToolDropdown({ onSelectTool, disabled }: SkillToolDropdownP
   if (!isClient) return null;
 
   return (
-    <div className="border rounded-lg flex flex-col overflow-hidden">
-      {/* Header with expand toggle */}
-      <div className="px-2.5 py-2 border-b border-border flex items-center justify-between bg-muted/30">
-        <span className="text-sm font-medium text-foreground">Select Tool</span>
+    <div className="border rounded-lg flex flex-col overflow-hidden min-h-[350px]">
+      {/* Search input */}
+      <div className="p-2 border-b border-border">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Input
+            placeholder="Search tools..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-8 h-8 text-sm"
+            disabled={disabled}
+          />
+        </div>
+      </div>
+
+      {/* Filters header with expand toggle */}
+      <div className="px-2.5 py-1.5 border-b border-border flex items-center justify-between bg-muted/30">
         <button
           onClick={() => setFiltersExpanded(!filtersExpanded)}
-          className="p-1 rounded hover:bg-accent text-muted-foreground"
-          title={filtersExpanded ? 'Hide filters' : 'Show filters'}
+          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
         >
-          {filtersExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          {filtersExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          Filters
         </button>
+        {hasActiveFilters && (
+          <button
+            onClick={clearAllFilters}
+            className="text-[10px] text-red-500 hover:text-red-400"
+          >
+            Clear all
+          </button>
+        )}
       </div>
 
       {/* Advanced Filters - collapsible */}
@@ -137,17 +168,19 @@ export function SkillToolDropdown({ onSelectTool, disabled }: SkillToolDropdownP
       )}
 
       {/* Tool List with infinite scroll */}
-      <ToolList
-        tools={search.allTools}
-        hasMore={search.hasMore}
-        isLoading={search.isLoading}
-        isLoadingMore={search.isLoadingMore}
-        error={search.error}
-        onLoadMore={search.loadMoreTools}
-        onSelectTool={handleSelectTool}
-        query={searchQuery}
-        availableApps={appFilter.availableApps || []}
-      />
+      <div className="flex-1 min-h-0">
+        <ToolList
+          tools={search.allTools}
+          hasMore={search.hasMore}
+          isLoading={search.isLoading}
+          isLoadingMore={search.isLoadingMore}
+          error={search.error}
+          onLoadMore={search.loadMoreTools}
+          onSelectTool={handleSelectTool}
+          query={debouncedQuery}
+          availableApps={appFilter.availableApps || []}
+        />
+      </div>
     </div>
   );
 }

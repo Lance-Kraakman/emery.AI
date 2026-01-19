@@ -294,6 +294,8 @@ message StoredPlanStep {
   repeated string context_tables = 5;  // Tables this step needs access to
   string target_agent = 6;             // Managed agent for routing (e.g., "schema_builder")
   StoredSubPlan sub_plan = 7;          // Sub-plan from cascading planning
+  string prompt_template = 8;          // Jinja2 template for autonomous execution ({{ variables }})
+  repeated string required_context = 9; // Variables needed at runtime from skill inputs/discovery
 }
 
 // Sub-plan from cascading planning

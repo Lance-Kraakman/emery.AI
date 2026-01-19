@@ -443,11 +443,15 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                         logger.debug(f"📤 Creating StepProgress protobuf message: type={response_dict.get('step_type')}, name={response_dict.get('step_name')}")
 
                         # Create StepProgress message without metadata
+                        # Ensure step_index is an integer (may come as string from some sources)
+                        raw_step_index = response_dict.get("step_index", 0)
+                        step_index = int(raw_step_index) if raw_step_index is not None else 0
+
                         step_progress_msg = agent_worker_pb2.StepProgress(
                             step_type=step_type_map.get(response_dict.get("step_type"), agent_worker_pb2.STEP_PLANNING),
                             step_name=response_dict.get("step_name", ""),
                             content=response_dict.get("content", ""),
-                            step_index=response_dict.get("step_index", 0)
+                            step_index=step_index
                         )
 
                         # Explicitly populate metadata map field (protobuf requires field-by-field assignment)
@@ -1458,6 +1462,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             )
 
             # Execute stored plan directly (no classification, no approval)
+            step_index = 0
             async for event in coordinator.execute(
                 task=task,
                 tools=tools,
@@ -1465,7 +1470,10 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 stored_plan=stored_plan,  # Pass stored plan for direct execution
                 agent_factories=agent_factories,
             ):
-                yield convert_coordinator_event(event, session_id)
+                converted = convert_coordinator_event(event, step_index)
+                if converted:
+                    yield converted
+                    step_index += 1
 
             return
 
@@ -1812,7 +1820,13 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     "context": plan.context,
                     "analysis": plan.analysis,
                     "steps": [
-                        {"step_id": s.step_id, "description": s.description, "tool_call": s.tool_call}
+                        {
+                            "step_id": s.step_id,
+                            "description": s.description,
+                            "tool_call": s.tool_call,
+                            "prompt_template": s.prompt_template,
+                            "required_context": s.required_context or [],
+                        }
                         for s in plan.steps
                     ]
                 })
@@ -1956,10 +1970,12 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             yield _make_progress("Classifying task...", "analyzing")
 
             # Use coordinator's classify_and_create_plan (same logic as ProcessMessage)
+            # is_skill_template=True ensures plan won't hardcode IDs (skills are reusable)
             async for event in coordinator.classify_and_create_plan(
                 task=task_instructions,
                 tools=[],  # No tools needed for skill plan generation
                 managed_agents=managed_agents,
+                is_skill_template=True,  # Skills are reusable templates - no hardcoded IDs
             ):
                 if isinstance(event, AwaitingClarificationEvent):
                     # Same handling as ProcessMessage - yield questions and pause
@@ -2033,6 +2049,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     "toolCall": step.tool_call,
                     "parameters": step.parameters or {},
                     "targetAgent": step.target_agent,
+                    "promptTemplate": step.prompt_template,
+                    "requiredContext": step.required_context or [],
                 }
                 for step in plan.steps
             ],

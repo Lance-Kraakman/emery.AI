@@ -595,7 +595,13 @@ export interface StoredPlanStep {
   /** Managed agent for routing (e.g., "schema_builder") */
   targetAgent: string;
   /** Sub-plan from cascading planning */
-  subPlan: StoredSubPlan | undefined;
+  subPlan:
+    | StoredSubPlan
+    | undefined;
+  /** Jinja2 template for autonomous execution ({{ variables }}) */
+  promptTemplate: string;
+  /** Variables needed at runtime from skill inputs/discovery */
+  requiredContext: string[];
 }
 
 export interface StoredPlanStep_ParametersEntry {
@@ -4682,6 +4688,8 @@ function createBaseStoredPlanStep(): StoredPlanStep {
     contextTables: [],
     targetAgent: "",
     subPlan: undefined,
+    promptTemplate: "",
+    requiredContext: [],
   };
 }
 
@@ -4707,6 +4715,12 @@ export const StoredPlanStep: MessageFns<StoredPlanStep> = {
     }
     if (message.subPlan !== undefined) {
       StoredSubPlan.encode(message.subPlan, writer.uint32(58).fork()).join();
+    }
+    if (message.promptTemplate !== "") {
+      writer.uint32(66).string(message.promptTemplate);
+    }
+    for (const v of message.requiredContext) {
+      writer.uint32(74).string(v!);
     }
     return writer;
   },
@@ -4777,6 +4791,22 @@ export const StoredPlanStep: MessageFns<StoredPlanStep> = {
           message.subPlan = StoredSubPlan.decode(reader, reader.uint32());
           continue;
         }
+        case 8: {
+          if (tag !== 66) {
+            break;
+          }
+
+          message.promptTemplate = reader.string();
+          continue;
+        }
+        case 9: {
+          if (tag !== 74) {
+            break;
+          }
+
+          message.requiredContext.push(reader.string());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -4802,6 +4832,10 @@ export const StoredPlanStep: MessageFns<StoredPlanStep> = {
         : [],
       targetAgent: isSet(object.targetAgent) ? globalThis.String(object.targetAgent) : "",
       subPlan: isSet(object.subPlan) ? StoredSubPlan.fromJSON(object.subPlan) : undefined,
+      promptTemplate: isSet(object.promptTemplate) ? globalThis.String(object.promptTemplate) : "",
+      requiredContext: globalThis.Array.isArray(object?.requiredContext)
+        ? object.requiredContext.map((e: any) => globalThis.String(e))
+        : [],
     };
   },
 
@@ -4834,6 +4868,12 @@ export const StoredPlanStep: MessageFns<StoredPlanStep> = {
     if (message.subPlan !== undefined) {
       obj.subPlan = StoredSubPlan.toJSON(message.subPlan);
     }
+    if (message.promptTemplate !== "") {
+      obj.promptTemplate = message.promptTemplate;
+    }
+    if (message.requiredContext?.length) {
+      obj.requiredContext = message.requiredContext;
+    }
     return obj;
   },
 
@@ -4859,6 +4899,8 @@ export const StoredPlanStep: MessageFns<StoredPlanStep> = {
     message.subPlan = (object.subPlan !== undefined && object.subPlan !== null)
       ? StoredSubPlan.fromPartial(object.subPlan)
       : undefined;
+    message.promptTemplate = object.promptTemplate ?? "";
+    message.requiredContext = object.requiredContext?.map((e) => e) || [];
     return message;
   },
 };
