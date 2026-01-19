@@ -113,6 +113,10 @@ class PlanStep:
     For skill templates (autonomous execution):
     - prompt_template: Jinja2 template for the execution prompt, with {{ variables }}
     - required_context: List of variable names needed at runtime
+
+    For OAuth connection requirements:
+    - connection_required: App slug (e.g., "slack", "gmail") that needs OAuth connection
+      If set, this step is a prerequisite that requires user to connect the app.
     """
     step_id: str
     description: str
@@ -128,6 +132,8 @@ class PlanStep:
     # Prompt template fields for autonomous execution
     prompt_template: Optional[str] = None  # Jinja2 template with {{ variables }}
     required_context: List[str] = field(default_factory=list)  # Variables needed at runtime
+    # OAuth connection requirement (Phase 2: discover_tools integration)
+    connection_required: Optional[str] = None  # App slug requiring connection (e.g., "slack", "gmail")
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -144,6 +150,7 @@ class PlanStep:
             "targetAgent": self.target_agent,
             "promptTemplate": self.prompt_template,
             "requiredContext": self.required_context,
+            "connectionRequired": self.connection_required,
         }
 
     @classmethod
@@ -163,6 +170,7 @@ class PlanStep:
             target_agent=data.get("targetAgent", data.get("target_agent")),
             prompt_template=data.get("promptTemplate", data.get("prompt_template")),
             required_context=data.get("requiredContext", data.get("required_context", [])),
+            connection_required=data.get("connectionRequired", data.get("connection_required")),
         )
 
     @classmethod
@@ -195,6 +203,7 @@ class PlanStep:
             target_agent=proto.target_agent or None,
             prompt_template=proto.prompt_template or None,
             required_context=list(proto.required_context) if proto.required_context else [],
+            connection_required=proto.connection_required if hasattr(proto, 'connection_required') and proto.connection_required else None,
         )
 
     def mark_in_progress(self) -> "PlanStep":
@@ -212,6 +221,7 @@ class PlanStep:
             target_agent=self.target_agent,
             prompt_template=self.prompt_template,
             required_context=self.required_context,
+            connection_required=self.connection_required,
         )
 
     def mark_completed(self, result: Optional[str] = None) -> "PlanStep":
@@ -229,6 +239,7 @@ class PlanStep:
             target_agent=self.target_agent,
             prompt_template=self.prompt_template,
             required_context=self.required_context,
+            connection_required=self.connection_required,
         )
 
     def mark_failed(self, error: str) -> "PlanStep":
@@ -246,6 +257,7 @@ class PlanStep:
             target_agent=self.target_agent,
             prompt_template=self.prompt_template,
             required_context=self.required_context,
+            connection_required=self.connection_required,
         )
 
     def with_sub_plan(self, sub_plan: "SubPlan") -> "PlanStep":
@@ -263,6 +275,7 @@ class PlanStep:
             target_agent=sub_plan.agent_name,
             prompt_template=self.prompt_template,
             required_context=self.required_context,
+            connection_required=self.connection_required,
         )
 
     def with_target_agent(self, agent_name: str) -> "PlanStep":
@@ -280,6 +293,7 @@ class PlanStep:
             target_agent=agent_name,
             prompt_template=self.prompt_template,
             required_context=self.required_context,
+            connection_required=self.connection_required,
         )
 
     def with_parameters(self, parameters: Dict[str, Any]) -> "PlanStep":
@@ -297,6 +311,7 @@ class PlanStep:
             target_agent=self.target_agent,
             prompt_template=self.prompt_template,
             required_context=self.required_context,
+            connection_required=self.connection_required,
         )
 
 
@@ -371,6 +386,8 @@ class Plan:
             result["promptTemplate"] = step.prompt_template
         if step.required_context:
             result["requiredContext"] = step.required_context
+        if step.connection_required:
+            result["connectionRequired"] = step.connection_required
         if step.sub_plan:
             result["subPlan"] = {
                 "agentName": step.sub_plan.agent_name,
@@ -642,6 +659,7 @@ def create_step(
     target_agent: Optional[str] = None,
     prompt_template: Optional[str] = None,
     required_context: Optional[List[str]] = None,
+    connection_required: Optional[str] = None,
 ) -> PlanStep:
     """
     Factory function to create a new plan step.
@@ -654,6 +672,7 @@ def create_step(
         target_agent: Name of managed agent to handle this step
         prompt_template: Jinja2 template for autonomous execution
         required_context: Variables needed at runtime for the template
+        connection_required: App slug requiring OAuth connection (e.g., "slack", "gmail")
 
     Returns:
         A new PlanStep instance in pending status
@@ -669,6 +688,7 @@ def create_step(
         target_agent=target_agent,
         prompt_template=prompt_template,
         required_context=required_context or [],
+        connection_required=connection_required,
     )
 
 

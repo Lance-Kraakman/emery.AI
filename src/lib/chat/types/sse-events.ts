@@ -41,6 +41,7 @@ export interface PlanStepData {
   toolName?: string
   toolArgs?: Record<string, any>
   status?: 'pending' | 'in_progress' | 'completed' | 'failed'
+  connectionRequired?: string  // App slug requiring OAuth connection (e.g., "slack", "gmail")
 }
 
 /**

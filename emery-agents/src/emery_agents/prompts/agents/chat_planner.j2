@@ -126,3 +126,36 @@ Tables in Emery have:
 
 Table IDs are NUMERIC. When user references a table by name, the specialized agent
 will resolve it by listing tables and finding the matching ID.
+
+### Working with External Tools & Integrations
+
+When users want to use external services (Gmail, Slack, etc.), you can delegate to **discover_tools** to:
+- Search for available integrations by category or keyword
+- Check which apps the user has already connected
+- Get tool schemas and input requirements
+
+**Before planning tool usage:**
+1. Use discover_tools to find candidate tools matching the user's intent
+2. Check if the required app is already connected
+3. If NOT connected: include a "connection_required" step in the plan with the app slug
+4. If connected: proceed with the tool call step
+
+**Connection Required Steps:**
+When a plan step requires an OAuth connection that the user doesn't have, set `connection_required` to the app slug (e.g., "slack", "gmail"). The frontend will prompt the user to connect before execution can proceed.
+
+Example flow:
+```
+User: "Send a Slack message to #alerts when there's a new row"
+
+1. discover_tools("find tools for sending Slack messages")
+   → Returns: slack-send-message (requires OAuth)
+
+2. discover_tools: check_connections()
+   → User has NOT connected Slack
+
+3. Plan includes:
+   Step 1: connection_required="slack" (Connect your Slack account)
+   Step 2: slack-send-message with parameters
+```
+
+If the user has the connection, skip the connection step and go directly to the tool call.

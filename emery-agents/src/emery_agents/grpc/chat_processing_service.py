@@ -772,6 +772,18 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 except ImportError as e:
                     logger.warning(f"Research agent unavailable (missing dependency): {e}")
 
+                # Discover tools agent for integration discovery
+                # Pass api_key and org_id for checking user's OAuth connections
+                discover_tools_agent = None
+                try:
+                    discover_tools_agent = self.managed_agents_factory.create_discover_tools(
+                        api_key=tool_provider.api_key,
+                        organization_id=tool_provider.organization_id,
+                        org_model=org_model
+                    )
+                except Exception as e:
+                    logger.warning(f"Discover tools agent unavailable: {e}")
+
                 # Load user-defined agents (dynamically created from DB)
                 # AIDEV-NOTE: This enables ChatPlanner to route to user agents via:
                 # 1. Natural language ("use my sales bot") via managed_agents
@@ -799,11 +811,12 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 # InterruptAwareToolCallingAgent sets interrupt_switch=True
                 # when detecting interrupt from managed agent, breaking the loop
                 # Pass file_attachments so chat agent can see available files in session
-                # Filter None values in case research_agent failed to create
+                # Filter None values in case research_agent or discover_tools_agent failed to create
                 managed_agents = [a for a in [
                     skill_builder_agent, document_builder_agent,
                     table_builder_agent, schema_builder_agent,
                     app_builder_agent, agent_builder_agent, research_agent,
+                    discover_tools_agent,  # Integration discovery for Pipedream tools
                     system_designer_agent,  # Top-level orchestrator for complex systems
                 ] if a is not None]
 

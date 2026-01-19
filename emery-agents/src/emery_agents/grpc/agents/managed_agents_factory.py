@@ -26,6 +26,7 @@ from ...agents.agent_builder_agent import create_agent_builder_agent
 from ...agents.page_builder_agent import create_page_builder_agent
 from ...agents.agent_executor_agent import create_agent_executor
 from ...agents.system_designer_agent import create_system_designer_agent
+from ...agents.discover_tools_agent import create_discover_tools_agent
 from ...tools.tool_executor import create_tool_executor
 from ...tools.block_schema_tool import BlockSchemaTool
 from ...services.tool_provider import ToolProvider
@@ -322,6 +323,35 @@ class ManagedAgentsFactory:
 
         logger.info("Created ResearchEmery agent (read-only system introspection)")
         return research_emery
+
+    def create_discover_tools(
+        self,
+        api_key: Optional[str] = None,
+        organization_id: Optional[int] = None,
+        org_model: Optional[str] = None,
+    ) -> ToolCallingAgent:
+        """
+        Create discover_tools agent for integration discovery.
+
+        discover_tools agent is READ-ONLY - no HITL approval needed.
+        Helps users find available Pipedream tools and check OAuth connections.
+
+        AIDEV-NOTE: Used as a managed agent of chat_planner for tool discovery
+        during planning. Can search tools, list integrations, check connections.
+        """
+        model = self.model_provider.get_model(
+            self.model_provider.resolve_model_selection(org_model=org_model)
+        )
+
+        discover_tools = create_discover_tools_agent(
+            model=model,
+            api_key=api_key,
+            organization_id=organization_id,
+            max_steps=10,
+        )
+
+        logger.info("Created discover_tools agent (read-only integration discovery)")
+        return discover_tools
 
     def create_app_builder(
         self,
@@ -711,6 +741,15 @@ class ManagedAgentsFactory:
         except Exception as e:
             logger.warning(f"Failed to create research_agent: {e}")
 
+        try:
+            agents.append(self.create_discover_tools(
+                api_key=tool_provider.api_key,
+                organization_id=tool_provider.organization_id,
+                org_model=org_model
+            ))
+        except Exception as e:
+            logger.warning(f"Failed to create discover_tools: {e}")
+
         logger.info(f"Created {len(agents)} managed agents for plan generation")
         return agents
 
@@ -931,6 +970,20 @@ class ManagedAgentsFactory:
                 **kwargs
             )
 
+        def discover_tools_factory(**kwargs: Any) -> Any:
+            """Factory for discover_tools with cascade planning support.
+
+            AIDEV-NOTE: discover_tools is READ-ONLY for integration discovery.
+            Helps users find Pipedream tools and check OAuth connections.
+            """
+            return create_discover_tools_agent(
+                model=model,
+                api_key=kwargs.pop('api_key', tool_provider.api_key),
+                organization_id=kwargs.pop('organization_id', tool_provider.organization_id),
+                max_steps=10,
+                **kwargs
+            )
+
         return {
             "schema_builder": schema_builder_factory,
             "table_builder": table_builder_factory,
@@ -942,4 +995,5 @@ class ManagedAgentsFactory:
             "agent_builder": agent_builder_factory,
             "page_builder": page_builder_factory,
             "system_designer": system_designer_factory,
+            "discover_tools": discover_tools_factory,
         }
