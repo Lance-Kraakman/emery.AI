@@ -821,12 +821,44 @@ export async function POST(req: NextRequest) {
                 controller.close();
                 
               } else if (response.type === 'awaiting_input' && response.awaitingInput) {
-                // HITL: Agent needs user input (plan approval or question)
+                // HITL: Agent needs user input (plan approval, question, or permission)
                 console.log(`[CHAT-GRPC-API] Agent awaiting input:`, {
                   inputType: response.awaitingInput.inputType,
                   title: response.awaitingInput.title,
                   optionsCount: response.awaitingInput.options?.length || 0
                 });
+
+                // Special handling for permission_request - emit dedicated event type
+                // AIDEV-NOTE: Permission requests are sent as awaiting_input from Python
+                // but converted to permission_request SSE events for the frontend
+                if (response.awaitingInput.inputType === 'permission_request') {
+                  try {
+                    const permissionData = JSON.parse(response.awaitingInput.planJson || '{}');
+                    const permissionEvent = {
+                      type: 'permission_request',
+                      permission: permissionData.permission || 'unknown',
+                      resource: permissionData.resource || undefined,
+                      resourceId: permissionData.resourceId || undefined,
+                      action: permissionData.action || 'access',
+                      context: permissionData.context || response.awaitingInput.content,
+                    };
+                    controller.enqueue(encodeSSEEvent(permissionEvent));
+                    console.log(`[CHAT-GRPC-API] Sent permission_request event (permission=${permissionData.permission})`);
+                  } catch (parseError) {
+                    console.error('[CHAT-GRPC-API] Failed to parse permission data:', parseError);
+                    // Fallback to generic awaiting_input
+                    const fallbackEvent = {
+                      type: 'awaiting_input',
+                      inputType: response.awaitingInput.inputType,
+                      title: response.awaitingInput.title,
+                      content: response.awaitingInput.content,
+                      options: response.awaitingInput.options || [],
+                      planJson: response.awaitingInput.planJson || null
+                    };
+                    controller.enqueue(encodeSSEEvent(fallbackEvent));
+                  }
+                  return; // Don't fall through to generic awaiting_input handling
+                }
 
                 // Store awaiting input state for message persistence
                 // AIDEV-NOTE: This allows UI to show approval/question UI on page reload
