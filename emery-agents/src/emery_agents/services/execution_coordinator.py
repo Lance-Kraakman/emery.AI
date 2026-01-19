@@ -1764,11 +1764,17 @@ Consider what has already been done and what still needs to happen.
 """
 
         # Use plan service to generate recovery steps
+        # IMPORTANT: Must pass same model/auth parameters as _generate_plan()
+        # to ensure correct model resolution (not falling back to HF default)
         recovery_plan = await self.plan_service.generate_plan(
             basic_instructions=recovery_prompt,
             context_tables=None,  # Use existing context
             available_tools=[getattr(t, 'name', str(t)) for t in tools],
             goal=f"Recovery: {current_plan.goal}",
+            org_model=self._org_model,
+            tools=tools,
+            api_key=self._api_key,
+            organization_id=self._organization_id,
             conversation_history=self._conversation_history,  # ACE: Resolve references
             strategy_service=self._strategy_service,  # ACE: Proven patterns
         )
