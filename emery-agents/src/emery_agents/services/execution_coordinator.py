@@ -35,6 +35,9 @@ from .sub_agent_planner import SubAgentPlanner, SubAgentPlanningResult
 from .protocols import EvaluatorAgent, Tool, ModelProvider, ManagedAgent
 from .task_classifier import TaskClassifier, TaskClassification
 from .research_tools_provider import get_research_tools, detect_research_intent
+from .execution_context_service import ExecutionContextService, create_execution_context_service
+from .strategy_accumulation_service import StrategyAccumulationService, create_strategy_accumulation_service
+from ..models.strategy_accumulation import StrategyOutcome
 from ..types import ExecutionMode
 
 logger = logging.getLogger(__name__)
@@ -356,6 +359,7 @@ class ExecutionCoordinator:
         org_model: Optional[str] = None,
         api_key: Optional[str] = None,
         organization_id: Optional[int] = None,
+        conversation_history: Optional[List[Any]] = None,
     ):
         """
         Initialize execution coordinator.
@@ -370,6 +374,7 @@ class ExecutionCoordinator:
             org_model: Organization model ID for model resolution hierarchy
             api_key: API key for model providers that require authentication (e.g., Gemini)
             organization_id: Organization ID for RLS context and research agent
+            conversation_history: Chat history for resolving references in planning (ACE pattern)
         """
         self.plan_service = plan_service or PlanService()
         self.evaluator_factory = evaluator_factory
@@ -426,6 +431,21 @@ class ExecutionCoordinator:
 
         # Store model_provider for recovery analysis (via plan_service)
         self._model_provider = model_provider
+
+        # ACE: Store conversation history for planning (resolves references like "option 1")
+        self._conversation_history = conversation_history
+
+        # ACE-inspired execution tracking services
+        self._execution_context_service: Optional[ExecutionContextService] = None
+        self._strategy_service: Optional[StrategyAccumulationService] = None
+        if model_provider:
+            self._execution_context_service = create_execution_context_service(
+                model_provider=model_provider,
+                org_model=org_model,
+                curate_after_steps=3,
+            )
+            self._strategy_service = create_strategy_accumulation_service()
+            logger.info("📊 ACE execution tracking services initialized")
 
     @classmethod
     def from_config(cls, config: ExecutionCoordinatorConfig) -> "ExecutionCoordinator":
@@ -808,6 +828,8 @@ class ExecutionCoordinator:
                 api_key=self._api_key,
                 organization_id=self._organization_id,
                 is_skill_template=is_skill_template,
+                conversation_history=self._conversation_history,  # ACE: Resolve references
+                strategy_service=self._strategy_service,  # ACE: Proven patterns
             )
         except Exception as e:
             logger.error(f"❌ Plan generation failed: {e}")
@@ -948,6 +970,15 @@ class ExecutionCoordinator:
         self._evaluation_count = 0
         steps_since_eval = 0
 
+        # Initialize ACE execution tracking on ledger
+        if self._ledger:
+            self._ledger.init_execution_tracking()
+            logger.info("📊 Execution tracking initialized on ledger")
+
+        # Track steps since last context curation
+        steps_since_curation = 0
+        curated_step_ids: List[str] = []  # Track which steps have been curated
+
         # Execute steps with replan support
         # The outer while loop allows restarting after a replan
         success = True
@@ -1081,6 +1112,57 @@ class ExecutionCoordinator:
                         step_id=step.step_id,
                         result=result,
                     )
+
+                    # ACE: Track execution context evolution
+                    if (
+                        self._ledger
+                        and self._ledger.evolution_tracker
+                        and self.plan_step_executor
+                    ):
+                        self._ledger.evolution_tracker.record_context_change(
+                            step_id=step.step_id,
+                            key=f"step_{step.step_id}_result",
+                            before_value=None,
+                            after_value=result,
+                        )
+
+                    # ACE: Run context curation periodically
+                    steps_since_curation += 1
+                    if (
+                        self._execution_context_service
+                        and self._ledger
+                        and self._ledger.execution_context
+                        and self.plan_step_executor
+                        and steps_since_curation >= self._execution_context_service.curate_after_steps
+                    ):
+                        # Get step results since last curation
+                        recent_step_ids = [
+                            s.step_id for s in self._current_plan.steps
+                            if s.status == PlanStepStatus.COMPLETED.value
+                            and s.step_id not in curated_step_ids
+                        ]
+
+                        if recent_step_ids:
+                            logger.info(f"📊 Running context curation for {len(recent_step_ids)} steps")
+                            self._ledger.execution_context = self._execution_context_service.curate(
+                                execution_context=self._ledger.execution_context,
+                                raw_step_results=self.plan_step_executor._step_results,
+                                recent_step_ids=recent_step_ids,
+                            )
+                            curated_step_ids.extend(recent_step_ids)
+                            steps_since_curation = 0
+
+                            # Take snapshot after curation
+                            if self._ledger.evolution_tracker:
+                                self._ledger.evolution_tracker.take_snapshot(
+                                    step_id=step.step_id,
+                                    context_state=self._ledger.execution_context.to_dict(),
+                                    summary=self._ledger.execution_context.get_relevant_context(500),
+                                )
+
+                            # Check for degradation
+                            if self._ledger.evolution_tracker.detect_degradation():
+                                logger.warning("📊 Context degradation detected during execution")
 
                     # Evaluate progress periodically
                     steps_since_eval += 1
@@ -1268,6 +1350,30 @@ class ExecutionCoordinator:
         else:
             self._current_plan = self._current_plan.fail()
             self._current_phase = ExecutionPhase.FAILED
+
+        # ACE: Record execution pattern for future strategy guidance
+        if self._strategy_service and self._current_plan:
+            outcome = StrategyOutcome.SUCCESS if success else StrategyOutcome.FAILURE
+            # Extract success/failure factors from ledger if available
+            success_factors: List[str] = []
+            failure_patterns: List[str] = []
+
+            if self._ledger:
+                # Get insights about what worked or didn't
+                if self._ledger.execution_context:
+                    for insight in self._ledger.execution_context.insights:
+                        if insight.insight_type.value in ("decision", "artifact"):
+                            success_factors.append(insight.summary)
+                        elif insight.insight_type.value in ("constraint", "error_recovery"):
+                            failure_patterns.append(insight.summary)
+
+            self._strategy_service.record_execution(
+                plan=self._current_plan,
+                outcome=outcome,
+                success_factors=success_factors[:5],  # Limit to top 5
+                failure_patterns=failure_patterns[:5],
+            )
+            logger.info(f"📊 Recorded execution pattern ({outcome.value})")
 
         logger.info(
             f"Plan {plan_id} execution {'completed' if success else 'failed'}"
@@ -1663,6 +1769,8 @@ Consider what has already been done and what still needs to happen.
             context_tables=None,  # Use existing context
             available_tools=[getattr(t, 'name', str(t)) for t in tools],
             goal=f"Recovery: {current_plan.goal}",
+            conversation_history=self._conversation_history,  # ACE: Resolve references
+            strategy_service=self._strategy_service,  # ACE: Proven patterns
         )
 
         # Build new step list:

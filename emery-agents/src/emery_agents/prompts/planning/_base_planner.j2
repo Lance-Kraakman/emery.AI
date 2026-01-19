@@ -65,6 +65,37 @@ You are regenerating an existing plan based on user feedback. DO NOT start from 
 {% endif %}
 
 ---
+{% if strategy_guidance %}
+
+## Strategy Guidance (Proven Patterns)
+
+These patterns have worked well for similar tasks in the past. Consider them when planning:
+
+{{ strategy_guidance }}
+
+---
+{% endif %}
+{% if has_conversation_history_lookup %}
+
+## Conversation History Lookup
+
+The **conversation_history_lookup** agent is available to search prior chat messages.
+
+**Use when the user references:**
+- "option 1", "option 2", etc. → Search for numbered options in assistant messages
+- "what you said", "earlier", "above" → Search assistant messages
+- "your suggestion", "the plan you proposed" → Search assistant messages
+- "I mentioned", "as I said" → Search user messages
+
+**Example:**
+```
+User: "Go with option 1"
+→ Delegate to conversation_history_lookup to find what "option 1" refers to
+→ Use the resolved content in your plan
+```
+
+---
+{% endif %}
 
 ## Plan Fields
 

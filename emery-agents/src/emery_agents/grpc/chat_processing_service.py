@@ -1018,6 +1018,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     sm=sm,  # Pass state machine for phase handling
                     managed_agents=managed_agents,
                     stored_plan=stored_plan,  # Pass stored plan for autonomous execution
+                    conversation_history=conversation_history,  # ACE: Resolve references
                 ):
                     if isinstance(event, dict):
                         # Regular event - yield it
@@ -1397,6 +1398,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         sm: Optional[CoordinatorStateMachine],
         managed_agents: Optional[List[Any]] = None,
         stored_plan: Optional[Plan] = None,
+        conversation_history: Optional[List[Any]] = None,
     ) -> AsyncIterator[Any]:
         """
         Coordinator-driven execution path.
@@ -1416,6 +1418,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             sm: State machine for phase handling
             managed_agents: Available managed agents for mode detection
             stored_plan: Pre-approved plan from skill's agentic step config (enables autonomous execution)
+            conversation_history: Chat history for ACE pattern (resolves references in planning)
         """
         # === AUTONOMOUS MODE: Execute stored plan directly ===
         if stored_plan and (not sm or sm.phase == Phase.IDLE):
@@ -1459,6 +1462,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 org_model=org_model,
                 api_key=context.tool_provider.api_key,  # For Gemini and other auth-required models
                 organization_id=context.tool_provider.organization_id,  # For research agent
+                conversation_history=conversation_history,  # ACE: Resolve references in planning
             )
 
             # Execute stored plan directly (no classification, no approval)
@@ -1550,6 +1554,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 org_model=org_model,
                 api_key=context.tool_provider.api_key,  # For Gemini and other auth-required models
                 organization_id=context.tool_provider.organization_id,  # For research agent
+                conversation_history=conversation_history,  # ACE: Resolve references in planning
             )
 
             # Use smart execute to determine mode and handle accordingly

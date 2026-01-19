@@ -30,7 +30,9 @@ from emery_agents.tools.plan_output_tool import PlanOutputTool
 from emery_agents.tools.recovery_output_tool import RecoveryOutputTool
 from emery_agents.prompts import render_template
 from emery_agents.agents import create_research_agent
+from emery_agents.agents.conversation_history_lookup_agent import create_conversation_history_lookup_agent
 from .protocols import ModelProvider, GRPCClient, Tool
+from .strategy_accumulation_service import StrategyAccumulationService
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +77,8 @@ class PlanService:
         organization_id: Optional[int] = None,
         skill_outputs: Optional[List[dict]] = None,
         is_skill_template: bool = False,
+        conversation_history: Optional[List[Any]] = None,
+        strategy_service: Optional[StrategyAccumulationService] = None,
     ) -> Plan:
         """
         Generate plan using context-first planning pattern.
@@ -100,6 +104,8 @@ class PlanService:
             organization_id: Optional organization ID for research_agent (RLS context)
             skill_outputs: Optional skill output definitions for result-aware planning
             is_skill_template: If True, plan is for a reusable skill (no hardcoded IDs)
+            conversation_history: Optional chat history for resolving references like "option 1"
+            strategy_service: Optional service for surfacing proven patterns from past executions
 
         Returns:
             Plan object with generated steps, context, and analysis
@@ -140,6 +146,29 @@ class PlanService:
             planner_tools.extend(research_tools)
             logger.info(f"🔬 Planner has {len(research_tools)} direct research tools (fallback)")
 
+        # ACE: Create conversation_history_lookup agent for resolving references
+        # (e.g., "option 1", "your earlier suggestion", "what you said")
+        if conversation_history:
+            history_lookup_agent = create_conversation_history_lookup_agent(
+                model=model,
+                conversation_history=conversation_history,
+                max_steps=5,
+            )
+            planner_managed_agents.append(history_lookup_agent)
+            logger.info(f"📋 Planner has conversation_history_lookup for resolving references")
+
+        # ACE: Get strategy guidance from past successful executions
+        strategy_guidance = ""
+        if strategy_service:
+            strategies = strategy_service.get_relevant_strategies(
+                goal=basic_instructions,
+                max_results=3,
+                min_confidence=0.3,
+            )
+            if strategies:
+                strategy_guidance = strategy_service.format_for_planner(strategies)
+                logger.info(f"📊 Found {len(strategies)} relevant strategies for planning")
+
         # Extract agent info for template (names + descriptions + capabilities)
         # Include both execution agents (for routing info) and planner's research_agent
         agent_info = []
@@ -178,6 +207,8 @@ class PlanService:
             skill_outputs=skill_outputs or [],  # For result-aware planning
             previous_plan_json=previous_plan_json,  # For regeneration with feedback
             user_feedback=user_feedback,  # User feedback for improvement
+            strategy_guidance=strategy_guidance,  # ACE: Proven patterns from past executions
+            has_conversation_history_lookup=bool(conversation_history),  # ACE: Can resolve references
         )
 
         logger.info(f"📋 Generating plan with research-driven pattern...")

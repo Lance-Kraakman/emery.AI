@@ -6,15 +6,25 @@ Used by the evaluator to assess progress and decide on replanning.
 
 This is the runtime orchestration state - NOT persisted to database.
 Optionally serializes to JSON for evaluator input.
+
+Extended with ACE-inspired execution tracking:
+- ExecutionContext: Curated insights from step results
+- StrategyRegistry: Recorded patterns for future planning
+- ExecutionEvolutionTracker: Context change detection
 """
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, TYPE_CHECKING
 from enum import Enum
 
 from emery_agents.models.plan import PlanStepStatus
 from emery_agents.utils.toon_format import to_toon
+
+if TYPE_CHECKING:
+    from emery_agents.models.execution_context import ExecutionContext
+    from emery_agents.models.execution_evolution import ExecutionEvolutionTracker
+    from emery_agents.models.strategy_accumulation import StrategyRegistry
 
 
 class LedgerEventType(Enum):
@@ -97,6 +107,32 @@ class TaskLedger:
     total_steps: int = 0
     replan_count: int = 0
     evaluation_count: int = 0
+
+    # ACE-inspired execution tracking (initialized via init_execution_tracking)
+    execution_context: Optional["ExecutionContext"] = None
+    strategy_registry: Optional["StrategyRegistry"] = None
+    evolution_tracker: Optional["ExecutionEvolutionTracker"] = None
+
+    def init_execution_tracking(self) -> None:
+        """
+        Initialize ACE-inspired execution tracking.
+
+        Call this at the start of plan execution to enable:
+        - Context curation (distill step results into insights)
+        - Strategy accumulation (record patterns for future planning)
+        - Evolution tracking (detect context degradation)
+        """
+        # Import here to avoid circular imports at module level
+        from emery_agents.models.execution_context import ExecutionContext
+        from emery_agents.models.execution_evolution import ExecutionEvolutionTracker
+        from emery_agents.models.strategy_accumulation import StrategyRegistry
+
+        if self.execution_context is None:
+            self.execution_context = ExecutionContext(task_id=self.task_id)
+        if self.strategy_registry is None:
+            self.strategy_registry = StrategyRegistry()
+        if self.evolution_tracker is None:
+            self.evolution_tracker = ExecutionEvolutionTracker(task_id=self.task_id)
 
     def add_step(self, step_id: str, step_name: str) -> None:
         """Add a step to track."""
@@ -279,7 +315,7 @@ class TaskLedger:
 
         This is what gets passed to the evaluator agent to assess progress.
         """
-        return {
+        result: Dict[str, Any] = {
             "task_id": self.task_id,
             "goal": self.goal,
             "created_at": self.created_at.isoformat(),
@@ -302,20 +338,49 @@ class TaskLedger:
             "step_results": self.get_step_results(),
         }
 
+        # Include ACE execution tracking data if initialized
+        if self.execution_context:
+            result["execution_context"] = self.execution_context.to_dict()
+
+        if self.evolution_tracker:
+            result["evolution_summary"] = self.evolution_tracker.get_evolution_summary()
+            if self.evolution_tracker.detect_degradation():
+                result["degradation_detected"] = True
+
+        return result
+
     def to_toon_summary(self) -> str:
         """
         Generate a concise TOON summary for the evaluator.
 
         Uses TOON format for minimal LLM token usage.
         Smaller than full to_dict() - focuses on what evaluator needs.
+
+        Includes ACE execution context if available:
+        - Curated insights from step results
+        - Degradation warnings if context is degrading
         """
-        return to_toon({
+        summary: Dict[str, Any] = {
             "goal": self.goal,
             "progress": f"{self.completed_steps}/{self.total_steps}",
             "has_failures": self.has_failures,
             "is_complete": self.is_complete,
             "step_results": self.get_step_results(),
-        })
+        }
+
+        # Add execution context insights if available
+        if self.execution_context and self.execution_context.insights:
+            # Get token-budgeted context (most relevant insights)
+            summary["curated_context"] = self.execution_context.get_relevant_context(
+                max_tokens=500
+            )
+
+        # Add degradation warning if context is degrading
+        if self.evolution_tracker and self.evolution_tracker.detect_degradation():
+            summary["context_warning"] = "Context degradation detected - consider recovery"
+            summary["degradation_warnings"] = self.evolution_tracker.degradation_warnings[-3:]
+
+        return to_toon(summary)
 
 
 def create_ledger_from_plan(task_id: str, goal: str, plan_steps: List[Dict[str, Any]]) -> TaskLedger:

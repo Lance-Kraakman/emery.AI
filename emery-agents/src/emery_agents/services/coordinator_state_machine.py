@@ -44,6 +44,7 @@ class Phase(Enum):
     AWAITING_CASCADE_QUESTIONS = auto() # Waiting for cascade planning question answers
     AWAITING_QUESTIONS = auto()         # Waiting for managed agent HITL response
     EXECUTING = auto()                  # Plan execution in progress
+    AWAITING_RECOVERY = auto()          # Waiting for user to help resolve blocked execution
 
 
 class ActionType(Enum):
@@ -55,6 +56,10 @@ class ActionType(Enum):
     YIELD_EVENT = auto()      # Yield an event to frontend
     ERROR = auto()            # Return error response
     COMPLETE = auto()         # Execution complete, clear state
+    # Recovery actions for AWAITING_RECOVERY phase
+    RETRY_STEP = auto()       # Retry the failed step as-is
+    SKIP_STEP = auto()        # Skip the failed step and continue
+    RETRY_WITH_INPUT = auto() # Retry with user-provided context/input
 
 
 @dataclass
@@ -76,6 +81,10 @@ class StateContext:
     coordinator: Optional["ExecutionCoordinator"] = None
     plan: Optional["Plan"] = None
     question_answers: Optional[Dict[str, str]] = None
+    # Recovery context (for AWAITING_RECOVERY phase)
+    blocked_reason: Optional[str] = None
+    failed_step: Optional[Any] = None
+    recovery_input: Optional[str] = None
 
     def clear(self) -> None:
         """Reset to idle state."""
@@ -84,6 +93,9 @@ class StateContext:
         self.coordinator = None
         self.plan = None
         self.question_answers = None
+        self.blocked_reason = None
+        self.failed_step = None
+        self.recovery_input = None
 
 
 class InvalidTransitionError(Exception):
@@ -118,6 +130,11 @@ VALID_TRANSITIONS: Dict[Phase, Set[Phase]] = {
     Phase.EXECUTING: {
         Phase.IDLE,               # Execution complete or error
         Phase.AWAITING_QUESTIONS, # Managed agent pauses for HITL
+        Phase.AWAITING_RECOVERY,  # Execution blocked, needs user help
+    },
+    Phase.AWAITING_RECOVERY: {
+        Phase.EXECUTING,  # User provides input, retry step
+        Phase.IDLE,       # User chooses to replan/cancel
     },
 }
 
@@ -161,6 +178,7 @@ class CoordinatorStateMachine:
             Phase.AWAITING_CASCADE_QUESTIONS: self._handle_cascade_questions,
             Phase.AWAITING_QUESTIONS: self._handle_managed_agent_hitl,
             Phase.EXECUTING: self._handle_executing,
+            Phase.AWAITING_RECOVERY: self._handle_recovery,
         }
 
     @property
@@ -335,6 +353,46 @@ class CoordinatorStateMachine:
             error_message="Execution in progress. Please wait for completion."
         )
 
+    def _handle_recovery(self, input_type: str, data: Any) -> StateAction:
+        """
+        Handle input in AWAITING_RECOVERY phase.
+
+        User can:
+        - Type "retry" to retry the failed step as-is
+        - Type "skip" to skip the failed step and continue
+        - Type "replan" or "cancel" to abort and start over
+        - Provide helpful context/input for retry
+        """
+        data_lower = str(data).lower().strip()
+
+        if data_lower == "retry":
+            logger.info(f"📊 State machine [{self.session_id}]: user chose retry")
+            return StateAction(
+                action_type=ActionType.RETRY_STEP,
+                next_phase=Phase.EXECUTING,
+            )
+        elif data_lower == "skip":
+            logger.info(f"📊 State machine [{self.session_id}]: user chose skip")
+            return StateAction(
+                action_type=ActionType.SKIP_STEP,
+                next_phase=Phase.EXECUTING,
+            )
+        elif data_lower in ("replan", "cancel"):
+            logger.info(f"📊 State machine [{self.session_id}]: user chose {data_lower}")
+            self.context.clear()
+            return StateAction(
+                action_type=ActionType.RUN_COORDINATOR,
+                next_phase=Phase.IDLE,
+            )
+        else:
+            # User provided helpful input - store and retry with it
+            logger.info(f"📊 State machine [{self.session_id}]: user provided recovery input")
+            return StateAction(
+                action_type=ActionType.RETRY_WITH_INPUT,
+                next_phase=Phase.EXECUTING,
+                context_updates={"recovery_input": data},
+            )
+
     # ============================================================
     # Event Handlers (called by coordinator event processing)
     # ============================================================
@@ -425,6 +483,26 @@ class CoordinatorStateMachine:
         """
         self.transition(Phase.EXECUTING)
 
+    def on_execution_blocked(
+        self,
+        reason: str,
+        failed_step: Optional[Any] = None,
+    ) -> None:
+        """
+        Execution blocked, needs user help to proceed.
+
+        Transitions: EXECUTING → AWAITING_RECOVERY
+
+        Args:
+            reason: Why execution is blocked
+            failed_step: The step that failed (for context)
+        """
+        self.transition(
+            Phase.AWAITING_RECOVERY,
+            blocked_reason=reason,
+            failed_step=failed_step,
+        )
+
     def on_execution_complete(self) -> None:
         """
         Execution finished (success or failure).
@@ -487,6 +565,9 @@ class CoordinatorStateMachine:
             "has_plan": self.context.plan is not None,
             "has_original_task": self.context.original_task is not None,
             "has_answers": self.context.question_answers is not None,
+            "blocked_reason": self.context.blocked_reason,
+            "has_failed_step": self.context.failed_step is not None,
+            "has_recovery_input": self.context.recovery_input is not None,
         }
 
     def __repr__(self) -> str:
