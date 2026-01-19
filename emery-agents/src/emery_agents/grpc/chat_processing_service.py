@@ -1820,7 +1820,13 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     "context": plan.context,
                     "analysis": plan.analysis,
                     "steps": [
-                        {"step_id": s.step_id, "description": s.description, "tool_call": s.tool_call}
+                        {
+                            "step_id": s.step_id,
+                            "description": s.description,
+                            "tool_call": s.tool_call,
+                            "prompt_template": s.prompt_template,
+                            "required_context": s.required_context or [],
+                        }
                         for s in plan.steps
                     ]
                 })
@@ -2043,6 +2049,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     "toolCall": step.tool_call,
                     "parameters": step.parameters or {},
                     "targetAgent": step.target_agent,
+                    "promptTemplate": step.prompt_template,
+                    "requiredContext": step.required_context or [],
                 }
                 for step in plan.steps
             ],
