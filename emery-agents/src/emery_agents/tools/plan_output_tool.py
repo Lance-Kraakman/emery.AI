@@ -85,10 +85,19 @@ Example:
                         "type": "string",
                         "description": "Name of managed agent to handle this step (optional)",
                     },
+                    "prompt_template": {
+                        "type": "string",
+                        "description": "Jinja2 template with {{variable}} placeholders for autonomous execution (skill templates only)",
+                    },
+                    "required_context": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of variable names needed at runtime for the prompt_template",
+                    },
                 },
                 "required": ["description"],
             },
-            "description": "List of step objects with description and optional target_agent",
+            "description": "List of step objects with description, optional target_agent, and optional prompt_template for skill templates",
         },
     }
     output_type = "string"
@@ -122,14 +131,26 @@ Example:
         for step in steps:
             if isinstance(step, str):
                 # Legacy format - just a string description
-                normalized_steps.append({"description": step, "target_agent": None})
+                normalized_steps.append({
+                    "description": step,
+                    "target_agent": None,
+                    "prompt_template": None,
+                    "required_context": [],
+                })
             elif isinstance(step, dict):
                 normalized_steps.append({
                     "description": step.get("description", str(step)),
                     "target_agent": step.get("target_agent"),
+                    "prompt_template": step.get("prompt_template"),
+                    "required_context": step.get("required_context", []),
                 })
             else:
-                normalized_steps.append({"description": str(step), "target_agent": None})
+                normalized_steps.append({
+                    "description": str(step),
+                    "target_agent": None,
+                    "prompt_template": None,
+                    "required_context": [],
+                })
 
         self.captured_plan = {
             "goal": goal,
