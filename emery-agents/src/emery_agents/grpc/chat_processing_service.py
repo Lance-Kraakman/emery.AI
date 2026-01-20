@@ -85,12 +85,7 @@ from ..services.execution_coordinator import (
     AutoFixStartedEvent,
     AutoFixCompletedEvent,
     RecoveryPlanProposedEvent,
-    # Cascade planning events
-    QuestionsCollectedEvent,
-    SubPlanCreatedEvent,
-    CascadingPlanCompleteEvent,
 )
-from ..models.planning_questions import QuestionAnswers
 from ..agents.evaluator_agent import create_evaluator_factory
 from ..models.plan import Plan, PlanStatus, create_plan
 from ..entities.execution_context import ExecutionContext
@@ -840,15 +835,10 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 # AIDEV-NOTE: system_designer understands the full Emery ecosystem and
                 # designs complete automation flows (agents -> skills -> databases -> views -> apps).
                 # It delegates to specialized builders for actual resource creation.
+                # The factory creates all managed agents internally (research_agent + builders).
                 system_designer_agent = self.managed_agents_factory.create_system_designer(
                     tool_provider=tool_provider,
                     org_model=org_model,
-                    managed_agents=[
-                        schema_builder_agent,
-                        app_builder_agent,
-                        agent_builder_agent,
-                        skill_builder_agent,
-                    ]
                 )
 
                 # Create ToolCallingAgent with managed agents
@@ -1538,14 +1528,6 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 max_steps=10,
             )
 
-            # Create agent factories for cascade planning (even if not used for autonomous mode)
-            agent_factories = None
-            if context.tool_provider:
-                agent_factories = self.managed_agents_factory.get_agent_factories(
-                    tool_provider=context.tool_provider,
-                    org_model=org_model
-                )
-
             coordinator = ExecutionCoordinator(
                 plan_service=self.plan_service,
                 model_provider=self.model_provider,
@@ -1569,7 +1551,6 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 tools=tools,
                 managed_agents=managed_agents,
                 stored_plan=stored_plan,  # Pass stored plan for direct execution
-                agent_factories=agent_factories,
             ):
                 converted = convert_coordinator_event(event, step_index)
                 if converted:
@@ -1631,13 +1612,6 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 yield "FALL_THROUGH"
                 return
 
-            # Create agent factories for cascade planning (SubAgentPlanner)
-            agent_factories = self.managed_agents_factory.get_agent_factories(
-                tool_provider=context.tool_provider,
-                org_model=org_model
-            )
-            logger.info(f"📋 Created {len(agent_factories)} agent factories for cascade planning")
-
             coordinator = ExecutionCoordinator(
                 plan_service=self.plan_service,
                 model_provider=self.model_provider,  # For LLM-based TaskClassifier
@@ -1657,7 +1631,6 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 task=task,
                 tools=tools,
                 managed_agents=managed_agents,
-                agent_factories=agent_factories,
             ):
                 if isinstance(event, AwaitingClarificationEvent):
                     # Clarification needed: Show questions to user before proceeding
@@ -1694,27 +1667,6 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     # PLAN_AND_APPROVE: Complex task, show plan for approval
                     plan = event.plan
                     logger.info(f"📋 Coordinator: PLAN_AND_APPROVE mode - plan {plan.id} with {len(plan.steps)} steps")
-
-                # Cascade planning events
-                elif isinstance(event, SubPlanCreatedEvent):
-                    # Sub-agent created its detailed plan - forward to UI
-                    logger.info(f"📋 Cascade: {event.agent_name} created sub-plan ({event.sub_plan_step_count} steps)")
-                    yield convert_coordinator_event(event, 0)
-
-                elif isinstance(event, QuestionsCollectedEvent):
-                    # Sub-agents have questions - present to user
-                    logger.info(f"📋 Cascade: {len(event.questions.questions)} questions collected from sub-agents")
-                    yield convert_coordinator_event(event, 0)
-
-                    # Update state machine (handles transition + context)
-                    if sm:
-                        sm.on_cascade_questions(coordinator, plan, task)
-                    return
-
-                elif isinstance(event, CascadingPlanCompleteEvent):
-                    # All sub-plans ready - forward to UI
-                    logger.info(f"📋 Cascade: All {event.total_sub_plans} sub-plans complete")
-                    yield convert_coordinator_event(event, 0)
 
                 elif isinstance(event, ErrorEvent):
                     # Plan generation or API error - return error to user, don't fall through
@@ -1831,65 +1783,6 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
         # NOTE: awaiting_clarification is now handled early (before coordinator creation)
         # to combine original task with clarification and re-run planning
-
-        elif sm and sm.phase == Phase.AWAITING_CASCADE_QUESTIONS:
-            # User responded to sub-agent questions from cascade planning
-            logger.info(f"📋 Coordinator: Received cascade question answers: {task[:100]}...")
-
-            # Get coordinator from state machine context
-            coordinator_from_session = sm.context.coordinator
-
-            if not coordinator_from_session:
-                logger.error("📋 Coordinator: No coordinator found in state machine for cascade answers")
-                yield self._create_error_response(
-                    "SESSION_STATE_ERROR",
-                    "Session state lost. Please start over.",
-                )
-                sm.on_error("Session state lost")
-                return
-
-            # Parse answers - expected as JSON object {question_id: answer, ...}
-            try:
-                answers_data = json.loads(task)
-                answers = QuestionAnswers(answers=answers_data if isinstance(answers_data, dict) else {})
-            except json.JSONDecodeError:
-                # Treat as free-form text answer to first question
-                logger.warning("📋 Cascade answers not JSON, treating as free-form text")
-                answers = QuestionAnswers(answers={"default": task})
-
-            # Store answers in state machine context
-            sm.context.question_answers = answers.answers
-
-            # Resume cascade planning with answers
-            step_index = 0
-            async for event in coordinator_from_session.resume_cascading_plan(answers):
-                if isinstance(event, QuestionsCollectedEvent):
-                    # More questions needed - present to user
-                    logger.info(f"📋 Cascade: More questions needed ({len(event.questions.questions)} questions)")
-                    yield convert_coordinator_event(event, step_index)
-
-                    # Self-transition for more questions
-                    sm.on_more_cascade_questions()
-                    return
-
-                elif isinstance(event, CascadingPlanCompleteEvent):
-                    # All planning complete - show plan for approval
-                    logger.info(f"📋 Cascade: Planning complete ({event.total_sub_plans} sub-plans)")
-                    yield convert_coordinator_event(event, step_index)
-
-                    # Transition to awaiting_approval
-                    sm.on_cascade_complete()
-
-                    plan = sm.context.plan
-                    if plan:
-                        yield self._create_awaiting_input_for_plan(plan)
-                    return
-                else:
-                    # Forward other events
-                    converted = convert_coordinator_event(event, step_index)
-                    if converted:
-                        yield converted
-                        step_index += 1
 
         elif sm and sm.phase == Phase.AWAITING_QUESTIONS:
             # Managed agent HITL response - let agent.run() resume the managed agent
@@ -2097,12 +1990,12 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             yield _make_progress("Classifying task...", "analyzing")
 
             # Use coordinator's classify_and_create_plan (same logic as ProcessMessage)
-            # is_skill_template=True ensures plan won't hardcode IDs (skills are reusable)
+            # is_template_generation=True ensures plan won't hardcode IDs (skills are reusable)
             async for event in coordinator.classify_and_create_plan(
                 task=task_instructions,
                 tools=[],  # No tools needed for skill plan generation
                 managed_agents=managed_agents,
-                is_skill_template=True,  # Skills are reusable templates - no hardcoded IDs
+                is_template_generation=True,  # Skills are reusable templates - no hardcoded IDs
             ):
                 if isinstance(event, AwaitingClarificationEvent):
                     # Same handling as ProcessMessage - yield questions and pause

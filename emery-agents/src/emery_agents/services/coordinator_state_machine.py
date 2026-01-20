@@ -23,7 +23,6 @@ Usage:
             ...
 """
 
-import json
 import logging
 from dataclasses import dataclass, field
 from enum import Enum, auto
@@ -41,7 +40,6 @@ class Phase(Enum):
     IDLE = auto()                       # No active coordination, accepts new tasks
     AWAITING_CLARIFICATION = auto()     # Waiting for task classifier clarification
     AWAITING_APPROVAL = auto()          # Waiting for user to approve a plan
-    AWAITING_CASCADE_QUESTIONS = auto() # Waiting for cascade planning question answers
     AWAITING_QUESTIONS = auto()         # Waiting for managed agent HITL response
     EXECUTING = auto()                  # Plan execution in progress
     AWAITING_RECOVERY = auto()          # Waiting for user to help resolve blocked execution
@@ -52,7 +50,6 @@ class ActionType(Enum):
     FALL_THROUGH = auto()     # Let agent.run() handle (no coordinator intervention)
     RUN_COORDINATOR = auto()  # Run coordinator.execute() for new task
     EXECUTE_PLAN = auto()     # Call coordinator.execute_plan() after approval
-    RESUME_CASCADE = auto()   # Call coordinator.resume_cascading_plan() with answers
     YIELD_EVENT = auto()      # Yield an event to frontend
     ERROR = auto()            # Return error response
     COMPLETE = auto()         # Execution complete, clear state
@@ -80,7 +77,6 @@ class StateContext:
     original_task: Optional[str] = None
     coordinator: Optional["ExecutionCoordinator"] = None
     plan: Optional["Plan"] = None
-    question_answers: Optional[Dict[str, str]] = None
     # Recovery context (for AWAITING_RECOVERY phase)
     blocked_reason: Optional[str] = None
     failed_step: Optional[Any] = None
@@ -92,7 +88,6 @@ class StateContext:
         self.original_task = None
         self.coordinator = None
         self.plan = None
-        self.question_answers = None
         self.blocked_reason = None
         self.failed_step = None
         self.recovery_input = None
@@ -108,7 +103,6 @@ VALID_TRANSITIONS: Dict[Phase, Set[Phase]] = {
     Phase.IDLE: {
         Phase.AWAITING_CLARIFICATION,
         Phase.AWAITING_APPROVAL,
-        Phase.AWAITING_CASCADE_QUESTIONS,
         Phase.AWAITING_QUESTIONS,  # Direct HITL from agent.run()
         Phase.EXECUTING,           # AUTONOMOUS mode (skip approval)
     },
@@ -118,11 +112,6 @@ VALID_TRANSITIONS: Dict[Phase, Set[Phase]] = {
     Phase.AWAITING_APPROVAL: {
         Phase.EXECUTING,  # User approves plan
         Phase.IDLE,       # User provides feedback (replan)
-    },
-    Phase.AWAITING_CASCADE_QUESTIONS: {
-        Phase.AWAITING_CASCADE_QUESTIONS,  # More questions after answers
-        Phase.AWAITING_APPROVAL,           # All questions answered, show plan
-        Phase.IDLE,                        # Error or cancel
     },
     Phase.AWAITING_QUESTIONS: {
         Phase.IDLE,  # Resume via FALL_THROUGH to agent.run()
@@ -175,7 +164,6 @@ class CoordinatorStateMachine:
             Phase.IDLE: self._handle_idle,
             Phase.AWAITING_CLARIFICATION: self._handle_clarification,
             Phase.AWAITING_APPROVAL: self._handle_approval,
-            Phase.AWAITING_CASCADE_QUESTIONS: self._handle_cascade_questions,
             Phase.AWAITING_QUESTIONS: self._handle_managed_agent_hitl,
             Phase.EXECUTING: self._handle_executing,
             Phase.AWAITING_RECOVERY: self._handle_recovery,
@@ -295,21 +283,6 @@ class CoordinatorStateMachine:
                 combined_task=combined_task
             )
 
-    def _handle_cascade_questions(self, input_type: str, data: Any) -> StateAction:
-        """
-        Handle input in AWAITING_CASCADE_QUESTIONS phase.
-
-        User answered questions from cascade planning sub-agents.
-        Resume cascade planning with the answers.
-        """
-        answers = self._parse_answers(data)
-        self.context.question_answers = answers
-
-        return StateAction(
-            action_type=ActionType.RESUME_CASCADE,
-            context_updates={"question_answers": answers}
-        )
-
     def _handle_managed_agent_hitl(self, input_type: str, data: Any) -> StateAction:
         """
         Handle input in AWAITING_QUESTIONS phase.
@@ -319,18 +292,10 @@ class CoordinatorStateMachine:
         """
         # Determine what to pass to agent.run()
         if self._is_approval(data):
-            # Simple approval - use "approve" as task
             task_for_resume = "approve"
         else:
-            # Parse as answers or treat as feedback
-            answers = self._parse_answers(data)
-            if answers and answers != {"default": str(data)}:
-                # Valid JSON answers - store them
-                self.context.question_answers = answers
-                task_for_resume = "approve"  # Resume with answers stored
-            else:
-                # Free-form feedback
-                task_for_resume = f"{self.context.original_task}\n\nUser feedback: {data}"
+            # Free-form feedback - combine with original task
+            task_for_resume = f"{self.context.original_task}\n\nUser feedback: {data}"
 
         # Clear state - agent.run() will resume with the prepared task
         self.context.clear()
@@ -426,44 +391,6 @@ class CoordinatorStateMachine:
             original_task=task
         )
 
-    def on_cascade_questions(
-        self,
-        coordinator: "ExecutionCoordinator",
-        plan: "Plan",
-        task: str
-    ) -> None:
-        """
-        Cascade planning has questions that need user answers.
-
-        Transitions: IDLE → AWAITING_CASCADE_QUESTIONS
-        """
-        self.transition(
-            Phase.AWAITING_CASCADE_QUESTIONS,
-            coordinator=coordinator,
-            plan=plan,
-            original_task=task
-        )
-
-    def on_more_cascade_questions(self) -> None:
-        """
-        After answering, cascade planning has more questions.
-
-        Transitions: AWAITING_CASCADE_QUESTIONS → AWAITING_CASCADE_QUESTIONS
-        (self-transition is allowed)
-        """
-        # No state change needed, just clear previous answers
-        self.context.question_answers = None
-        logger.info(f"📊 State machine [{self.session_id}]: more cascade questions")
-
-    def on_cascade_complete(self) -> None:
-        """
-        Cascade planning finished, plan ready for approval.
-
-        Transitions: AWAITING_CASCADE_QUESTIONS → AWAITING_APPROVAL
-        """
-        self.transition(Phase.AWAITING_APPROVAL)
-        self.context.question_answers = None
-
     def on_managed_agent_hitl(self, task: str) -> None:
         """
         Managed agent (e.g., app_builder) paused for HITL.
@@ -540,18 +467,6 @@ class CoordinatorStateMachine:
         """Check if the input is an approval response."""
         return str(data).lower().strip() == "approve"
 
-    def _parse_answers(self, data: Any) -> Dict[str, str]:
-        """Parse input as answers dict."""
-        if isinstance(data, dict):
-            return data
-        try:
-            parsed = json.loads(data)
-            if isinstance(parsed, dict):
-                return parsed
-        except (json.JSONDecodeError, TypeError):
-            pass
-        return {"default": str(data)}
-
     # ============================================================
     # Serialization (for persistence/debugging)
     # ============================================================
@@ -564,7 +479,6 @@ class CoordinatorStateMachine:
             "has_coordinator": self.context.coordinator is not None,
             "has_plan": self.context.plan is not None,
             "has_original_task": self.context.original_task is not None,
-            "has_answers": self.context.question_answers is not None,
             "blocked_reason": self.context.blocked_reason,
             "has_failed_step": self.context.failed_step is not None,
             "has_recovery_input": self.context.recovery_input is not None,

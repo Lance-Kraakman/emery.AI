@@ -37,6 +37,25 @@ from ...services.research_tools_provider import get_research_tools
 logger = logging.getLogger(__name__)
 
 
+def _validate_tools(tools: List[Any], expected: int, context: str) -> None:
+    """
+    Validate tool count before unpacking to prevent IndexError.
+
+    Args:
+        tools: List of tools returned from tool_provider
+        expected: Expected number of tools
+        context: Context string for error message (e.g., "schema_builder")
+
+    Raises:
+        ValueError: If tool count doesn't match expected
+    """
+    if len(tools) < expected:
+        tool_names = [getattr(t, 'name', str(t)) for t in tools]
+        raise ValueError(
+            f"Expected {expected} tools for {context}, got {len(tools)}: {tool_names}"
+        )
+
+
 @dataclass
 class ManagedAgentConfig:
     """Configuration for creating managed agents."""
@@ -139,6 +158,7 @@ class ManagedAgentsFactory:
         proper instructions.
         """
         tools = tool_provider.get_skill_builder_tools()
+        _validate_tools(tools, 1, "skill_builder")
         skill_crud_tool = tools[0]
 
         model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
@@ -173,6 +193,7 @@ class ManagedAgentsFactory:
         proper instructions.
         """
         tools = tool_provider.get_document_builder_tools()
+        _validate_tools(tools, 1, "document_builder")
         document_crud_tool = tools[0]
 
         model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
@@ -204,6 +225,7 @@ class ManagedAgentsFactory:
         quick schema changes like adding/deleting fields.
         """
         tools = tool_provider.get_table_builder_tools()
+        _validate_tools(tools, 2, "table_builder")
         table_crud_tool, field_crud_tool = tools[0], tools[1]
 
         model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
@@ -243,6 +265,7 @@ class ManagedAgentsFactory:
         This enables comprehensive planning that covers table_builder work.
         """
         tools = tool_provider.get_schema_builder_tools()
+        _validate_tools(tools, 3, "schema_builder")
         database_crud_tool, table_crud_tool, field_crud_tool = tools[0], tools[1], tools[2]
 
         model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
@@ -376,6 +399,7 @@ class ManagedAgentsFactory:
         analyzing reference URLs and asking HITL questions about page content.
         """
         tools = tool_provider.get_app_builder_tools()
+        _validate_tools(tools, 3, "app_builder")
         app_crud_tool, page_crud_tool, view_crud_tool = tools[0], tools[1], tools[2]
 
         model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
@@ -474,6 +498,7 @@ class ManagedAgentsFactory:
         proper instructions.
         """
         tools = tool_provider.get_agent_builder_tools()
+        _validate_tools(tools, 2, "agent_builder")
         agent_crud_tool, skill_crud_tool = tools[0], tools[1]
 
         model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
@@ -497,7 +522,6 @@ class ManagedAgentsFactory:
         self,
         tool_provider: ToolProvider,
         org_model: Optional[str] = None,
-        managed_agents: Optional[List[Any]] = None,
     ) -> ToolCallingAgent:
         """
         Create a System Designer agent for holistic automation system design.
@@ -538,7 +562,7 @@ class ManagedAgentsFactory:
         agent_builder = self.create_agent_builder(tool_provider, org_model)
         skill_builder = self.create_skill_builder(tool_provider, org_model)
 
-        # Build managed agents list: research + specialists + any additional
+        # Build managed agents list: research + specialists
         all_managed_agents = [
             research_agent,
             schema_builder,
@@ -546,8 +570,6 @@ class ManagedAgentsFactory:
             agent_builder,
             skill_builder,
         ]
-        if managed_agents:
-            all_managed_agents.extend(managed_agents)
 
         system_designer = create_system_designer_agent(
             tools=[],  # No direct tools - delegates to managed agents
@@ -769,261 +791,3 @@ class ManagedAgentsFactory:
 
         logger.info(f"Created {len(agents)} managed agents for plan generation")
         return agents
-
-    def get_agent_factories(
-        self,
-        tool_provider: ToolProvider,
-        org_model: Optional[str] = None
-    ) -> Dict[str, Callable[..., Any]]:
-        """
-        Return factory functions for cascade planning.
-
-        These factories can be called with custom parameters (planning_callback,
-        planning_only, extra_tools) by SubAgentPlanner during cascade planning.
-
-        AIDEV-NOTE: The factory functions accept **kwargs to allow SubAgentPlanner
-        to inject planning callbacks. The underlying agent creation functions
-        have been updated to accept these optional parameters.
-
-        Args:
-            tool_provider: Provider for agent-specific tools
-            org_model: Organization-level model override
-
-        Returns:
-            Dict mapping agent names to factory functions
-        """
-        model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
-
-        def schema_builder_factory(**kwargs: Any) -> Any:
-            """Factory for schema_builder with cascade planning support.
-
-            AIDEV-NOTE: Includes research tools for comprehensive planning.
-            """
-            tools = tool_provider.get_schema_builder_tools()
-            database_crud, table_crud, field_crud = tools[0], tools[1], tools[2]
-            tool_executor = create_tool_executor(
-                tools=[field_crud, table_crud, database_crud],
-                model=model,
-                max_steps=8
-            )
-            # Add research tools for context gathering
-            research_tools = self._get_research_tools()
-            return create_schema_builder_agent(
-                tools=[tool_executor] + research_tools,
-                model=model,
-                max_steps=15,
-                **kwargs  # Accept planning_callback, planning_only, extra_tools
-            )
-
-        def table_builder_factory(**kwargs: Any) -> Any:
-            """Factory for table_builder with cascade planning support."""
-            tools = tool_provider.get_table_builder_tools()
-            table_crud, field_crud = tools[0], tools[1]
-            tool_executor = create_tool_executor(
-                tools=[field_crud, table_crud],
-                model=model,
-                max_steps=3
-            )
-            return create_table_builder_agent(
-                tools=[tool_executor],
-                model=model,
-                max_steps=6,
-                **kwargs
-            )
-
-        def document_builder_factory(**kwargs: Any) -> Any:
-            """Factory for document_builder with cascade planning support."""
-            tools = tool_provider.get_document_builder_tools()
-            document_crud = tools[0]
-            tool_executor = create_tool_executor(
-                tools=[document_crud],
-                model=model,
-                max_steps=3
-            )
-            return create_document_builder_agent(
-                tools=[tool_executor],
-                model=model,
-                max_steps=10,
-                **kwargs
-            )
-
-        def skill_builder_factory(**kwargs: Any) -> Any:
-            """Factory for skill_builder with cascade planning support."""
-            tools = tool_provider.get_skill_builder_tools()
-            skill_crud = tools[0]
-            tool_executor = create_tool_executor(
-                tools=[skill_crud],
-                model=model,
-                max_steps=3
-            )
-            return create_skill_builder_agent(
-                tools=[tool_executor],
-                model=model,
-                max_steps=10,
-                **kwargs
-            )
-
-        def research_agent_factory(**kwargs: Any) -> Any:
-            """Factory for research_agent with cascade planning support."""
-            # AIDEV-NOTE: Pass api_key and organization_id from tool_provider
-            # to auto-create ResearchEmery as managed agent for system introspection
-            return create_research_agent(
-                model=model,
-                max_steps=10,
-                api_key=kwargs.pop('api_key', tool_provider.api_key),
-                organization_id=kwargs.pop('organization_id', tool_provider.organization_id),
-                **kwargs
-            )
-
-        def research_emery_factory(**kwargs: Any) -> Any:
-            """Factory for research_emery with cascade planning support."""
-            # AIDEV-NOTE: api_key and organization_id can be passed via kwargs
-            # if needed for auth context during cascade planning
-            return create_research_emery_agent(
-                model=model,
-                api_key=kwargs.pop('api_key', None),
-                organization_id=kwargs.pop('organization_id', None),
-                max_steps=10,
-                **kwargs
-            )
-
-        def app_builder_factory(**kwargs: Any) -> Any:
-            """Factory for app_builder with cascade planning support.
-
-            AIDEV-NOTE: Includes research tools for comprehensive planning
-            and page_builder as managed_agent for delegation.
-            """
-            tools = tool_provider.get_app_builder_tools()
-            app_crud, page_crud, view_crud = tools[0], tools[1], tools[2]
-            tool_executor = create_tool_executor(
-                tools=[app_crud, page_crud, view_crud],
-                model=model,
-                max_steps=5
-            )
-
-            # Add research tools for context gathering
-            research_tools = self._get_research_tools()
-
-            # Add block_schema tool for on-demand block schema access and validation
-            block_schema_tool = BlockSchemaTool()
-
-            # Create page_builder as managed agent
-            page_builder = page_builder_factory(**kwargs)
-
-            return create_app_builder_agent(
-                tools=[tool_executor, block_schema_tool] + research_tools,
-                model=model,
-                max_steps=10,
-                managed_agents=[page_builder],
-                **kwargs
-            )
-
-        def agent_builder_factory(**kwargs: Any) -> Any:
-            """Factory for agent_builder with cascade planning support."""
-            tools = tool_provider.get_agent_builder_tools()
-            agent_crud, skill_crud = tools[0], tools[1]
-            tool_executor = create_tool_executor(
-                tools=[agent_crud, skill_crud],
-                model=model,
-                max_steps=5
-            )
-            return create_agent_builder_agent(
-                tools=[tool_executor],
-                model=model,
-                max_steps=10,
-                **kwargs
-            )
-
-        def page_builder_factory(**kwargs: Any) -> Any:
-            """Factory for page_builder with cascade planning support.
-
-            AIDEV-NOTE: page_builder gets page_crud DIRECTLY (not via tool_executor)
-            plus block_schema tool for on-demand schema access and validation.
-            """
-            page_crud = tool_provider.get("page_crud")
-
-            # Add block_schema tool for on-demand block schema access and validation
-            block_schema_tool = BlockSchemaTool()
-
-            # Create research_agent as managed agent for URL analysis
-            managed_agents = None
-            try:
-                research = create_research_agent(
-                    model=model,
-                    max_steps=10,
-                    api_key=kwargs.pop('api_key', tool_provider.api_key),
-                    organization_id=kwargs.pop('organization_id', tool_provider.organization_id),
-                )
-                managed_agents = [research]
-            except Exception:
-                pass  # Research is optional
-
-            return create_page_builder_agent(
-                tools=[page_crud, block_schema_tool],
-                model=model,
-                max_steps=15,
-                managed_agents=managed_agents,
-                **kwargs
-            )
-
-        def system_designer_factory(**kwargs: Any) -> Any:
-            """Factory for system_designer with cascade planning support.
-
-            AIDEV-NOTE: system_designer is the TOP-LEVEL ORCHESTRATOR that
-            understands the full Emery ecosystem. It has:
-            - research_agent as managed agent (combines web search + system introspection)
-            - schema_builder, app_builder, agent_builder, skill_builder as specialists
-
-            Uses phases for dynamic planning (Discovery -> Execution -> Summary).
-            Delegates to specialists rather than using CRUD tools directly.
-            """
-            # Create research_agent for combined web + system research
-            research_agent = research_agent_factory(**kwargs)
-
-            # Create specialist builders for delegation
-            schema_builder = schema_builder_factory(**kwargs)
-            app_builder_agent = app_builder_factory(**kwargs)
-            agent_builder_agent = agent_builder_factory(**kwargs)
-            skill_builder_agent = skill_builder_factory(**kwargs)
-
-            return create_system_designer_agent(
-                tools=[],  # No direct tools - delegates to managed agents
-                model=model,
-                max_steps=15,
-                managed_agents=[
-                    research_agent,
-                    schema_builder,
-                    app_builder_agent,
-                    agent_builder_agent,
-                    skill_builder_agent,
-                ],
-                **kwargs
-            )
-
-        def discover_tools_factory(**kwargs: Any) -> Any:
-            """Factory for discover_tools with cascade planning support.
-
-            AIDEV-NOTE: discover_tools is READ-ONLY for integration discovery.
-            Helps users find Pipedream tools and check OAuth connections.
-            """
-            return create_discover_tools_agent(
-                model=model,
-                api_key=kwargs.pop('api_key', tool_provider.api_key),
-                organization_id=kwargs.pop('organization_id', tool_provider.organization_id),
-                max_steps=10,
-                **kwargs
-            )
-
-        return {
-            "schema_builder": schema_builder_factory,
-            "table_builder": table_builder_factory,
-            "document_builder": document_builder_factory,
-            "skill_builder": skill_builder_factory,
-            "research_agent": research_agent_factory,
-            "research_emery": research_emery_factory,
-            "app_builder": app_builder_factory,
-            "agent_builder": agent_builder_factory,
-            "page_builder": page_builder_factory,
-            "system_designer": system_designer_factory,
-            "discover_tools": discover_tools_factory,
-        }

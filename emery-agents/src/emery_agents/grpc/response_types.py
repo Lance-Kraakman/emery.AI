@@ -10,7 +10,7 @@ from typing import List, Literal, TypedDict, Union
 
 
 # Step types
-StepType = Literal["PLANNING", "ACTION", "REASONING", "FINAL", "CODE_EXECUTION"]
+StepType = Literal["PLANNING", "ACTION", "REASONING", "FINAL", "CODE_EXECUTION", "PHASE"]
 
 
 class StepMetadata(TypedDict, total=False):
@@ -28,11 +28,14 @@ class StepMetadata(TypedDict, total=False):
     replan_number: str
     success: str
     confidence: str
-    # Cascade planning and unified message handling metadata
+    # Unified message handling metadata
     plan_id: str
     agent_name: str
-    total_sub_plans: str
     feedback: str
+    # Phase execution metadata
+    phase_name: str
+    step_count: str
+    needs_replan: str
 
 
 class StepProgressDict(TypedDict):
