@@ -1,6 +1,10 @@
 // AIDEV-NOTE: Force dynamic rendering to prevent build-time database connections
 export const dynamic = 'force-dynamic';
 
+// AIDEV-NOTE: Extend serverless function timeout for long-running agent tasks
+// Vercel Pro allows up to 300s (5 min), Hobby plan allows 60s
+export const maxDuration = 300; // 5 minutes
+
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
 import { db } from '@/ddd/infrastructure/db/client';

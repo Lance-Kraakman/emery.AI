@@ -47,7 +47,8 @@ export function ToolList({
 }: ToolListProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  // Track expanded groups - empty set means all groups start collapsed
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [iconErrors, setIconErrors] = useState<Set<string>>(new Set());
 
   // Group tools by provider
@@ -83,7 +84,7 @@ export function ToolList({
   }, [tools, availableApps]);
 
   const toggleGroup = useCallback((provider: string) => {
-    setCollapsedGroups(prev => {
+    setExpandedGroups(prev => {
       const next = new Set(prev);
       if (next.has(provider)) {
         next.delete(provider);
@@ -153,13 +154,13 @@ export function ToolList({
       ) : (
         <>
           {toolGroups.map((group, groupIndex) => {
-            const isCollapsed = collapsedGroups.has(group.provider);
+            const isCollapsed = !expandedGroups.has(group.provider);
             const ChevronIcon = isCollapsed ? ChevronRight : ChevronDown;
             let toolIndex = 0;
 
             // Calculate starting index for this group
             for (let i = 0; i < groupIndex; i++) {
-              if (!collapsedGroups.has(toolGroups[i].provider)) {
+              if (expandedGroups.has(toolGroups[i].provider)) {
                 toolIndex += toolGroups[i].tools.length;
               }
             }

@@ -387,9 +387,13 @@ class AppStack(Stack):
             )
 
         # Create the ALB origin once for reuse
+        # AIDEV-NOTE: Extend read_timeout for long-running chat/agent streaming operations
+        # Default CloudFront timeout is 30s which causes premature disconnects
         alb_origin = origins.LoadBalancerV2Origin(
             frontend_service.load_balancer,
-            protocol_policy=cloudfront.OriginProtocolPolicy.HTTP_ONLY
+            protocol_policy=cloudfront.OriginProtocolPolicy.HTTP_ONLY,
+            read_timeout=Duration.seconds(300),  # 5 minutes to match ALB idle timeout
+            keepalive_timeout=Duration.seconds(60),  # Keep connection alive between requests
         )
 
         # Create CloudFront distribution for static URL routing

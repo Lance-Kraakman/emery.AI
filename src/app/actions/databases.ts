@@ -309,6 +309,120 @@ export async function deleteDatabase(id: number, revalidateUrl?: string): Promis
 }
 
 /**
+ * Get a preview of what will be deleted when cascade deleting a database
+ */
+export async function getDatabaseDeletionPreview(id: number): Promise<Result<{
+  databaseId: number;
+  databaseName: string;
+  tables: Array<{ id: number; name: string }>;
+  tableCount: number;
+}>> {
+  try {
+    if (!id) {
+      return { success: false, error: "Database ID is required" };
+    }
+
+    await requireResourcePermission("database:view", "database", id);
+    const databaseApplicationService = getDatabaseApplicationService();
+
+    const result = await databaseApplicationService.getDeletionPreview(DatabaseId.fromNumber(id));
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || "Failed to get deletion preview"
+      };
+    }
+
+    return {
+      success: true,
+      data: result.data
+    };
+  } catch (error) {
+    console.error('Error getting database deletion preview:', error)
+    return { success: false, error: "Failed to get database deletion preview" }
+  }
+}
+
+/**
+ * Delete a database with cascade - deletes all tables first, then the database
+ * Use this when the user has confirmed cascade deletion by typing the confirmation phrase
+ */
+export async function cascadeDeleteDatabase(id: number, revalidateUrl?: string): Promise<Result<{
+  deletedTables: number;
+  deletedDatabase: boolean;
+}>> {
+  try {
+    if (!id) {
+      return { success: false, error: "Database ID is required" };
+    }
+
+    const session = await requireResourcePermission("database:manage", "database", id);
+    const currentOrg = await requireCurrentOrganization();
+    const databaseApplicationService = getDatabaseApplicationService();
+
+    // AUDIT: Get database name BEFORE deletion
+    const databaseToDelete = await databaseApplicationService.getDatabase(DatabaseId.fromNumber(id));
+    const databaseName = databaseToDelete?.name;
+
+    // Get deletion preview for audit logging
+    const preview = await databaseApplicationService.getDeletionPreview(DatabaseId.fromNumber(id));
+    const tableCount = preview.success && preview.data ? preview.data.tableCount : 0;
+    const tableNames = preview.success && preview.data ? preview.data.tables.map(t => t.name) : [];
+
+    const result = await databaseApplicationService.deleteDatabaseWithCascade(
+      DatabaseId.fromNumber(id),
+      OrganizationId.fromNumber(currentOrg.id)
+    );
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || "Failed to cascade delete database"
+      };
+    }
+
+    // AUDIT: Log cascade database deletion
+    const auditService = getAuditApplicationService();
+    auditService.logEvent(
+      OrganizationId.fromNumber(currentOrg.id),
+      {
+        eventType: 'database',
+        eventCategory: 'database_crud',
+        eventAction: 'delete',
+        actorType: 'user',
+        actorId: session.user.id,
+        actorName: session.user.name || undefined,
+        resourceType: 'database',
+        resourceId: String(id),
+        resourceName: databaseName,
+        eventData: {
+          cascadeDelete: true,
+          deletedTables: result.data?.deletedTables || 0,
+          tableNames
+        },
+        success: true,
+      }
+    );
+
+    // Revalidate the appropriate path
+    if (revalidateUrl) {
+      revalidatePath(revalidateUrl)
+    } else {
+      revalidatePath('/data') // Default path for database operations
+    }
+
+    return {
+      success: true,
+      data: result.data
+    };
+  } catch (error) {
+    console.error('Error cascade deleting database:', error)
+    return { success: false, error: "Failed to cascade delete database" }
+  }
+}
+
+/**
  * Get database count for the current organization
  */
 export async function getDatabaseCount() {

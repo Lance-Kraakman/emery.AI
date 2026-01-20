@@ -222,7 +222,13 @@ export class ChatProcessingClient {
 
     return new Promise((resolve, reject) => {
       console.log(`[CHAT-GRPC-CLIENT] Starting gRPC stream for message processing`);
-      const call = this.client.ProcessMessage(request);
+
+      // Set a generous deadline for long-running AI tasks (10 minutes)
+      // This is a safety net - keepalive pings handle connection health
+      const deadlineMs = 10 * 60 * 1000; // 10 minutes
+      const deadline = new Date(Date.now() + deadlineMs);
+
+      const call = this.client.ProcessMessage(request, { deadline });
 
       call.on('data', (response: ProcessMessageResponse) => {
         console.log(`[CHAT-GRPC-CLIENT] Received streaming response:`, {

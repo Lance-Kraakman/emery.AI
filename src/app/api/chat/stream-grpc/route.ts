@@ -15,6 +15,11 @@
  * AIDEV-NOTE: Clean separation - database stays in Next.js, AI processing in gRPC
  */
 
+// AIDEV-NOTE: Extend serverless function timeout for long-running AI tasks
+// Vercel Pro allows up to 300s (5 min), Hobby plan allows 60s
+// This prevents premature timeout for complex multi-step agent executions
+export const maxDuration = 300; // 5 minutes
+
 import { NextRequest } from 'next/server';
 import { auth } from '@/lib/auth';
 

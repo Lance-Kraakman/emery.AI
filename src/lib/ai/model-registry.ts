@@ -238,12 +238,42 @@ export const HUGGINGFACE_MODELS: Record<string, ModelMetadata> = {
     recommendedFor: 'Fast & reliable fallback',
   },
 
-  'google/gemini-1.5-pro': {
-    id: 'google/gemini-1.5-pro',
-    name: 'Gemini 1.5 Pro',
+  'google/gemini-2.5-flash': {
+    id: 'google/gemini-2.5-flash',
+    name: 'Gemini 2.5 Flash',
     provider: 'huggingface',
-    description: 'Most capable Gemini model. Excellent reasoning and 2M context window.',
-    contextWindow: 2000000,
+    description: 'Latest stable Gemini Flash model. Fast and efficient with 1M context.',
+    contextWindow: 1000000,
+    maxOutputTokens: 8192,
+    taskType: 'chat-completion',
+    outputType: 'text',
+    capabilities: {
+      toolCalling: true,
+      streaming: true,
+      vision: true,
+      jsonMode: true,
+      multimodal: true,
+    },
+    pricing: {
+      inputPer1M: 0.15,
+      outputPer1M: 0.60,
+      currency: 'USD',
+      inputCreditsPerK: 0.375,
+      outputCreditsPerK: 1.5,
+    },
+    tier: 'free',
+    category: 'fast',
+    endpoint: {
+      type: 'inference-api',
+    },
+  },
+
+  'google/gemini-2.5-pro': {
+    id: 'google/gemini-2.5-pro',
+    name: 'Gemini 2.5 Pro',
+    provider: 'huggingface',
+    description: 'Most powerful Gemini model with adaptive thinking. 1M context.',
+    contextWindow: 1000000,
     maxOutputTokens: 8192,
     taskType: 'chat-completion',
     outputType: 'text',
