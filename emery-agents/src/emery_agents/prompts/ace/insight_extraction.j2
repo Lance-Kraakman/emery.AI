@@ -1,0 +1,28 @@
+Analyze these step execution results and extract actionable insights.
+
+## Step Results
+{% for step_id, result in step_results.items() %}
+### Step {{ step_id }}
+```
+{{ result }}
+```
+
+{% endfor %}
+
+## Instructions
+
+Extract insights that will help future steps succeed. For each insight, identify:
+- **type**: One of DISCOVERY, DECISION, ARTIFACT, CONSTRAINT, ERROR_RECOVERY
+- **summary**: 1-2 sentence actionable summary
+- **key_facts**: List of essential facts (bullet points)
+
+Insight types:
+- DISCOVERY: Found something new (table, field, pattern, entity)
+- DECISION: Made a choice that affects later steps
+- ARTIFACT: Created something (new record, table, field)
+- CONSTRAINT: Learned a limitation (permission, schema requirement)
+- ERROR_RECOVERY: How an error was resolved
+
+Focus on ACTIONABLE information. Be CONCISE.
+
+Call the report_insights tool with your extracted insights.

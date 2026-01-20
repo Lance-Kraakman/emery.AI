@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "name": "schema_builder",
+  "description": "Database schema design and creation specialist",
+  "capabilities": {
+    "create_database": {
+      "description": "Create a new database in the organization",
+      "inputs": {
+        "name": {"type": "string", "required": true, "description": "Database name"}
+      },
+      "outputs": {
+        "database_id": {"type": "string", "format": "uuid"},
+        "success": {"type": "boolean"}
+      }
+    },
+    "create_table": {
+      "description": "Create a table with fields in a database",
+      "inputs": {
+        "database_id": {"type": "string", "format": "uuid", "required": true},
+        "name": {"type": "string", "required": true},
+        "fields": {
+          "type": "array",
+          "items": {"$ref": "#/definitions/field_definition"}
+        }
+      },
+      "outputs": {
+        "table_id": {"type": "string", "format": "uuid"},
+        "success": {"type": "boolean"}
+      }
+    },
+    "add_field": {
+      "description": "Add a field to an existing table",
+      "inputs": {
+        "table_id": {"type": "string", "format": "uuid", "required": true},
+        "name": {"type": "string", "required": true},
+        "type": {"$ref": "#/definitions/field_type", "required": true},
+        "required": {"type": "boolean", "default": false},
+        "config": {"$ref": "#/definitions/field_config"}
+      },
+      "outputs": {
+        "field_id": {"type": "integer"},
+        "success": {"type": "boolean"}
+      }
+    },
+    "create_relation": {
+      "description": "Create a relation between two tables",
+      "inputs": {
+        "source_table_id": {"type": "string", "format": "uuid", "required": true},
+        "target_table_id": {"type": "string", "format": "uuid", "required": true},
+        "field_name": {"type": "string", "required": true}
+      },
+      "outputs": {
+        "field_id": {"type": "integer"},
+        "success": {"type": "boolean"}
+      }
+    }
+  },
+  "definitions": {
+    "field_type": {
+      "type": "string",
+      "enum": ["text", "number", "date", "boolean", "single-select", "multi-select", "relation", "email", "phone", "url", "tiptap_editor"]
+    },
+    "field_definition": {
+      "type": "object",
+      "properties": {
+        "name": {"type": "string"},
+        "type": {"$ref": "#/definitions/field_type"},
+        "required": {"type": "boolean", "default": false},
+        "options": {"type": "array", "items": {"type": "string"}, "description": "For select types"},
+        "related_table_id": {"type": "string", "format": "uuid", "description": "For relation type"}
+      },
+      "required": ["name", "type"]
+    },
+    "field_config": {
+      "type": "object",
+      "properties": {
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "value": {"type": "string"},
+              "color": {"type": "string"}
+            }
+          },
+          "description": "Options for single-select or multi-select fields"
+        }
+      }
+    }
+  }
+}

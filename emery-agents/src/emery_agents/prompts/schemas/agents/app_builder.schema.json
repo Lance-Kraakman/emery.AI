@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "name": "app_builder",
+  "description": "Application and page creation specialist",
+  "capabilities": {
+    "create_app": {
+      "description": "Create a new app in the organization",
+      "inputs": {
+        "name": {"type": "string", "required": true},
+        "description": {"type": "string"}
+      },
+      "outputs": {
+        "app_id": {"type": "integer"},
+        "success": {"type": "boolean"}
+      }
+    },
+    "create_page": {
+      "description": "Create a new page in an app",
+      "inputs": {
+        "app_id": {"type": "integer", "required": true},
+        "name": {"type": "string", "required": true},
+        "page_type": {"type": "string", "enum": ["dashboard", "form", "list", "detail"]}
+      },
+      "outputs": {
+        "page_id": {"type": "integer"},
+        "success": {"type": "boolean"}
+      }
+    },
+    "add_component": {
+      "description": "Add a Puck component to a page",
+      "inputs": {
+        "page_id": {"type": "integer", "required": true},
+        "component_type": {"$ref": "#/definitions/component_type", "required": true},
+        "props": {"type": "object"},
+        "data_binding": {"$ref": "#/definitions/data_binding"}
+      },
+      "outputs": {
+        "component_id": {"type": "string"},
+        "success": {"type": "boolean"}
+      }
+    },
+    "bind_view": {
+      "description": "Bind a view to a data component",
+      "inputs": {
+        "component_id": {"type": "string", "required": true},
+        "view_id": {"type": "string", "format": "uuid", "required": true}
+      },
+      "outputs": {
+        "success": {"type": "boolean"}
+      }
+    }
+  },
+  "definitions": {
+    "component_type": {
+      "type": "string",
+      "enum": ["DataBlock", "FormBlock", "TableBlock", "MetricBlock", "ChartBlock", "TextBlock", "ButtonBlock"]
+    },
+    "data_binding": {
+      "type": "object",
+      "properties": {
+        "view_id": {"type": "string", "format": "uuid"},
+        "table_id": {"type": "string", "format": "uuid"},
+        "filters": {"type": "array", "items": {"type": "object"}}
+      }
+    }
+  }
+}

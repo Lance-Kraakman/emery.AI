@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "name": "skill_builder",
+  "description": "Skill definition and configuration specialist",
+  "capabilities": {
+    "create_skill": {
+      "description": "Create a new skill with instructions and tools",
+      "inputs": {
+        "name": {"type": "string", "required": true},
+        "description": {"type": "string"},
+        "instructions": {"type": "string", "required": true},
+        "tools": {"type": "array", "items": {"type": "string"}}
+      },
+      "outputs": {
+        "skill_id": {"type": "integer"},
+        "success": {"type": "boolean"}
+      }
+    },
+    "update_skill_instructions": {
+      "description": "Update the instructions for an existing skill",
+      "inputs": {
+        "skill_id": {"type": "integer", "required": true},
+        "instructions": {"type": "string", "required": true}
+      },
+      "outputs": {
+        "success": {"type": "boolean"}
+      }
+    },
+    "add_skill_input": {
+      "description": "Add an input parameter to a skill",
+      "inputs": {
+        "skill_id": {"type": "integer", "required": true},
+        "name": {"type": "string", "required": true},
+        "type": {"type": "string", "enum": ["text", "number", "boolean", "json", "file"]},
+        "description": {"type": "string"},
+        "required": {"type": "boolean", "default": false}
+      },
+      "outputs": {
+        "input_id": {"type": "integer"},
+        "success": {"type": "boolean"}
+      }
+    },
+    "add_skill_output": {
+      "description": "Add an output definition to a skill",
+      "inputs": {
+        "skill_id": {"type": "integer", "required": true},
+        "name": {"type": "string", "required": true},
+        "type": {"type": "string", "enum": ["text", "number", "boolean", "json", "file"]},
+        "description": {"type": "string"}
+      },
+      "outputs": {
+        "output_id": {"type": "integer"},
+        "success": {"type": "boolean"}
+      }
+    },
+    "configure_skill_tools": {
+      "description": "Configure which tools are available to a skill",
+      "inputs": {
+        "skill_id": {"type": "integer", "required": true},
+        "tools": {"type": "array", "items": {"type": "string"}, "required": true}
+      },
+      "outputs": {
+        "success": {"type": "boolean"}
+      }
+    }
+  }
+}

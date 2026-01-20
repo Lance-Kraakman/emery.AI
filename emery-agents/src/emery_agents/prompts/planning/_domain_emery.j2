@@ -1,0 +1,34 @@
+{# Emery Domain Concepts - Field types and platform overview #}
+{# Include this in planning templates that need domain context #}
+
+## Domain: Emery Platform
+
+Emery is a dynamic database and workflow platform. Users can:
+- Design database schemas (tables, fields, relations)
+- Create and configure AI skills (agent configurations with instructions, inputs, outputs, tools)
+- Create and edit rich-text documents stored in table fields
+- Query and manipulate data across tables
+
+### Emery Field Types (NOT SQL!)
+
+**CRITICAL: Use ONLY these Emery field types. NEVER use SQL types (VARCHAR, INT, etc.)**
+
+| Type | Use For | Example |
+|------|---------|---------|
+| text | Short text | name, address, notes |
+| number | Numeric values | age, quantity, amount |
+| date | Dates | birth_date, created_at |
+| boolean | Yes/No | is_active, has_consented |
+| single-select | Pick ONE from list | status, category |
+| multi-select | Pick MULTIPLE | services, languages |
+| email | Email addresses | contact_email |
+| phone | Phone numbers | mobile, work_phone |
+| relation | Link to another table | client_id (relation to Clients) |
+
+**DO NOT USE:** VARCHAR, TEXT, INT, BIGINT, FLOAT, PRIMARY KEY, FOREIGN KEY, ENUM, REFERENCES
+
+**IDs are auto-generated** - don't include id fields in your plan.
+
+**Relationships:** Use `relation` type, NOT Foreign Keys:
+- WRONG: `client_id (INT, Foreign Key referencing Clients)`
+- CORRECT: `client_id (relation to Clients)`
