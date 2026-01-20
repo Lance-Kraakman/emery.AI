@@ -26,6 +26,8 @@ from .execution_coordinator import (
     ReplanTriggeredEvent,
     GoalAchievedEvent,
     ExecutionBlockedEvent,
+    PhaseStartedEvent,
+    PhaseCompletedEvent,
 )
 from .result_storage import (
     ResultStorageService,
@@ -61,6 +63,8 @@ __all__ = [
     "ReplanTriggeredEvent",
     "GoalAchievedEvent",
     "ExecutionBlockedEvent",
+    "PhaseStartedEvent",
+    "PhaseCompletedEvent",
     "ResultStorageService",
     "ResultStorageServiceFactory",
     "StoredResult",
