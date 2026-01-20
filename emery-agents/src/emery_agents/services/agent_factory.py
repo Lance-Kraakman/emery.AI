@@ -203,7 +203,3 @@ class AgentFactory:
         """Clear the agent cache."""
         self.agent_cache.clear()
         logger.info("🧹 Agent cache cleared")
-
-    def get_cache_size(self) -> int:
-        """Get current cache size."""
-        return len(self.agent_cache)
