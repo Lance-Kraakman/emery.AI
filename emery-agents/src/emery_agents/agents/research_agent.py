@@ -29,10 +29,8 @@ def create_research_agent(
     model: Any,
     additional_tools: Optional[List[Tool]] = None,
     max_steps: int = 10,
-    # Optional overrides for cascade planning (SubAgentPlanner)
+    # Optional custom callback for plan interruption
     planning_callback: Optional[Callable[[PlanningStep, CodeAgent], None]] = None,
-    planning_only: bool = False,
-    extra_tools: Optional[List[Tool]] = None,
     # Optional managed agents (ResearchEmery)
     managed_agents: Optional[List[Any]] = None,
     # Auth context for creating ResearchEmery as managed agent
@@ -57,9 +55,7 @@ def create_research_agent(
         model: The LLM model to use
         additional_tools: Extra tools to include (e.g., file_reader)
         max_steps: Maximum agent steps (default 10)
-        planning_callback: Optional callback for cascade planning
-        planning_only: Whether in planning-only mode
-        extra_tools: Additional tools for cascade planning
+        planning_callback: Optional callback for plan interruption
         managed_agents: Optional list of managed sub-agents
         api_key: API key for ResearchEmery (if auto-creating)
         organization_id: Organization ID for ResearchEmery (if auto-creating)
@@ -77,10 +73,6 @@ def create_research_agent(
 
     all_tools = research_tools + (additional_tools or [])
 
-    # Merge extra_tools if provided (for cascade planning question tool)
-    if extra_tools:
-        all_tools = all_tools + extra_tools
-
     # Build managed agents list
     effective_managed_agents = list(managed_agents or [])
 
@@ -92,18 +84,15 @@ def create_research_agent(
             organization_id=organization_id,
             max_steps=8,
             planning_callback=planning_callback,
-            planning_only=planning_only,
         )
         effective_managed_agents.append(research_emery)
         logger.info(f"   Added ResearchEmery as managed agent for system introspection")
 
     # Use centralized prompt system - composes base + agent-specific + tools
-    # Use planning_only context for cascade sub-planning
-    context_type = "planning_only" if planning_only else "interactive"
     instructions = build_agent_instructions(
         tools=all_tools,
         agent_type="research",
-        context_type=context_type,
+        context_type="interactive",
         managed_agents=effective_managed_agents if effective_managed_agents else None
     )
 

@@ -46,10 +46,8 @@ def create_system_designer_agent(
     progress_callback: Any = None,
     # Managed agents for delegation (research_emery, and optionally specialized builders)
     managed_agents: Optional[List[Any]] = None,
-    # Optional overrides for cascade planning (SubAgentPlanner)
+    # Optional custom callback for plan interruption
     planning_callback: Callable[[PlanningStep, CodeAgent], None] | None = None,
-    planning_only: bool = False,
-    extra_tools: List[Tool] | None = None,
 ) -> StatefulManagedAgent:
     """
     Create System Designer agent for holistic automation system design.
@@ -76,8 +74,6 @@ def create_system_designer_agent(
         progress_callback: Callback for streaming nested steps
         managed_agents: Specialized builders for delegation + research_emery
         planning_callback: Custom callback for plan interruption
-        planning_only: Whether in planning-only mode (cascade planning)
-        extra_tools: Additional tools for cascade planning
 
     Returns:
         Configured StatefulManagedAgent with planning and interruption
@@ -86,22 +82,16 @@ def create_system_designer_agent(
     effective_callback = planning_callback or create_planning_callback()
 
     # Build instructions from template
-    context_type = "planning_only" if planning_only else "interactive"
     instructions = build_agent_instructions(
         tools=tools,
         agent_type="system_designer",
-        context_type=context_type
+        context_type="interactive"
     )
-
-    # Merge extra_tools if provided
-    effective_tools = list(tools)
-    if extra_tools:
-        effective_tools.extend(extra_tools)
 
     # Create agent with HITL support
     # planning_interval=3: Research first, then create comprehensive system plan
     agent = StatefulManagedAgent(
-        tools=effective_tools,
+        tools=tools,
         model=model,
         max_steps=max_steps,
         instructions=instructions,
@@ -123,7 +113,7 @@ def create_system_designer_agent(
     agent.capabilities = render_capabilities("system_designer")
 
     logger.info(f"Created System Designer agent (CodeAgent) with planning_interval=3")
-    logger.info(f"   Tools: {[t.name for t in effective_tools]}")
+    logger.info(f"   Tools: {[t.name for t in tools]}")
     if managed_agents:
         agent_names = [a.name for a in managed_agents if hasattr(a, 'name')]
         logger.info(f"   Managed agents: {agent_names}")

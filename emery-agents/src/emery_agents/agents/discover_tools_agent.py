@@ -28,10 +28,8 @@ def create_discover_tools_agent(
     organization_id: Optional[int] = None,
     additional_tools: Optional[List[Tool]] = None,
     max_steps: int = 10,
-    # Optional overrides for cascade planning (SubAgentPlanner)
+    # Optional custom callback for plan interruption
     planning_callback: Optional[Callable[[PlanningStep, CodeAgent], None]] = None,
-    planning_only: bool = False,
-    extra_tools: Optional[List[Tool]] = None,
 ) -> ToolCallingAgent:
     """
     Create discover_tools agent for integration discovery.
@@ -54,9 +52,7 @@ def create_discover_tools_agent(
         organization_id: Organization context for RLS
         additional_tools: Extra tools to include
         max_steps: Maximum agent steps (default 10)
-        planning_callback: Optional callback for cascade planning
-        planning_only: Whether in planning-only mode
-        extra_tools: Additional tools for cascade planning
+        planning_callback: Optional callback for plan interruption
 
     Returns:
         Configured ToolCallingAgent for integration discovery
@@ -69,16 +65,11 @@ def create_discover_tools_agent(
 
     all_tools = discovery_tools + (additional_tools or [])
 
-    # Merge extra_tools if provided (for cascade planning question tool)
-    if extra_tools:
-        all_tools = all_tools + extra_tools
-
     # Use centralized prompt system
-    context_type = "planning_only" if planning_only else "interactive"
     instructions = build_agent_instructions(
         tools=all_tools,
         agent_type="discover_tools",
-        context_type=context_type,
+        context_type="interactive",
     )
 
     # Build step_callbacks if planning_callback provided

@@ -10,10 +10,8 @@ AIDEV-NOTE: Agents use native smolagents features:
 - reset=False: Preserve memory between messages
 """
 
-from .skill_builder_agent import (
-    create_skill_builder_agent,
-    create_planning_callback,
-)
+from .skill_builder_agent import create_skill_builder_agent
+from .planning_utils import create_planning_callback
 from .document_builder_agent import (
     create_document_builder_agent,
 )

@@ -45,10 +45,8 @@ def create_page_builder_agent(
     progress_callback: Any = None,
     # Optional research capability
     managed_agents: Optional[List[Any]] = None,
-    # Optional overrides for cascade planning (SubAgentPlanner)
+    # Optional custom callback for plan interruption
     planning_callback: Callable[[PlanningStep, CodeAgent], None] | None = None,
-    planning_only: bool = False,
-    extra_tools: List[Tool] | None = None,
 ) -> StatefulManagedAgent:
     """
     Create a Page Builder agent with native planning, step callbacks, and optional research.
@@ -82,8 +80,6 @@ def create_page_builder_agent(
         progress_callback: Callback for streaming nested steps
         managed_agents: Optional list of managed agents (e.g., research_agent)
         planning_callback: Custom callback for plan interruption
-        planning_only: Whether in planning-only mode (cascade planning)
-        extra_tools: Additional tools for cascade planning
 
     Returns:
         Configured StatefulManagedAgent with planning and interruption
@@ -92,24 +88,17 @@ def create_page_builder_agent(
     effective_callback = planning_callback if planning_callback is not None else create_planning_callback()
 
     # Get instructions from centralized function (base + agent-specific + tools)
-    # Use planning_only context for cascade sub-planning
-    context_type = "planning_only" if planning_only else "interactive"
     instructions = build_agent_instructions(
         tools=tools,
         agent_type="page_builder",
-        context_type=context_type
+        context_type="interactive"
     )
-
-    # Merge extra_tools if provided (for cascade planning question tool)
-    effective_tools = list(tools)
-    if extra_tools:
-        effective_tools.extend(extra_tools)
 
     # Use StatefulManagedAgent (CodeAgent-based) to preserve memory between calls
     # This is critical for HITL - regular agents reset memory on each __call__
     # StatefulManagedAgent.__init__ sets planning templates automatically
     agent = StatefulManagedAgent(
-        tools=effective_tools,
+        tools=tools,
         model=model,
         max_steps=max_steps,
         instructions=instructions,  # Custom instructions from Jinja2 template

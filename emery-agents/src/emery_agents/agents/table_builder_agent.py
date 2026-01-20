@@ -28,10 +28,8 @@ def create_table_builder_agent(
     tools: List[Tool],
     model: Any,
     max_steps: int = 6,
-    # Optional overrides for cascade planning (SubAgentPlanner)
+    # Optional custom callback for plan interruption
     planning_callback: Optional[Callable[[PlanningStep, CodeAgent], None]] = None,
-    planning_only: bool = False,
-    extra_tools: Optional[List[Tool]] = None,
 ) -> CodeAgent:
     """
     Create a Table Builder agent for single table operations.
@@ -55,18 +53,11 @@ def create_table_builder_agent(
         Configured CodeAgent for autonomous execution
     """
     # Get instructions from centralized function
-    # Use planning_only context for cascade sub-planning
-    context_type = "planning_only" if planning_only else "autonomous"
     instructions = build_agent_instructions(
         tools=tools,
         agent_type="table_builder",
-        context_type=context_type
+        context_type="autonomous"
     )
-
-    # Merge extra_tools if provided (for cascade planning question tool)
-    effective_tools = list(tools)
-    if extra_tools:
-        effective_tools.extend(extra_tools)
 
     # Build step_callbacks if planning_callback provided
     step_callbacks = {PlanningStep: planning_callback} if planning_callback else None
@@ -74,7 +65,7 @@ def create_table_builder_agent(
     # Use CodeAgent directly - no StatefulManagedAgent needed
     # since we don't need memory preservation between calls
     agent = CodeAgent(
-        tools=effective_tools,
+        tools=tools,
         model=model,
         max_steps=max_steps,
         instructions=instructions,
