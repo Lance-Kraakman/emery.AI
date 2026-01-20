@@ -185,15 +185,32 @@ class PlannerClassifier:
         classifier.run(prompt)
 
         if classification_tool.result:
-            # Validate domains
+            # Validate domains - fail fast if LLM returned invalid domains
             result = classification_tool.result
             valid_domains = [d for d in result.domains if d in self.VALID_DOMAINS]
+            invalid_domains = [d for d in result.domains if d not in self.VALID_DOMAINS]
+
             if not valid_domains:
-                valid_domains = ["schema"]  # Default if LLM returned invalid domains
+                raise ValueError(
+                    f"LLM returned no valid domains. Got: {result.domains}. "
+                    f"Valid domains are: {self.VALID_DOMAINS}"
+                )
+
+            if invalid_domains:
+                logger.warning(
+                    f"LLM returned invalid domains that were filtered: {invalid_domains}. "
+                    f"Continuing with valid domains: {valid_domains}"
+                )
+
+            if result.primary_domain not in self.VALID_DOMAINS:
+                raise ValueError(
+                    f"LLM returned invalid primary_domain: '{result.primary_domain}'. "
+                    f"Valid domains are: {self.VALID_DOMAINS}"
+                )
 
             classification = DomainClassification(
                 domains=valid_domains,
-                primary_domain=result.primary_domain if result.primary_domain in self.VALID_DOMAINS else valid_domains[0],
+                primary_domain=result.primary_domain,
                 confidence=result.confidence,
                 reasoning=result.reasoning,
                 phase_goals=result.phase_goals,

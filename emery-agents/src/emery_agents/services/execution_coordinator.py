@@ -21,23 +21,25 @@ from ..agents.interrupt_classifier import (
     create_interrupt_classifier,
     build_classification_prompt,
 )
-from ..models.plan import Plan, PlanStep, PlanStatus, PlanStepStatus, SubPlan, RecoveryResult, create_plan
+from ..models.plan import Plan, PlanStep, PlanStatus, PlanStepStatus, RecoveryResult, create_plan
 from ..models.task_ledger import TaskLedger, create_ledger_from_plan, LedgerEventType
 from ..utils.toon_format import to_toon
 from ..utils.session_logger import SessionLogger, get_session_logger
 from ..models.context_mapping import ResolvedContext
 from ..models.execution import StepExecutionResult, EvaluatorInput, ReplanContext
-from ..models.planning_questions import BatchedQuestions, QuestionAnswers
 from ..tools.tool_modes import ToolMode, filter_tools_for_mode
 from .plan_service import PlanService
 from .plan_step_executor import PlanStepExecutor
-from .sub_agent_planner import SubAgentPlanner, SubAgentPlanningResult
 from .protocols import EvaluatorAgent, Tool, ModelProvider, ManagedAgent
 from .task_classifier import TaskClassifier, TaskClassification
 from .research_tools_provider import get_research_tools, detect_research_intent
-from .execution_context_service import ExecutionContextService, create_execution_context_service
-from .strategy_accumulation_service import StrategyAccumulationService, create_strategy_accumulation_service
-from ..models.strategy_accumulation import StrategyOutcome
+from emery_agents.ace import (
+    ExecutionContextService,
+    create_execution_context_service,
+    StrategyAccumulationService,
+    create_strategy_accumulation_service,
+    StrategyOutcome,
+)
 from ..types import ExecutionMode
 
 logger = logging.getLogger(__name__)
@@ -63,7 +65,6 @@ class Phase(str, Enum):
     CLASSIFYING = "classifying"
     AWAITING_CLARIFICATION = "awaiting_clarification"
     PLANNING = "planning"
-    AWAITING_CASCADE_QUESTIONS = "awaiting_cascade_questions"
     AWAITING_APPROVAL = "awaiting_approval"
     EXECUTING = "executing"
     COMPLETED = "completed"
@@ -81,9 +82,7 @@ class PendingContext:
     original_task: str
     tools: List[Any]
     managed_agents: List[Any]
-    agent_factories: Optional[Dict[str, Callable[..., Any]]] = None
     clarification_response: Optional[str] = None
-    cascade_answers: Optional[Dict[str, str]] = None
 
 
 @dataclass
@@ -312,31 +311,6 @@ class DirectExecutionStartedEvent:
     task: str
 
 
-# Cascading planning events
-@dataclass
-class SubPlanCreatedEvent:
-    """Event emitted when a sub-agent creates its detailed plan."""
-    plan_id: str
-    step_id: str
-    agent_name: str
-    sub_plan_goal: str
-    sub_plan_step_count: int
-
-
-@dataclass
-class QuestionsCollectedEvent:
-    """Event emitted when sub-agents have questions for user."""
-    plan_id: str
-    questions: BatchedQuestions
-
-
-@dataclass
-class CascadingPlanCompleteEvent:
-    """Event emitted when all planning (high-level + sub-agent) is complete."""
-    plan_id: str
-    total_sub_plans: int
-
-
 # Planning progress events (for UI feedback during thinking phase)
 @dataclass
 class ClassificationStartedEvent:
@@ -434,8 +408,6 @@ class ExecutionCoordinator:
         self._replan_count: int = 0
         self._evaluation_count: int = 0
         self._managed_agents: Optional[List[Any]] = None  # Stored from execute() for later use
-        self._agent_factories: Optional[Dict[str, Callable[..., Any]]] = None  # For cascade planning
-        self._sub_planner: Optional[SubAgentPlanner] = None  # For cascading planning resume
 
         # Unified phase for handle_message() routing (replaces session_manager's coordinator_phase)
         self._unified_phase: Phase = Phase.IDLE
@@ -488,7 +460,10 @@ class ExecutionCoordinator:
                 org_model=org_model,
                 curate_after_steps=3,
             )
-            self._strategy_service = create_strategy_accumulation_service()
+            self._strategy_service = create_strategy_accumulation_service(
+                model_provider=model_provider,
+                org_model=org_model,
+            )
             logger.info("📊 ACE execution tracking services initialized")
 
     @classmethod
@@ -553,7 +528,6 @@ class ExecutionCoordinator:
         managed_agents: Optional[List[ManagedAgent]] = None,
         context: Optional[str] = None,
         stored_plan: Optional[Plan] = None,
-        agent_factories: Optional[Dict[str, Callable[..., Any]]] = None,
     ) -> AsyncIterator[Any]:
         """
         Smart execution entry point - decides mode based on LLM task analysis.
@@ -576,7 +550,6 @@ class ExecutionCoordinator:
             managed_agents: Available managed agents (for classification)
             context: Additional context (e.g., existing databases)
             stored_plan: Pre-approved plan from skill config (enables autonomous execution)
-            agent_factories: Factory functions for cascade planning (SubAgentPlanner)
 
         Yields:
             AwaitingClarificationEvent if questions needed
@@ -584,9 +557,8 @@ class ExecutionCoordinator:
             PlanCreatedEvent for complex tasks
             PlanApprovedEvent + execution events for stored plans
         """
-        # Store managed_agents and agent_factories for later use in execute_plan
+        # Store managed_agents for later use in execute_plan
         self._managed_agents = managed_agents
-        self._agent_factories = agent_factories
 
         # Initialize session logger for this execution (only logs if EMERY_DEBUG_PROMPTS=1)
         session_id = self._generate_session_id()
@@ -644,7 +616,6 @@ class ExecutionCoordinator:
             "mode": classification.mode,
             "needs_clarification": classification.needs_clarification,
             "target_agent": classification.target_agent,
-            "use_cascade_planning": classification.use_cascade_planning,
             "reasoning": classification.reasoning[:200] if classification.reasoning else ""
         })
 
@@ -670,25 +641,13 @@ class ExecutionCoordinator:
         # Emit planning started event (for UI feedback)
         yield PlanningStartedEvent(goal=task[:200] if len(task) > 200 else task)
 
-        # Check if cascade planning is needed (multi-agent complex tasks)
-        # Requires agent_factories for SubAgentPlanner to create agents with planning callbacks
-        if classification.use_cascade_planning and agent_factories:
-            logger.info("📋 Coordinator: Cascade planning mode (multi-agent complex task)")
-            async for event in self.create_cascading_plan(
-                goal=task,
-                instructions=task,
-                tools=tools,
-                agent_factories=agent_factories,
-            ):
-                yield event
-        else:
-            logger.info("📋 Coordinator: Plan and approve mode (complex task)")
-            async for event in self.create_plan(
-                goal=task,
-                instructions=task,
-                tools=tools,
-            ):
-                yield event
+        logger.info("📋 Coordinator: Plan and approve mode (complex task)")
+        async for event in self.create_plan(
+            goal=task,
+            instructions=task,
+            tools=tools,
+        ):
+            yield event
         # Session manager handles approval state
 
     async def classify_and_create_plan(
@@ -697,7 +656,7 @@ class ExecutionCoordinator:
         tools: List[Any],
         managed_agents: Optional[List[ManagedAgent]] = None,
         context: Optional[str] = None,
-        is_skill_template: bool = False,
+        is_template_generation: bool = False,
     ) -> AsyncIterator[Any]:
         """
         Classify task and create plan without execution.
@@ -711,7 +670,7 @@ class ExecutionCoordinator:
             tools: Available tools (for plan context)
             managed_agents: Available managed agents (for classification context)
             context: Additional context (e.g., existing databases)
-            is_skill_template: If True, plan won't hardcode IDs (for reusable skills)
+            is_template_generation: If True, generate template plan with {{ variable }} placeholders
 
         Yields:
             AwaitingClarificationEvent if questions needed (caller should pause)
@@ -754,7 +713,7 @@ class ExecutionCoordinator:
             instructions=task,
             tools=tools,
             managed_agents=managed_agents,
-            is_skill_template=is_skill_template,
+            is_template_generation=is_template_generation,
         ):
             yield event
 
@@ -787,15 +746,9 @@ class ExecutionCoordinator:
             TaskClassification with mode, clarification needs, and questions
         """
         if not self._task_classifier:
-            # Fallback if no classifier configured - default to PLAN_AND_APPROVE
-            logger.warning("📋 No TaskClassifier configured, defaulting to PLAN_AND_APPROVE")
-            return TaskClassification(
-                mode="PLAN_AND_APPROVE",
-                needs_clarification=False,
-                target_agent=None,
-                clarification_questions=[],
-                reasoning="No classifier configured",
-                use_cascade_planning=False,
+            raise ValueError(
+                "ExecutionCoordinator requires TaskClassifier. "
+                "Configure task_classifier in initialization."
             )
 
         # Get agent info for classification context
@@ -820,7 +773,7 @@ class ExecutionCoordinator:
         tools: List[Any],
         context_tables: Optional[ResolvedContext] = None,
         managed_agents: Optional[List[Any]] = None,
-        is_skill_template: bool = False,
+        is_template_generation: bool = False,
     ) -> AsyncIterator[Any]:
         """
         Phase 1: Create a plan using read-only tools.
@@ -834,7 +787,7 @@ class ExecutionCoordinator:
             tools: Available tools (will be filtered to read-only)
             context_tables: Resolved context mappings for available tables
             managed_agents: Available managed agents (for routing decisions)
-            is_skill_template: If True, plan is for a reusable skill (no hardcoded IDs)
+            is_template_generation: If True, generate template plan with {{ variable }} placeholders
 
         Yields:
             PlanCreatedEvent when plan is ready for approval
@@ -878,7 +831,7 @@ class ExecutionCoordinator:
                 research_tools=research_tools,
                 api_key=self._api_key,
                 organization_id=self._organization_id,
-                is_skill_template=is_skill_template,
+                is_template_generation=is_template_generation,
                 conversation_history=self._conversation_history,  # ACE: Resolve references
                 strategy_service=self._strategy_service,  # ACE: Proven patterns
             )
@@ -1038,6 +991,9 @@ class ExecutionCoordinator:
         current_phase_name: Optional[str] = None
         phase_step_results: Dict[str, List[str]] = {}  # phase_name -> list of results
 
+        # Session logging for flow tracking
+        session_logger = get_session_logger()
+
         # Execute steps with replan support
         # The outer while loop allows restarting after a replan
         success = True
@@ -1136,6 +1092,14 @@ class ExecutionCoordinator:
                 # Phase transition tracking
                 step_phase = step.phase_name  # May be None for non-phased plans
                 if step_phase != current_phase_name:
+                    # Log phase transition
+                    if session_logger:
+                        session_logger.log_state_transition(
+                            from_state=f"phase:{current_phase_name}" if current_phase_name else "none",
+                            to_state=f"phase:{step_phase}" if step_phase else "none",
+                            trigger="step_phase_change",
+                        )
+
                     # Emit phase completed for previous phase (if any)
                     if current_phase_name is not None:
                         phase_results = phase_step_results.get(current_phase_name, [])
@@ -1302,11 +1266,16 @@ class ExecutionCoordinator:
                         ]
 
                         if recent_step_ids:
-                            logger.info(f"📊 Running context curation for {len(recent_step_ids)} steps")
+                            # Collect StepResult objects for curation
+                            step_results_to_curate = [
+                                self.plan_step_executor.step_results[step_id]
+                                for step_id in recent_step_ids
+                                if step_id in self.plan_step_executor.step_results
+                            ]
+                            logger.info(f"📊 Running context curation for {len(step_results_to_curate)} steps")
                             self._ledger.execution_context = self._execution_context_service.curate(
                                 execution_context=self._ledger.execution_context,
-                                raw_step_results=self.plan_step_executor.step_results,
-                                recent_step_ids=recent_step_ids,
+                                step_results=step_results_to_curate,
                             )
                             curated_step_ids.extend(recent_step_ids)
                             steps_since_curation = 0
@@ -1316,7 +1285,7 @@ class ExecutionCoordinator:
                                 self._ledger.evolution_tracker.take_snapshot(
                                     step_id=step.step_id,
                                     context_state=self._ledger.execution_context.to_dict(),
-                                    summary=self._ledger.execution_context.get_relevant_context(500),
+                                    summary=self._ledger.execution_context.format_insights(500),
                                 )
 
                                 # Check for degradation
@@ -1340,6 +1309,18 @@ class ExecutionCoordinator:
                             evaluation=evaluation,
                             evaluation_number=self._evaluation_count,
                         )
+
+                        # Log evaluation result
+                        if session_logger:
+                            session_logger.log_event("evaluation_result", {
+                                "step_id": step.step_id,
+                                "goal_achieved": evaluation.goal_achieved,
+                                "needs_replan": evaluation.needs_replan,
+                                "should_continue": evaluation.should_continue,
+                                "blocking_issues": evaluation.blocking_issues,
+                                "reason": evaluation.reason[:200] if evaluation.reason else None,
+                                "evaluation_number": self._evaluation_count,
+                            })
 
                         # Handle evaluation result
                         if evaluation.goal_achieved:
@@ -1370,6 +1351,15 @@ class ExecutionCoordinator:
                                 break
 
                             self._replan_count += 1
+
+                            # Log replan trigger
+                            if session_logger:
+                                session_logger.log_event("replan_triggered", {
+                                    "replan_count": self._replan_count,
+                                    "trigger": "evaluation",
+                                    "reason": evaluation.reason[:200] if evaluation.reason else None,
+                                })
+
                             yield ReplanTriggeredEvent(
                                 plan_id=plan_id,
                                 reason=evaluation.reason,
@@ -1577,17 +1567,6 @@ class ExecutionCoordinator:
             return self._ledger.to_dict()
         return None
 
-    def get_ledger_summary(self) -> Optional[str]:
-        """
-        Get concise ledger summary in TOON format for evaluator.
-
-        Returns:
-            TOON string summary or None if no ledger exists
-        """
-        if self._ledger:
-            return self._ledger.to_toon_summary()
-        return None
-
     async def _synthesize_final_answer(self) -> str:
         """
         ACE: Use evaluator to synthesize all step results into coherent final answer.
@@ -1609,7 +1588,7 @@ class ExecutionCoordinator:
         # Get curated insights from execution context
         curated_context = ""
         if self._ledger.execution_context:
-            curated_context = self._ledger.execution_context.get_relevant_context(max_tokens=1000)
+            curated_context = self._ledger.execution_context.format_insights(max_tokens=1000)
 
         # Build synthesis prompt
         goal = self._current_plan.goal if self._current_plan else "Unknown"
@@ -1775,9 +1754,12 @@ Analyze this state and call the report_evaluation tool with your assessment.
         # Fallback: If there's a tool_call specified, use it directly
         if step.tool_call:
             tool = None
+            # Extract base tool name (before ':' if present, e.g., "tool:action" -> "tool")
+            tool_call_parts = step.tool_call.lower().split(':')
+            target_tool_name = tool_call_parts[0] if tool_call_parts else step.tool_call.lower()
             for t in tools:
                 tool_name = getattr(t, 'name', str(t))
-                if tool_name.lower() == step.tool_call.lower().split(':')[0]:
+                if tool_name.lower() == target_tool_name:
                     tool = t
                     break
 
@@ -2122,185 +2104,6 @@ Consider what has already been done and what still needs to happen.
 
 
     # ============================================================
-    # Cascading Planning - Sub-Agent Planning Before Execution
-    # ============================================================
-
-    async def create_cascading_plan(
-        self,
-        goal: str,
-        instructions: str,
-        tools: List[Any],
-        agent_factories: Dict[str, Callable[..., Any]],
-        context_tables: Optional[ResolvedContext] = None,
-    ) -> AsyncIterator[Any]:
-        """
-        Create hierarchical plan: high-level + sub-agent detailed plans.
-
-        Phase 1: Generate high-level plan (goal + steps)
-        Phase 2: For each step targeting a managed agent, run sub-agent planning
-        Phase 3: Collect questions from all sub-agents
-        Phase 4: Yield complete plan or questions for user
-
-        Args:
-            goal: High-level goal to achieve
-            instructions: Detailed instructions for planning
-            tools: Available tools
-            agent_factories: Dict mapping agent_name to factory function
-            context_tables: Resolved context mappings
-
-        Yields:
-            PlanCreatedEvent, SubPlanCreatedEvent, QuestionsCollectedEvent,
-            or CascadingPlanCompleteEvent
-        """
-        # Phase 1: High-level plan (existing flow)
-        async for event in self.create_plan(goal, instructions, tools, context_tables):
-            yield event
-
-        if not self._current_plan:
-            return
-
-        # Phase 2: Sub-agent planning
-        self._sub_planner = SubAgentPlanner(
-            agent_factories=agent_factories,
-            original_task=instructions,
-            model=None,  # Model passed via agent factories
-            max_depth=3,  # Enable 3 levels of recursive cascade planning
-            model_provider=self._model_provider,  # For LLM step classification
-            org_model=self._org_model,
-        )
-
-        updated_steps: List[PlanStep] = []
-        for step in self._current_plan.steps:
-            # Use target_agent from plan (set by LLM during planning)
-            target = step.target_agent
-
-            if target and target in agent_factories:
-                logger.info(f"📋 Running sub-agent planning for step: {step.description[:50]}...")
-
-                result = self._sub_planner.run_planning(step, target)
-
-                if result.success and result.sub_plan:
-                    updated_steps.append(step.with_sub_plan(result.sub_plan))
-                    yield SubPlanCreatedEvent(
-                        plan_id=self._current_plan.id,
-                        step_id=step.step_id,
-                        agent_name=target,
-                        sub_plan_goal=result.sub_plan.goal,
-                        sub_plan_step_count=len(result.sub_plan.steps),
-                    )
-                    logger.info(
-                        f"✅ Sub-plan created for {target}: "
-                        f"{len(result.sub_plan.steps)} steps"
-                    )
-                else:
-                    updated_steps.append(step.with_target_agent(target))
-                    if result.error:
-                        logger.warning(f"Sub-agent planning failed: {result.error}")
-            else:
-                updated_steps.append(step)
-
-        # Phase 3: Check for questions
-        all_questions = self._sub_planner.get_all_questions()
-        if not all_questions.is_empty:
-            logger.info(
-                f"📋 Questions collected: {len(all_questions.questions)} "
-                f"questions from sub-agents"
-            )
-            yield QuestionsCollectedEvent(
-                plan_id=self._current_plan.id,
-                questions=all_questions,
-            )
-            # Don't update plan yet - wait for answers via resume_cascading_plan
-            return
-
-        # Phase 4: Update plan with sub-plans and emit complete event
-        self._current_plan = self._current_plan.with_steps(updated_steps)
-        total_sub_plans = sum(1 for s in updated_steps if s.sub_plan)
-
-        logger.info(
-            f"📋 Cascading planning complete: {total_sub_plans} sub-plans created"
-        )
-        yield CascadingPlanCompleteEvent(
-            plan_id=self._current_plan.id,
-            total_sub_plans=total_sub_plans,
-        )
-
-    async def resume_cascading_plan(
-        self,
-        answers: QuestionAnswers,
-    ) -> AsyncIterator[Any]:
-        """
-        Resume cascading planning with user's answers to questions.
-
-        Called after QuestionsCollectedEvent when user provides answers.
-
-        Args:
-            answers: User's answers to the batched questions
-
-        Yields:
-            SubPlanCreatedEvent for completed sub-plans,
-            QuestionsCollectedEvent if more questions,
-            or CascadingPlanCompleteEvent when done
-        """
-        if not self._sub_planner or not self._current_plan:
-            logger.error("Cannot resume: no active cascading planning session")
-            return
-
-        # Get steps that need their sub-plans completed with answers
-        updated_steps: List[PlanStep] = []
-
-        for step in self._current_plan.steps:
-            if step.target_agent and not step.sub_plan:
-                # This step needs planning resumed with answers
-                step_answers = answers.get_answers_for_agent(
-                    step.target_agent,
-                    self._sub_planner.get_all_questions(),
-                )
-
-                if step_answers:
-                    result = self._sub_planner.resume_with_answers(
-                        step.step_id,
-                        step_answers,
-                    )
-
-                    if result.success and result.sub_plan:
-                        updated_steps.append(step.with_sub_plan(result.sub_plan))
-                        yield SubPlanCreatedEvent(
-                            plan_id=self._current_plan.id,
-                            step_id=step.step_id,
-                            agent_name=step.target_agent,
-                            sub_plan_goal=result.sub_plan.goal,
-                            sub_plan_step_count=len(result.sub_plan.steps),
-                        )
-                    else:
-                        updated_steps.append(step)
-                else:
-                    updated_steps.append(step)
-            else:
-                updated_steps.append(step)
-
-        # Clear questions for next round
-        self._sub_planner.clear_questions()
-
-        # Check if more questions arose
-        all_questions = self._sub_planner.get_all_questions()
-        if not all_questions.is_empty:
-            yield QuestionsCollectedEvent(
-                plan_id=self._current_plan.id,
-                questions=all_questions,
-            )
-            return
-
-        # Update plan and emit complete
-        self._current_plan = self._current_plan.with_steps(updated_steps)
-        total_sub_plans = sum(1 for s in updated_steps if s.sub_plan)
-
-        yield CascadingPlanCompleteEvent(
-            plan_id=self._current_plan.id,
-            total_sub_plans=total_sub_plans,
-        )
-
-    # ============================================================
     # Unified Message Handling - Single Entry Point
     # ============================================================
 
@@ -2316,7 +2119,6 @@ Consider what has already been done and what still needs to happen.
         self._current_plan = None
         self._ledger = None
         self._pending_context = None
-        self._sub_planner = None
         self._replan_count = 0
         self._evaluation_count = 0
         self._interrupt_queue = []
@@ -2339,10 +2141,6 @@ Consider what has already been done and what still needs to happen.
         phase_str = self._unified_phase.value
         logger.info(f"⏸️ Interrupt queued during {phase_str}: {message[:50]}...")
         return InterruptQueuedEvent(message=message, phase=phase_str)
-
-    def has_pending_interrupts(self) -> bool:
-        """Check if there are pending interrupt messages."""
-        return len(self._interrupt_queue) > 0
 
     async def _classify_interrupt(
         self,
@@ -2438,7 +2236,6 @@ Consider what has already been done and what still needs to happen.
         message: str,
         tools: Optional[List[Any]] = None,
         managed_agents: Optional[List[Any]] = None,
-        agent_factories: Optional[Dict[str, Callable[..., Any]]] = None,
     ) -> AsyncIterator[Any]:
         """
         Route message based on current phase - SINGLE ENTRY POINT.
@@ -2450,7 +2247,6 @@ Consider what has already been done and what still needs to happen.
             message: The user's message (task, approval response, or answers)
             tools: Available tools (only needed for fresh start)
             managed_agents: Available managed agents (only needed for fresh start)
-            agent_factories: Factory functions for cascade planning
 
         Yields:
             Appropriate events based on current phase and message content
@@ -2476,38 +2272,29 @@ Consider what has already been done and what still needs to happen.
             async for event in self._handle_approval_response(message, tools):
                 yield event
 
-        elif self._unified_phase == Phase.AWAITING_CASCADE_QUESTIONS:
-            async for event in self._handle_cascade_response(message):
-                yield event
-
         else:
             # IDLE or fresh start - run classification + planning
             # Store context for potential resumption
             effective_tools = tools or (self._pending_context.tools if self._pending_context else [])
             effective_agents = managed_agents or (self._pending_context.managed_agents if self._pending_context else [])
-            effective_factories = agent_factories or (self._pending_context.agent_factories if self._pending_context else None)
 
             # Store pending context for potential clarification/approval
             self._pending_context = PendingContext(
                 original_task=message,
                 tools=effective_tools,
                 managed_agents=effective_agents,
-                agent_factories=effective_factories,
             )
 
             async for event in self.execute(
                 task=message,
                 tools=effective_tools,
                 managed_agents=effective_agents,
-                agent_factories=effective_factories,
             ):
                 # Track phase transitions based on events
                 if isinstance(event, AwaitingClarificationEvent):
                     self._unified_phase = Phase.AWAITING_CLARIFICATION
                 elif isinstance(event, PlanCreatedEvent):
                     self._unified_phase = Phase.AWAITING_APPROVAL
-                elif isinstance(event, QuestionsCollectedEvent):
-                    self._unified_phase = Phase.AWAITING_CASCADE_QUESTIONS
                 elif isinstance(event, ExecutionCompletedEvent):
                     self._unified_phase = Phase.COMPLETED if event.success else Phase.FAILED
                 elif isinstance(event, DirectExecutionStartedEvent):
@@ -2534,13 +2321,10 @@ Consider what has already been done and what still needs to happen.
             task=combined_task,
             tools=self._pending_context.tools,
             managed_agents=self._pending_context.managed_agents,
-            agent_factories=self._pending_context.agent_factories,
         ):
             # Track phase transitions
             if isinstance(event, PlanCreatedEvent):
                 self._unified_phase = Phase.AWAITING_APPROVAL
-            elif isinstance(event, QuestionsCollectedEvent):
-                self._unified_phase = Phase.AWAITING_CASCADE_QUESTIONS
             elif isinstance(event, ExecutionCompletedEvent):
                 self._unified_phase = Phase.COMPLETED if event.success else Phase.FAILED
 
@@ -2603,41 +2387,10 @@ Consider what has already been done and what still needs to happen.
                 task=feedback_task,
                 tools=self._pending_context.tools,
                 managed_agents=self._pending_context.managed_agents,
-                agent_factories=self._pending_context.agent_factories,
             ):
                 if isinstance(event, PlanCreatedEvent):
                     self._unified_phase = Phase.AWAITING_APPROVAL
                 yield event
-
-    async def _handle_cascade_response(self, response: str) -> AsyncIterator[Any]:
-        """
-        Handle answers to cascade planning questions.
-
-        AIDEV-NOTE: Replaces the `awaiting_cascade_questions` phase handling
-        in chat_processing_service.py.
-        """
-        if not self._current_plan:
-            yield ErrorEvent(error="No current plan for cascade response")
-            return
-
-        # Try to parse as JSON, fall back to simple dict
-        try:
-            answers_dict = json.loads(response)
-        except json.JSONDecodeError:
-            # Treat as single answer to first question
-            answers_dict = {"default": response}
-
-        logger.info(f"📋 Processing cascade answers: {len(answers_dict)} answers")
-
-        async for event in self.resume_cascading_plan(QuestionAnswers(answers=answers_dict)):
-            if isinstance(event, QuestionsCollectedEvent):
-                # More questions - stay in this phase
-                self._unified_phase = Phase.AWAITING_CASCADE_QUESTIONS
-            elif isinstance(event, CascadingPlanCompleteEvent):
-                # Planning complete - transition to awaiting approval
-                self._unified_phase = Phase.AWAITING_APPROVAL
-
-            yield event
 
 
 class ExecutionCoordinatorFactory:

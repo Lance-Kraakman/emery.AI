@@ -154,10 +154,12 @@ class GapAnalyzer:
             logger.warning(f"No domain concerns defined for agent: {agent_name}")
             return GapAnalysisResult(agent_name=agent_name)
 
-        # If no model provider, use simple heuristic analysis
+        # Require model provider - no heuristic fallback
         if not self.model_provider:
-            logger.warning("No model_provider - using heuristic gap analysis")
-            return self._heuristic_analysis(agent_name, user_request, concerns)
+            raise ValueError(
+                "GapAnalyzer requires model_provider for LLM-based analysis. "
+                "Heuristic fallback has been removed."
+            )
 
         # Use LLM for intelligent gap analysis
         return self._llm_analysis(
@@ -208,9 +210,13 @@ class GapAnalyzer:
 
         except Exception as e:
             logger.error(f"Gap analysis failed: {e}")
+            raise
 
-        # Fallback to heuristic if LLM fails
-        return self._heuristic_analysis(agent_name, user_request, concerns)
+        # If tool wasn't called, raise an error
+        raise ValueError(
+            "GapAnalyzer LLM did not call the gap_analysis tool. "
+            "This indicates an issue with the prompt or model."
+        )
 
     def _build_analysis_prompt(
         self,
@@ -298,60 +304,6 @@ Call the report_gap_analysis tool with your analysis.
             gaps=gaps,
             context_summary=result.get("context_summary", ""),
         )
-
-    def _heuristic_analysis(
-        self,
-        agent_name: str,
-        user_request: str,
-        concerns: List[DomainConcern],
-    ) -> GapAnalysisResult:
-        """
-        Simple heuristic-based gap analysis.
-
-        Fallback when LLM is not available. Uses keyword matching
-        to estimate what's clear vs unclear.
-        """
-        request_lower = user_request.lower()
-        clear_concerns: List[str] = []
-        gaps: List[ConcernGap] = []
-
-        # Simple keyword matching per concern category
-        category_keywords = {
-            "structure": ["table", "entity", "create", "add"],
-            "fields": ["field", "column", "attribute", "property", "with"],
-            "relationships": ["relate", "link", "connect", "reference", "foreign"],
-            "workflow": ["step", "process", "when", "trigger", "then"],
-            "purpose": ["for", "to", "goal", "purpose", "need"],
-            "data": ["data", "input", "from", "source"],
-        }
-
-        for concern in concerns:
-            # Check if keywords for this category appear in request
-            keywords = category_keywords.get(concern.category, [])
-            has_keywords = any(kw in request_lower for kw in keywords)
-
-            # If request is long and has relevant keywords, assume clearer
-            is_detailed = len(user_request) > 100
-
-            if has_keywords and is_detailed:
-                clear_concerns.append(concern.id)
-            elif concern.required:
-                # Required concerns without clear keywords -> gap
-                gaps.append(ConcernGap(
-                    concern=concern,
-                    context_found="",
-                    reason_unclear="Could not determine from request",
-                    suggested_question=concern.question_template,
-                    suggested_options=None,
-                ))
-
-        return GapAnalysisResult(
-            agent_name=agent_name,
-            clear_concerns=clear_concerns,
-            gaps=gaps,
-            context_summary="Heuristic analysis (no LLM available)",
-        )
-
 
 class GapAnalyzerFactory:
     """Factory for creating GapAnalyzer instances."""

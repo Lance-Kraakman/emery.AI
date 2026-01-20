@@ -118,12 +118,13 @@ class PlannerRouter:
         # Register phase goals for each domain using LLM-generated goals from classification
         for domain in ordered_domains:
             phase_name = domain.title()
-            # Use LLM-generated goal if available, fallback to generic
-            if phase_name in classification.phase_goals:
-                goal = classification.phase_goals[phase_name]
-            else:
-                # Fallback for edge cases where LLM didn't generate a goal
-                goal = f"Handle {domain} domain for: {instructions[:100]}"
+            if phase_name not in classification.phase_goals:
+                raise ValueError(
+                    f"LLM did not generate goal for phase '{phase_name}'. "
+                    f"Available goals: {list(classification.phase_goals.keys())}. "
+                    f"Ensure domain_classifier.j2 instructs LLM to generate phase_goals."
+                )
+            goal = classification.phase_goals[phase_name]
             planning_context.add_phase_goal(phase_name, goal, generated_by="Classification")
 
         prev_domain = None
