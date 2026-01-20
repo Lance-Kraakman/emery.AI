@@ -115,17 +115,16 @@ class PlannerRouter:
 
         planning_context = PlanningContext(overall_goal=instructions)
 
-        # Register phase goals for each domain (simple derivation for now)
-        # Future: Planning meta-phase would generate specific goals via LLM
-        instructions_preview = instructions[:100]
+        # Register phase goals for each domain using LLM-generated goals from classification
         for domain in ordered_domains:
             phase_name = domain.title()
-            if domain == "schema":
-                planning_context.add_phase_goal(phase_name, f"Design database schema for: {instructions_preview}")
-            elif domain == "app":
-                planning_context.add_phase_goal(phase_name, f"Build application interface for: {instructions_preview}")
-            elif domain == "automation":
-                planning_context.add_phase_goal(phase_name, f"Create automation skills for: {instructions_preview}")
+            # Use LLM-generated goal if available, fallback to generic
+            if phase_name in classification.phase_goals:
+                goal = classification.phase_goals[phase_name]
+            else:
+                # Fallback for edge cases where LLM didn't generate a goal
+                goal = f"Handle {domain} domain for: {instructions[:100]}"
+            planning_context.add_phase_goal(phase_name, goal, generated_by="Classification")
 
         prev_domain = None
         for domain in ordered_domains:
