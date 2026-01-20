@@ -113,9 +113,9 @@ After research finds: Table 'docs' (ID: 113) with 1 field (docs, tiptap_editor)
   "analysis": "## Analysis\n\nThe docs table has minimal structure. Common improvements for document tables include:\n- Adding metadata fields (title, author, created_date)\n- Adding status tracking (draft/published)\n- Adding categorization (tags, folder)",
   "goal": "Enhance the docs table with metadata and organization fields",
   "steps": [
-    {"description": "Add 'title' (text) field to docs table (ID: 113) for document naming", "target_agent": "schema_builder"},
-    {"description": "Add 'status' (select: draft/review/published) field for workflow tracking", "target_agent": "schema_builder"},
-    {"description": "Add 'created_at' (timestamp) and 'updated_at' (timestamp) fields for auditing", "target_agent": "schema_builder"}
+    {"description": "Add 'title' (text) field to docs table (ID: 113) for document naming", "target_agent": "schema_builder", "phase_name": "Execution", "phase_order": 1},
+    {"description": "Add 'status' (select: draft/review/published) field for workflow tracking", "target_agent": "schema_builder", "phase_name": "Execution", "phase_order": 1},
+    {"description": "Add 'created_at' (timestamp) and 'updated_at' (timestamp) fields for auditing", "target_agent": "schema_builder", "phase_name": "Execution", "phase_order": 1}
   ]
 }
 ```
@@ -138,8 +138,8 @@ Each step should have:
 ```json
 {
   "steps": [
-    {"description": "Create 'clients' table in database abc-123-def with fields: name, email, phone", "target_agent": "schema_builder"},
-    {"description": "Add foreign key relationship from orders to clients", "target_agent": "schema_builder"}
+    {"description": "Create 'clients' table in database abc-123-def with fields: name (text), email (email), phone (phone)", "target_agent": "schema_builder", "phase_name": "Execution", "phase_order": 1},
+    {"description": "Create 'orders' table with: client_id (relation to clients), date (date), total (number), status (single-select)", "target_agent": "schema_builder", "phase_name": "Execution", "phase_order": 1}
   ]
 }
 ```
@@ -156,6 +156,8 @@ Each step should have:
 **Step 2 - You call**: `table_crud(method="list_tables")`
 **Response**: "Found 0 tables"
 
+**IMPORTANT:** Since no databases exist, Step 1 MUST create a database first!
+
 **Step 3 - You call**: `submit_plan(...)`
 
 ```json
@@ -164,10 +166,10 @@ Each step should have:
   "analysis": "## Analysis\n\nFrom the user's request, I identified these entities:\n\n**Clients**\n- Core entity for tracking people\n- Fields: name, date_of_birth, phone, email, address\n\n**Consultations**\n- Records of each consultation session\n- Fields: date, notes, outcome\n- Relationship: belongs to client\n\n**Health History**\n- Medical background for each client\n- Fields: conditions, medications, allergies\n- Relationship: belongs to client",
   "goal": "Create client consultation tracking database with clients, consultations, and health history tables",
   "steps": [
-    {"description": "Create 'clients' table with: id (uuid), name (text), date_of_birth (date), phone (text), email (text), address (text), created_at (timestamp)", "target_agent": "schema_builder"},
-    {"description": "Create 'consultations' table with: id (uuid), client_id (uuid), date (date), notes (text), outcome (text)", "target_agent": "schema_builder"},
-    {"description": "Create 'health_history' table with: id (uuid), client_id (uuid), conditions (text), medications (text), allergies (text)", "target_agent": "schema_builder"},
-    {"description": "Set up foreign keys: consultations.client_id -> clients.id, health_history.client_id -> clients.id", "target_agent": "schema_builder"}
+    {"description": "Create database 'ClientTracking'", "target_agent": "schema_builder", "phase_name": "Execution", "phase_order": 1},
+    {"description": "Create 'clients' table with: name (text), date_of_birth (date), phone (phone), email (email), address (text)", "target_agent": "schema_builder", "phase_name": "Execution", "phase_order": 1},
+    {"description": "Create 'consultations' table with: client_id (relation to clients), date (date), notes (text), outcome (text)", "target_agent": "schema_builder", "phase_name": "Execution", "phase_order": 1},
+    {"description": "Create 'health_history' table with: client_id (relation to clients), conditions (text), medications (text), allergies (text)", "target_agent": "schema_builder", "phase_name": "Execution", "phase_order": 1}
   ]
 }
 ```

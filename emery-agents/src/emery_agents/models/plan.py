@@ -134,6 +134,10 @@ class PlanStep:
     required_context: List[str] = field(default_factory=list)  # Variables needed at runtime
     # OAuth connection requirement (Phase 2: discover_tools integration)
     connection_required: Optional[str] = None  # App slug requiring connection (e.g., "slack", "gmail")
+    # Phase grouping fields for hierarchical planning
+    phase_name: Optional[str] = None  # e.g., "Discovery", "Filtering", "Summary"
+    phase_order: Optional[int] = None  # e.g., 1, 2, 3 for ordering phases
+    replan_after: bool = False  # If True, replan subsequent phases after this step's phase completes
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -151,6 +155,9 @@ class PlanStep:
             "promptTemplate": self.prompt_template,
             "requiredContext": self.required_context,
             "connectionRequired": self.connection_required,
+            "phaseName": self.phase_name,
+            "phaseOrder": self.phase_order,
+            "replanAfter": self.replan_after,
         }
 
     @classmethod
@@ -171,6 +178,9 @@ class PlanStep:
             prompt_template=data.get("promptTemplate", data.get("prompt_template")),
             required_context=data.get("requiredContext", data.get("required_context", [])),
             connection_required=data.get("connectionRequired", data.get("connection_required")),
+            phase_name=data.get("phaseName", data.get("phase_name")),
+            phase_order=data.get("phaseOrder", data.get("phase_order")),
+            replan_after=data.get("replanAfter", data.get("replan_after", False)),
         )
 
     @classmethod
@@ -204,6 +214,9 @@ class PlanStep:
             prompt_template=proto.prompt_template or None,
             required_context=list(proto.required_context) if proto.required_context else [],
             connection_required=proto.connection_required if hasattr(proto, 'connection_required') and proto.connection_required else None,
+            phase_name=proto.phase_name if hasattr(proto, 'phase_name') and proto.phase_name else None,
+            phase_order=proto.phase_order if hasattr(proto, 'phase_order') and proto.phase_order else None,
+            replan_after=proto.replan_after if hasattr(proto, 'replan_after') else False,
         )
 
     def mark_in_progress(self) -> "PlanStep":
@@ -222,6 +235,9 @@ class PlanStep:
             prompt_template=self.prompt_template,
             required_context=self.required_context,
             connection_required=self.connection_required,
+            phase_name=self.phase_name,
+            phase_order=self.phase_order,
+            replan_after=self.replan_after,
         )
 
     def mark_completed(self, result: Optional[str] = None) -> "PlanStep":
@@ -240,6 +256,9 @@ class PlanStep:
             prompt_template=self.prompt_template,
             required_context=self.required_context,
             connection_required=self.connection_required,
+            phase_name=self.phase_name,
+            phase_order=self.phase_order,
+            replan_after=self.replan_after,
         )
 
     def mark_failed(self, error: str) -> "PlanStep":
@@ -258,6 +277,9 @@ class PlanStep:
             prompt_template=self.prompt_template,
             required_context=self.required_context,
             connection_required=self.connection_required,
+            phase_name=self.phase_name,
+            phase_order=self.phase_order,
+            replan_after=self.replan_after,
         )
 
     def with_sub_plan(self, sub_plan: "SubPlan") -> "PlanStep":
@@ -276,6 +298,9 @@ class PlanStep:
             prompt_template=self.prompt_template,
             required_context=self.required_context,
             connection_required=self.connection_required,
+            phase_name=self.phase_name,
+            phase_order=self.phase_order,
+            replan_after=self.replan_after,
         )
 
     def with_target_agent(self, agent_name: str) -> "PlanStep":
@@ -294,6 +319,9 @@ class PlanStep:
             prompt_template=self.prompt_template,
             required_context=self.required_context,
             connection_required=self.connection_required,
+            phase_name=self.phase_name,
+            phase_order=self.phase_order,
+            replan_after=self.replan_after,
         )
 
     def with_parameters(self, parameters: Dict[str, Any]) -> "PlanStep":
@@ -312,6 +340,9 @@ class PlanStep:
             prompt_template=self.prompt_template,
             required_context=self.required_context,
             connection_required=self.connection_required,
+            phase_name=self.phase_name,
+            phase_order=self.phase_order,
+            replan_after=self.replan_after,
         )
 
 
@@ -388,6 +419,12 @@ class Plan:
             result["requiredContext"] = step.required_context
         if step.connection_required:
             result["connectionRequired"] = step.connection_required
+        if step.phase_name:
+            result["phaseName"] = step.phase_name
+        if step.phase_order is not None:
+            result["phaseOrder"] = step.phase_order
+        if step.replan_after:
+            result["replanAfter"] = step.replan_after
         if step.sub_plan:
             result["subPlan"] = {
                 "agentName": step.sub_plan.agent_name,
@@ -660,6 +697,9 @@ def create_step(
     prompt_template: Optional[str] = None,
     required_context: Optional[List[str]] = None,
     connection_required: Optional[str] = None,
+    phase_name: Optional[str] = None,
+    phase_order: Optional[int] = None,
+    replan_after: bool = False,
 ) -> PlanStep:
     """
     Factory function to create a new plan step.
@@ -673,6 +713,9 @@ def create_step(
         prompt_template: Jinja2 template for autonomous execution
         required_context: Variables needed at runtime for the template
         connection_required: App slug requiring OAuth connection (e.g., "slack", "gmail")
+        phase_name: Phase this step belongs to (e.g., "Discovery", "Filtering")
+        phase_order: Order of this step's phase (1, 2, 3...)
+        replan_after: If True, replan subsequent phases after this step's phase completes
 
     Returns:
         A new PlanStep instance in pending status
@@ -689,6 +732,9 @@ def create_step(
         prompt_template=prompt_template,
         required_context=required_context or [],
         connection_required=connection_required,
+        phase_name=phase_name,
+        phase_order=phase_order,
+        replan_after=replan_after,
     )
 
 

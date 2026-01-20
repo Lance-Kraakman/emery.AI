@@ -3,6 +3,10 @@
 
 {% include 'execution/_base_executor.j2' %}
 
+{% if current_step.phase_name %}
+## Phase: {{ current_step.phase_name }}
+{% endif %}
+
 ## Current Step
 {{ current_step.description }}
 

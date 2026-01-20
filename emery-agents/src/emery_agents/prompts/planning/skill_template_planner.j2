@@ -36,9 +36,9 @@ This skill must produce these outputs. Your plan MUST include steps that generat
 {
   "goal": "Analyze tables and produce summary output",
   "steps": [
-    {"description": "Research all tables using research_agent", "target_agent": "research_agent", "prompt_template": "Use available tools to gather information about all tables in the system.", "required_context": []},
-    {"description": "Analyze table structures and identify data patterns", "target_agent": null, "prompt_template": "Analyze the gathered table information and identify patterns, relationships, and key insights.", "required_context": []},
-    {"description": "Format findings into {{"{{"}}summary{{"}}"}} output", "target_agent": null, "prompt_template": "Format your analysis into the {{"{{"}}summary{{"}}"}} output variable with key insights and recommendations.", "required_context": ["summary"]}
+    {"description": "Research all tables using research_agent", "target_agent": "research_agent", "prompt_template": "Use available tools to gather information about all tables in the system.", "required_context": [], "phase_name": "Discovery", "phase_order": 1, "replan_after": true},
+    {"description": "Analyze table structures and identify data patterns", "target_agent": null, "prompt_template": "Analyze the gathered table information and identify patterns, relationships, and key insights.", "required_context": [], "phase_name": "Analysis", "phase_order": 2, "replan_after": true},
+    {"description": "Format findings into {{"{{"}}summary{{"}}"}} output", "target_agent": null, "prompt_template": "Format your analysis into the {{"{{"}}summary{{"}}"}} output variable with key insights and recommendations.", "required_context": ["summary"], "phase_name": "Execution", "phase_order": 3}
   ]
 }
 ```
@@ -82,13 +82,18 @@ Each step MUST include:
       "description": "Parse request and determine action type",
       "prompt_template": "Analyze the user request: {{"{{"}}request{{"}}"}}\n\nDetermine the action type:\n- If user wants to read/view: action = 'read'\n- If user wants to create/new: action = 'create'\n- If user wants to edit/update: action = 'update'\n\nReturn the determined action.",
       "required_context": ["request"],
-      "target_agent": null
+      "target_agent": null,
+      "phase_name": "Analysis",
+      "phase_order": 1,
+      "replan_after": true
     },
     {
       "description": "Execute document operation based on action",
       "prompt_template": "Based on the action determined:\n\n**If reading:**\nCall emery-read-document with:\n- document_id: {{"{{"}}document_id{{"}}"}}\n- table_id: {{"{{"}}table_id{{"}}"}}\n\n**If creating:**\nCall emery-create-document with:\n- table_id: {{"{{"}}table_id{{"}}"}}\n- title: Extract from {{"{{"}}request{{"}}"}}\n\n**If updating:**\nCall emery-update-document with:\n- document_id: {{"{{"}}document_id{{"}}"}}\n- table_id: {{"{{"}}table_id{{"}}"}}\n- content: Changes from {{"{{"}}request{{"}}"}}",
       "required_context": ["request", "document_id", "table_id"],
-      "target_agent": null
+      "target_agent": null,
+      "phase_name": "Execution",
+      "phase_order": 2
     }
   ]
 }
@@ -130,19 +135,26 @@ Available inputs: {% for input in skill_inputs %}`{{"{{"}}{{ input.name }}{{"}}"
       "description": "Parse request and determine action type",
       "prompt_template": "Analyze the user request: {{"{{"}}request{{"}}"}}\n\nDetermine the action type:\n- If user wants to read/view: action = 'read'\n- If user wants to create/new: action = 'create'\n- If user wants to edit/update: action = 'update'\n\nReturn the determined action.",
       "required_context": ["request"],
-      "target_agent": null
+      "target_agent": null,
+      "phase_name": "Analysis",
+      "phase_order": 1,
+      "replan_after": true
     },
     {
       "description": "Execute document operation based on action",
       "prompt_template": "Based on the action determined:\n\n**If reading:**\nCall emery-read-document with:\n- document_id: {{"{{"}}document_id{{"}}"}}\n- table_id: {{"{{"}}table_id{{"}}"}}\n\n**If creating:**\nCall emery-create-document with:\n- table_id: {{"{{"}}table_id{{"}}"}}\n- title: Extract from {{"{{"}}request{{"}}"}}\n\n**If updating:**\nCall emery-update-document with:\n- document_id: {{"{{"}}document_id{{"}}"}}\n- table_id: {{"{{"}}table_id{{"}}"}}\n- content: Changes from {{"{{"}}request{{"}}"}}",
       "required_context": ["request", "document_id", "table_id"],
-      "target_agent": null
+      "target_agent": null,
+      "phase_name": "Execution",
+      "phase_order": 2
     },
     {
       "description": "Set result confirmation",
       "prompt_template": "Set the {{"{{"}}result{{"}}"}} output to a confirmation message:\n\nFormat: 'Document [action] successfully: [details]'\n\nInclude:\n- What action was performed\n- Document title or ID affected\n- Any relevant details from the operation",
       "required_context": ["result"],
-      "target_agent": null
+      "target_agent": null,
+      "phase_name": "Summary",
+      "phase_order": 3
     }
   ]
 }

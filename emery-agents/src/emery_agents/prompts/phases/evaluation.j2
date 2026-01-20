@@ -20,7 +20,7 @@ You are evaluating the progress of a task execution.
 {% if step_results %}
 ### Recent Step Results
 {% for step_id, result in step_results.items() %}
-- **{{ step_id }}**: {{ result[:200] }}{% if result|length > 200 %}...{% endif %}
+- **{{ step_id }}**: {{ result }}
 {% endfor %}
 {% endif %}
 

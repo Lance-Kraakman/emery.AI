@@ -49,7 +49,7 @@ This skill receives runtime inputs. Use `{{"{{"}}input_name{{"}}"}}` placeholder
 
 {% endfor %}
 {% endif %}
-{% if is_skill_template %}
+{% if is_template_generation %}
 
 ## CRITICAL: Skill Template Rules
 
@@ -122,7 +122,7 @@ This skill must produce these outputs. Your plan MUST include steps that generat
 {% endif %}
 
 ---
-{% if is_skill_template %}
+{% if is_template_generation %}
 
 ## CRITICAL: Skill Template Mode
 
@@ -249,7 +249,7 @@ After gathering context, call **`submit_plan`** with:
   "analysis": "## Analysis\n\n[Your analysis of what needs to be created/modified]",
   "goal": "[Clear goal statement]",
   "steps": [
-{% if is_skill_template %}
+{% if is_template_generation %}
     {"description": "[Specific step - NO hardcoded IDs, use role references or {{input}} placeholders]", "target_agent": "[agent_name]"}
 {% else %}
     {"description": "[Specific step with table/field names and REAL IDs from context]", "target_agent": "[agent_name]"}
@@ -310,7 +310,7 @@ Example for "Analyze all tables and give me a summary":
 ```
 
 ---
-{% if is_skill_template %}
+{% if is_template_generation %}
 
 ## Example: Skill Template Plan
 
@@ -393,7 +393,7 @@ For each step, provide BOTH:
 ---
 
 ## DO:
-{% if is_skill_template %}
+{% if is_template_generation %}
 - Research to understand available tools and their parameters
 - Use `{{"{{"}}input_name{{"}}"}}` (double braces) for all dynamic values
 - Include actual tool names with variable placeholders in parameters
@@ -411,7 +411,7 @@ For each step, provide BOTH:
 - Show the user exactly what will be created
 
 ## DO NOT:
-{% if is_skill_template %}
+{% if is_template_generation %}
 - Call research_agent or any context-gathering tools
 - Reference specific table names, database names, or organization names
 - Use UUIDs or specific IDs that won't exist at runtime
@@ -439,7 +439,7 @@ Never say "no further steps necessary" - the instructions always require executi
 
 ---
 
-{% if is_skill_template %}
+{% if is_template_generation %}
 This is a skill template. You may research to understand tools, then call `submit_plan()` with steps using `{{"{{"}}input_name{{"}}"}}` variable placeholders. Do NOT include hardcoded IDs or org-specific values.
 {% elif has_research_agent %}
 Now delegate to `research_agent.forward(task="...")` to gather context for this task, then call `submit_plan()` with real IDs from the research.
