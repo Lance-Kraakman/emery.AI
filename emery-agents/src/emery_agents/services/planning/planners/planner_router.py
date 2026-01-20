@@ -100,8 +100,6 @@ class PlannerRouter:
 
         # Step 2: Generate steps for each domain
         all_steps: List[PlanStep] = []
-        combined_context = ""
-        combined_analysis = ""
 
         # Sort domains by execution order
         ordered_domains = sorted(
@@ -110,7 +108,6 @@ class PlannerRouter:
         )
 
         # Initialize PlanningContextService for LLM-based context curation
-        # AIDEV-NOTE: This replaces raw string concatenation with structured context
         planning_context_service = PlanningContextService(
             model_provider=self.model_provider,
             org_model=org_model,
@@ -150,8 +147,8 @@ class PlannerRouter:
                 session_logger.log_event("domain_context_input", {
                     "domain": domain,
                     "curated_context_length": len(curated_context),
-                    "raw_context_length": len(combined_context),
                     "insight_count": len(planning_context.insights),
+                    "completed_phases": planning_context.completed_phases,
                     "curated_context_preview": curated_context[-500:] if curated_context else "",
                 })
                 # Log full curated context passed to this domain
@@ -209,11 +206,8 @@ class PlannerRouter:
                 )
 
             all_steps.extend(result.steps)
-            combined_context += f"\n\n## {domain.title()} Context\n{result.context}"
-            combined_analysis += f"\n\n## {domain.title()} Analysis\n{result.analysis}"
 
-            # Curate context via ACE for next phase
-            # AIDEV-NOTE: This extracts insights from raw context using LLM
+            # Curate context via ACE (extracts insights from raw context using LLM)
             if planning_context_service:
                 planning_context = planning_context_service.curate_after_phase(
                     planning_context=planning_context,
@@ -221,6 +215,9 @@ class PlannerRouter:
                     raw_context=result.context,
                     raw_analysis=result.analysis,
                 )
+            else:
+                # Still mark phase completed even without full ACE curation
+                planning_context.mark_phase_completed(phase_name)
 
             prev_domain = domain
 
@@ -230,15 +227,15 @@ class PlannerRouter:
         # - Automation planner discovers: existing agents, skills, triggers
         # These are NOT duplicates - they discover different domain-specific entities.
 
-        # Step 3: Create plan
+        # Step 3: Create plan with ACE-curated context
         plan_goal = goal or self._summarize(instructions)
 
         plan = create_plan(
             goal=plan_goal,
             basic_instructions=instructions,
             steps=all_steps,
-            context=combined_context.strip(),
-            analysis=combined_analysis.strip(),
+            context=planning_context.format_context_for_plan(),
+            analysis=planning_context.format_analysis_for_plan(),
         )
 
         logger.info(

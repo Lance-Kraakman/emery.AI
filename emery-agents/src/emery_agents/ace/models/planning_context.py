@@ -128,3 +128,62 @@ class PlanningContext:
         """Mark a phase as completed."""
         if phase_name not in self.completed_phases:
             self.completed_phases.append(phase_name)
+
+    def format_context_for_plan(self) -> str:
+        """
+        Format discovered entities for the Plan's context field.
+
+        Returns a summary of all ENTITY insights (what was discovered).
+        """
+        parts = [f"## Overall Goal\n{self.overall_goal}"]
+
+        # Group entities by source phase
+        for phase in self.completed_phases:
+            phase_entities = [
+                i for i in self.insights
+                if i.source_phase == phase and i.insight_type == PlanningInsightType.ENTITY
+            ]
+            if phase_entities:
+                parts.append(f"\n### {phase} - Discovered")
+                for entity in phase_entities:
+                    parts.append(f"- {entity.summary}")
+                    for fact in entity.key_facts:
+                        parts.append(f"  - {fact}")
+
+        return "\n".join(parts) if parts else ""
+
+    def format_analysis_for_plan(self) -> str:
+        """
+        Format decisions and constraints for the Plan's analysis field.
+
+        Returns a summary of DECISION, CONSTRAINT, and DEPENDENCY insights.
+        """
+        parts = []
+
+        # Group by insight type
+        decisions = [i for i in self.insights if i.insight_type == PlanningInsightType.DECISION]
+        constraints = [i for i in self.insights if i.insight_type == PlanningInsightType.CONSTRAINT]
+        dependencies = [i for i in self.insights if i.insight_type == PlanningInsightType.DEPENDENCY]
+
+        if decisions:
+            parts.append("## Decisions Made")
+            for d in decisions:
+                parts.append(f"- [{d.source_phase}] {d.summary}")
+
+        if constraints:
+            parts.append("\n## Constraints Identified")
+            for c in constraints:
+                parts.append(f"- [{c.source_phase}] {c.summary}")
+
+        if dependencies:
+            parts.append("\n## Dependencies")
+            for dep in dependencies:
+                parts.append(f"- [{dep.source_phase}] {dep.summary}")
+
+        # Include phase goals as planned approach
+        if self.phase_goals:
+            parts.append("\n## Planned Approach")
+            for pg in self.phase_goals:
+                parts.append(f"- **{pg.phase_name}**: {pg.goal}")
+
+        return "\n".join(parts) if parts else ""
