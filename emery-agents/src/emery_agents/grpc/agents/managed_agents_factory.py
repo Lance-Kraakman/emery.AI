@@ -508,10 +508,14 @@ class ManagedAgentsFactory:
 
         System Designer has:
         - research_agent (managed agent) for web search + system introspection
-        - Other builders as managed_agents for delegation
+        - schema_builder (managed agent) for database/table design
+        - app_builder (managed agent) for app/page creation
+        - agent_builder (managed agent) for agent configuration
+        - skill_builder (managed agent) for skill definitions
 
         AIDEV-NOTE: System Designer does NOT have CRUD tools directly.
-        It delegates to specialized builders via cascade planning.
+        It delegates to specialized builders which handle execution.
+        Uses phases for dynamic planning (Discovery -> Execution -> Summary).
 
         AIDEV-NOTE: Uses research_agent instead of separate research tools +
         research_emery. research_agent already combines both (web search tools +
@@ -527,13 +531,26 @@ class ManagedAgentsFactory:
             org_model=org_model
         )
 
-        # Build managed agents list: research_agent + any provided builders
-        all_managed_agents = [research_agent]
+        # Create specialist builders for delegation
+        # system_designer routes to these based on plan phases
+        schema_builder = self.create_schema_builder(tool_provider, org_model)
+        app_builder = self.create_app_builder(tool_provider, org_model)
+        agent_builder = self.create_agent_builder(tool_provider, org_model)
+        skill_builder = self.create_skill_builder(tool_provider, org_model)
+
+        # Build managed agents list: research + specialists + any additional
+        all_managed_agents = [
+            research_agent,
+            schema_builder,
+            app_builder,
+            agent_builder,
+            skill_builder,
+        ]
         if managed_agents:
             all_managed_agents.extend(managed_agents)
 
         system_designer = create_system_designer_agent(
-            tools=[],  # No direct tools - delegates to research_agent
+            tools=[],  # No direct tools - delegates to managed agents
             model=model,
             max_steps=15,
             managed_agents=all_managed_agents,
@@ -955,18 +972,31 @@ class ManagedAgentsFactory:
             AIDEV-NOTE: system_designer is the TOP-LEVEL ORCHESTRATOR that
             understands the full Emery ecosystem. It has:
             - research_agent as managed agent (combines web search + system introspection)
-            - NO CRUD tools (delegates to specialized builders)
+            - schema_builder, app_builder, agent_builder, skill_builder as specialists
 
-            Uses research_agent instead of separate research tools + research_emery.
+            Uses phases for dynamic planning (Discovery -> Execution -> Summary).
+            Delegates to specialists rather than using CRUD tools directly.
             """
             # Create research_agent for combined web + system research
             research_agent = research_agent_factory(**kwargs)
 
+            # Create specialist builders for delegation
+            schema_builder = schema_builder_factory(**kwargs)
+            app_builder_agent = app_builder_factory(**kwargs)
+            agent_builder_agent = agent_builder_factory(**kwargs)
+            skill_builder_agent = skill_builder_factory(**kwargs)
+
             return create_system_designer_agent(
-                tools=[],  # No direct tools - delegates to research_agent
+                tools=[],  # No direct tools - delegates to managed agents
                 model=model,
                 max_steps=15,
-                managed_agents=[research_agent],
+                managed_agents=[
+                    research_agent,
+                    schema_builder,
+                    app_builder_agent,
+                    agent_builder_agent,
+                    skill_builder_agent,
+                ],
                 **kwargs
             )
 

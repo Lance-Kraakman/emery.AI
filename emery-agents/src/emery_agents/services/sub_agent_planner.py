@@ -1,5 +1,22 @@
 """
-Sub-Agent Planner - Orchestrates planning phase for managed agents.
+Sub-Agent Planner - DEPRECATED - Orchestrates planning phase for managed agents.
+
+DEPRECATION NOTICE:
+This module is deprecated in favor of phase-based replanning with `replan_after`.
+Phase-based replanning provides the same dynamic planning capability but:
+- Uses a simpler single-tier mechanism
+- Integrates with PhaseCompletedEvent for user feedback
+- Avoids recursive nested planning complexity
+
+The recommended approach is:
+1. Central plan uses phases: Discovery → Analysis → Execution → Summary
+2. Discovery/Analysis phases have `replan_after=True`
+3. After phase completion, ExecutionCoordinator triggers `_handle_replan()`
+4. Each specialist agent uses `planning_interval` for its own HITL
+
+---
+
+Original documentation (kept for reference):
 
 Uses proven HITL pattern: planning_interval + step_callbacks + interrupt.
 Each sub-agent runs in planning-only mode to generate detailed sub-plans.
@@ -29,6 +46,7 @@ plan for that nested agent. This creates a tree of detailed plans:
 
 import logging
 import re
+import warnings
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
 
@@ -70,7 +88,11 @@ AgentFactory = Callable[..., Any]
 
 class SubAgentPlanner:
     """
-    Orchestrates sub-agent planning using existing HITL patterns.
+    DEPRECATED: Orchestrates sub-agent planning using existing HITL patterns.
+
+    This class is deprecated in favor of phase-based replanning with `replan_after`.
+    Use phases (Discovery, Analysis, Execution, Summary) with `replan_after=True`
+    on Discovery/Analysis phases to achieve the same dynamic planning effect.
 
     Two-phase approach:
     1. Gap Analysis: Check domain concerns → identify what's unclear
@@ -98,6 +120,9 @@ class SubAgentPlanner:
         """
         Initialize SubAgentPlanner.
 
+        DEPRECATED: Use phase-based replanning with `replan_after=True` instead.
+        See execution_coordinator.py for the recommended approach.
+
         Args:
             agent_factories: Dict mapping agent_name to factory function
             original_task: Full user request for context
@@ -108,6 +133,16 @@ class SubAgentPlanner:
             model_provider: Provider for LLM access (used for step classification)
             org_model: Organization model ID for model resolution
         """
+        warnings.warn(
+            "SubAgentPlanner is deprecated. Use phase-based replanning with "
+            "replan_after=True on Discovery/Analysis phases instead. "
+            "See ORCHESTRATION_FLOW.md for the recommended approach.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        logger.warning(
+            "⚠️ SubAgentPlanner is deprecated. Consider using phase-based replanning."
+        )
         self.agent_factories = agent_factories
         self.original_task = original_task
         self.model = model

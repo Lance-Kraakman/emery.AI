@@ -31,6 +31,7 @@ from emery_agents.tools.crud_tools import load_skill_crud, load_document_crud
 from emery_agents.services.tool_provider import ToolProvider
 from emery_agents.tools.skill_tool import SkillTool
 from emery_agents.tools.tool_executor import create_tool_executor
+from emery_agents.tools.tool_modes import filter_tools_for_mode, ToolMode
 from .generated import agent_worker_pb2, agent_worker_pb2_grpc
 from .mappers import ProtoMapper
 from .mappers.message_mapper import (
@@ -62,6 +63,7 @@ from ..services.agent_executor import AgentExecutor
 from ..services.skill_executor import SkillExecutorService
 from ..services.plan_service import PlanService
 from ..services.plan_step_executor import PlanStepExecutor
+from ..models.skill_definition import SkillInputDefinition, SkillOutputDefinition
 from ..services.execution_coordinator import (
     ExecutionCoordinator,
     CoordinatorMode,
@@ -74,6 +76,7 @@ from ..services.execution_coordinator import (
     ExecutionBlockedEvent,
     GoalAchievedEvent,
     ExecutionCompletedEvent,
+    FinalSynthesisEvent,
     DirectExecutionStartedEvent,
     AwaitingClarificationEvent,
     ErrorEvent,  # Plan generation / API errors
@@ -865,8 +868,14 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 managed_agents.extend(user_agent_executors)
                 logger.info(f"📋 Total managed agents: {len(managed_agents)} ({len(user_agent_executors)} user-defined)")
 
+                # Filter tools for chat_router - only read-only tools
+                # chat_router is a PURE ROUTER: it routes to managed agents for mutations
+                # This forces all CRUD operations to go through specialized agents
+                router_tools = filter_tools_for_mode(smolagents_tools, ToolMode.PLANNING)
+                logger.info(f"🔒 chat_router gets {len(router_tools)} read-only tools (filtered from {len(smolagents_tools)})")
+
                 agent = self.managed_agents_factory.create_chat_planner(
-                    smolagents_tools,
+                    router_tools,  # Only read-only tools
                     org_model=org_model,
                     has_images=has_images,
                     managed_agents=managed_agents,
@@ -1552,7 +1561,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
             # Execute stored plan directly (no classification, no approval)
             step_index = 0
-            last_step_result = None  # Track last step result for final summary
+            final_synthesis: Optional[str] = None  # ACE: Synthesized final answer
             execution_success = False  # Track execution success
 
             async for event in coordinator.execute(
@@ -1567,15 +1576,15 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     yield converted
                     step_index += 1
 
-                # Capture step results for final summary (same as interactive mode)
-                if isinstance(event, StepCompletedEvent) and event.result:
-                    last_step_result = event.result
+                # Capture synthesized final answer (ACE)
+                if isinstance(event, FinalSynthesisEvent):
+                    final_synthesis = event.synthesis
                 elif isinstance(event, ExecutionCompletedEvent):
                     execution_success = event.success
 
             # Send final summary as content_chunk so user sees the result
             if execution_success:
-                summary = last_step_result or f"Plan executed successfully with {step_index} steps."
+                summary = final_synthesis or f"Plan executed successfully with {step_index} steps."
                 yield {
                     "type": "content_chunk",
                     "content": f"\n\n{summary}"
@@ -1768,7 +1777,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
                 # === PHASE 2: EXECUTION ===
                 step_index = 0
-                last_step_result: Optional[str] = None
+                final_synthesis: Optional[str] = None  # ACE: Synthesized final answer
                 execution_success = False
 
                 async for event in coordinator_from_session.execute_plan(plan_from_session.id, tools):
@@ -1777,16 +1786,16 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                         yield converted
                         step_index += 1
 
-                    # Capture step results for final summary
-                    if isinstance(event, StepCompletedEvent) and event.result:
-                        last_step_result = event.result
+                    # Capture synthesized final answer (ACE)
+                    if isinstance(event, FinalSynthesisEvent):
+                        final_synthesis = event.synthesis
                     elif isinstance(event, ExecutionCompletedEvent):
                         execution_success = event.success
 
                 # Send final summary as content_chunk so user sees a message
                 # AIDEV-NOTE: This is critical - without this, user only sees step progress
                 if execution_success:
-                    summary = last_step_result or f"Plan executed successfully with {step_index} steps."
+                    summary = final_synthesis or f"Plan executed successfully with {step_index} steps."
                     yield {
                         "type": "content_chunk",
                         "content": f"\n\n✅ **Execution Complete**\n\n{summary}"
@@ -1812,9 +1821,13 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 return
 
         elif sm and sm.phase == Phase.EXECUTING:
-            # Execution is typically synchronous, but handle edge cases
-            logger.warning("⚠️ Coordinator: Unexpected executing phase on new message")
-            sm.on_error("Unexpected message during execution")
+            # User sent message while in EXECUTING state - likely after a blocking issue
+            # Clear state and process as new input (will go through task classifier)
+            logger.info(f"📋 Coordinator: User input during EXECUTING phase, treating as new task: {task[:100]}...")
+            sm.context.clear()
+            # Fall through to normal agent processing
+            yield "FALL_THROUGH"
+            return
 
         # NOTE: awaiting_clarification is now handled early (before coordinator creation)
         # to combine original task with clarification and re-run planning
@@ -2023,21 +2036,23 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             logger.info(f"📋 GeneratePlan: Using {len(managed_agents)} managed agents")
 
             # 3. Extract skill inputs for variable-aware planning
-            skill_inputs = []
-            for input_def in request.skill_inputs:
-                skill_inputs.append({
-                    "name": input_def.name,
-                    "type": input_def.type or "text",
-                    "required": input_def.required,
-                })
+            skill_inputs: List[SkillInputDefinition] = [
+                SkillInputDefinition(
+                    name=input_def.name,
+                    type=input_def.type or "text",
+                    required=input_def.required,
+                )
+                for input_def in request.skill_inputs
+            ]
 
             # 3a. Extract skill outputs for result-aware planning
-            skill_outputs = []
-            for output_def in request.skill_outputs:
-                skill_outputs.append({
-                    "name": output_def.name,
-                    "type": output_def.type or "text",
-                })
+            skill_outputs: List[SkillOutputDefinition] = [
+                SkillOutputDefinition(
+                    name=output_def.name,
+                    type=output_def.type or "text",
+                )
+                for output_def in request.skill_outputs
+            ]
 
             # 3b. Extract previous plan and feedback for regeneration
             previous_plan_json = request.previous_plan_json if request.previous_plan_json else None

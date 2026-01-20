@@ -8,10 +8,15 @@ AIDEV-NOTE: This is the TOP-LEVEL ORCHESTRATOR that sits above specialized build
 It understands the full Emery ecosystem (agents -> skills -> databases -> views -> apps)
 and designs holistic solutions before delegating to specialists.
 
-AIDEV-NOTE: System Designer does NOT have CRUD tools directly. It has:
-- research_emery (via managed agent) for system introspection
-- research tools (web_search, visit_webpage) for context gathering
-It delegates actual resource creation to specialized builders via cascade planning.
+AIDEV-NOTE: System Designer does NOT have CRUD tools directly. It has managed agents:
+- research_agent for system introspection + web research
+- schema_builder for database/table design
+- app_builder for app/page creation
+- agent_builder for agent configuration
+- skill_builder for skill definitions
+
+It delegates actual resource creation to these specialists, each of which uses its
+own planning_interval for HITL approval of complex operations.
 
 AIDEV-NOTE: Uses StatefulManagedAgent (CodeAgent-based) to preserve memory between
 calls. Regular managed agents reset memory on each __call__, but StatefulManagedAgent

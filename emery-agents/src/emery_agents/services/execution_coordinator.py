@@ -1142,12 +1142,72 @@ class ExecutionCoordinator:
                         results_summary = f"Completed {len(phase_results)} step(s)"
                         if phase_results:
                             results_summary = "; ".join(r[:100] for r in phase_results if r)[:500]
+
+                        # Check if any step in completed phase has replan_after=True
+                        phase_steps = [
+                            s for s in self._current_plan.steps
+                            if s.phase_name == current_phase_name
+                        ]
+                        needs_phase_replan = any(s.replan_after for s in phase_steps)
+
                         yield PhaseCompletedEvent(
                             plan_id=plan_id,
                             phase_name=current_phase_name,
                             results_summary=results_summary,
-                            needs_replan=False,  # Will be determined after phase if replan_after=True
+                            needs_replan=needs_phase_replan,
                         )
+
+                        # Trigger replanning if phase has replan_after=True
+                        if needs_phase_replan:
+                            if self._replan_count >= self.max_replans:
+                                logger.warning(
+                                    f"Max replans ({self.max_replans}) exceeded for phase replan"
+                                )
+                            else:
+                                self._replan_count += 1
+                                logger.info(
+                                    f"🔄 Phase '{current_phase_name}' completed with replan_after=True, "
+                                    f"triggering replan #{self._replan_count}"
+                                )
+                                yield ReplanTriggeredEvent(
+                                    plan_id=plan_id,
+                                    reason=f"Phase '{current_phase_name}' completed with replan_after=True",
+                                    replan_number=self._replan_count,
+                                )
+
+                                # Perform phase-based replanning with phase results as context
+                                old_pending_count = len(self._current_plan.get_pending_steps())
+                                self._current_plan = await self._handle_replan(
+                                    current_plan=self._current_plan,
+                                    failed_step=None,
+                                    reason=f"Phase '{current_phase_name}' completed - replanning subsequent phases based on discoveries",
+                                    tools=tools,
+                                )
+                                new_pending_count = len(self._current_plan.get_pending_steps())
+
+                                yield PlanUpdatedEvent(
+                                    plan_id=plan_id,
+                                    reason=f"Phase '{current_phase_name}' replan",
+                                    added_steps=max(0, new_pending_count - old_pending_count),
+                                    removed_steps=max(0, old_pending_count - new_pending_count),
+                                    replan_number=self._replan_count,
+                                )
+
+                                # Update ledger with phase replan info
+                                if self._ledger:
+                                    self._ledger._record_event(
+                                        event_type=LedgerEventType.REPLAN_TRIGGERED,
+                                        data={
+                                            "reason": f"Phase '{current_phase_name}' replan_after=True",
+                                            "replan_number": self._replan_count,
+                                            "new_step_count": new_pending_count,
+                                            "phase_results": results_summary,
+                                        }
+                                    )
+
+                                # Restart step iteration with updated plan
+                                should_restart = True
+                                break
 
                     # Start new phase
                     current_phase_name = step_phase

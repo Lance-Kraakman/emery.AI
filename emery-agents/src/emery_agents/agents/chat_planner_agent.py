@@ -98,8 +98,9 @@ def create_chat_planner_agent(
     # Set attributes for identification
     agent.name = "chat_planner"
     agent.description = (
-        "Main chat orchestrator that routes requests to specialized agents "
-        "or handles simple queries directly."
+        "Chat router that routes requests to specialized agents. "
+        "Has READ-ONLY tools for gathering information but CANNOT make changes directly. "
+        "All mutations must go through managed agents (schema_builder, app_builder, etc.)."
     )
 
     logger.info(f"Created Chat Planner agent (ToolCallingAgent) with {len(tools)} tools, "
