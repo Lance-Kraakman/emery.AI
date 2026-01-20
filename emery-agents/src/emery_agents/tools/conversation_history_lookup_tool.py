@@ -118,7 +118,7 @@ Example:
             if query_lower in text.lower():
                 matches.append({
                     "role": msg_role,
-                    "content": text[:500],  # Truncate for token efficiency
+                    "content": text,  # Full content - let the agent see complete context
                     "match_preview": self._get_match_preview(text, query_lower),
                 })
 

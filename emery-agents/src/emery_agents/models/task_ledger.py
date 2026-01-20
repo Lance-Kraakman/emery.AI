@@ -22,9 +22,7 @@ from emery_agents.models.plan import PlanStepStatus
 from emery_agents.utils.toon_format import to_toon
 
 if TYPE_CHECKING:
-    from emery_agents.models.execution_context import ExecutionContext
-    from emery_agents.models.execution_evolution import ExecutionEvolutionTracker
-    from emery_agents.models.strategy_accumulation import StrategyRegistry
+    from emery_agents.ace import ExecutionContext, ExecutionEvolutionTracker, StrategyRegistry
 
 
 class LedgerEventType(Enum):
@@ -108,6 +106,9 @@ class TaskLedger:
     replan_count: int = 0
     evaluation_count: int = 0
 
+    # Planning metadata for evaluator visibility
+    strategy_guidance: Optional[str] = None  # ACE: Proven patterns from past executions that influenced planning
+
     # ACE-inspired execution tracking (initialized via init_execution_tracking)
     execution_context: Optional["ExecutionContext"] = None
     strategy_registry: Optional["StrategyRegistry"] = None
@@ -122,10 +123,8 @@ class TaskLedger:
         - Strategy accumulation (record patterns for future planning)
         - Evolution tracking (detect context degradation)
         """
-        # Import here to avoid circular imports at module level
-        from emery_agents.models.execution_context import ExecutionContext
-        from emery_agents.models.execution_evolution import ExecutionEvolutionTracker
-        from emery_agents.models.strategy_accumulation import StrategyRegistry
+        # Import from ACE package (avoid circular imports at module level)
+        from emery_agents.ace import ExecutionContext, ExecutionEvolutionTracker, StrategyRegistry
 
         if self.execution_context is None:
             self.execution_context = ExecutionContext(task_id=self.task_id)
@@ -296,11 +295,11 @@ class TaskLedger:
         return (done / self.total_steps) * 100
 
     def get_step_results(self) -> Dict[str, Optional[str]]:
-        """Get results from all completed steps."""
+        """Get results from all completed steps (including empty results)."""
         return {
             step_id: step.result
             for step_id, step in self.steps.items()
-            if step.status == PlanStepStatus.COMPLETED.value and step.result
+            if step.status == PlanStepStatus.COMPLETED.value
         }
 
     def get_recent_events(self, limit: int = 10) -> List[LedgerEvent]:
@@ -347,6 +346,10 @@ class TaskLedger:
             if self.evolution_tracker.detect_degradation():
                 result["degradation_detected"] = True
 
+        # Include strategy guidance if it was used during planning
+        if self.strategy_guidance:
+            result["strategy_guidance"] = self.strategy_guidance
+
         return result
 
     def to_toon_summary(self) -> str:
@@ -370,8 +373,8 @@ class TaskLedger:
 
         # Add execution context insights if available
         if self.execution_context and self.execution_context.insights:
-            # Get token-budgeted context (most relevant insights)
-            summary["curated_context"] = self.execution_context.get_relevant_context(
+            # Format insights for LLM consumption
+            summary["curated_context"] = self.execution_context.format_insights(
                 max_tokens=500
             )
 

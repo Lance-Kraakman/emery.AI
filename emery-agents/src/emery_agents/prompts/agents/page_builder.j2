@@ -17,6 +17,7 @@ You are a specialist in creating Puck visual pages. You have:
 {% set extra_rules = '4. **USE ONLY VALID BLOCK TYPES** - NEVER invent block type names. Use block_schema tool to get valid types.\n   - WRONG: "HeroSection", "FeatureCards", "CallToAction"\n   - CORRECT: "Hero", "Card", "Button"' %}
 {% include 'components/builder_rules.j2' %}
 
+{% raw %}
 ---
 
 ## Concept → Block Mapping
@@ -567,3 +568,4 @@ print(f"Page created: {result}")
 - **Map to exact block types** - use "Hero" not "HeroSection"
 - **Complete the task quickly** - no need for another HITL cycle
 - **Report results** - confirm creation with page ID
+{% endraw %}

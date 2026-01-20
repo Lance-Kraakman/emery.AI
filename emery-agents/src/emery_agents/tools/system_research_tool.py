@@ -34,6 +34,7 @@ def create_system_research_tool(
     - agents: Find agents by name/role, get agent details
     - skills: Find skills, get instructions/config
     - tasks: Query task history, get logs/results
+    - databases: List databases, get database details
     - tables: List tables, get schema/fields
     - apps: List apps, get pages/config
     - audit: Query audit events, get resource trails
@@ -65,6 +66,7 @@ Resource types:
 - agents: Find agents by name/role, get agent details (id, name, role, automations)
 - skills: Find skills, get instructions/config (id, name, instructions, inputs, outputs)
 - tasks: Query task history, get logs/results (id, status, result, logs)
+- databases: List databases, get database details (id, name, slug)
 - tables: List tables, get schema/fields (id, name, fields)
 - apps: List apps, get pages/config (id, name, slug, pages)
 - pages: Get page by ID with content (id, name, templateData), or list pages in app
@@ -76,6 +78,8 @@ Examples:
 - Find skill by name: system_research(resource_type="skills", query="summarize")
 - Recent tasks: system_research(resource_type="tasks", filters={"limit": 10})
 - Task by ID: system_research(resource_type="tasks", query="task-uuid-here")
+- List databases: system_research(resource_type="databases")
+- Get database by ID: system_research(resource_type="databases", query="5")
 - Audit for skill: system_research(resource_type="audit", filters={"resourceType": "skill", "resourceId": "15"})
 - Tables in database: system_research(resource_type="tables")
 - Page content: system_research(resource_type="pages", query="22", include_details=True)
@@ -85,7 +89,7 @@ Examples:
         inputs = {
             "resource_type": {
                 "type": "string",
-                "description": "Type to research: 'organization', 'agents', 'skills', 'tasks', 'tables', 'apps', 'pages', 'audit'"
+                "description": "Type to research: 'organization', 'agents', 'skills', 'tasks', 'databases', 'tables', 'apps', 'pages', 'audit'"
             },
             "query": {
                 "type": "string",
@@ -134,6 +138,8 @@ Examples:
                 return self._research_skills(query, filters, include_details)
             elif resource_type == "tasks":
                 return self._research_tasks(query, filters, include_details)
+            elif resource_type == "databases":
+                return self._research_databases(query, filters, include_details)
             elif resource_type == "tables":
                 return self._research_tables(query, filters, include_details)
             elif resource_type == "apps":
@@ -146,7 +152,7 @@ Examples:
                 return {
                     "success": False,
                     "error": f"Unknown resource type: '{resource_type}'. "
-                             f"Supported types: organization, agents, skills, tasks, tables, apps, pages, audit"
+                             f"Supported types: organization, agents, skills, tasks, databases, tables, apps, pages, audit"
                 }
 
         def _research_organization(
@@ -264,6 +270,37 @@ Examples:
                     params.append("limit=20")  # Default limit
                 if params:
                     endpoint += "?" + "&".join(params)
+                return self._make_api_request(
+                    endpoint=endpoint,
+                    method="GET",
+                    auth_token=_auth_token,
+                    organization_id=_org_id
+                )
+
+        def _research_databases(
+            self,
+            query: Optional[str],
+            filters: Dict,
+            include_details: bool
+        ) -> Dict[str, Any]:
+            """Research databases - list or get by ID."""
+            if query and query.isdigit():
+                # Get specific database by ID
+                format_param = "format=llm" if not include_details else ""
+                endpoint = f"databases/{query}"
+                if format_param:
+                    endpoint += f"?{format_param}"
+                return self._make_api_request(
+                    endpoint=endpoint,
+                    method="GET",
+                    auth_token=_auth_token,
+                    organization_id=_org_id
+                )
+            else:
+                # List databases
+                endpoint = "databases?format=llm"
+                if filters.get("limit"):
+                    endpoint += f"&limit={filters['limit']}"
                 return self._make_api_request(
                     endpoint=endpoint,
                     method="GET",

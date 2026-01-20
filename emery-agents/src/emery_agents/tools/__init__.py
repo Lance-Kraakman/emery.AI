@@ -9,6 +9,7 @@ from .tool_modes import (
     READ_ONLY_TOOLS,
     MUTATION_ONLY_TOOLS,
 )
+from .step_output_tool import StepOutputTool
 
 __all__ = [
     "ToolMode",
@@ -18,4 +19,5 @@ __all__ = [
     "get_execution_tool_permissions",
     "READ_ONLY_TOOLS",
     "MUTATION_ONLY_TOOLS",
+    "StepOutputTool",
 ]

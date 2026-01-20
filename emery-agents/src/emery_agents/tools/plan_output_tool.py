@@ -10,11 +10,37 @@ directly without any regex parsing.
 """
 
 import logging
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from smolagents import Tool
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class NormalizedStepData:
+    """Normalized step data captured from planner output."""
+
+    description: str
+    target_agent: Optional[str] = None
+    prompt_template: Optional[str] = None
+    required_context: List[str] = field(default_factory=list)
+    phase_name: Optional[str] = None
+    phase_order: Optional[int] = None
+    replan_after: bool = False
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dict for captured_plan storage."""
+        return {
+            "description": self.description,
+            "target_agent": self.target_agent,
+            "prompt_template": self.prompt_template,
+            "required_context": self.required_context,
+            "phase_name": self.phase_name,
+            "phase_order": self.phase_order,
+            "replan_after": self.replan_after,
+        }
 
 
 class PlanOutputTool(Tool):  # type: ignore[misc]
@@ -50,9 +76,9 @@ Example:
   "analysis": "## Analysis\\n\\nI identified these entities from your request:\\n- **clients**: name, DOB, contact info\\n- **health_history**: conditions, medications\\n\\nRelationships: health_history belongs to clients",
   "goal": "Create client consultation database with health tracking",
   "steps": [
-    {"description": "Create 'clients' table with: id, name, date_of_birth, phone, email", "target_agent": "schema_builder"},
-    {"description": "Create 'health_history' table with: id, client_id, conditions, medications", "target_agent": "schema_builder"},
-    {"description": "Set up foreign key: health_history.client_id -> clients.id", "target_agent": "schema_builder"}
+    {"description": "Create 'clients' table with: id, name, date_of_birth, phone, email", "target_agent": "schema_builder", "phase_name": "Execution", "phase_order": 1},
+    {"description": "Create 'health_history' table with: id, client_id, conditions, medications", "target_agent": "schema_builder", "phase_name": "Execution", "phase_order": 1},
+    {"description": "Set up foreign key: health_history.client_id -> clients.id", "target_agent": "schema_builder", "phase_name": "Execution", "phase_order": 1}
   ]
 }
 """
@@ -94,10 +120,22 @@ Example:
                         "items": {"type": "string"},
                         "description": "List of variable names needed at runtime for the prompt_template",
                     },
+                    "phase_name": {
+                        "type": "string",
+                        "description": "Logical phase grouping (e.g., 'Discovery', 'Analysis', 'Execution', 'Summary')",
+                    },
+                    "phase_order": {
+                        "type": "integer",
+                        "description": "Order of this phase (1, 2, 3...)",
+                    },
+                    "replan_after": {
+                        "type": "boolean",
+                        "description": "If true, replan subsequent phases using this phase's results (default: false)",
+                    },
                 },
                 "required": ["description"],
             },
-            "description": "List of step objects with description, optional target_agent, and optional prompt_template for skill templates",
+            "description": "List of step objects with description, optional target_agent, phase_name, phase_order, and optional prompt_template for skill templates",
         },
     }
     output_type = "string"
@@ -126,35 +164,45 @@ Example:
         Returns:
             Confirmation message
         """
-        # Normalize steps to ensure consistent structure
-        normalized_steps = []
+        # Normalize steps to ensure consistent structure using dataclass
+        normalized_steps: List[NormalizedStepData] = []
         for step in steps:
-            if isinstance(step, str):
-                # Legacy format - just a string description
-                normalized_steps.append({
-                    "description": step,
-                    "target_agent": None,
-                    "prompt_template": None,
-                    "required_context": [],
-                })
-            elif isinstance(step, dict):
-                normalized_steps.append({
-                    "description": step.get("description", str(step)),
-                    "target_agent": step.get("target_agent"),
-                    "prompt_template": step.get("prompt_template"),
-                    "required_context": step.get("required_context", []),
-                })
+            if isinstance(step, dict):
+                normalized_steps.append(NormalizedStepData(
+                    description=step.get("description", str(step)),
+                    target_agent=step.get("target_agent"),
+                    prompt_template=step.get("prompt_template"),
+                    required_context=step.get("required_context", []),
+                    phase_name=step.get("phase_name"),
+                    phase_order=step.get("phase_order"),
+                    replan_after=step.get("replan_after", False),
+                ))
             else:
-                normalized_steps.append({
-                    "description": str(step),
-                    "target_agent": None,
-                    "prompt_template": None,
-                    "required_context": [],
-                })
+                # Unexpected format - log warning and handle gracefully
+                logger.warning(
+                    f"Unexpected step format (expected dict): {type(step).__name__}. "
+                    f"String steps are deprecated."
+                )
+                normalized_steps.append(NormalizedStepData(
+                    description=str(step),
+                ))
+
+        # Apply phase defaults - discovery/analysis already happened during planning
+        # so most plans just need Execution phase
+        for step in normalized_steps:
+            if not step.phase_name:
+                step.phase_name = "Execution"
+            if step.phase_order is None:
+                step.phase_order = 1
+
+        # If LLM explicitly set Discovery/Analysis, default replan_after to true
+        for step in normalized_steps:
+            if step.phase_name in ("Discovery", "Analysis") and not step.replan_after:
+                step.replan_after = True
 
         self.captured_plan = {
             "goal": goal,
-            "steps": normalized_steps,
+            "steps": [s.to_dict() for s in normalized_steps],
             "context": context,
             "analysis": analysis,
         }
@@ -164,8 +212,8 @@ Example:
         if analysis:
             logger.debug(f"  Analysis: {analysis[:100]}...")
         for i, step in enumerate(normalized_steps, 1):
-            agent_info = f" [{step['target_agent']}]" if step.get('target_agent') else ""
-            desc = step.get('description') or ""
+            agent_info = f" [{step.target_agent}]" if step.target_agent else ""
+            desc = step.description or ""
             logger.debug(f"  Step {i}{agent_info}: {desc[:80]}...")
         return f"Plan submitted: {goal} with {len(normalized_steps)} steps"
 

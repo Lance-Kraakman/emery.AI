@@ -129,9 +129,18 @@ tool_executor(tool="field_crud", task="create field 'has_power_of_attorney' of t
 ```
 
 ### Error Handling
+- **No databases exist** → Create a database first using `database_crud` before creating tables
 - Creation fails partway → Report which succeeded/failed
 - Database not found → List available databases
 - Table exists → Offer to add fields to existing
+
+### IMPORTANT: Handle Empty System
+If `databases[0]` is returned (zero databases), you MUST create a database first:
+```python
+# No databases exist - create one first
+tool_executor(tool="database_crud", task="create database named 'Main'")
+# Response will include the new database ID - use it for creating tables
+```
 
 ---
 

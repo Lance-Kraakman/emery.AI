@@ -193,7 +193,7 @@ class ToolProvider:
 
         AIDEV-NOTE: System designer delegates mutations to specialized builders
         (schema_builder, app_builder, agent_builder, skill_builder) via
-        cascade planning. It only needs research capability and security analysis.
+        managed agents. It only needs research capability and security analysis.
 
         Returns security_report tool - other tools added in ManagedAgentsFactory.
         """
