@@ -91,23 +91,6 @@ Use the agent names from "Available Agents" above. Set target_agent to:
 - The agent name if the task clearly matches one agent's domain
 - null/none if multiple agents are needed or it's unclear which to use
 
-### Cascade Planning
-
-Set use_cascade_planning=True when:
-- The task involves MULTIPLE agents that each need to create detailed sub-plans
-- Each sub-agent should ask clarifying questions specific to their domain
-- The task is complex enough that a simple high-level plan isn't sufficient
-
-Examples requiring cascade planning:
-- "Build a complete CRM system" → Multiple agents (database, document, forms) each need detailed plans
-- "Create an HR onboarding system" → Document builder, schema builder, and skill builder each involved
-- "Design a project management app" → Multiple domains need coordinated planning
-
-Do NOT use cascade planning when:
-- Task is handled by a single agent
-- Task is simple (DIRECT mode)
-- High-level planning is sufficient
-
 ### System-Wide Tasks → system_designer
 
 Route to **system_designer** when the task:

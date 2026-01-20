@@ -834,7 +834,11 @@ class StepExecutorService:
                 if current_idx + 1 < len(all_steps):
                     next_step_ids_or_names = [all_steps[current_idx + 1].id]
             except StopIteration:
-                pass
+                # Current step ID not found in all_steps - may indicate plan/step mismatch
+                logger.debug(
+                    f"Step {current_step.id} not found in all_steps "
+                    f"(available: {[s.id for s in all_steps]})"
+                )
 
         # Add to pending (avoid duplicates and already executed)
         # Handle both new format (IDs) and old format (names) for backward compatibility

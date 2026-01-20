@@ -396,21 +396,6 @@ class SessionManager:
             for sid in list(self.metadata.keys())
         ]
 
-    def get_stats(self) -> Dict[str, Any]:
-        """
-        Get session manager statistics.
-
-        Returns:
-            Dictionary with statistics
-        """
-        return {
-            "active_sessions": len(self.agents),
-            "total_messages": sum(m.message_count for m in self.metadata.values()),
-            "restored_sessions": sum(1 for m in self.metadata.values() if m.restored_from_history),
-            "idle_timeout": self.idle_timeout,
-            "max_lifetime": self.max_lifetime
-        }
-
     # ============================================================
     # Attachment Management Methods
     # ============================================================

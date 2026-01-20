@@ -208,12 +208,16 @@ class PlannerClassifier:
                     f"Valid domains are: {self.VALID_DOMAINS}"
                 )
 
+            # Normalize phase_goals keys to Title Case (LLM may return lowercase)
+            # planner_router.py expects "Schema", "App", etc. but LLM may return "schema", "app"
+            normalized_goals = {k.title(): v for k, v in result.phase_goals.items()}
+
             classification = DomainClassification(
                 domains=valid_domains,
                 primary_domain=result.primary_domain,
                 confidence=result.confidence,
                 reasoning=result.reasoning,
-                phase_goals=result.phase_goals,
+                phase_goals=normalized_goals,
             )
 
             # Log classification result

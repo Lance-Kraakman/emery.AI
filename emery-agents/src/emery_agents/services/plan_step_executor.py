@@ -7,7 +7,9 @@ plan steps using smolagents' native managed agent routing.
 Architecture:
     ExecutionCoordinator.execute_plan()
         └── plan_step_executor.execute(plan, current_step)
-                └── Generates prompt from Plan using step_executor.j2
+                └── Generates prompt using mode-specific templates:
+                    - Autonomous: step_executor_autonomous.j2 (has prompt_template)
+                    - Interactive: step_executor_interactive.j2 (description-based)
                 └── Creates ToolCallingAgent with managed_agents
                 └── Smolagents routes based on agent descriptions
                 └── Returns result from appropriate managed agent
@@ -20,8 +22,10 @@ from typing import Any, Dict, List, Optional
 
 from smolagents import ToolCallingAgent
 
-from ..models.plan import Plan, PlanStep, PlanStepStatus, SubPlan
+from ..ace import StepResult
+from ..models.plan import Plan, PlanStep, PlanStepStatus
 from ..prompts import render_template
+from ..utils.session_logger import get_session_logger
 from .protocols import ModelProvider
 from .prompt_template_resolver import resolve_prompt_template
 
@@ -59,18 +63,18 @@ class PlanStepExecutor:
         self.model = model
         self.max_steps = max_steps
         self.skill_inputs = skill_inputs or {}
-        # Track results from previous steps for prompt template resolution
-        self._step_results: Dict[str, Any] = {}
+        # Track results from previous steps for prompt template resolution and ACE curation
+        self._step_results: Dict[str, StepResult] = {}
 
         agent_names = [getattr(a, 'name', '?') for a in managed_agents]
         logger.info(f"✨ Created PlanStepExecutor with {len(tools)} tools, agents: {agent_names}")
 
     @property
-    def step_results(self) -> Dict[str, Any]:
+    def step_results(self) -> Dict[str, StepResult]:
         """
         Get results from all executed steps.
 
-        Returns dict of step_id -> {result, description}.
+        Returns dict of step_id -> StepResult.
         Used by ExecutionContextService for context curation (ACE pattern).
         """
         return self._step_results
@@ -83,9 +87,7 @@ class PlanStepExecutor:
         """
         Execute a plan step with full plan context.
 
-        If the step has a pre-planned sub_plan (from cascading planning),
-        executes that directly. Otherwise, generates execution prompt
-        FROM the plan - not from raw user input.
+        Generates execution prompt FROM the plan - not from raw user input.
 
         Args:
             plan: The approved Plan object
@@ -94,162 +96,68 @@ class PlanStepExecutor:
         Returns:
             Result from step execution
         """
-        # Check for pre-planned sub-plan from cascading planning
-        if current_step.sub_plan:
-            result = self._execute_sub_plan(plan, current_step, current_step.sub_plan)
-        else:
-            # Standard execution path
-            result = self._execute_with_routing(plan, current_step)
-
-        # Store result for use in subsequent step templates
-        self._step_results[current_step.step_id] = {
-            "result": result,
-            "description": current_step.description,
-        }
-
-        return result
-
-    def _execute_sub_plan(
-        self,
-        plan: Plan,
-        parent_step: PlanStep,
-        sub_plan: SubPlan,
-        depth: int = 0,
-    ) -> str:
-        """
-        Execute a pre-planned sub-plan from cascading planning.
-
-        The sub-plan was already created during planning phase.
-        We execute it directly without replanning.
-
-        Supports RECURSIVE execution: if a sub-plan step has its own
-        nested sub_plan, we recursively execute that first.
-
-        Args:
-            plan: The parent Plan object
-            parent_step: The parent step containing the sub_plan
-            sub_plan: The pre-planned SubPlan to execute
-            depth: Current recursion depth (for logging)
-
-        Returns:
-            Result from sub-plan execution
-        """
-        depth_prefix = "  " * depth
-        logger.info(
-            f"{depth_prefix}🔧 Executing sub-plan for {sub_plan.agent_name}: "
-            f"{len(sub_plan.steps)} steps (depth={depth})"
+        # Session logging for flow tracking
+        session_logger = get_session_logger()
+        step_index = next(
+            (i for i, s in enumerate(plan.steps) if s.step_id == current_step.step_id),
+            0,
         )
-        logger.debug(f"{depth_prefix}🔧 Sub-plan goal: {sub_plan.goal[:100]}...")
+        if session_logger:
+            session_logger.log_step_execution(
+                plan_id=plan.id,
+                step_id=current_step.step_id,
+                action="routing_started",
+                description=current_step.description,
+            )
+            session_logger.log_event("step_routing", {
+                "step_id": current_step.step_id,
+                "target_agent": current_step.target_agent,
+                "has_prompt_template": bool(current_step.prompt_template),
+                "execution_mode": "autonomous" if current_step.prompt_template else "interactive",
+                "phase_name": current_step.phase_name,
+                "step_index": step_index,
+                "total_steps": len(plan.steps),
+            })
 
-        # Execute each step, handling nested sub-plans recursively
-        results: List[str] = []
+        result = self._execute_with_routing(plan, current_step, session_logger)
 
-        for i, step in enumerate(sub_plan.steps):
-            step_num = i + 1
+        # Store result for use in subsequent step templates and ACE curation
+        self._step_results[current_step.step_id] = StepResult(
+            step_id=current_step.step_id,
+            result=result,
+            description=current_step.description,
+        )
 
-            # Check for nested sub-plan (from recursive cascade planning)
-            if step.sub_plan:
-                logger.info(
-                    f"{depth_prefix}📋 Step {step_num}: Executing nested {step.sub_plan.agent_name} sub-plan"
-                )
-
-                # RECURSIVE: Execute nested sub-plan
-                nested_result = self._execute_sub_plan(
-                    plan=plan,
-                    parent_step=step,
-                    sub_plan=step.sub_plan,
-                    depth=depth + 1,
-                )
-                results.append(
-                    f"Step {step_num} ({step.sub_plan.agent_name}): {nested_result}"
-                )
-                continue
-
-            # Regular step - execute via target agent
-            logger.info(f"{depth_prefix}📋 Step {step_num}: {step.description[:60]}...")
-
-        # If all steps were nested sub-plans, return combined results
-        all_nested = len(results) == len(sub_plan.steps)
-        if results and all_nested:
-            combined = "\n".join(results)
-            logger.info(f"{depth_prefix}✅ Sub-plan executed (all nested)")
-            return combined
-
-        # Otherwise, execute via target agent for non-nested steps
-        target_agent = None
-        for agent in self.managed_agents:
-            if getattr(agent, 'name', None) == sub_plan.agent_name:
-                target_agent = agent
-                break
-
-        if not target_agent:
-            raise ValueError(
-                f"Target agent '{sub_plan.agent_name}' not found in managed_agents"
+        # Log step completion
+        if session_logger:
+            session_logger.log_step_execution(
+                plan_id=plan.id,
+                step_id=current_step.step_id,
+                action="completed",
+                description=current_step.description,
+                result=result[:500] if result else None,
+            )
+            session_logger.log_full_content(
+                content_type="result",
+                name=f"step_{current_step.step_id}_result",
+                content=result,
+                metadata={"step_id": current_step.step_id, "step_index": step_index},
             )
 
-        # Format remaining non-nested steps for execution
-        non_nested_steps = [s for s in sub_plan.steps if not s.sub_plan]
-        steps_text = "\n".join([
-            f"{i+1}. {step.description}"
-            for i, step in enumerate(non_nested_steps)
-        ])
-
-        # Generate execution-mode prompt (no replanning)
-        prompt = render_template(
-            "execution/sub_plan_executor.j2",
-            goal=plan.goal,
-            sub_plan_goal=sub_plan.goal,
-            parent_step=parent_step,
-            sub_plan_steps=non_nested_steps,
-            steps_text=steps_text,
-            planning_observations=sub_plan.planning_observations,
-        )
-
-        try:
-            # Disable HITL on sub-agent during execution
-            # (already approved at high-level during planning phase)
-            original_planning_interval = getattr(target_agent, 'planning_interval', None)
-            if hasattr(target_agent, 'planning_interval'):
-                target_agent.planning_interval = None
-                logger.debug(f"{depth_prefix}🔧 Disabled planning_interval for {sub_plan.agent_name}")
-
-            # Execute via target agent directly
-            # The agent should not replan - just execute the approved steps
-            result = target_agent(prompt)
-            result_str = str(result)
-
-            # Combine with nested results
-            if results:
-                combined = "\n".join(results) + f"\n\nAgent execution: {result_str}"
-                logger.info(f"{depth_prefix}✅ Sub-plan executed for {sub_plan.agent_name}")
-                return combined
-
-            logger.info(f"{depth_prefix}✅ Sub-plan executed for {sub_plan.agent_name}")
-            logger.debug(f"{depth_prefix}🔧 Result preview: {result_str[:200]}...")
-
-            return result_str
-
-        except Exception as e:
-            error_msg = f"Sub-plan execution error: {str(e)}"
-            logger.error(f"{depth_prefix}❌ PlanStepExecutor: {error_msg}", exc_info=True)
-            raise
-
-        finally:
-            # Restore original planning_interval
-            if original_planning_interval is not None and hasattr(target_agent, 'planning_interval'):
-                target_agent.planning_interval = original_planning_interval
+        return result
 
     def _execute_with_routing(
         self,
         plan: Plan,
         current_step: PlanStep,
+        session_logger: Any = None,
     ) -> str:
         """
         Execute step with normal smolagents routing.
 
-        Used when step doesn't have a pre-planned sub_plan.
-        If the step has a prompt_template, uses the resolver with runtime context.
-        Otherwise falls back to step_executor.j2 template.
+        Uses smolagents' native managed agent routing.
+        If the step has a prompt_template, uses step_executor_autonomous.j2 with resolved variables.
+        Otherwise uses step_executor_interactive.j2 with the description field.
 
         Args:
             plan: The approved Plan object
@@ -319,6 +227,21 @@ class PlanStepExecutor:
             f"{current_step.description[:80]}..."
         )
         logger.debug(f"🔧 Generated prompt ({len(prompt)} chars)")
+
+        # Log full prompt for debugging
+        if session_logger:
+            execution_mode = "autonomous" if current_step.prompt_template else "interactive"
+            session_logger.log_full_content(
+                content_type="prompt",
+                name=f"step_{current_step.step_id}_executor",
+                content=prompt,
+                metadata={
+                    "step_id": current_step.step_id,
+                    "target_agent": current_step.target_agent,
+                    "execution_mode": execution_mode,
+                    "step_index": step_index,
+                },
+            )
 
         # Disable HITL on all managed agents during execution
         # (already approved at high-level during planning phase)
