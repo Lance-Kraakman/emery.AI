@@ -131,6 +131,13 @@ class ExecutionCompletedEvent:
 
 
 @dataclass
+class FinalSynthesisEvent:
+    """Event emitted with synthesized final answer from all step results."""
+    plan_id: str
+    synthesis: str
+
+
+@dataclass
 class EvaluationResult:
     """Result from evaluator agent."""
     goal_achieved: bool
@@ -164,6 +171,24 @@ class PlanUpdatedEvent:
     added_steps: int
     removed_steps: int
     replan_number: int
+
+
+@dataclass
+class PhaseStartedEvent:
+    """Event emitted when a new phase begins execution."""
+    plan_id: str
+    phase_name: str
+    phase_goal: str
+    step_count: int
+
+
+@dataclass
+class PhaseCompletedEvent:
+    """Event emitted when a phase completes execution."""
+    plan_id: str
+    phase_name: str
+    results_summary: str
+    needs_replan: bool  # True if subsequent phases should be replanned
 
 
 @dataclass
@@ -310,6 +335,25 @@ class CascadingPlanCompleteEvent:
     """Event emitted when all planning (high-level + sub-agent) is complete."""
     plan_id: str
     total_sub_plans: int
+
+
+# Planning progress events (for UI feedback during thinking phase)
+@dataclass
+class ClassificationStartedEvent:
+    """Event emitted when starting to classify user request."""
+    task_summary: str  # Truncated user message for display
+
+
+@dataclass
+class PlanningStartedEvent:
+    """Event emitted when planning begins after classification."""
+    goal: str
+
+
+@dataclass
+class PlanningProgressEvent:
+    """Event emitted during planning with progress info."""
+    message: str  # e.g., "Analyzing requirements...", "Identifying tools needed..."
 
 
 @dataclass
@@ -589,6 +633,10 @@ class ExecutionCoordinator:
         # === INTERACTIVE MODE: Planning → Approval → Execution ===
         self._execution_mode = ExecutionMode.INTERACTIVE
 
+        # Emit classification started event (for UI feedback during thinking phase)
+        task_summary = task[:100] + "..." if len(task) > 100 else task
+        yield ClassificationStartedEvent(task_summary=task_summary)
+
         # Use LLM-based classification
         self._session_logger.log_state_transition("IDLE", "CLASSIFYING", "task_received")
         classification = self._classify_task(task, managed_agents or [], context)
@@ -619,6 +667,9 @@ class ExecutionCoordinator:
             return
 
         # PLAN_AND_APPROVE: Full planning flow
+        # Emit planning started event (for UI feedback)
+        yield PlanningStartedEvent(goal=task[:200] if len(task) > 200 else task)
+
         # Check if cascade planning is needed (multi-agent complex tasks)
         # Requires agent_factories for SubAgentPlanner to create agents with planning callbacks
         if classification.use_cascade_planning and agent_factories:
@@ -852,6 +903,10 @@ class ExecutionCoordinator:
         )
         self._ledger.record_plan_created({"plan_id": plan.id, "step_count": len(plan.steps)})
 
+        # ACE: Store strategy guidance used during planning so evaluator can see it
+        if self.plan_service.last_strategy_guidance:
+            self._ledger.strategy_guidance = self.plan_service.last_strategy_guidance
+
         logger.info(f"Plan {plan.id} created, awaiting approval")
         yield PlanCreatedEvent(plan_id=plan.id, plan=plan)
 
@@ -979,6 +1034,10 @@ class ExecutionCoordinator:
         steps_since_curation = 0
         curated_step_ids: List[str] = []  # Track which steps have been curated
 
+        # Phase tracking for hierarchical plans
+        current_phase_name: Optional[str] = None
+        phase_step_results: Dict[str, List[str]] = {}  # phase_name -> list of results
+
         # Execute steps with replan support
         # The outer while loop allows restarting after a replan
         success = True
@@ -1074,6 +1133,40 @@ class ExecutionCoordinator:
                 if should_restart:
                     break
 
+                # Phase transition tracking
+                step_phase = step.phase_name  # May be None for non-phased plans
+                if step_phase != current_phase_name:
+                    # Emit phase completed for previous phase (if any)
+                    if current_phase_name is not None:
+                        phase_results = phase_step_results.get(current_phase_name, [])
+                        results_summary = f"Completed {len(phase_results)} step(s)"
+                        if phase_results:
+                            results_summary = "; ".join(r[:100] for r in phase_results if r)[:500]
+                        yield PhaseCompletedEvent(
+                            plan_id=plan_id,
+                            phase_name=current_phase_name,
+                            results_summary=results_summary,
+                            needs_replan=False,  # Will be determined after phase if replan_after=True
+                        )
+
+                    # Start new phase
+                    current_phase_name = step_phase
+                    if step_phase:
+                        # Count steps in this phase
+                        phase_step_count = sum(
+                            1 for s in pending_steps if s.phase_name == step_phase
+                        )
+                        phase_goal = f"Executing {step_phase} phase"
+                        yield PhaseStartedEvent(
+                            plan_id=plan_id,
+                            phase_name=step_phase,
+                            phase_goal=phase_goal,
+                            step_count=phase_step_count,
+                        )
+                        # Initialize phase results list
+                        if step_phase not in phase_step_results:
+                            phase_step_results[step_phase] = []
+
                 # Update ledger - step started
                 if self._ledger:
                     self._ledger.start_step(step.step_id)
@@ -1112,6 +1205,12 @@ class ExecutionCoordinator:
                         step_id=step.step_id,
                         result=result,
                     )
+
+                    # Track result for phase summary
+                    if step.phase_name and result:
+                        if step.phase_name not in phase_step_results:
+                            phase_step_results[step.phase_name] = []
+                        phase_step_results[step.phase_name].append(result)
 
                     # ACE: Track execution context evolution
                     if (
@@ -1379,6 +1478,32 @@ class ExecutionCoordinator:
             f"Plan {plan_id} execution {'completed' if success else 'failed'}"
         )
 
+        # Emit final PhaseCompletedEvent for the last phase (if any)
+        if current_phase_name is not None:
+            phase_results = phase_step_results.get(current_phase_name, [])
+            results_summary = f"Completed {len(phase_results)} step(s)"
+            if phase_results:
+                results_summary = "; ".join(r[:100] for r in phase_results if r)[:500]
+            yield PhaseCompletedEvent(
+                plan_id=plan_id,
+                phase_name=current_phase_name,
+                results_summary=results_summary,
+                needs_replan=False,
+            )
+
+        # === FINAL SYNTHESIS: Use evaluator to create coherent final answer ===
+        if success and self._ledger:
+            try:
+                final_synthesis = await self._synthesize_final_answer()
+                if final_synthesis:
+                    yield FinalSynthesisEvent(
+                        plan_id=plan_id,
+                        synthesis=final_synthesis,
+                    )
+                    logger.info("📝 Final synthesis generated from all step results")
+            except Exception as e:
+                logger.warning(f"Final synthesis failed, using raw results: {e}")
+
         yield ExecutionCompletedEvent(plan_id=plan_id, success=success)
 
     def get_ledger_for_evaluator(self) -> Optional[Dict[str, Any]]:
@@ -1402,6 +1527,85 @@ class ExecutionCoordinator:
         if self._ledger:
             return self._ledger.to_toon_summary()
         return None
+
+    async def _synthesize_final_answer(self) -> str:
+        """
+        ACE: Use evaluator to synthesize all step results into coherent final answer.
+
+        This is called AFTER all steps complete, before ExecutionCompletedEvent.
+        Takes all step results + curated insights and creates a unified response.
+
+        Returns:
+            Synthesized final answer string
+        """
+        if not self._ledger:
+            return ""
+
+        # Get all step results (including empty ones)
+        step_results = self._ledger.get_step_results()
+        if not step_results:
+            return ""
+
+        # Get curated insights from execution context
+        curated_context = ""
+        if self._ledger.execution_context:
+            curated_context = self._ledger.execution_context.get_relevant_context(max_tokens=1000)
+
+        # Build synthesis prompt
+        goal = self._current_plan.goal if self._current_plan else "Unknown"
+
+        synthesis_prompt = f"""You are synthesizing the results of a completed task execution.
+
+## Original Goal
+{goal}
+
+## Step Results
+{self._format_step_results_for_synthesis(step_results)}
+
+## Curated Insights
+{curated_context if curated_context else "No additional insights."}
+
+## Instructions
+Create a coherent, well-organized summary that:
+1. Directly addresses the original goal
+2. Synthesizes all step results into a unified answer
+3. Highlights key findings and important details
+4. Is formatted for easy reading (use markdown)
+
+Do NOT just list the steps. Create a synthesized, coherent response."""
+
+        # Use evaluator model for synthesis (runs synchronously in thread)
+        if not self.evaluator_factory:
+            logger.warning("No evaluator_factory for synthesis - using raw results")
+            return self._format_step_results_for_synthesis(step_results)
+
+        try:
+            evaluator, _ = self.evaluator_factory()
+            result = await asyncio.to_thread(evaluator.run, synthesis_prompt)
+            return result if isinstance(result, str) else str(result)
+        except Exception as e:
+            logger.error(f"Synthesis LLM call failed: {e}")
+            # Fallback: concatenate results
+            return self._format_step_results_for_synthesis(step_results)
+
+    def _format_step_results_for_synthesis(self, step_results: Dict[str, Optional[str]]) -> str:
+        """Format step results for synthesis prompt."""
+        if not step_results:
+            return "No step results available."
+
+        # Get ledger reference (caller guarantees this is non-None)
+        ledger = self._ledger
+        if not ledger:
+            return "No step results available."
+
+        parts = []
+        for step_id, result in step_results.items():
+            step_state = ledger.steps.get(step_id)
+            step_name = step_state.step_name if step_state else step_id
+            result_text = result if result else "(completed with no output)"
+            parts.append(f"### {step_name}\n{result_text}")
+
+        return "\n\n".join(parts)
 
     async def _evaluate_progress(self) -> EvaluationResult:
         """

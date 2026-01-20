@@ -20,6 +20,7 @@ from ..services.execution_coordinator import (
     GoalAchievedEvent,
     ExecutionBlockedEvent,
     ExecutionCompletedEvent,
+    FinalSynthesisEvent,
     RecoveryAnalysisEvent,
     AutoFixStartedEvent,
     AutoFixCompletedEvent,
@@ -32,6 +33,13 @@ from ..services.execution_coordinator import (
     PlanRejectedEvent,
     PlanFeedbackEvent,
     ErrorEvent,
+    # Phase execution events
+    PhaseStartedEvent,
+    PhaseCompletedEvent,
+    # Planning progress events (for UI feedback during thinking phase)
+    ClassificationStartedEvent,
+    PlanningStartedEvent,
+    PlanningProgressEvent,
 )
 from .response_types import (
     StepProgressDict,
@@ -144,6 +152,20 @@ def convert_coordinator_event(event: Any, step_index: int) -> Optional[Coordinat
             "content": f"All steps completed {status}",
             "metadata": {"success": str(event.success)},
             "step_index": 999
+        }
+
+    elif isinstance(event, FinalSynthesisEvent):
+        # ACE: Synthesized final answer from all step results
+        return {
+            "type": "step_progress",
+            "step_type": "FINAL",
+            "step_name": "Final Answer",
+            "content": event.synthesis,
+            "metadata": {
+                "type": "final_synthesis",
+                "plan_id": event.plan_id,
+            },
+            "step_index": 998  # Just before ExecutionCompletedEvent
         }
 
     # Recovery events (confidence-based error handling)
@@ -292,6 +314,37 @@ def convert_coordinator_event(event: Any, step_index: int) -> Optional[Coordinat
             "step_index": step_index
         }
 
+    # Phase execution events
+    elif isinstance(event, PhaseStartedEvent):
+        return {
+            "type": "step_progress",
+            "step_type": "PHASE",
+            "step_name": f"Phase: {event.phase_name}",
+            "content": event.phase_goal,
+            "metadata": {
+                "type": "phase_started",
+                "plan_id": event.plan_id,
+                "phase_name": event.phase_name,
+                "step_count": str(event.step_count),
+            },
+            "step_index": step_index
+        }
+
+    elif isinstance(event, PhaseCompletedEvent):
+        return {
+            "type": "step_progress",
+            "step_type": "PHASE",
+            "step_name": f"Completed: {event.phase_name}",
+            "content": event.results_summary,
+            "metadata": {
+                "type": "phase_completed",
+                "plan_id": event.plan_id,
+                "phase_name": event.phase_name,
+                "needs_replan": str(event.needs_replan),
+            },
+            "step_index": step_index
+        }
+
     elif isinstance(event, ErrorEvent):
         return {
             "type": "error",
@@ -304,6 +357,37 @@ def convert_coordinator_event(event: Any, step_index: int) -> Optional[Coordinat
                 "auto_retry": False,
                 "session_reset": not event.recoverable
             }
+        }
+
+    # Planning progress events (for UI feedback during thinking phase)
+    elif isinstance(event, ClassificationStartedEvent):
+        return {
+            "type": "step_progress",
+            "step_type": "PLANNING",
+            "step_name": "Analyzing Request",
+            "content": f"Understanding: {event.task_summary}",
+            "metadata": {"type": "classification_started"},
+            "step_index": step_index
+        }
+
+    elif isinstance(event, PlanningStartedEvent):
+        return {
+            "type": "step_progress",
+            "step_type": "PLANNING",
+            "step_name": "Creating Plan",
+            "content": f"Goal: {event.goal}",
+            "metadata": {"type": "planning_started"},
+            "step_index": step_index
+        }
+
+    elif isinstance(event, PlanningProgressEvent):
+        return {
+            "type": "step_progress",
+            "step_type": "PLANNING",
+            "step_name": "Planning",
+            "content": event.message,
+            "metadata": {"type": "planning_progress"},
+            "step_index": step_index
         }
 
     return None  # Unknown event type
