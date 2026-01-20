@@ -12,7 +12,7 @@ import type { IChatRepository } from '@/ddd/domain/chat/repositories/chat-reposi
 import type { IChatMessageRepository } from '@/ddd/domain/chat/repositories/chat-message-repository';
 import type { DynamicTableService } from '@/ddd/domain/tables/services/dynamic-table-service';
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
-import { AgentId, TableId, OrganizationId, UserId, ChatId } from '@/ddd/domain/shared/value-objects';
+import { AgentId, TableId, OrganizationId, UserId, ChatId, ChatMessageId } from '@/ddd/domain/shared/value-objects';
 import { Chat, ChatUtils, type CreateChatData, type ChatContextMetadata } from '@/ddd/domain/chat/entities/chat';
 import type { DomainType } from '@/ddd/domain/shared/types/domain-type';
 import type { ChatMessage, CreateChatMessageData, ChatMessageMetadata } from '@/ddd/domain/chat/entities/chat-message';
@@ -21,6 +21,7 @@ import { ChatMessageEntity } from '@/ddd/domain/chat/entities/chat-message';
 import type {
   CreateChatDTO,
   SendMessageDTO,
+  UpdateMessageDTO,
   GetChatHistoryDTO,
   GetChatsDTO,
   ChatSessionDTO,
@@ -266,6 +267,57 @@ export class ChatApplicationService {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to send message'
+      };
+    }
+  }
+
+  /**
+   * Update an existing message (for streaming incremental saves)
+   *
+   * AIDEV-NOTE: Used for optimistic save with incremental updates during streaming.
+   * Only updates content and metadata - other fields are immutable.
+   */
+  async updateMessage(dto: UpdateMessageDTO): Promise<Result<ChatMessageDTO>> {
+    try {
+      const messageId = ChatMessageId.fromString(dto.messageId);
+      const chatId = ChatId.fromString(dto.chatId);
+      const organizationId = OrganizationId.fromNumber(dto.organizationId);
+
+      // Verify chat exists (for organization scope)
+      const chat = await this.chatRepository.findById(chatId, organizationId);
+      if (!chat) {
+        return {
+          success: false,
+          error: 'Chat not found or access denied'
+        };
+      }
+
+      // Build update data
+      const updateData: { content?: string; metadata?: ChatMessageMetadata } = {};
+      if (dto.content !== undefined) updateData.content = dto.content;
+      if (dto.metadata !== undefined) updateData.metadata = dto.metadata;
+
+      // Update message
+      const updatedMessage = await this.messageRepository.update(messageId, updateData);
+      if (!updatedMessage) {
+        return {
+          success: false,
+          error: 'Message not found'
+        };
+      }
+
+      logger.debug(`Updated message ${dto.messageId}`);
+
+      return {
+        success: true,
+        data: ChatMapper.toMessageDTO(updatedMessage)
+      };
+
+    } catch (error) {
+      logger.error('Error updating message:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update message'
       };
     }
   }

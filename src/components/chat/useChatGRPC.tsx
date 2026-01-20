@@ -213,13 +213,43 @@ export function useChatGRPC(
         setCurrentChatId(chatId)
 
         // Convert DTOs to ChatMessage format
-        const chatMessages: ChatMessage[] = result.data.messages.map(msg =>
-          createTextMessage(msg.content, msg.role as 'user' | 'assistant', msg.id, msg.metadata)
-        )
+        // Handle incomplete messages (streamingStatus === 'streaming') from interrupted streams
+        const chatMessages: ChatMessage[] = result.data.messages.map(msg => {
+          const isIncomplete = msg.metadata?.streamingStatus === 'streaming'
+
+          // For incomplete messages, append indicator to content
+          let displayContent = msg.content
+          if (isIncomplete) {
+            const trimmed = msg.content?.trim() || ''
+            if (!trimmed) {
+              displayContent = '_Message was interrupted during generation_'
+            } else {
+              displayContent = `${trimmed}\n\n---\n_Message was interrupted. Some content may be missing._`
+            }
+          }
+
+          // Mark incomplete messages in metadata for potential UI styling
+          const displayMetadata = isIncomplete
+            ? { ...msg.metadata, isIncomplete: true }
+            : msg.metadata
+
+          return createTextMessage(
+            displayContent,
+            msg.role as 'user' | 'assistant',
+            msg.id,
+            displayMetadata
+          )
+        })
 
         console.log('[DEBUG] loadChatSession - messages from server:', {
           count: result.data.messages.length,
-          messages: result.data.messages.map(m => ({ id: m.id, role: m.role, contentLength: m.content?.length }))
+          incompleteCount: result.data.messages.filter(m => m.metadata?.streamingStatus === 'streaming').length,
+          messages: result.data.messages.map(m => ({
+            id: m.id,
+            role: m.role,
+            contentLength: m.content?.length,
+            streamingStatus: m.metadata?.streamingStatus
+          }))
         })
         setMessages(chatMessages)
         setSelectedModel(result.data.session.model || undefined)
