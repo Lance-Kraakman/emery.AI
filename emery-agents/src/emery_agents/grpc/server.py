@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 logging.getLogger("openai._base_client").setLevel(logging.WARNING)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("smolagents").setLevel(logging.WARNING)
 
 class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer):
     """gRPC service implementation for AgentWorker."""
