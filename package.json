@@ -38,6 +38,7 @@
     "seed:apps": "npx tsx src/drizzle/seeds/app-types.ts",
     "seed:tools": "npx tsx src/drizzle/seeds/tools.ts",
     "seed:all": "npm run seed:apps && npm run seed:tools",
+    "fetch:pipedream-tools": "npx tsx src/scripts/fetch-pipedream-tools-with-env.ts",
     "test:agent-execution": "node src/scripts/test-agent-execution.js",
     "generate:blocks-schema": "tsx scripts/generate-blocks-schema.ts"
   },
