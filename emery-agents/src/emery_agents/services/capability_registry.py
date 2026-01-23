@@ -4,6 +4,10 @@ Capability Registry - central storage for all capabilities.
 Provides discovery methods for the planner to find relevant capabilities
 without loading all 30K+ capabilities into context at once.
 
+Two-tier capability access:
+- Enabled: Capabilities the org has enabled (system agents, org skills, connected integrations)
+- Available: All other capabilities (marketplace, unconnected integrations)
+
 Uses semantic search (Google embeddings) for accurate capability matching.
 """
 
@@ -19,8 +23,9 @@ class CapabilityRegistry:
     """
     Central registry for all capabilities (agents, skills, tools).
 
-    The planner uses discovery methods to find relevant capabilities
-    rather than receiving the full list (which could be 30K+ items).
+    Tracks which capabilities are enabled per-org for two-tier search:
+    - get_enabled(org_id): Org's active capabilities
+    - get_available(org_id): Capabilities org could enable
 
     Usage:
         registry = CapabilityRegistry()
@@ -36,13 +41,17 @@ class CapabilityRegistry:
             entities=["tables", "fields"],
         ))
 
-        # Planner discovers capabilities
-        results = registry.search("create tables")
-        capability = registry.get("agent:schema_builder")
+        # Enable for an org
+        registry.enable_for_org("agent:schema_builder", org_id="org_123")
+
+        # Two-tier discovery
+        enabled = registry.get_enabled("org_123")  # Org's capabilities
+        available = registry.get_available("org_123")  # Not yet enabled
     """
 
     def __init__(self) -> None:
         self._capabilities: dict[str, Capability] = {}
+        self._enabled: dict[str, set[str]] = {}  # org_id -> set of capability_ids
 
     def register(self, capability: Capability) -> None:
         """Register a capability in the registry."""
@@ -66,6 +75,74 @@ class CapabilityRegistry:
     def count(self) -> int:
         """Return total number of registered capabilities."""
         return len(self._capabilities)
+
+    # --- Per-org enabled tracking ---
+
+    def enable_for_org(self, capability_id: str, org_id: str) -> bool:
+        """
+        Mark a capability as enabled for an org.
+
+        Returns True if capability exists, False otherwise.
+        """
+        if capability_id not in self._capabilities:
+            logger.warning(f"Cannot enable unknown capability: {capability_id}")
+            return False
+
+        if org_id not in self._enabled:
+            self._enabled[org_id] = set()
+        self._enabled[org_id].add(capability_id)
+        return True
+
+    def disable_for_org(self, capability_id: str, org_id: str) -> bool:
+        """
+        Mark a capability as disabled for an org.
+
+        Returns True if was enabled, False otherwise.
+        """
+        if org_id in self._enabled and capability_id in self._enabled[org_id]:
+            self._enabled[org_id].discard(capability_id)
+            return True
+        return False
+
+    def is_enabled(self, capability_id: str, org_id: str) -> bool:
+        """Check if capability is enabled for org."""
+        return org_id in self._enabled and capability_id in self._enabled[org_id]
+
+    def get_enabled(self, org_id: str) -> list[Capability]:
+        """
+        Get capabilities enabled for this org.
+
+        Returns:
+            List of capabilities the org has enabled (agents, skills, connected integrations)
+        """
+        enabled_ids = self._enabled.get(org_id, set())
+        return [c for c in self._capabilities.values() if c.id in enabled_ids]
+
+    def get_available(self, org_id: str) -> list[Capability]:
+        """
+        Get capabilities NOT enabled for this org.
+
+        Returns:
+            List of capabilities the org could enable (marketplace, unconnected integrations)
+        """
+        enabled_ids = self._enabled.get(org_id, set())
+        return [c for c in self._capabilities.values() if c.id not in enabled_ids]
+
+    def enable_all_system_agents(self, org_id: str) -> int:
+        """
+        Enable all system agents (domain=emery) for an org.
+
+        Called at org creation to give access to core capabilities.
+
+        Returns:
+            Number of system agents enabled
+        """
+        count = 0
+        for cap in self._capabilities.values():
+            if cap.domain == "emery" and cap.type == CapabilityType.AGENT:
+                self.enable_for_org(cap.id, org_id)
+                count += 1
+        return count
 
     def by_type(self, capability_type: CapabilityType) -> list[Capability]:
         """
@@ -170,5 +247,55 @@ class CapabilityRegistry:
         return sorted(set(c.domain for c in self._capabilities.values()))
 
     def clear(self) -> None:
-        """Remove all capabilities from the registry."""
+        """Remove all capabilities and enabled tracking from the registry."""
         self._capabilities.clear()
+        self._enabled.clear()
+
+    def clear_org(self, org_id: str) -> None:
+        """Remove all enabled tracking for an org."""
+        if org_id in self._enabled:
+            del self._enabled[org_id]
+
+    def search_enabled(
+        self,
+        query: str,
+        org_id: str,
+        *,
+        limit: int = 5,
+    ) -> list[Capability]:
+        """
+        Search within org's enabled capabilities.
+
+        Args:
+            query: Search query string
+            org_id: Organization ID
+            limit: Maximum results
+
+        Returns:
+            Matching enabled capabilities
+        """
+        enabled = self.get_enabled(org_id)
+        matches = [c for c in enabled if c.matches_query(query)]
+        return matches[:limit]
+
+    def search_available(
+        self,
+        query: str,
+        org_id: str,
+        *,
+        limit: int = 5,
+    ) -> list[Capability]:
+        """
+        Search within capabilities NOT enabled for org.
+
+        Args:
+            query: Search query string
+            org_id: Organization ID
+            limit: Maximum results
+
+        Returns:
+            Matching available capabilities
+        """
+        available = self.get_available(org_id)
+        matches = [c for c in available if c.matches_query(query)]
+        return matches[:limit]

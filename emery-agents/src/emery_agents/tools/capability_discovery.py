@@ -1,16 +1,13 @@
 """
 Capability Discovery Tools - Tools for planner to discover capabilities.
 
-Two-tier search:
-1. search_capabilities: Searches ACTIVE capabilities (org's agents + skills)
-2. search_available: Searches AVAILABLE capabilities (templates + integrations)
+Two-tier search based on org's enabled capabilities:
+- search_org: Searches capabilities enabled for the org
+- search_integrations: Searches capabilities NOT enabled (available to add)
 
-Active = domains ["emery", "user"] (system agents + org's custom stuff)
-Available = everything else (integrations, templates, marketplace)
-
-Additional tools:
-- list_capabilities: List by domain or type
-- get_capability: Get full details for a specific capability
+Plus exploration tools:
+- list_capabilities: Browse by domain/type
+- get_capability: Get full details
 """
 
 import logging
@@ -23,161 +20,134 @@ from ..services.capability_registry import CapabilityRegistry
 
 logger = logging.getLogger(__name__)
 
-# Domains considered "active" (org's stuff + system agents)
-ACTIVE_DOMAINS = {"emery", "user"}
 
+def _format_capabilities(capabilities: list[Capability], include_domain: bool = False) -> str:
+    """Format capabilities for display. Shared by all search tools."""
+    if not capabilities:
+        return "No capabilities found."
 
-class SearchCapabilitiesTool(Tool):
-    """
-    Search ACTIVE capabilities (org's agents + skills).
-
-    Searches only in active domains (emery, user) - things the org
-    has created or that are always available system agents.
-
-    Use search_available for integrations and templates.
-    """
-
-    name = "search_capabilities"
-    description = (
-        "Search org's active capabilities (agents and skills). "
-        "Returns system agents and org's custom skills ranked by relevance. "
-        "Use search_available for integrations and templates."
-    )
-    inputs = {
-        "query": {
-            "type": "string",
-            "description": "Search query describing what you need (e.g., 'create database tables', 'analyze data')",
-        },
-        "limit": {
-            "type": "integer",
-            "description": "Maximum results to return (default 5)",
-            "nullable": True,
-        },
-    }
-    output_type = "string"
-
-    def __init__(self, registry: CapabilityRegistry):
-        super().__init__()
-        self.registry = registry
-
-    def forward(
-        self,
-        query: str,
-        limit: Optional[int] = None,
-    ) -> str:
-        """Search active capabilities (org's agents + skills)."""
-        actual_limit = limit if limit is not None else 5
-
-        # Filter to active domains only
-        all_caps = self.registry.all()
-        active_caps = [c for c in all_caps if c.domain in ACTIVE_DOMAINS]
-
-        if not active_caps:
-            return f"No active capabilities found. Use search_available for integrations."
-
-        # Search within active capabilities using keyword matching
-        # (semantic search would be better but requires embedding each time)
-        query_lower = query.lower()
-        matches = [c for c in active_caps if c.matches_query(query)]
-
-        if not matches:
-            # No matches - show what's available
-            return f"No active capabilities match '{query}'. Available: {[c.name for c in active_caps[:5]]}"
-
-        matches = matches[:actual_limit]
-        return self._format_results(matches, "active")
-
-    def _format_results(self, capabilities: list[Capability], tier: str) -> str:
-        """Format search results compactly."""
-        lines = [f"Found {len(capabilities)} {tier} capabilities:"]
-        for cap in capabilities:
-            desc = cap.description[:60] + "..." if len(cap.description) > 60 else cap.description
-            lines.append(f"→ {cap.id} - {desc}")
-        return "\n".join(lines)
-
-
-class SearchAvailableTool(Tool):
-    """
-    Search AVAILABLE capabilities (integrations + templates).
-
-    Searches all non-active domains - integrations (gmail, slack, etc.),
-    templates, and marketplace items that could be enabled.
-    """
-
-    name = "search_available"
-    description = (
-        "Search available integrations and templates. "
-        "Returns capabilities that could be added to the org. "
-        "Use search_capabilities first for org's existing agents/skills."
-    )
-    inputs = {
-        "query": {
-            "type": "string",
-            "description": "Search query (e.g., 'send email', 'slack notifications')",
-        },
-        "limit": {
-            "type": "integer",
-            "description": "Maximum results to return (default 5)",
-            "nullable": True,
-        },
-    }
-    output_type = "string"
-
-    def __init__(self, registry: CapabilityRegistry):
-        super().__init__()
-        self.registry = registry
-
-    def forward(
-        self,
-        query: str,
-        limit: Optional[int] = None,
-    ) -> str:
-        """Search available capabilities (integrations + templates)."""
-        actual_limit = limit if limit is not None else 5
-
-        # Filter to non-active domains
-        all_caps = self.registry.all()
-        available_caps = [c for c in all_caps if c.domain not in ACTIVE_DOMAINS]
-
-        if not available_caps:
-            return "No integrations or templates registered in the system."
-
-        # Search within available capabilities
-        matches = [c for c in available_caps if c.matches_query(query)]
-
-        if not matches:
-            domains = list(set(c.domain for c in available_caps))[:5]
-            return f"No available capabilities match '{query}'. Domains: {domains}"
-
-        matches = matches[:actual_limit]
-        return self._format_results(matches)
-
-    def _format_results(self, capabilities: list[Capability]) -> str:
-        """Format search results compactly."""
-        lines = [f"Found {len(capabilities)} available capabilities:"]
-        for cap in capabilities:
-            desc = cap.description[:60] + "..." if len(cap.description) > 60 else cap.description
+    lines = [f"Found {len(capabilities)} capabilities:"]
+    for cap in capabilities:
+        desc = cap.description[:60] + "..." if len(cap.description) > 60 else cap.description
+        if include_domain:
             lines.append(f"→ {cap.id} - {desc} [{cap.domain}]")
-        return "\n".join(lines)
+        else:
+            lines.append(f"→ {cap.id} - {desc}")
+    return "\n".join(lines)
+
+
+class SearchOrgTool(Tool):
+    """
+    Search org's enabled capabilities.
+
+    Searches agents, skills, and integrations that are enabled for this org.
+    Use search_integrations for capabilities that could be added.
+    """
+
+    name = "search_org"
+    description = (
+        "Search org's enabled capabilities (agents, skills, connected integrations). "
+        "Use search_integrations for capabilities that could be added."
+    )
+    inputs = {
+        "query": {
+            "type": "string",
+            "description": "Search query (e.g., 'create tables', 'send email')",
+        },
+        "limit": {
+            "type": "integer",
+            "description": "Maximum results (default 5)",
+            "nullable": True,
+        },
+    }
+    output_type = "string"
+
+    def __init__(self, registry: CapabilityRegistry, org_id: str):
+        super().__init__()
+        self.registry = registry
+        self.org_id = org_id
+
+    def forward(self, query: str, limit: Optional[int] = None) -> str:
+        """Search org's enabled capabilities."""
+        actual_limit = limit if limit is not None else 5
+
+        matches = self.registry.search_enabled(query, self.org_id, limit=actual_limit)
+
+        if not matches:
+            enabled = self.registry.get_enabled(self.org_id)
+            if enabled:
+                names = [c.name for c in enabled[:5]]
+                return f"No match for '{query}'. Enabled: {names}"
+            else:
+                return f"No enabled capabilities. Use search_integrations to find available ones."
+
+        return _format_capabilities(matches)
+
+
+class SearchIntegrationsTool(Tool):
+    """
+    Search available integrations and templates.
+
+    Searches capabilities NOT enabled for this org - things that could be added.
+    Use search_org for capabilities already enabled.
+    """
+
+    name = "search_integrations"
+    description = (
+        "Search available integrations and templates (not yet enabled). "
+        "Use search_org for org's enabled capabilities."
+    )
+    inputs = {
+        "query": {
+            "type": "string",
+            "description": "Search query (e.g., 'send sms', 'slack notifications')",
+        },
+        "limit": {
+            "type": "integer",
+            "description": "Maximum results (default 5)",
+            "nullable": True,
+        },
+    }
+    output_type = "string"
+
+    def __init__(self, registry: CapabilityRegistry, org_id: str):
+        super().__init__()
+        self.registry = registry
+        self.org_id = org_id
+
+    def forward(self, query: str, limit: Optional[int] = None) -> str:
+        """Search available capabilities (not enabled for org)."""
+        actual_limit = limit if limit is not None else 5
+
+        matches = self.registry.search_available(query, self.org_id, limit=actual_limit)
+
+        if not matches:
+            available = self.registry.get_available(self.org_id)
+            if available:
+                domains = list(set(c.domain for c in available))[:5]
+                return f"No match for '{query}'. Available domains: {domains}"
+            else:
+                return "No available integrations in the system."
+
+        return _format_capabilities(matches, include_domain=True)
 
 
 class ListCapabilitiesTool(Tool):
     """
     List capabilities by domain or type.
 
-    Use to see what's available in a specific domain (emery, gmail, etc.)
-    or of a specific type (agent, skill, tool).
+    Use to explore what's available before searching.
     """
 
     name = "list_capabilities"
     description = (
-        "List available capabilities by domain or type. "
-        "Use to explore what's available before searching."
+        "List capabilities by domain or type. "
+        "Use to explore what's available."
     )
     inputs = {
         "domain": {
             "type": "string",
-            "description": "Domain to list (emery, gmail, slack, user, web, etc.)",
+            "description": "Domain to list (emery, gmail, slack, etc.)",
             "nullable": True,
         },
         "type": {
@@ -187,7 +157,7 @@ class ListCapabilitiesTool(Tool):
         },
         "limit": {
             "type": "integer",
-            "description": "Maximum results to return (default 10)",
+            "description": "Maximum results (default 10)",
             "nullable": True,
         },
     }
@@ -223,17 +193,9 @@ class ListCapabilitiesTool(Tool):
         if not caps:
             return f"No capabilities found ({context})"
 
-        # Limit results
         caps = caps[:actual_limit]
-
-        return self._format_list(caps, context, len(self.registry.all()))
-
-    def _format_list(
-        self, capabilities: list[Capability], context: str, total: int
-    ) -> str:
-        """Format capability list."""
-        lines = [f"Capabilities ({context}): {len(capabilities)} of {total} total"]
-        for cap in capabilities:
+        lines = [f"Capabilities ({context}): {len(caps)} shown"]
+        for cap in caps:
             lines.append(f"- {cap.id}: {cap.name}")
         return "\n".join(lines)
 
@@ -242,14 +204,13 @@ class GetCapabilityTool(Tool):
     """
     Get detailed information about a specific capability.
 
-    Use after search/list to get full details about a capability
-    before using it in a plan.
+    Use after search to understand what a capability does.
     """
 
     name = "get_capability"
     description = (
         "Get full details about a capability by ID. "
-        "Use after searching to understand what a capability can do."
+        "Use after searching to understand what it does."
     )
     inputs = {
         "capability_id": {
@@ -268,17 +229,16 @@ class GetCapabilityTool(Tool):
         cap = self.registry.get(capability_id)
 
         if not cap:
-            # Suggest similar IDs if not found
             all_ids = [c.id for c in self.registry.all()]
-            similar = [id for id in all_ids if capability_id.split(":")[-1] in id]
+            similar = [id for id in all_ids if capability_id.split(":")[-1] in id][:3]
             if similar:
-                return f"Capability not found: '{capability_id}'. Did you mean: {similar[:3]}?"
-            return f"Capability not found: '{capability_id}'"
+                return f"Not found: '{capability_id}'. Did you mean: {similar}?"
+            return f"Not found: '{capability_id}'"
 
         return self._format_details(cap)
 
     def _format_details(self, cap: Capability) -> str:
-        """Format capability details with planning guidance."""
+        """Format capability details."""
         from ..prompts import get_capability_instructions
 
         lines = [
@@ -294,23 +254,18 @@ class GetCapabilityTool(Tool):
 
         lines.append(f"\n{cap.description}")
 
-        # Add metadata if present
         if cap.metadata.get("skills"):
             skills = cap.metadata["skills"]
             lines.append(f"\nSkills: {len(skills)} available")
-            for skill in skills[:5]:  # Show first 5
-                name = skill.get("name", "unnamed")
-                lines.append(f"  - {name}")
+            for skill in skills[:5]:
+                lines.append(f"  - {skill.get('name', 'unnamed')}")
 
         if cap.metadata.get("inputs"):
             inputs = cap.metadata["inputs"]
             lines.append(f"\nInputs: {len(inputs)} required")
             for inp in inputs[:5]:
-                name = inp.get("name", "unnamed")
-                inp_type = inp.get("type", "any")
-                lines.append(f"  - {name} ({inp_type})")
+                lines.append(f"  - {inp.get('name', 'unnamed')} ({inp.get('type', 'any')})")
 
-        # Add planning guidance if available
         planning_guide = get_capability_instructions(cap.id, mode="planning")
         if planning_guide:
             lines.append(f"\n{planning_guide}")
@@ -318,27 +273,30 @@ class GetCapabilityTool(Tool):
         return "\n".join(lines)
 
 
-def create_discovery_tools(registry: CapabilityRegistry) -> list[Tool]:
+def create_discovery_tools(
+    registry: CapabilityRegistry,
+    org_id: Optional[str] = None,
+) -> list[Tool]:
     """
-    Create all capability discovery tools for a registry.
-
-    Two-tier search:
-    - search_capabilities: Active (org's agents + skills)
-    - search_available: Available (integrations + templates)
-
-    Plus exploration tools:
-    - list_capabilities: Browse by domain/type
-    - get_capability: Get full details
+    Create capability discovery tools for a registry.
 
     Args:
-        registry: The capability registry to search
+        registry: The capability registry
+        org_id: Organization ID for two-tier search. If None, org-specific
+                tools are not included.
 
     Returns:
-        List of discovery tools [search_active, search_available, list, get]
+        List of discovery tools
     """
-    return [
-        SearchCapabilitiesTool(registry),
-        SearchAvailableTool(registry),
-        ListCapabilitiesTool(registry),
-        GetCapabilityTool(registry),
-    ]
+    tools: list[Tool] = []
+
+    # Org-specific search tools (require org_id)
+    if org_id:
+        tools.append(SearchOrgTool(registry, org_id))
+        tools.append(SearchIntegrationsTool(registry, org_id))
+
+    # General tools (no org_id needed)
+    tools.append(ListCapabilitiesTool(registry))
+    tools.append(GetCapabilityTool(registry))
+
+    return tools

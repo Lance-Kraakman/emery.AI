@@ -75,10 +75,10 @@ You are regenerating an existing plan based on user feedback. DO NOT start from 
 
 Use these tools to find capabilities for your plan:
 
-- `search_capabilities(query)` - Search org's agents and skills (active)
-- `search_available(query)` - Search all integrations and templates (available)
+- `search_org(query)` - Search org's enabled capabilities
+- `search_integrations(query)` - Search available integrations and templates
 
-**Search active first**, then available if no match found.
+**Search org first**, then integrations if no match found.
 
 ---
 {% if strategy_guidance %}
