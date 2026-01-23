@@ -380,6 +380,7 @@ class ExecutionCoordinator:
         api_key: Optional[str] = None,
         organization_id: Optional[int] = None,
         conversation_history: Optional[List[Any]] = None,
+        capability_registry: Optional[Any] = None,
     ):
         """
         Initialize execution coordinator.
@@ -451,6 +452,9 @@ class ExecutionCoordinator:
 
         # ACE: Store conversation history for planning (resolves references like "option 1")
         self._conversation_history = conversation_history
+
+        # Capability registry for plan generation (discovery tools)
+        self._capability_registry = capability_registry
 
         # ACE-inspired execution tracking services
         self._execution_context_service: Optional[ExecutionContextService] = None
@@ -840,6 +844,7 @@ class ExecutionCoordinator:
                 is_template_generation=is_template_generation,
                 conversation_history=self._conversation_history,  # ACE: Resolve references
                 strategy_service=self._strategy_service,  # ACE: Proven patterns
+                capability_registry=self._capability_registry,  # Capability discovery tools
             )
         except Exception as e:
             logger.error(f"❌ Plan generation failed: {e}")

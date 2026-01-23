@@ -333,7 +333,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 organization_id=request.organization_id
             )
 
-            managed_agents = self.managed_agents_factory.create_all_agents(
+            managed_agents, capability_registry = self.managed_agents_factory.create_all_agents(
                 tool_provider=tool_provider,
                 org_model=request.model or None
             )
@@ -377,6 +377,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 org_model=request.model or None,
                 api_key=tool_provider.api_key,
                 organization_id=tool_provider.organization_id,
+                capability_registry=capability_registry,
             )
 
             yield _make_progress("Classifying task...", "analyzing")

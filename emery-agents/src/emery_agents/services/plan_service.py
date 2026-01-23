@@ -103,6 +103,7 @@ class PlanService:
         is_template_generation: bool = False,
         conversation_history: Optional[List[Any]] = None,
         strategy_service: Optional[StrategyAccumulationService] = None,
+        capability_registry: Optional[Any] = None,
     ) -> Plan:
         """
         Generate plan using phased domain routing.
@@ -151,7 +152,11 @@ class PlanService:
             organization_id=organization_id,
         )
 
-        # Delegate to generator (uses phased domain routing)
+        # Set capability_registry on generator for discovery tools
+        if capability_registry:
+            self._generator.capability_registry = capability_registry
+
+        # Delegate to generator (uses capability-based discovery)
         result = await self._generator.generate(
             request,
             strategy_service=strategy_service,
