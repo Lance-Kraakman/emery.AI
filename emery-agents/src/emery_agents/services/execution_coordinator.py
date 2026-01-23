@@ -418,9 +418,8 @@ class ExecutionCoordinator:
         # Pending context for resumption after user input (replaces session_manager's original_task)
         self._pending_context: Optional[PendingContext] = None
 
-        # Interrupt handling queue for messages received during planning/execution
-        self._interrupt_queue: List[str] = []
-        self._execution_paused: bool = False
+        # NOTE: Interrupt queue state is now managed by self._interrupt_handler
+        # (instantiated after ACE services below)
 
         # LLM-based task classifier (replaces string matching)
         # Includes research_agent for comprehensive context gathering before classification
@@ -880,44 +879,45 @@ class ExecutionCoordinator:
         yield PlanCreatedEvent(plan_id=plan.id, plan=plan)
 
         # Check for queued interrupts after planning completes
-        if self._interrupt_queue:
-            interrupt_msg = self._interrupt_queue.pop(0)
-            logger.info(f"📋 Processing queued interrupt after planning: {interrupt_msg[:50]}...")
+        if self._interrupt_handler.has_pending_interrupts():
+            interrupt_msg = self._interrupt_handler.pop_interrupt()
+            if interrupt_msg:  # Type guard for Optional[str]
+                logger.info(f"📋 Processing queued interrupt after planning: {interrupt_msg[:50]}...")
 
-            # Classify the interrupt
-            classification = await self._classify_interrupt(interrupt_msg)
-            yield InterruptProcessingEvent(
-                message=interrupt_msg,
-                classification=classification.classification,
-            )
-
-            if classification.is_cancel:
-                # User wants to cancel - reset state
-                yield PlanCancelledEvent(
-                    plan_id=plan.id,
-                    reason=f"User cancelled: {interrupt_msg}",
+                # Classify the interrupt
+                classification = await self._interrupt_handler.classify_interrupt(interrupt_msg, self._current_plan)
+                yield InterruptProcessingEvent(
+                    message=interrupt_msg,
+                    classification=classification.classification,
                 )
-                self._reset_state()
-                return
 
-            if classification.requires_replan:
-                # User wants to change direction - replan with new context
-                logger.info(f"📋 Replanning with user feedback: {interrupt_msg[:50]}...")
-                combined_task = f"{goal}\n\nUser feedback: {interrupt_msg}"
+                if classification.is_cancel:
+                    # User wants to cancel - reset state
+                    yield PlanCancelledEvent(
+                        plan_id=plan.id,
+                        reason=f"User cancelled: {interrupt_msg}",
+                    )
+                    self._reset_state()
+                    return
 
-                # Re-run planning with the new context
-                async for event in self.create_plan(
-                    goal=combined_task,
-                    instructions=f"{instructions}\n\nAdditional user input: {interrupt_msg}",
-                    tools=tools,
-                    context_tables=context_tables,
-                    managed_agents=managed_agents,
-                ):
-                    yield event
-                return
+                if classification.requires_replan:
+                    # User wants to change direction - replan with new context
+                    logger.info(f"📋 Replanning with user feedback: {interrupt_msg[:50]}...")
+                    combined_task = f"{goal}\n\nUser feedback: {interrupt_msg}"
 
-            # CONTEXT_ADD: Inject context into ledger for execution phase
-            self._inject_interrupt_context(interrupt_msg)
+                    # Re-run planning with the new context
+                    async for event in self.create_plan(
+                        goal=combined_task,
+                        instructions=f"{instructions}\n\nAdditional user input: {interrupt_msg}",
+                        tools=tools,
+                        context_tables=context_tables,
+                        managed_agents=managed_agents,
+                    ):
+                        yield event
+                    return
+
+                # CONTEXT_ADD: Inject context into ledger for execution phase
+                self._interrupt_handler.inject_context(self._ledger, interrupt_msg)
 
     async def approve_plan(self, plan_id: str) -> Plan:
         """
@@ -1026,80 +1026,81 @@ class ExecutionCoordinator:
 
             for step_index, step in enumerate(pending_steps):
                 # Check for queued interrupts before each step
-                if self._interrupt_queue or self._execution_paused:
-                    self._execution_paused = False
-                    if self._interrupt_queue:
-                        interrupt_msg = self._interrupt_queue.pop(0)
-                        logger.info(f"⏸️ Processing interrupt before step {step_index}: {interrupt_msg[:50]}...")
+                if self._interrupt_handler.has_pending_interrupts() or self._interrupt_handler.is_paused:
+                    self._interrupt_handler.resume_execution()
+                    if self._interrupt_handler.has_pending_interrupts():
+                        interrupt_msg = self._interrupt_handler.pop_interrupt()
+                        if interrupt_msg:  # Type guard for Optional[str]
+                            logger.info(f"⏸️ Processing interrupt before step {step_index}: {interrupt_msg[:50]}...")
 
-                        yield InterruptReceivedEvent(
-                            message=interrupt_msg,
-                            step_index=step_index,
-                        )
-
-                        # Classify the interrupt
-                        classification = await self._classify_interrupt(interrupt_msg)
-                        yield InterruptProcessingEvent(
-                            message=interrupt_msg,
-                            classification=classification.classification,
-                        )
-
-                        if classification.is_cancel:
-                            # User wants to cancel - reset state
-                            yield PlanCancelledEvent(
-                                plan_id=plan_id,
-                                reason=f"User cancelled: {interrupt_msg}",
+                            yield InterruptReceivedEvent(
+                                message=interrupt_msg,
+                                step_index=step_index,
                             )
-                            self._reset_state()
-                            return
 
-                        if classification.requires_replan:
-                            # User wants to change direction - trigger replan
-                            logger.info(f"📋 User interrupt requires replan: {interrupt_msg[:50]}...")
+                            # Classify the interrupt
+                            classification = await self._interrupt_handler.classify_interrupt(interrupt_msg, self._current_plan)
+                            yield InterruptProcessingEvent(
+                                message=interrupt_msg,
+                                classification=classification.classification,
+                            )
 
-                            if self._replan_count >= self.max_replans:
-                                logger.warning(f"Max replans ({self.max_replans}) exceeded")
-                                yield ExecutionBlockedEvent(
+                            if classification.is_cancel:
+                                # User wants to cancel - reset state
+                                yield PlanCancelledEvent(
                                     plan_id=plan_id,
-                                    reason=f"Max replans exceeded after user interrupt: {interrupt_msg}",
+                                    reason=f"User cancelled: {interrupt_msg}",
                                 )
-                                success = False
+                                self._reset_state()
+                                return
+
+                            if classification.requires_replan:
+                                # User wants to change direction - trigger replan
+                                logger.info(f"📋 User interrupt requires replan: {interrupt_msg[:50]}...")
+
+                                if self._replan_count >= self.max_replans:
+                                    logger.warning(f"Max replans ({self.max_replans}) exceeded")
+                                    yield ExecutionBlockedEvent(
+                                        plan_id=plan_id,
+                                        reason=f"Max replans exceeded after user interrupt: {interrupt_msg}",
+                                    )
+                                    success = False
+                                    break
+
+                                self._replan_count += 1
+                                yield ReplanTriggeredEvent(
+                                    plan_id=plan_id,
+                                    reason=f"User interrupt: {interrupt_msg}",
+                                    replan_number=self._replan_count,
+                                )
+
+                                # Replan with interrupt context
+                                old_pending_count = len(self._current_plan.get_pending_steps())
+                                self._current_plan = await self._replan_handler.handle_replan(
+                                    current_plan=self._current_plan,
+                                    failed_step=None,
+                                    reason=f"User interrupt: {interrupt_msg}",
+                                    tools=tools,
+                                )
+                                new_pending_count = len(self._current_plan.get_pending_steps())
+
+                                yield PlanUpdatedEvent(
+                                    plan_id=plan_id,
+                                    reason=f"User interrupt: {interrupt_msg}",
+                                    added_steps=new_pending_count,
+                                    removed_steps=old_pending_count - new_pending_count if old_pending_count > new_pending_count else 0,
+                                    replan_number=self._replan_count,
+                                )
+
+                                should_restart = True
                                 break
 
-                            self._replan_count += 1
-                            yield ReplanTriggeredEvent(
-                                plan_id=plan_id,
-                                reason=f"User interrupt: {interrupt_msg}",
-                                replan_number=self._replan_count,
+                            # CONTEXT_ADD: Inject context and continue
+                            self._interrupt_handler.inject_context(self._ledger, interrupt_msg)
+                            yield ContextInjectedEvent(
+                                message=interrupt_msg,
+                                step_index=step_index,
                             )
-
-                            # Replan with interrupt context
-                            old_pending_count = len(self._current_plan.get_pending_steps())
-                            self._current_plan = await self._handle_replan(
-                                current_plan=self._current_plan,
-                                failed_step=None,
-                                reason=f"User interrupt: {interrupt_msg}",
-                                tools=tools,
-                            )
-                            new_pending_count = len(self._current_plan.get_pending_steps())
-
-                            yield PlanUpdatedEvent(
-                                plan_id=plan_id,
-                                reason=f"User interrupt: {interrupt_msg}",
-                                added_steps=new_pending_count,
-                                removed_steps=old_pending_count - new_pending_count if old_pending_count > new_pending_count else 0,
-                                replan_number=self._replan_count,
-                            )
-
-                            should_restart = True
-                            break
-
-                        # CONTEXT_ADD: Inject context and continue
-                        self._inject_interrupt_context(interrupt_msg)
-                        yield ContextInjectedEvent(
-                            message=interrupt_msg,
-                            step_index=step_index,
-                        )
 
                 # Exit the loop if we need to restart after replan
                 if should_restart:
@@ -1157,7 +1158,7 @@ class ExecutionCoordinator:
 
                                 # Perform phase-based replanning with phase results as context
                                 old_pending_count = len(self._current_plan.get_pending_steps())
-                                self._current_plan = await self._handle_replan(
+                                self._current_plan = await self._replan_handler.handle_replan(
                                     current_plan=self._current_plan,
                                     failed_step=None,
                                     reason=f"Phase '{current_phase_name}' completed - replanning subsequent phases based on discoveries",
@@ -1225,8 +1226,13 @@ class ExecutionCoordinator:
                         "in_progress",
                     )
 
-                    # Execute the step
-                    result = await self._execute_step(step, tools, managed_agents)
+                    # Execute the step via StepExecutor
+                    result = await self._step_executor.execute_step(
+                        current_plan=self._current_plan,
+                        step=step,
+                        tools=tools,
+                        managed_agents=managed_agents,
+                    )
 
                     # Mark step as completed
                     self._current_plan = await self.plan_service.update_step_status(
@@ -1384,7 +1390,7 @@ class ExecutionCoordinator:
 
                             # Perform dynamic replanning
                             old_pending_count = len(self._current_plan.get_pending_steps())
-                            self._current_plan = await self._handle_replan(
+                            self._current_plan = await self._replan_handler.handle_replan(
                                 current_plan=self._current_plan,
                                 failed_step=step if step.status == PlanStepStatus.FAILED.value else None,
                                 reason=evaluation.reason,
@@ -1487,7 +1493,7 @@ class ExecutionCoordinator:
                 )
 
                 # Perform dynamic replanning
-                self._current_plan = await self._handle_replan(
+                self._current_plan = await self._replan_handler.handle_replan(
                     current_plan=self._current_plan,
                     failed_step=None,
                     reason="Goal not yet achieved after completing all steps",
@@ -1732,68 +1738,7 @@ Analyze this state and call the report_evaluation tool with your assessment.
                 reason=f"Evaluation error: {e}",
             )
 
-    async def _execute_step(
-        self,
-        step: PlanStep,
-        tools: List[Any],
-        managed_agents: Optional[List[Any]] = None,
-    ) -> Optional[str]:
-        """
-        Execute a single plan step using PlanStepExecutor.
-
-        Uses smolagents' native managed agent routing - the LLM reads
-        agent descriptions and automatically routes to the right agent.
-
-        The executor receives the Plan object and generates a prompt from it,
-        ensuring the sub-agent has proper context (goal, progress, agents).
-
-        Args:
-            step: The step to execute
-            tools: Available tools
-            managed_agents: Available managed agents for delegation (unused - handled by executor)
-
-        Returns:
-            Result string from step execution
-        """
-        logger.info(f"Executing step {step.step_id}: {step.description[:100]}...")
-
-        # Use PlanStepExecutor - pass Plan object, executor generates prompt from it
-        # Wrap in asyncio.to_thread since execute() is synchronous (calls blocking LLM APIs)
-        if self.plan_step_executor and self._current_plan:
-            result = await asyncio.to_thread(
-                self.plan_step_executor.execute,
-                plan=self._current_plan,
-                current_step=step,
-            )
-            return result
-
-        # Fallback: If there's a tool_call specified, use it directly
-        if step.tool_call:
-            tool = None
-            # Extract base tool name (before ':' if present, e.g., "tool:action" -> "tool")
-            tool_call_parts = step.tool_call.lower().split(':')
-            target_tool_name = tool_call_parts[0] if tool_call_parts else step.tool_call.lower()
-            for t in tools:
-                tool_name = getattr(t, 'name', str(t))
-                if tool_name.lower() == target_tool_name:
-                    tool = t
-                    break
-
-            if not tool:
-                raise ValueError(f"Tool not found: {step.tool_call}")
-
-            logger.info(f"Executing tool {step.tool_call} with params: {step.parameters}")
-            try:
-                # Wrap blocking tool call in thread
-                result = await asyncio.to_thread(tool.forward, **(step.parameters or {}))
-                return f"Executed {step.tool_call}: {result}"
-            except Exception as e:
-                logger.error(f"Tool execution failed: {e}")
-                raise
-
-        # No executor and no tool_call - just mark as done
-        logger.warning("No plan_step_executor configured, step not actually executed")
-        return f"Step completed (no executor): {step.description}"
+    # NOTE: _execute_step has been moved to StepExecutor.execute_step()
 
     async def _handle_step_failure(
         self,
@@ -1949,131 +1894,18 @@ Analyze this state and call the report_evaluation tool with your assessment.
         )
 
         try:
-            result = await self._execute_step(updated_step, tools)
+            assert self._current_plan is not None  # We're in execution, plan must exist
+            result = await self._step_executor.execute_step(
+                current_plan=self._current_plan,
+                step=updated_step,
+                tools=tools,
+            )
             return result
         except Exception as e:
             logger.error(f"Recovery step failed: {e}")
             raise
 
-    async def _handle_replan(
-        self,
-        current_plan: Plan,
-        failed_step: Optional[PlanStep],
-        reason: str,
-        tools: List[Any],
-    ) -> Plan:
-        """
-        Handle replanning when evaluator indicates plan needs adjustment.
-
-        Uses diff-based approach to generate minimal changes instead of
-        regenerating all pending steps from scratch.
-
-        AIDEV-NOTE: This preserves continuity by modifying existing steps
-        rather than discarding them. Only adds/skips/modifies as needed.
-
-        Args:
-            current_plan: The current plan being executed
-            failed_step: The step that triggered replanning (if any)
-            reason: Why replanning was triggered
-            tools: Available tools for recovery planning
-
-        Returns:
-            Updated plan with recovery steps applied via diff
-        """
-        logger.info(f"📋 Handling replan for plan {current_plan.id}: {reason}")
-
-        # Build completed context for the differ
-        completed_steps = [
-            s for s in current_plan.steps
-            if s.status == PlanStepStatus.COMPLETED.value
-        ]
-        completed_context = "\n".join([
-            f"- {s.description}: {s.result[:200] if s.result else 'completed'}"
-            for s in completed_steps
-        ]) if completed_steps else None
-
-        # Use PlanDiffer for minimal changes
-        if self._model_provider is None:
-            raise ValueError("Cannot replan without model_provider")
-        differ = PlanDiffer(model_provider=self._model_provider)
-
-        try:
-            diff = await differ.generate_diff(
-                current_plan=current_plan,
-                reason=reason,
-                failed_step=failed_step,
-                completed_context=completed_context,
-                org_model=self._org_model,
-            )
-
-            # Log the diff for debugging
-            session_logger = get_session_logger()
-            if session_logger:
-                session_logger.log_event("plan_diff_generated", {
-                    "plan_id": current_plan.id,
-                    "reason": reason,
-                    "diff_summary": diff.summary(),
-                    "steps_to_skip": diff.steps_to_skip,
-                    "steps_to_modify": len(diff.steps_to_modify),
-                    "steps_to_append": len(diff.steps_to_append),
-                    "reasoning": diff.reasoning[:200] if diff.reasoning else "",
-                })
-
-            # Apply the diff
-            updated_plan = differ.apply_diff(current_plan, diff)
-
-            logger.info(
-                f"📋 Replan complete via diff: {diff.summary()} -> v{updated_plan.version}"
-            )
-
-            return updated_plan
-
-        except Exception as e:
-            # Fallback to simple skip-and-continue if diff generation fails
-            logger.warning(f"Diff generation failed, using fallback: {e}")
-
-            new_steps = []
-            for step in current_plan.steps:
-                if step.status == PlanStepStatus.COMPLETED.value:
-                    new_steps.append(step)
-                elif failed_step and step.step_id == failed_step.step_id:
-                    # Skip the failed step
-                    skipped = PlanStep(
-                        step_id=step.step_id,
-                        description=step.description,
-                        tool_call=step.tool_call,
-                        parameters=step.parameters,
-                        target_agent=step.target_agent,
-                        context_tables=step.context_tables,
-                        prompt_template=step.prompt_template,
-                        required_context=step.required_context,
-                        phase_name=step.phase_name,
-                        phase_order=step.phase_order,
-                        replan_after=step.replan_after,
-                        status=PlanStepStatus.SKIPPED.value,
-                        result=step.result,
-                        error=f"Skipped during replan (fallback): {reason[:100]}",
-                    )
-                    new_steps.append(skipped)
-                else:
-                    # Keep pending steps as-is
-                    new_steps.append(step)
-
-            updated_plan = Plan(
-                id=current_plan.id,
-                goal=current_plan.goal,
-                basic_instructions=current_plan.basic_instructions,
-                steps=new_steps,
-                status=PlanStatus.EXECUTING.value,
-                generated_at=current_plan.generated_at,
-                approved_at=current_plan.approved_at,
-                version=current_plan.version + 1,
-                context=current_plan.context,
-                analysis=f"{current_plan.analysis}\n\n[Replan v{current_plan.version + 1}] Fallback: {reason}",
-            )
-
-            logger.info(f"📋 Replan complete (fallback): skipped failed step -> v{updated_plan.version}")
-            return updated_plan
+    # NOTE: _handle_replan has been moved to ReplanHandler.handle_replan()
 
     async def run_with_approval(
         self,
@@ -2129,8 +1961,8 @@ Analyze this state and call the report_evaluation tool with your assessment.
         self._pending_context = None
         self._replan_count = 0
         self._evaluation_count = 0
-        self._interrupt_queue = []
-        self._execution_paused = False
+        self._interrupt_handler.clear_queue()
+        self._interrupt_handler.resume_execution()
         logger.info("📋 Coordinator state reset to IDLE")
 
     def queue_interrupt(self, message: str) -> InterruptQueuedEvent:
@@ -2138,6 +1970,7 @@ Analyze this state and call the report_evaluation tool with your assessment.
         Queue an interrupt message for processing.
 
         Called when a message arrives during planning or execution phase.
+        Delegates to InterruptHandler.
 
         Args:
             message: The user's interrupt message
@@ -2145,99 +1978,11 @@ Analyze this state and call the report_evaluation tool with your assessment.
         Returns:
             InterruptQueuedEvent for UI feedback
         """
-        self._interrupt_queue.append(message)
-        phase_str = self._unified_phase.value
-        logger.info(f"⏸️ Interrupt queued during {phase_str}: {message[:50]}...")
-        return InterruptQueuedEvent(message=message, phase=phase_str)
+        # Delegate to handler, then wrap in coordinator's event type
+        handler_event = self._interrupt_handler.queue_interrupt(message, self._unified_phase.value)
+        return InterruptQueuedEvent(message=handler_event.message, phase=handler_event.phase)
 
-    async def _classify_interrupt(
-        self,
-        interrupt_message: str,
-    ) -> InterruptClassification:
-        """
-        Use subagent pattern to classify interrupt intent.
-
-        Args:
-            interrupt_message: The user's interrupt message
-
-        Returns:
-            InterruptClassification with classification and reasoning
-        """
-        if not self._model_provider or not self._current_plan:
-            # Fallback if no model available - default to CONTEXT_ADD
-            logger.warning("No model provider available for interrupt classification")
-            return InterruptClassification(
-                classification="CONTEXT_ADD",
-                requires_replan=False,
-                is_cancel=False,
-                reasoning="No classifier available, defaulting to context injection",
-            )
-
-        # Build context for classification
-        completed_steps = "\n".join([
-            f"- {s.description}"
-            for s in self._current_plan.steps
-            if s.status == PlanStepStatus.COMPLETED.value
-        ]) or "None yet"
-
-        remaining_steps = "\n".join([
-            f"- {s.description}"
-            for s in self._current_plan.steps
-            if s.status == PlanStepStatus.PENDING.value
-        ]) or "None remaining"
-
-        prompt = build_classification_prompt(
-            interrupt_message=interrupt_message,
-            current_plan_summary=f"Goal: {self._current_plan.goal}",
-            completed_steps=completed_steps,
-            remaining_steps=remaining_steps,
-        )
-
-        try:
-            # Create classifier and run (synchronous, wrap in thread)
-            model = self._org_model or "claude-sonnet-4-20250514"
-            classifier_agent, classification_tool = create_interrupt_classifier(model)
-
-            await asyncio.to_thread(classifier_agent.run, prompt)
-
-            result = classification_tool.get_result()
-            if result:
-                return result
-
-            # Tool wasn't called - default to CONTEXT_ADD
-            logger.warning("Interrupt classifier did not call report_classification tool")
-            return InterruptClassification(
-                classification="CONTEXT_ADD",
-                requires_replan=False,
-                is_cancel=False,
-                reasoning="Classifier did not provide classification, defaulting to context injection",
-            )
-
-        except Exception as e:
-            logger.error(f"Interrupt classification failed: {e}")
-            return InterruptClassification(
-                classification="CONTEXT_ADD",
-                requires_replan=False,
-                is_cancel=False,
-                reasoning=f"Classification error: {e}, defaulting to context injection",
-            )
-
-    def _inject_interrupt_context(self, interrupt_msg: str) -> None:
-        """
-        Add user interrupt as context for the agent to consider in next steps.
-
-        This updates the ledger with the user's feedback so subsequent steps
-        can see and act on the new information.
-
-        Args:
-            interrupt_msg: The user's interrupt message
-        """
-        if self._ledger:
-            self._ledger._record_event(
-                event_type=LedgerEventType.USER_FEEDBACK,
-                data={"feedback": interrupt_msg}
-            )
-            logger.info(f"💉 Injected interrupt context into ledger: {interrupt_msg[:50]}...")
+    # NOTE: _classify_interrupt and _inject_interrupt_context have been moved to InterruptHandler
 
     async def handle_message(
         self,
@@ -2268,7 +2013,7 @@ Analyze this state and call the report_evaluation tool with your assessment.
 
         # Handle interrupts during execution phase - queue and pause
         if self._unified_phase == Phase.EXECUTING:
-            self._execution_paused = True
+            self._interrupt_handler.pause_execution()
             yield self.queue_interrupt(message)
             return
 
