@@ -4,20 +4,16 @@ Planning Module
 Modular planning infrastructure for plan generation, persistence, and analysis.
 
 This module provides:
-- PlanGenerator: Core logic for generating plans from instructions
+- PlanGenerator: Core logic for generating plans using capability discovery
 - PlanRepository: gRPC persistence for plans
 - FailureAnalyzer: Step failure analysis and recovery
 - Dataclasses: PlanGenerationRequest, PlanGenerationResult, etc.
-- Domain Planners: Schema, App, Automation planners with LLM classification
 
-AIDEV-NOTE: The original monolithic PlanService (~700 lines) has been split into:
-- models.py: Typed dataclasses for requests/results
-- plan_generator.py: LLM-based plan generation
-- plan_repository.py: gRPC persistence
-- failure_analyzer.py: Recovery analysis
-- planners/: Domain-specific planners with routing
-
-The PlanService class in plan_service.py is now a facade that delegates to these modules.
+AIDEV-NOTE: Plan generation uses capability-based discovery instead of
+domain-specific planners (schema, app, automation). The PlanGenerator:
+1. Uses capability discovery tools to find relevant capabilities
+2. Generates plan steps with target agents from discovered capabilities
+3. Outputs structured plan via submit_plan tool
 """
 
 from .models import (
@@ -31,19 +27,6 @@ from .plan_generator import PlanGenerator
 from .plan_repository import PlanRepository
 from .failure_analyzer import FailureAnalyzer
 from .plan_differ import PlanDiff, PlanDiffer
-
-# Domain planners
-from .planners import (
-    DomainPlanner,
-    DomainPlanResult,
-    PlannerClassifier,
-    DomainClassification,
-    DirectDomainPlanner,
-    SchemaDomainPlanner,
-    AppDomainPlanner,
-    AutomationDomainPlanner,
-    PlannerRouter,
-)
 
 __all__ = [
     # Models
@@ -59,14 +42,4 @@ __all__ = [
     # Plan Diffs
     "PlanDiff",
     "PlanDiffer",
-    # Domain Planners
-    "DomainPlanner",
-    "DomainPlanResult",
-    "PlannerClassifier",
-    "DomainClassification",
-    "DirectDomainPlanner",
-    "SchemaDomainPlanner",
-    "AppDomainPlanner",
-    "AutomationDomainPlanner",
-    "PlannerRouter",
 ]

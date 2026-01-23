@@ -1,3 +1,10 @@
+{#
+Task Classifier Template - Simplified
+
+Determines execution mode (DIRECT vs PLAN_AND_APPROVE) and whether
+clarification is needed. Does NOT route to specific agents - that's
+handled by capability discovery in the chat planner.
+#}
 Analyze this user task and classify how it should be handled.
 
 ## User Task
@@ -11,15 +18,6 @@ ALWAYS assume the user is asking about their Emery data unless they explicitly s
 - "Help me plan X" → Plan to create X in Emery
 
 Do NOT ask "where do you want this?" - the answer is always Emery.
-
-## Available Agents
-{% if available_agents %}
-{% for agent in available_agents %}
-- **{{ agent.name }}**: {{ agent.description }}
-{% endfor %}
-{% else %}
-No agents configured.
-{% endif %}
 
 ## Step 1: Is This Clearly Simple?
 
@@ -65,9 +63,9 @@ Use research when:
 - Complex task requiring multiple steps
 - Vague request without specific details
 - Task that should show a plan for user approval
-- Examples: "create a database", "help me design a schema"
+- Examples: "create a database", "help me design a schema", "build a CRM system"
 
-### Clarification Questions (Step 4)
+### Clarification Questions
 
 **ONLY ask clarification if research was done and STILL didn't resolve the ambiguity.**
 
@@ -84,33 +82,6 @@ Do NOT ask clarifying questions when:
 - All necessary details are provided or can be inferred
 
 **Bias toward action**: If research provides context, use it. Clarification is a last resort when research doesn't help.
-
-### Target Agent Selection
-
-Use the agent names from "Available Agents" above. Set target_agent to:
-- The agent name if the task clearly matches one agent's domain
-- null/none if multiple agents are needed or it's unclear which to use
-
-### System-Wide Tasks → system_designer
-
-Route to **system_designer** when the task:
-- Involves MULTIPLE resource types (databases + apps + agents + skills)
-- Describes end-to-end automation ("when X happens, do Y, which updates Z")
-- Mentions "system", "workflow", "automation flow", "complete solution"
-- Requires understanding relationships between components
-- Asks to build something that spans data storage, user interfaces, AND automations
-
-Examples requiring system_designer:
-- "Build a CRM with customer tracking and automated follow-ups"
-- "Create an onboarding workflow: form → database → welcome email → task assignment"
-- "Design a project management system with status tracking and notifications"
-- "Build a customer feedback system with form, storage, and daily digest emails"
-- "Create an inventory system that alerts when stock is low"
-
-Do NOT route to system_designer when:
-- Task is single-domain (just database, just app, just agent)
-- Task is simple/direct (add field, create page, update agent)
-- User explicitly names a specific agent to use
 
 ### Question Guidelines
 

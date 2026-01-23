@@ -8,12 +8,14 @@ EvaluatorAgent and GapAnalyzer) for reliable results.
 The classifier determines:
 1. Execution mode: DIRECT (simple) or PLAN_AND_APPROVE (complex)
 2. Whether clarification questions should be asked first
-3. Which agent should handle the task (if clear)
+
+NOTE: This does NOT route to specific agents - that's handled by capability
+discovery in the chat planner.
 """
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 from smolagents import ToolCallingAgent
 
@@ -31,7 +33,6 @@ class TaskClassification:
 
     mode: str  # "DIRECT" or "PLAN_AND_APPROVE"
     needs_clarification: bool
-    target_agent: Optional[str] = None
     clarification_questions: List[str] = field(default_factory=list)
     reasoning: str = ""
 
@@ -50,6 +51,10 @@ class TaskClassifier:
 
     When needs_clarification is True, questions are returned to be shown
     to the user before proceeding with execution.
+
+    NOTE: This classifier does NOT route to specific agents. Capability
+    discovery happens in the chat planner using search_capabilities,
+    list_capabilities, and get_capability tools.
 
     AIDEV-NOTE: The classifier can use research_agent as a managed agent for
     comprehensive context gathering (apps, tables, URLs) before deciding
@@ -75,7 +80,6 @@ class TaskClassifier:
     def classify(
         self,
         task: str,
-        available_agents: Optional[List[Dict[str, Any]]] = None,
         context: Optional[str] = None,
         org_model: Optional[str] = None,
     ) -> TaskClassification:
@@ -87,7 +91,6 @@ class TaskClassifier:
 
         Args:
             task: The user's task/request text
-            available_agents: Agent info dicts with 'name' and 'description' keys
             context: Additional context (e.g., existing databases)
             org_model: Organization model ID for model resolution hierarchy
 
@@ -101,11 +104,10 @@ class TaskClassifier:
         if session_logger:
             session_logger.log_event("task_classification_started", {
                 "task_preview": task[:200],
-                "available_agents": [a.get("name") for a in available_agents] if available_agents else [],
                 "has_context": bool(context),
             })
 
-        prompt = self._build_prompt(task, available_agents, context)
+        prompt = self._build_prompt(task, context)
         tool = TaskClassifierTool()
 
         # Log full prompt for debugging
@@ -129,7 +131,7 @@ class TaskClassifier:
             # Add research_agent as managed agent if available
             managed_agents = [self.research_agent] if self.research_agent else None
             if managed_agents:
-                logger.info(f"🔍 Classifier has research_agent for context gathering")
+                logger.info("🔍 Classifier has research_agent for context gathering")
 
             classifier = ToolCallingAgent(
                 tools=tools,
@@ -144,8 +146,7 @@ class TaskClassifier:
                 classification = TaskClassification(**result)
                 logger.info(
                     f"✅ Classification: mode={classification.mode}, "
-                    f"needs_clarification={classification.needs_clarification}, "
-                    f"target_agent={classification.target_agent}"
+                    f"needs_clarification={classification.needs_clarification}"
                 )
                 if classification.clarification_questions:
                     logger.info(
@@ -157,7 +158,6 @@ class TaskClassifier:
                     session_logger.log_event("task_classification_result", {
                         "mode": classification.mode,
                         "needs_clarification": classification.needs_clarification,
-                        "target_agent": classification.target_agent,
                         "question_count": len(classification.clarification_questions),
                         "reasoning_preview": classification.reasoning[:200] if classification.reasoning else None,
                     })
@@ -177,14 +177,11 @@ class TaskClassifier:
     def _build_prompt(
         self,
         task: str,
-        available_agents: Optional[List[Dict[str, Any]]],
         context: Optional[str],
     ) -> str:
         """Build the classification prompt using jinja template."""
         return render_template(
             "planning/task_classifier.j2",
             task=task,
-            available_agents=available_agents or [],
             context=context,
         )
-

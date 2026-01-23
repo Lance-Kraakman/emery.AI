@@ -1,55 +1,16 @@
 """
-Domain Planners
+Domain Planners - DEPRECATED
 
-Managed planners for domain-specific plan generation.
+The domain-specific planners (schema, app, automation) have been replaced
+by capability-based planning. The PlanGenerator now uses:
 
-The planning system uses domain planners to:
-1. Classify requests into domains (direct, schema, app, automation)
-2. Generate domain-specific steps
-3. Route to appropriate managed agents
+1. Capability discovery tools (search_capabilities, list_capabilities, get_capability)
+2. PlanOutputTool (submit_plan) for structured plan capture
+3. A single ToolCallingAgent that discovers and routes to capabilities dynamically
 
-Architecture:
-- PlannerClassifier: LLM-based domain classification
-- DomainPlanner: Protocol for domain planners
-- DirectDomainPlanner: Pure LLM tasks (no platform operations)
-- SchemaDomainPlanner: Database/table operations
-- AppDomainPlanner: App/page operations
-- AutomationDomainPlanner: Agent/skill operations
-- PlannerRouter: Orchestrates domain planners
+This directory is kept for backwards compatibility but will be removed
+in a future version.
 """
 
-from .base_planner import (
-    DomainPlanner,
-    DomainPlanResult,
-    BaseDomainPlanner,
-    ACEContext,
-    TemplateGenerationContext,
-)
-from .planner_classifier import (
-    PlannerClassifier,
-    DomainClassification,
-)
-from .direct_planner import DirectDomainPlanner
-from .schema_planner import SchemaDomainPlanner
-from .app_planner import AppDomainPlanner
-from .automation_planner import AutomationDomainPlanner
-from .planner_router import PlannerRouter
-
-__all__ = [
-    # Base
-    "DomainPlanner",
-    "DomainPlanResult",
-    "BaseDomainPlanner",
-    "ACEContext",
-    "TemplateGenerationContext",
-    # Classifier
-    "PlannerClassifier",
-    "DomainClassification",
-    # Domain Planners
-    "DirectDomainPlanner",
-    "SchemaDomainPlanner",
-    "AppDomainPlanner",
-    "AutomationDomainPlanner",
-    # Router
-    "PlannerRouter",
-]
+# No exports - domain planners have been removed
+__all__: list[str] = []

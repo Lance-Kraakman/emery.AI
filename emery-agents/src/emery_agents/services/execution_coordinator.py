@@ -630,7 +630,6 @@ class ExecutionCoordinator:
         self._session_logger.log_event("task_classified", {
             "mode": classification.mode,
             "needs_clarification": classification.needs_clarification,
-            "target_agent": classification.target_agent,
             "reasoning": classification.reasoning[:200] if classification.reasoning else ""
         })
 
@@ -704,7 +703,6 @@ class ExecutionCoordinator:
         self._session_logger.log_event("task_classified", {
             "mode": classification.mode,
             "needs_clarification": classification.needs_clarification,
-            "target_agent": classification.target_agent,
             "reasoning": classification.reasoning[:200] if classification.reasoning else ""
         })
 
@@ -766,17 +764,10 @@ class ExecutionCoordinator:
                 "Configure task_classifier in initialization."
             )
 
-        # Get agent info for classification context
-        # ManagedAgent protocol guarantees .name and .description attributes exist
-        available_agents_info: List[Dict[str, str]] = [
-            {"name": a.name, "description": a.description}
-            for a in managed_agents
-        ]
-
         # Run LLM-based classification with resolved model
+        # NOTE: Capability discovery happens in chat_planner, not here
         return self._task_classifier.classify(
             task=task,
-            available_agents=available_agents_info,
             context=context,
             org_model=self._org_model,
         )
