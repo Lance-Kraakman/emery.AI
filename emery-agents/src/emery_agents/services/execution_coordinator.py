@@ -1757,7 +1757,7 @@ class ExecutionCoordinator:
 
         try:
             # Run recovery analysis via PlanService (LLM gathers context and analyzes)
-            # Context gathering is done via research_emery (created inside PlanService)
+            # Uses existing research_emery from capability_registry if available
             recovery = self.plan_service.analyze_step_failure(
                 failed_step=step,
                 error_message=error,
@@ -1766,6 +1766,7 @@ class ExecutionCoordinator:
                 org_model=self._org_model,
                 api_key=self._api_key,
                 organization_id=self._organization_id,
+                capability_registry=self._capability_registry,
             )
 
             # Emit analysis result

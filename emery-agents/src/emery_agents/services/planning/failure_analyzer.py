@@ -13,11 +13,14 @@ from typing import Optional
 
 from smolagents import ToolCallingAgent
 
+from typing import Optional
+
 from emery_agents.models.plan import PlanStep, RecoveryResult
 from emery_agents.models.task_ledger import TaskLedger
 from emery_agents.tools.recovery_output_tool import RecoveryOutputTool
 from emery_agents.prompts import render_template
 
+from ..capability_registry import CapabilityRegistry
 from ..protocols import ModelProvider
 from .models import FailureAnalysisRequest
 
@@ -53,6 +56,7 @@ class FailureAnalyzer:
         org_model: Optional[str] = None,
         api_key: Optional[str] = None,
         organization_id: Optional[int] = None,
+        capability_registry: Optional[CapabilityRegistry] = None,
     ) -> RecoveryResult:
         """
         Analyze a failed step and determine how to fix it.
@@ -95,9 +99,17 @@ class FailureAnalyzer:
             model_id = self.model_provider.resolve_model_selection(org_model=org_model)
             model = self.model_provider.get_model(model_id=model_id)
 
-            # Create research_emery for context gathering
+            # Get research_emery from capability registry if available
             managed_agents = []
-            if api_key and organization_id:
+            if capability_registry:
+                # Try to get existing research_emery from registry
+                research_cap = capability_registry.get("agent:research_emery")
+                if research_cap and research_cap.metadata.get("executor"):
+                    managed_agents.append(research_cap.metadata["executor"])
+                    logger.info("🔬 Recovery analyzer using research_emery from capability registry")
+
+            # Fallback: create new research_emery if not in registry and auth available
+            if not managed_agents and api_key and organization_id:
                 from emery_agents.agents.research_emery_agent import create_research_emery_agent
                 research_emery = create_research_emery_agent(
                     model=model,
@@ -106,7 +118,7 @@ class FailureAnalyzer:
                     max_steps=6,
                 )
                 managed_agents.append(research_emery)
-                logger.info("🔬 Recovery analyzer has research_emery for context gathering")
+                logger.info("🔬 Recovery analyzer created new research_emery (not in registry)")
 
             analyzer = ToolCallingAgent(
                 tools=[recovery_tool],

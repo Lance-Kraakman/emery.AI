@@ -955,18 +955,12 @@ class ManagedAgentsFactory:
             ),
         ]
 
-        # Create each managed agent and register as capability
-        for create_fn, agent_id, description, actions, entities in agent_definitions:
+        # Create each managed agent (individual create_* methods already register capabilities)
+        for create_fn, agent_id, _, _, _ in agent_definitions:
             try:
                 agent = create_fn()
                 agents.append(agent)
-                self._register_agent_capability(
-                    agent=agent,
-                    agent_id=agent_id,
-                    description=description,
-                    actions=actions,
-                    entities=entities,
-                )
+                # NOTE: Registration happens inside create_* methods, not here
             except Exception as e:
                 logger.warning(f"Failed to create {agent_id}: {e}")
 

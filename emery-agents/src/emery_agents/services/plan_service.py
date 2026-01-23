@@ -29,6 +29,7 @@ from emery_agents.models.context_mapping import ResolvedContext
 from emery_agents.models.skill_definition import SkillInputDefinition, SkillOutputDefinition
 
 from .protocols import ModelProvider, GRPCClient, Tool
+from .capability_registry import CapabilityRegistry
 from emery_agents.ace import StrategyAccumulationService
 from .planning import (
     PlanGenerator,
@@ -245,6 +246,7 @@ class PlanService:
         org_model: Optional[str] = None,
         api_key: Optional[str] = None,
         organization_id: Optional[int] = None,
+        capability_registry: Optional[CapabilityRegistry] = None,
     ) -> RecoveryResult:
         """
         Analyze a failed step and determine how to fix it.
@@ -259,6 +261,7 @@ class PlanService:
             org_model: Organization model ID for model resolution hierarchy
             api_key: API key for research_emery auth
             organization_id: Organization ID for research_emery RLS context
+            capability_registry: Registry for agent lookup (avoids creating new agents)
 
         Returns:
             RecoveryResult with corrected_parameters and confidence
@@ -272,6 +275,7 @@ class PlanService:
             org_model=org_model,
             api_key=api_key,
             organization_id=organization_id,
+            capability_registry=capability_registry,
         )
 
     @property
