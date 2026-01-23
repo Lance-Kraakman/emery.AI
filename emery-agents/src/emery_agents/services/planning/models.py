@@ -19,26 +19,7 @@ from emery_agents.models.skill_definition import SkillInputDefinition, SkillOutp
 from emery_agents.models.plan import Plan
 from emery_agents.services.protocols import Tool, ManagedAgent
 from emery_agents.services.capability_registry import CapabilityRegistry
-from emery_agents.services.context import SessionContext
-
-
-@dataclass(frozen=True)
-class AgentInfo:
-    """Agent information for template rendering."""
-
-    name: str
-    description: str
-    capabilities: str
-    tools: tuple[str, ...] = field(default_factory=tuple)
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dict for Jinja template."""
-        return {
-            "name": self.name,
-            "description": self.description,
-            "capabilities": self.capabilities,
-            "tools": list(self.tools),
-        }
+from emery_agents.services.context import SessionConfig, WorkspaceContext
 
 
 @dataclass(frozen=True)
@@ -87,16 +68,14 @@ class PlanGenerationRequest:
     previous_plan_json: Optional[str] = None
     user_feedback: Optional[str] = None
 
-    # Auth & model
-    org_model: Optional[str] = None
-    api_key: Optional[str] = None
-    organization_id: Optional[int] = None
+    # Auth & identity (unified in SessionConfig)
+    config: Optional[SessionConfig] = None
 
     # Capability discovery
     capability_registry: Optional[CapabilityRegistry] = None
 
-    # Pre-resolved session context (agents, tables, apps - eliminates discovery calls)
-    session_context: Optional[SessionContext] = None
+    # Pre-resolved workspace state (agents, tables - eliminates discovery calls)
+    workspace: Optional[WorkspaceContext] = None
 
 
 @dataclass
@@ -143,7 +122,5 @@ class FailureAnalysisRequest:
     # Execution state (serialized ledger summary)
     ledger_summary: str = ""
 
-    # Auth & model
-    org_model: Optional[str] = None
-    api_key: Optional[str] = None
-    organization_id: Optional[int] = None
+    # Auth & identity (unified in SessionConfig)
+    config: Optional[SessionConfig] = None

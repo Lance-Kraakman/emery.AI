@@ -1,23 +1,17 @@
 """
-Unified Session Context
+Session Config and Workspace Context
 
-Provides session-level context that's pre-resolved at session start,
-complementing the execution-scoped ExecutionState.
+Provides two focused dataclasses for context management:
+1. SessionConfig - Auth and identity (immutable, set at session start)
+2. WorkspaceContext - Pre-resolved workspace state for templates
 
-AIDEV-NOTE: This consolidates scattered context into a single source:
-- Session identifiers (org, user, workspace)
-- Pre-resolved agents and tools (no discovery needed)
-- Conversation history reference
-
-The existing ExecutionContext (entities/execution_context.py) handles
-task-specific context and remains unchanged. This module adds the
-session-level context that wraps around task execution.
+This separates concerns:
+- Config: Who is making the request (org, auth)
+- Context: What's available in the workspace (agents, tables)
 """
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
-
-from ..models.plan import Plan
 
 
 @dataclass
@@ -77,113 +71,63 @@ class AppInfo:
         }
 
 
-@dataclass
-class ToolInfo:
-    """Pre-resolved tool information."""
-    name: str
-    description: str
-    is_read_only: bool = False
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "name": self.name,
-            "description": self.description,
-            "is_read_only": self.is_read_only,
-        }
-
-
-@dataclass
-class SessionContext:
+@dataclass(frozen=True)
+class SessionConfig:
     """
-    Session-scoped context, resolved once at session start.
+    Auth and identity - immutable, set once at session start.
 
-    Contains everything needed for an execution session:
-    - Identity (org, user, workspace)
-    - Available agents and tools (pre-resolved, no discovery)
-    - Existing resources (tables, apps) for context-aware prompts
-    - Conversation history reference
-
-    Usage:
-        session = SessionContext.create(
-            session_id="abc123",
-            org_id="org_1",
-            workspace_id="ws_1",
-            model_provider=model_provider,
-        )
-
-        # Pass to planner/executor for prompt rendering
-        prompt_vars = session.to_prompt_context()
+    Contains configuration that doesn't change during execution:
+    - Organization identity
+    - Model preferences
+    - API credentials
     """
-    session_id: str
     org_id: str
-    user_id: str = ""
-    workspace_id: str = ""
+    org_model: Optional[str] = None
+    api_key: Optional[str] = None
 
-    # Pre-resolved at session start (no discovery calls needed)
+
+@dataclass
+class WorkspaceContext:
+    """
+    Pre-resolved workspace state for template rendering.
+
+    Contains what's available in the workspace:
+    - Available agents (from capability registry)
+    - Existing tables (from workspace)
+    - Existing apps (from workspace)
+
+    This is built at planning time and passed to templates.
+    """
     available_agents: List[AgentInfo] = field(default_factory=list)
-    available_tools: List[ToolInfo] = field(default_factory=list)
-
-    # Existing resources in workspace (for context-aware clarification)
     existing_tables: List[TableInfo] = field(default_factory=list)
     existing_apps: List[AppInfo] = field(default_factory=list)
 
-    # Conversation reference (actual messages stored elsewhere)
-    conversation_id: Optional[str] = None
+    @property
+    def has_tables(self) -> bool:
+        return len(self.existing_tables) > 0
 
-    # Model configuration
-    org_model: Optional[str] = None
+    @property
+    def has_agents(self) -> bool:
+        return len(self.available_agents) > 0
 
-    @classmethod
-    def create(
-        cls,
-        session_id: str,
-        org_id: str,
-        user_id: str = "",
-        workspace_id: str = "",
-        agents: Optional[List[AgentInfo]] = None,
-        tools: Optional[List[ToolInfo]] = None,
-        tables: Optional[List[TableInfo]] = None,
-        apps: Optional[List[AppInfo]] = None,
-        org_model: Optional[str] = None,
-    ) -> "SessionContext":
+    @property
+    def has_apps(self) -> bool:
+        return len(self.existing_apps) > 0
+
+    def to_template_context(self) -> Dict[str, Any]:
         """
-        Factory method to create a session context.
-
-        In production, agents/tools/resources would be resolved from
-        CapabilityRegistry and workspace at session start.
-        """
-        return cls(
-            session_id=session_id,
-            org_id=org_id,
-            user_id=user_id,
-            workspace_id=workspace_id,
-            available_agents=agents or [],
-            available_tools=tools or [],
-            existing_tables=tables or [],
-            existing_apps=apps or [],
-            org_model=org_model,
-        )
-
-    def to_prompt_context(self) -> Dict[str, Any]:
-        """
-        Build context dict for prompt template rendering.
+        Build dict for template rendering.
 
         Returns dict that can be passed directly to render_template().
-        Includes existing resources for context-aware clarification.
+        Templates select what they need via macros.
         """
         return {
-            "session_id": self.session_id,
-            "org_id": self.org_id,
-            "user_id": self.user_id,
-            "workspace_id": self.workspace_id,
             "available_agents": [a.to_dict() for a in self.available_agents],
-            "available_tools": [t.to_dict() for t in self.available_tools],
             "existing_tables": [t.to_dict() for t in self.existing_tables],
             "existing_apps": [a.to_dict() for a in self.existing_apps],
-            "has_agents": len(self.available_agents) > 0,
-            "has_tools": len(self.available_tools) > 0,
-            "has_tables": len(self.existing_tables) > 0,
-            "has_apps": len(self.existing_apps) > 0,
+            "has_agents": self.has_agents,
+            "has_tables": self.has_tables,
+            "has_apps": self.has_apps,
         }
 
     def get_agent_by_name(self, name: str) -> Optional[AgentInfo]:
@@ -193,56 +137,9 @@ class SessionContext:
                 return agent
         return None
 
-    def get_tool_by_name(self, name: str) -> Optional[ToolInfo]:
-        """Look up tool by name."""
-        for tool in self.available_tools:
-            if tool.name == name:
-                return tool
-        return None
-
     def get_table_by_name(self, name: str) -> Optional[TableInfo]:
         """Look up table by name."""
         for table in self.existing_tables:
             if table.name == name:
                 return table
         return None
-
-
-def build_prompt_context(
-    session: SessionContext,
-    task: str,
-    plan: Optional[Plan] = None,
-    step_results: Optional[Dict[str, Dict[str, Any]]] = None,
-    additional_context: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """
-    Build complete prompt context from session and execution state.
-
-    This is the single function to call when rendering any prompt template.
-    It combines session context with task-specific state.
-
-    Includes:
-    - Session identity (org, user, workspace)
-    - Available agents and tools (pre-resolved)
-    - Existing resources (tables, apps) for context-aware prompts
-    - Task-specific state (plan, step results)
-
-    Args:
-        session: Session-level context (agents, tools, resources, identity)
-        task: Current task/goal
-        plan: Current plan if any
-        step_results: Results from completed steps
-        additional_context: Any extra context to merge in
-
-    Returns:
-        Dict ready for render_template()
-    """
-    context = session.to_prompt_context()
-    context.update({
-        "task": task,
-        "plan": plan,
-        "step_results": step_results or {},
-    })
-    if additional_context:
-        context.update(additional_context)
-    return context

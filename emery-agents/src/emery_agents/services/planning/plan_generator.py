@@ -30,7 +30,7 @@ from emery_agents.tools.plan_output_tool import PlanOutputTool
 from emery_agents.tools.capability_discovery import create_discovery_tools
 from emery_agents.tools.ask_question_tool import AskQuestionTool
 from emery_agents.prompts import render_template
-from emery_agents.services.context import SessionContext
+from emery_agents.services.context import WorkspaceContext
 from .models import (
     PlanGenerationRequest,
     PlanGenerationResult,
@@ -117,8 +117,9 @@ class PlanGenerator:
 
         self._last_strategy_guidance = strategy_guidance
 
-        # Get model
-        model_id = self.model_provider.resolve_model_selection(org_model=request.org_model)
+        # Get model - use org_model from config if available
+        org_model = request.config.org_model if request.config else None
+        model_id = self.model_provider.resolve_model_selection(org_model=org_model)
         model = self.model_provider.get_model(model_id=model_id)
 
         # Get capability registry
@@ -145,7 +146,7 @@ class PlanGenerator:
             skill_inputs=request.skill_inputs,
             skill_outputs=request.skill_outputs,
             user_feedback=request.user_feedback,
-            session_context=request.session_context,
+            workspace=request.workspace,
         )
 
         # Create and run the single planning agent (no sub-agents)
@@ -199,7 +200,7 @@ class PlanGenerator:
         skill_inputs: Optional[List[SkillInputDefinition]],
         skill_outputs: Optional[List[SkillOutputDefinition]],
         user_feedback: Optional[str] = None,
-        session_context: Optional[SessionContext] = None,
+        workspace: Optional[WorkspaceContext] = None,
     ) -> str:
         """Build the planning prompt using J2 templates.
 
@@ -207,7 +208,7 @@ class PlanGenerator:
         - planning/planner.j2 for interactive planning
         - planning/skill_template_planner.j2 for skill template generation
 
-        If session_context is provided, it injects:
+        If workspace is provided, it injects:
         - available_agents: Pre-resolved agents (no discovery calls needed)
         - context: Existing tables/apps for context-aware clarification
         """
@@ -228,11 +229,11 @@ class PlanGenerator:
             "user_feedback": user_feedback,
         }
 
-        # Inject session context if available
-        if session_context:
-            prompt_context = session_context.to_prompt_context()
-            template_vars["available_agents"] = prompt_context.get("available_agents", [])
-            template_vars["context"] = prompt_context  # Full context for workspace_context.j2 macros
+        # Inject workspace context if available
+        if workspace:
+            template_context = workspace.to_template_context()
+            template_vars["available_agents"] = template_context.get("available_agents", [])
+            template_vars["context"] = template_context  # Full context for workspace_context.j2 macros
 
         return render_template(template_name, **template_vars)
 

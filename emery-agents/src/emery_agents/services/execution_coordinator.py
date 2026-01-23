@@ -45,7 +45,7 @@ from emery_agents.ace import (
 )
 from ..types import ExecutionMode
 from .planning.plan_differ import PlanDiffer
-from .context import SessionContext, AgentInfo, TableInfo, AppInfo
+from .context import SessionConfig, WorkspaceContext, AgentInfo, TableInfo, AppInfo
 
 logger = logging.getLogger(__name__)
 
@@ -449,6 +449,14 @@ class ExecutionCoordinator:
         self._org_model = org_model
         self._api_key = api_key
         self._organization_id = organization_id
+
+        # Unified config (single source of truth for auth/identity)
+        self._config = SessionConfig(
+            org_id=str(organization_id) if organization_id else "",
+            org_model=org_model,
+            api_key=api_key,
+        )
+
         self._current_phase = ExecutionPhase.PLANNING
         self._current_plan: Optional[Plan] = None
         self._ledger: Optional[TaskLedger] = None
@@ -820,12 +828,12 @@ class ExecutionCoordinator:
             org_model=self._org_model,
         )
 
-    def _build_session_context(
+    def _build_workspace_context(
         self,
         tools: Optional[List[Tool]] = None,
-    ) -> SessionContext:
+    ) -> WorkspaceContext:
         """
-        Build session context with existing workspace resources and available agents.
+        Build workspace context with existing workspace resources and available agents.
 
         This pre-resolves context at planning time so prompts can include:
         - Existing tables/apps for context-aware clarification
@@ -835,7 +843,7 @@ class ExecutionCoordinator:
             tools: Available tools (for extracting existing tables)
 
         Returns:
-            SessionContext with pre-resolved resources and agents
+            WorkspaceContext with pre-resolved resources and agents
         """
         # Get available agents from capability registry
         available_agents: List[AgentInfo] = []
@@ -854,7 +862,7 @@ class ExecutionCoordinator:
                         antipatterns=antipatterns if isinstance(antipatterns, list) else [],
                         capabilities=capabilities,
                     ))
-                logger.info(f"📋 Pre-loaded {len(available_agents)} agents for session context")
+                logger.info(f"📋 Pre-loaded {len(available_agents)} agents for workspace context")
             except Exception as e:
                 logger.warning(f"📋 Could not load agents from capability registry: {e}")
 
@@ -875,13 +883,10 @@ class ExecutionCoordinator:
                         logger.debug(f"📋 Could not get existing tables: {e}")
                     break
 
-        return SessionContext.create(
-            session_id=self._generate_session_id(),
-            org_id=str(self._organization_id) if self._organization_id else "",
-            agents=available_agents,
-            tables=existing_tables,
-            apps=existing_apps,
-            org_model=self._org_model,
+        return WorkspaceContext(
+            available_agents=available_agents,
+            existing_tables=existing_tables,
+            existing_apps=existing_apps,
         )
 
     def _parse_tables_from_result(self, result: Any) -> List[TableInfo]:
@@ -976,30 +981,28 @@ class ExecutionCoordinator:
             else:
                 logger.warning("🔬 Research intent detected but research tools unavailable")
 
-        # Build session context with pre-resolved agents and existing resources
-        session_context = self._build_session_context(tools=planning_tools)
+        # Build workspace context with pre-resolved agents and existing resources
+        workspace_context = self._build_workspace_context(tools=planning_tools)
 
         # Generate plan using LLM
         # Pass managed_agents so planner knows available agents for routing
         # Pass research_tools so planner can do web research if needed
-        # Pass session_context for pre-loaded agents and workspace state
+        # Pass config and workspace for pre-loaded agents and workspace state
         try:
             result = await self.plan_service.generate_plan(
                 basic_instructions=instructions,
                 context_tables=context_tables,
                 available_tools=[getattr(t, 'name', str(t)) for t in planning_tools],
                 goal=goal,
-                org_model=self._org_model,
                 tools=planning_tools,
                 managed_agents=agents,
                 research_tools=research_tools,
-                api_key=self._api_key,
-                organization_id=self._organization_id,
                 is_template_generation=is_template_generation,
                 conversation_history=self._conversation_history,  # ACE: Resolve references
                 strategy_service=self._strategy_service,  # ACE: Proven patterns
                 capability_registry=self._capability_registry,  # Capability discovery tools
-                session_context=session_context,  # Pre-resolved agents and workspace state
+                config=self._config,  # Auth and identity (single source of truth)
+                workspace=workspace_context,  # Pre-resolved agents and workspace state
             )
         except Exception as e:
             logger.error(f"❌ Plan generation failed: {e}")

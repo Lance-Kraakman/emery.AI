@@ -41,7 +41,7 @@ from .planning import (
     AgentInfo,
     ToolResultSummary,
 )
-from .context import SessionContext
+from .context import SessionConfig, WorkspaceContext
 
 logger = logging.getLogger(__name__)
 
@@ -92,21 +92,19 @@ class PlanService:
         context_tables: Optional[ResolvedContext] = None,
         available_tools: Optional[List[str]] = None,
         goal: Optional[str] = None,
-        org_model: Optional[str] = None,
         tools: Optional[List[Tool]] = None,
         managed_agents: Optional[List[Any]] = None,
         research_tools: Optional[List[Any]] = None,
-        api_key: Optional[str] = None,
         skill_inputs: Optional[List[SkillInputDefinition]] = None,
         previous_plan_json: Optional[str] = None,
         user_feedback: Optional[str] = None,
-        organization_id: Optional[int] = None,
         skill_outputs: Optional[List[SkillOutputDefinition]] = None,
         is_template_generation: bool = False,
         conversation_history: Optional[List[Any]] = None,
         strategy_service: Optional[StrategyAccumulationService] = None,
         capability_registry: Optional[Any] = None,
-        session_context: Optional[SessionContext] = None,
+        config: Optional[SessionConfig] = None,
+        workspace: Optional[WorkspaceContext] = None,
     ) -> PlanGenerationResult:
         """
         Generate plan using phased domain routing.
@@ -119,20 +117,19 @@ class PlanService:
             context_tables: Resolved context mappings (tables available for the plan)
             available_tools: Tool names as strings (for logging, unused)
             goal: Optional explicit goal (defaults to LLM-generated goal)
-            org_model: Organization model ID for model resolution hierarchy
             tools: Actual tool objects (for prompt template)
             managed_agents: Available managed agents (planner sees their descriptions)
             research_tools: Optional web research tools (web_search, visit_webpage)
-            api_key: Optional API key for model providers
             skill_inputs: Optional skill input definitions for variable-aware planning
             previous_plan_json: Optional previous plan JSON for regeneration with feedback
             user_feedback: Optional user feedback for plan regeneration
-            organization_id: Optional organization ID for research_agent (RLS context)
             skill_outputs: Optional skill output definitions for result-aware planning
             is_template_generation: If True, plan is for a reusable skill (no hardcoded IDs)
             conversation_history: Optional chat history for resolving references
             strategy_service: Optional service for surfacing proven patterns
             capability_registry: Optional registry for capability discovery
+            config: Session config with auth/identity (org_id, org_model, api_key)
+            workspace: Pre-resolved workspace state (agents, tables, apps)
 
         Returns:
             PlanGenerationResult with either:
@@ -153,11 +150,9 @@ class PlanService:
             is_template_generation=is_template_generation,
             previous_plan_json=previous_plan_json,
             user_feedback=user_feedback,
-            org_model=org_model,
-            api_key=api_key,
-            organization_id=organization_id,
             capability_registry=capability_registry,
-            session_context=session_context,
+            config=config,
+            workspace=workspace,
         )
 
         # Delegate to generator (uses capability-based discovery)
