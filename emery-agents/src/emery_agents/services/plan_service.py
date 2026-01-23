@@ -41,6 +41,7 @@ from .planning import (
     AgentInfo,
     ToolResultSummary,
 )
+from .context import SessionContext
 
 logger = logging.getLogger(__name__)
 
@@ -105,6 +106,7 @@ class PlanService:
         conversation_history: Optional[List[Any]] = None,
         strategy_service: Optional[StrategyAccumulationService] = None,
         capability_registry: Optional[Any] = None,
+        session_context: Optional[SessionContext] = None,
     ) -> PlanGenerationResult:
         """
         Generate plan using phased domain routing.
@@ -155,6 +157,7 @@ class PlanService:
             api_key=api_key,
             organization_id=organization_id,
             capability_registry=capability_registry,
+            session_context=session_context,
         )
 
         # Delegate to generator (uses capability-based discovery)

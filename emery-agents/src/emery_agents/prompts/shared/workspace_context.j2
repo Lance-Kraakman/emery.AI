@@ -1,0 +1,89 @@
+{#
+Workspace Context Macros
+
+Shared macros for rendering workspace state and available agents
+in any prompt template. Used by classifier and planner to provide
+context-aware clarification and agent selection.
+
+Usage:
+    {% from "shared/workspace_context.j2" import render_workspace, render_agents %}
+
+    {{ render_workspace(context) }}
+    {{ render_agents(available_agents) }}
+#}
+
+{# Renders current workspace state (tables, apps) for context-aware prompts #}
+{% macro render_workspace(context) %}
+## Current Workspace State
+
+{% if context.existing_tables %}
+**Existing Tables ({{ context.existing_tables | length }}):**
+{% for table in context.existing_tables[:10] %}
+- `{{ table.name }}`{% if table.field_count %} ({{ table.field_count }} fields){% endif %}
+{% endfor %}
+{% if context.existing_tables | length > 10 %}
+... and {{ context.existing_tables | length - 10 }} more tables
+{% endif %}
+{% else %}
+No tables exist yet in this workspace.
+{% endif %}
+
+{% if context.existing_apps %}
+
+**Existing Apps ({{ context.existing_apps | length }}):**
+{% for app in context.existing_apps[:5] %}
+- `{{ app.name }}`{% if app.description %}: {{ app.description[:50] }}{% endif %}
+{% endfor %}
+{% if context.existing_apps | length > 5 %}
+... and {{ context.existing_apps | length - 5 }} more apps
+{% endif %}
+{% endif %}
+{% endmacro %}
+
+
+{# Renders available agents for delegation (eliminates need for discovery tools) #}
+{% macro render_agents(agents) %}
+{% if agents %}
+## Available Agents
+
+Use these agents by setting `target_agent` in plan steps. No discovery needed.
+
+{% for agent in agents %}
+### {{ agent.name }}
+- **Use for:** {{ agent.description }}
+{% if agent.examples %}- **Example tasks:** {{ agent.examples | join(', ') }}{% endif %}
+{% if agent.antipatterns %}- **Do NOT use for:** {{ agent.antipatterns | join(', ') }}{% endif %}
+
+{% endfor %}
+{% endif %}
+{% endmacro %}
+
+
+{# Renders a compact agent selection table #}
+{% macro render_agent_table(agents) %}
+{% if agents %}
+## Agent Selection
+
+| Agent | Use For |
+|-------|---------|
+{% for agent in agents %}
+| `{{ agent.name }}` | {{ agent.description[:60] }}{% if agent.description | length > 60 %}...{% endif %} |
+{% endfor %}
+{% endif %}
+{% endmacro %}
+
+
+{# Renders context-aware clarification guidance #}
+{% macro render_clarification_guidance(context) %}
+## Context-Aware Clarification
+
+{% if context.has_tables %}
+When user asks to create something vague (like "create a database"):
+- **Show what exists:** "You have {{ context.existing_tables | length }} existing table(s): {{ context.existing_tables[:3] | map(attribute='name') | join(', ') }}{% if context.existing_tables | length > 3 %}...{% endif %}"
+- **Ask with context:** "Would you like to add to these existing tables or create something new?"
+{% else %}
+When user asks to create something vague:
+- Don't ask WHERE (always Emery)
+- DO ask WHAT: "What entities/tables do you need?" or "What would you like to track?"
+{% endif %}
+{% endmacro %}

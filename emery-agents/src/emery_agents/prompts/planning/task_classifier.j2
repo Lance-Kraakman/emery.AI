@@ -4,11 +4,19 @@ Task Classifier Template - Simplified
 Determines execution mode (DIRECT vs PLAN_AND_APPROVE) and whether
 clarification is needed. Does NOT route to specific agents - that's
 handled by capability discovery in the chat planner.
+
+Now includes workspace context for context-aware clarification.
 #}
+{% from "shared/workspace_context.j2" import render_workspace, render_clarification_guidance %}
+
 Analyze this user task and classify how it should be handled.
 
 ## User Task
 {{ task }}
+{% if context %}
+
+{{ render_workspace(context) }}
+{% endif %}
 
 ## Default Assumptions
 
@@ -90,14 +98,29 @@ Do NOT ask clarifying questions when:
 
 **Bias toward asking WHAT**: If the user hasn't specified what they want to create, ask. Don't create vague plans.
 
+### Context-Aware Questions
+{% if context and context.has_tables %}
+
+**IMPORTANT:** The workspace already has existing tables. When asking clarification:
+- Mention what already exists: "You have {{ context.existing_tables | length }} existing table(s)"
+- Ask if they want to modify existing or create new
+- Example: "You have tables: {% for t in context.existing_tables[:3] %}{{ t.name }}{% if not loop.last %}, {% endif %}{% endfor %}. Would you like to add to these or create something new?"
+{% endif %}
+
 ### Question Guidelines
 
 When asking questions about WHAT to create:
 - Ask about the core entities/tables needed
 - Ask about the key fields or data to track
 - Phrase as choices when possible
+{% if context and context.has_tables %}
+- Reference existing tables when relevant
+{% endif %}
 
 Good questions:
+{% if context and context.has_tables %}
+- "You have existing tables ({% for t in context.existing_tables[:3] %}{{ t.name }}{% if not loop.last %}, {% endif %}{% endfor %}). Do you want to add more tables or modify these?"
+{% endif %}
 - "What would you like to track in this database? (e.g., customers, orders, inventory)"
 - "What information should each record contain?"
 - "What's the main purpose - tracking sales, managing contacts, or something else?"

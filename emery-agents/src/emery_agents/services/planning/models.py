@@ -19,6 +19,7 @@ from emery_agents.models.skill_definition import SkillInputDefinition, SkillOutp
 from emery_agents.models.plan import Plan
 from emery_agents.services.protocols import Tool, ManagedAgent
 from emery_agents.services.capability_registry import CapabilityRegistry
+from emery_agents.services.context import SessionContext
 
 
 @dataclass(frozen=True)
@@ -93,6 +94,9 @@ class PlanGenerationRequest:
 
     # Capability discovery
     capability_registry: Optional[CapabilityRegistry] = None
+
+    # Pre-resolved session context (agents, tables, apps - eliminates discovery calls)
+    session_context: Optional[SessionContext] = None
 
 
 @dataclass

@@ -23,6 +23,7 @@ from ..agents.interrupt_classifier import (
 )
 from ..models.plan import Plan, PlanStep, PlanStatus, PlanStepStatus, RecoveryResult, create_plan
 from ..models.task_ledger import TaskLedger, create_ledger_from_plan, LedgerEventType
+from ..models.capability import CapabilityType
 from ..utils.toon_format import to_toon
 from ..utils.session_logger import SessionLogger, get_session_logger
 from ..models.context_mapping import ResolvedContext
@@ -44,6 +45,7 @@ from emery_agents.ace import (
 )
 from ..types import ExecutionMode
 from .planning.plan_differ import PlanDiffer
+from .context import SessionContext, AgentInfo, TableInfo, AppInfo
 
 logger = logging.getLogger(__name__)
 
@@ -818,6 +820,113 @@ class ExecutionCoordinator:
             org_model=self._org_model,
         )
 
+    def _build_session_context(
+        self,
+        tools: Optional[List[Tool]] = None,
+    ) -> SessionContext:
+        """
+        Build session context with existing workspace resources and available agents.
+
+        This pre-resolves context at planning time so prompts can include:
+        - Existing tables/apps for context-aware clarification
+        - Available agents for delegation (eliminates discovery tool calls)
+
+        Args:
+            tools: Available tools (for extracting existing tables)
+
+        Returns:
+            SessionContext with pre-resolved resources and agents
+        """
+        # Get available agents from capability registry
+        available_agents: List[AgentInfo] = []
+        if self._capability_registry:
+            try:
+                for cap in self._capability_registry.by_type(CapabilityType.AGENT):
+                    # Extract examples and antipatterns from metadata if present
+                    examples = cap.metadata.get("examples", [])
+                    antipatterns = cap.metadata.get("antipatterns", [])
+                    capabilities = cap.actions  # Use actions as capabilities
+
+                    available_agents.append(AgentInfo(
+                        name=cap.name,
+                        description=cap.description,
+                        examples=examples if isinstance(examples, list) else [],
+                        antipatterns=antipatterns if isinstance(antipatterns, list) else [],
+                        capabilities=capabilities,
+                    ))
+                logger.info(f"📋 Pre-loaded {len(available_agents)} agents for session context")
+            except Exception as e:
+                logger.warning(f"📋 Could not load agents from capability registry: {e}")
+
+        # Get existing tables from read-only tools if available
+        existing_tables: List[TableInfo] = []
+        existing_apps: List[AppInfo] = []
+        if tools:
+            for tool in tools:
+                tool_name = getattr(tool, 'name', '')
+                # Try to get existing tables from list_tables tool
+                if 'list_tables' in tool_name or tool_name == 'list_tables':
+                    try:
+                        result = tool.forward() if hasattr(tool, 'forward') else None
+                        if result:
+                            existing_tables = self._parse_tables_from_result(result)
+                            logger.info(f"📋 Found {len(existing_tables)} existing tables")
+                    except Exception as e:
+                        logger.debug(f"📋 Could not get existing tables: {e}")
+                    break
+
+        return SessionContext.create(
+            session_id=self._generate_session_id(),
+            org_id=str(self._organization_id) if self._organization_id else "",
+            agents=available_agents,
+            tables=existing_tables,
+            apps=existing_apps,
+            org_model=self._org_model,
+        )
+
+    def _parse_tables_from_result(self, result: Any) -> List[TableInfo]:
+        """
+        Parse table information from list_tables tool result.
+
+        Args:
+            result: Result from list_tables tool (string or structured)
+
+        Returns:
+            List of TableInfo objects
+        """
+        tables: List[TableInfo] = []
+
+        if isinstance(result, str):
+            # Try to parse string result - simple line-by-line parsing
+            for line in result.split('\n'):
+                line = line.strip()
+                if line and not line.startswith('#') and not line.startswith('No '):
+                    # Extract table name from formats like "- table_name (5 fields)"
+                    if line.startswith('- ') or line.startswith('* '):
+                        line = line[2:]
+                    # Remove field count if present
+                    if '(' in line:
+                        name = line.split('(')[0].strip().strip('`')
+                    else:
+                        name = line.strip().strip('`')
+                    if name:
+                        tables.append(TableInfo(name=name))
+
+        elif isinstance(result, list):
+            # Handle list of dicts or strings
+            for item in result:
+                if isinstance(item, dict):
+                    tables.append(TableInfo(
+                        name=item.get('name', ''),
+                        id=item.get('id'),
+                        field_count=item.get('field_count', 0),
+                        fields=item.get('fields', []),
+                    ))
+                elif isinstance(item, str):
+                    tables.append(TableInfo(name=item))
+
+        return tables
+
     async def create_plan(
         self,
         goal: str,
@@ -867,10 +976,13 @@ class ExecutionCoordinator:
             else:
                 logger.warning("🔬 Research intent detected but research tools unavailable")
 
+        # Build session context with pre-resolved agents and existing resources
+        session_context = self._build_session_context(tools=planning_tools)
+
         # Generate plan using LLM
         # Pass managed_agents so planner knows available agents for routing
         # Pass research_tools so planner can do web research if needed
-        # Context gathering is done via research_emery (created inside PlanService)
+        # Pass session_context for pre-loaded agents and workspace state
         try:
             result = await self.plan_service.generate_plan(
                 basic_instructions=instructions,
@@ -887,6 +999,7 @@ class ExecutionCoordinator:
                 conversation_history=self._conversation_history,  # ACE: Resolve references
                 strategy_service=self._strategy_service,  # ACE: Proven patterns
                 capability_registry=self._capability_registry,  # Capability discovery tools
+                session_context=session_context,  # Pre-resolved agents and workspace state
             )
         except Exception as e:
             logger.error(f"❌ Plan generation failed: {e}")
