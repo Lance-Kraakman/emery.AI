@@ -1,0 +1,36 @@
+Analyze the user's request to determine what information is clear vs. what needs clarification.
+
+## User Request
+{{ user_request }}
+{% if gathered_context %}
+
+## Gathered Context
+{{ gathered_context }}
+{% endif %}
+
+## Domain Concerns for {{ agent_name }}
+These are the things this agent needs to know to do its job:
+
+{% for concern in concerns %}
+- **{{ concern.id }}** ({{ concern.category }}): {{ concern.description }}
+  Check: {{ concern.check_prompt }}
+  Question template: {{ concern.question_template }}
+  Required: {{ 'Yes' if concern.required else 'No' }}
+{% endfor %}
+
+## Instructions
+
+For EACH concern above:
+1. Check if the user's request clearly addresses it
+2. If CLEAR: Add the concern ID to clear_concerns
+3. If UNCLEAR: Add to gaps with:
+   - The concern_id
+   - What context you found (if any)
+   - Why it's still unclear
+   - A specific question to ask (use the template but make it specific to this request)
+   - Optional answer options if applicable
+
+Be CONSERVATIVE - only mark as unclear if truly ambiguous.
+If the user gave specific details, respect them as clear.
+
+Call the report_gap_analysis tool with your analysis.

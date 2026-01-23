@@ -110,9 +110,11 @@ class PlanGenerator:
         tools: List[Any] = [plan_output_tool]
 
         # Add capability discovery tools if registry available
-        if self.capability_registry:
+        # Prefer request.capability_registry, fall back to self for backward compat
+        registry = request.capability_registry or self.capability_registry
+        if registry:
             from emery_agents.tools.capability_discovery import create_discovery_tools
-            discovery_tools = create_discovery_tools(self.capability_registry)
+            discovery_tools = create_discovery_tools(registry)
             tools.extend(discovery_tools)
             logger.info(f"Added {len(discovery_tools)} capability discovery tools")
 

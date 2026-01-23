@@ -91,6 +91,9 @@ class PlanGenerationRequest:
     api_key: Optional[str] = None
     organization_id: Optional[int] = None
 
+    # Capability discovery
+    capability_registry: Optional[Any] = None
+
 
 @dataclass
 class PlanGenerationResult:

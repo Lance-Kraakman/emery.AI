@@ -27,6 +27,7 @@ from ..utils.toon_format import to_toon
 from ..utils.session_logger import SessionLogger, get_session_logger
 from ..models.context_mapping import ResolvedContext
 from ..models.execution import StepExecutionResult, EvaluatorInput, ReplanContext
+from ..prompts import render_template
 from ..tools.tool_modes import ToolMode, filter_tools_for_mode
 from .plan_service import PlanService
 from .plan_step_executor import PlanStepExecutor
@@ -1608,28 +1609,16 @@ class ExecutionCoordinator:
         if self._ledger.execution_context:
             curated_context = self._ledger.execution_context.format_insights(max_tokens=1000)
 
-        # Build synthesis prompt
+        # Build synthesis prompt from template
         goal = self._current_plan.goal if self._current_plan else "Unknown"
+        formatted_results = self._format_step_results_for_synthesis(step_results)
 
-        synthesis_prompt = f"""You are synthesizing the results of a completed task execution.
-
-## Original Goal
-{goal}
-
-## Step Results
-{self._format_step_results_for_synthesis(step_results)}
-
-## Curated Insights
-{curated_context if curated_context else "No additional insights."}
-
-## Instructions
-Create a coherent, well-organized summary that:
-1. Directly addresses the original goal
-2. Synthesizes all step results into a unified answer
-3. Highlights key findings and important details
-4. Is formatted for easy reading (use markdown)
-
-Do NOT just list the steps. Create a synthesized, coherent response."""
+        synthesis_prompt = render_template(
+            "execution/step_synthesis.j2",
+            goal=goal,
+            step_results=formatted_results,
+            curated_context=curated_context,
+        )
 
         # Use evaluator model for synthesis (runs synchronously in thread)
         if not self.evaluator_factory:
@@ -1688,16 +1677,13 @@ Do NOT just list the steps. Create a synthesized, coherent response."""
             evaluator, eval_tool = self.evaluator_factory()
             ledger_data = self.get_ledger_for_evaluator() or {}
 
-            # Build evaluation prompt with TOON for minimal token usage
+            # Build evaluation prompt from template with TOON for minimal token usage
             goal = self._current_plan.goal if self._current_plan else "Unknown"
-            prompt = f"""
-Goal: {goal}
-
-Ledger State:
-{to_toon(ledger_data)}
-
-Analyze this state and call the report_evaluation tool with your assessment.
-"""
+            prompt = render_template(
+                "execution/step_evaluation.j2",
+                goal=goal,
+                ledger_state=to_toon(ledger_data),
+            )
 
             # Run evaluator - it will call report_evaluation tool
             # Wrap in thread since evaluator.run() is synchronous (calls blocking LLM APIs)

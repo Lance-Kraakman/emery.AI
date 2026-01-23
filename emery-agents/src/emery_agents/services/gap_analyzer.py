@@ -225,51 +225,14 @@ class GapAnalyzer:
         gathered_context: Optional[str],
         concerns: List[DomainConcern],
     ) -> str:
-        """Build prompt for gap analysis."""
-        # Format concerns for the prompt
-        concerns_text = "\n".join([
-            f"- **{c.id}** ({c.category}): {c.description}\n"
-            f"  Check: {c.check_prompt}\n"
-            f"  Question template: {c.question_template}\n"
-            f"  Required: {'Yes' if c.required else 'No'}"
-            for c in concerns
-        ])
-
-        context_section = ""
-        if gathered_context:
-            context_section = f"""
-## Gathered Context
-{gathered_context}
-"""
-
-        return f"""Analyze the user's request to determine what information is clear vs. what needs clarification.
-
-## User Request
-{user_request}
-{context_section}
-
-## Domain Concerns for {agent_name}
-These are the things this agent needs to know to do its job:
-
-{concerns_text}
-
-## Instructions
-
-For EACH concern above:
-1. Check if the user's request clearly addresses it
-2. If CLEAR: Add the concern ID to clear_concerns
-3. If UNCLEAR: Add to gaps with:
-   - The concern_id
-   - What context you found (if any)
-   - Why it's still unclear
-   - A specific question to ask (use the template but make it specific to this request)
-   - Optional answer options if applicable
-
-Be CONSERVATIVE - only mark as unclear if truly ambiguous.
-If the user gave specific details, respect them as clear.
-
-Call the report_gap_analysis tool with your analysis.
-"""
+        """Build prompt for gap analysis using J2 template."""
+        return render_template(
+            "planning/gap_analysis.j2",
+            agent_name=agent_name,
+            user_request=user_request,
+            gathered_context=gathered_context,
+            concerns=concerns,
+        )
 
     def _parse_analysis_result(
         self,

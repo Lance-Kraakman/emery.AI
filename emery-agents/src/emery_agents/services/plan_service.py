@@ -133,7 +133,7 @@ class PlanService:
         Returns:
             Plan object with generated steps, context, and analysis
         """
-        # Build request dataclass
+        # Build request dataclass (includes all config for plan generation)
         request = PlanGenerationRequest(
             basic_instructions=basic_instructions,
             context_tables=context_tables,
@@ -150,11 +150,8 @@ class PlanService:
             org_model=org_model,
             api_key=api_key,
             organization_id=organization_id,
+            capability_registry=capability_registry,
         )
-
-        # Set capability_registry on generator for discovery tools
-        if capability_registry:
-            self._generator.capability_registry = capability_registry
 
         # Delegate to generator (uses capability-based discovery)
         result = await self._generator.generate(

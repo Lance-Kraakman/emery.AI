@@ -116,10 +116,16 @@ def extract_action_step(step: ActionStep, index: int) -> StepProgressDict:
 
     # Add skill metadata for managed agents and skill-related tools
     # This enables UI to show skill execution progress
-    MANAGED_AGENTS = {"skill_builder", "document_builder", "table_builder", "schema_builder"}
-    SKILL_TOOLS = {"tool_executor"}
+    # Pattern-based detection: *_builder, *_agent, tool_executor, skill-*
+    is_managed_agent = (
+        tool_name.endswith("_builder") or
+        tool_name.endswith("_agent") or
+        tool_name == "tool_executor" or
+        tool_name == "system_designer" or
+        tool_name.startswith("skill-")
+    )
 
-    if tool_name in MANAGED_AGENTS or tool_name in SKILL_TOOLS or tool_name.startswith("skill-"):
+    if is_managed_agent:
         metadata_dict["skill_name"] = tool_name
         # Determine status based on observations (completed if we have output)
         metadata_dict["skill_status"] = "completed" if content else "executing"
@@ -164,26 +170,13 @@ def build_skill_message(tool_name: str, tool_args: str, observations: str) -> st
         if tool:
             messages.append(f"Using tool: {tool}")
 
-    elif tool_name == "schema_builder":
-        # Schema builder working on database schema
+    elif tool_name.endswith("_builder") or tool_name.endswith("_agent") or tool_name == "system_designer":
+        # Generic handler for all managed agents (*_builder, *_agent, system_designer)
         task = args.get("task", args.get("request", ""))
         if task:
-            messages.append(f"Schema task: {task[:100]}{'...' if len(task) > 100 else ''}")
-
-    elif tool_name == "table_builder":
-        task = args.get("task", "")
-        if task:
-            messages.append(f"Table task: {task[:100]}{'...' if len(task) > 100 else ''}")
-
-    elif tool_name == "skill_builder":
-        task = args.get("task", "")
-        if task:
-            messages.append(f"Building skill: {task[:100]}{'...' if len(task) > 100 else ''}")
-
-    elif tool_name == "document_builder":
-        task = args.get("task", "")
-        if task:
-            messages.append(f"Document task: {task[:100]}{'...' if len(task) > 100 else ''}")
+            # Format agent name for display: schema_builder -> Schema
+            display_name = tool_name.replace("_builder", "").replace("_agent", "").replace("_", " ").title()
+            messages.append(f"{display_name}: {task[:100]}{'...' if len(task) > 100 else ''}")
 
     elif tool_name.startswith("skill-"):
         # Generic skill call

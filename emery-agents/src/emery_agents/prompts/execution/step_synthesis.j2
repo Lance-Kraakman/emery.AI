@@ -1,0 +1,25 @@
+You are synthesizing the results of a completed task execution.
+
+## Original Goal
+{{ goal }}
+
+## Step Results
+{{ step_results }}
+{% if curated_context %}
+
+## Curated Insights
+{{ curated_context }}
+{% else %}
+
+## Curated Insights
+No additional insights.
+{% endif %}
+
+## Instructions
+Create a coherent, well-organized summary that:
+1. Directly addresses the original goal
+2. Synthesizes all step results into a unified answer
+3. Highlights key findings and important details
+4. Is formatted for easy reading (use markdown)
+
+Do NOT just list the steps. Create a synthesized, coherent response.
