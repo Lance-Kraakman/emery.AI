@@ -107,12 +107,6 @@ class Capability:
         """Extract name without type prefix."""
         return self.id.split(":", 1)[1]
 
-    def matches_query(self, query: str) -> bool:
-        """Check if this capability matches a search query (basic keyword match)."""
-        query_lower = query.lower()
-        searchable = f"{self.name} {self.description} {' '.join(self.actions)} {' '.join(self.entities)}".lower()
-        return query_lower in searchable
-
     def to_summary(self) -> dict[str, Any]:
         """Convert to summary dict for planner context."""
         return {

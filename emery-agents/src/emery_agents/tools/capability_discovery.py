@@ -124,7 +124,7 @@ class SearchIntegrationsTool(Tool):
         if not matches:
             available = self.registry.get_available(self.org_id)
             if available:
-                domains = list(set(c.domain for c in available))[:5]
+                domains = sorted(set(c.domain for c in available))[:5]
                 return f"No match for '{query}'. Available domains: {domains}"
             else:
                 return "No available integrations in the system."
@@ -150,7 +150,7 @@ class ListCapabilitiesTool(Tool):
             "description": "Domain to list (emery, gmail, slack, etc.)",
             "nullable": True,
         },
-        "type": {
+        "cap_type": {
             "type": "string",
             "description": "Type filter: 'agent', 'skill', or 'tool'",
             "nullable": True,
@@ -170,7 +170,7 @@ class ListCapabilitiesTool(Tool):
     def forward(
         self,
         domain: Optional[str] = None,
-        type: Optional[str] = None,
+        cap_type: Optional[str] = None,
         limit: Optional[int] = None,
     ) -> str:
         """List capabilities by domain or type."""
@@ -179,13 +179,13 @@ class ListCapabilitiesTool(Tool):
         if domain:
             caps = self.registry.by_domain(domain)
             context = f"domain='{domain}'"
-        elif type:
+        elif cap_type:
             try:
-                cap_type = CapabilityType(type.lower())
-                caps = self.registry.by_type(cap_type)
-                context = f"type='{type}'"
+                type_enum = CapabilityType(cap_type.lower())
+                caps = self.registry.by_type(type_enum)
+                context = f"type='{cap_type}'"
             except ValueError:
-                return f"Invalid type: '{type}'. Use 'agent', 'skill', or 'tool'."
+                return f"Invalid type: '{cap_type}'. Use 'agent', 'skill', or 'tool'."
         else:
             caps = self.registry.all()
             context = "all"
@@ -230,7 +230,12 @@ class GetCapabilityTool(Tool):
 
         if not cap:
             all_ids = [c.id for c in self.registry.all()]
-            similar = [id for id in all_ids if capability_id.split(":")[-1] in id][:3]
+            # Match on name portion only, case-insensitive
+            search_term = capability_id.split(":")[-1].lower()
+            similar = [
+                cid for cid in all_ids
+                if search_term in cid.split(":")[-1].lower()
+            ][:3]
             if similar:
                 return f"Not found: '{capability_id}'. Did you mean: {similar}?"
             return f"Not found: '{capability_id}'"

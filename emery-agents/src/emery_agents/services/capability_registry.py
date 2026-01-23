@@ -61,6 +61,9 @@ class CapabilityRegistry:
         """Remove a capability from the registry. Returns True if found."""
         if capability_id in self._capabilities:
             del self._capabilities[capability_id]
+            # Clean up any enabled references to this capability
+            for enabled_set in self._enabled.values():
+                enabled_set.discard(capability_id)
             return True
         return False
 
@@ -171,6 +174,49 @@ class CapabilityRegistry:
             c for c in self._capabilities.values() if c.domain.lower() == domain_lower
         ]
 
+    def _semantic_search(
+        self,
+        query: str,
+        candidates: list[Capability],
+        limit: int,
+    ) -> list[Capability]:
+        """
+        Perform semantic search on a list of capabilities.
+
+        Uses HuggingFace embeddings to find capabilities that match the query
+        semantically (not just keyword matching).
+
+        Args:
+            query: Search query string
+            candidates: Capabilities to search within
+            limit: Maximum results to return
+
+        Returns:
+            List of matching capabilities ranked by similarity
+        """
+        if not candidates:
+            return []
+
+        from .embedding_service import get_embedding, cosine_similarity
+
+        query_embedding = get_embedding(query)
+
+        # Score each capability by similarity
+        scored: list[tuple[float, Capability]] = []
+        for cap in candidates:
+            # Build searchable text from capability metadata
+            cap_text = f"{cap.name} {cap.description} {' '.join(cap.actions)} {' '.join(cap.entities)}"
+            cap_embedding = get_embedding(cap_text)
+            score = cosine_similarity(query_embedding, cap_embedding)
+            scored.append((score, cap))
+
+        # Sort by score descending
+        scored.sort(key=lambda x: x[0], reverse=True)
+
+        results = [cap for _, cap in scored[:limit]]
+        logger.debug(f"Semantic search '{query}' → {len(results)} results")
+        return results
+
     def search(
         self,
         query: str,
@@ -178,12 +224,11 @@ class CapabilityRegistry:
         capability_type: Optional[CapabilityType] = None,
         domain: Optional[str] = None,
         limit: int = 10,
-        use_semantic: bool = True,
     ) -> list[Capability]:
         """
         Search capabilities using semantic similarity.
 
-        Uses Google embeddings to find capabilities that match the query
+        Uses HuggingFace embeddings to find capabilities that match the query
         semantically (not just keyword matching). This handles synonyms
         and related concepts.
 
@@ -192,7 +237,6 @@ class CapabilityRegistry:
             capability_type: Optional type filter (AGENT, SKILL, TOOL)
             domain: Optional domain filter (emery, gmail, etc.)
             limit: Maximum results to return (default 10)
-            use_semantic: If True (default), use semantic search. If False, use keyword.
 
         Returns:
             List of matching capabilities ranked by relevance, limited to `limit`
@@ -206,41 +250,7 @@ class CapabilityRegistry:
             domain_lower = domain.lower()
             candidates = [c for c in candidates if c.domain.lower() == domain_lower]
 
-        if not candidates:
-            return []
-
-        if not use_semantic:
-            # Fallback to keyword matching
-            matches = [c for c in candidates if c.matches_query(query)]
-            return matches[:limit]
-
-        # Semantic search using embeddings
-        try:
-            from .embedding_service import get_embedding, cosine_similarity
-
-            query_embedding = get_embedding(query)
-
-            # Score each capability by similarity
-            scored: list[tuple[float, Capability]] = []
-            for cap in candidates:
-                # Build searchable text from capability metadata
-                cap_text = f"{cap.name} {cap.description} {' '.join(cap.actions)} {' '.join(cap.entities)}"
-                cap_embedding = get_embedding(cap_text)
-                score = cosine_similarity(query_embedding, cap_embedding)
-                scored.append((score, cap))
-
-            # Sort by score descending
-            scored.sort(key=lambda x: x[0], reverse=True)
-
-            results = [cap for _, cap in scored[:limit]]
-            logger.debug(f"Semantic search '{query}' → {len(results)} results")
-            return results
-
-        except Exception as e:
-            # Fallback to keyword matching if embeddings fail
-            logger.warning(f"Semantic search failed, falling back to keyword: {e}")
-            matches = [c for c in candidates if c.matches_query(query)]
-            return matches[:limit]
+        return self._semantic_search(query, candidates, limit)
 
     def list_domains(self) -> list[str]:
         """Return list of unique domains across all capabilities."""
@@ -264,7 +274,7 @@ class CapabilityRegistry:
         limit: int = 5,
     ) -> list[Capability]:
         """
-        Search within org's enabled capabilities.
+        Search within org's enabled capabilities using semantic similarity.
 
         Args:
             query: Search query string
@@ -272,11 +282,10 @@ class CapabilityRegistry:
             limit: Maximum results
 
         Returns:
-            Matching enabled capabilities
+            Matching enabled capabilities ranked by relevance
         """
         enabled = self.get_enabled(org_id)
-        matches = [c for c in enabled if c.matches_query(query)]
-        return matches[:limit]
+        return self._semantic_search(query, enabled, limit)
 
     def search_available(
         self,
@@ -286,7 +295,7 @@ class CapabilityRegistry:
         limit: int = 5,
     ) -> list[Capability]:
         """
-        Search within capabilities NOT enabled for org.
+        Search within capabilities NOT enabled for org using semantic similarity.
 
         Args:
             query: Search query string
@@ -294,8 +303,7 @@ class CapabilityRegistry:
             limit: Maximum results
 
         Returns:
-            Matching available capabilities
+            Matching available capabilities ranked by relevance
         """
         available = self.get_available(org_id)
-        matches = [c for c in available if c.matches_query(query)]
-        return matches[:limit]
+        return self._semantic_search(query, available, limit)
