@@ -113,6 +113,7 @@ services:
       PYTHONPATH: /usr/src/app/src
       WORKER_ADDRESS: agent-chat-integration:50051        # Chat service (internal network)
       USE_PIPEDREAM_TOOLS: true
+      S3_BUCKET_NAME: emery-files
       NEXTJS_BASE_URL: http://app-integration:3000
       EMERY_DEBUG_PROMPTS: "1"
     depends_on:
