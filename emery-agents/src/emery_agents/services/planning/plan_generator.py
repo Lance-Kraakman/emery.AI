@@ -177,67 +177,33 @@ class PlanGenerator:
         skill_inputs: Optional[List[Any]],
         skill_outputs: Optional[List[Any]],
     ) -> str:
-        """Build the planning prompt."""
-        # Use a simple planning prompt that instructs the agent to:
-        # 1. Use capability discovery to understand available capabilities
-        # 2. Gather context about existing resources
-        # 3. Generate a plan using submit_plan
+        """Build the planning prompt using J2 templates.
 
-        prompt_parts = [
-            "You are a planning agent. Generate an execution plan for this task.",
-            "",
-            "## Task",
-            instructions,
-            "",
-        ]
+        Uses existing templates:
+        - planning/skill_template_planner.j2 for skill template generation
+        - planning/interactive_planner.j2 for interactive planning
+        """
+        # Choose template based on mode
+        template_name = (
+            "planning/skill_template_planner.j2"
+            if is_template_generation
+            else "planning/interactive_planner.j2"
+        )
 
-        if goal:
-            prompt_parts.extend([
-                "## Goal",
-                goal,
-                "",
-            ])
-
-        if strategy_guidance:
-            prompt_parts.extend([
-                "## Strategy Guidance (from past successful executions)",
-                strategy_guidance,
-                "",
-            ])
-
-        prompt_parts.extend([
-            "## Instructions",
-            "",
-            "1. **Discover capabilities**: Use search_capabilities, list_capabilities to find relevant capabilities for this task",
-            "2. **Gather context**: Use available tools to understand existing resources (databases, tables, etc.)",
-            "3. **Generate plan**: Call submit_plan with:",
-            "   - goal: Brief description of what will be achieved",
-            "   - context: What you discovered about existing resources",
-            "   - analysis: Your analysis of what needs to be done",
-            "   - steps: List of steps with description and target_agent",
-            "",
-            "For each step, set target_agent to the capability that should handle it.",
-            "Common targets: schema_builder, table_builder, skill_builder, document_builder, app_builder",
-            "",
-        ])
-
-        if is_template_generation:
-            prompt_parts.extend([
-                "## Template Generation Mode",
-                "This is for a skill template. Use {{ variable }} placeholders in step descriptions",
-                "for values that should be provided at runtime.",
-                "",
-            ])
-            if skill_inputs:
-                prompt_parts.append("Available inputs:")
-                for inp in skill_inputs:
-                    name = inp.name if hasattr(inp, 'name') else inp.get('name', 'unknown')
-                    prompt_parts.append(f"  - {name}")
-                prompt_parts.append("")
-
-        prompt_parts.append("Now discover capabilities and generate the plan.")
-
-        return "\n".join(prompt_parts)
+        # Build template context
+        # Note: managed_agents is not passed here - the templates have a fallback
+        # that instructs using capability discovery tools instead
+        return render_template(
+            template_name,
+            task=instructions,
+            goal=goal,
+            strategy_guidance=strategy_guidance,
+            skill_inputs=skill_inputs,
+            skill_outputs=skill_outputs,
+            has_research_agent=bool(self.research_tools),
+            has_research_tools=bool(self.read_only_tools or self.research_tools),
+            # managed_agents not passed - template fallback will guide to use discovery tools
+        )
 
     def _create_plan_from_captured(
         self,

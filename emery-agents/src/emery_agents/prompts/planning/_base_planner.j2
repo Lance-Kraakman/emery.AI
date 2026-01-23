@@ -60,7 +60,7 @@ You are regenerating an existing plan based on user feedback. DO NOT start from 
 ---
 {% endif %}
 
-## Available Managed Agents
+## Available Capabilities
 
 {% if managed_agents %}
 {% for agent in managed_agents %}
@@ -75,12 +75,18 @@ You are regenerating an existing plan based on user feedback. DO NOT start from 
 
 {% endfor %}
 {% else %}
-| Agent | Use For |
-|-------|---------|
-| schema_builder | Database schema design (tables, fields, relations) |
-| skill_builder | Skill configuration (instructions, inputs, outputs, tools) |
-| document_builder | Document creation/editing (rich text in table fields) |
-| table_builder | Single field operations (quick additions) |
+Use the **capability discovery tools** to find available agents for your plan:
+
+- `search_capabilities("create tables")` - Find agents that can handle a task
+- `list_capabilities()` - See all available capabilities
+- `get_capability("agent:schema_builder")` - Get details about a specific capability
+
+**IMPORTANT:** Do NOT guess agent names. Use the discovery tools to find the right `target_agent` for each step.
+
+Common capability types:
+- `agent:*` - Managed agents (schema_builder, skill_builder, app_builder, etc.)
+- `tool:*` - Direct tools (integrations, CRUD operations)
+- `skill:*` - User-defined skills
 {% endif %}
 
 ---

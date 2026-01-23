@@ -219,6 +219,15 @@ class ManagedAgentsFactory:
             max_steps=10
         )
 
+        # Register capability for discovery
+        self._register_agent_capability(
+            agent=skill_builder,
+            agent_id="agent:skill_builder",
+            description="Creates and configures skills for agents",
+            actions=["create", "update", "delete"],
+            entities=["skills"],
+        )
+
         logger.info("Created Skill Builder agent with ToolExecutor sub-agent")
         return skill_builder
 
@@ -254,6 +263,15 @@ class ManagedAgentsFactory:
             max_steps=10
         )
 
+        # Register capability for discovery
+        self._register_agent_capability(
+            agent=document_builder,
+            agent_id="agent:document_builder",
+            description="Creates and edits documents with structured content",
+            actions=["create", "update", "delete"],
+            entities=["documents"],
+        )
+
         logger.info("Created Document Builder agent with ToolExecutor sub-agent")
         return document_builder
 
@@ -284,6 +302,15 @@ class ManagedAgentsFactory:
             tools=[tool_executor],
             model=model,
             max_steps=6
+        )
+
+        # Register capability for discovery
+        self._register_agent_capability(
+            agent=table_builder,
+            agent_id="agent:table_builder",
+            description="Quick table modifications - adds/removes fields on existing tables",
+            actions=["create", "update", "delete"],
+            entities=["tables", "fields"],
         )
 
         logger.info("Created Table Builder agent (autonomous) with ToolExecutor sub-agent")
@@ -329,6 +356,15 @@ class ManagedAgentsFactory:
             max_steps=15
         )
 
+        # Register capability for discovery
+        self._register_agent_capability(
+            agent=schema_builder,
+            agent_id="agent:schema_builder",
+            description="Designs complex database schemas from requirements - creates databases, tables, and fields",
+            actions=["create", "update", "delete"],
+            entities=["databases", "tables", "fields"],
+        )
+
         logger.info(f"Created Schema Builder agent (HITL) with ToolExecutor + {len(research_tools)} research tools")
         return schema_builder
 
@@ -356,6 +392,15 @@ class ManagedAgentsFactory:
             max_steps=10,
             api_key=api_key,
             organization_id=organization_id,
+        )
+
+        # Register capability for discovery
+        self._register_agent_capability(
+            agent=research_agent,
+            agent_id="agent:research_agent",
+            description="Searches the web and Emery platform for information",
+            actions=["search", "read"],
+            entities=[],  # Works on anything
         )
 
         logger.info("Created Research agent (read-only) with ResearchEmery sub-agent")
@@ -417,6 +462,15 @@ class ManagedAgentsFactory:
             max_steps=10,
         )
 
+        # Register capability for discovery
+        self._register_agent_capability(
+            agent=discover_tools,
+            agent_id="agent:discover_tools",
+            description="Discovers available integrations and checks OAuth connections",
+            actions=["search", "list", "check"],
+            entities=["integrations", "connections"],
+        )
+
         logger.info("Created discover_tools agent (read-only integration discovery)")
         return discover_tools
 
@@ -469,6 +523,15 @@ class ManagedAgentsFactory:
             model=model,
             max_steps=10,
             managed_agents=[page_builder],
+        )
+
+        # Register capability for discovery
+        self._register_agent_capability(
+            agent=app_builder,
+            agent_id="agent:app_builder",
+            description="Creates apps with pages and views for data visualization",
+            actions=["create", "update", "delete"],
+            entities=["apps", "pages", "views"],
         )
 
         logger.info(f"Created App Builder agent with ToolExecutor + block_schema + {len(research_tools)} research tools + page_builder")
@@ -524,6 +587,15 @@ class ManagedAgentsFactory:
             managed_agents=managed_agents,
         )
 
+        # Register capability for discovery
+        self._register_agent_capability(
+            agent=page_builder,
+            agent_id="agent:page_builder",
+            description="Creates visual pages with Puck blocks and layouts",
+            actions=["create", "update"],
+            entities=["pages", "blocks"],
+        )
+
         logger.info("Created Page Builder agent with page_crud + block_schema + research_agent")
         return page_builder
 
@@ -557,6 +629,15 @@ class ManagedAgentsFactory:
             tools=[tool_executor],
             model=model,
             max_steps=10
+        )
+
+        # Register capability for discovery
+        self._register_agent_capability(
+            agent=agent_builder,
+            agent_id="agent:agent_builder",
+            description="Creates and configures AI agents with skills",
+            actions=["create", "update", "delete"],
+            entities=["agents", "skills"],
         )
 
         logger.info("Created Agent Builder agent with ToolExecutor sub-agent")
@@ -620,6 +701,15 @@ class ManagedAgentsFactory:
             model=model,
             max_steps=15,
             managed_agents=all_managed_agents,
+        )
+
+        # Register capability for discovery
+        self._register_agent_capability(
+            agent=system_designer,
+            agent_id="agent:system_designer",
+            description="Designs holistic automation systems - orchestrates schema, app, agent, and skill builders",
+            actions=["design", "orchestrate"],
+            entities=["systems", "databases", "apps", "agents", "skills"],
         )
 
         agent_names = [a.name for a in all_managed_agents if hasattr(a, 'name')]
