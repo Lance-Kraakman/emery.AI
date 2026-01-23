@@ -14,11 +14,11 @@ and outputs for plan generation. This enables:
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-# Forward references for type hints (actual imports would create cycles)
-if False:  # TYPE_CHECKING
-    from emery_agents.models.context_mapping import ResolvedContext
-    from emery_agents.models.skill_definition import SkillInputDefinition, SkillOutputDefinition
-    from emery_agents.models.plan import Plan
+from emery_agents.models.context_mapping import ResolvedContext
+from emery_agents.models.skill_definition import SkillInputDefinition, SkillOutputDefinition
+from emery_agents.models.plan import Plan
+from emery_agents.services.protocols import Tool, ManagedAgent
+from emery_agents.services.capability_registry import CapabilityRegistry
 
 
 @dataclass(frozen=True)
@@ -68,18 +68,18 @@ class PlanGenerationRequest:
     basic_instructions: str
 
     # Context
-    context_tables: Optional["ResolvedContext"] = None
+    context_tables: Optional[ResolvedContext] = None
     goal: Optional[str] = None
-    conversation_history: Optional[List[Any]] = None
+    conversation_history: Optional[List[Dict[str, Any]]] = None
 
     # Available resources
-    tools: List[Any] = field(default_factory=list)
-    managed_agents: List[Any] = field(default_factory=list)
-    research_tools: Optional[List[Any]] = None
+    tools: List[Tool] = field(default_factory=list)
+    managed_agents: List[ManagedAgent] = field(default_factory=list)
+    research_tools: Optional[List[Tool]] = None
 
     # Template generation mode (for reusable skills with {{ variable }} placeholders)
-    skill_inputs: List["SkillInputDefinition"] = field(default_factory=list)
-    skill_outputs: List["SkillOutputDefinition"] = field(default_factory=list)
+    skill_inputs: List[SkillInputDefinition] = field(default_factory=list)
+    skill_outputs: List[SkillOutputDefinition] = field(default_factory=list)
     is_template_generation: bool = False
 
     # Regeneration
@@ -92,7 +92,7 @@ class PlanGenerationRequest:
     organization_id: Optional[int] = None
 
     # Capability discovery
-    capability_registry: Optional[Any] = None
+    capability_registry: Optional[CapabilityRegistry] = None
 
 
 @dataclass
@@ -105,7 +105,7 @@ class PlanGenerationResult:
     needs more information from the user.
     """
 
-    plan: Optional["Plan"] = None
+    plan: Optional[Plan] = None
     strategy_guidance: Optional[str] = None
     context_gathered: Optional[str] = None
     analysis: Optional[str] = None

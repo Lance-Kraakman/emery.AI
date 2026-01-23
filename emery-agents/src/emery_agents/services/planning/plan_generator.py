@@ -17,13 +17,15 @@ The planner has access to:
 """
 
 import logging
-from typing import List, Any, Optional
+from typing import Any, Dict, List, Optional
 
 from smolagents import ToolCallingAgent
 
-from ..protocols import ModelProvider
+from ..protocols import ModelProvider, Tool
+from ..capability_registry import CapabilityRegistry
 from emery_agents.ace import StrategyAccumulationService
 from emery_agents.models.plan import Plan, PlanStep, create_plan, create_step
+from emery_agents.models.skill_definition import SkillInputDefinition, SkillOutputDefinition
 from emery_agents.tools.plan_output_tool import PlanOutputTool
 from emery_agents.tools.capability_discovery import create_discovery_tools
 from emery_agents.tools.ask_question_tool import AskQuestionTool
@@ -55,9 +57,9 @@ class PlanGenerator:
     def __init__(
         self,
         model_provider: Optional[ModelProvider] = None,
-        capability_registry: Optional[Any] = None,
-        research_tools: Optional[List[Any]] = None,
-        read_only_tools: Optional[List[Any]] = None,
+        capability_registry: Optional[CapabilityRegistry] = None,
+        research_tools: Optional[List[Tool]] = None,
+        read_only_tools: Optional[List[Tool]] = None,
     ):
         """
         Initialize plan generator.
@@ -128,12 +130,10 @@ class PlanGenerator:
 
         # Single agent has all tools: discovery + research + read_only + plan output + ask questions
         # Agent decides when to use research tools (not forced)
-        all_tools: List[Any] = (
-            [plan_output_tool, ask_question_tool]
-            + list(discovery_tools)
-            + self.research_tools
-            + self.read_only_tools
-        )
+        all_tools: List[Tool] = [plan_output_tool, ask_question_tool]
+        all_tools.extend(discovery_tools)
+        all_tools.extend(self.research_tools)
+        all_tools.extend(self.read_only_tools)
 
         # Build the planning prompt
         prompt = self._build_planning_prompt(
@@ -194,14 +194,14 @@ class PlanGenerator:
         goal: Optional[str],
         strategy_guidance: str,
         is_template_generation: bool,
-        skill_inputs: Optional[List[Any]],
-        skill_outputs: Optional[List[Any]],
+        skill_inputs: Optional[List[SkillInputDefinition]],
+        skill_outputs: Optional[List[SkillOutputDefinition]],
         user_feedback: Optional[str] = None,
     ) -> str:
         """Build the planning prompt using J2 templates.
 
-        Uses new focused templates:
-        - planning/planner.j2 for interactive planning (with sub-agents)
+        Uses templates:
+        - planning/planner.j2 for interactive planning
         - planning/skill_template_planner.j2 for skill template generation
         """
         # Choose template based on mode
@@ -223,7 +223,7 @@ class PlanGenerator:
 
     def _create_plan_from_captured(
         self,
-        captured_plan: dict[str, Any],
+        captured_plan: Dict[str, Any],
         basic_instructions: str,
     ) -> Plan:
         """Convert captured plan dict to Plan model."""
