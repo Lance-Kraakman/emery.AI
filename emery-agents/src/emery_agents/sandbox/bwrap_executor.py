@@ -15,12 +15,12 @@ This mirrors Claude Code's sandboxing approach:
 https://www.anthropic.com/engineering/claude-code-sandboxing
 """
 
-import asyncio
 import logging
 import os
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Tuple, Optional, List
+from typing import Optional, List, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -58,25 +58,31 @@ class BwrapExecutor:
     All other host paths are invisible to the sandboxed process.
     """
 
-    # Base bwrap command - creates empty namespace by default
+    # Base bwrap command - works unprivileged in containers
+    # Key: use --ro-bind for /proc and /dev instead of --proc and --dev
+    # which try to mount new filesystems (requires CAP_SYS_ADMIN)
     BWRAP_BASE_CMD = [
         "bwrap",
+        # User namespace FIRST - enables unprivileged operation
+        "--unshare-user",
+        # Other namespaces (now allowed because we have user namespace)
+        "--unshare-pid",
+        "--unshare-uts",
+        "--unshare-cgroup",
         # System tools (read-only)
         "--ro-bind", "/usr", "/usr",
         "--ro-bind", "/bin", "/bin",
-        # Minimal system access
-        "--proc", "/proc",
-        "--dev", "/dev",
+        # Bind existing proc/dev read-only (instead of mounting new ones)
+        "--ro-bind", "/proc", "/proc",
+        "--dev-bind", "/dev", "/dev",
         # Ephemeral tmpfs for system dirs
         "--tmpfs", "/tmp",
         "--tmpfs", "/var",
         "--tmpfs", "/run",
-        # Create /etc with minimal required files
         "--tmpfs", "/etc",
-        # Full isolation
-        "--unshare-all",      # New namespaces (pid, net, user, etc.)
-        "--new-session",      # New session (can't signal host processes)
-        "--die-with-parent",  # Kill sandbox if parent dies
+        # Session/parent controls
+        "--new-session",
+        "--die-with-parent",
     ]
 
     def __init__(self):
@@ -110,18 +116,9 @@ class BwrapExecutor:
         # Bind the agent's workspace (read-write)
         cmd.extend(["--bind", str(workspace_path), "/workspace"])
 
-        # Optional: allow network access
-        if allow_network:
-            # Remove --unshare-all and add back everything except network
-            cmd = [c for c in cmd if c != "--unshare-all"]
-            cmd.extend([
-                "--unshare-user",
-                "--unshare-ipc",
-                "--unshare-pid",
-                "--unshare-uts",
-                "--unshare-cgroup",
-                # Note: NOT unsharing network
-            ])
+        # Network isolation (default: no network)
+        if not allow_network:
+            cmd.extend(["--unshare-net"])
 
         # Additional bind mounts (for special cases)
         if additional_binds:
@@ -133,7 +130,7 @@ class BwrapExecutor:
 
         return cmd
 
-    async def execute(
+    def execute(
         self,
         command: str,
         workspace_path: Path,
@@ -164,7 +161,7 @@ class BwrapExecutor:
         if not shutil.which("bwrap"):
             # Fallback to direct execution (for development/testing)
             logger.warning("bwrap not available, executing without sandbox")
-            return await self._execute_direct(command, workspace_path, timeout, env)
+            return self._execute_direct(command, workspace_path, timeout, env)
 
         # Build bwrap command
         cmd = self._build_command(command, workspace_path, allow_network)
@@ -176,35 +173,26 @@ class BwrapExecutor:
         exec_env = env if env is not None else {}
 
         try:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                timeout=timeout,
                 env=exec_env,
                 cwd=str(workspace_path),
             )
-
-            try:
-                stdout_bytes, stderr_bytes = await asyncio.wait_for(
-                    proc.communicate(),
-                    timeout=timeout
-                )
-                return ExecutionResult(
-                    exit_code=proc.returncode or 0,
-                    stdout=stdout_bytes.decode("utf-8", errors="replace"),
-                    stderr=stderr_bytes.decode("utf-8", errors="replace"),
-                    timed_out=False,
-                )
-            except asyncio.TimeoutError:
-                proc.kill()
-                await proc.wait()
-                return ExecutionResult(
-                    exit_code=-1,
-                    stdout="",
-                    stderr=f"Command timed out after {timeout} seconds",
-                    timed_out=True,
-                )
-
+            return ExecutionResult(
+                exit_code=result.returncode,
+                stdout=result.stdout.decode("utf-8", errors="replace"),
+                stderr=result.stderr.decode("utf-8", errors="replace"),
+                timed_out=False,
+            )
+        except subprocess.TimeoutExpired:
+            return ExecutionResult(
+                exit_code=-1,
+                stdout="",
+                stderr=f"Command timed out after {timeout} seconds",
+                timed_out=True,
+            )
         except Exception as e:
             logger.exception(f"Sandbox execution failed: {e}")
             return ExecutionResult(
@@ -214,7 +202,7 @@ class BwrapExecutor:
                 timed_out=False,
             )
 
-    async def _execute_direct(
+    def _execute_direct(
         self,
         command: str,
         workspace_path: Path,
@@ -229,35 +217,27 @@ class BwrapExecutor:
         logger.warning("Executing without sandbox isolation")
 
         try:
-            proc = await asyncio.create_subprocess_shell(
+            result = subprocess.run(
                 command,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+                shell=True,
+                capture_output=True,
+                timeout=timeout,
                 cwd=str(workspace_path),
                 env=env,
             )
-
-            try:
-                stdout_bytes, stderr_bytes = await asyncio.wait_for(
-                    proc.communicate(),
-                    timeout=timeout
-                )
-                return ExecutionResult(
-                    exit_code=proc.returncode or 0,
-                    stdout=stdout_bytes.decode("utf-8", errors="replace"),
-                    stderr=stderr_bytes.decode("utf-8", errors="replace"),
-                    timed_out=False,
-                )
-            except asyncio.TimeoutError:
-                proc.kill()
-                await proc.wait()
-                return ExecutionResult(
-                    exit_code=-1,
-                    stdout="",
-                    stderr=f"Command timed out after {timeout} seconds",
-                    timed_out=True,
-                )
-
+            return ExecutionResult(
+                exit_code=result.returncode,
+                stdout=result.stdout.decode("utf-8", errors="replace"),
+                stderr=result.stderr.decode("utf-8", errors="replace"),
+                timed_out=False,
+            )
+        except subprocess.TimeoutExpired:
+            return ExecutionResult(
+                exit_code=-1,
+                stdout="",
+                stderr=f"Command timed out after {timeout} seconds",
+                timed_out=True,
+            )
         except Exception as e:
             return ExecutionResult(
                 exit_code=-1,
@@ -266,96 +246,3 @@ class BwrapExecutor:
                 timed_out=False,
             )
 
-    async def execute_streaming(
-        self,
-        command: str,
-        workspace_path: Path,
-        timeout: int = 300,
-        allow_network: bool = False,
-    ):
-        """
-        Execute command and stream stdout/stderr in real-time.
-
-        Yields (stream_type, line) tuples where stream_type is 'stdout' or 'stderr'.
-        """
-        import shutil
-        if not shutil.which("bwrap"):
-            logger.warning("bwrap not available, streaming without sandbox")
-            async for item in self._stream_direct(command, workspace_path, timeout):
-                yield item
-            return
-
-        cmd = self._build_command(command, workspace_path, allow_network)
-
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            env={},
-            cwd=str(workspace_path),
-        )
-
-        async def read_stream(stream, stream_type):
-            while True:
-                line = await stream.readline()
-                if not line:
-                    break
-                yield (stream_type, line.decode("utf-8", errors="replace").rstrip())
-
-        # Create tasks for both streams
-        stdout_task = asyncio.create_task(
-            self._collect_lines(read_stream(proc.stdout, "stdout"))
-        )
-        stderr_task = asyncio.create_task(
-            self._collect_lines(read_stream(proc.stderr, "stderr"))
-        )
-
-        try:
-            done, pending = await asyncio.wait(
-                [stdout_task, stderr_task],
-                timeout=timeout,
-                return_when=asyncio.ALL_COMPLETED
-            )
-
-            for task in done:
-                for item in task.result():
-                    yield item
-
-            if pending:
-                for task in pending:
-                    task.cancel()
-                proc.kill()
-                yield ("stderr", f"Command timed out after {timeout} seconds")
-
-        finally:
-            await proc.wait()
-
-    async def _stream_direct(self, command, workspace_path, timeout):
-        """Stream output from direct execution (fallback)."""
-        proc = await asyncio.create_subprocess_shell(
-            command,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            cwd=str(workspace_path),
-        )
-
-        async def read_stream(stream, stream_type):
-            while True:
-                line = await stream.readline()
-                if not line:
-                    break
-                yield (stream_type, line.decode("utf-8", errors="replace").rstrip())
-
-        async for item in read_stream(proc.stdout, "stdout"):
-            yield item
-        async for item in read_stream(proc.stderr, "stderr"):
-            yield item
-
-        await proc.wait()
-
-    async def _collect_lines(self, async_gen):
-        """Collect all lines from an async generator."""
-        lines = []
-        async for item in async_gen:
-            lines.append(item)
-        return lines

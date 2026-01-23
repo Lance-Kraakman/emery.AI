@@ -12,10 +12,8 @@ Security:
 - Only /workspace is writable
 """
 
-import asyncio
 import logging
 from pathlib import Path
-from typing import Optional
 
 from smolagents import Tool
 
@@ -104,45 +102,17 @@ Examples:
         logger.debug(f"Executing bash command: {command[:100]}...")
 
         try:
-            # Run async executor in sync context
-            result = asyncio.run(
-                self.executor.execute(
-                    command=command,
-                    workspace_path=self.workspace_path,
-                    timeout=self.timeout,
-                    allow_network=self.allow_network,
-                )
+            result = self.executor.execute(
+                command=command,
+                workspace_path=self.workspace_path,
+                timeout=self.timeout,
+                allow_network=self.allow_network,
             )
-
             return str(result)
-
-        except asyncio.TimeoutError:
-            return f"Error: Command timed out after {self.timeout} seconds"
         except Exception as e:
             logger.exception(f"Bash command failed: {e}")
             return f"Error executing command: {str(e)}"
 
-    async def forward_async(self, command: str) -> str:
-        """
-        Async version of forward for use in async contexts.
-
-        Args:
-            command: Bash command to execute
-
-        Returns:
-            Command stdout on success, or error message on failure
-        """
-        if not command or not command.strip():
-            return "Error: Empty command"
-
-        result = await self.executor.execute(
-            command=command,
-            workspace_path=self.workspace_path,
-            timeout=self.timeout,
-            allow_network=self.allow_network,
-        )
-
-        return str(result)
 
 
 def load_bash_tool(
