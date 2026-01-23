@@ -1104,6 +1104,17 @@ class AgentExecutor:
             )
             tools = self.tool_loader.load_tools(tool_configs)
 
+        # Add BashTool if workspace_path is available (filesystem-based execution)
+        if context.workspace_path:
+            from ..tools.bash_tool import BashTool
+            bash_tool = BashTool(
+                workspace_path=context.workspace_path,
+                allow_network=False,  # Network disabled by default for security
+                timeout=300,
+            )
+            tools.append(bash_tool)
+            logger.info(f"Added BashTool with workspace: {context.workspace_path}")
+
         # Create agent using AgentFactory
         agent_config = AgentConfig(
             tools=tools,
@@ -1174,6 +1185,17 @@ class AgentExecutor:
                 logger.info(f"Loaded {len(tools)} tools for skill '{skill.name}'")
             except Exception as e:
                 logger.warning(f"Failed to load some tools for skill {skill.name}: {e}")
+
+        # Add BashTool if workspace_path is available (filesystem-based execution)
+        if context.workspace_path:
+            from ..tools.bash_tool import BashTool
+            bash_tool = BashTool(
+                workspace_path=context.workspace_path,
+                allow_network=False,  # Network disabled by default for security
+                timeout=300,
+            )
+            tools.append(bash_tool)
+            logger.info(f"Added BashTool with workspace: {context.workspace_path}")
 
         # Load available skills as SkillTools for delegation
         if context.available_skills:

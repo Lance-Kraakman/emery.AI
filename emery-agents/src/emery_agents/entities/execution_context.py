@@ -6,6 +6,7 @@ Uses direct types (int, str) instead of wrapper classes.
 """
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import List, Optional, Dict, Any, Callable
 from ..types import AgentId, OrganizationId, ExecutionMode
 from ..models.context_mapping import ResolvedContext
@@ -104,6 +105,10 @@ class ExecutionContext:
     # Type: Optional[Plan] - using Any to avoid circular import
     plan: Optional[Any] = None
 
+    # Workspace filesystem path for isolated bash execution
+    # When set, BashTool is available for file operations in sandboxed environment
+    workspace_path: Optional[Path] = None
+
     @property
     def is_autonomous(self) -> bool:
         """Check if execution is autonomous (skill-based, no HITL)."""
@@ -141,4 +146,5 @@ class ExecutionContext:
             tool_mode=self.tool_mode,
             tool_provider=self.tool_provider,  # Shared reference (not copied)
             plan=self.plan,  # Shared reference (not copied)
+            workspace_path=self.workspace_path,
         )

@@ -134,6 +134,11 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
             execution_context.agent_model = agent_model
             execution_context.org_model = org_model
 
+            # Add workspace path for bash tool access
+            if workspace_path:
+                execution_context.workspace_path = workspace_path
+                logger.info(f"📁 [TASK-{task_request.task_id[:8]}] Workspace path set: {workspace_path}")
+
             logger.info(f"🔧 [TASK-{request.task_id[:8]}] Model context set: agent={agent_model or 'none'}, org={org_model or 'none'}")
 
             # Stream execution progress (simplified - direct executor)
