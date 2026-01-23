@@ -5,12 +5,14 @@ import logging
 import os
 import time
 import asyncio
-from typing import AsyncIterator, Optional, List, Dict, Any
+from pathlib import Path
+from typing import AsyncIterator, Optional, List, Dict, Any, Tuple
 
 import grpc
 
 from .generated import agent_worker_pb2, agent_worker_pb2_grpc
 from .mappers.message_mapper import build_conversation_messages, has_images, extract_text_from_parts
+from ..infrastructure.workspace_sync import WorkspaceSync
 from ..services.model_provider import SmolagentsModelProvider
 from ..services.tool_loader import UnifiedToolLoader
 from ..services.session_manager import SessionManager
@@ -42,7 +44,23 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         self.organization_id = organization_id
         self.active_streams: Dict[str, bool] = {}
 
-        self.session_manager = SessionManager(idle_timeout=1800, max_lifetime=14400)
+        # Initialize workspace sync for persistent filesystem
+        s3_bucket = os.getenv("S3_BUCKET_NAME")
+        if s3_bucket:
+            self.workspace_sync = WorkspaceSync(
+                bucket=s3_bucket,
+                prefix="workspaces"  # Base prefix, type (users/agents) added per request
+            )
+            logger.info(f"✅ WorkspaceSync initialized with bucket: {s3_bucket}")
+        else:
+            self.workspace_sync = None
+            logger.warning("⚠️ S3_BUCKET_NAME not set, workspace sync disabled for chat")
+
+        self.session_manager = SessionManager(
+            idle_timeout=1800,
+            max_lifetime=14400,
+            workspace_sync=self.workspace_sync
+        )
         self.session_manager.start_cleanup_task()
 
         try:
@@ -86,6 +104,31 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             self.tool_loader = None
             self.model_provider = None
             self.agent_factory = None
+
+    def _get_workspace_id(
+        self,
+        request: agent_worker_pb2.ProcessMessageRequest
+    ) -> Tuple[str, str, str]:
+        """
+        Determine workspace type and ID from request.
+
+        Returns:
+            Tuple of (workspace_type, workspace_id, s3_prefix)
+            - workspace_type: "agents" or "users"
+            - workspace_id: agent_id or user_id
+            - s3_prefix: full S3 prefix path
+        """
+        # Check if chat is with an agent (domain_type == "agent")
+        if request.context and request.context.domain_type == "agent" and request.context.domain_id:
+            workspace_type = "agents"
+            workspace_id = str(request.context.domain_id)
+        else:
+            # General chat - use user's personal workspace
+            workspace_type = "users"
+            workspace_id = request.user_id
+
+        s3_prefix = f"workspaces/{workspace_type}"
+        return workspace_type, workspace_id, s3_prefix
 
     async def ProcessMessage(
         self,
@@ -133,6 +176,21 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             logger.info(f"🔧 AgentConfig provided: {tools_count} tools, {skills_count} skills")
         else:
             logger.info(f"⚠️ No AgentConfig provided, using empty tools")
+
+        # Download workspace from S3 if workspace sync is enabled
+        workspace_path: Optional[Path] = None
+        workspace_type: Optional[str] = None
+        workspace_id: Optional[str] = None
+        workspace_prefix: Optional[str] = None
+
+        if self.workspace_sync:
+            try:
+                workspace_type, workspace_id, workspace_prefix = self._get_workspace_id(request)
+                workspace_path = self.workspace_sync.download(workspace_id, prefix=workspace_prefix)
+                logger.info(f"📁 Workspace downloaded: {workspace_path} (type={workspace_type}, id={workspace_id})")
+            except Exception as e:
+                logger.error(f"Failed to download workspace: {e}")
+                # Continue without workspace - chat can still work
 
         try:
             conversation_messages = await build_conversation_messages(
@@ -192,7 +250,10 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 conversation_history=request.conversation_history,
                 agent_config=agent_config,  # Pass agent_config for skill execution
                 user_api_key=user_api_key,  # User API key for managed agents
-                file_attachments=file_attachments  # File attachments for skill context injection
+                file_attachments=file_attachments,  # File attachments for skill context injection
+                workspace_path=workspace_path,  # Workspace filesystem path
+                workspace_id=workspace_id,  # Workspace ID for S3 (user_id or agent_id)
+                workspace_prefix=workspace_prefix,  # S3 prefix ("workspaces/users" or "workspaces/agents")
             ):
                 # Check for cancellation
                 if self.active_streams.get(message_id, False):
@@ -223,6 +284,14 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     sequence += seq_inc
                     if should_break:
                         break
+
+            # Upload workspace after message processing (crash-safe persistence)
+            if self.workspace_sync and workspace_path and workspace_id and workspace_prefix:
+                try:
+                    self.workspace_sync.upload(workspace_id, prefix=workspace_prefix)
+                    logger.info(f"📤 Workspace uploaded: {workspace_id}")
+                except Exception as e:
+                    logger.error(f"Failed to upload workspace: {e}")
 
             processing_time = int((time.time() - start_time) * 1000)
             handler_token_usage = self._agent_handler.last_token_usage

@@ -8,6 +8,7 @@ Sessions are identified by chat_id and maintain agent memory across messages.
 import asyncio
 import logging
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Dict, Optional, Any, List, TYPE_CHECKING
 from dataclasses import dataclass, field
 from smolagents import ToolCallingAgent
@@ -18,6 +19,7 @@ from .coordinator_state_machine import CoordinatorStateMachine, Phase
 if TYPE_CHECKING:
     from .execution_coordinator import ExecutionCoordinator
     from ..models.plan import Plan
+    from ..infrastructure.workspace_sync import WorkspaceSync
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +40,10 @@ class SessionMetadata:
     last_error_timestamp: Optional[datetime] = None
     # File attachments accumulated during session (for skill context injection)
     attachments: List[Any] = field(default_factory=list)
+    # Workspace tracking for filesystem-based agent execution
+    workspace_path: Optional[Path] = None  # Local path to extracted workspace
+    workspace_id: Optional[str] = None  # ID for S3 (user_id or agent_id)
+    workspace_prefix: Optional[str] = None  # S3 prefix ("workspaces/users" or "workspaces/agents")
 
 
 class SessionManager:
@@ -59,13 +65,19 @@ class SessionManager:
     4. After restart → Recreate agent, restore from database history
     """
 
-    def __init__(self, idle_timeout: int = 1800, max_lifetime: int = 14400):
+    def __init__(
+        self,
+        idle_timeout: int = 1800,
+        max_lifetime: int = 14400,
+        workspace_sync: Optional['WorkspaceSync'] = None
+    ):
         """
         Initialize session manager.
 
         Args:
             idle_timeout: Seconds of inactivity before cleanup (default 30 min)
             max_lifetime: Maximum session lifetime in seconds (default 4 hours)
+            workspace_sync: WorkspaceSync instance for S3 workspace persistence
         """
         self.agents: Dict[str, ToolCallingAgent] = {}
         self.metadata: Dict[str, SessionMetadata] = {}
@@ -73,12 +85,14 @@ class SessionManager:
         self.state_machines: Dict[str, CoordinatorStateMachine] = {}
         self.idle_timeout = idle_timeout
         self.max_lifetime = max_lifetime
+        self.workspace_sync = workspace_sync
         # Plan generation sessions (for HITL question/answer flow)
         self._plan_sessions: Dict[str, Dict[str, Any]] = {}
         self._cleanup_task: Optional[asyncio.Task] = None
         logger.info(
             f"SessionManager initialized: "
-            f"idle_timeout={idle_timeout}s, max_lifetime={max_lifetime}s"
+            f"idle_timeout={idle_timeout}s, max_lifetime={max_lifetime}s, "
+            f"workspace_sync={'enabled' if workspace_sync else 'disabled'}"
         )
 
     def start_cleanup_task(self):
@@ -100,7 +114,7 @@ class SessionManager:
                 logger.error(f"Session cleanup error: {e}", exc_info=True)
 
     async def _cleanup_idle_sessions(self):
-        """Remove idle and expired sessions."""
+        """Remove idle and expired sessions, uploading workspaces first."""
         now = datetime.now()
         sessions_to_remove = []
 
@@ -117,6 +131,16 @@ class SessionManager:
                 sessions_to_remove.append((session_id, f"max lifetime ({lifetime:.0f}s)"))
 
         for session_id, reason in sessions_to_remove:
+            # Upload workspace to S3 before removing session
+            meta = self.metadata.get(session_id)
+            if meta and self.workspace_sync and meta.workspace_id and meta.workspace_prefix:
+                try:
+                    self.workspace_sync.upload(meta.workspace_id, prefix=meta.workspace_prefix)
+                    self.workspace_sync.cleanup(meta.workspace_id)
+                    logger.info(f"📤 Uploaded workspace for session {session_id} before cleanup")
+                except Exception as e:
+                    logger.error(f"Failed to upload workspace for session {session_id}: {e}")
+
             await self.remove_session(session_id, reason)
 
         if sessions_to_remove:
@@ -165,7 +189,10 @@ class SessionManager:
         organization_id: int,
         user_id: str,
         restored_from_history: bool = False,
-        history_message_count: int = 0
+        history_message_count: int = 0,
+        workspace_path: Optional[Path] = None,
+        workspace_id: Optional[str] = None,
+        workspace_prefix: Optional[str] = None,
     ):
         """
         Register new agent in session manager.
@@ -177,6 +204,9 @@ class SessionManager:
             user_id: User ID
             restored_from_history: Whether agent was restored from history
             history_message_count: Number of messages restored from history
+            workspace_path: Local path to extracted workspace
+            workspace_id: ID for S3 (user_id or agent_id)
+            workspace_prefix: S3 prefix ("workspaces/users" or "workspaces/agents")
         """
         self.agents[session_id] = agent
         self.metadata[session_id] = SessionMetadata(
@@ -187,13 +217,17 @@ class SessionManager:
             last_activity=datetime.now(),
             message_count=1,
             restored_from_history=restored_from_history,
-            history_message_count=history_message_count
+            history_message_count=history_message_count,
+            workspace_path=workspace_path,
+            workspace_id=workspace_id,
+            workspace_prefix=workspace_prefix,
         )
 
         logger.info(
             f"✨ Created session {session_id} "
             f"(org={organization_id}, user={user_id}, "
-            f"restored={restored_from_history}, history_msgs={history_message_count})"
+            f"restored={restored_from_history}, history_msgs={history_message_count}, "
+            f"workspace={'enabled' if workspace_path else 'disabled'})"
         )
 
     async def restore_agent_from_history(

@@ -9,6 +9,7 @@ import ast
 import asyncio
 import json
 import logging
+from pathlib import Path
 from typing import AsyncIterator, Optional, List, Dict, Any, TYPE_CHECKING
 
 from smolagents.memory import ActionStep, PlanningStep, FinalAnswerStep
@@ -120,7 +121,10 @@ class AgentStreamingHandler:
         conversation_history: Optional[List] = None,
         agent_config: Optional['agent_worker_pb2.AgentConfig'] = None,
         user_api_key: Optional[str] = None,
-        file_attachments: Optional[List['agent_worker_pb2.FileAttachment']] = None
+        file_attachments: Optional[List['agent_worker_pb2.FileAttachment']] = None,
+        workspace_path: Optional[Path] = None,
+        workspace_id: Optional[str] = None,
+        workspace_prefix: Optional[str] = None,
     ) -> AsyncIterator[StreamResponseDict]:
         """
         Stream AI response using ToolCallingAgent with stateful session support.
@@ -182,6 +186,9 @@ class AgentStreamingHandler:
                     user_id=user_id,
                     org_id=org_id,
                     conversation_history=conversation_history,
+                    workspace_path=workspace_path,
+                    workspace_id=workspace_id,
+                    workspace_prefix=workspace_prefix,
                 )
 
             logger.info(f"🤖 Using ToolCallingAgent with {len(smolagents_tools)} tools")
@@ -230,6 +237,7 @@ class AgentStreamingHandler:
                 agent_config=agent_config,
                 file_attachments=file_attachments,
                 conversation_history=conversation_history,
+                workspace_path=workspace_path,
             ):
                 yield event
 
@@ -253,6 +261,9 @@ class AgentStreamingHandler:
         user_id: Optional[str],
         org_id: Optional[int],
         conversation_history: Optional[List],
+        workspace_path: Optional[Path] = None,
+        workspace_id: Optional[str] = None,
+        workspace_prefix: Optional[str] = None,
     ) -> Any:
         """Create new agent and restore from history (COLD PATH)."""
         # Create managed agents using factory
@@ -355,7 +366,10 @@ class AgentStreamingHandler:
                 organization_id=org_id or 0,
                 user_id=user_id or "",
                 restored_from_history=bool(conversation_history),
-                history_message_count=len(conversation_history) if conversation_history else 0
+                history_message_count=len(conversation_history) if conversation_history else 0,
+                workspace_path=workspace_path,
+                workspace_id=workspace_id,
+                workspace_prefix=workspace_prefix,
             )
 
             if file_attachments:
@@ -385,6 +399,7 @@ class AgentStreamingHandler:
         agent_config: Optional['agent_worker_pb2.AgentConfig'],
         file_attachments: Optional[List],
         conversation_history: Optional[List],
+        workspace_path: Optional[Path] = None,
     ) -> AsyncIterator[StreamResponseDict]:
         """Execute agent with streaming and coordinator integration."""
         step_index = 0
@@ -448,6 +463,7 @@ class AgentStreamingHandler:
             api_key=tool_provider.api_key,
             organization_id=str(tool_provider.organization_id),
             tool_provider=tool_provider,
+            workspace_path=workspace_path,
         )
         AgentExecutor.set_current_context(context)
         logger.info(f"📎 Set execution context: {len(file_attachments or [])} current, {len(session_attachments)} session files")

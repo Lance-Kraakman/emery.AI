@@ -79,14 +79,15 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
 
         # Download workspace from S3 if workspace sync is enabled
         workspace_path: Optional[Path] = None
+        workspace_id = str(task_request.agent_id)  # Convert to string for workspace sync
         if self.workspace_sync:
             try:
-                workspace_path = self.workspace_sync.download(task_request.agent_id)
+                workspace_path = self.workspace_sync.download(workspace_id)
                 logger.info(f"📁 [TASK-{task_request.task_id[:8]}] Workspace downloaded to {workspace_path}")
 
                 # Prepare task history directory
                 self.workspace_sync.prepare_task_history(
-                    agent_id=task_request.agent_id,
+                    workspace_id=workspace_id,
                     task_id=task_request.task_id,
                     workspace_path=workspace_path,
                 )
@@ -188,9 +189,9 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
             # Upload workspace back to S3 and cleanup
             if self.workspace_sync and workspace_path:
                 try:
-                    self.workspace_sync.upload(task_request.agent_id)
+                    self.workspace_sync.upload(workspace_id)
                     logger.info(f"📤 [TASK-{task_request.task_id[:8]}] Workspace uploaded to S3")
-                    self.workspace_sync.cleanup(task_request.agent_id)
+                    self.workspace_sync.cleanup(workspace_id)
                 except Exception as e:
                     logger.error(f"Failed to upload workspace: {e}")
 
