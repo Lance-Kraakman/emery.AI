@@ -844,6 +844,10 @@ export const agents = pgTable("agents", {
   planGeneratedAt: timestamp("plan_generated_at"),
   planApprovedAt: timestamp("plan_approved_at"),
 
+  // Workspace filesystem - S3 path to agent's workspace tar archive
+  // Contains persistent files, context, memory, and execution history
+  workspacePath: text("workspace_path"), // S3 path: workspaces/agents/{id}.tar.gz
+
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   // RBAC-based policy for viewing agents (resource-aware)
@@ -1204,6 +1208,11 @@ export const tasks = pgTable("tasks", {
   result: jsonb("result"), // Final output data
   error: text("error"),
   logs: jsonb("logs").$type<string[]>().default([]), // Execution logs from gRPC TaskProgress
+
+  // Workspace filesystem - S3 path to task outputs in agent's workspace
+  // Results: /workspace/history/{task_id}/result.json
+  // Logs: /workspace/history/{task_id}/session.jsonl
+  storagePath: text("storage_path"), // S3 path to task outputs in workspace
 
   // Execution tracking
   startedAt: timestamp("started_at"),

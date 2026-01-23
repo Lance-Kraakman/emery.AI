@@ -3,7 +3,8 @@ import sys
 import time
 import os
 import asyncio
-from typing import AsyncIterator, Dict, Any, List
+from pathlib import Path
+from typing import AsyncIterator, Dict, Any, List, Optional
 import grpc
 from grpc import aio
 from .generated import agent_worker_pb2, agent_worker_pb2_grpc
@@ -11,6 +12,7 @@ from .generated import table_service_pb2, table_service_pb2_grpc
 from .mappers import ProtoMapper
 from ..services.agent_executor import AgentExecutor
 from ..services.tool_loader import UnifiedToolLoader
+from ..infrastructure.workspace_sync import WorkspaceSync
 import concurrent.futures
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -24,7 +26,7 @@ logging.getLogger("smolagents").setLevel(logging.WARNING)
 
 class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer):
     """gRPC service implementation for AgentWorker."""
-    
+
     def __init__(self, max_concurrent_tasks: int = 10):
         # Fail fast if HF_TOKEN is not provided
         hf_token = os.getenv("HF_TOKEN")
@@ -33,7 +35,7 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
                 "HF_TOKEN environment variable is required for AgentWorkerService. "
                 "Get your token from https://huggingface.co/settings/tokens"
             )
-        
+
         self.max_concurrent_tasks = max_concurrent_tasks
         self.worker_id = f"worker_{int(time.time())}"
         self.start_time = time.time()
@@ -46,25 +48,56 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
         self.tool_loader = UnifiedToolLoader()
         self.proto_mapper = ProtoMapper()
 
+        # Initialize workspace sync for filesystem-based agent workspaces
+        # Workspaces are stored in S3 as tar.gz archives
+        s3_bucket = os.getenv("S3_BUCKET_NAME")
+        if s3_bucket:
+            self.workspace_sync: Optional[WorkspaceSync] = WorkspaceSync(
+                bucket=s3_bucket,
+                prefix="workspaces/agents",
+            )
+            logger.info(f"WorkspaceSync initialized with bucket: {s3_bucket}")
+        else:
+            self.workspace_sync = None
+            logger.warning("S3_BUCKET_NAME not set - workspace persistence disabled")
+
     async def ExecuteTask(
-        self, 
-        request: agent_worker_pb2.TaskRequest, 
+        self,
+        request: agent_worker_pb2.TaskRequest,
         context: grpc.aio.ServicerContext
     ) -> AsyncIterator[agent_worker_pb2.TaskProgress]:
         """Execute agent task with streaming progress updates."""
-        
+
         # Convert protobuf to domain entity
         task_request = self.proto_mapper.task_request_from_proto(request)
-        
+
         print(f"🚀 [TASK-{task_request.task_id[:8]}] Starting execution for agent: {task_request.agent_id}")
         print(f"📋 [TASK-{task_request.task_id[:8]}] Name: {task_request.name}")
         sys.stdout.flush()
-        
+
         logger.info(f"Task: {task_request.name}")
-        
+
+        # Download workspace from S3 if workspace sync is enabled
+        workspace_path: Optional[Path] = None
+        if self.workspace_sync:
+            try:
+                workspace_path = self.workspace_sync.download(task_request.agent_id)
+                logger.info(f"📁 [TASK-{task_request.task_id[:8]}] Workspace downloaded to {workspace_path}")
+
+                # Prepare task history directory
+                self.workspace_sync.prepare_task_history(
+                    agent_id=task_request.agent_id,
+                    task_id=task_request.task_id,
+                    workspace_path=workspace_path,
+                )
+            except Exception as e:
+                logger.error(f"Failed to download workspace: {e}")
+                # Continue without workspace - task can still execute
+
         self.active_tasks[task_request.task_id] = {
-            'agent_id': task_request.agent_id, 
-            'start_time': time.time()
+            'agent_id': task_request.agent_id,
+            'start_time': time.time(),
+            'workspace_path': workspace_path,
         }
 
         try:
@@ -147,6 +180,15 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
             yield error_progress
             
         finally:
+            # Upload workspace back to S3 and cleanup
+            if self.workspace_sync and workspace_path:
+                try:
+                    self.workspace_sync.upload(task_request.agent_id)
+                    logger.info(f"📤 [TASK-{task_request.task_id[:8]}] Workspace uploaded to S3")
+                    self.workspace_sync.cleanup(task_request.agent_id)
+                except Exception as e:
+                    logger.error(f"Failed to upload workspace: {e}")
+
             if request.task_id in self.active_tasks:
                 del self.active_tasks[request.task_id]
 
