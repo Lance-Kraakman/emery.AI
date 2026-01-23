@@ -10,10 +10,12 @@ to single agent. Benefits:
 - Same functionality, fewer round-trips
 
 The planner has access to:
-- Discovery tools: search/list/get capabilities
-- Research tools: web search, read-only data access
+- Research tools: web search, read-only data access (optional, uses if needed)
 - Ask question tool: for clarifying user intent
 - Submit plan tool: for outputting structured plans
+
+NOTE: Discovery tools removed - agents are pre-loaded in WorkspaceContext
+and injected directly into the prompt.
 """
 
 import logging
@@ -22,12 +24,10 @@ from typing import Any, Dict, List, Optional
 from smolagents import ToolCallingAgent
 
 from ..protocols import ModelProvider, Tool
-from ..capability_registry import CapabilityRegistry
 from emery_agents.ace import StrategyAccumulationService
 from emery_agents.models.plan import Plan, PlanStep, create_plan, create_step
 from emery_agents.models.skill_definition import SkillInputDefinition, SkillOutputDefinition
 from emery_agents.tools.plan_output_tool import PlanOutputTool
-from emery_agents.tools.capability_discovery import create_discovery_tools
 from emery_agents.tools.ask_question_tool import AskQuestionTool
 from emery_agents.prompts import render_template
 from emery_agents.services.context import WorkspaceContext
@@ -43,14 +43,16 @@ class PlanGenerator:
     """
     Generates plans using a single planner agent.
 
-    The planner has all tools available and decides when to use them:
-    - Discovery tools: Find relevant capabilities (agents)
-    - Research tools: Gather context about existing data
-    - Ask question tool: Clarify user intent when needed
+    The planner has tools available and decides when to use them:
+    - Research tools: Gather context about existing data (uses if needed)
+    - Ask question tool: Clarify user intent when details are missing
     - Submit plan tool: Output structured plan
 
+    Available agents are pre-loaded in WorkspaceContext and injected into
+    the prompt - no discovery tools needed.
+
     Benefits:
-    - 1-2 LLM calls (vs 3+ with sub-agents)
+    - 1 LLM call for most plans (vs 3+ with sub-agents or discovery)
     - Agent decides when research is needed (not forced)
     - Simpler control flow
     """
@@ -58,7 +60,6 @@ class PlanGenerator:
     def __init__(
         self,
         model_provider: Optional[ModelProvider] = None,
-        capability_registry: Optional[CapabilityRegistry] = None,
         research_tools: Optional[List[Tool]] = None,
         read_only_tools: Optional[List[Tool]] = None,
     ):
@@ -67,12 +68,10 @@ class PlanGenerator:
 
         Args:
             model_provider: Model provider for LLM access and model resolution
-            capability_registry: Registry for capability discovery
             research_tools: Optional research tools (web search, etc.)
             read_only_tools: Optional read-only tools for context gathering
         """
         self.model_provider = model_provider
-        self.capability_registry = capability_registry
         self.research_tools = research_tools or []
         self.read_only_tools = read_only_tools or []
         self._last_strategy_guidance: str = ""
@@ -122,18 +121,15 @@ class PlanGenerator:
         model_id = self.model_provider.resolve_model_selection(org_model=org_model)
         model = self.model_provider.get_model(model_id=model_id)
 
-        # Get capability registry
-        registry = request.capability_registry or self.capability_registry
-
         # Build all tools for the single planning agent
+        # AIDEV-NOTE: Discovery tools removed - agents are pre-loaded in WorkspaceContext
+        # and injected into the prompt. This saves LLM tool calls for agent selection.
         plan_output_tool = PlanOutputTool()
         ask_question_tool = AskQuestionTool()
-        discovery_tools = create_discovery_tools(registry) if registry else []
 
-        # Single agent has all tools: discovery + research + read_only + plan output + ask questions
+        # Planner has: plan output + ask questions + research + read_only
         # Agent decides when to use research tools (not forced)
         all_tools: List[Tool] = [plan_output_tool, ask_question_tool]
-        all_tools.extend(discovery_tools)
         all_tools.extend(self.research_tools)
         all_tools.extend(self.read_only_tools)
 

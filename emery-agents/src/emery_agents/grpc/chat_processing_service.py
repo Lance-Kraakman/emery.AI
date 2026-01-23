@@ -449,9 +449,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 capability_registry=capability_registry,
             )
 
-            yield _make_progress("Classifying task...", "analyzing")
+            yield _make_progress("Creating plan...", "planning")
 
-            async for event in coordinator.classify_and_create_plan(
+            async for event in coordinator.create_plan_only(
                 task=task_instructions,
                 tools=[],
                 managed_agents=managed_agents,

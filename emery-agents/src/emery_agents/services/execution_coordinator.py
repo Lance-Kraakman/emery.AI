@@ -33,7 +33,7 @@ from ..tools.tool_modes import ToolMode, filter_tools_for_mode
 from .plan_service import PlanService
 from .plan_step_executor import PlanStepExecutor
 from .protocols import EvaluatorAgent, Tool, ModelProvider, ManagedAgent
-from .task_classifier import TaskClassifier, TaskClassification
+# AIDEV-NOTE: TaskClassifier removed - planner handles clarification inline
 from .research_tools_provider import get_research_tools, detect_research_intent
 from .execution import InterruptHandler, ReplanHandler, StepExecutor, ReplanNeedsClarificationError
 from emery_agents.ace import (
@@ -474,30 +474,8 @@ class ExecutionCoordinator:
         # NOTE: Interrupt queue state is now managed by self._interrupt_handler
         # (instantiated after ACE services below)
 
-        # LLM-based task classifier (replaces string matching)
-        # Includes research_agent for comprehensive context gathering before classification
-        self._task_classifier: Optional[TaskClassifier] = None
-        if model_provider:
-            # Create research_agent for classifier to gather context (apps, tables, URLs)
-            research_agent = None
-            if api_key and organization_id:
-                try:
-                    from ..agents.research_agent import create_research_agent
-                    model = model_provider.get_model(model_id=org_model) if org_model else model_provider.get_model()
-                    research_agent = create_research_agent(
-                        model=model,
-                        api_key=api_key,
-                        organization_id=organization_id,
-                        max_steps=6,
-                    )
-                    logger.info("📋 Created research_agent for task classifier")
-                except Exception as e:
-                    logger.warning(f"📋 Could not create research_agent for classifier: {e}")
-
-            self._task_classifier = TaskClassifier(
-                model_provider=model_provider,
-                research_agent=research_agent,
-            )
+        # AIDEV-NOTE: TaskClassifier removed - planner handles clarification inline
+        # via ask_clarifying_question tool. This saves 1 LLM call per request.
 
         # Store model_provider for recovery analysis (via plan_service)
         self._model_provider = model_provider
@@ -601,32 +579,32 @@ class ExecutionCoordinator:
         stored_plan: Optional[Plan] = None,
     ) -> AsyncIterator[Any]:
         """
-        Smart execution entry point - decides mode based on LLM task analysis.
+        Execution entry point - creates plan then executes after approval.
 
-        Uses TaskClassifier (LLM-based) to determine:
-        - Whether task is simple (DIRECT) or complex (PLAN_AND_APPROVE)
-        - Whether clarifying questions should be asked first
-        - Which agent should handle the task (if clear)
+        Flow:
+        1. Create plan (planner asks clarifying questions if needed)
+        2. Wait for user approval
+        3. Execute approved plan
 
-        If stored_plan is provided, skips classification and executes
+        If stored_plan is provided, skips planning and executes
         the pre-approved plan directly (autonomous mode).
 
-        AIDEV-NOTE: Replaces brittle string matching patterns with intelligent
-        LLM-based classification. If needs_clarification is True, questions
-        are yielded before proceeding.
+        AIDEV-NOTE: Simplified from previous flow that had separate classification
+        step. Now the planner handles clarification inline via ask_clarifying_question
+        tool, saving 1 LLM call per request.
 
         Args:
             task: The user's task/request
             tools: Available tools
-            managed_agents: Available managed agents (for classification)
+            managed_agents: Available managed agents
             context: Additional context (e.g., existing databases)
             stored_plan: Pre-approved plan from skill config (enables autonomous execution)
 
         Yields:
-            AwaitingClarificationEvent if questions needed
-            DirectExecutionStartedEvent for simple tasks
-            PlanCreatedEvent for complex tasks
-            PlanApprovedEvent + execution events for stored plans
+            PlanningStartedEvent when planning begins
+            AwaitingClarificationEvent if planner needs more info
+            PlanCreatedEvent when plan is ready
+            PlanApprovedEvent + execution events after approval
         """
         # Store managed_agents for later use in execute_plan
         self._managed_agents = managed_agents
@@ -674,44 +652,20 @@ class ExecutionCoordinator:
             return
 
         # === INTERACTIVE MODE: Planning → Approval → Execution ===
+        # AIDEV-NOTE: Simplified flow - no separate classification step.
+        # The planner handles clarification inline via ask_clarifying_question tool.
         self._execution_mode = ExecutionMode.INTERACTIVE
 
-        # Emit classification started event (for UI feedback during thinking phase)
-        task_summary = task[:100] + "..." if len(task) > 100 else task
-        yield ClassificationStartedEvent(task_summary=task_summary)
-
-        # Use LLM-based classification
-        self._session_logger.log_state_transition("IDLE", "CLASSIFYING", "task_received")
-        classification = self._classify_task(task, managed_agents or [], context)
-        self._session_logger.log_event("task_classified", {
-            "mode": classification.mode,
-            "needs_clarification": classification.needs_clarification,
-            "reasoning": classification.reasoning[:200] if classification.reasoning else ""
-        })
-
-        # If clarification questions are needed, ask them first
-        if classification.needs_clarification and classification.clarification_questions:
-            logger.info(
-                f"📋 Coordinator: Task needs clarification - "
-                f"{len(classification.clarification_questions)} questions"
-            )
-            yield AwaitingClarificationEvent(
-                questions=classification.clarification_questions,
-                reasoning=classification.reasoning,
-            )
-            return
-
-        # Map classification mode to coordinator mode
-        if classification.mode == "DIRECT":
-            logger.info("📋 Coordinator: Direct execution (no plan needed)")
-            yield DirectExecutionStartedEvent(task=task)
-            return
-
-        # PLAN_AND_APPROVE: Full planning flow
         # Emit planning started event (for UI feedback)
-        yield PlanningStartedEvent(goal=task[:200] if len(task) > 200 else task)
+        task_summary = task[:200] if len(task) > 200 else task
+        yield PlanningStartedEvent(goal=task_summary)
 
-        logger.info("📋 Coordinator: Plan and approve mode (complex task)")
+        self._session_logger.log_state_transition("IDLE", "PLANNING", "task_received")
+        logger.info("📋 Coordinator: Creating plan (planner handles clarification if needed)")
+
+        # Go directly to planning - planner will:
+        # - Use ask_clarifying_question tool if details are missing
+        # - Create plan with specific steps if task is clear
         async for event in self.create_plan(
             goal=task,
             instructions=task,
@@ -720,7 +674,7 @@ class ExecutionCoordinator:
             yield event
         # Session manager handles approval state
 
-    async def classify_and_create_plan(
+    async def create_plan_only(
         self,
         task: str,
         tools: List[Any],
@@ -729,21 +683,23 @@ class ExecutionCoordinator:
         is_template_generation: bool = False,
     ) -> AsyncIterator[Any]:
         """
-        Classify task and create plan without execution.
+        Create plan without execution.
 
         Used by GeneratePlan RPC for skill editor plan generation.
-        Reuses the exact same classification and planning logic as execute(),
-        but stops after plan creation without executing it.
+        Stops after plan creation without executing it.
+
+        AIDEV-NOTE: Renamed from classify_and_create_plan since classification
+        is now handled inline by the planner.
 
         Args:
             task: The skill instructions to generate a plan for
             tools: Available tools (for plan context)
-            managed_agents: Available managed agents (for classification context)
+            managed_agents: Available managed agents
             context: Additional context (e.g., existing databases)
             is_template_generation: If True, generate template plan with {{ variable }} placeholders
 
         Yields:
-            AwaitingClarificationEvent if questions needed (caller should pause)
+            AwaitingClarificationEvent if questions needed (planner asks via tool)
             Events from create_plan() including PlanCreatedEvent
         """
         self._managed_agents = managed_agents
@@ -751,31 +707,10 @@ class ExecutionCoordinator:
         # Initialize session logger
         session_id = self._generate_session_id()
         self._session_logger = SessionLogger.get_or_create(session_id)
-        self._session_logger.log_event("classify_and_create_plan_started", {"task_preview": task[:200]})
+        self._session_logger.log_event("create_plan_only_started", {"task_preview": task[:200]})
 
-        # === CLASSIFICATION (same as execute()) ===
-        self._session_logger.log_state_transition("IDLE", "CLASSIFYING", "task_received")
-        classification = self._classify_task(task, managed_agents or [], context)
-        self._session_logger.log_event("task_classified", {
-            "mode": classification.mode,
-            "needs_clarification": classification.needs_clarification,
-            "reasoning": classification.reasoning[:200] if classification.reasoning else ""
-        })
-
-        # If clarification questions are needed, ask them first
-        if classification.needs_clarification and classification.clarification_questions:
-            logger.info(
-                f"📋 Coordinator: Task needs clarification - "
-                f"{len(classification.clarification_questions)} questions"
-            )
-            yield AwaitingClarificationEvent(
-                questions=classification.clarification_questions,
-                reasoning=classification.reasoning,
-            )
-            return
-
-        # === PLAN CREATION (same as execute() for PLAN_AND_APPROVE) ===
-        # Always use create_plan for skill generation (no DIRECT mode)
+        # Go directly to plan creation - planner handles clarification
+        self._session_logger.log_state_transition("IDLE", "PLANNING", "task_received")
         logger.info("📋 Coordinator: Creating plan for skill instructions")
         async for event in self.create_plan(
             goal=task,
@@ -786,47 +721,9 @@ class ExecutionCoordinator:
         ):
             yield event
 
-        # NOTE: Does NOT call execute_plan() - that's the key difference from execute()
-
     def _generate_session_id(self) -> str:
         """Generate a short unique session ID for logging."""
         return str(uuid.uuid4())[:8]
-
-    def _classify_task(
-        self,
-        task: str,
-        managed_agents: List[ManagedAgent],
-        context: Optional[str] = None,
-    ) -> TaskClassification:
-        """
-        Classify task using LLM-based TaskClassifier.
-
-        AIDEV-NOTE: Replaces brittle string matching (_get_target_agent,
-        _is_multi_step_task, _is_ambiguous_request) with intelligent LLM-based
-        classification. The LLM is much better at detecting ambiguity and
-        determining appropriate execution mode.
-
-        Args:
-            task: User's task text
-            managed_agents: Available managed agents (typed via ManagedAgent protocol)
-            context: Additional context (e.g., existing databases)
-
-        Returns:
-            TaskClassification with mode, clarification needs, and questions
-        """
-        if not self._task_classifier:
-            raise ValueError(
-                "ExecutionCoordinator requires TaskClassifier. "
-                "Configure task_classifier in initialization."
-            )
-
-        # Run LLM-based classification with resolved model
-        # NOTE: Capability discovery happens in chat_planner, not here
-        return self._task_classifier.classify(
-            task=task,
-            context=context,
-            org_model=self._org_model,
-        )
 
     def _build_workspace_context(
         self,
