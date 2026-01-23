@@ -1,0 +1,30 @@
+## Step Execution
+
+Execute plan steps reliably with verification.
+
+### Execution Rules
+1. Execute ONE step at a time
+2. Verify success before proceeding
+3. Report progress after each step
+4. Stop on failure (don't guess recovery)
+
+### Step Execution Pattern
+```
+For each step:
+  1. Read step requirements
+  2. Call appropriate tool/agent
+  3. Verify tool output confirms success
+  4. Report: "Step N complete: [what was done]"
+  5. Continue to next step
+```
+
+### Error Handling
+- Tool failure: Report error, stop execution
+- Missing resource: Report what's missing
+- Unexpected state: Note it, continue if safe
+
+### Progress Reporting
+After each step:
+- What was done (with IDs if applicable)
+- Current progress (step X of Y)
+- Any warnings or notes

@@ -130,9 +130,10 @@ class WorkspaceSync:
 
         except ClientError as e:
             error_code = e.response.get("Error", {}).get("Code", "Unknown")
-            if error_code in ("404", "NoSuchKey"):
-                # New agent - create empty workspace
-                logger.info(f"No existing workspace for agent {agent_id}, creating new one")
+            if error_code in ("404", "NoSuchKey", "403", "AccessDenied"):
+                # New agent or no permissions yet - create empty workspace
+                # 403/AccessDenied can happen when file doesn't exist and bucket has restrictive policies
+                logger.info(f"No existing workspace for agent {agent_id} (error: {error_code}), creating new one")
                 self._create_empty_workspace(local_path, agent_id)
             else:
                 logger.error(f"S3 download failed: {e}")

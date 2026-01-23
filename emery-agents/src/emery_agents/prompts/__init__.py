@@ -177,6 +177,41 @@ def compose_templates(templates: List[str], **variables: Any) -> str:
     return get_loader().compose(templates, **variables)
 
 
+def compose_layers(
+    layers: List[str],
+    separator: str = "\n\n",
+    **variables: Any
+) -> str:
+    """
+    Compose prompt layers by category for focused, modular prompts.
+
+    Layers are specified as category/name (without .j2 extension):
+    - "shared/identity" -> shared/identity.j2
+    - "behaviors/planner" -> behaviors/planner.j2
+    - "modes/interactive" -> modes/interactive.j2
+
+    Args:
+        layers: List of layer paths (category/name format)
+        separator: String between layers (default: double newline)
+        **variables: Template variables passed to all layers
+
+    Returns:
+        Combined prompt string
+
+    Example:
+        # Build a focused planning prompt (~65 lines vs 451)
+        instructions = compose_layers([
+            "shared/identity",
+            "shared/critical_rules",
+            "behaviors/planner",
+            "modes/interactive",
+        ], research_questions=["What tables exist?"])
+    """
+    # Convert layer names to full template paths
+    template_paths = [f"{layer}.j2" for layer in layers]
+    return get_loader().compose(template_paths, separator=separator, **variables)
+
+
 def get_cached_base_instructions(**kwargs: Any) -> str:
     """
     Get cached base instructions (identity + rules + goal persistence).

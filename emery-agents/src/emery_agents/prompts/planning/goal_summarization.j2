@@ -1,14 +1,14 @@
 {#
 Goal Summarization Template
 
-Summarizes long user instructions into a concise goal statement.
+Transforms user instructions into a structured goal with requirements.
 Used by PlannerRouter to create meaningful plan.goal values.
 
-AIDEV-NOTE: This addresses the context blowup issue where raw user
-messages (sometimes very long) were stored as plan.goal, confusing
-the evaluator and wasting context tokens.
+AIDEV-NOTE: This addresses two issues:
+1. Context blowup from raw user messages as goals
+2. Goals that just echo user input without requirements analysis
 #}
-You are summarizing a user request into a clear, concise goal statement.
+You are transforming a user request into a structured goal with requirements.
 
 ## User Request
 
@@ -16,27 +16,36 @@ You are summarizing a user request into a clear, concise goal statement.
 
 ---
 
-## Guidelines
+## Transformation Process
 
-Create a goal statement that:
-1. Is **100 words or less**
-2. Focuses on **WHAT** needs to be achieved, not HOW
-3. Captures the **essential intent** of the request
-4. Uses **action verbs** (create, build, set up, configure)
-5. Mentions **key entities** (tables, apps, agents, etc.)
+### Step 1: Identify What User Actually Needs
+Look beyond the literal words. What outcome do they want?
+
+### Step 2: Extract Requirements
+Break down into concrete requirements (what features/capabilities):
+
+| User Says | Requirements |
+|-----------|-------------|
+| "create a crm" | Contact mgmt, deal tracking, activity log |
+| "add email field" | Field: email (type: email), Table: {name} |
+| "invoicing system" | Invoice records, line items, payment tracking |
+
+### Step 3: Create Goal Statement
+Combine into a concise goal (100 words max) that includes:
+1. **Action** - What to create/build/configure
+2. **Key requirements** - Main features/capabilities
+3. **Entities** - Tables, apps, skills mentioned
 
 ## Examples
 
-**Input (long):** "I need a system to track our customers. We should have their name, email address, phone number, company they work for, and their status (like active, inactive, lead, etc). Also need to be able to see all this in a nice dashboard with filtering."
+**Input:** "I need a system to track our customers..."
+**Goal:** "Create customer tracking system with: (1) Customers table with name, email, phone, company, status fields, (2) Dashboard app for viewing/filtering customers"
 
-**Output:** "Create a customer tracking system with a customers table (name, email, phone, company, status fields) and a dashboard app for viewing and filtering customer data."
-
-**Input (long):** "Can you analyze the text I provide and determine if it's a support request, a sales inquiry, or general feedback, then route it to the appropriate team member based on that classification?"
-
-**Output:** "Build a text routing skill that classifies input as support/sales/feedback and routes to the appropriate team."
+**Input:** "Can you analyze text and route to teams..."
+**Goal:** "Build text routing skill with: (1) Classification for support/sales/feedback, (2) Team routing based on classification"
 
 ---
 
 ## Submit Goal
 
-Call the **summarize_goal** tool with your concise goal statement.
+Call **summarize_goal** with your transformed goal statement.

@@ -1,0 +1,27 @@
+## Domain Research (Emery Platform)
+
+Research the organization's data BEFORE planning. This provides real IDs and structure.
+
+### What to Research
+{% if research_questions %}
+{% for question in research_questions %}
+- {{ question }}
+{% endfor %}
+{% else %}
+- What tables exist? List with IDs and field structures
+- What skills are configured? What do they do?
+- What apps/pages exist?
+{% endif %}
+
+### Research Rules
+{% if is_template %}
+- TEMPLATE MODE: Get schema structure only (field types, relationships)
+- Do NOT capture specific IDs - use `{{variable}}` placeholders instead
+{% else %}
+- SPECIFIC MODE: Capture real resource IDs for the plan
+- Example: `table_id=42`, `field_id=17`
+{% endif %}
+
+### Tools for Domain Research
+- `system_research` - Query organization data
+- List tools (tables, fields, skills, apps)
