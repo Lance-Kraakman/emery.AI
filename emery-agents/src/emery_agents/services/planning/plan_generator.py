@@ -1,15 +1,15 @@
 """
 Plan Generator
 
-Generates plans using the chat planner agent with capability discovery.
-The chat planner uses discovery tools to find relevant capabilities
-and outputs structured plans via PlanOutputTool.
+Generates plans using a planner agent with sub-agents for focused tasks.
 
-AIDEV-NOTE: Replaces domain-specific planners (schema, app, automation)
-with unified capability-based planning. The chat planner:
-1. Uses search_capabilities, list_capabilities, get_capability to find capabilities
-2. Generates plan steps with target agents from discovered capabilities
-3. Outputs structured plan via submit_plan tool
+Architecture:
+- Planner (orchestrator): Analyzes task, delegates to sub-agents
+- plan_researcher (sub-agent): Gathers context via capability discovery
+- plan_submitter (sub-agent): Validates and submits structured plan
+
+This keeps prompts small (~100 lines total vs 450 lines before) and
+isolates research context from the planner.
 """
 
 import logging
@@ -21,6 +21,7 @@ from ..protocols import ModelProvider
 from emery_agents.ace import StrategyAccumulationService
 from emery_agents.models.plan import Plan, PlanStep, create_plan, create_step
 from emery_agents.tools.plan_output_tool import PlanOutputTool
+from emery_agents.tools.capability_discovery import create_discovery_tools
 from emery_agents.prompts import render_template
 from .models import (
     PlanGenerationRequest,
@@ -32,15 +33,17 @@ logger = logging.getLogger(__name__)
 
 class PlanGenerator:
     """
-    Generates plans using capability-based discovery.
+    Generates plans using a planner with sub-agents.
 
-    Uses a ToolCallingAgent with:
-    - Capability discovery tools (search_capabilities, list_capabilities, get_capability)
-    - Plan output tool (submit_plan) for structured plan capture
-    - Research tools for context gathering
+    Architecture:
+    - Planner: Orchestrates, analyzes task, decides what to do
+    - plan_researcher: Gathers context via capability discovery (returns concise summary)
+    - plan_submitter: Validates and submits structured plan
 
-    The agent discovers relevant capabilities based on the task and generates
-    a plan with steps targeting those capabilities.
+    Benefits:
+    - Small focused prompts (~100 lines total)
+    - Research context isolated (doesn't bloat planner)
+    - Clear responsibilities
     """
 
     def __init__(
@@ -105,24 +108,24 @@ class PlanGenerator:
 
         self._last_strategy_guidance = strategy_guidance
 
+        # Get model
+        model_id = self.model_provider.resolve_model_selection(org_model=request.org_model)
+        model = self.model_provider.get_model(model_id=model_id)
+
+        # Get capability registry
+        registry = request.capability_registry or self.capability_registry
+
         # Build tools for the planning agent
         plan_output_tool = PlanOutputTool()
-        tools: List[Any] = [plan_output_tool]
+        discovery_tools = create_discovery_tools(registry) if registry else []
+        tools: List[Any] = list(discovery_tools)
 
-        # Add capability discovery tools if registry available
-        # Prefer request.capability_registry, fall back to self for backward compat
-        registry = request.capability_registry or self.capability_registry
-        if registry:
-            from emery_agents.tools.capability_discovery import create_discovery_tools
-            discovery_tools = create_discovery_tools(registry)
-            tools.extend(discovery_tools)
-            logger.info(f"Added {len(discovery_tools)} capability discovery tools")
-
-        # Add read-only tools for context gathering
-        tools.extend(self.read_only_tools)
-
-        # Add research tools
-        tools.extend(self.research_tools)
+        # Create sub-agents
+        managed_agents = self._create_sub_agents(
+            model=model,
+            registry=registry,
+            plan_output_tool=plan_output_tool,
+        )
 
         # Build the planning prompt
         prompt = self._build_planning_prompt(
@@ -132,17 +135,15 @@ class PlanGenerator:
             is_template_generation=request.is_template_generation,
             skill_inputs=request.skill_inputs,
             skill_outputs=request.skill_outputs,
+            user_feedback=request.user_feedback,
         )
 
-        # Get model
-        model_id = self.model_provider.resolve_model_selection(org_model=request.org_model)
-        model = self.model_provider.get_model(model_id=model_id)
-
-        # Create and run the planning agent
+        # Create and run the planning agent with sub-agents
         planner = ToolCallingAgent(
             tools=tools,
             model=model,
-            max_steps=15,  # Allow sufficient steps for discovery + planning
+            managed_agents=managed_agents if managed_agents else None,
+            max_steps=15,
         )
 
         try:
@@ -170,6 +171,42 @@ class PlanGenerator:
             strategy_guidance=strategy_guidance,
         )
 
+    def _create_sub_agents(
+        self,
+        model: Any,
+        registry: Optional[Any],
+        plan_output_tool: PlanOutputTool,
+    ) -> List[Any]:
+        """Create sub-agents for the planner.
+
+        Returns:
+            List of managed agents: [plan_researcher, plan_submitter]
+        """
+        # Build researcher tools: discovery + read-only + research
+        discovery_tools = create_discovery_tools(registry) if registry else []
+        researcher_tools = list(discovery_tools) + self.read_only_tools + self.research_tools
+
+        # plan_researcher: gathers context
+        researcher = ToolCallingAgent(
+            tools=researcher_tools,
+            model=model,
+            name="plan_researcher",
+            description="Gathers context for planning. Returns concise summary of existing resources and available capabilities.",
+            max_steps=10,
+        )
+
+        # plan_submitter: validates and submits
+        submitter = ToolCallingAgent(
+            tools=[plan_output_tool],
+            model=model,
+            name="plan_submitter",
+            description="Validates and submits structured plans. Call with goal, context, analysis, and steps.",
+            max_steps=3,
+        )
+
+        logger.info("Created plan_researcher and plan_submitter sub-agents")
+        return [researcher, submitter]
+
     def _build_planning_prompt(
         self,
         instructions: str,
@@ -178,23 +215,21 @@ class PlanGenerator:
         is_template_generation: bool,
         skill_inputs: Optional[List[Any]],
         skill_outputs: Optional[List[Any]],
+        user_feedback: Optional[str] = None,
     ) -> str:
         """Build the planning prompt using J2 templates.
 
-        Uses existing templates:
+        Uses new focused templates:
+        - planning/planner.j2 for interactive planning (with sub-agents)
         - planning/skill_template_planner.j2 for skill template generation
-        - planning/interactive_planner.j2 for interactive planning
         """
         # Choose template based on mode
         template_name = (
             "planning/skill_template_planner.j2"
             if is_template_generation
-            else "planning/interactive_planner.j2"
+            else "planning/planner.j2"
         )
 
-        # Build template context
-        # Note: managed_agents is not passed here - the templates have a fallback
-        # that instructs using capability discovery tools instead
         return render_template(
             template_name,
             task=instructions,
@@ -202,9 +237,7 @@ class PlanGenerator:
             strategy_guidance=strategy_guidance,
             skill_inputs=skill_inputs,
             skill_outputs=skill_outputs,
-            has_research_agent=bool(self.research_tools),
-            has_research_tools=bool(self.read_only_tools or self.research_tools),
-            # managed_agents not passed - template fallback will guide to use discovery tools
+            user_feedback=user_feedback,
         )
 
     def _create_plan_from_captured(

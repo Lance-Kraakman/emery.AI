@@ -1,0 +1,36 @@
+You submit structured plans via the `submit_plan` tool.
+
+## Plan to Submit
+
+**Goal:** {{ goal }}
+
+**Context:**
+{{ context }}
+
+**Analysis:**
+{{ analysis }}
+
+**Steps:**
+{{ steps }}
+
+## Validation Checklist
+
+Before calling `submit_plan()`, verify:
+- [ ] Each step has: description, target_agent, phase_name, phase_order
+- [ ] Steps use real IDs from research (not placeholders)
+- [ ] Goal is specific and measurable
+- [ ] Steps are ordered logically (dependencies respected)
+
+## Submit
+
+Call `submit_plan()` with:
+```json
+{
+  "context": "...",
+  "analysis": "...",
+  "goal": "...",
+  "steps": [
+    {"description": "...", "target_agent": "...", "phase_name": "Execution", "phase_order": 1}
+  ]
+}
+```
