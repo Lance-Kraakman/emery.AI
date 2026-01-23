@@ -41,6 +41,7 @@ from emery_agents.ace import (
     StrategyOutcome,
 )
 from ..types import ExecutionMode
+from .planning.plan_differ import PlanDiffer
 
 logger = logging.getLogger(__name__)
 
@@ -1949,8 +1950,11 @@ Analyze this state and call the report_evaluation tool with your assessment.
         """
         Handle replanning when evaluator indicates plan needs adjustment.
 
-        Generates recovery steps to address the issue and merges them into the plan.
-        Failed/problematic steps are marked as skipped and new steps are inserted.
+        Uses diff-based approach to generate minimal changes instead of
+        regenerating all pending steps from scratch.
+
+        AIDEV-NOTE: This preserves continuity by modifying existing steps
+        rather than discarding them. Only adds/skips/modifies as needed.
 
         Args:
             current_plan: The current plan being executed
@@ -1959,113 +1963,102 @@ Analyze this state and call the report_evaluation tool with your assessment.
             tools: Available tools for recovery planning
 
         Returns:
-            Updated plan with recovery steps
+            Updated plan with recovery steps applied via diff
         """
-        logger.info(f"Handling replan for plan {current_plan.id}: {reason}")
+        logger.info(f"📋 Handling replan for plan {current_plan.id}: {reason}")
 
-        # Get completed and pending steps
-        completed_steps = [s for s in current_plan.steps if s.status == PlanStepStatus.COMPLETED.value]
-        pending_steps = [s for s in current_plan.steps if s.status == PlanStepStatus.PENDING.value]
-
-        # Build recovery context
-        completed_summary = "\n".join([
-            f"- {s.description} (result: {s.result or 'completed'})"
+        # Build completed context for the differ
+        completed_steps = [
+            s for s in current_plan.steps
+            if s.status == PlanStepStatus.COMPLETED.value
+        ]
+        completed_context = "\n".join([
+            f"- {s.description}: {s.result[:200] if s.result else 'completed'}"
             for s in completed_steps
-        ]) or "No steps completed yet"
+        ]) if completed_steps else None
 
-        pending_summary = "\n".join([
-            f"- {s.description}"
-            for s in pending_steps
-        ]) or "No pending steps"
+        # Use PlanDiffer for minimal changes
+        if self._model_provider is None:
+            raise ValueError("Cannot replan without model_provider")
+        differ = PlanDiffer(model_provider=self._model_provider)
 
-        failed_info = ""
-        if failed_step:
-            failed_info = f"""
-The following step triggered replanning:
-- Step: {failed_step.description}
-- Error: {failed_step.error or 'N/A'}
-- Result: {failed_step.result or 'N/A'}
-"""
-
-        # Generate recovery instructions
-        recovery_prompt = f"""
-The plan needs adjustment. Please generate recovery steps.
-
-Original Goal: {current_plan.goal}
-
-{failed_info}
-
-Reason for replanning: {reason}
-
-Completed Steps:
-{completed_summary}
-
-Remaining Pending Steps:
-{pending_summary}
-
-Available Tools: {[getattr(t, 'name', str(t)) for t in tools]}
-
-Generate new steps to recover and achieve the original goal.
-Consider what has already been done and what still needs to happen.
-"""
-
-        # Use plan service to generate recovery steps
-        # IMPORTANT: Must pass same model/auth parameters as _generate_plan()
-        # to ensure correct model resolution (not falling back to HF default)
-        recovery_plan = await self.plan_service.generate_plan(
-            basic_instructions=recovery_prompt,
-            context_tables=None,  # Use existing context
-            available_tools=[getattr(t, 'name', str(t)) for t in tools],
-            goal=f"Recovery: {current_plan.goal}",
-            org_model=self._org_model,
-            tools=tools,
-            api_key=self._api_key,
-            organization_id=self._organization_id,
-            conversation_history=self._conversation_history,  # ACE: Resolve references
-            strategy_service=self._strategy_service,  # ACE: Proven patterns
-        )
-
-        # Build new step list:
-        # 1. Keep completed steps as-is
-        # 2. Mark failed step as skipped (if any)
-        # 3. Remove old pending steps
-        # 4. Add new recovery steps
-        new_steps = list(completed_steps)
-
-        if failed_step:
-            skipped_step = PlanStep(
-                step_id=failed_step.step_id,
-                description=failed_step.description,
-                tool_call=failed_step.tool_call,
-                parameters=failed_step.parameters,
-                context_tables=failed_step.context_tables,
-                status=PlanStepStatus.SKIPPED.value,
-                result=failed_step.result,
-                error=f"Skipped during replan: {reason}",
+        try:
+            diff = await differ.generate_diff(
+                current_plan=current_plan,
+                reason=reason,
+                failed_step=failed_step,
+                completed_context=completed_context,
+                org_model=self._org_model,
             )
-            new_steps.append(skipped_step)
 
-        # Add recovery steps
-        new_steps.extend(recovery_plan.steps)
+            # Log the diff for debugging
+            session_logger = get_session_logger()
+            if session_logger:
+                session_logger.log_event("plan_diff_generated", {
+                    "plan_id": current_plan.id,
+                    "reason": reason,
+                    "diff_summary": diff.summary(),
+                    "steps_to_skip": diff.steps_to_skip,
+                    "steps_to_modify": len(diff.steps_to_modify),
+                    "steps_to_append": len(diff.steps_to_append),
+                    "reasoning": diff.reasoning[:200] if diff.reasoning else "",
+                })
 
-        # Create updated plan with incremented version
-        updated_plan = Plan(
-            id=current_plan.id,
-            goal=current_plan.goal,
-            basic_instructions=current_plan.basic_instructions,
-            steps=new_steps,
-            status=PlanStatus.EXECUTING.value,
-            generated_at=current_plan.generated_at,
-            approved_at=current_plan.approved_at,
-            version=current_plan.version + 1,
-        )
+            # Apply the diff
+            updated_plan = differ.apply_diff(current_plan, diff)
 
-        logger.info(
-            f"Replan complete: removed {len(pending_steps)} pending steps, "
-            f"added {len(recovery_plan.steps)} recovery steps (v{updated_plan.version})"
-        )
+            logger.info(
+                f"📋 Replan complete via diff: {diff.summary()} -> v{updated_plan.version}"
+            )
 
-        return updated_plan
+            return updated_plan
+
+        except Exception as e:
+            # Fallback to simple skip-and-continue if diff generation fails
+            logger.warning(f"Diff generation failed, using fallback: {e}")
+
+            new_steps = []
+            for step in current_plan.steps:
+                if step.status == PlanStepStatus.COMPLETED.value:
+                    new_steps.append(step)
+                elif failed_step and step.step_id == failed_step.step_id:
+                    # Skip the failed step
+                    skipped = PlanStep(
+                        step_id=step.step_id,
+                        description=step.description,
+                        tool_call=step.tool_call,
+                        parameters=step.parameters,
+                        target_agent=step.target_agent,
+                        context_tables=step.context_tables,
+                        prompt_template=step.prompt_template,
+                        required_context=step.required_context,
+                        phase_name=step.phase_name,
+                        phase_order=step.phase_order,
+                        replan_after=step.replan_after,
+                        status=PlanStepStatus.SKIPPED.value,
+                        result=step.result,
+                        error=f"Skipped during replan (fallback): {reason[:100]}",
+                    )
+                    new_steps.append(skipped)
+                else:
+                    # Keep pending steps as-is
+                    new_steps.append(step)
+
+            updated_plan = Plan(
+                id=current_plan.id,
+                goal=current_plan.goal,
+                basic_instructions=current_plan.basic_instructions,
+                steps=new_steps,
+                status=PlanStatus.EXECUTING.value,
+                generated_at=current_plan.generated_at,
+                approved_at=current_plan.approved_at,
+                version=current_plan.version + 1,
+                context=current_plan.context,
+                analysis=f"{current_plan.analysis}\n\n[Replan v{current_plan.version + 1}] Fallback: {reason}",
+            )
+
+            logger.info(f"📋 Replan complete (fallback): skipped failed step -> v{updated_plan.version}")
+            return updated_plan
 
     async def run_with_approval(
         self,

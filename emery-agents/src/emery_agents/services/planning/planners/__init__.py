@@ -4,13 +4,14 @@ Domain Planners
 Managed planners for domain-specific plan generation.
 
 The planning system uses domain planners to:
-1. Classify requests into domains (schema, app, automation)
+1. Classify requests into domains (direct, schema, app, automation)
 2. Generate domain-specific steps
 3. Route to appropriate managed agents
 
 Architecture:
 - PlannerClassifier: LLM-based domain classification
 - DomainPlanner: Protocol for domain planners
+- DirectDomainPlanner: Pure LLM tasks (no platform operations)
 - SchemaDomainPlanner: Database/table operations
 - AppDomainPlanner: App/page operations
 - AutomationDomainPlanner: Agent/skill operations
@@ -28,6 +29,7 @@ from .planner_classifier import (
     PlannerClassifier,
     DomainClassification,
 )
+from .direct_planner import DirectDomainPlanner
 from .schema_planner import SchemaDomainPlanner
 from .app_planner import AppDomainPlanner
 from .automation_planner import AutomationDomainPlanner
@@ -44,6 +46,7 @@ __all__ = [
     "PlannerClassifier",
     "DomainClassification",
     # Domain Planners
+    "DirectDomainPlanner",
     "SchemaDomainPlanner",
     "AppDomainPlanner",
     "AutomationDomainPlanner",

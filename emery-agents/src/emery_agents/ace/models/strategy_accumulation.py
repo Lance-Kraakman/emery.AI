@@ -128,6 +128,28 @@ class StrategyRecord:
             "created_at": self.created_at.isoformat(),
         }
 
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "StrategyRecord":
+        """Create from dictionary."""
+        pattern = ExecutionPattern.from_dict(data["pattern"])
+        last_used = None
+        if data.get("last_used_at"):
+            last_used = datetime.fromisoformat(data["last_used_at"])
+        created = datetime.utcnow()
+        if data.get("created_at"):
+            created = datetime.fromisoformat(data["created_at"])
+
+        record = cls(
+            pattern=pattern,
+            success_count=data.get("success_count", 0),
+            failure_count=data.get("failure_count", 0),
+            partial_count=data.get("partial_count", 0),
+            last_used_at=last_used,
+            goal_keywords=set(data.get("goal_keywords", [])),
+            created_at=created,
+        )
+        return record
+
 
 @dataclass
 class StrategyRegistry:
@@ -226,3 +248,21 @@ class StrategyRegistry:
             "strategies": {k: v.to_dict() for k, v in self.strategies.items()},
             "keyword_count": len(self.keyword_index),
         }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "StrategyRegistry":
+        """Create from dictionary."""
+        registry = cls()
+
+        strategies_data = data.get("strategies", {})
+        for pattern_id, record_data in strategies_data.items():
+            record = StrategyRecord.from_dict(record_data)
+            registry.strategies[pattern_id] = record
+
+            # Rebuild keyword index
+            for keyword in record.goal_keywords:
+                if keyword not in registry.keyword_index:
+                    registry.keyword_index[keyword] = set()
+                registry.keyword_index[keyword].add(pattern_id)
+
+        return registry

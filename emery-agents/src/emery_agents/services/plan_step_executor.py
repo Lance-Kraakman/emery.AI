@@ -159,6 +159,10 @@ class PlanStepExecutor:
         If the step has a prompt_template, uses step_executor_autonomous.j2 with resolved variables.
         Otherwise uses step_executor_interactive.j2 with the description field.
 
+        Special handling for target_agent="direct_execution":
+        - Executes directly via LLM without managed agent routing
+        - No platform operations, just LLM processing/transformation
+
         Args:
             plan: The approved Plan object
             current_step: The step to execute
@@ -166,6 +170,10 @@ class PlanStepExecutor:
         Returns:
             Result from step execution
         """
+        # Handle direct execution (pure LLM tasks without managed agent routing)
+        if current_step.target_agent == "direct_execution":
+            return self._execute_direct(plan, current_step, session_logger)
+
         # Get step index and context
         step_index = next(
             (i for i, s in enumerate(plan.steps) if s.step_id == current_step.step_id),
@@ -283,6 +291,91 @@ class PlanStepExecutor:
                 agent_id = id(agent)
                 if agent_id in original_intervals:
                     agent.planning_interval = original_intervals[agent_id]
+
+    def _execute_direct(
+        self,
+        plan: Plan,
+        current_step: PlanStep,
+        session_logger: Any = None,
+    ) -> str:
+        """
+        Execute a direct LLM task without managed agent routing.
+
+        Used for pure LLM tasks: analysis, classification, routing,
+        summarization, transformation, decision-making.
+
+        These tasks don't create platform entities (tables, apps, agents)
+        and don't need managed agent routing.
+
+        Args:
+            plan: The approved Plan object
+            current_step: The step to execute
+
+        Returns:
+            Result from LLM execution
+        """
+        step_index = next(
+            (i for i, s in enumerate(plan.steps) if s.step_id == current_step.step_id),
+            0,
+        )
+
+        logger.info(
+            f"🔧 Direct execution step {step_index + 1}/{len(plan.steps)}: "
+            f"{current_step.description[:80]}..."
+        )
+
+        # Determine the task from prompt_template or description
+        if current_step.prompt_template:
+            # Autonomous mode: resolve template variables
+            task = resolve_prompt_template(
+                template=current_step.prompt_template,
+                skill_inputs=self.skill_inputs,
+                discovered_context={},
+                previous_results=self._step_results,
+            )
+            logger.info(f"📝 Direct execution (autonomous): resolved template ({len(task)} chars)")
+        else:
+            # Interactive mode: use description
+            task = current_step.description
+            logger.info(f"📝 Direct execution (interactive): using description")
+
+        # Log full task for debugging
+        if session_logger:
+            session_logger.log_full_content(
+                content_type="prompt",
+                name=f"step_{current_step.step_id}_direct_execution",
+                content=task,
+                metadata={
+                    "step_id": current_step.step_id,
+                    "target_agent": "direct_execution",
+                    "execution_mode": "autonomous" if current_step.prompt_template else "interactive",
+                    "step_index": step_index,
+                },
+            )
+
+        try:
+            # Create agent with NO managed agents (direct LLM task)
+            # Tools are still available for structured output if needed
+            direct_agent = ToolCallingAgent(
+                tools=self.tools,
+                managed_agents=[],  # No managed agents for direct execution
+                model=self.model,
+                max_steps=3,  # Direct tasks should be quick
+            )
+
+            # Execute the direct task
+            result = direct_agent.run(task=task, reset=True)
+            result_str = str(result)
+
+            logger.info(f"✅ Direct execution completed")
+            logger.debug(f"🔧 Direct execution result preview: {result_str[:200]}...")
+
+            return result_str
+
+        except Exception as e:
+            error_msg = f"Direct execution error: {str(e)}"
+            logger.error(f"❌ Direct execution failed: {error_msg}", exc_info=True)
+            raise
 
 
 class PlanStepExecutorFactory:

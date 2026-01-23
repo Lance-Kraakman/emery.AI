@@ -1,0 +1,42 @@
+{#
+Goal Summarization Template
+
+Summarizes long user instructions into a concise goal statement.
+Used by PlannerRouter to create meaningful plan.goal values.
+
+AIDEV-NOTE: This addresses the context blowup issue where raw user
+messages (sometimes very long) were stored as plan.goal, confusing
+the evaluator and wasting context tokens.
+#}
+You are summarizing a user request into a clear, concise goal statement.
+
+## User Request
+
+{{ instructions }}
+
+---
+
+## Guidelines
+
+Create a goal statement that:
+1. Is **100 words or less**
+2. Focuses on **WHAT** needs to be achieved, not HOW
+3. Captures the **essential intent** of the request
+4. Uses **action verbs** (create, build, set up, configure)
+5. Mentions **key entities** (tables, apps, agents, etc.)
+
+## Examples
+
+**Input (long):** "I need a system to track our customers. We should have their name, email address, phone number, company they work for, and their status (like active, inactive, lead, etc). Also need to be able to see all this in a nice dashboard with filtering."
+
+**Output:** "Create a customer tracking system with a customers table (name, email, phone, company, status fields) and a dashboard app for viewing and filtering customer data."
+
+**Input (long):** "Can you analyze the text I provide and determine if it's a support request, a sales inquiry, or general feedback, then route it to the appropriate team member based on that classification?"
+
+**Output:** "Build a text routing skill that classifies input as support/sales/feedback and routes to the appropriate team."
+
+---
+
+## Submit Goal
+
+Call the **summarize_goal** tool with your concise goal statement.

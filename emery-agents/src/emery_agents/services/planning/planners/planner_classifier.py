@@ -109,8 +109,8 @@ class PlannerClassifier:
     handle a given request. Requires model_provider - no static fallback.
     """
 
-    # Valid domains
-    VALID_DOMAINS = {"schema", "app", "automation"}
+    # Valid domains (direct is for pure LLM tasks without platform operations)
+    VALID_DOMAINS = {"schema", "app", "automation", "direct"}
 
     def __init__(self, model_provider: Optional[Any] = None):
         """

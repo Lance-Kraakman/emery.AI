@@ -4,9 +4,10 @@ Analyze this request and identify which planning domains are needed.
 
 ## Domains
 
+- **direct**: Pure LLM tasks with NO platform operations - analysis, classification, routing, summarization, transformation, decision-making. Use when the task is purely about processing/transforming input without creating tables, apps, or agents.
 - **schema**: databases, tables, fields, relations, data modeling
 - **app**: apps, pages, visual components, forms, dashboards, data binding
-- **automation**: agents, skills, triggers, workflows, scheduled tasks
+- **automation**: agents, skills, triggers, workflows, scheduled tasks (that CREATE entities)
 
 ## Request
 

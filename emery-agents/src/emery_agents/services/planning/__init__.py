@@ -30,6 +30,7 @@ from .models import (
 from .plan_generator import PlanGenerator
 from .plan_repository import PlanRepository
 from .failure_analyzer import FailureAnalyzer
+from .plan_differ import PlanDiff, PlanDiffer
 
 # Domain planners
 from .planners import (
@@ -37,6 +38,7 @@ from .planners import (
     DomainPlanResult,
     PlannerClassifier,
     DomainClassification,
+    DirectDomainPlanner,
     SchemaDomainPlanner,
     AppDomainPlanner,
     AutomationDomainPlanner,
@@ -54,11 +56,15 @@ __all__ = [
     "PlanGenerator",
     "PlanRepository",
     "FailureAnalyzer",
+    # Plan Diffs
+    "PlanDiff",
+    "PlanDiffer",
     # Domain Planners
     "DomainPlanner",
     "DomainPlanResult",
     "PlannerClassifier",
     "DomainClassification",
+    "DirectDomainPlanner",
     "SchemaDomainPlanner",
     "AppDomainPlanner",
     "AutomationDomainPlanner",
