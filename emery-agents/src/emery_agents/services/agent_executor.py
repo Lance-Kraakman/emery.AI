@@ -23,6 +23,7 @@ from .agent_factory import AgentFactory, AgentConfig
 from .token_usage_extractor import TokenUsageExtractor
 from ..tools.skill_tool import SkillTool
 from ..tools.output_tool import OutputTool, build_target_field_metadata_from_mappings
+from ..tools.bash_tool import BashTool
 from ..clients import HuggingFaceInferenceClient, TaskResult
 from .skill_executor import SkillExecutorService
 from .step_executor import StepExecutorService
@@ -1106,7 +1107,6 @@ class AgentExecutor:
 
         # Add BashTool if workspace_path is available (filesystem-based execution)
         if context.workspace_path:
-            from ..tools.bash_tool import BashTool
             bash_tool = BashTool(
                 workspace_path=context.workspace_path,
                 allow_network=False,  # Network disabled by default for security
@@ -1188,7 +1188,6 @@ class AgentExecutor:
 
         # Add BashTool if workspace_path is available (filesystem-based execution)
         if context.workspace_path:
-            from ..tools.bash_tool import BashTool
             bash_tool = BashTool(
                 workspace_path=context.workspace_path,
                 allow_network=False,  # Network disabled by default for security
