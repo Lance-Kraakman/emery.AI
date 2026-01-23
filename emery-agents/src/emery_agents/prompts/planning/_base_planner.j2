@@ -62,19 +62,6 @@ You are regenerating an existing plan based on user feedback. DO NOT start from 
 
 ## Available Capabilities
 
-{% if managed_agents %}
-{% for agent in managed_agents %}
-### {{ agent.name }}
-{{ agent.description }}
-{% if agent.capabilities %}
-**Capabilities:** {{ agent.capabilities }}
-{% endif %}
-{% if agent.tools %}
-**Tools:** {{ agent.tools | join(', ') }}
-{% endif %}
-
-{% endfor %}
-{% else %}
 Use the **capability discovery tools** to find available agents for your plan:
 
 - `search_capabilities("create tables")` - Find agents that can handle a task
@@ -87,7 +74,6 @@ Common capability types:
 - `agent:*` - Managed agents (schema_builder, skill_builder, app_builder, etc.)
 - `tool:*` - Direct tools (integrations, CRUD operations)
 - `skill:*` - User-defined skills
-{% endif %}
 
 ---
 {% if strategy_guidance %}
