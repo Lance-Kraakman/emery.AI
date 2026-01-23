@@ -273,10 +273,14 @@ flowchart TB
 | Component | File | Key Lines |
 |-----------|------|-----------|
 | gRPC Entry | `grpc/chat_processing_service.py` | 298-302, 703-1200 |
+| Approval Handler | `grpc/approval_handler.py` | Extracted approval/error helpers |
 | State Machine | `services/coordinator_state_machine.py` | 40-45, 102-128 |
 | Coordinator | `services/execution_coordinator.py` | 525-651, 939-1558 |
+| Step Executor | `services/execution/step_executor.py` | Extracted step execution |
+| Interrupt Handler | `services/execution/interrupt_handler.py` | Extracted interrupt management |
+| Replan Handler | `services/execution/replan_handler.py` | Extracted replanning logic |
 | Planning Router | `services/planning/planners/planner_router.py` | 69-262 |
-| Step Executor | `services/plan_step_executor.py` | 82-147, 149-293 |
+| Plan Step Executor | `services/plan_step_executor.py` | 82-147, 149-293 |
 | Plan Differ | `services/planning/plan_differ.py` | 181-371 |
 | ACE Context | `ace/services/context_service.py` | 137-302 |
 | ACE Strategy | `ace/services/strategy_service.py` | 86-295 |
@@ -317,3 +321,23 @@ flowchart LR
 |------|-------------|-----------------|
 | PLANNING | Read-only discovery | list_tables, describe_table, list_apps, etc. |
 | EXECUTION | Full operations | create_table, update_record, create_app, etc. |
+
+## Extracted Modules (Phase 5 Refactoring)
+
+### services/execution/
+
+Extracted from `execution_coordinator.py` for maintainability:
+
+| Module | Purpose |
+|--------|---------|
+| `step_executor.py` | Executes individual plan steps using PlanStepExecutor |
+| `interrupt_handler.py` | Manages interrupt queue and classification |
+| `replan_handler.py` | Handles diff-based replanning when evaluator triggers replan |
+
+### grpc/
+
+Extracted from `chat_processing_service.py`:
+
+| Module | Purpose |
+|--------|---------|
+| `approval_handler.py` | Plan approval helpers, error response creation |

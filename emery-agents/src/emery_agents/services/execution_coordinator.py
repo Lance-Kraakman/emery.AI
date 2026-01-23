@@ -33,6 +33,7 @@ from .plan_step_executor import PlanStepExecutor
 from .protocols import EvaluatorAgent, Tool, ModelProvider, ManagedAgent
 from .task_classifier import TaskClassifier, TaskClassification
 from .research_tools_provider import get_research_tools, detect_research_intent
+from .execution import InterruptHandler, ReplanHandler, StepExecutor
 from emery_agents.ace import (
     ExecutionContextService,
     create_execution_context_service,
@@ -466,6 +467,20 @@ class ExecutionCoordinator:
                 org_model=org_model,
             )
             logger.info("📊 ACE execution tracking services initialized")
+
+        # Extracted handlers for maintainability
+        self._interrupt_handler = InterruptHandler(
+            model_provider=model_provider,
+            org_model=org_model,
+        )
+        self._replan_handler = ReplanHandler(
+            model_provider=model_provider,
+            org_model=org_model,
+        )
+        self._step_executor = StepExecutor(
+            plan_step_executor=plan_step_executor,
+            session_logger=get_session_logger(),
+        )
 
     @classmethod
     def from_config(cls, config: ExecutionCoordinatorConfig) -> "ExecutionCoordinator":

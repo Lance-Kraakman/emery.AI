@@ -105,6 +105,11 @@ from .step_converter import (
     build_skill_message,
 )
 from .coordinator_event_converter import convert_coordinator_event
+from .approval_handler import (
+    is_approval_response,
+    create_awaiting_input_for_plan,
+    create_error_response,
+)
 from .response_types import (
     StepType,
     StepMetadata,
@@ -981,7 +986,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     input_type = "clarification"
                     logger.info("📋 Processing clarification response via state machine")
                 elif sm.phase == Phase.AWAITING_QUESTIONS:
-                    input_type = "approval" if self._is_approval_response(current_task) else "feedback"
+                    input_type = "approval" if is_approval_response(current_task) else "feedback"
                     logger.info(f"📋 Processing managed agent HITL response: {input_type}")
                 else:
                     input_type = "task"
@@ -1671,7 +1676,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 elif isinstance(event, ErrorEvent):
                     # Plan generation or API error - return error to user, don't fall through
                     logger.error(f"📋 Coordinator: Plan generation error - {event.error}")
-                    yield self._create_error_response(
+                    yield create_error_response(
                         "PLAN_GENERATION_FAILED",
                         event.error,
                     )
@@ -1684,7 +1689,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 sm.on_plan_created(coordinator, plan, task)
 
                 # Send plan for approval via awaiting_input
-                yield self._create_awaiting_input_for_plan(plan)
+                yield create_awaiting_input_for_plan(plan)
             elif plan is None:
                 # No plan created - this shouldn't happen for PLAN_AND_APPROVE
                 logger.warning("📋 Coordinator: No plan created, falling through to normal flow")
@@ -1693,7 +1698,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         elif sm and sm.phase == Phase.AWAITING_APPROVAL:
             # === CHECK FOR APPROVAL ===
 
-            if self._is_approval_response(task):
+            if is_approval_response(task):
                 # User approved - switch to execution mode
                 context.tool_mode = ToolMode.EXECUTION
                 AgentExecutor.set_current_context(context)
@@ -1705,7 +1710,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
                 if not coordinator_from_session or not plan_from_session:
                     logger.error("📋 Coordinator: No coordinator/plan found in state machine")
-                    yield self._create_error_response(
+                    yield create_error_response(
                         "SESSION_STATE_ERROR",
                         "Session state lost. Please start over.",
                     )
@@ -1721,7 +1726,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 except Exception as e:
                     logger.error(f"📋 Coordinator: Plan approval failed: {e}")
                     sm.on_error(f"Plan approval failed: {e}")
-                    yield self._create_error_response(
+                    yield create_error_response(
                         "PLAN_APPROVAL_FAILED",
                         f"Failed to approve plan: {e}",
                     )
@@ -1793,78 +1798,6 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             sm.context.clear()
 
             yield "FALL_THROUGH"
-
-    def _is_approval_response(self, task: str) -> bool:
-        """
-        Check if the user response is an approval.
-
-        Only accepts structured 'approve' from UI button.
-        Any other text is feedback that routes to orchestrator.
-        """
-        return task.lower().strip() == "approve"
-
-    def _create_awaiting_input_for_plan(self, plan: Plan) -> AwaitingInputResponseDict:
-        """Create awaiting_input event for plan approval."""
-        # Format plan steps as markdown
-        plan_content = f"## Plan: {plan.goal}\n\n"
-
-        # Include context section if available
-        if plan.context:
-            plan_content += f"### Current State\n{plan.context}\n\n"
-
-        # Include analysis section if available
-        if plan.analysis:
-            plan_content += f"### Analysis\n{plan.analysis}\n\n"
-
-        # Add steps
-        plan_content += "### Steps\n"
-        for i, step in enumerate(plan.steps, 1):
-            plan_content += f"{i}. {step.description}\n"
-            if step.tool_call:
-                plan_content += f"   - Tool: `{step.tool_call}`\n"
-
-        return {
-            "type": "awaiting_input",
-            "data": {
-                "input_type": "plan_approval",
-                "title": "Review Plan",
-                "content": plan_content,
-                "options": [
-                    {"id": "approve", "label": "Approve", "description": "Execute the plan"}
-                ],
-                "plan_json": json.dumps({
-                    "id": plan.id,
-                    "goal": plan.goal,
-                    "context": plan.context,
-                    "analysis": plan.analysis,
-                    "steps": [
-                        {
-                            "step_id": s.step_id,
-                            "description": s.description,
-                            "tool_call": s.tool_call,
-                            "prompt_template": s.prompt_template,
-                            "required_context": s.required_context or [],
-                        }
-                        for s in plan.steps
-                    ]
-                })
-            }
-        }
-
-    def _create_error_response(self, error_code: str, error_message: str) -> ErrorResponseDict:
-        """Create a typed error response dict."""
-        return {
-            "type": "error",
-            "error": {
-                "error_code": error_code,
-                "error_message": error_message,
-                "error_details": {"severity": "recoverable"},
-                "hint": "",
-                "can_retry": True,
-                "auto_retry": False,
-                "session_reset": False
-            }
-        }
 
     async def GeneratePlan(
         self,
