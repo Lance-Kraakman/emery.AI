@@ -5,3 +5,25 @@ You are executing step {{ step_index + 1 }} of {{ total_steps }} in the approved
 
 ## Plan Goal
 {{ goal }}
+
+## Critical Rule: Ask Questions If Missing Information
+
+If you cannot complete this step because you lack specific details:
+1. Call `ask_clarifying_question` with:
+   - question: What you need to know
+   - options: Choices (if applicable)
+   - context: Why you need this information
+2. STOP execution and wait for user response
+
+<example>
+Step says: "Create the customers table"
+But doesn't specify fields.
+
+DO: ask_clarifying_question(
+    question="What fields should the customers table have?",
+    options=["Name, email, phone", "Name, email, address, company", "Custom fields"],
+    context="I need to know the table structure to create it"
+)
+
+DON'T: Just output "I need more information" as text and mark complete.
+</example>

@@ -101,13 +101,21 @@ class PlanGenerationResult:
     All outputs from plan generation.
 
     Encapsulates the plan and any metadata gathered during generation.
+    May contain clarifying_questions instead of a plan if the planner
+    needs more information from the user.
     """
 
-    plan: "Plan"
+    plan: Optional["Plan"] = None
     strategy_guidance: Optional[str] = None
     context_gathered: Optional[str] = None
     analysis: Optional[str] = None
     tool_results: List[Dict[str, Any]] = field(default_factory=list)
+    clarifying_questions: Optional[List[Dict[str, Any]]] = None
+
+    @property
+    def needs_clarification(self) -> bool:
+        """Check if we need clarification from user instead of having a plan."""
+        return self.clarifying_questions is not None and len(self.clarifying_questions) > 0
 
 
 @dataclass

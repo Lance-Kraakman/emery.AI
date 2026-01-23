@@ -34,7 +34,7 @@ from .plan_step_executor import PlanStepExecutor
 from .protocols import EvaluatorAgent, Tool, ModelProvider, ManagedAgent
 from .task_classifier import TaskClassifier, TaskClassification
 from .research_tools_provider import get_research_tools, detect_research_intent
-from .execution import InterruptHandler, ReplanHandler, StepExecutor
+from .execution import InterruptHandler, ReplanHandler, StepExecutor, ReplanNeedsClarificationError
 from emery_agents.ace import (
     ExecutionContextService,
     create_execution_context_service,
@@ -302,10 +302,51 @@ class CoordinatorMode(Enum):
 
 
 @dataclass
+class ClarifyingQuestion:
+    """A structured clarifying question with optional choices."""
+    question: str
+    options: Optional[List[str]] = None
+    context: Optional[str] = None
+    required: bool = True
+
+    @classmethod
+    def from_string(cls, question: str) -> "ClarifyingQuestion":
+        """Create from a simple string question."""
+        return cls(question=question)
+
+
+@dataclass
 class AwaitingClarificationEvent:
     """Event emitted when clarifying questions need to be asked before proceeding."""
-    questions: List[str]
-    reasoning: str
+    questions: List[ClarifyingQuestion]
+    reasoning: str = "Need more information to proceed"
+
+    def __init__(
+        self,
+        questions: "List[ClarifyingQuestion] | List[str]",
+        reasoning: str = "Need more information to proceed"
+    ):
+        """Initialize with either ClarifyingQuestion objects or strings for backward compatibility."""
+        if questions and isinstance(questions[0], str):
+            # Backward compatibility: convert strings to ClarifyingQuestion
+            self.questions = [ClarifyingQuestion.from_string(q) for q in questions]  # type: ignore
+        else:
+            self.questions = questions  # type: ignore
+        self.reasoning = reasoning
+
+    @classmethod
+    def from_dict_list(cls, questions: List[Dict[str, Any]], reasoning: str = "") -> "AwaitingClarificationEvent":
+        """Create from list of question dicts (from AskQuestionTool)."""
+        structured_questions = [
+            ClarifyingQuestion(
+                question=q.get("question", ""),
+                options=q.get("options"),
+                context=q.get("context"),
+                required=q.get("required", True),
+            )
+            for q in questions
+        ]
+        return cls(questions=structured_questions, reasoning=reasoning)
 
 
 @dataclass
@@ -831,7 +872,7 @@ class ExecutionCoordinator:
         # Pass research_tools so planner can do web research if needed
         # Context gathering is done via research_emery (created inside PlanService)
         try:
-            plan = await self.plan_service.generate_plan(
+            result = await self.plan_service.generate_plan(
                 basic_instructions=instructions,
                 context_tables=context_tables,
                 available_tools=[getattr(t, 'name', str(t)) for t in planning_tools],
@@ -853,6 +894,35 @@ class ExecutionCoordinator:
             self._unified_phase = Phase.FAILED
             yield ErrorEvent(
                 error=f"Failed to generate plan: {e}",
+                recoverable=True,
+            )
+            return
+
+        # Check if planner needs clarification instead of generating plan
+        if result.needs_clarification and result.clarifying_questions:
+            logger.info(f"❓ Planner needs clarification: {len(result.clarifying_questions)} question(s)")
+            self._unified_phase = Phase.AWAITING_CLARIFICATION
+
+            # Store pending context for when user responds
+            self._pending_context = PendingContext(
+                original_task=instructions,
+                tools=tools,
+                managed_agents=managed_agents or [],
+            )
+
+            yield AwaitingClarificationEvent.from_dict_list(
+                questions=result.clarifying_questions,
+                reasoning="Need more details to create a specific plan",
+            )
+            return
+
+        plan = result.plan
+        if plan is None:
+            logger.error("❌ Plan generation returned no plan and no questions")
+            self._current_phase = ExecutionPhase.FAILED
+            self._unified_phase = Phase.FAILED
+            yield ErrorEvent(
+                error="Plan generation failed: no plan returned",
                 recoverable=True,
             )
             return
@@ -1231,6 +1301,30 @@ class ExecutionCoordinator:
                         managed_agents=managed_agents,
                     )
 
+                    # Check if step needs clarification instead of completing
+                    if result and "__needs_clarification__" in result:
+                        try:
+                            clarification_data = json.loads(result)
+                            if clarification_data.get("__needs_clarification__"):
+                                questions = clarification_data.get("questions", [])
+                                logger.info(f"❓ Step {step.step_id} needs clarification: {len(questions)} question(s)")
+
+                                # Store pending context for resumption
+                                self._pending_context = PendingContext(
+                                    original_task=self._current_plan.basic_instructions if self._current_plan else "",
+                                    tools=tools,
+                                    managed_agents=managed_agents or [],
+                                )
+                                self._unified_phase = Phase.AWAITING_CLARIFICATION
+
+                                yield AwaitingClarificationEvent.from_dict_list(
+                                    questions=questions,
+                                    reasoning=f"Step '{step.description}' needs more information to complete",
+                                )
+                                return
+                        except json.JSONDecodeError:
+                            pass  # Not JSON, treat as normal result
+
                     # Mark step as completed
                     self._current_plan = await self.plan_service.update_step_status(
                         self._current_plan,
@@ -1387,12 +1481,28 @@ class ExecutionCoordinator:
 
                             # Perform dynamic replanning
                             old_pending_count = len(self._current_plan.get_pending_steps())
-                            self._current_plan = await self._replan_handler.handle_replan(
-                                current_plan=self._current_plan,
-                                failed_step=step if step.status == PlanStepStatus.FAILED.value else None,
-                                reason=evaluation.reason,
-                                tools=tools,
-                            )
+                            try:
+                                self._current_plan = await self._replan_handler.handle_replan(
+                                    current_plan=self._current_plan,
+                                    failed_step=step if step.status == PlanStepStatus.FAILED.value else None,
+                                    reason=evaluation.reason,
+                                    tools=tools,
+                                )
+                            except ReplanNeedsClarificationError as e:
+                                # Replan detected missing info - ask user before proceeding
+                                logger.info(f"❓ Replan needs clarification: {len(e.questions)} question(s)")
+                                self._unified_phase = Phase.AWAITING_CLARIFICATION
+                                self._pending_context = PendingContext(
+                                    original_task=self._current_plan.basic_instructions if self._current_plan else "",
+                                    tools=tools,
+                                    managed_agents=managed_agents or [],
+                                )
+                                yield AwaitingClarificationEvent.from_dict_list(
+                                    questions=e.questions,
+                                    reasoning=e.reasoning or f"Need more information to continue: {evaluation.reason}",
+                                )
+                                return
+
                             new_pending_count = len(self._current_plan.get_pending_steps())
 
                             yield PlanUpdatedEvent(

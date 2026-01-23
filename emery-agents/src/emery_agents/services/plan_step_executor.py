@@ -26,6 +26,7 @@ from ..ace import StepResult
 from ..models.plan import Plan, PlanStep, PlanStepStatus
 from ..prompts import render_template
 from ..utils.session_logger import get_session_logger
+from ..tools.ask_question_tool import AskQuestionTool
 from .protocols import ModelProvider
 from .prompt_template_resolver import resolve_prompt_template
 
@@ -65,6 +66,8 @@ class PlanStepExecutor:
         self.skill_inputs = skill_inputs or {}
         # Track results from previous steps for prompt template resolution and ACE curation
         self._step_results: Dict[str, StepResult] = {}
+        # Tool for asking clarifying questions when step lacks needed information
+        self._ask_question_tool = AskQuestionTool()
 
         agent_names = [getattr(a, 'name', '?') for a in managed_agents]
         logger.info(f"✨ Created PlanStepExecutor with {len(tools)} tools, agents: {agent_names}")
@@ -262,10 +265,16 @@ class PlanStepExecutor:
             logger.debug(f"🔧 Disabled planning_interval for {len(original_intervals)} managed agents")
 
         try:
+            # Reset the ask question tool for this step
+            self._ask_question_tool.reset()
+
             # Create sub-agent with managed agents
             # Smolagents reads agent descriptions and routes automatically
+            # Include ask_clarifying_question tool so agent can ask for missing info
+            step_tools = [self._ask_question_tool] + list(self.tools)
+
             sub_agent = ToolCallingAgent(
-                tools=self.tools,
+                tools=step_tools,
                 managed_agents=self.managed_agents,
                 model=self.model,
                 max_steps=self.max_steps,
@@ -274,6 +283,19 @@ class PlanStepExecutor:
             # Execute step - smolagents handles routing
             result = sub_agent.run(task=prompt, reset=True)
             result_str = str(result)
+
+            # Check if the agent asked clarifying questions instead of completing
+            if self._ask_question_tool.has_questions():
+                questions = self._ask_question_tool.get_questions()
+                logger.info(f"❓ Step asked {len(questions)} clarifying question(s) instead of completing")
+                # Return special marker so caller knows to handle questions
+                # Format: JSON with questions array
+                import json
+                return json.dumps({
+                    "__needs_clarification__": True,
+                    "questions": questions,
+                    "partial_result": result_str,
+                })
 
             logger.info(f"✅ PlanStepExecutor: Step completed")
             logger.debug(f"🔧 PlanStepExecutor: Result preview: {result_str[:200]}...")
@@ -354,10 +376,16 @@ class PlanStepExecutor:
             )
 
         try:
+            # Reset the ask question tool for this step
+            self._ask_question_tool.reset()
+
             # Create agent with NO managed agents (direct LLM task)
             # Tools are still available for structured output if needed
+            # Include ask_clarifying_question tool so agent can ask for missing info
+            step_tools = [self._ask_question_tool] + list(self.tools)
+
             direct_agent = ToolCallingAgent(
-                tools=self.tools,
+                tools=step_tools,
                 managed_agents=[],  # No managed agents for direct execution
                 model=self.model,
                 max_steps=3,  # Direct tasks should be quick
@@ -366,6 +394,17 @@ class PlanStepExecutor:
             # Execute the direct task
             result = direct_agent.run(task=task, reset=True)
             result_str = str(result)
+
+            # Check if the agent asked clarifying questions instead of completing
+            if self._ask_question_tool.has_questions():
+                questions = self._ask_question_tool.get_questions()
+                logger.info(f"❓ Direct step asked {len(questions)} clarifying question(s)")
+                import json
+                return json.dumps({
+                    "__needs_clarification__": True,
+                    "questions": questions,
+                    "partial_result": result_str,
+                })
 
             logger.info(f"✅ Direct execution completed")
             logger.debug(f"🔧 Direct execution result preview: {result_str[:200]}...")

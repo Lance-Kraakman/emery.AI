@@ -105,7 +105,7 @@ class PlanService:
         conversation_history: Optional[List[Any]] = None,
         strategy_service: Optional[StrategyAccumulationService] = None,
         capability_registry: Optional[Any] = None,
-    ) -> Plan:
+    ) -> PlanGenerationResult:
         """
         Generate plan using phased domain routing.
 
@@ -130,9 +130,12 @@ class PlanService:
             is_template_generation: If True, plan is for a reusable skill (no hardcoded IDs)
             conversation_history: Optional chat history for resolving references
             strategy_service: Optional service for surfacing proven patterns
+            capability_registry: Optional registry for capability discovery
 
         Returns:
-            Plan object with generated steps, context, and analysis
+            PlanGenerationResult with either:
+            - plan: Generated Plan object (if details were sufficient)
+            - clarifying_questions: Questions for user (if details were missing)
         """
         # Build request dataclass (includes all config for plan generation)
         request = PlanGenerationRequest(
@@ -160,7 +163,7 @@ class PlanService:
             strategy_service=strategy_service,
         )
 
-        return result.plan
+        return result
 
     async def save_agent_plan(self, agent_id: int, plan: Plan) -> None:
         """Save plan to agent entity via gRPC."""

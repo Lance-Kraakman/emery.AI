@@ -22,6 +22,7 @@ from emery_agents.ace import StrategyAccumulationService
 from emery_agents.models.plan import Plan, PlanStep, create_plan, create_step
 from emery_agents.tools.plan_output_tool import PlanOutputTool
 from emery_agents.tools.capability_discovery import create_discovery_tools
+from emery_agents.tools.ask_question_tool import AskQuestionTool
 from emery_agents.prompts import render_template
 from .models import (
     PlanGenerationRequest,
@@ -117,14 +118,16 @@ class PlanGenerator:
 
         # Build tools for the planning agent
         plan_output_tool = PlanOutputTool()
+        ask_question_tool = AskQuestionTool()
         discovery_tools = create_discovery_tools(registry) if registry else []
-        tools: List[Any] = list(discovery_tools)
+        tools: List[Any] = [ask_question_tool] + list(discovery_tools)
 
-        # Create sub-agents
+        # Create sub-agents (pass task for template rendering)
         managed_agents = self._create_sub_agents(
             model=model,
             registry=registry,
             plan_output_tool=plan_output_tool,
+            task=request.basic_instructions,
         )
 
         # Build the planning prompt
@@ -152,6 +155,16 @@ class PlanGenerator:
             logger.error(f"Planning agent failed: {e}")
             raise
 
+        # Check if planner asked clarifying questions
+        if ask_question_tool.has_questions():
+            questions = ask_question_tool.get_questions()
+            logger.info(f"❓ Planner asked {len(questions)} clarifying question(s)")
+            return PlanGenerationResult(
+                plan=None,
+                strategy_guidance=strategy_guidance,
+                clarifying_questions=questions,
+            )
+
         # Extract the captured plan
         captured_plan = plan_output_tool.get_plan()
         if not captured_plan:
@@ -176,8 +189,15 @@ class PlanGenerator:
         model: Any,
         registry: Optional[Any],
         plan_output_tool: PlanOutputTool,
+        task: str,
     ) -> List[Any]:
         """Create sub-agents for the planner.
+
+        Args:
+            model: LLM model for the agents
+            registry: Capability registry for discovery tools
+            plan_output_tool: Tool for submitting plans
+            task: The task description (for template rendering)
 
         Returns:
             List of managed agents: [plan_researcher, plan_submitter]
@@ -186,25 +206,33 @@ class PlanGenerator:
         discovery_tools = create_discovery_tools(registry) if registry else []
         researcher_tools = list(discovery_tools) + self.read_only_tools + self.research_tools
 
-        # plan_researcher: gathers context
+        # Render researcher prompt from template
+        researcher_prompt = render_template("planning/plan_researcher.j2", task=task)
+
+        # plan_researcher: gathers context via capability discovery
         researcher = ToolCallingAgent(
             tools=researcher_tools,
             model=model,
             name="plan_researcher",
-            description="Gathers context for planning. Returns concise summary of existing resources and available capabilities.",
+            description="Gathers context for planning via capability discovery.",
+            instructions=researcher_prompt,
             max_steps=10,
         )
+
+        # Render submitter prompt from template
+        submitter_prompt = render_template("planning/plan_submitter.j2")
 
         # plan_submitter: validates and submits
         submitter = ToolCallingAgent(
             tools=[plan_output_tool],
             model=model,
             name="plan_submitter",
-            description="Validates and submits structured plans. Call with goal, context, analysis, and steps.",
+            description="Validates and submits structured plans.",
+            instructions=submitter_prompt,
             max_steps=3,
         )
 
-        logger.info("Created plan_researcher and plan_submitter sub-agents")
+        logger.info("Created plan_researcher and plan_submitter sub-agents with instructions")
         return [researcher, submitter]
 
     def _build_planning_prompt(

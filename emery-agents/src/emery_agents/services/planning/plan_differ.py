@@ -24,6 +24,7 @@ from smolagents import Tool, ToolCallingAgent
 from emery_agents.models.plan import Plan, PlanStep, PlanStatus, PlanStepStatus, create_step
 from emery_agents.prompts import render_template
 from emery_agents.services.protocols import ModelProvider
+from emery_agents.tools.ask_question_tool import AskQuestionTool
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,9 @@ class PlanDiff:
     reasoning: str = ""
     """Explanation of why these changes were made."""
 
+    clarifying_questions: List[Dict[str, Any]] = field(default_factory=list)
+    """Questions to ask user when missing information detected."""
+
     def is_empty(self) -> bool:
         """Check if the diff has no changes."""
         return (
@@ -59,7 +63,13 @@ class PlanDiff:
             and not self.steps_to_modify
             and not self.steps_to_insert
             and not self.steps_to_append
+            and not self.clarifying_questions
         )
+
+    @property
+    def needs_clarification(self) -> bool:
+        """Check if diff requires user clarification before proceeding."""
+        return len(self.clarifying_questions) > 0
 
     def summary(self) -> str:
         """Get a human-readable summary of the diff."""
@@ -238,19 +248,30 @@ class PlanDiffer:
             pending_steps=pending_steps,
         )
 
-        # Use DiffOutputTool for structured output
+        # Use DiffOutputTool and AskQuestionTool for structured output
         diff_tool = DiffOutputTool()
+        ask_question_tool = AskQuestionTool()
         model_id = self.model_provider.resolve_model_selection(org_model=org_model)
         model = self.model_provider.get_model(model_id=model_id)
 
         agent = ToolCallingAgent(
-            tools=[diff_tool],
+            tools=[diff_tool, ask_question_tool],
             model=model,
-            max_steps=3,
+            max_steps=5,  # More steps to allow for questions + diff
         )
 
         try:
             agent.run(prompt)
+
+            # Check if clarifying questions were asked
+            if ask_question_tool.has_questions():
+                questions = ask_question_tool.get_questions()
+                logger.info(f"❓ Replan needs clarification: {len(questions)} question(s)")
+                return PlanDiff(
+                    clarifying_questions=questions,
+                    reasoning="Need more information before replanning",
+                )
+
             diff = diff_tool.get_diff()
 
             if diff is None:

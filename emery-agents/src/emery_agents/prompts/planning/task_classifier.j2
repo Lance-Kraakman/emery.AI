@@ -67,29 +67,45 @@ Use research when:
 
 ### Clarification Questions
 
-**ONLY ask clarification if research was done and STILL didn't resolve the ambiguity.**
+There are two types of missing information:
+1. **WHERE** - Where should this be created? → Always assume Emery, don't ask
+2. **WHAT** - What exactly should be created? → ASK if not specified
 
-Set needs_clarification=True when:
-- Research was done but STILL cannot find what the user is referring to
-- Multiple resources match AND research doesn't clarify which one
-- User's intent is still ambiguous after research
+Set needs_clarification=True when task lacks WHAT details:
+- "create a database" → WHAT tables? WHAT fields? ASK.
+- "build an app" → WHAT should it do? WHAT features? ASK.
+- "help me design a schema" → FOR WHAT? What entities? ASK.
+- "set up tracking" → Track WHAT? What data? ASK.
 
 Do NOT ask clarifying questions when:
-- Task was clearly simple (no research needed)
-- Research found the resource the user mentioned (use it!)
-- Research analyzed the reference URL (use that info!)
-- User wants to create/design something → Assume they want it in Emery
-- All necessary details are provided or can be inferred
+- Task specifies WHAT: "create a customers table with name, email, phone"
+- Task is clearly simple: "add email field to users table"
+- Research found the specific resource user mentioned
 
-**Bias toward action**: If research provides context, use it. Clarification is a last resort when research doesn't help.
+**Key distinction:**
+- "Create a database" → needs_clarification=True (WHAT is missing)
+- "Create a database for tracking customer orders" → needs_clarification=False (WHAT is specified)
+- "Create a CRM" → needs_clarification=True (too vague - what CRM features?)
+- "Create a CRM with customers, contacts, and deals tables" → needs_clarification=False
+
+**Bias toward asking WHAT**: If the user hasn't specified what they want to create, ask. Don't create vague plans.
 
 ### Question Guidelines
 
-When asking questions:
-- Be specific and actionable
-- Ask about the most critical missing info first
-- Limit to 1-3 questions maximum
-- Phrase as choices when possible (e.g., "Do you want to A) create new or B) modify existing?")
+When asking questions about WHAT to create:
+- Ask about the core entities/tables needed
+- Ask about the key fields or data to track
+- Phrase as choices when possible
+
+Good questions:
+- "What would you like to track in this database? (e.g., customers, orders, inventory)"
+- "What information should each record contain?"
+- "What's the main purpose - tracking sales, managing contacts, or something else?"
+
+Bad questions:
+- "Where do you want this created?" (always Emery)
+- "Are you sure you want to do this?" (just do it)
+- "What technology stack?" (irrelevant for Emery)
 
 ## Your Task
 

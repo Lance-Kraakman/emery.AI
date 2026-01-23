@@ -10,9 +10,18 @@ import logging
 from typing import Any, List, Optional
 
 from ...models.plan import Plan, PlanStep, PlanStatus, PlanStepStatus
-from ..planning.plan_differ import PlanDiffer
+from ..planning.plan_differ import PlanDiffer, PlanDiff
 from ..protocols import ModelProvider
 from ...utils.session_logger import get_session_logger
+
+
+class ReplanNeedsClarificationError(Exception):
+    """Raised when replan requires user clarification before proceeding."""
+
+    def __init__(self, questions: List[Any], reasoning: str = ""):
+        self.questions = questions
+        self.reasoning = reasoning
+        super().__init__(f"Replan needs clarification: {len(questions)} question(s)")
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +96,14 @@ class ReplanHandler:
                 completed_context=completed_context,
                 org_model=self.org_model,
             )
+
+            # Check if replan needs user clarification
+            if diff.needs_clarification:
+                logger.info(f"❓ Replan detected missing information, needs {len(diff.clarifying_questions)} clarification(s)")
+                raise ReplanNeedsClarificationError(
+                    questions=diff.clarifying_questions,
+                    reasoning=diff.reasoning,
+                )
 
             # Log the diff for debugging
             session_logger = get_session_logger()
