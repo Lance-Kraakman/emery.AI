@@ -1,0 +1,26 @@
+{#
+Agent Capability Template
+
+Provides focused instructions for executing an agent capability.
+Used by build_capability_instructions() when executing agent steps.
+#}
+## Agent: {{ name }}
+
+{{ description }}
+
+**Actions:** {{ actions | join(", ") }}
+{% if entities %}
+**Works with:** {{ entities | join(", ") }}
+{% endif %}
+
+{% if skills %}
+### Available Skills
+{% for skill in skills %}
+- **{{ skill.name }}**: {{ skill.description }}
+{% endfor %}
+{% endif %}
+
+### Usage
+Delegate tasks to this agent with: `{{ name }}.forward(task="...")`
+
+The agent will execute autonomously and report results.

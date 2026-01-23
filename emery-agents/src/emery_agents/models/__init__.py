@@ -24,6 +24,10 @@ from .task_ledger import (
     StepState,
     create_ledger_from_plan,
 )
+from .capability import (
+    Capability,
+    CapabilityType,
+)
 
 __all__ = [
     "ContextMapping",
@@ -42,4 +46,6 @@ __all__ = [
     "LedgerEventType",
     "StepState",
     "create_ledger_from_plan",
+    "Capability",
+    "CapabilityType",
 ]

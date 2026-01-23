@@ -30,9 +30,12 @@ Usage:
 import logging
 import os
 from pathlib import Path
-from typing import Optional, Any, List, Dict
+from typing import TYPE_CHECKING, Optional, Any, List, Dict
 
 from jinja2 import Environment, FileSystemLoader
+
+if TYPE_CHECKING:
+    from ..models.capability import Capability
 
 from ..utils.session_logger import get_session_logger
 
@@ -609,3 +612,85 @@ def build_agent_instructions(
     except Exception as e:
         logger.error(f"❌ Failed to load templates: {e}")
         raise RuntimeError(f"Failed to build agent instructions: {e}") from e
+
+
+def build_capability_instructions(
+    capability: "Capability",  # Forward reference to avoid circular import
+    include_base: bool = False,
+) -> str:
+    """
+    Build focused instructions for executing a capability.
+
+    By default, returns ONLY the capability-specific instructions (~200-400 chars).
+    Sub-agents executing capabilities don't need identity/rules - they execute
+    one task autonomously.
+
+    Args:
+        capability: The Capability object to build instructions for
+        include_base: If True, include identity + critical rules (for top-level agents).
+                     Default False for focused sub-agent instructions.
+
+    Returns:
+        Focused instructions string for executing this capability
+
+    Example:
+        from emery_agents.models import Capability, CapabilityType
+
+        cap = Capability(
+            id="agent:schema_builder",
+            name="schema_builder",
+            type=CapabilityType.AGENT,
+            domain="emery",
+            description="Creates database tables and fields",
+            actions=["create", "update", "delete"],
+            entities=["tables", "fields"],
+        )
+
+        # Focused (default) - ~200-400 chars
+        instructions = build_capability_instructions(cap)
+
+        # With base templates - ~3500 chars
+        instructions = build_capability_instructions(cap, include_base=True)
+    """
+    from emery_agents.models.capability import CapabilityType
+
+    # Map capability type to template
+    template_map = {
+        CapabilityType.AGENT: "capabilities/agent",
+        CapabilityType.SKILL: "capabilities/skill",
+        CapabilityType.TOOL: "capabilities/tool",
+    }
+
+    capability_template = template_map.get(capability.type)
+    if not capability_template:
+        raise ValueError(f"Unknown capability type: {capability.type}")
+
+    # Build layers - focused by default (just capability template)
+    layers = []
+
+    # Only include base templates if explicitly requested
+    if include_base:
+        layers.extend([
+            "shared/identity",
+            "shared/critical_rules",
+        ])
+
+    # Always include the capability-specific template
+    layers.append(capability_template)
+
+    instructions = compose_layers(
+        layers,
+        name=capability.name,
+        description=capability.description,
+        actions=capability.actions,
+        entities=capability.entities,
+        skills=capability.metadata.get("skills"),
+        inputs=capability.metadata.get("inputs"),
+        outputs=capability.metadata.get("outputs"),
+        parameters=capability.metadata.get("parameters"),
+    )
+
+    logger.debug(f"📝 Built capability instructions for {capability.id} ({len(instructions)} chars, base={include_base})")
+    _write_debug_prompt(f"capability_{capability.short_name}", instructions)
+
+    return instructions

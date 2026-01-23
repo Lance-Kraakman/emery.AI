@@ -28,6 +28,7 @@ from smolagents.monitoring import LogLevel
 
 from .interrupt_aware_agent import InterruptAwareToolCallingAgent
 from ..prompts import build_agent_instructions
+from ..services.capability_registry import CapabilityRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,8 @@ def create_chat_planner_agent(
     user_agents: Optional[List[dict]] = None,
     context_type: str = "interactive",
     max_steps: int = 10,
-    session_attachments: Optional[List[Any]] = None
+    session_attachments: Optional[List[Any]] = None,
+    capability_registry: Optional[CapabilityRegistry] = None,
 ) -> InterruptAwareToolCallingAgent:
     """
     Create the Chat Planner orchestrator agent.
@@ -65,21 +67,34 @@ def create_chat_planner_agent(
         max_steps: Maximum execution steps
         session_attachments: Optional list of file attachments available in session
                             (displayed to agent for file reference awareness)
+        capability_registry: Registry of all capabilities (agents, skills, tools)
+                            for dynamic capability discovery
 
     Returns:
         Configured InterruptAwareToolCallingAgent
     """
+    # Build capability summaries for template if registry provided
+    # This gives planner visibility into all available capabilities
+    capability_summaries = []
+    if capability_registry:
+        capability_summaries = [
+            cap.to_summary() for cap in capability_registry.all()
+        ]
+        logger.info(f"Providing {len(capability_summaries)} capability summaries to planner")
+
     # Get instructions from centralized function (base + agent-specific + tools)
     # Pass managed_agents so template can list available specialists
     # Pass user_agents for user-defined agent visibility in template
     # Pass session_attachments so agent knows what files are available
+    # Pass capabilities for unified capability discovery
     instructions = build_agent_instructions(
         tools=tools,
         agent_type="chat_planner",
         context_type=context_type,
         managed_agents=managed_agents or [],
         user_agents=user_agents or [],
-        session_attachments=session_attachments
+        session_attachments=session_attachments,
+        capabilities=capability_summaries,
     )
 
     # Create the orchestrator agent

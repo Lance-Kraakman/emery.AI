@@ -33,6 +33,9 @@ from ...services.tool_provider import ToolProvider
 from ...services.model_provider import SmolagentsModelProvider
 from ...services.agent_api_service import AgentAPIService
 from ...services.research_tools_provider import get_research_tools
+from ...services.capability_registry import CapabilityRegistry
+from ...models.capability import Capability, CapabilityType
+from ...tools.capability_discovery import create_discovery_tools
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +84,41 @@ class ManagedAgentsFactory:
             model_provider: Provider for LLM model instances
         """
         self.model_provider = model_provider
+        self.capability_registry = CapabilityRegistry()
+
+    def _register_agent_capability(
+        self,
+        agent: Any,
+        agent_id: str,
+        description: str,
+        actions: List[str],
+        entities: List[str],
+        domain: str = "emery",
+    ) -> None:
+        """
+        Register an agent as a capability in the registry.
+
+        Args:
+            agent: The agent instance (for metadata)
+            agent_id: Capability ID (e.g., "agent:schema_builder")
+            description: What this agent does
+            actions: List of actions it can perform
+            entities: List of entities it works with
+            domain: Source domain (default: "emery")
+        """
+        name = agent_id.split(":", 1)[1] if ":" in agent_id else agent_id
+        capability = Capability(
+            id=agent_id,
+            name=name,
+            type=CapabilityType.AGENT,
+            domain=domain,
+            description=description,
+            actions=actions,
+            entities=entities,
+            metadata={"executor": agent},
+        )
+        self.capability_registry.register(capability)
+        logger.debug(f"Registered capability: {agent_id}")
 
     def _get_research_tools(self) -> List[Any]:
         """
@@ -133,14 +171,20 @@ class ManagedAgentsFactory:
             )
         )
 
+        # Add capability discovery tools to the planner
+        discovery_tools = create_discovery_tools(self.capability_registry)
+        all_tools = list(smolagents_tools) + discovery_tools
+        logger.info(f"Added {len(discovery_tools)} capability discovery tools to chat_planner")
+
         return create_chat_planner_agent(
-            tools=smolagents_tools,
+            tools=all_tools,
             model=model,
             managed_agents=managed_agents,
             user_agents=user_agents,
             context_type="interactive",
             max_steps=10,
-            session_attachments=session_attachments
+            session_attachments=session_attachments,
+            capability_registry=self.capability_registry,
         )
 
     def create_skill_builder(
@@ -706,6 +750,16 @@ class ManagedAgentsFactory:
                     'skillNames': skill_names,
                 })
 
+                # Register user agent as capability
+                self._register_agent_capability(
+                    agent=executor,
+                    agent_id=f"agent:{agent_data.name}",
+                    description=agent_data.description or f"User-defined agent: {agent_data.name}",
+                    actions=["execute"],  # User agents execute their skills
+                    entities=skill_names,  # Skills are what they work with
+                    domain="user",
+                )
+
                 logger.info(f"[USER-AGENTS] Loaded: {agent_data.name} ({len(skills_data)} skills)")
 
             except Exception as e:
@@ -719,75 +773,112 @@ class ManagedAgentsFactory:
         self,
         tool_provider: ToolProvider,
         org_model: Optional[str] = None
-    ) -> List[Any]:
+    ) -> tuple[List[Any], CapabilityRegistry]:
         """
-        Create all managed agents for plan generation.
+        Create all managed agents for plan generation and register as capabilities.
 
-        Returns list of all available managed agents. Used by GeneratePlan
-        to provide agent info to the planner for routing decisions.
+        Returns list of all available managed agents AND the capability registry.
+        Used by GeneratePlan to provide agent info to the planner for routing decisions.
 
         Args:
             tool_provider: Provider for agent-specific tools
             org_model: Organization-level model override
 
         Returns:
-            List of managed agent instances
+            Tuple of (managed agent instances, capability registry)
         """
         agents = []
 
-        # Create each managed agent (skip any that fail)
-        try:
-            agents.append(self.create_skill_builder(tool_provider, org_model))
-        except Exception as e:
-            logger.warning(f"Failed to create skill_builder: {e}")
+        # Agent capability metadata for registration
+        # Format: (create_fn, agent_id, description, actions, entities)
+        agent_definitions = [
+            (
+                lambda: self.create_skill_builder(tool_provider, org_model),
+                "agent:skill_builder",
+                "Creates and configures skills for agents",
+                ["create", "update", "delete"],
+                ["skills"],
+            ),
+            (
+                lambda: self.create_document_builder(tool_provider, org_model),
+                "agent:document_builder",
+                "Creates and edits documents with structured content",
+                ["create", "update", "delete"],
+                ["documents"],
+            ),
+            (
+                lambda: self.create_table_builder(tool_provider, org_model),
+                "agent:table_builder",
+                "Quick table modifications - adds/removes fields on existing tables",
+                ["create", "update", "delete"],
+                ["tables", "fields"],
+            ),
+            (
+                lambda: self.create_schema_builder(tool_provider, org_model),
+                "agent:schema_builder",
+                "Designs complex database schemas from requirements - creates databases, tables, and fields",
+                ["create", "update", "delete"],
+                ["databases", "tables", "fields"],
+            ),
+            (
+                lambda: self.create_app_builder(tool_provider, org_model),
+                "agent:app_builder",
+                "Creates apps with pages and views for data visualization",
+                ["create", "update", "delete"],
+                ["apps", "pages", "views"],
+            ),
+            (
+                lambda: self.create_page_builder(tool_provider, org_model),
+                "agent:page_builder",
+                "Creates visual pages with Puck blocks and layouts",
+                ["create", "update"],
+                ["pages", "blocks"],
+            ),
+            (
+                lambda: self.create_agent_builder(tool_provider, org_model),
+                "agent:agent_builder",
+                "Creates and configures AI agents with skills",
+                ["create", "update", "delete"],
+                ["agents", "skills"],
+            ),
+            (
+                lambda: self.create_research_agent(
+                    api_key=tool_provider.api_key,
+                    organization_id=tool_provider.organization_id,
+                    org_model=org_model
+                ),
+                "agent:research_agent",
+                "Searches the web and Emery platform for information",
+                ["search", "read"],
+                [],  # Works on anything
+            ),
+            (
+                lambda: self.create_discover_tools(
+                    api_key=tool_provider.api_key,
+                    organization_id=tool_provider.organization_id,
+                    org_model=org_model
+                ),
+                "agent:discover_tools",
+                "Discovers available integrations and checks OAuth connections",
+                ["search", "list", "check"],
+                ["integrations", "connections"],
+            ),
+        ]
 
-        try:
-            agents.append(self.create_document_builder(tool_provider, org_model))
-        except Exception as e:
-            logger.warning(f"Failed to create document_builder: {e}")
+        # Create each managed agent and register as capability
+        for create_fn, agent_id, description, actions, entities in agent_definitions:
+            try:
+                agent = create_fn()
+                agents.append(agent)
+                self._register_agent_capability(
+                    agent=agent,
+                    agent_id=agent_id,
+                    description=description,
+                    actions=actions,
+                    entities=entities,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to create {agent_id}: {e}")
 
-        try:
-            agents.append(self.create_table_builder(tool_provider, org_model))
-        except Exception as e:
-            logger.warning(f"Failed to create table_builder: {e}")
-
-        try:
-            agents.append(self.create_schema_builder(tool_provider, org_model))
-        except Exception as e:
-            logger.warning(f"Failed to create schema_builder: {e}")
-
-        try:
-            agents.append(self.create_app_builder(tool_provider, org_model))
-        except Exception as e:
-            logger.warning(f"Failed to create app_builder: {e}")
-
-        try:
-            agents.append(self.create_page_builder(tool_provider, org_model))
-        except Exception as e:
-            logger.warning(f"Failed to create page_builder: {e}")
-
-        try:
-            agents.append(self.create_agent_builder(tool_provider, org_model))
-        except Exception as e:
-            logger.warning(f"Failed to create agent_builder: {e}")
-
-        try:
-            agents.append(self.create_research_agent(
-                api_key=tool_provider.api_key,
-                organization_id=tool_provider.organization_id,
-                org_model=org_model
-            ))
-        except Exception as e:
-            logger.warning(f"Failed to create research_agent: {e}")
-
-        try:
-            agents.append(self.create_discover_tools(
-                api_key=tool_provider.api_key,
-                organization_id=tool_provider.organization_id,
-                org_model=org_model
-            ))
-        except Exception as e:
-            logger.warning(f"Failed to create discover_tools: {e}")
-
-        logger.info(f"Created {len(agents)} managed agents for plan generation")
-        return agents
+        logger.info(f"Created {len(agents)} managed agents, registered {self.capability_registry.count()} capabilities")
+        return agents, self.capability_registry
