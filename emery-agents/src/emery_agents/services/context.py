@@ -15,10 +15,9 @@ session-level context that wraps around task execution.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Dict, List, Optional
 
-if TYPE_CHECKING:
-    from ..models.plan import Plan
+from ..models.plan import Plan
 
 
 @dataclass
@@ -107,7 +106,7 @@ class SessionContext:
         agents: Optional[List[AgentInfo]] = None,
         tools: Optional[List[ToolInfo]] = None,
         org_model: Optional[str] = None,
-    ) -> "SessionContext":
+    ) -> "SessionContext":  # Forward ref needed - class not yet defined
         """
         Factory method to create a session context.
 
@@ -159,7 +158,7 @@ class SessionContext:
 def build_prompt_context(
     session: SessionContext,
     task: str,
-    plan: Optional["Plan"] = None,
+    plan: Optional[Plan] = None,
     step_results: Optional[Dict[str, Dict[str, Any]]] = None,
     additional_context: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:

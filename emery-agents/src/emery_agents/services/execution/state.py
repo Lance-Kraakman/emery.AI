@@ -13,10 +13,10 @@ AIDEV-NOTE: This replaces:
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Dict, List, Optional
 
-if TYPE_CHECKING:
-    from ...models.plan import Plan, PlanStep
+from ...models.plan import Plan, PlanStep
+from ..protocols import Tool, ManagedAgent
 
 
 class Phase(str, Enum):
@@ -90,7 +90,7 @@ class ExecutionState:
     conversation_id: Optional[str] = None
 
     # Plan state
-    plan: Optional["Plan"] = None
+    plan: Optional[Plan] = None
     current_step_index: int = 0
     step_results: Dict[str, StepResult] = field(default_factory=dict)
 
@@ -101,8 +101,8 @@ class ExecutionState:
     error: Optional[str] = None
 
     # Tools/agents available (resolved at start)
-    tools: List[Any] = field(default_factory=list)
-    managed_agents: List[Any] = field(default_factory=list)
+    tools: List[Tool] = field(default_factory=list)
+    managed_agents: List[ManagedAgent] = field(default_factory=list)
 
     def reset(self) -> None:
         """Reset state for new task."""
@@ -114,7 +114,7 @@ class ExecutionState:
         self.pending_input = None
         self.error = None
 
-    def start_task(self, task: str, tools: List[Any], managed_agents: List[Any]) -> None:
+    def start_task(self, task: str, tools: List[Tool], managed_agents: List[ManagedAgent]) -> None:
         """Initialize state for new task."""
         self.phase = Phase.WORKING
         self.original_task = task
@@ -126,7 +126,7 @@ class ExecutionState:
         self.pending_input = None
         self.error = None
 
-    def set_plan(self, plan: "Plan") -> None:
+    def set_plan(self, plan: Plan) -> None:
         """Set plan and prepare for approval."""
         self.plan = plan
         self.current_step_index = 0
@@ -203,14 +203,14 @@ class ExecutionState:
         return self.phase in (Phase.COMPLETE, Phase.FAILED)
 
     @property
-    def current_step(self) -> Optional["PlanStep"]:
+    def current_step(self) -> Optional[PlanStep]:
         """Get current step being executed."""
         if self.plan and 0 <= self.current_step_index < len(self.plan.steps):
             return self.plan.steps[self.current_step_index]
         return None
 
     @property
-    def pending_steps(self) -> List["PlanStep"]:
+    def pending_steps(self) -> List[PlanStep]:
         """Get remaining steps to execute."""
         if self.plan:
             return self.plan.steps[self.current_step_index:]
