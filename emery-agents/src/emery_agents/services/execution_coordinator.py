@@ -45,7 +45,7 @@ from emery_agents.ace import (
 )
 from ..types import ExecutionMode
 from .planning.plan_differ import PlanDiffer
-from .context import SessionConfig, WorkspaceContext, AgentInfo, TableInfo, AppInfo
+from .context import SessionConfig, WorkspaceContext, TableInfo, AppInfo
 
 logger = logging.getLogger(__name__)
 
@@ -730,39 +730,21 @@ class ExecutionCoordinator:
         tools: Optional[List[Tool]] = None,
     ) -> WorkspaceContext:
         """
-        Build workspace context with existing workspace resources and available agents.
+        Build workspace context with existing workspace DATA.
 
-        This pre-resolves context at planning time so prompts can include:
-        - Existing tables/apps for context-aware clarification
-        - Available agents for delegation (eliminates discovery tool calls)
+        This pre-resolves DATA context at planning time so prompts can include
+        existing tables/apps for context-aware clarification.
+
+        NOTE: Capabilities (agents, skills, tools) are handled separately.
+        Core system agents are pre-loaded directly into planner prompts.
+        User skills and integrations use discovery tools.
 
         Args:
             tools: Available tools (for extracting existing tables)
 
         Returns:
-            WorkspaceContext with pre-resolved resources and agents
+            WorkspaceContext with existing tables and apps
         """
-        # Get available agents from capability registry
-        available_agents: List[AgentInfo] = []
-        if self._capability_registry:
-            try:
-                for cap in self._capability_registry.by_type(CapabilityType.AGENT):
-                    # Extract examples and antipatterns from metadata if present
-                    examples = cap.metadata.get("examples", [])
-                    antipatterns = cap.metadata.get("antipatterns", [])
-                    capabilities = cap.actions  # Use actions as capabilities
-
-                    available_agents.append(AgentInfo(
-                        name=cap.name,
-                        description=cap.description,
-                        examples=examples if isinstance(examples, list) else [],
-                        antipatterns=antipatterns if isinstance(antipatterns, list) else [],
-                        capabilities=capabilities,
-                    ))
-                logger.info(f"📋 Pre-loaded {len(available_agents)} agents for workspace context")
-            except Exception as e:
-                logger.warning(f"📋 Could not load agents from capability registry: {e}")
-
         # Get existing tables from read-only tools if available
         existing_tables: List[TableInfo] = []
         existing_apps: List[AppInfo] = []
@@ -781,7 +763,6 @@ class ExecutionCoordinator:
                     break
 
         return WorkspaceContext(
-            available_agents=available_agents,
             existing_tables=existing_tables,
             existing_apps=existing_apps,
         )

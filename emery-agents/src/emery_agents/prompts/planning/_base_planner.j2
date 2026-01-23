@@ -1,6 +1,6 @@
 {# Base Planning Template - Common elements for all planning modes #}
 {# Include this in mode-specific planners: interactive_planner.j2, skill_template_planner.j2 #}
-{% from "shared/workspace_context.j2" import render_workspace, render_agents, render_agent_table %}
+{% from "shared/workspace_context.j2" import render_workspace, render_core_agents %}
 
 You are a planning agent for Emery. Follow the Facts-Survey-Plan process to create effective plans.
 
@@ -65,23 +65,20 @@ You are regenerating an existing plan based on user feedback. DO NOT start from 
 ---
 {% endif %}
 
-## Available Agents
-{% if available_agents %}
+## Capabilities
 
-{{ render_agents(available_agents) }}
-
-**Agent Selection:** Set `target_agent` in your plan steps to delegate work.
-No discovery tools needed - use the agent names listed above.
-
-| Task Type | Agent |
-|-----------|-------|
-{% for agent in available_agents %}
-| {{ agent.description[:40] }}{% if agent.description | length > 40 %}...{% endif %} | `{{ agent.name }}` |
-{% endfor %}
-{% else %}
-
-No agents pre-loaded. Use `target_agent: null` for direct execution steps.
+{% if core_agents %}
+{{ render_core_agents(core_agents) }}
 {% endif %}
+
+### Discovery Tools
+
+Use these tools to find capabilities for your plan:
+
+- `search_capabilities(query)` - Search org's agents and skills (active)
+- `search_available(query)` - Search all integrations and templates (available)
+
+**Search active first**, then available if no match found.
 
 ---
 {% if strategy_guidance %}

@@ -22,7 +22,6 @@ from .models import (
     PlanGenerationResult,
     FailureAnalysisRequest,
 )
-from ..context import AgentInfo
 from .plan_generator import PlanGenerator
 from .plan_repository import PlanRepository
 from .failure_analyzer import FailureAnalyzer
@@ -30,7 +29,6 @@ from .plan_differ import PlanDiff, PlanDiffer
 
 __all__ = [
     # Models
-    "AgentInfo",
     "ToolResultSummary",
     "PlanGenerationRequest",
     "PlanGenerationResult",

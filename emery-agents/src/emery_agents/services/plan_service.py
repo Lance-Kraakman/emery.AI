@@ -37,8 +37,6 @@ from .planning import (
     FailureAnalyzer,
     PlanGenerationRequest,
     PlanGenerationResult,
-    # Re-export for backward compatibility
-    AgentInfo,
     ToolResultSummary,
 )
 from .context import SessionConfig, WorkspaceContext
@@ -49,7 +47,6 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "PlanService",
     "PlanServiceFactory",
-    "AgentInfo",
     "ToolResultSummary",
 ]
 

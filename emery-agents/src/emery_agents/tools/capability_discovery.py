@@ -1,11 +1,14 @@
 """
 Capability Discovery Tools - Tools for planner to discover capabilities.
 
-These tools allow the planner to search and explore the capability registry
-without loading all 30K+ capabilities into context at once.
+Two-tier search:
+1. search_capabilities: Searches ACTIVE capabilities (org's agents + skills)
+2. search_available: Searches AVAILABLE capabilities (templates + integrations)
 
-Three tools:
-- search_capabilities: Semantic search by description
+Active = domains ["emery", "user"] (system agents + org's custom stuff)
+Available = everything else (integrations, templates, marketplace)
+
+Additional tools:
 - list_capabilities: List by domain or type
 - get_capability: Get full details for a specific capability
 """
@@ -20,29 +23,30 @@ from ..services.capability_registry import CapabilityRegistry
 
 logger = logging.getLogger(__name__)
 
+# Domains considered "active" (org's stuff + system agents)
+ACTIVE_DOMAINS = {"emery", "user"}
+
 
 class SearchCapabilitiesTool(Tool):
     """
-    Search capabilities by semantic similarity.
+    Search ACTIVE capabilities (org's agents + skills).
 
-    Uses embeddings to find capabilities that match the query semantically,
-    handling synonyms and related concepts.
+    Searches only in active domains (emery, user) - things the org
+    has created or that are always available system agents.
+
+    Use search_available for integrations and templates.
     """
 
     name = "search_capabilities"
     description = (
-        "Search for capabilities by description. Returns agents, skills, and tools "
-        "ranked by relevance. Use this to find the right capability for a task."
+        "Search org's active capabilities (agents and skills). "
+        "Returns system agents and org's custom skills ranked by relevance. "
+        "Use search_available for integrations and templates."
     )
     inputs = {
         "query": {
             "type": "string",
-            "description": "Search query describing what you need (e.g., 'create database tables', 'send email')",
-        },
-        "domain": {
-            "type": "string",
-            "description": "Optional domain filter (emery, gmail, slack, etc.)",
-            "nullable": True,
+            "description": "Search query describing what you need (e.g., 'create database tables', 'analyze data')",
         },
         "limit": {
             "type": "integer",
@@ -59,28 +63,99 @@ class SearchCapabilitiesTool(Tool):
     def forward(
         self,
         query: str,
-        domain: Optional[str] = None,
         limit: Optional[int] = None,
     ) -> str:
-        """Search for capabilities matching the query."""
+        """Search active capabilities (org's agents + skills)."""
         actual_limit = limit if limit is not None else 5
 
-        results = self.registry.search(
-            query,
-            domain=domain,
-            limit=actual_limit,
-        )
+        # Filter to active domains only
+        all_caps = self.registry.all()
+        active_caps = [c for c in all_caps if c.domain in ACTIVE_DOMAINS]
 
-        if not results:
-            return f"No capabilities found for query: '{query}'"
+        if not active_caps:
+            return f"No active capabilities found. Use search_available for integrations."
 
-        return self._format_results(results)
+        # Search within active capabilities using keyword matching
+        # (semantic search would be better but requires embedding each time)
+        query_lower = query.lower()
+        matches = [c for c in active_caps if c.matches_query(query)]
+
+        if not matches:
+            # No matches - show what's available
+            return f"No active capabilities match '{query}'. Available: {[c.name for c in active_caps[:5]]}"
+
+        matches = matches[:actual_limit]
+        return self._format_results(matches, "active")
+
+    def _format_results(self, capabilities: list[Capability], tier: str) -> str:
+        """Format search results compactly."""
+        lines = [f"Found {len(capabilities)} {tier} capabilities:"]
+        for cap in capabilities:
+            desc = cap.description[:60] + "..." if len(cap.description) > 60 else cap.description
+            lines.append(f"→ {cap.id} - {desc}")
+        return "\n".join(lines)
+
+
+class SearchAvailableTool(Tool):
+    """
+    Search AVAILABLE capabilities (integrations + templates).
+
+    Searches all non-active domains - integrations (gmail, slack, etc.),
+    templates, and marketplace items that could be enabled.
+    """
+
+    name = "search_available"
+    description = (
+        "Search available integrations and templates. "
+        "Returns capabilities that could be added to the org. "
+        "Use search_capabilities first for org's existing agents/skills."
+    )
+    inputs = {
+        "query": {
+            "type": "string",
+            "description": "Search query (e.g., 'send email', 'slack notifications')",
+        },
+        "limit": {
+            "type": "integer",
+            "description": "Maximum results to return (default 5)",
+            "nullable": True,
+        },
+    }
+    output_type = "string"
+
+    def __init__(self, registry: CapabilityRegistry):
+        super().__init__()
+        self.registry = registry
+
+    def forward(
+        self,
+        query: str,
+        limit: Optional[int] = None,
+    ) -> str:
+        """Search available capabilities (integrations + templates)."""
+        actual_limit = limit if limit is not None else 5
+
+        # Filter to non-active domains
+        all_caps = self.registry.all()
+        available_caps = [c for c in all_caps if c.domain not in ACTIVE_DOMAINS]
+
+        if not available_caps:
+            return "No integrations or templates registered in the system."
+
+        # Search within available capabilities
+        matches = [c for c in available_caps if c.matches_query(query)]
+
+        if not matches:
+            domains = list(set(c.domain for c in available_caps))[:5]
+            return f"No available capabilities match '{query}'. Domains: {domains}"
+
+        matches = matches[:actual_limit]
+        return self._format_results(matches)
 
     def _format_results(self, capabilities: list[Capability]) -> str:
         """Format search results compactly."""
-        lines = [f"Found {len(capabilities)} capabilities:"]
+        lines = [f"Found {len(capabilities)} available capabilities:"]
         for cap in capabilities:
-            # Compact format: id - description [domain]
             desc = cap.description[:60] + "..." if len(cap.description) > 60 else cap.description
             lines.append(f"→ {cap.id} - {desc} [{cap.domain}]")
         return "\n".join(lines)
@@ -203,7 +278,9 @@ class GetCapabilityTool(Tool):
         return self._format_details(cap)
 
     def _format_details(self, cap: Capability) -> str:
-        """Format capability details."""
+        """Format capability details with planning guidance."""
+        from ..prompts import get_capability_instructions
+
         lines = [
             f"## {cap.name}",
             f"ID: {cap.id}",
@@ -233,6 +310,11 @@ class GetCapabilityTool(Tool):
                 inp_type = inp.get("type", "any")
                 lines.append(f"  - {name} ({inp_type})")
 
+        # Add planning guidance if available
+        planning_guide = get_capability_instructions(cap.id, mode="planning")
+        if planning_guide:
+            lines.append(f"\n{planning_guide}")
+
         return "\n".join(lines)
 
 
@@ -240,14 +322,23 @@ def create_discovery_tools(registry: CapabilityRegistry) -> list[Tool]:
     """
     Create all capability discovery tools for a registry.
 
+    Two-tier search:
+    - search_capabilities: Active (org's agents + skills)
+    - search_available: Available (integrations + templates)
+
+    Plus exploration tools:
+    - list_capabilities: Browse by domain/type
+    - get_capability: Get full details
+
     Args:
         registry: The capability registry to search
 
     Returns:
-        List of discovery tools [search, list, get]
+        List of discovery tools [search_active, search_available, list, get]
     """
     return [
         SearchCapabilitiesTool(registry),
+        SearchAvailableTool(registry),
         ListCapabilitiesTool(registry),
         GetCapabilityTool(registry),
     ]

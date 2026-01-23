@@ -187,6 +187,15 @@ class PlanGenerator:
             strategy_guidance=strategy_guidance,
         )
 
+    # Core system agents - always available, pre-loaded into prompts
+    # These don't need discovery tools since they're fundamental to the system
+    CORE_AGENTS = [
+        {"name": "schema_builder", "description": "Create and modify database tables and fields"},
+        {"name": "skill_builder", "description": "Create automation skills and workflows"},
+        {"name": "app_builder", "description": "Create apps, pages, and views"},
+        {"name": "document_builder", "description": "Create and manage documents"},
+    ]
+
     def _build_planning_prompt(
         self,
         instructions: str,
@@ -204,9 +213,9 @@ class PlanGenerator:
         - planning/planner.j2 for interactive planning
         - planning/skill_template_planner.j2 for skill template generation
 
-        If workspace is provided, it injects:
-        - available_agents: Pre-resolved agents (no discovery calls needed)
-        - context: Existing tables/apps for context-aware clarification
+        Injects:
+        - core_agents: System agents always available (no discovery needed)
+        - context: Workspace data (tables, apps) for context-aware clarification
         """
         # Choose template based on mode
         template_name = (
@@ -223,13 +232,13 @@ class PlanGenerator:
             "skill_inputs": skill_inputs,
             "skill_outputs": skill_outputs,
             "user_feedback": user_feedback,
+            "core_agents": self.CORE_AGENTS,  # Always include core agents
         }
 
-        # Inject workspace context if available
+        # Inject workspace data context if available
         if workspace:
             template_context = workspace.to_template_context()
-            template_vars["available_agents"] = template_context.get("available_agents", [])
-            template_vars["context"] = template_context  # Full context for workspace_context.j2 macros
+            template_vars["context"] = template_context  # Workspace data for templates
 
         return render_template(template_name, **template_vars)
 
