@@ -17,12 +17,12 @@ domain-specific planners (schema, app, automation). The PlanGenerator:
 """
 
 from .models import (
-    AgentInfo,
     ToolResultSummary,
     PlanGenerationRequest,
     PlanGenerationResult,
     FailureAnalysisRequest,
 )
+from ..context import AgentInfo
 from .plan_generator import PlanGenerator
 from .plan_repository import PlanRepository
 from .failure_analyzer import FailureAnalyzer

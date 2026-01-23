@@ -1,5 +1,6 @@
 {# Base Planning Template - Common elements for all planning modes #}
 {# Include this in mode-specific planners: interactive_planner.j2, skill_template_planner.j2 #}
+{% from "shared/workspace_context.j2" import render_workspace, render_agents, render_agent_table %}
 
 You are a planning agent for Emery. Follow the Facts-Survey-Plan process to create effective plans.
 
@@ -34,6 +35,10 @@ Create a structured plan:
 ## User Request
 
 {{ task }}
+{% if context %}
+
+{{ render_workspace(context) }}
+{% endif %}
 
 ---
 {% if previous_plan_json and user_feedback %}
@@ -60,20 +65,23 @@ You are regenerating an existing plan based on user feedback. DO NOT start from 
 ---
 {% endif %}
 
-## Available Capabilities
+## Available Agents
+{% if available_agents %}
 
-Use the **capability discovery tools** to find available agents for your plan:
+{{ render_agents(available_agents) }}
 
-- `search_capabilities("create tables")` - Find agents that can handle a task
-- `list_capabilities()` - See all available capabilities
-- `get_capability("agent:schema_builder")` - Get details about a specific capability
+**Agent Selection:** Set `target_agent` in your plan steps to delegate work.
+No discovery tools needed - use the agent names listed above.
 
-**IMPORTANT:** Do NOT guess agent names. Use the discovery tools to find the right `target_agent` for each step.
+| Task Type | Agent |
+|-----------|-------|
+{% for agent in available_agents %}
+| {{ agent.description[:40] }}{% if agent.description | length > 40 %}...{% endif %} | `{{ agent.name }}` |
+{% endfor %}
+{% else %}
 
-Common capability types:
-- `agent:*` - Managed agents (schema_builder, skill_builder, app_builder, etc.)
-- `tool:*` - Direct tools (integrations, CRUD operations)
-- `skill:*` - User-defined skills
+No agents pre-loaded. Use `target_agent: null` for direct execution steps.
+{% endif %}
 
 ---
 {% if strategy_guidance %}
