@@ -36,6 +36,17 @@ from ..services.execution_coordinator import (
     ClassificationStartedEvent,
     PlanningStartedEvent,
     PlanningProgressEvent,
+    # Missing converters (added for completeness)
+    PlanCreatedEvent,
+    PlanApprovedEvent,
+    PlanUpdatedEvent,
+    AwaitingClarificationEvent,
+    DirectExecutionStartedEvent,
+    PlanCancelledEvent,
+    InterruptQueuedEvent,
+    InterruptReceivedEvent,
+    InterruptProcessingEvent,
+    ContextInjectedEvent,
 )
 from .response_types import (
     StepProgressDict,
@@ -328,6 +339,169 @@ def convert_coordinator_event(event: Any, step_index: int) -> Optional[Coordinat
             "step_name": "Planning",
             "content": event.message,
             "metadata": {"type": "planning_progress"},
+            "step_index": step_index
+        }
+
+    # ============================================================
+    # Plan lifecycle events
+    # ============================================================
+
+    elif isinstance(event, PlanCreatedEvent):
+        # Format plan steps for display
+        steps_preview = []
+        if event.plan and event.plan.steps:
+            for i, step in enumerate(event.plan.steps[:5], 1):
+                steps_preview.append(f"{i}. {step.description}")
+            if len(event.plan.steps) > 5:
+                steps_preview.append(f"... and {len(event.plan.steps) - 5} more steps")
+
+        return {
+            "type": "awaiting_input",
+            "data": {
+                "input_type": "approval",
+                "title": "Plan Ready for Approval",
+                "content": "\n".join(steps_preview) if steps_preview else "Plan created",
+                "options": [
+                    {"id": "approve", "label": "Approve", "description": "Execute this plan"},
+                    {"id": "reject", "label": "Reject", "description": "Cancel and start over"},
+                ],
+                "plan_json": event.plan.to_json() if hasattr(event.plan, 'to_json') else "",
+                "plan_id": event.plan_id,
+            }
+        }
+
+    elif isinstance(event, PlanApprovedEvent):
+        return {
+            "type": "step_progress",
+            "step_type": "PLANNING",
+            "step_name": "Plan Approved",
+            "content": "Starting execution...",
+            "metadata": {
+                "type": "plan_approved",
+                "plan_id": event.plan_id,
+            },
+            "step_index": step_index
+        }
+
+    elif isinstance(event, PlanUpdatedEvent):
+        return {
+            "type": "step_progress",
+            "step_type": "REASONING",
+            "step_name": f"Plan Updated (v{event.replan_number})",
+            "content": event.reason,
+            "metadata": {
+                "type": "plan_updated",
+                "plan_id": event.plan_id,
+                "version": str(event.replan_number),
+            },
+            "step_index": step_index
+        }
+
+    elif isinstance(event, PlanCancelledEvent):
+        return {
+            "type": "step_progress",
+            "step_type": "FINAL",
+            "step_name": "Plan Cancelled",
+            "content": event.reason,
+            "metadata": {
+                "type": "plan_cancelled",
+                "plan_id": event.plan_id,
+            },
+            "step_index": 999
+        }
+
+    # ============================================================
+    # Clarification events
+    # ============================================================
+
+    elif isinstance(event, AwaitingClarificationEvent):
+        # Format questions for display
+        questions_data: list[Any] = []
+        for q in event.questions:
+            q_dict: dict[str, Any] = {
+                "question": q.question,
+                "required": q.required,
+            }
+            if q.options:
+                q_dict["options"] = q.options
+            if q.context:
+                q_dict["context"] = q.context
+            questions_data.append(q_dict)
+
+        return {
+            "type": "awaiting_input",
+            "data": {
+                "input_type": "clarification",
+                "title": "Clarification Needed",
+                "content": event.reasoning,
+                "questions": questions_data,
+                "options": [],  # Questions have their own options
+                "plan_json": "",
+            }
+        }
+
+    elif isinstance(event, DirectExecutionStartedEvent):
+        return {
+            "type": "step_progress",
+            "step_type": "ACTION",
+            "step_name": "Direct Execution",
+            "content": f"Executing: {event.task[:100]}...",
+            "metadata": {"type": "direct_execution_started"},
+            "step_index": step_index
+        }
+
+    # ============================================================
+    # Interrupt handling events
+    # ============================================================
+
+    elif isinstance(event, InterruptQueuedEvent):
+        return {
+            "type": "step_progress",
+            "step_type": "INFO",
+            "step_name": "Message Queued",
+            "content": f"Your message will be processed after {event.phase} completes",
+            "metadata": {
+                "type": "interrupt_queued",
+                "phase": event.phase,
+            },
+            "step_index": step_index
+        }
+
+    elif isinstance(event, InterruptReceivedEvent):
+        return {
+            "type": "step_progress",
+            "step_type": "INFO",
+            "step_name": "Interrupt Received",
+            "content": f"Processing your message...",
+            "metadata": {
+                "type": "interrupt_received",
+                "message_preview": event.message[:50] if event.message else "",
+            },
+            "step_index": step_index
+        }
+
+    elif isinstance(event, InterruptProcessingEvent):
+        return {
+            "type": "step_progress",
+            "step_type": "REASONING",
+            "step_name": f"Processing: {event.classification}",
+            "content": event.message[:100] if event.message else "Processing interrupt...",
+            "metadata": {
+                "type": "interrupt_processing",
+                "classification": event.classification,
+            },
+            "step_index": step_index
+        }
+
+    elif isinstance(event, ContextInjectedEvent):
+        return {
+            "type": "step_progress",
+            "step_type": "INFO",
+            "step_name": "Context Added",
+            "content": event.message[:100] if event.message else "Context injected",
+            "metadata": {
+                "type": "context_injected",
+            },
             "step_index": step_index
         }
 

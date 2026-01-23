@@ -10,7 +10,7 @@ from typing import List, Literal, TypedDict, Union
 
 
 # Step types
-StepType = Literal["PLANNING", "ACTION", "REASONING", "FINAL", "CODE_EXECUTION", "PHASE"]
+StepType = Literal["PLANNING", "ACTION", "REASONING", "FINAL", "CODE_EXECUTION", "PHASE", "INFO"]
 
 
 class StepMetadata(TypedDict, total=False):
@@ -36,6 +36,11 @@ class StepMetadata(TypedDict, total=False):
     phase_name: str
     step_count: str
     needs_replan: str
+    # Interrupt handling metadata
+    phase: str
+    message_preview: str
+    classification: str
+    version: str
 
 
 class StepProgressDict(TypedDict):
@@ -83,6 +88,14 @@ class InputOptionDict(TypedDict, total=False):
     description: str
 
 
+class QuestionDict(TypedDict, total=False):
+    """Question structure for clarification."""
+    question: str
+    options: List[str]
+    context: str
+    required: bool
+
+
 class AwaitingInputDataDict(TypedDict, total=False):
     """Awaiting input data structure."""
     input_type: str
@@ -90,6 +103,8 @@ class AwaitingInputDataDict(TypedDict, total=False):
     content: str
     options: List[InputOptionDict]
     plan_json: str
+    plan_id: str
+    questions: List[QuestionDict]
 
 
 class AwaitingInputResponseDict(TypedDict):

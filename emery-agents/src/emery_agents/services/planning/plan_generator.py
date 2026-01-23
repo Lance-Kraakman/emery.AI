@@ -1,15 +1,19 @@
 """
 Plan Generator
 
-Generates plans using a planner agent with sub-agents for focused tasks.
+Generates plans using a single planner agent with all tools available.
 
-Architecture:
-- Planner (orchestrator): Analyzes task, delegates to sub-agents
-- plan_researcher (sub-agent): Gathers context via capability discovery
-- plan_submitter (sub-agent): Validates and submits structured plan
+AIDEV-NOTE: Simplified from 3-agent architecture (planner + researcher + submitter)
+to single agent. Benefits:
+- 1-2 LLM calls instead of 3+ (agent decides when to research)
+- Simpler prompt flow
+- Same functionality, fewer round-trips
 
-This keeps prompts small (~100 lines total vs 450 lines before) and
-isolates research context from the planner.
+The planner has access to:
+- Discovery tools: search/list/get capabilities
+- Research tools: web search, read-only data access
+- Ask question tool: for clarifying user intent
+- Submit plan tool: for outputting structured plans
 """
 
 import logging
@@ -34,17 +38,18 @@ logger = logging.getLogger(__name__)
 
 class PlanGenerator:
     """
-    Generates plans using a planner with sub-agents.
+    Generates plans using a single planner agent.
 
-    Architecture:
-    - Planner: Orchestrates, analyzes task, decides what to do
-    - plan_researcher: Gathers context via capability discovery (returns concise summary)
-    - plan_submitter: Validates and submits structured plan
+    The planner has all tools available and decides when to use them:
+    - Discovery tools: Find relevant capabilities (agents)
+    - Research tools: Gather context about existing data
+    - Ask question tool: Clarify user intent when needed
+    - Submit plan tool: Output structured plan
 
     Benefits:
-    - Small focused prompts (~100 lines total)
-    - Research context isolated (doesn't bloat planner)
-    - Clear responsibilities
+    - 1-2 LLM calls (vs 3+ with sub-agents)
+    - Agent decides when research is needed (not forced)
+    - Simpler control flow
     """
 
     def __init__(
@@ -116,18 +121,18 @@ class PlanGenerator:
         # Get capability registry
         registry = request.capability_registry or self.capability_registry
 
-        # Build tools for the planning agent
+        # Build all tools for the single planning agent
         plan_output_tool = PlanOutputTool()
         ask_question_tool = AskQuestionTool()
         discovery_tools = create_discovery_tools(registry) if registry else []
-        tools: List[Any] = [ask_question_tool] + list(discovery_tools)
 
-        # Create sub-agents (pass task for template rendering)
-        managed_agents = self._create_sub_agents(
-            model=model,
-            registry=registry,
-            plan_output_tool=plan_output_tool,
-            task=request.basic_instructions,
+        # Single agent has all tools: discovery + research + read_only + plan output + ask questions
+        # Agent decides when to use research tools (not forced)
+        all_tools: List[Any] = (
+            [plan_output_tool, ask_question_tool]
+            + list(discovery_tools)
+            + self.research_tools
+            + self.read_only_tools
         )
 
         # Build the planning prompt
@@ -141,11 +146,10 @@ class PlanGenerator:
             user_feedback=request.user_feedback,
         )
 
-        # Create and run the planning agent with sub-agents
+        # Create and run the single planning agent (no sub-agents)
         planner = ToolCallingAgent(
-            tools=tools,
+            tools=all_tools,
             model=model,
-            managed_agents=managed_agents if managed_agents else None,
             max_steps=15,
         )
 
@@ -183,57 +187,6 @@ class PlanGenerator:
             plan=plan,
             strategy_guidance=strategy_guidance,
         )
-
-    def _create_sub_agents(
-        self,
-        model: Any,
-        registry: Optional[Any],
-        plan_output_tool: PlanOutputTool,
-        task: str,
-    ) -> List[Any]:
-        """Create sub-agents for the planner.
-
-        Args:
-            model: LLM model for the agents
-            registry: Capability registry for discovery tools
-            plan_output_tool: Tool for submitting plans
-            task: The task description (for template rendering)
-
-        Returns:
-            List of managed agents: [plan_researcher, plan_submitter]
-        """
-        # Build researcher tools: discovery + read-only + research
-        discovery_tools = create_discovery_tools(registry) if registry else []
-        researcher_tools = list(discovery_tools) + self.read_only_tools + self.research_tools
-
-        # Render researcher prompt from template
-        researcher_prompt = render_template("planning/plan_researcher.j2", task=task)
-
-        # plan_researcher: gathers context via capability discovery
-        researcher = ToolCallingAgent(
-            tools=researcher_tools,
-            model=model,
-            name="plan_researcher",
-            description="Gathers context for planning via capability discovery.",
-            instructions=researcher_prompt,
-            max_steps=10,
-        )
-
-        # Render submitter prompt from template
-        submitter_prompt = render_template("planning/plan_submitter.j2")
-
-        # plan_submitter: validates and submits
-        submitter = ToolCallingAgent(
-            tools=[plan_output_tool],
-            model=model,
-            name="plan_submitter",
-            description="Validates and submits structured plans.",
-            instructions=submitter_prompt,
-            max_steps=3,
-        )
-
-        logger.info("Created plan_researcher and plan_submitter sub-agents with instructions")
-        return [researcher, submitter]
 
     def _build_planning_prompt(
         self,
