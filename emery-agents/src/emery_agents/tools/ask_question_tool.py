@@ -5,12 +5,12 @@ Instead of hoping agents ask questions in plan text and parsing with regex,
 agents explicitly call this tool to record structured questions for the user.
 
 AIDEV-NOTE: This enables intentional question-asking during planning.
-Sub-agents call ask_clarifying_question with question, options, and context.
-Questions are collected and batched for presentation to user.
+Sub-agents call ask_clarifying_questions with a list of questions.
+Questions are submitted immediately and the agent stops to wait for user response.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from smolagents import Tool
 
@@ -20,9 +20,9 @@ logger = logging.getLogger(__name__)
 class AgentStopWithQuestionsException(Exception):
     """Raised to stop agent execution after questions are recorded.
 
-    When an agent calls ask_clarifying_question (default behavior),
-    this exception is raised to immediately stop the agent loop
-    and return the collected questions to the user.
+    When an agent calls ask_clarifying_questions, this exception is raised
+    to immediately stop the agent loop and return the collected questions
+    to the user.
     """
 
     def __init__(self, questions: List[Dict[str, Any]]):
@@ -39,20 +39,17 @@ class AskQuestionTool(Tool):  # type: ignore[misc]
     - Technical decisions (which approach?)
     - Scope clarification (include X?)
 
-    By default, calling this tool submits the question(s) and waits for user response.
-    To gather multiple questions before submitting, use final=False on earlier questions.
+    Calling this tool immediately submits all questions and waits for user response.
     """
 
     # Skip smolagents' forward signature validation
     skip_forward_signature_validation = True
 
-    name = "ask_clarifying_question"
+    name = "ask_clarifying_questions"
     description = """Gather clarifying questions from the user during planning.
 
 Call this BEFORE finalizing your plan when you need information to proceed.
-
-By default, this submits the question and waits for user response.
-To gather multiple questions before submitting, set final=False on earlier questions.
+This submits all questions and waits for user response.
 
 When to use:
 - Business requirements: "What health metrics should we track?"
@@ -63,43 +60,53 @@ When to use:
 Provide options when possible - makes it easier for the user to answer quickly.
 Explain context so user understands why you need this information.
 
-Example (single question - most common):
+Example (single question):
 {
-    "question": "What would you like help with today?",
-    "options": ["Create or modify data tables", "Build an automation", "Create an app"],
-    "context": "I want to understand what you're trying to accomplish"
+    "questions": [
+        {
+            "question": "What would you like help with today?",
+            "options": ["Create or modify data tables", "Build an automation", "Create an app"],
+            "context": "I want to understand what you're trying to accomplish"
+        }
+    ]
 }
 
-Example (multiple questions - use final=false on earlier ones):
-{"question": "What tables do you need?", "options": [...], "final": false}
-{"question": "Should we add audit fields?", "options": ["Yes", "No"]}
+Example (multiple questions):
+{
+    "questions": [
+        {"question": "What tables do you need?", "options": ["Customers", "Orders", "Products", "Custom"]},
+        {"question": "Should we add audit fields (created_at, updated_at)?", "options": ["Yes", "No"]}
+    ]
+}
 """
 
     inputs = {
-        "question": {
-            "type": "string",
-            "description": "The question to ask the user. Be specific and clear.",
-        },
-        "options": {
+        "questions": {
             "type": "array",
-            "items": {"type": "string"},
-            "description": "Optional list of answer options for multiple choice. Omit for free-text answer.",
-            "nullable": True,
-        },
-        "context": {
-            "type": "string",
-            "description": "Why you need this information. Helps user understand the impact of their answer.",
-            "nullable": True,
-        },
-        "required": {
-            "type": "boolean",
-            "description": "Whether this question must be answered before proceeding. Defaults to true.",
-            "nullable": True,
-        },
-        "final": {
-            "type": "boolean",
-            "description": "Submit questions and wait for response. Defaults to true. Set to false to gather more questions first.",
-            "nullable": True,
+            "items": {
+                "type": "object",
+                "properties": {
+                    "question": {
+                        "type": "string",
+                        "description": "The question to ask the user. Be specific and clear.",
+                    },
+                    "options": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Optional list of answer options for multiple choice. Omit for free-text answer.",
+                    },
+                    "context": {
+                        "type": "string",
+                        "description": "Why you need this information. Helps user understand the impact.",
+                    },
+                    "required": {
+                        "type": "boolean",
+                        "description": "Whether this question must be answered. Defaults to true.",
+                    },
+                },
+                "required": ["question"],
+            },
+            "description": "List of questions to ask the user. Each question has: question (required), options, context, required.",
         },
     }
     output_type = "string"
@@ -110,54 +117,43 @@ Example (multiple questions - use final=false on earlier ones):
 
     def forward(
         self,
-        question: str,
-        options: Optional[List[str]] = None,
-        context: Optional[str] = None,
-        required: Optional[bool] = None,
-        final: Optional[bool] = None,
+        questions: List[Dict[str, Any]],
     ) -> str:
         """
-        Gather a clarifying question from the user.
+        Gather clarifying questions from the user.
 
         Args:
-            question: The question text to ask the user
-            options: Optional list of answer options for multiple choice
-            context: Why this information is needed
-            required: Whether answer is required (defaults to True)
-            final: Submit questions and wait for response (defaults to True)
+            questions: List of question objects with 'question', 'options', 'context', 'required'
 
         Returns:
-            Confirmation message (only if final=False)
+            Never returns - always raises exception to stop agent
 
         Raises:
-            AgentStopWithQuestionsException: Stops agent to wait for user response (default)
+            AgentStopWithQuestionsException: Stops agent to wait for user response
         """
-        is_required = required if required is not None else True
+        if not questions:
+            raise ValueError("questions list cannot be empty")
 
-        question_data = {
-            "question": question,
-            "options": options,
-            "context": context,
-            "required": is_required,
-        }
+        for q in questions:
+            question_text = q.get("question", "")
+            if not question_text:
+                continue
 
-        self.collected_questions.append(question_data)
+            question_data = {
+                "question": question_text,
+                "options": q.get("options"),
+                "context": q.get("context"),
+                "required": q.get("required", True),
+            }
 
-        option_count = len(options) if options else 0
-        option_info = f" ({option_count} options)" if options else " (free text)"
+            self.collected_questions.append(question_data)
 
-        logger.info(f"❓ Question recorded{option_info}: {question[:60]}...")
-        if context:
-            logger.debug(f"   Context: {context[:80]}...")
+            option_count = len(q.get("options", []) or [])
+            option_info = f" ({option_count} options)" if option_count else " (free text)"
+            logger.info(f"❓ Question recorded{option_info}: {question_text[:60]}...")
 
-        # DEFAULT TO TRUE - stop and submit unless explicitly told not to
-        should_submit = final if final is not None else True
-
-        if should_submit:
-            logger.info(f"📤 Submitting {len(self.collected_questions)} question(s) to user")
-            raise AgentStopWithQuestionsException(self.collected_questions)
-
-        return f"Question recorded ({len(self.collected_questions)} total). Add more questions or omit final to submit."
+        logger.info(f"📤 Submitting {len(self.collected_questions)} question(s) to user")
+        raise AgentStopWithQuestionsException(self.collected_questions)
 
     def get_questions(self) -> List[Dict[str, Any]]:
         """

@@ -59,31 +59,23 @@ First, determine what the user is asking for:
 
 **If intent is unclear, ask an OPEN question:**
 ```python
-ask_clarifying_question(
-    question="Hi! What would you like help with today?",
-    options=["Create or modify data tables", "Build an automation or skill", "Create an app or page", "Something else"],
-    context="I want to understand what you're trying to accomplish"
-)
+ask_clarifying_questions(questions=[
+    {
+        "question": "Hi! What would you like help with today?",
+        "options": ["Create or modify data tables", "Build an automation or skill", "Create an app or page", "Something else"],
+        "context": "I want to understand what you're trying to accomplish"
+    }
+])
 ```
 
-**If intent is clear but details are missing, ask a SPECIFIC question:**
+**If intent is clear but details are missing, ask SPECIFIC questions:**
 ```python
-# For database/table work
-ask_clarifying_question(
-    question="What data do you need to track?",
-    options=["Customers and contacts", "Orders and inventory", "Projects and tasks", "Custom - I'll describe it"],
-    context="I need to know what tables and fields to create"
-)
-
-# For skill/automation work
-ask_clarifying_question(
-    question="What should this automation do?",
-    options=["Send notifications", "Process data", "Connect systems", "Custom - I'll describe it"],
-    context="I need to understand the workflow"
-)
+# Can ask multiple questions in one call
+ask_clarifying_questions(questions=[
+    {"question": "What data do you need to track?", "options": ["Customers", "Orders", "Projects", "Custom"]},
+    {"question": "Should we add audit fields (created_at, updated_at)?", "options": ["Yes", "No"]}
+])
 ```
-
-**Note:** Questions are submitted immediately by default. Use `final=False` only if you need to gather multiple questions before submitting.
 
 ### 2. Discover Capabilities
 
