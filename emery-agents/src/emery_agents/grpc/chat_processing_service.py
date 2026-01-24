@@ -12,6 +12,7 @@ import grpc
 
 from .generated import agent_worker_pb2, agent_worker_pb2_grpc
 from .mappers.message_mapper import build_conversation_messages, has_images, extract_text_from_parts
+from .mappers import format_clarifying_questions
 from ..infrastructure.workspace_sync import WorkspaceSync
 from ..services.model_provider import SmolagentsModelProvider
 from ..services.tool_loader import UnifiedToolLoader
@@ -471,22 +472,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                         "user_feedback": user_feedback,
                     })
 
-                    # Properly format ClarifyingQuestion objects as structured data
-                    questions_data = []
-                    for i, q in enumerate(event.questions):
-                        q_dict: Dict[str, Any] = {
-                            "questionId": f"q_{i}",
-                            "question": q.question,
-                            "required": q.required,
-                        }
-                        if q.options:
-                            q_dict["options"] = q.options
-                        if q.context:
-                            q_dict["context"] = q.context
-                        questions_data.append(q_dict)
-
                     # Serialize questions as JSON in content (protobuf doesn't have questions field)
-                    questions_json = json.dumps(questions_data)
+                    questions_json = json.dumps(format_clarifying_questions(event.questions))
 
                     yield agent_worker_pb2.GeneratePlanResponse(
                         awaiting_input=agent_worker_pb2.AwaitingInput(

@@ -22,6 +22,7 @@ from ..models.plan import Plan
 from ..tools.tool_modes import ToolMode
 from ..services.agent_executor import AgentExecutor
 from .coordinator_event_converter import convert_coordinator_event
+from .mappers import format_clarifying_questions
 from .approval_handler import (
     is_approval_response,
     create_awaiting_input_for_plan,
@@ -266,27 +267,13 @@ class CoordinatorStreamingHandler:
             if isinstance(event, AwaitingClarificationEvent):
                 logger.info(f"📋 Coordinator: Task needs clarification - {len(event.questions)} questions")
 
-                # Properly format ClarifyingQuestion objects as structured data
-                questions_data = []
-                for i, q in enumerate(event.questions):
-                    q_dict: dict[str, Any] = {
-                        "questionId": f"q_{i}",
-                        "question": q.question,
-                        "required": q.required,
-                    }
-                    if q.options:
-                        q_dict["options"] = q.options
-                    if q.context:
-                        q_dict["context"] = q.context
-                    questions_data.append(q_dict)
-
                 yield {
                     "type": "awaiting_input",
                     "data": {
                         "input_type": "questions",
                         "title": "Clarification Needed",
                         "content": event.reasoning,
-                        "questions": questions_data,
+                        "questions": format_clarifying_questions(event.questions),
                         "options": [],
                         "plan_json": ""
                     }

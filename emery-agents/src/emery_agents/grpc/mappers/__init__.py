@@ -26,6 +26,8 @@ from .message_types import (
     MessageContentList,
 )
 
+from .question_mapper import format_clarifying_questions
+
 __all__ = [
     # Message mapping functions (chat/vision)
     'download_image_from_url',
@@ -45,4 +47,6 @@ __all__ = [
     'ImageUrlContentPart',
     'ContentPart',
     'MessageContentList',
+    # Question formatting
+    'format_clarifying_questions',
 ]
