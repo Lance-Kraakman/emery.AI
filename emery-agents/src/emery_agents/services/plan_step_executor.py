@@ -17,6 +17,7 @@ Architecture:
 This is different from StepExecutorService which handles DAG workflow steps.
 """
 
+import json
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -298,7 +299,6 @@ class PlanStepExecutor:
                 logger.info(f"❓ Step asked {len(questions)} clarifying question(s) instead of completing")
                 # Return special marker so caller knows to handle questions
                 # Format: JSON with questions array
-                import json
                 return json.dumps({
                     "__needs_clarification__": True,
                     "questions": questions,
@@ -407,7 +407,6 @@ class PlanStepExecutor:
             if self._ask_question_tool.has_questions():
                 questions = self._ask_question_tool.get_questions()
                 logger.info(f"❓ Direct step asked {len(questions)} clarifying question(s)")
-                import json
                 return json.dumps({
                     "__needs_clarification__": True,
                     "questions": questions,
