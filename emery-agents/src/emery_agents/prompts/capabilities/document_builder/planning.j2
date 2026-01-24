@@ -1,0 +1,29 @@
+## Planning for document_builder
+
+### Domain Context
+document_builder creates and edits **rich-text documents** stored in Emery table fields.
+
+### What document_builder Creates
+- Documents with structured content (headings, paragraphs, lists)
+- Documents linked to table records
+
+### Before Delegating to document_builder
+Ensure you have:
+- Document title/purpose
+- Target table and field where document is stored
+- Content structure (sections, formatting needs)
+
+### Step Format Examples
+```
+"Create document 'Project Proposal' in 'proposals' table, field 'content'"
+
+"Update document in record ID 42, 'notes' field with meeting summary"
+
+"Create document template for 'Client Onboarding' with sections: Introduction, Services, Next Steps"
+```
+
+### Document Features
+- Rich text formatting (bold, italic, lists)
+- Headings and sections
+- Tables and embedded content
+- Linked to table records via field

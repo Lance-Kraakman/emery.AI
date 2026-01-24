@@ -27,6 +27,7 @@ from ..services.coordinator_state_machine import (
 from ..entities.execution_context import ExecutionContext
 from ..types import ExecutionMode
 from ..models.plan import Plan, create_plan
+from ..models.capability import Capability, CapabilityType
 from ..services.tool_provider import ToolProvider
 from ..utils.error_classifier import classify_error
 from ..utils.error_messages import ErrorSeverity
@@ -478,6 +479,24 @@ class AgentStreamingHandler:
         if agent_config and agent_config.skills:
             stored_plan = detect_stored_plan_from_skills(list(agent_config.skills))
 
+        # Register user-defined skills to capability registry for discovery
+        if agent_config and agent_config.skills:
+            registry = self.managed_agents_factory.capability_registry
+            for skill in agent_config.skills:
+                skill_id = f"skill:{skill.id}"
+                # Only register if not already present
+                if not registry.get(skill_id):
+                    registry.register(Capability(
+                        id=skill_id,
+                        name=skill.name,
+                        type=CapabilityType.TOOL,
+                        domain="user",
+                        description=skill.description or f"User skill: {skill.name}",
+                        actions=["execute"],
+                        entities=["skill"],
+                    ))
+            logger.info(f"📝 Registered {len(list(agent_config.skills))} user skills to capability registry")
+
         # Coordinator handles all execution paths
         should_fall_through = skip_coordinator
         if not skip_coordinator:
@@ -491,6 +510,7 @@ class AgentStreamingHandler:
                 managed_agents=managed_agents,
                 stored_plan=stored_plan,
                 conversation_history=conversation_history,
+                capability_registry=self.managed_agents_factory.capability_registry,
             ):
                 if isinstance(event, dict):
                     yield event

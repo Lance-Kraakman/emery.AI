@@ -1,0 +1,24 @@
+## Executing User-Defined Skills
+
+Skills execute with their own persona and instructions loaded from the database.
+
+### Execution Flow
+1. Load skill configuration (inputs, outputs, instructions, persona)
+2. Validate all required inputs are provided
+3. Execute skill with its configured persona
+4. Capture defined outputs for downstream use
+
+### Input Validation
+- Check all required inputs are present
+- Validate input types match skill definitions
+- Report missing inputs before execution
+
+### Output Capture
+- Capture outputs as defined in skill configuration
+- Store outputs in execution context
+- Make outputs available for subsequent steps
+
+### Error Handling
+- Report skill execution failures clearly
+- Include which inputs were provided
+- Suggest fixes for common issues

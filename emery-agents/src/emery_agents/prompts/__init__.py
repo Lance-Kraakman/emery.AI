@@ -537,15 +537,26 @@ def build_agent_instructions(
         base_instructions = get_cached_base_instructions(**kwargs)
 
         # Agent-specific additions (domain content)
+        # Try new capabilities/{agent_type}/execution.j2 first, fall back to agents/{agent_type}.j2
         if agent_type != "default":
+            agent_content = ""
             try:
-                agent_template = f"agents/{agent_type}.j2"
-                agent_content = render_template(agent_template, tools=tools, **kwargs)
+                # New location: capabilities/{agent_type}/execution.j2
+                capability_template = f"capabilities/{agent_type}/execution.j2"
+                agent_content = render_template(capability_template, tools=tools, **kwargs)
                 if agent_content.strip():
                     base_instructions = f"{base_instructions}\n\n{agent_content}"
-                    logger.debug(f"📝 Added agent template: {agent_template} ({len(agent_content)} chars)")
-            except Exception as e:
-                logger.warning(f"⚠️ Agent template {agent_type}.j2 not found: {e}")
+                    logger.debug(f"📝 Added capability template: {capability_template} ({len(agent_content)} chars)")
+            except Exception:
+                # Fallback: agents/{agent_type}.j2
+                try:
+                    agent_template = f"agents/{agent_type}.j2"
+                    agent_content = render_template(agent_template, tools=tools, **kwargs)
+                    if agent_content.strip():
+                        base_instructions = f"{base_instructions}\n\n{agent_content}"
+                        logger.debug(f"📝 Added agent template (fallback): {agent_template} ({len(agent_content)} chars)")
+                except Exception as e:
+                    logger.warning(f"⚠️ No template found for agent {agent_type}: {e}")
 
         # Mode-specific behavior (interactive vs autonomous) - separate template files
         try:
@@ -614,9 +625,58 @@ def build_agent_instructions(
         raise RuntimeError(f"Failed to build agent instructions: {e}") from e
 
 
+def get_capability_instructions(
+    capability_id: str,
+    mode: str = "execution",
+) -> str:
+    """
+    Get instructions for a capability by ID.
+
+    Loads from capabilities/{name}/{mode}.j2 templates.
+
+    Args:
+        capability_id: Capability ID like "agent:schema_builder" or just "schema_builder"
+        mode: "planning" (for planner discovery) or "execution" (for agent runtime)
+
+    Returns:
+        Rendered template content, or empty string if not found
+
+    Example:
+        # For planner discovering a capability
+        planning_guide = get_capability_instructions("agent:schema_builder", mode="planning")
+
+        # For agent execution
+        exec_instructions = get_capability_instructions("schema_builder", mode="execution")
+    """
+    # Extract name from capability_id (handle "agent:schema_builder" or "schema_builder")
+    name = capability_id.split(":")[-1] if ":" in capability_id else capability_id
+
+    # Try new capabilities/{name}/{mode}.j2 path
+    template_path = f"capabilities/{name}/{mode}.j2"
+
+    try:
+        content = render_template(template_path)
+        logger.debug(f"📝 Loaded capability {mode} instructions from {template_path}")
+        return content
+    except Exception:
+        # Fallback: for execution, try old agents/{name}.j2 path
+        if mode == "execution":
+            try:
+                fallback_path = f"agents/{name}.j2"
+                content = render_template(fallback_path)
+                logger.debug(f"📝 Loaded capability execution from fallback {fallback_path}")
+                return content
+            except Exception:
+                pass
+
+        logger.debug(f"📝 No {mode} template found for capability {name}")
+        return ""
+
+
 def build_capability_instructions(
     capability: "Capability",  # Forward reference to avoid circular import
     include_base: bool = False,
+    mode: str = "execution",
 ) -> str:
     """
     Build focused instructions for executing a capability.
@@ -629,9 +689,10 @@ def build_capability_instructions(
         capability: The Capability object to build instructions for
         include_base: If True, include identity + critical rules (for top-level agents).
                      Default False for focused sub-agent instructions.
+        mode: "planning" (for planner) or "execution" (for agent runtime)
 
     Returns:
-        Focused instructions string for executing this capability
+        Focused instructions string for the capability
 
     Example:
         from emery_agents.models import Capability, CapabilityType
@@ -646,15 +707,32 @@ def build_capability_instructions(
             entities=["tables", "fields"],
         )
 
-        # Focused (default) - ~200-400 chars
-        instructions = build_capability_instructions(cap)
+        # Planning guidance for planner
+        planning = build_capability_instructions(cap, mode="planning")
 
-        # With base templates - ~3500 chars
-        instructions = build_capability_instructions(cap, include_base=True)
+        # Execution instructions for agent runtime
+        execution = build_capability_instructions(cap, mode="execution")
+
+        # With base templates (for top-level agents)
+        full = build_capability_instructions(cap, include_base=True, mode="execution")
     """
+    # Try the new ID-specific template first
+    instructions = get_capability_instructions(capability.id, mode=mode)
+
+    if instructions:
+        # If include_base requested, prepend base templates
+        if include_base:
+            base_layers = ["shared/identity", "shared/critical_rules"]
+            base_content = compose_layers(base_layers)
+            instructions = f"{base_content}\n\n{instructions}"
+
+        logger.debug(f"📝 Built capability {mode} instructions for {capability.id} ({len(instructions)} chars)")
+        _write_debug_prompt(f"capability_{capability.short_name}_{mode}", instructions)
+        return instructions
+
+    # Fallback to old generic type-based templates
     from emery_agents.models.capability import CapabilityType
 
-    # Map capability type to template
     template_map = {
         CapabilityType.AGENT: "capabilities/agent",
         CapabilityType.SKILL: "capabilities/skill",
@@ -665,17 +743,9 @@ def build_capability_instructions(
     if not capability_template:
         raise ValueError(f"Unknown capability type: {capability.type}")
 
-    # Build layers - focused by default (just capability template)
     layers = []
-
-    # Only include base templates if explicitly requested
     if include_base:
-        layers.extend([
-            "shared/identity",
-            "shared/critical_rules",
-        ])
-
-    # Always include the capability-specific template
+        layers.extend(["shared/identity", "shared/critical_rules"])
     layers.append(capability_template)
 
     instructions = compose_layers(

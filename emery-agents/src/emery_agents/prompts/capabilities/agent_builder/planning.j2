@@ -1,0 +1,32 @@
+## Planning for agent_builder
+
+### Domain Context
+agent_builder creates and configures **Emery agents** - AI assistants with skills and data access.
+
+### What agent_builder Creates
+- Agent configurations (name, persona, instructions)
+- Agent-skill associations
+- Data access permissions (which tables agent can use)
+
+### Before Delegating to agent_builder
+Ensure you have:
+- Agent name and purpose
+- Persona/style for the agent
+- Skills the agent should have access to
+- Tables/data the agent needs to access
+
+### Step Format Examples
+```
+"Create agent 'Sales Assistant' with access to 'leads' and 'contacts' tables, persona: helpful and professional"
+
+"Add skill 'send_followup_email' to 'Customer Support' agent"
+
+"Update 'Inventory Manager' agent to include access to 'suppliers' table"
+```
+
+### Agent Components
+- **Name**: Identifier for the agent
+- **Persona**: Personality and communication style
+- **Instructions**: How the agent should behave
+- **Skills**: What the agent can do
+- **Data Access**: Which tables the agent can read/write

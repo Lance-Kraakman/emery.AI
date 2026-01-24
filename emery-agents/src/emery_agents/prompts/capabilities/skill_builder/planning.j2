@@ -1,0 +1,31 @@
+## Planning for skill_builder
+
+### Domain Context
+skill_builder creates and configures **Emery skills** - reusable automation steps that agents can execute.
+
+### What skill_builder Creates
+- Skills with defined inputs and outputs
+- Skill instructions (what the skill does)
+- Input/output mappings to tables
+
+### Before Delegating to skill_builder
+Ensure you have:
+- Skill name and purpose
+- Required inputs (what data the skill needs)
+- Expected outputs (what data the skill produces)
+- Instructions for how the skill should behave
+
+### Step Format Examples
+```
+"Create skill 'send_welcome_email' with inputs: recipient_email (text), recipient_name (text). Output: email_sent (boolean)"
+
+"Create skill 'generate_report' with inputs: date_range (text), report_type (text). Output: report_content (text)"
+
+"Update skill 'process_order' to add output: tracking_number (text)"
+```
+
+### Skill Components
+- **Inputs**: Data required to run the skill
+- **Outputs**: Data captured after skill execution
+- **Instructions**: Natural language description of what the skill does
+- **Persona**: Optional personality/style for the skill's execution
