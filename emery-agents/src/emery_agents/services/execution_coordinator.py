@@ -43,6 +43,7 @@ from .execution import (
     Phase,
     InputType,
     WorkMode,
+    TaskBuilder,
 )
 from emery_agents.ace import (
     ExecutionContextService,
@@ -963,7 +964,7 @@ class ExecutionCoordinator:
                 if classification.requires_replan:
                     # User wants to change direction - replan with new context
                     logger.info(f"📋 Replanning with user feedback: {interrupt_msg[:50]}...")
-                    combined_task = f"{goal}\n\nUser feedback: {interrupt_msg}"
+                    combined_task = TaskBuilder.with_interrupt(goal, interrupt_msg)
 
                     # Re-run planning with the new context
                     async for event in self.create_plan(
@@ -1117,39 +1118,19 @@ class ExecutionCoordinator:
                                 # User wants to change direction - trigger replan
                                 logger.info(f"📋 User interrupt requires replan: {interrupt_msg[:50]}...")
 
-                                if self._replan_count >= self.max_replans:
-                                    logger.warning(f"Max replans ({self.max_replans}) exceeded")
-                                    yield ExecutionBlockedEvent(
-                                        plan_id=plan_id,
-                                        reason=f"Max replans exceeded after user interrupt: {interrupt_msg}",
-                                    )
+                                replan_blocked = False
+                                async for event in self._trigger_replan(
+                                    reason=f"User interrupt: {interrupt_msg}",
+                                    plan_id=plan_id,
+                                    tools=tools,
+                                ):
+                                    yield event
+                                    if isinstance(event, ExecutionBlockedEvent):
+                                        replan_blocked = True
+
+                                if replan_blocked:
                                     success = False
                                     break
-
-                                self._replan_count += 1
-                                yield ReplanTriggeredEvent(
-                                    plan_id=plan_id,
-                                    reason=f"User interrupt: {interrupt_msg}",
-                                    replan_number=self._replan_count,
-                                )
-
-                                # Replan with interrupt context
-                                old_pending_count = len(self._current_plan.get_pending_steps())
-                                self._current_plan = await self._replan_handler.handle_replan(
-                                    current_plan=self._current_plan,
-                                    failed_step=None,
-                                    reason=f"User interrupt: {interrupt_msg}",
-                                    tools=tools,
-                                )
-                                new_pending_count = len(self._current_plan.get_pending_steps())
-
-                                yield PlanUpdatedEvent(
-                                    plan_id=plan_id,
-                                    reason=f"User interrupt: {interrupt_msg}",
-                                    added_steps=new_pending_count,
-                                    removed_steps=old_pending_count - new_pending_count if old_pending_count > new_pending_count else 0,
-                                    replan_number=self._replan_count,
-                                )
 
                                 should_restart = True
                                 break
@@ -1199,53 +1180,20 @@ class ExecutionCoordinator:
 
                         # Trigger replanning if phase has replan_after=True
                         if needs_phase_replan:
-                            if self._replan_count >= self.max_replans:
-                                logger.warning(
-                                    f"Max replans ({self.max_replans}) exceeded for phase replan"
-                                )
-                            else:
-                                self._replan_count += 1
-                                logger.info(
-                                    f"🔄 Phase '{current_phase_name}' completed with replan_after=True, "
-                                    f"triggering replan #{self._replan_count}"
-                                )
-                                yield ReplanTriggeredEvent(
-                                    plan_id=plan_id,
-                                    reason=f"Phase '{current_phase_name}' completed with replan_after=True",
-                                    replan_number=self._replan_count,
-                                )
+                            logger.info(
+                                f"🔄 Phase '{current_phase_name}' completed with replan_after=True"
+                            )
+                            async for event in self._trigger_replan(
+                                reason=f"Phase '{current_phase_name}' completed - replanning subsequent phases based on discoveries",
+                                plan_id=plan_id,
+                                tools=tools,
+                            ):
+                                yield event
+                                # Max replans exceeded is logged by _trigger_replan but doesn't block for phases
+                                # (original behavior: just log warning, don't fail)
 
-                                # Perform phase-based replanning with phase results as context
-                                old_pending_count = len(self._current_plan.get_pending_steps())
-                                self._current_plan = await self._replan_handler.handle_replan(
-                                    current_plan=self._current_plan,
-                                    failed_step=None,
-                                    reason=f"Phase '{current_phase_name}' completed - replanning subsequent phases based on discoveries",
-                                    tools=tools,
-                                )
-                                new_pending_count = len(self._current_plan.get_pending_steps())
-
-                                yield PlanUpdatedEvent(
-                                    plan_id=plan_id,
-                                    reason=f"Phase '{current_phase_name}' replan",
-                                    added_steps=max(0, new_pending_count - old_pending_count),
-                                    removed_steps=max(0, old_pending_count - new_pending_count),
-                                    replan_number=self._replan_count,
-                                )
-
-                                # Update ledger with phase replan info
-                                if self._ledger:
-                                    self._ledger._record_event(
-                                        event_type=LedgerEventType.REPLAN_TRIGGERED,
-                                        data={
-                                            "reason": f"Phase '{current_phase_name}' replan_after=True",
-                                            "replan_number": self._replan_count,
-                                            "new_step_count": new_pending_count,
-                                            "phase_results": results_summary,
-                                        }
-                                    )
-
-                                # Restart step iteration with updated plan
+                            # Restart step iteration with updated plan (unless max replans hit)
+                            if self._replan_count <= self.max_replans:
                                 should_restart = True
                                 break
 
@@ -1355,47 +1303,9 @@ class ExecutionCoordinator:
                         )
 
                     # ACE: Run context curation periodically
-                    steps_since_curation += 1
-                    if (
-                        self._execution_context_service
-                        and self._ledger
-                        and self._ledger.execution_context
-                        and self.plan_step_executor
-                        and steps_since_curation >= self._execution_context_service.curate_after_steps
-                    ):
-                        # Get step results since last curation
-                        recent_step_ids = [
-                            s.step_id for s in self._current_plan.steps
-                            if s.status == PlanStepStatus.COMPLETED.value
-                            and s.step_id not in curated_step_ids
-                        ]
-
-                        if recent_step_ids:
-                            # Collect StepResult objects for curation
-                            step_results_to_curate = [
-                                self.plan_step_executor.step_results[step_id]
-                                for step_id in recent_step_ids
-                                if step_id in self.plan_step_executor.step_results
-                            ]
-                            logger.info(f"📊 Running context curation for {len(step_results_to_curate)} steps")
-                            self._ledger.execution_context = self._execution_context_service.curate(
-                                execution_context=self._ledger.execution_context,
-                                step_results=step_results_to_curate,
-                            )
-                            curated_step_ids.extend(recent_step_ids)
-                            steps_since_curation = 0
-
-                            # Take snapshot after curation and check for degradation
-                            if self._ledger.evolution_tracker:
-                                self._ledger.evolution_tracker.take_snapshot(
-                                    step_id=step.step_id,
-                                    context_state=self._ledger.execution_context.to_dict(),
-                                    summary=self._ledger.execution_context.format_insights(500),
-                                )
-
-                                # Check for degradation
-                                if self._ledger.evolution_tracker.detect_degradation():
-                                    logger.warning("📊 Context degradation detected during execution")
+                    steps_since_curation, curated_step_ids = await self._curate_context_if_needed(
+                        step, steps_since_curation, curated_step_ids
+                    )
 
                     # Evaluate progress periodically
                     steps_since_eval += 1
@@ -1446,40 +1356,28 @@ class ExecutionCoordinator:
                             break
 
                         if evaluation.needs_replan:
-                            if self._replan_count >= self.max_replans:
-                                logger.warning(f"Max replans ({self.max_replans}) exceeded")
-                                yield ExecutionBlockedEvent(
+                            try:
+                                replan_blocked = False
+                                failed = step if step.status == PlanStepStatus.FAILED.value else None
+                                async for event in self._trigger_replan(
+                                    reason=evaluation.reason,
                                     plan_id=plan_id,
-                                    reason=f"Max replans ({self.max_replans}) exceeded: {evaluation.reason}",
-                                )
-                                success = False
+                                    tools=tools,
+                                    failed_step=failed,
+                                    session_logger=session_logger,
+                                ):
+                                    yield event
+                                    if isinstance(event, ExecutionBlockedEvent):
+                                        replan_blocked = True
+
+                                if replan_blocked:
+                                    success = False
+                                    break
+
+                                # Set flag to restart step iteration with updated plan
+                                should_restart = True
                                 break
 
-                            self._replan_count += 1
-
-                            # Log replan trigger
-                            if session_logger:
-                                session_logger.log_event("replan_triggered", {
-                                    "replan_count": self._replan_count,
-                                    "trigger": "evaluation",
-                                    "reason": evaluation.reason[:200] if evaluation.reason else None,
-                                })
-
-                            yield ReplanTriggeredEvent(
-                                plan_id=plan_id,
-                                reason=evaluation.reason,
-                                replan_number=self._replan_count,
-                            )
-
-                            # Perform dynamic replanning
-                            old_pending_count = len(self._current_plan.get_pending_steps())
-                            try:
-                                self._current_plan = await self._replan_handler.handle_replan(
-                                    current_plan=self._current_plan,
-                                    failed_step=step if step.status == PlanStepStatus.FAILED.value else None,
-                                    reason=evaluation.reason,
-                                    tools=tools,
-                                )
                             except ReplanNeedsClarificationError as e:
                                 # Replan detected missing info - ask user before proceeding
                                 logger.info(f"❓ Replan needs clarification: {len(e.questions)} question(s)")
@@ -1494,33 +1392,6 @@ class ExecutionCoordinator:
                                     reasoning=e.reasoning or f"Need more information to continue: {evaluation.reason}",
                                 )
                                 return
-
-                            new_pending_count = len(self._current_plan.get_pending_steps())
-
-                            yield PlanUpdatedEvent(
-                                plan_id=plan_id,
-                                reason=evaluation.reason,
-                                added_steps=new_pending_count,
-                                removed_steps=old_pending_count - new_pending_count if old_pending_count > new_pending_count else 0,
-                                replan_number=self._replan_count,
-                            )
-
-                            # Update ledger with replan info
-                            if self._ledger:
-                                self._ledger._record_event(
-                                    event_type=LedgerEventType.REPLAN_TRIGGERED,
-                                    data={
-                                        "reason": evaluation.reason,
-                                        "replan_number": self._replan_count,
-                                        "new_step_count": new_pending_count,
-                                    }
-                                )
-
-                            logger.info(f"Replan complete ({self._replan_count}): {evaluation.reason}")
-
-                            # Set flag to restart step iteration with updated plan
-                            should_restart = True
-                            break
 
                         if not evaluation.should_continue:
                             logger.info("Evaluator indicated stop - ending execution")
@@ -1584,29 +1455,12 @@ class ExecutionCoordinator:
                 logger.info(
                     "Goal not achieved and should continue, but no more steps - auto-triggering replan"
                 )
-                self._replan_count += 1
-                yield ReplanTriggeredEvent(
-                    plan_id=plan_id,
-                    reason="Goal not yet achieved, adding steps to complete",
-                    replan_number=self._replan_count,
-                )
-
-                # Perform dynamic replanning
-                self._current_plan = await self._replan_handler.handle_replan(
-                    current_plan=self._current_plan,
-                    failed_step=None,
+                async for event in self._trigger_replan(
                     reason="Goal not yet achieved after completing all steps",
-                    tools=tools,
-                )
-                new_pending_count = len(self._current_plan.get_pending_steps())
-
-                yield PlanUpdatedEvent(
                     plan_id=plan_id,
-                    reason="Auto-replan: goal not achieved",
-                    added_steps=new_pending_count,
-                    removed_steps=0,
-                    replan_number=self._replan_count,
-                )
+                    tools=tools,
+                ):
+                    yield event
 
                 last_evaluation = None
                 continue  # Restart with new pending steps
@@ -1992,6 +1846,157 @@ class ExecutionCoordinator:
 
     # NOTE: _handle_replan has been moved to ReplanHandler.handle_replan()
 
+    async def _trigger_replan(
+        self,
+        reason: str,
+        plan_id: str,
+        tools: List[Any],
+        failed_step: Optional[PlanStep] = None,
+        session_logger: Optional[SessionLogger] = None,
+    ) -> AsyncIterator[Any]:
+        """
+        Execute replan and yield events. Consolidates 4 duplicate replan patterns.
+
+        Args:
+            reason: Why replan is being triggered
+            plan_id: ID of the current plan
+            tools: Available tools for replanning
+            failed_step: The step that failed (if any)
+            session_logger: Optional session logger for event tracking
+
+        Yields:
+            ReplanTriggeredEvent, PlanUpdatedEvent
+            ExecutionBlockedEvent if max replans exceeded
+            AwaitingClarificationEvent if replan needs clarification
+
+        Raises:
+            ReplanNeedsClarificationError: Re-raised for caller to handle
+        """
+        if self._replan_count >= self.max_replans:
+            logger.warning(f"Max replans ({self.max_replans}) exceeded")
+            yield ExecutionBlockedEvent(
+                plan_id=plan_id,
+                reason=f"Max replans ({self.max_replans}) exceeded: {reason}",
+            )
+            return
+
+        self._replan_count += 1
+
+        # Optional session logging
+        if session_logger:
+            session_logger.log_event("replan_triggered", {
+                "replan_count": self._replan_count,
+                "trigger": "evaluation" if failed_step else "interrupt_or_phase",
+                "reason": reason[:200] if reason else None,
+            })
+
+        yield ReplanTriggeredEvent(
+            plan_id=plan_id,
+            reason=reason,
+            replan_number=self._replan_count,
+        )
+
+        # Perform dynamic replanning
+        assert self._current_plan is not None
+        old_pending_count = len(self._current_plan.get_pending_steps())
+
+        # May raise ReplanNeedsClarificationError for caller to handle
+        self._current_plan = await self._replan_handler.handle_replan(
+            current_plan=self._current_plan,
+            failed_step=failed_step,
+            reason=reason,
+            tools=tools,
+        )
+
+        new_pending_count = len(self._current_plan.get_pending_steps())
+
+        yield PlanUpdatedEvent(
+            plan_id=plan_id,
+            reason=reason,
+            added_steps=max(0, new_pending_count - old_pending_count),
+            removed_steps=max(0, old_pending_count - new_pending_count),
+            replan_number=self._replan_count,
+        )
+
+        # Update ledger with replan info
+        if self._ledger:
+            self._ledger._record_event(
+                event_type=LedgerEventType.REPLAN_TRIGGERED,
+                data={
+                    "reason": reason,
+                    "replan_number": self._replan_count,
+                    "new_step_count": new_pending_count,
+                }
+            )
+
+        logger.info(f"Replan complete ({self._replan_count}): {reason}")
+
+    async def _curate_context_if_needed(
+        self,
+        step: PlanStep,
+        steps_since_curation: int,
+        curated_step_ids: List[str],
+    ) -> Tuple[int, List[str]]:
+        """
+        ACE: Run context curation periodically after step completion.
+
+        Args:
+            step: Current step being processed
+            steps_since_curation: Counter since last curation
+            curated_step_ids: List of already curated step IDs
+
+        Returns:
+            Updated (steps_since_curation, curated_step_ids)
+        """
+        steps_since_curation += 1
+
+        if not (
+            self._execution_context_service
+            and self._ledger
+            and self._ledger.execution_context
+            and self.plan_step_executor
+            and steps_since_curation >= self._execution_context_service.curate_after_steps
+        ):
+            return steps_since_curation, curated_step_ids
+
+        assert self._current_plan is not None
+
+        # Get step results since last curation
+        recent_step_ids = [
+            s.step_id for s in self._current_plan.steps
+            if s.status == PlanStepStatus.COMPLETED.value
+            and s.step_id not in curated_step_ids
+        ]
+
+        if not recent_step_ids:
+            return steps_since_curation, curated_step_ids
+
+        # Collect StepResult objects for curation
+        step_results_to_curate = [
+            self.plan_step_executor.step_results[step_id]
+            for step_id in recent_step_ids
+            if step_id in self.plan_step_executor.step_results
+        ]
+
+        logger.info(f"📊 Running context curation for {len(step_results_to_curate)} steps")
+        self._ledger.execution_context = self._execution_context_service.curate(
+            execution_context=self._ledger.execution_context,
+            step_results=step_results_to_curate,
+        )
+        curated_step_ids.extend(recent_step_ids)
+
+        # Take snapshot after curation and check for degradation
+        if self._ledger.evolution_tracker:
+            self._ledger.evolution_tracker.take_snapshot(
+                step_id=step.step_id,
+                context_state=self._ledger.execution_context.to_dict(),
+                summary=self._ledger.execution_context.format_insights(500),
+            )
+            if self._ledger.evolution_tracker.detect_degradation():
+                logger.warning("📊 Context degradation detected during execution")
+
+        return 0, curated_step_ids  # Reset counter
+
     async def run_with_approval(
         self,
         goal: str,
@@ -2147,7 +2152,7 @@ class ExecutionCoordinator:
             yield ErrorEvent(error="No pending context for clarification")
             return
 
-        combined_task = f"{self._pending_context.original_task}\n\nUser's clarification: {response}"
+        combined_task = TaskBuilder.with_clarification(self._pending_context.original_task, response)
         self._set_idle()
         logger.info("📋 Processing clarification response, re-executing with combined task")
 
@@ -2214,7 +2219,7 @@ class ExecutionCoordinator:
                 return
 
             # Re-plan with feedback context
-            feedback_task = f"{self._pending_context.original_task}\n\nUser feedback on plan: {response}"
+            feedback_task = TaskBuilder.with_feedback(self._pending_context.original_task, response)
             self._set_working(WorkMode.PLANNING)
 
             async for event in self.execute(

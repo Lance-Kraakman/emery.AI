@@ -13,6 +13,7 @@ Extracted components from ExecutionCoordinator for maintainability.
 from .step_executor import StepExecutor
 from .interrupt_handler import InterruptHandler, QueuedInterrupt
 from .replan_handler import ReplanHandler, ReplanNeedsClarificationError
+from .task_builder import TaskBuilder
 from .state import (
     Phase,
     ExecutionPhase,  # Backward compat alias
@@ -30,6 +31,7 @@ __all__ = [
     "QueuedInterrupt",
     "ReplanHandler",
     "ReplanNeedsClarificationError",
+    "TaskBuilder",
     # State management
     "Phase",
     "ExecutionPhase",
