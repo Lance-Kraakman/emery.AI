@@ -99,22 +99,24 @@ This skill must produce these outputs. Your plan MUST include steps that generat
 ---
 {% endif %}
 
-## Available Managed Agents
+## Available Capabilities
 
-{% if managed_agents %}
-{% for agent in managed_agents %}
-### {{ agent.name }}
-{{ agent.description }}
-{% if agent.capabilities %}
-
-**Capabilities:**
-{{ agent.capabilities }}
+{% set agent_caps = capabilities | selectattr("type.value", "equalto", "agent") | list if capabilities else [] %}
+{% if agent_caps %}
+{% for cap in agent_caps %}
+### {{ cap.name }}
+{{ cap.description }}
+**Actions:** {{ cap.actions | join(', ') }}
+{% if cap.entities %}
+**Works with:** {{ cap.entities | join(', ') }}
 {% endif %}
 
 {% endfor %}
+
+Use `search_org(query)` to find capabilities by what they do.
 {% else %}
-| Agent | Use For |
-|-------|---------|
+| Capability | Use For |
+|------------|---------|
 | schema_builder | Database schema design (tables, fields, relations) |
 | skill_builder | Skill configuration (instructions, inputs, outputs, tools) |
 | document_builder | Document creation/editing (rich text in table fields) |

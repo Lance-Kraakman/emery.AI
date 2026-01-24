@@ -25,10 +25,16 @@
 {% endfor %}
 {% endif %}
 
-## Available Agents
-{% for agent in managed_agents %}
-- **{{ agent.name }}**: {{ agent.description }}
+{% set agent_caps = capabilities | selectattr("type.value", "equalto", "agent") | list %}
+{% if agent_caps %}
+## Available Capabilities (Agents)
+{% for cap in agent_caps %}
+- **{{ cap.name }}**: {{ cap.description }}
+  Actions: {{ cap.actions | join(', ') }}
 {% endfor %}
+
+Use `search_org(query)` to find capabilities, `get_capability(id)` for details.
+{% endif %}
 
 ---
 

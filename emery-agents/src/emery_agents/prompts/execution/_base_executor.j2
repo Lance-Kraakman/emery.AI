@@ -27,3 +27,33 @@ DO: ask_clarifying_question(
 
 DON'T: Just output "I need more information" as text and mark complete.
 </example>
+
+## Resource Discovery (CRITICAL)
+
+BEFORE asking the user for any ID or resource reference, ALWAYS try to discover it first:
+
+1. **User mentions a table by name** (e.g., "Tasks table"):
+   - FIRST: Call `table_crud(method="list")` to list all tables
+   - Search results for matching name
+   - ONLY ask if: no match found OR multiple ambiguous matches
+
+2. **User mentions a field** (e.g., "status field"):
+   - FIRST: List fields in the relevant table
+   - Match by name
+   - ONLY ask if ambiguous
+
+3. **User says "my X" or "the X"**:
+   - ASSUME it exists - list and find it
+   - DON'T ask for an ID when you can look it up
+
+<example>
+User request mentions "Tasks table"
+
+WRONG: ask_clarifying_question("What is the table ID of 'Tasks'?")
+  - You have not tried to find it yet!
+
+RIGHT:
+1. table_crud(method="list") → returns [{id: 123, name: "Tasks"}, ...]
+2. Find "Tasks" in results → id = 123
+3. Proceed with table_id = 123
+</example>

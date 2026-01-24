@@ -27,6 +27,7 @@ from ..models.plan import Plan, PlanStep, PlanStepStatus
 from ..prompts import render_template
 from ..utils.session_logger import get_session_logger
 from ..tools.ask_question_tool import AskQuestionTool
+from ..services.capability_registry import CapabilityRegistry
 from .protocols import ModelProvider
 from .prompt_template_resolver import resolve_prompt_template
 
@@ -48,6 +49,7 @@ class PlanStepExecutor:
         model: Any,
         max_steps: int = 10,
         skill_inputs: Optional[Dict[str, Any]] = None,
+        capability_registry: Optional[CapabilityRegistry] = None,
     ):
         """
         Initialize PlanStepExecutor.
@@ -58,12 +60,14 @@ class PlanStepExecutor:
             model: LLM model for sub-agent
             max_steps: Max steps for sub-agent execution
             skill_inputs: Runtime inputs for skill execution (used with prompt templates)
+            capability_registry: Registry of capabilities for dynamic discovery in templates
         """
         self.tools = tools
         self.managed_agents = managed_agents
         self.model = model
         self.max_steps = max_steps
         self.skill_inputs = skill_inputs or {}
+        self.capability_registry = capability_registry
         # Track results from previous steps for prompt template resolution and ACE curation
         self._step_results: Dict[str, StepResult] = {}
         # Tool for asking clarifying questions when step lacks needed information
@@ -206,6 +210,8 @@ class PlanStepExecutor:
                 f"📝 Autonomous mode: resolved prompt template for step {step_index + 1} "
                 f"({len(resolved_prompt)} chars)"
             )
+            # Get capabilities for template display
+            capabilities = self.capability_registry.all() if self.capability_registry else []
             prompt = render_template(
                 "execution/step_executor_autonomous.j2",
                 goal=plan.goal,
@@ -214,7 +220,7 @@ class PlanStepExecutor:
                 total_steps=len(plan.steps),
                 completed_steps=completed_steps,
                 remaining_steps=remaining_steps,
-                managed_agents=self.managed_agents,
+                capabilities=capabilities,
                 resolved_prompt=resolved_prompt,
             )
         else:
@@ -222,6 +228,8 @@ class PlanStepExecutor:
             logger.info(
                 f"📝 Interactive mode: using description for step {step_index + 1}"
             )
+            # Get capabilities for template display
+            capabilities = self.capability_registry.all() if self.capability_registry else []
             prompt = render_template(
                 "execution/step_executor_interactive.j2",
                 goal=plan.goal,
@@ -230,7 +238,7 @@ class PlanStepExecutor:
                 total_steps=len(plan.steps),
                 completed_steps=completed_steps,
                 remaining_steps=remaining_steps,
-                managed_agents=self.managed_agents,
+                capabilities=capabilities,
             )
 
         logger.info(
@@ -424,6 +432,7 @@ class PlanStepExecutorFactory:
         self,
         model_provider: ModelProvider,
         org_model: Optional[str] = None,
+        capability_registry: Optional[CapabilityRegistry] = None,
     ):
         """
         Initialize factory.
@@ -431,9 +440,11 @@ class PlanStepExecutorFactory:
         Args:
             model_provider: Provider for getting LLM models
             org_model: Organization model ID for model resolution
+            capability_registry: Registry for dynamic capability discovery in templates
         """
         self.model_provider = model_provider
         self.org_model = org_model
+        self.capability_registry = capability_registry
 
     def create(
         self,
@@ -458,4 +469,5 @@ class PlanStepExecutorFactory:
             managed_agents=managed_agents,
             model=model,
             max_steps=max_steps,
+            capability_registry=self.capability_registry,
         )

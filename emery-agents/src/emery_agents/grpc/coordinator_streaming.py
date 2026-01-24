@@ -164,6 +164,7 @@ class CoordinatorStreamingHandler:
             managed_agents=managed_agents_list,
             model=model,
             max_steps=10,
+            capability_registry=capability_registry,
         )
 
         coordinator = ExecutionCoordinator(
@@ -237,6 +238,7 @@ class CoordinatorStreamingHandler:
             managed_agents=managed_agents_list,
             model=model,
             max_steps=10,
+            capability_registry=capability_registry,
         )
 
         if context.tool_provider is None:
@@ -352,6 +354,11 @@ class CoordinatorStreamingHandler:
                 if converted:
                     yield converted
                     step_index += 1
+
+                # Check if execution paused for clarification - return early
+                if isinstance(event, AwaitingClarificationEvent):
+                    logger.info(f"📋 Execution paused for clarification: {len(event.questions)} question(s)")
+                    return  # Don't show completion message - UI shows clarification questions
 
                 if isinstance(event, FinalSynthesisEvent):
                     final_synthesis = event.synthesis
