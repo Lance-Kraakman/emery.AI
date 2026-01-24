@@ -46,44 +46,34 @@ class AskQuestionTool(Tool):  # type: ignore[misc]
     skip_forward_signature_validation = True
 
     name = "ask_clarifying_questions"
-    description = """Gather clarifying questions from the user during planning.
+    description = """Gather ALL clarifying questions from the user in a single call.
 
-Call this BEFORE finalizing your plan when you need information to proceed.
-This submits all questions and waits for user response.
+IMPORTANT: Include all questions you need in ONE call. This tool submits immediately and waits for user response.
 
 When to use:
-- Business requirements: "What health metrics should we track?"
-- Technical decisions: "Should we use soft deletes or hard deletes?"
-- Scope clarification: "How many years of history to keep?"
-- Missing information: "What fields should the Client table have?"
+- Unclear intent: "What would you like help with?"
+- Missing details: "What tables/fields do you need?"
+- Technical decisions: "Should we use soft deletes?"
+- Scope clarification: "Any other requirements?"
 
-Provide options when possible - makes it easier for the user to answer quickly.
-Explain context so user understands why you need this information.
+Format:
+- Use "options" for multiple choice (faster for user to answer)
+- Omit "options" for open-ended free text response
+- Use "context" to explain why you need the information
 
-Example (single question with options):
+Example (gather multiple questions at once):
 {
     "questions": [
-        {
-            "question": "What would you like help with today?",
-            "options": ["Create or modify data tables", "Build an automation", "Create an app"],
-            "context": "I want to understand what you're trying to accomplish"
-        }
-    ]
-}
-
-Example (open-ended question - no options):
-{
-    "questions": [
-        {"question": "What data do you need to track? Describe the tables and fields you need."}
-    ]
-}
-
-Example (multiple questions):
-{
-    "questions": [
-        {"question": "What tables do you need?", "options": ["Customers", "Orders", "Products", "Custom"]},
+        {"question": "What data do you need to track?", "options": ["Customers", "Orders", "Products", "Custom"]},
         {"question": "Should we add audit fields (created_at, updated_at)?", "options": ["Yes", "No"]},
-        {"question": "Any other requirements?"}
+        {"question": "Any specific requirements or constraints?"}
+    ]
+}
+
+Example (single open-ended question):
+{
+    "questions": [
+        {"question": "Describe what you're trying to build."}
     ]
 }
 """

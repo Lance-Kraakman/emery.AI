@@ -57,30 +57,28 @@ First, determine what the user is asking for:
 | Vague actionable | "create a database", "build an app" | Ask WHAT specifically they want |
 | Clear actionable | "create customers table with name, email" | Proceed to discovery |
 
-**If intent is unclear, ask an OPEN question:**
-```python
-ask_clarifying_questions(questions=[
-    {
-        "question": "Hi! What would you like help with today?",
-        "options": ["Create or modify data tables", "Build an automation or skill", "Create an app or page", "Something else"],
-        "context": "I want to understand what you're trying to accomplish"
-    }
-])
-```
+**Use `ask_clarifying_questions` to gather all questions at once:**
 
-**If intent is clear but details are missing, ask SPECIFIC questions:**
+This tool submits all questions in a single call and waits for user response. Include ALL the questions you need answered - don't call it multiple times.
+
 ```python
-# Multiple choice - use options
+# Greeting or unclear intent - ask what they need
+ask_clarifying_questions(questions=[
+    {"question": "Hi! What would you like help with today?",
+     "options": ["Create or modify data tables", "Build an automation", "Create an app", "Something else"]}
+])
+
+# Need multiple details - gather all questions together
 ask_clarifying_questions(questions=[
     {"question": "What data do you need to track?", "options": ["Customers", "Orders", "Projects", "Custom"]},
-    {"question": "Should we add audit fields?", "options": ["Yes", "No"]}
-])
-
-# Open-ended - omit options for free text response
-ask_clarifying_questions(questions=[
-    {"question": "Describe the tables and fields you need."}
+    {"question": "Should we add audit fields (created_at, updated_at)?", "options": ["Yes", "No"]},
+    {"question": "Any specific requirements or constraints?"}  # No options = free text
 ])
 ```
+
+- Use `options` for multiple choice (faster for user)
+- Omit `options` for open-ended free text
+- Include `context` to explain why you need the information
 
 ### 2. Discover Capabilities
 
