@@ -28,7 +28,7 @@ from emery_agents.ace import StrategyAccumulationService
 from emery_agents.models.plan import Plan, PlanStep, create_plan, create_step
 from emery_agents.models.skill_definition import SkillInputDefinition, SkillOutputDefinition
 from emery_agents.tools.plan_output_tool import PlanOutputTool
-from emery_agents.tools.ask_question_tool import AskQuestionTool, AgentStopWithQuestionsException
+from emery_agents.tools.ask_question_tool import AskQuestionTool
 from emery_agents.prompts import render_template
 from emery_agents.services.context import WorkspaceContext
 from .models import (
@@ -154,23 +154,15 @@ class PlanGenerator:
 
         try:
             planner.run(prompt)
-        except AgentStopWithQuestionsException as e:
-            # Agent explicitly stopped to ask questions (via final=True)
-            logger.info(f"❓ Planner submitted {len(e.questions)} clarifying question(s)")
-            return PlanGenerationResult(
-                plan=None,
-                strategy_guidance=strategy_guidance,
-                clarifying_questions=e.questions,
-            )
         except Exception as e:
             logger.error(f"Planning agent failed: {e}")
             raise
 
-        # Fallback: Check if planner asked questions but didn't use final=True
-        # (This handles the case where agent collected questions but didn't stop)
+        # Check if planner collected clarifying questions
+        # (Tool returns stop signal string, we check for collected questions after run)
         if ask_question_tool.has_questions():
             questions = ask_question_tool.get_questions()
-            logger.info(f"❓ Planner asked {len(questions)} clarifying question(s) (no final=True)")
+            logger.info(f"❓ Planner collected {len(questions)} clarifying question(s)")
             return PlanGenerationResult(
                 plan=None,
                 strategy_guidance=strategy_guidance,

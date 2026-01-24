@@ -6,7 +6,7 @@ agents explicitly call this tool to record structured questions for the user.
 
 AIDEV-NOTE: This enables intentional question-asking during planning.
 Sub-agents call ask_clarifying_questions with a list of questions.
-Questions are submitted immediately and the agent stops to wait for user response.
+Questions are collected, then checked after agent run completes.
 """
 
 import logging
@@ -15,19 +15,6 @@ from typing import Any, Dict, List
 from smolagents import Tool
 
 logger = logging.getLogger(__name__)
-
-
-class AgentStopWithQuestionsException(Exception):
-    """Raised to stop agent execution after questions are recorded.
-
-    When an agent calls ask_clarifying_questions, this exception is raised
-    to immediately stop the agent loop and return the collected questions
-    to the user.
-    """
-
-    def __init__(self, questions: List[Dict[str, Any]]):
-        self.questions = questions
-        super().__init__(f"Collected {len(questions)} question(s), awaiting user response")
 
 
 class AskQuestionTool(Tool):  # type: ignore[misc]
@@ -39,7 +26,8 @@ class AskQuestionTool(Tool):  # type: ignore[misc]
     - Technical decisions (which approach?)
     - Scope clarification (include X?)
 
-    Calling this tool immediately submits all questions and waits for user response.
+    Questions are collected and checked after the agent run completes.
+    The tool returns a stop signal - the agent should stop after calling this.
     """
 
     # Skip smolagents' forward signature validation
@@ -48,7 +36,10 @@ class AskQuestionTool(Tool):  # type: ignore[misc]
     name = "ask_clarifying_questions"
     description = """Gather ALL clarifying questions from the user in a single call.
 
-IMPORTANT: Include all questions you need in ONE call. This tool submits immediately and waits for user response.
+IMPORTANT:
+- Include all questions you need in ONE call
+- After calling this tool, STOP and do not call any other tools
+- Wait for user response before continuing
 
 When to use:
 - Unclear intent: "What would you like help with?"
@@ -124,10 +115,7 @@ Example (single open-ended question):
             questions: List of question objects with 'question', 'options', 'context', 'required'
 
         Returns:
-            Never returns - always raises exception to stop agent
-
-        Raises:
-            AgentStopWithQuestionsException: Stops agent to wait for user response
+            Stop signal string instructing agent to wait for user response
         """
         if not questions:
             raise ValueError("questions list cannot be empty")
@@ -150,8 +138,13 @@ Example (single open-ended question):
             option_info = f" ({option_count} options)" if option_count else " (free text)"
             logger.info(f"❓ Question recorded{option_info}: {question_text[:60]}...")
 
-        logger.info(f"📤 Submitting {len(self.collected_questions)} question(s) to user")
-        raise AgentStopWithQuestionsException(self.collected_questions)
+        logger.info(f"📤 Collected {len(self.collected_questions)} question(s), waiting for user")
+
+        # Return stop signal - do NOT raise exception (smolagents treats exceptions as errors)
+        return (
+            f"[QUESTIONS_COLLECTED] {len(self.collected_questions)} question(s) recorded. "
+            "STOP now and wait for user response. Do not call any other tools."
+        )
 
     def get_questions(self) -> List[Dict[str, Any]]:
         """
