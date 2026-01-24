@@ -16,7 +16,6 @@ from .replan_handler import ReplanHandler, ReplanNeedsClarificationError
 from .task_builder import TaskBuilder
 from .state import (
     Phase,
-    ExecutionPhase,  # Backward compat alias
     InputType,
     WorkMode,
     ClarifyingQuestion,
@@ -34,7 +33,6 @@ __all__ = [
     "TaskBuilder",
     # State management
     "Phase",
-    "ExecutionPhase",
     "InputType",
     "WorkMode",
     "ClarifyingQuestion",

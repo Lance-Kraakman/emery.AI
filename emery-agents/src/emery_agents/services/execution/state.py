@@ -248,5 +248,3 @@ class ExecutionState:
         }
 
 
-# Backward compatibility aliases
-ExecutionPhase = Phase  # Old name still works

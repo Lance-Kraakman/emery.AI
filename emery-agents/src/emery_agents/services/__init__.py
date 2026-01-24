@@ -14,7 +14,6 @@ from .plan_service import PlanService, PlanServiceFactory
 from .execution_coordinator import (
     ExecutionCoordinator,
     ExecutionCoordinatorFactory,
-    ExecutionPhase,
     PlanCreatedEvent,
     PlanApprovedEvent,
     StepStartedEvent,
@@ -52,7 +51,6 @@ __all__ = [
     "PlanServiceFactory",
     "ExecutionCoordinator",
     "ExecutionCoordinatorFactory",
-    "ExecutionPhase",
     "PlanCreatedEvent",
     "PlanApprovedEvent",
     "StepStartedEvent",
