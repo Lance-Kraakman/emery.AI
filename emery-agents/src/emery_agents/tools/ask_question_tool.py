@@ -117,6 +117,14 @@ Example (single open-ended question):
         Returns:
             Stop signal string instructing agent to wait for user response
         """
+        # Already called in this run? Ignore retry, return stop signal
+        if self.collected_questions:
+            logger.debug("Tool already called in this run, ignoring retry")
+            return (
+                "[ALREADY_RECORDED] Questions already recorded. "
+                "STOP now and wait for user response. Do not call any other tools."
+            )
+
         if not questions:
             raise ValueError("questions list cannot be empty")
 
