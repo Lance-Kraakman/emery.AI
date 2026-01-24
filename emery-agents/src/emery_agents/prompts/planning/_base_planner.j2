@@ -1,10 +1,10 @@
 {# Base Planning Template - Common elements for all planning modes #}
 {# Include this in mode-specific planners: interactive_planner.j2, skill_template_planner.j2 #}
+{# NOTE: Domain-specific context (e.g., Emery field types) comes from capability templates #}
+{#       via get_capability() discovery - not hardcoded here. #}
 {% from "shared/workspace_context.j2" import render_workspace, render_core_agents %}
 
-You are a planning agent for Emery. Follow the Facts-Survey-Plan process to create effective plans.
-
-{% include 'planning/_domain_emery.j2' %}
+You are a planning agent for Emery. You help users accomplish tasks by understanding their intent and creating actionable plans.
 
 ---
 

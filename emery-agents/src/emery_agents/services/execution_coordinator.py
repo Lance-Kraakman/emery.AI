@@ -54,7 +54,7 @@ from emery_agents.ace import (
 )
 from ..types import ExecutionMode
 from .planning.plan_differ import PlanDiffer
-from .context import SessionConfig, WorkspaceContext, TableInfo, AppInfo
+from .context import SessionConfig, WorkspaceContext, TableInfo, AppInfo, DatabaseInfo
 
 logger = logging.getLogger(__name__)
 
@@ -736,51 +736,110 @@ class ExecutionCoordinator:
         Build workspace context with existing workspace DATA.
 
         This pre-resolves DATA context at planning time so prompts can include
-        existing tables/apps for context-aware clarification.
+        existing databases/tables/apps for context-aware clarification.
 
         NOTE: Capabilities (agents, skills, tools) are handled separately.
         Core system agents are pre-loaded directly into planner prompts.
         User skills and integrations use discovery tools.
 
         Args:
-            tools: Available tools (for extracting existing tables)
+            tools: Available tools (for extracting existing databases/tables)
 
         Returns:
-            WorkspaceContext with existing tables and apps
+            WorkspaceContext with existing databases, tables and apps
         """
-        # Get existing tables from read-only tools if available
+        existing_databases: List[DatabaseInfo] = []
         existing_tables: List[TableInfo] = []
         existing_apps: List[AppInfo] = []
+
         if tools:
+            # First pass: get databases (needed for table name lookup)
             for tool in tools:
                 tool_name = getattr(tool, 'name', '')
-                # Try to get existing tables from list_tables tool
-                if 'list_tables' in tool_name or tool_name == 'list_tables':
+                if tool_name == 'database_crud' or 'database_crud' in tool_name:
                     try:
-                        result = tool.forward() if hasattr(tool, 'forward') else None
+                        result = tool.forward(method='list') if hasattr(tool, 'forward') else None
                         if result:
-                            existing_tables = self._parse_tables_from_result(result)
+                            existing_databases = self._parse_databases_from_result(result)
+                            logger.info(f"📁 Found {len(existing_databases)} existing databases")
+                    except Exception as e:
+                        logger.debug(f"📁 Could not get existing databases: {e}")
+                    break
+
+            # Second pass: get tables (with database name lookup)
+            for tool in tools:
+                tool_name = getattr(tool, 'name', '')
+                if tool_name == 'table_crud' or 'table_crud' in tool_name:
+                    try:
+                        result = tool.forward(method='list_tables') if hasattr(tool, 'forward') else None
+                        if result:
+                            existing_tables = self._parse_tables_from_result(result, existing_databases)
                             logger.info(f"📋 Found {len(existing_tables)} existing tables")
                     except Exception as e:
                         logger.debug(f"📋 Could not get existing tables: {e}")
                     break
 
         return WorkspaceContext(
+            existing_databases=existing_databases,
             existing_tables=existing_tables,
             existing_apps=existing_apps,
         )
 
-    def _parse_tables_from_result(self, result: Any) -> List[TableInfo]:
+    def _parse_databases_from_result(self, result: Any) -> List[DatabaseInfo]:
+        """
+        Parse database information from database_crud list result.
+
+        Args:
+            result: Result from database_crud list method (dict or list)
+
+        Returns:
+            List of DatabaseInfo objects
+        """
+        databases: List[DatabaseInfo] = []
+
+        # Handle dict response (API might return {success: true, data: [...]})
+        if isinstance(result, dict):
+            items = result.get('data', result.get('databases', []))
+            if not isinstance(items, list):
+                items = []
+        elif isinstance(result, list):
+            items = result
+        else:
+            return databases
+
+        for item in items:
+            if isinstance(item, dict):
+                databases.append(DatabaseInfo(
+                    name=item.get('name', ''),
+                    id=item.get('id'),
+                    table_count=item.get('table_count') or item.get('tableCount') or 0,
+                ))
+
+        return databases
+
+    def _parse_tables_from_result(
+        self,
+        result: Any,
+        databases: Optional[List[DatabaseInfo]] = None
+    ) -> List[TableInfo]:
         """
         Parse table information from list_tables tool result.
 
         Args:
             result: Result from list_tables tool (string or structured)
+            databases: Optional list of databases for name lookup
 
         Returns:
-            List of TableInfo objects
+            List of TableInfo objects with database info when available
         """
         tables: List[TableInfo] = []
+
+        # Build database name lookup from id
+        db_lookup: Dict[str, str] = {}
+        if databases:
+            for db in databases:
+                if db.id:
+                    db_lookup[str(db.id)] = db.name
 
         if isinstance(result, str):
             # Try to parse string result - simple line-by-line parsing
@@ -798,14 +857,35 @@ class ExecutionCoordinator:
                     if name:
                         tables.append(TableInfo(name=name))
 
+        elif isinstance(result, dict):
+            # Handle dict response (API might return {success: true, data: [...]})
+            items = result.get('data', result.get('tables', []))
+            if isinstance(items, list):
+                for item in items:
+                    if isinstance(item, dict):
+                        database_id = item.get('databaseId') or item.get('database_id')
+                        database_id_str = str(database_id) if database_id else None
+                        tables.append(TableInfo(
+                            name=item.get('name', ''),
+                            id=item.get('id'),
+                            database_id=database_id_str,
+                            database_name=db_lookup.get(database_id_str, '') if database_id_str else '',
+                            field_count=item.get('field_count') or item.get('fieldCount') or 0,
+                            fields=item.get('fields', []),
+                        ))
+
         elif isinstance(result, list):
             # Handle list of dicts or strings
             for item in result:
                 if isinstance(item, dict):
+                    database_id = item.get('databaseId') or item.get('database_id')
+                    database_id_str = str(database_id) if database_id else None
                     tables.append(TableInfo(
                         name=item.get('name', ''),
                         id=item.get('id'),
-                        field_count=item.get('field_count', 0),
+                        database_id=database_id_str,
+                        database_name=db_lookup.get(database_id_str, '') if database_id_str else '',
+                        field_count=item.get('field_count') or item.get('fieldCount') or 0,
                         fields=item.get('fields', []),
                     ))
                 elif isinstance(item, str):

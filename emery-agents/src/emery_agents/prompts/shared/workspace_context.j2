@@ -1,32 +1,46 @@
 {#
 Workspace Context Macros
 
-Macros for rendering workspace DATA (tables, apps) in prompts.
-Used for context-aware clarification.
+Macros for rendering workspace DATA in prompts. Used for context-aware planning.
 
-NOTE: Capabilities (agents, skills, tools) are handled separately:
-- Core system agents are pre-loaded directly in planner prompts
-- User skills and integrations use discovery tools
+## What This Renders (WorkspaceContext - DATA)
+- Databases: containers/groups for tables
+- Tables: user's data structures with fields
+- Apps: user's applications
+
+## What This Does NOT Render (handled separately)
+- Capabilities: agents, skills, tools (use discovery tools: search_org, get_capability)
+- Core Agents: schema_builder, skill_builder, etc. (pre-loaded in planner prompts)
 
 Usage:
     {% from "shared/workspace_context.j2" import render_workspace %}
     {{ render_workspace(context) }}
 #}
 
-{# Renders current workspace DATA (tables, apps) for context-aware prompts #}
+{# Renders current workspace DATA (databases, tables, apps) for context-aware prompts #}
 {% macro render_workspace(context) %}
 ## Workspace Data
+
+{% if context.existing_databases %}
+**Databases ({{ context.existing_databases | length }}):**
+{% for db in context.existing_databases[:5] %}
+- `{{ db.name }}`{% if db.table_count %} ({{ db.table_count }} tables){% endif %}
+{% endfor %}
+{% if context.existing_databases | length > 5 %}
+... and {{ context.existing_databases | length - 5 }} more databases
+{% endif %}
+{% endif %}
 
 {% if context.existing_tables %}
 **Tables ({{ context.existing_tables | length }}):**
 {% for table in context.existing_tables[:10] %}
-- `{{ table.name }}`{% if table.field_count %} ({{ table.field_count }} fields){% endif %}
+- `{{ table.name }}`{% if table.database_name %} in {{ table.database_name }}{% endif %}{% if table.field_count %} ({{ table.field_count }} fields){% endif %}
 {% endfor %}
 {% if context.existing_tables | length > 10 %}
 ... and {{ context.existing_tables | length - 10 }} more tables
 {% endif %}
-{% else %}
-No tables exist yet.
+{% elif not context.existing_databases %}
+No databases or tables exist yet.
 {% endif %}
 
 {% if context.existing_apps %}
@@ -47,13 +61,13 @@ No tables exist yet.
 ## Context-Aware Clarification
 
 {% if context.has_tables %}
-When user asks to create something vague (like "create a database"):
-- **Show what exists:** "You have {{ context.existing_tables | length }} existing table(s): {{ context.existing_tables[:3] | map(attribute='name') | join(', ') }}{% if context.existing_tables | length > 3 %}...{% endif %}"
-- **Ask with context:** "Would you like to add to these existing tables or create something new?"
+When user's intent is unclear or vague:
+- **Reference existing resources:** "You have {{ context.existing_tables | length }} existing table(s): {{ context.existing_tables[:3] | map(attribute='name') | join(', ') }}{% if context.existing_tables | length > 3 %}...{% endif %}"
+- **Ask open-ended:** "What would you like help with?" or "Would you like to work with these or create something new?"
 {% else %}
-When user asks to create something vague:
-- Don't ask WHERE (always Emery)
-- DO ask WHAT: "What entities/tables do you need?" or "What would you like to track?"
+When user's intent is unclear or vague:
+- **Ask open-ended:** "What would you like help with today?"
+- **If actionable but vague:** "What specifically would you like to create or accomplish?"
 {% endif %}
 {% endmacro %}
 
