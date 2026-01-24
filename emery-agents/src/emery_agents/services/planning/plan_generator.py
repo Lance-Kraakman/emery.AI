@@ -157,11 +157,19 @@ class PlanGenerator:
         try:
             planner.run(prompt)
         except Exception as e:
+            # Check if this is an interrupt due to clarifying questions
+            if "interrupted" in str(e).lower() and ask_question_tool.has_questions():
+                questions = ask_question_tool.get_questions()
+                logger.info(f"❓ Planner interrupted with {len(questions)} clarifying question(s)")
+                return PlanGenerationResult(
+                    plan=None,
+                    strategy_guidance=strategy_guidance,
+                    clarifying_questions=questions,
+                )
             logger.error(f"Planning agent failed: {e}")
             raise
 
-        # Check if planner collected clarifying questions
-        # (Tool returns stop signal string, we check for collected questions after run)
+        # Check if planner collected clarifying questions (agent completed without interrupt)
         if ask_question_tool.has_questions():
             questions = ask_question_tool.get_questions()
             logger.info(f"❓ Planner collected {len(questions)} clarifying question(s)")
