@@ -35,7 +35,12 @@ from .plan_step_executor import PlanStepExecutor
 from .protocols import EvaluatorAgent, Tool, ModelProvider, ManagedAgent
 # AIDEV-NOTE: TaskClassifier removed - planner handles clarification inline
 from .research_tools_provider import get_research_tools, detect_research_intent
-from .execution import InterruptHandler, ReplanHandler, StepExecutor, ReplanNeedsClarificationError
+from .execution import (
+    InterruptHandler,
+    ReplanHandler,
+    StepExecutor,
+    ReplanNeedsClarificationError,
+)
 from emery_agents.ace import (
     ExecutionContextService,
     create_execution_context_service,
@@ -50,20 +55,11 @@ from .context import SessionConfig, WorkspaceContext, TableInfo, AppInfo
 logger = logging.getLogger(__name__)
 
 
-class ExecutionPhase(Enum):
-    """Current phase of execution."""
-    PLANNING = "planning"
-    AWAITING_APPROVAL = "awaiting_approval"
-    EXECUTING = "executing"
-    COMPLETED = "completed"
-    FAILED = "failed"
-
-
 class Phase(str, Enum):
     """
     Unified phase enum for handle_message() routing.
 
-    AIDEV-NOTE: This merges SessionManager's string phases with ExecutionPhase enum.
+    AIDEV-NOTE: This merges SessionManager's string phases into a unified Phase enum.
     The string inheritance allows direct comparison with string values.
     """
     IDLE = "idle"
@@ -438,7 +434,6 @@ class ExecutionCoordinator:
             api_key=api_key,
         )
 
-        self._current_phase = ExecutionPhase.PLANNING
         self._current_plan: Optional[Plan] = None
         self._ledger: Optional[TaskLedger] = None
         self._replan_count: int = 0
@@ -508,11 +503,6 @@ class ExecutionCoordinator:
             max_replans=config.max_replans,
             org_model=config.org_model,
         )
-
-    @property
-    def current_phase(self) -> ExecutionPhase:
-        """Get current execution phase."""
-        return self._current_phase
 
     @property
     def current_plan(self) -> Optional[Plan]:
@@ -603,7 +593,7 @@ class ExecutionCoordinator:
                 f"with {len(stored_plan.steps)} steps (autonomous mode)"
             )
             self._current_plan = stored_plan
-            self._current_phase = ExecutionPhase.EXECUTING
+            self._unified_phase = Phase.EXECUTING
             self._session_logger.log_state_transition("IDLE", "EXECUTING", "stored_plan")
             self._session_logger.log_plan(
                 action="loaded",
@@ -817,7 +807,6 @@ class ExecutionCoordinator:
         Yields:
             PlanCreatedEvent when plan is ready for approval
         """
-        self._current_phase = ExecutionPhase.PLANNING
         self._unified_phase = Phase.PLANNING
         logger.info(f"Starting planning phase for goal: {goal}")
 
@@ -865,7 +854,6 @@ class ExecutionCoordinator:
             )
         except Exception as e:
             logger.error(f"❌ Plan generation failed: {e}")
-            self._current_phase = ExecutionPhase.FAILED
             self._unified_phase = Phase.FAILED
             yield ErrorEvent(
                 error=f"Failed to generate plan: {e}",
@@ -894,7 +882,6 @@ class ExecutionCoordinator:
         plan = result.plan
         if plan is None:
             logger.error("❌ Plan generation returned no plan and no questions")
-            self._current_phase = ExecutionPhase.FAILED
             self._unified_phase = Phase.FAILED
             yield ErrorEvent(
                 error="Plan generation failed: no plan returned",
@@ -903,7 +890,7 @@ class ExecutionCoordinator:
             return
 
         self._current_plan = plan
-        self._current_phase = ExecutionPhase.AWAITING_APPROVAL
+        self._unified_phase = Phase.AWAITING_APPROVAL
 
         # Create task ledger from plan for evaluator
         self._ledger = create_ledger_from_plan(
@@ -1026,7 +1013,6 @@ class ExecutionCoordinator:
                 f"(current: {self._current_plan.status})"
             )
 
-        self._current_phase = ExecutionPhase.EXECUTING
         self._unified_phase = Phase.EXECUTING
         self._current_plan = self._current_plan.start_execution()
         logger.info(f"Starting execution of plan {plan_id}")
@@ -1599,10 +1585,10 @@ class ExecutionCoordinator:
         # Mark plan as completed or failed
         if success:
             self._current_plan = self._current_plan.complete()
-            self._current_phase = ExecutionPhase.COMPLETED
+            self._unified_phase = Phase.COMPLETED
         else:
             self._current_plan = self._current_plan.fail()
-            self._current_phase = ExecutionPhase.FAILED
+            self._unified_phase = Phase.FAILED
 
         # ACE: Record execution pattern for future strategy guidance
         if self._strategy_service and self._current_plan:
@@ -2023,7 +2009,6 @@ class ExecutionCoordinator:
         in chat_processing_service.py with a single method.
         """
         self._unified_phase = Phase.IDLE
-        self._current_phase = ExecutionPhase.PLANNING
         self._current_plan = None
         self._ledger = None
         self._pending_context = None

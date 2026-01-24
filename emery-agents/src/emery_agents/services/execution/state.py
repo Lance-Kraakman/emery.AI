@@ -41,6 +41,7 @@ class InputType(str, Enum):
     """Type of user input being awaited."""
     APPROVAL = "approval"           # Plan approval
     CLARIFICATION = "clarification"  # Clarifying question
+    QUESTIONS = "questions"         # Managed agent HITL questions
     RECOVERY = "recovery"           # Recovery from failure
 
 
@@ -145,6 +146,15 @@ class ExecutionState:
         self.phase = Phase.AWAITING_INPUT
         self.pending_input = PendingInput(
             input_type=InputType.CLARIFICATION,
+            questions=questions,
+            reasoning=reasoning,
+        )
+
+    def await_questions(self, questions: List[ClarifyingQuestion], reasoning: str = "") -> None:
+        """Transition to awaiting managed agent HITL questions."""
+        self.phase = Phase.AWAITING_INPUT
+        self.pending_input = PendingInput(
+            input_type=InputType.QUESTIONS,
             questions=questions,
             reasoning=reasoning,
         )
