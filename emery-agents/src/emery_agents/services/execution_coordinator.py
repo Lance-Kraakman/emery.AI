@@ -40,6 +40,9 @@ from .execution import (
     ReplanHandler,
     StepExecutor,
     ReplanNeedsClarificationError,
+    Phase,
+    InputType,
+    WorkMode,
 )
 from emery_agents.ace import (
     ExecutionContextService,
@@ -55,21 +58,7 @@ from .context import SessionConfig, WorkspaceContext, TableInfo, AppInfo
 logger = logging.getLogger(__name__)
 
 
-class Phase(str, Enum):
-    """
-    Unified phase enum for handle_message() routing.
-
-    AIDEV-NOTE: This merges SessionManager's string phases into a unified Phase enum.
-    The string inheritance allows direct comparison with string values.
-    """
-    IDLE = "idle"
-    CLASSIFYING = "classifying"
-    AWAITING_CLARIFICATION = "awaiting_clarification"
-    PLANNING = "planning"
-    AWAITING_APPROVAL = "awaiting_approval"
-    EXECUTING = "executing"
-    COMPLETED = "completed"
-    FAILED = "failed"
+# Phase, InputType, WorkMode now imported from .execution
 
 
 @dataclass
@@ -440,8 +429,12 @@ class ExecutionCoordinator:
         self._evaluation_count: int = 0
         self._managed_agents: Optional[List[Any]] = None  # Stored from execute() for later use
 
-        # Unified phase for handle_message() routing (replaces session_manager's coordinator_phase)
-        self._unified_phase: Phase = Phase.IDLE
+        # Unified 5-state phase for handle_message() routing
+        self._phase: Phase = Phase.IDLE
+        # What kind of work (PLANNING or EXECUTING) - for tool filtering
+        self._work_mode: Optional[WorkMode] = None
+        # What kind of input we're awaiting (APPROVAL, CLARIFICATION, QUESTIONS, RECOVERY)
+        self._awaiting_type: Optional[InputType] = None
         # Execution mode (interactive vs autonomous) - set in execute() based on stored_plan
         self._execution_mode: Optional[ExecutionMode] = None
         # Pending context for resumption after user input (replaces session_manager's original_task)
@@ -515,9 +508,19 @@ class ExecutionCoordinator:
         return self._ledger
 
     @property
-    def unified_phase(self) -> Phase:
-        """Get current unified phase for handle_message() routing."""
-        return self._unified_phase
+    def phase(self) -> Phase:
+        """Get current phase (IDLE, WORKING, AWAITING_INPUT, COMPLETE, FAILED)."""
+        return self._phase
+
+    @property
+    def work_mode(self) -> Optional[WorkMode]:
+        """Get current work mode (PLANNING or EXECUTING) when phase is WORKING."""
+        return self._work_mode
+
+    @property
+    def awaiting_type(self) -> Optional[InputType]:
+        """Get what type of input we're awaiting when phase is AWAITING_INPUT."""
+        return self._awaiting_type
 
     @property
     def execution_mode(self) -> Optional[ExecutionMode]:
@@ -530,12 +533,40 @@ class ExecutionCoordinator:
     @property
     def is_terminal_state(self) -> bool:
         """Check if coordinator is in a terminal state (completed or failed)."""
-        return self._unified_phase in (Phase.COMPLETED, Phase.FAILED)
+        return self._phase in (Phase.COMPLETE, Phase.FAILED)
 
     @property
     def pending_context(self) -> Optional[PendingContext]:
         """Get pending context for resumption after user input."""
         return self._pending_context
+
+    # ============================================================
+    # Phase State Helpers
+    # ============================================================
+
+    def _set_idle(self) -> None:
+        """Set phase to IDLE (ready for new task)."""
+        self._set_idle()
+        self._work_mode = None
+        self._awaiting_type = None
+
+    def _set_working(self, mode: WorkMode) -> None:
+        """Set phase to WORKING with specified work mode."""
+        self._phase = Phase.WORKING
+        self._work_mode = mode
+        self._awaiting_type = None
+
+    def _set_awaiting(self, input_type: InputType) -> None:
+        """Set phase to AWAITING_INPUT with specified input type."""
+        self._phase = Phase.AWAITING_INPUT
+        self._awaiting_type = input_type
+        # Keep work_mode so we know what phase we were in
+
+    def _set_complete(self, success: bool) -> None:
+        """Set phase to COMPLETE or FAILED."""
+        self._phase = Phase.COMPLETE if success else Phase.FAILED
+        self._work_mode = None
+        self._awaiting_type = None
 
     # ============================================================
     # Smart Execution - Adaptive Mode Selection
@@ -593,7 +624,7 @@ class ExecutionCoordinator:
                 f"with {len(stored_plan.steps)} steps (autonomous mode)"
             )
             self._current_plan = stored_plan
-            self._unified_phase = Phase.EXECUTING
+            self._set_working(WorkMode.EXECUTING)
             self._session_logger.log_state_transition("IDLE", "EXECUTING", "stored_plan")
             self._session_logger.log_plan(
                 action="loaded",
@@ -807,7 +838,7 @@ class ExecutionCoordinator:
         Yields:
             PlanCreatedEvent when plan is ready for approval
         """
-        self._unified_phase = Phase.PLANNING
+        self._set_working(WorkMode.PLANNING)
         logger.info(f"Starting planning phase for goal: {goal}")
 
         # Use passed managed_agents or fall back to stored ones
@@ -854,7 +885,7 @@ class ExecutionCoordinator:
             )
         except Exception as e:
             logger.error(f"❌ Plan generation failed: {e}")
-            self._unified_phase = Phase.FAILED
+            self._set_complete(False)
             yield ErrorEvent(
                 error=f"Failed to generate plan: {e}",
                 recoverable=True,
@@ -864,7 +895,7 @@ class ExecutionCoordinator:
         # Check if planner needs clarification instead of generating plan
         if result.needs_clarification and result.clarifying_questions:
             logger.info(f"❓ Planner needs clarification: {len(result.clarifying_questions)} question(s)")
-            self._unified_phase = Phase.AWAITING_CLARIFICATION
+            self._set_awaiting(InputType.CLARIFICATION)
 
             # Store pending context for when user responds
             self._pending_context = PendingContext(
@@ -882,7 +913,7 @@ class ExecutionCoordinator:
         plan = result.plan
         if plan is None:
             logger.error("❌ Plan generation returned no plan and no questions")
-            self._unified_phase = Phase.FAILED
+            self._set_complete(False)
             yield ErrorEvent(
                 error="Plan generation failed: no plan returned",
                 recoverable=True,
@@ -890,7 +921,7 @@ class ExecutionCoordinator:
             return
 
         self._current_plan = plan
-        self._unified_phase = Phase.AWAITING_APPROVAL
+        self._set_awaiting(InputType.APPROVAL)
 
         # Create task ledger from plan for evaluator
         self._ledger = create_ledger_from_plan(
@@ -1013,7 +1044,7 @@ class ExecutionCoordinator:
                 f"(current: {self._current_plan.status})"
             )
 
-        self._unified_phase = Phase.EXECUTING
+        self._set_working(WorkMode.EXECUTING)
         self._current_plan = self._current_plan.start_execution()
         logger.info(f"Starting execution of plan {plan_id}")
 
@@ -1276,7 +1307,7 @@ class ExecutionCoordinator:
                                     tools=tools,
                                     managed_agents=managed_agents or [],
                                 )
-                                self._unified_phase = Phase.AWAITING_CLARIFICATION
+                                self._set_awaiting(InputType.CLARIFICATION)
 
                                 yield AwaitingClarificationEvent.from_dict_list(
                                     questions=questions,
@@ -1452,7 +1483,7 @@ class ExecutionCoordinator:
                             except ReplanNeedsClarificationError as e:
                                 # Replan detected missing info - ask user before proceeding
                                 logger.info(f"❓ Replan needs clarification: {len(e.questions)} question(s)")
-                                self._unified_phase = Phase.AWAITING_CLARIFICATION
+                                self._set_awaiting(InputType.CLARIFICATION)
                                 self._pending_context = PendingContext(
                                     original_task=self._current_plan.basic_instructions if self._current_plan else "",
                                     tools=tools,
@@ -1585,10 +1616,10 @@ class ExecutionCoordinator:
         # Mark plan as completed or failed
         if success:
             self._current_plan = self._current_plan.complete()
-            self._unified_phase = Phase.COMPLETED
+            self._set_complete(True)
         else:
             self._current_plan = self._current_plan.fail()
-            self._unified_phase = Phase.FAILED
+            self._set_complete(False)
 
         # ACE: Record execution pattern for future strategy guidance
         if self._strategy_service and self._current_plan:
@@ -2008,7 +2039,7 @@ class ExecutionCoordinator:
         AIDEV-NOTE: Replaces the scattered `clear_coordinator_state()` calls
         in chat_processing_service.py with a single method.
         """
-        self._unified_phase = Phase.IDLE
+        self._set_idle()
         self._current_plan = None
         self._ledger = None
         self._pending_context = None
@@ -2032,7 +2063,7 @@ class ExecutionCoordinator:
             InterruptQueuedEvent for UI feedback
         """
         # Delegate to handler, then wrap in coordinator's event type
-        handler_event = self._interrupt_handler.queue_interrupt(message, self._unified_phase.value)
+        handler_event = self._interrupt_handler.queue_interrupt(message, self._phase.value)
         return InterruptQueuedEvent(message=handler_event.message, phase=handler_event.phase)
 
     # NOTE: _classify_interrupt and _inject_interrupt_context have been moved to InterruptHandler
@@ -2057,24 +2088,24 @@ class ExecutionCoordinator:
         Yields:
             Appropriate events based on current phase and message content
         """
-        logger.info(f"📋 handle_message() in phase {self._unified_phase.value}")
+        logger.info(f"📋 handle_message() in phase {self._phase.value}, work_mode={self._work_mode}, awaiting={self._awaiting_type}")
 
         # Handle interrupts during planning phase - queue for processing after plan completes
-        if self._unified_phase == Phase.PLANNING:
+        if self._phase == Phase.WORKING and self._work_mode == WorkMode.PLANNING:
             yield self.queue_interrupt(message)
             return
 
         # Handle interrupts during execution phase - queue and pause
-        if self._unified_phase == Phase.EXECUTING:
+        if self._phase == Phase.WORKING and self._work_mode == WorkMode.EXECUTING:
             self._interrupt_handler.pause_execution()
             yield self.queue_interrupt(message)
             return
 
-        if self._unified_phase == Phase.AWAITING_CLARIFICATION:
+        if self._phase == Phase.AWAITING_INPUT and self._awaiting_type == InputType.CLARIFICATION:
             async for event in self._handle_clarification_response(message):
                 yield event
 
-        elif self._unified_phase == Phase.AWAITING_APPROVAL:
+        elif self._phase == Phase.AWAITING_INPUT and self._awaiting_type == InputType.APPROVAL:
             async for event in self._handle_approval_response(message, tools):
                 yield event
 
@@ -2098,11 +2129,11 @@ class ExecutionCoordinator:
             ):
                 # Track phase transitions based on events
                 if isinstance(event, AwaitingClarificationEvent):
-                    self._unified_phase = Phase.AWAITING_CLARIFICATION
+                    self._set_awaiting(InputType.CLARIFICATION)
                 elif isinstance(event, PlanCreatedEvent):
-                    self._unified_phase = Phase.AWAITING_APPROVAL
+                    self._set_awaiting(InputType.APPROVAL)
                 elif isinstance(event, ExecutionCompletedEvent):
-                    self._unified_phase = Phase.COMPLETED if event.success else Phase.FAILED
+                    self._set_complete(event.success)
 
                 yield event
 
@@ -2117,7 +2148,7 @@ class ExecutionCoordinator:
             return
 
         combined_task = f"{self._pending_context.original_task}\n\nUser's clarification: {response}"
-        self._unified_phase = Phase.IDLE
+        self._set_idle()
         logger.info("📋 Processing clarification response, re-executing with combined task")
 
         async for event in self.execute(
@@ -2127,9 +2158,9 @@ class ExecutionCoordinator:
         ):
             # Track phase transitions
             if isinstance(event, PlanCreatedEvent):
-                self._unified_phase = Phase.AWAITING_APPROVAL
+                self._set_awaiting(InputType.APPROVAL)
             elif isinstance(event, ExecutionCompletedEvent):
-                self._unified_phase = Phase.COMPLETED if event.success else Phase.FAILED
+                self._set_complete(event.success)
 
             yield event
 
@@ -2159,12 +2190,12 @@ class ExecutionCoordinator:
             await self.approve_plan(self._current_plan.id)
             yield PlanApprovedEvent(plan_id=self._current_plan.id)
 
-            self._unified_phase = Phase.EXECUTING
+            self._set_working(WorkMode.EXECUTING)
             effective_tools = tools or (self._pending_context.tools if self._pending_context else [])
 
             async for event in self.execute_plan(self._current_plan.id, effective_tools):
                 if isinstance(event, ExecutionCompletedEvent):
-                    self._unified_phase = Phase.COMPLETED if event.success else Phase.FAILED
+                    self._set_complete(event.success)
                 yield event
 
         elif response_lower in ("reject", "no", "n", "cancel", "rejected"):
@@ -2184,7 +2215,7 @@ class ExecutionCoordinator:
 
             # Re-plan with feedback context
             feedback_task = f"{self._pending_context.original_task}\n\nUser feedback on plan: {response}"
-            self._unified_phase = Phase.PLANNING
+            self._set_working(WorkMode.PLANNING)
 
             async for event in self.execute(
                 task=feedback_task,
@@ -2192,7 +2223,7 @@ class ExecutionCoordinator:
                 managed_agents=self._pending_context.managed_agents,
             ):
                 if isinstance(event, PlanCreatedEvent):
-                    self._unified_phase = Phase.AWAITING_APPROVAL
+                    self._set_awaiting(InputType.APPROVAL)
                 yield event
 
 

@@ -17,6 +17,7 @@ from .state import (
     Phase,
     ExecutionPhase,  # Backward compat alias
     InputType,
+    WorkMode,
     ClarifyingQuestion,
     PendingInput,
     StepResult,
@@ -26,12 +27,14 @@ from .state import (
 __all__ = [
     "StepExecutor",
     "InterruptHandler",
+    "QueuedInterrupt",
     "ReplanHandler",
     "ReplanNeedsClarificationError",
     # State management
     "Phase",
     "ExecutionPhase",
     "InputType",
+    "WorkMode",
     "ClarifyingQuestion",
     "PendingInput",
     "StepResult",

@@ -45,6 +45,12 @@ class InputType(str, Enum):
     RECOVERY = "recovery"           # Recovery from failure
 
 
+class WorkMode(str, Enum):
+    """What kind of work the agent is doing when in WORKING phase."""
+    PLANNING = "planning"    # Read-only tools, generating plan
+    EXECUTING = "executing"  # Full tools, running steps
+
+
 @dataclass
 class ClarifyingQuestion:
     """A question to ask the user."""

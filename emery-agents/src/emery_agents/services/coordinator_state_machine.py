@@ -36,7 +36,13 @@ logger = logging.getLogger(__name__)
 
 
 class Phase(Enum):
-    """Coordinator execution phases."""
+    """
+    State machine phases for gRPC routing.
+
+    NOTE: This is separate from execution.Phase (5-state). This enum is used
+    for gRPC layer routing decisions, while execution.Phase tracks the
+    coordinator's execution state. They serve different purposes.
+    """
     IDLE = auto()                       # No active coordination, accepts new tasks
     AWAITING_CLARIFICATION = auto()     # Waiting for task classifier clarification
     AWAITING_APPROVAL = auto()          # Waiting for user to approve a plan
