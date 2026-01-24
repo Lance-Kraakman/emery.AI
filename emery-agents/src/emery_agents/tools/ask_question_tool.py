@@ -60,7 +60,7 @@ When to use:
 Provide options when possible - makes it easier for the user to answer quickly.
 Explain context so user understands why you need this information.
 
-Example (single question):
+Example (single question with options):
 {
     "questions": [
         {
@@ -71,11 +71,19 @@ Example (single question):
     ]
 }
 
+Example (open-ended question - no options):
+{
+    "questions": [
+        {"question": "What data do you need to track? Describe the tables and fields you need."}
+    ]
+}
+
 Example (multiple questions):
 {
     "questions": [
         {"question": "What tables do you need?", "options": ["Customers", "Orders", "Products", "Custom"]},
-        {"question": "Should we add audit fields (created_at, updated_at)?", "options": ["Yes", "No"]}
+        {"question": "Should we add audit fields (created_at, updated_at)?", "options": ["Yes", "No"]},
+        {"question": "Any other requirements?"}
     ]
 }
 """

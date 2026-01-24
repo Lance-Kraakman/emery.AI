@@ -70,10 +70,15 @@ ask_clarifying_questions(questions=[
 
 **If intent is clear but details are missing, ask SPECIFIC questions:**
 ```python
-# Can ask multiple questions in one call
+# Multiple choice - use options
 ask_clarifying_questions(questions=[
     {"question": "What data do you need to track?", "options": ["Customers", "Orders", "Projects", "Custom"]},
-    {"question": "Should we add audit fields (created_at, updated_at)?", "options": ["Yes", "No"]}
+    {"question": "Should we add audit fields?", "options": ["Yes", "No"]}
+])
+
+# Open-ended - omit options for free text response
+ask_clarifying_questions(questions=[
+    {"question": "Describe the tables and fields you need."}
 ])
 ```
 
