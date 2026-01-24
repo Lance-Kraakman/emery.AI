@@ -8,7 +8,7 @@ Two-tier capability access:
 - Enabled: Capabilities the org has enabled (system agents, org skills, connected integrations)
 - Available: All other capabilities (marketplace, unconnected integrations)
 
-Uses semantic search (Google embeddings) for accurate capability matching.
+Uses semantic search (HuggingFace embeddings) for accurate capability matching.
 """
 
 import logging
@@ -192,30 +192,36 @@ class CapabilityRegistry:
             limit: Maximum results to return
 
         Returns:
-            List of matching capabilities ranked by similarity
+            List of matching capabilities ranked by similarity.
+            Returns empty list if embedding service fails.
         """
         if not candidates:
             return []
 
-        from .embedding_service import get_embedding, cosine_similarity
+        try:
+            from .embedding_service import get_embedding, cosine_similarity
 
-        query_embedding = get_embedding(query)
+            query_embedding = get_embedding(query)
 
-        # Score each capability by similarity
-        scored: list[tuple[float, Capability]] = []
-        for cap in candidates:
-            # Build searchable text from capability metadata
-            cap_text = f"{cap.name} {cap.description} {' '.join(cap.actions)} {' '.join(cap.entities)}"
-            cap_embedding = get_embedding(cap_text)
-            score = cosine_similarity(query_embedding, cap_embedding)
-            scored.append((score, cap))
+            # Score each capability by similarity
+            scored: list[tuple[float, Capability]] = []
+            for cap in candidates:
+                # Build searchable text from capability metadata
+                cap_text = f"{cap.name} {cap.description} {' '.join(cap.actions)} {' '.join(cap.entities)}"
+                cap_embedding = get_embedding(cap_text)
+                score = cosine_similarity(query_embedding, cap_embedding)
+                scored.append((score, cap))
 
-        # Sort by score descending
-        scored.sort(key=lambda x: x[0], reverse=True)
+            # Sort by score descending
+            scored.sort(key=lambda x: x[0], reverse=True)
 
-        results = [cap for _, cap in scored[:limit]]
-        logger.debug(f"Semantic search '{query}' → {len(results)} results")
-        return results
+            results = [cap for _, cap in scored[:limit]]
+            logger.debug(f"Semantic search '{query}' → {len(results)} results")
+            return results
+
+        except Exception as e:
+            logger.warning(f"Semantic search failed: {e}")
+            return []
 
     def search(
         self,

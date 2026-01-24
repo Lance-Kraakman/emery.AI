@@ -229,15 +229,12 @@ class GetCapabilityTool(Tool):
         cap = self.registry.get(capability_id)
 
         if not cap:
-            all_ids = [c.id for c in self.registry.all()]
-            # Match on name portion only, case-insensitive
-            search_term = capability_id.split(":")[-1].lower()
-            similar = [
-                cid for cid in all_ids
-                if search_term in cid.split(":")[-1].lower()
-            ][:3]
+            # Use semantic search to find similar capabilities
+            search_term = capability_id.split(":")[-1]
+            similar = self.registry.search(search_term, limit=3)
             if similar:
-                return f"Not found: '{capability_id}'. Did you mean: {similar}?"
+                similar_ids = [c.id for c in similar]
+                return f"Not found: '{capability_id}'. Did you mean: {similar_ids}?"
             return f"Not found: '{capability_id}'"
 
         return self._format_details(cap)
