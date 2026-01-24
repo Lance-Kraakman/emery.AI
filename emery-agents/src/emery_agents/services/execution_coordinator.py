@@ -546,7 +546,7 @@ class ExecutionCoordinator:
 
     def _set_idle(self) -> None:
         """Set phase to IDLE (ready for new task)."""
-        self._set_idle()
+        self._phase = Phase.IDLE
         self._work_mode = None
         self._awaiting_type = None
 
