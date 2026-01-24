@@ -21,7 +21,7 @@ and injected directly into the prompt.
 import logging
 from typing import Any, Dict, List, Optional
 
-from smolagents import ToolCallingAgent
+from emery_agents.agents.planning_agent import PlanningAgent
 
 from ..protocols import ModelProvider, Tool
 from emery_agents.ace import StrategyAccumulationService
@@ -146,10 +146,12 @@ class PlanGenerator:
         )
 
         # Create and run the single planning agent (no sub-agents)
-        planner = ToolCallingAgent(
+        # PlanningAgent stops early when clarifying questions are collected
+        planner = PlanningAgent(
             tools=all_tools,
             model=model,
             max_steps=15,
+            ask_question_tool=ask_question_tool,
         )
 
         try:
