@@ -352,28 +352,9 @@ class AwaitingClarificationEvent:
 
 
 @dataclass
-class DirectExecutionStartedEvent:
-    """Event emitted when coordinator starts direct execution (no plan)."""
-    task: str
-
-
-# Planning progress events (for UI feedback during thinking phase)
-@dataclass
-class ClassificationStartedEvent:
-    """Event emitted when starting to classify user request."""
-    task_summary: str  # Truncated user message for display
-
-
-@dataclass
 class PlanningStartedEvent:
-    """Event emitted when planning begins after classification."""
+    """Event emitted when planning begins."""
     goal: str
-
-
-@dataclass
-class PlanningProgressEvent:
-    """Event emitted during planning with progress info."""
-    message: str  # e.g., "Analyzing requirements...", "Identifying tools needed..."
 
 
 @dataclass
@@ -2137,9 +2118,6 @@ class ExecutionCoordinator:
                     self._unified_phase = Phase.AWAITING_APPROVAL
                 elif isinstance(event, ExecutionCompletedEvent):
                     self._unified_phase = Phase.COMPLETED if event.success else Phase.FAILED
-                elif isinstance(event, DirectExecutionStartedEvent):
-                    # Direct mode doesn't need coordinator state
-                    self._unified_phase = Phase.IDLE
 
                 yield event
 

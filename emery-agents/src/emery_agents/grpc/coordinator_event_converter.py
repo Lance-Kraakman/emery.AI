@@ -32,16 +32,12 @@ from ..services.execution_coordinator import (
     # Phase execution events
     PhaseStartedEvent,
     PhaseCompletedEvent,
-    # Planning progress events (for UI feedback during thinking phase)
-    ClassificationStartedEvent,
+    # Planning events
     PlanningStartedEvent,
-    PlanningProgressEvent,
-    # Missing converters (added for completeness)
     PlanCreatedEvent,
     PlanApprovedEvent,
     PlanUpdatedEvent,
     AwaitingClarificationEvent,
-    DirectExecutionStartedEvent,
     PlanCancelledEvent,
     InterruptQueuedEvent,
     InterruptReceivedEvent,
@@ -311,17 +307,7 @@ def convert_coordinator_event(event: Any, step_index: int) -> Optional[Coordinat
             }
         }
 
-    # Planning progress events (for UI feedback during thinking phase)
-    elif isinstance(event, ClassificationStartedEvent):
-        return {
-            "type": "step_progress",
-            "step_type": "PLANNING",
-            "step_name": "Analyzing Request",
-            "content": f"Understanding: {event.task_summary}",
-            "metadata": {"type": "classification_started"},
-            "step_index": step_index
-        }
-
+    # Planning events
     elif isinstance(event, PlanningStartedEvent):
         return {
             "type": "step_progress",
@@ -329,16 +315,6 @@ def convert_coordinator_event(event: Any, step_index: int) -> Optional[Coordinat
             "step_name": "Creating Plan",
             "content": f"Goal: {event.goal}",
             "metadata": {"type": "planning_started"},
-            "step_index": step_index
-        }
-
-    elif isinstance(event, PlanningProgressEvent):
-        return {
-            "type": "step_progress",
-            "step_type": "PLANNING",
-            "step_name": "Planning",
-            "content": event.message,
-            "metadata": {"type": "planning_progress"},
             "step_index": step_index
         }
 
@@ -438,16 +414,6 @@ def convert_coordinator_event(event: Any, step_index: int) -> Optional[Coordinat
                 "options": [],  # Questions have their own options
                 "plan_json": "",
             }
-        }
-
-    elif isinstance(event, DirectExecutionStartedEvent):
-        return {
-            "type": "step_progress",
-            "step_type": "ACTION",
-            "step_name": "Direct Execution",
-            "content": f"Executing: {event.task[:100]}...",
-            "metadata": {"type": "direct_execution_started"},
-            "step_index": step_index
         }
 
     # ============================================================

@@ -11,7 +11,7 @@ Extracted components from ExecutionCoordinator for maintainability.
 """
 
 from .step_executor import StepExecutor
-from .interrupt_handler import InterruptHandler
+from .interrupt_handler import InterruptHandler, QueuedInterrupt
 from .replan_handler import ReplanHandler, ReplanNeedsClarificationError
 from .state import (
     Phase,

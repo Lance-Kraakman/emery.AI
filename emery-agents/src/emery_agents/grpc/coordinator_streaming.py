@@ -13,7 +13,6 @@ from ..services.execution_coordinator import (
     PlanCreatedEvent,
     ExecutionCompletedEvent,
     FinalSynthesisEvent,
-    DirectExecutionStartedEvent,
     AwaitingClarificationEvent,
     ErrorEvent,
 )
@@ -68,6 +67,7 @@ class CoordinatorStreamingHandler:
         managed_agents: Optional[List[Any]] = None,
         stored_plan: Optional[Plan] = None,
         conversation_history: Optional[List[Any]] = None,
+        capability_registry: Optional[Any] = None,
     ) -> AsyncIterator[Any]:
         """
         Coordinator-driven execution path.
@@ -96,6 +96,7 @@ class CoordinatorStreamingHandler:
                 managed_agents=managed_agents,
                 stored_plan=stored_plan,
                 conversation_history=conversation_history,
+                capability_registry=capability_registry,
             ):
                 yield event
             return
@@ -110,6 +111,7 @@ class CoordinatorStreamingHandler:
                 sm=sm,
                 managed_agents=managed_agents,
                 conversation_history=conversation_history,
+                capability_registry=capability_registry,
             ):
                 yield event
 
@@ -145,6 +147,7 @@ class CoordinatorStreamingHandler:
         managed_agents: Optional[List[Any]],
         stored_plan: Plan,
         conversation_history: Optional[List[Any]],
+        capability_registry: Optional[Any] = None,
     ) -> AsyncIterator[Any]:
         """Handle autonomous mode with pre-approved stored plan."""
         assert context.tool_provider is not None, "tool_provider required for autonomous execution"
@@ -173,6 +176,7 @@ class CoordinatorStreamingHandler:
             api_key=context.tool_provider.api_key,
             organization_id=context.tool_provider.organization_id,
             conversation_history=conversation_history,
+            capability_registry=capability_registry,
         )
 
         step_index = 0
@@ -217,6 +221,7 @@ class CoordinatorStreamingHandler:
         sm: Optional['CoordinatorStateMachine'],
         managed_agents: Optional[List[Any]],
         conversation_history: Optional[List[Any]],
+        capability_registry: Optional[Any] = None,
     ) -> AsyncIterator[Any]:
         """Handle new request - coordinator determines mode."""
         logger.info("📋 Coordinator: Analyzing task to determine execution mode...")
@@ -249,6 +254,7 @@ class CoordinatorStreamingHandler:
             api_key=context.tool_provider.api_key,
             organization_id=context.tool_provider.organization_id,
             conversation_history=conversation_history,
+            capability_registry=capability_registry,
         )
 
         plan: Optional[Plan] = None
@@ -277,11 +283,6 @@ class CoordinatorStreamingHandler:
 
                 if sm:
                     sm.on_clarification_needed(task)
-                return
-
-            elif isinstance(event, DirectExecutionStartedEvent):
-                logger.info("📋 Coordinator: DIRECT mode - executing without plan")
-                yield "FALL_THROUGH"
                 return
 
             elif isinstance(event, PlanCreatedEvent):

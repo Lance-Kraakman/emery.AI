@@ -24,8 +24,8 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class InterruptQueuedEvent:
-    """User sent message during planning - queued for processing after plan completes."""
+class QueuedInterrupt:
+    """Internal representation of a queued interrupt."""
     message: str
     phase: str  # "planning" or "executing"
 
@@ -57,7 +57,7 @@ class InterruptHandler:
         self._interrupt_queue: List[str] = []
         self._execution_paused: bool = False
 
-    def queue_interrupt(self, message: str, phase: str = "executing") -> InterruptQueuedEvent:
+    def queue_interrupt(self, message: str, phase: str = "executing") -> QueuedInterrupt:
         """
         Queue an interrupt message for processing.
 
@@ -68,11 +68,11 @@ class InterruptHandler:
             phase: Current phase ("planning" or "executing")
 
         Returns:
-            InterruptQueuedEvent for UI feedback
+            QueuedInterrupt with message and phase info
         """
         self._interrupt_queue.append(message)
         logger.info(f"⏸️ Interrupt queued during {phase}: {message[:50]}...")
-        return InterruptQueuedEvent(message=message, phase=phase)
+        return QueuedInterrupt(message=message, phase=phase)
 
     def has_pending_interrupts(self) -> bool:
         """Check if there are pending interrupts in the queue."""
