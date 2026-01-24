@@ -1017,17 +1017,43 @@ export async function POST(req: NextRequest) {
                 }
 
                 // Send awaiting_input event to frontend
+                // Normalize inputType to just 'plan_approval' or 'questions'
+                const isPlanApproval = response.awaitingInput.inputType === 'plan_approval';
+                const normalizedInputType = isPlanApproval ? 'plan_approval' : 'questions';
+
+                // For questions type, parse JSON content and convert to questionSections
+                let questionSections: Array<{agentName: string; stepId: string; questions: any[]}> | undefined;
+                let displayContent = response.awaitingInput.content;
+
+                if (!isPlanApproval && response.awaitingInput.content) {
+                  try {
+                    // Content contains JSON array of questions
+                    const questions = JSON.parse(response.awaitingInput.content);
+                    if (Array.isArray(questions) && questions.length > 0) {
+                      questionSections = [{
+                        agentName: 'assistant',
+                        stepId: 'clarification',
+                        questions: questions
+                      }];
+                      displayContent = ''; // Don't display raw JSON
+                    }
+                  } catch {
+                    // Not JSON, keep as-is (legacy format)
+                  }
+                }
+
                 const awaitingInputEvent = {
                   type: 'awaiting_input',
-                  inputType: response.awaitingInput.inputType,
+                  inputType: normalizedInputType,
                   title: response.awaitingInput.title,
-                  content: response.awaitingInput.content,
+                  content: isPlanApproval ? '' : displayContent, // Plan content already in message
                   options: response.awaitingInput.options || [],
-                  planJson: response.awaitingInput.planJson || null
+                  planJson: response.awaitingInput.planJson || null,
+                  questionSections: questionSections
                 };
 
                 controller.enqueue(encodeSSEEvent(awaitingInputEvent));
-                console.log(`[CHAT-GRPC-API] Sent awaiting_input event (type=${response.awaitingInput.inputType})`);
+                console.log(`[CHAT-GRPC-API] Sent awaiting_input event (type=${normalizedInputType}, questions=${questionSections?.length || 0})`);
 
               } else if (response.type === 'error' && response.error) {
                 // AI processing error with user-friendly message

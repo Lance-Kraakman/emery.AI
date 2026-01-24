@@ -89,11 +89,18 @@ def convert_awaiting_input(response_dict: Dict[str, Any]) -> agent_worker_pb2.Pr
         for opt in data.get("options", [])
     ]
 
+    # For questions type, serialize questions array to JSON in content
+    # (protobuf AwaitingInput doesn't have a questions field)
+    content = str(data.get("content", ""))
+    questions = data.get("questions", [])
+    if questions and data.get("input_type") == "questions":
+        content = json.dumps(questions)
+
     return agent_worker_pb2.ProcessMessageResponse(
         awaiting_input=agent_worker_pb2.AwaitingInput(
             input_type=str(data.get("input_type", "question")),
             title=str(data.get("title", "")),
-            content=str(data.get("content", "")),
+            content=content,
             options=input_options,
             plan_json=str(data.get("plan_json", ""))
         ),

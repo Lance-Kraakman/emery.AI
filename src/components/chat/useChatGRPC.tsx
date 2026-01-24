@@ -683,24 +683,29 @@ export function useChatGRPC(
                 });
 
               } else if (isAwaitingInputEvent(eventData)) {
-                // Unified HITL: Agent needs user input (plan approval or question)
+                // Unified HITL: Agent needs user input (plan approval or questions)
                 logger.debug('Awaiting input', {
                   inputType: eventData.inputType,
                   title: eventData.title,
-                  optionsCount: eventData.options?.length || 0
+                  optionsCount: eventData.options?.length || 0,
+                  hasQuestions: !!eventData.questionSections?.length
                 });
 
                 // Set awaiting input state for UI to render approval/question card
+                // API route normalizes inputType to 'plan_approval' | 'questions'
+                // and converts questions to questionSections format
                 setAwaitingInput({
-                  inputType: eventData.inputType,
+                  inputType: eventData.inputType as 'plan_approval' | 'questions',
                   title: eventData.title,
                   content: eventData.content,
                   options: eventData.options || [],
-                  planJson: eventData.planJson
+                  planJson: eventData.planJson,
+                  questionSections: eventData.questionSections
                 });
 
-                // Display ALL awaiting input content (questions, plans, etc.) in the message
-                // This ensures clarifying questions and plan approvals appear in chat history
+                // Display content in chat history (if any)
+                // Note: For plan_approval, content is empty (plan shown in message already)
+                // For questions, content may be empty if using questionSections UI
                 if (eventData.content) {
                   const inputMessage = `\n\n**${eventData.title}**\n\n${eventData.content}`;
                   assistantMessage += inputMessage;

@@ -266,16 +266,27 @@ class CoordinatorStreamingHandler:
             if isinstance(event, AwaitingClarificationEvent):
                 logger.info(f"📋 Coordinator: Task needs clarification - {len(event.questions)} questions")
 
-                questions_content = ""
-                for q in event.questions:
-                    questions_content += f"{q}\n"
+                # Properly format ClarifyingQuestion objects as structured data
+                questions_data = []
+                for i, q in enumerate(event.questions):
+                    q_dict: dict[str, Any] = {
+                        "questionId": f"q_{i}",
+                        "question": q.question,
+                        "required": q.required,
+                    }
+                    if q.options:
+                        q_dict["options"] = q.options
+                    if q.context:
+                        q_dict["context"] = q.context
+                    questions_data.append(q_dict)
 
                 yield {
                     "type": "awaiting_input",
                     "data": {
-                        "input_type": "question",
+                        "input_type": "questions",
                         "title": "Clarification Needed",
-                        "content": questions_content,
+                        "content": event.reasoning,
+                        "questions": questions_data,
                         "options": [],
                         "plan_json": ""
                     }

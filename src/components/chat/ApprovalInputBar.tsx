@@ -36,7 +36,7 @@ export function ApprovalInputBar({
   const containerRef = useRef<HTMLDivElement>(null)
 
   const options = awaitingInput.options || []
-  const isBatchedQuestions = awaitingInput.inputType === 'batched_questions'
+  const isQuestions = awaitingInput.inputType === 'questions'
   const questionSections = awaitingInput.questionSections || []
 
   // Format agent name for display (snake_case → Title Case)
@@ -144,14 +144,14 @@ export function ApprovalInputBar({
       </div>
 
       {/* Content (for questions/clarifications) */}
-      {awaitingInput.content && !isBatchedQuestions && (
+      {awaitingInput.content && !isQuestions && (
         <div className="prose prose-sm dark:prose-invert max-w-none mb-3 text-sm max-h-[50vh] overflow-y-auto">
           <ReactMarkdown>{awaitingInput.content}</ReactMarkdown>
         </div>
       )}
 
       {/* Batched Questions UI - Flattened Claude Code-style numbered list */}
-      {isBatchedQuestions && questionSections.length > 0 && (() => {
+      {isQuestions && questionSections.length > 0 && (() => {
         // Flatten all questions with inline agent context
         const allQuestions = questionSections.flatMap(section =>
           section.questions.map(q => ({ ...q, agentName: section.agentName }))
@@ -224,7 +224,7 @@ export function ApprovalInputBar({
       })()}
 
       {/* Options list + custom input (all styled the same) */}
-      {!isBatchedQuestions && <div className="space-y-0.5">
+      {!isQuestions && <div className="space-y-0.5">
         {options.map((option, index) => {
           const isSelected = index === selectedIndex
           return (

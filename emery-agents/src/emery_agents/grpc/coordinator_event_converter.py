@@ -393,8 +393,9 @@ def convert_coordinator_event(event: Any, step_index: int) -> Optional[Coordinat
     elif isinstance(event, AwaitingClarificationEvent):
         # Format questions for display
         questions_data: list[Any] = []
-        for q in event.questions:
+        for i, q in enumerate(event.questions):
             q_dict: dict[str, Any] = {
+                "questionId": f"q_{i}",
                 "question": q.question,
                 "required": q.required,
             }
@@ -407,7 +408,7 @@ def convert_coordinator_event(event: Any, step_index: int) -> Optional[Coordinat
         return {
             "type": "awaiting_input",
             "data": {
-                "input_type": "clarification",
+                "input_type": "questions",
                 "title": "Clarification Needed",
                 "content": event.reasoning,
                 "questions": questions_data,

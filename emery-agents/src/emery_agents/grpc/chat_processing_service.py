@@ -471,13 +471,28 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                         "user_feedback": user_feedback,
                     })
 
-                    questions_content = "\n".join(event.questions)
+                    # Properly format ClarifyingQuestion objects as structured data
+                    questions_data = []
+                    for i, q in enumerate(event.questions):
+                        q_dict: Dict[str, Any] = {
+                            "questionId": f"q_{i}",
+                            "question": q.question,
+                            "required": q.required,
+                        }
+                        if q.options:
+                            q_dict["options"] = q.options
+                        if q.context:
+                            q_dict["context"] = q.context
+                        questions_data.append(q_dict)
+
+                    # Serialize questions as JSON in content (protobuf doesn't have questions field)
+                    questions_json = json.dumps(questions_data)
 
                     yield agent_worker_pb2.GeneratePlanResponse(
                         awaiting_input=agent_worker_pb2.AwaitingInput(
-                            input_type="question",
+                            input_type="questions",
                             title="Clarification Needed",
-                            content=questions_content,
+                            content=questions_json,
                             options=[],
                             session_id=session_id
                         ),

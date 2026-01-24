@@ -81,18 +81,17 @@ export interface QuestionSection {
 /**
  * Awaiting input state for HITL (plan approval or questions)
  *
- * AIDEV-NOTE: Unified HITL state supporting:
- * - plan_approval: Shows plan + Approve/Reject/Modify buttons
- * - question: Shows question + option buttons for user choice
- * - batched_questions: Shows questions from multiple sub-agents grouped together
+ * AIDEV-NOTE: Simplified HITL state with just 2 types:
+ * - plan_approval: Shows approve/reject buttons (plan content in chat message above)
+ * - questions: Shows all clarifying questions with structured UI
  */
 export interface AwaitingInputState {
-  inputType: 'plan_approval' | 'question' | 'batched_questions'
+  inputType: 'plan_approval' | 'questions'
   title: string
   content: string
   options: InputOption[]
   planJson?: string
-  // For batched_questions input type
+  // For questions input type - structured question data
   questionSections?: QuestionSection[]
 }
 
