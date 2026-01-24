@@ -1,5 +1,5 @@
 """
-Ask Question Tool - Allows sub-agents to ask structured clarifying questions.
+Ask Question Tool - Allows sub-agents to gather clarifying questions from users.
 
 Instead of hoping agents ask questions in plan text and parsing with regex,
 agents explicitly call this tool to record structured questions for the user.
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 class AgentStopWithQuestionsException(Exception):
     """Raised to stop agent execution after questions are recorded.
 
-    When an agent calls ask_clarifying_question with final=True,
+    When an agent calls ask_clarifying_question (default behavior),
     this exception is raised to immediately stop the agent loop
     and return the collected questions to the user.
     """
@@ -32,28 +32,27 @@ class AgentStopWithQuestionsException(Exception):
 
 class AskQuestionTool(Tool):  # type: ignore[misc]
     """
-    Tool for sub-agents to ask structured clarifying questions.
+    Tool for sub-agents to gather clarifying questions from users.
 
     The agent calls this tool during planning when it needs:
     - Business requirements clarification
     - Technical decisions (which approach?)
     - Scope clarification (include X?)
 
-    Questions are collected and presented to user in a batched UI.
-
-    Use final=True on the last question to stop the agent and submit all questions.
+    By default, calling this tool submits the question(s) and waits for user response.
+    To gather multiple questions before submitting, use final=False on earlier questions.
     """
 
     # Skip smolagents' forward signature validation
     skip_forward_signature_validation = True
 
     name = "ask_clarifying_question"
-    description = """Ask the user a clarifying question during planning.
+    description = """Gather clarifying questions from the user during planning.
 
 Call this BEFORE finalizing your plan when you need information to proceed.
 
-IMPORTANT: Set final=True on your last question to submit and wait for user response.
-Without final=True, questions are just recorded but the agent continues running.
+By default, this submits the question and waits for user response.
+To gather multiple questions before submitting, set final=False on earlier questions.
 
 When to use:
 - Business requirements: "What health metrics should we track?"
@@ -64,19 +63,16 @@ When to use:
 Provide options when possible - makes it easier for the user to answer quickly.
 Explain context so user understands why you need this information.
 
-Example (single question):
+Example (single question - most common):
 {
     "question": "What would you like help with today?",
     "options": ["Create or modify data tables", "Build an automation", "Create an app"],
-    "context": "I want to understand what you're trying to accomplish",
-    "final": true
+    "context": "I want to understand what you're trying to accomplish"
 }
 
-Example (multiple questions):
-# First question - don't set final
-{"question": "What tables do you need?", "options": [...]}
-# Last question - set final=true to submit all
-{"question": "Should we add audit fields?", "options": ["Yes", "No"], "final": true}
+Example (multiple questions - use final=false on earlier ones):
+{"question": "What tables do you need?", "options": [...], "final": false}
+{"question": "Should we add audit fields?", "options": ["Yes", "No"]}
 """
 
     inputs = {
@@ -102,7 +98,7 @@ Example (multiple questions):
         },
         "final": {
             "type": "boolean",
-            "description": "If true, submit all questions and stop to wait for user response. Set this on your last question.",
+            "description": "Submit questions and wait for response. Defaults to true. Set to false to gather more questions first.",
             "nullable": True,
         },
     }
@@ -121,20 +117,20 @@ Example (multiple questions):
         final: Optional[bool] = None,
     ) -> str:
         """
-        Record a clarifying question.
+        Gather a clarifying question from the user.
 
         Args:
             question: The question text to ask the user
             options: Optional list of answer options for multiple choice
             context: Why this information is needed
             required: Whether answer is required (defaults to True)
-            final: If True, stop agent and submit all questions to user
+            final: Submit questions and wait for response (defaults to True)
 
         Returns:
-            Confirmation message (if not final)
+            Confirmation message (only if final=False)
 
         Raises:
-            AgentStopWithQuestionsException: When final=True, stops the agent
+            AgentStopWithQuestionsException: Stops agent to wait for user response (default)
         """
         is_required = required if required is not None else True
 
@@ -154,12 +150,14 @@ Example (multiple questions):
         if context:
             logger.debug(f"   Context: {context[:80]}...")
 
-        # If final=True, stop the agent and return questions to user
-        if final:
+        # DEFAULT TO TRUE - stop and submit unless explicitly told not to
+        should_submit = final if final is not None else True
+
+        if should_submit:
             logger.info(f"📤 Submitting {len(self.collected_questions)} question(s) to user")
             raise AgentStopWithQuestionsException(self.collected_questions)
 
-        return f"Question recorded ({len(self.collected_questions)} total). Set final=True on your last question to submit."
+        return f"Question recorded ({len(self.collected_questions)} total). Add more questions or omit final to submit."
 
     def get_questions(self) -> List[Dict[str, Any]]:
         """

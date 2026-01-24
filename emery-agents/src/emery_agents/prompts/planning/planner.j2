@@ -62,8 +62,7 @@ First, determine what the user is asking for:
 ask_clarifying_question(
     question="Hi! What would you like help with today?",
     options=["Create or modify data tables", "Build an automation or skill", "Create an app or page", "Something else"],
-    context="I want to understand what you're trying to accomplish",
-    final=True  # IMPORTANT: Always set final=True to submit and wait for response
+    context="I want to understand what you're trying to accomplish"
 )
 ```
 
@@ -73,20 +72,18 @@ ask_clarifying_question(
 ask_clarifying_question(
     question="What data do you need to track?",
     options=["Customers and contacts", "Orders and inventory", "Projects and tasks", "Custom - I'll describe it"],
-    context="I need to know what tables and fields to create",
-    final=True
+    context="I need to know what tables and fields to create"
 )
 
 # For skill/automation work
 ask_clarifying_question(
     question="What should this automation do?",
     options=["Send notifications", "Process data", "Connect systems", "Custom - I'll describe it"],
-    context="I need to understand the workflow",
-    final=True
+    context="I need to understand the workflow"
 )
 ```
 
-**IMPORTANT:** Always set `final=True` on your question to submit it and wait for the user's response. Without `final=True`, the question is recorded but not submitted.
+**Note:** Questions are submitted immediately by default. Use `final=False` only if you need to gather multiple questions before submitting.
 
 ### 2. Discover Capabilities
 
