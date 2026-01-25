@@ -1,14 +1,16 @@
-"""
-Database CRUD operations as DSPy-compatible functions.
+"""Database CRUD tool - thin wrapper on DatabaseAPI.
 
 Ported from tools/crud_tools.py (load_database_crud).
+Refactored to use shared typed API layer.
 """
 
 from __future__ import annotations
 
+import json
+from dataclasses import asdict
 from typing import Any, Callable
 
-from ..http_client import make_request
+from ..api import DatabaseAPI
 from ..mutation_guard import check_mutation_allowed
 
 
@@ -23,6 +25,7 @@ def create_database_crud(api_key: str, org_id: str) -> Callable[..., str]:
     Returns:
         database_crud function that DSPy ReAct can use
     """
+    api = DatabaseAPI(api_key, org_id)
 
     def database_crud(
         method: str,
@@ -46,64 +49,46 @@ def create_database_crud(api_key: str, org_id: str) -> Callable[..., str]:
         if blocked:
             return blocked
 
-        if method == "create":
-            if not data:
-                return "ERROR: Database data is required for create. Provide {name, description}"
-            return make_request(
-                endpoint="databases?format=llm",
-                method="POST",
-                data=data,
-                auth_token=api_key,
-                org_id=org_id,
-            )
+        if method == "list":
+            databases = api.list(filters=filters)
+            return json.dumps({"data": [asdict(db) for db in databases]})
 
         elif method == "read":
             if not database_id:
                 return "ERROR: database_id is required for read operation"
-            return make_request(
-                endpoint=f"databases/{database_id}",
-                method="GET",
-                data=None,
-                auth_token=api_key,
-                org_id=org_id,
+            db = api.get(int(database_id))
+            if db is None:
+                return "ERROR: Database not found"
+            return json.dumps(asdict(db))
+
+        elif method == "create":
+            if not data:
+                return "ERROR: Database data is required for create. Provide {name, description}"
+            db = api.create(
+                name=data.get("name", ""),
+                description=data.get("description", ""),
             )
+            if db is None:
+                return "ERROR: Failed to create database"
+            return json.dumps(asdict(db))
 
         elif method == "update":
             if not database_id:
                 return "ERROR: database_id is required for update operation"
             if not data:
                 return "ERROR: Database data is required for update"
-            return make_request(
-                endpoint=f"databases/{database_id}?format=llm",
-                method="PUT",
-                data=data,
-                auth_token=api_key,
-                org_id=org_id,
-            )
+            db = api.update(int(database_id), data)
+            if db is None:
+                return "ERROR: Failed to update database"
+            return json.dumps(asdict(db))
 
         elif method == "delete":
             if not database_id:
                 return "ERROR: database_id is required for delete operation"
-            return make_request(
-                endpoint=f"databases/{database_id}?format=llm",
-                method="DELETE",
-                data=None,
-                auth_token=api_key,
-                org_id=org_id,
-            )
-
-        elif method == "list":
-            endpoint = "databases?format=llm"
-            if filters:
-                for key, value in filters.items():
-                    endpoint += f"&{key}={value}"
-            return make_request(
-                endpoint=endpoint,
-                method="GET",
-                data=None,
-                auth_token=api_key,
-                org_id=org_id,
-            )
+            success = api.delete(int(database_id))
+            if not success:
+                return "ERROR: Failed to delete database"
+            return json.dumps({"success": True, "deleted_id": database_id})
 
         else:
             return f"ERROR: Unknown method: {method}. Supported: list, read, create, update, delete"

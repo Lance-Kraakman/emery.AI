@@ -1,0 +1,196 @@
+"""Typed Database API - shared by tools and services."""
+
+from __future__ import annotations
+
+import json
+import logging
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
+
+from ..http_client import make_request
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class Database:
+    """Database entity."""
+
+    id: int
+    name: str
+    description: str = ""
+    table_count: int = 0
+    slug: str = ""
+
+
+class DatabaseAPI:
+    """Typed API for database operations.
+
+    Usage:
+        api = DatabaseAPI(api_key, org_id)
+        databases = api.list()
+        db = api.get(123)
+        new_db = api.create("My Database", "Description")
+    """
+
+    def __init__(self, api_key: str, org_id: str):
+        self._api_key = api_key
+        self._org_id = org_id
+
+    def list(self, filters: Optional[Dict[str, Any]] = None) -> List[Database]:
+        """List all databases.
+
+        Args:
+            filters: Optional filter criteria
+
+        Returns:
+            List of Database objects
+        """
+        endpoint = "databases?format=llm"
+        if filters:
+            for key, value in filters.items():
+                endpoint += f"&{key}={value}"
+
+        result = make_request(
+            endpoint=endpoint,
+            method="GET",
+            data=None,
+            auth_token=self._api_key,
+            org_id=self._org_id,
+        )
+
+        if result.startswith("ERROR"):
+            logger.debug(f"Database list failed: {result}")
+            return []
+
+        try:
+            data = json.loads(result)
+            return [
+                Database(
+                    id=db["id"],
+                    name=db.get("name", ""),
+                    description=db.get("description", ""),
+                    table_count=db.get("tableCount", 0),
+                    slug=db.get("slug", ""),
+                )
+                for db in data.get("data", [])
+            ]
+        except (json.JSONDecodeError, KeyError) as e:
+            logger.debug(f"Database parse failed: {e}")
+            return []
+
+    def get(self, database_id: int) -> Optional[Database]:
+        """Get database by ID.
+
+        Args:
+            database_id: Database ID
+
+        Returns:
+            Database object or None if not found
+        """
+        result = make_request(
+            endpoint=f"databases/{database_id}",
+            method="GET",
+            data=None,
+            auth_token=self._api_key,
+            org_id=self._org_id,
+        )
+
+        if result.startswith("ERROR"):
+            return None
+
+        try:
+            db = json.loads(result)
+            return Database(
+                id=db["id"],
+                name=db.get("name", ""),
+                description=db.get("description", ""),
+                table_count=db.get("tableCount", 0),
+                slug=db.get("slug", ""),
+            )
+        except (json.JSONDecodeError, KeyError):
+            return None
+
+    def create(self, name: str, description: str = "") -> Optional[Database]:
+        """Create database.
+
+        Args:
+            name: Database name
+            description: Optional description
+
+        Returns:
+            Created Database or None on failure
+        """
+        result = make_request(
+            endpoint="databases?format=llm",
+            method="POST",
+            data={"name": name, "description": description},
+            auth_token=self._api_key,
+            org_id=self._org_id,
+        )
+
+        if result.startswith("ERROR"):
+            logger.debug(f"Database create failed: {result}")
+            return None
+
+        try:
+            db = json.loads(result)
+            return Database(
+                id=db["id"],
+                name=db.get("name", name),
+                description=db.get("description", description),
+            )
+        except (json.JSONDecodeError, KeyError):
+            return None
+
+    def update(
+        self, database_id: int, data: Dict[str, Any]
+    ) -> Optional[Database]:
+        """Update database.
+
+        Args:
+            database_id: Database ID
+            data: Update data (name, description)
+
+        Returns:
+            Updated Database or None on failure
+        """
+        result = make_request(
+            endpoint=f"databases/{database_id}?format=llm",
+            method="PUT",
+            data=data,
+            auth_token=self._api_key,
+            org_id=self._org_id,
+        )
+
+        if result.startswith("ERROR"):
+            return None
+
+        try:
+            db = json.loads(result)
+            return Database(
+                id=db["id"],
+                name=db.get("name", ""),
+                description=db.get("description", ""),
+            )
+        except (json.JSONDecodeError, KeyError):
+            return None
+
+    def delete(self, database_id: int) -> bool:
+        """Delete database.
+
+        Args:
+            database_id: Database ID
+
+        Returns:
+            True on success, False on failure
+        """
+        result = make_request(
+            endpoint=f"databases/{database_id}?format=llm",
+            method="DELETE",
+            data=None,
+            auth_token=self._api_key,
+            org_id=self._org_id,
+        )
+
+        return not result.startswith("ERROR")
