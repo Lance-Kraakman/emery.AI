@@ -458,3 +458,192 @@ RIGHT: Check requirements - if it's pick-one-from-list, use single-select
 - Components: `components/[component_name].j2`
 - Planning: `planning/[stage_name].j2`
 - Base templates: `base/[template_name].j2`
+- Capability templates: `capabilities/[capability_name]/[mode].j2`
+
+---
+
+## Capability-Agnostic Architecture
+
+Agent prompts should NOT contain hardcoded domain knowledge (field types, etc.).
+Domain-specific guidance comes from capability templates.
+
+### Template Locations
+
+```
+capabilities/
+├── schema_builder/
+│   ├── planning.j2      # Planning guidance for the planner
+│   └── execution.j2     # Runtime instructions for the agent
+├── skill_builder/
+│   ├── planning.j2
+│   └── execution.j2
+└── ...
+```
+
+### How It Works
+
+1. `Capability.to_summary()` loads `capabilities/{name}/planning.j2`
+2. Returns it as `planning_instructions` in the summary
+3. `step_planner.j2` renders `{{ cap.planning_instructions }}`
+4. Planner sees domain-specific guidance without hardcoding
+
+### Example: schema_builder
+
+The file `capabilities/schema_builder/planning.j2` contains:
+- Emery field types (text, number, email, boolean, single-select, etc.)
+- Examples of proper step format
+- Anti-patterns (never use SQL types like INT, VARCHAR)
+
+This keeps the planner generic while capabilities provide domain context.
+
+### Adding New Capabilities
+
+1. Create `capabilities/[name]/planning.j2` with planning guidance
+2. Create `capabilities/[name]/execution.j2` with runtime instructions
+3. Register capability in `managed_agents_factory.py`
+4. Planner automatically discovers and uses the guidance
+
+---
+
+## Think vs Ask Decision Tree
+
+Before asking the user a question, follow this decision tree:
+
+```
+User provides vague requirement
+        │
+        ├─ Did they delegate? ("you decide", "what do you think", "generate some")
+        │   └─ YES → Research capability guidance, propose solution
+        │
+        ├─ Can workspace context help? (existing tables show patterns)
+        │   └─ YES → Use existing patterns as reference, propose solution
+        │
+        ├─ Can discovery/research help?
+        │   └─ YES → Use search_org(), get_capability(), then propose
+        │
+        ├─ Are there multiple valid approaches?
+        │   └─ YES → Briefly explain tradeoffs, recommend one
+        │
+        └─ Still truly unclear?
+            └─ YES → Ask clarifying question WITH EXAMPLES
+```
+
+### Delegation Phrases (Use Defaults)
+
+These phrases mean the user wants YOU to decide:
+- "make something up", "anything", "you pick", "you decide"
+- "what do you think", "what would you suggest", "you suggest"
+- "generate some", "create some", "come up with"
+- "typical", "standard", "default", "common"
+- "figure it out", "use your judgment"
+
+### When to Think/Research
+
+- User says "create a [domain] database" → Research capabilities + workspace context for patterns
+- User says "what do you suggest" → Use get_capability() to get field types, then propose
+- User references external system → Research that system
+- User asks about existing resources → Use system_research tool
+- User delegates ("you decide") → Research, then propose based on capability guidance
+
+### When to Ask
+
+- Security implications ("should this data be encrypted?")
+- Business rules unclear ("what triggers this workflow?")
+- Destructive operations ("delete all records?")
+- User explicitly asks ("which approach should we use?")
+- No capability guidance available and no workspace patterns to reference
+
+### How to Ask (With Examples)
+
+**Always provide concrete examples, not abstract categories.**
+
+```
+WRONG:
+"What would you like help with?"
+Options: ["Build an automation", "Create tables", "Create an app"]
+
+RIGHT:
+"What would you like help with?"
+Options: [
+  "Send notifications when something happens (e.g., email on new order)",
+  "Track and manage data (e.g., customers, projects, inventory)",
+  "Generate reports or summaries",
+  "Something else"
+]
+```
+
+**Follow-up questions should also include suggestions:**
+
+```
+WRONG:
+"What kind of automation would you like to build?"
+
+RIGHT:
+"What would you like to automate? For example: notify team on new orders,
+send weekly reports, sync data between tables, remind about overdue tasks."
+```
+
+---
+
+## Propose with Defaults Pattern
+
+Instead of asking open-ended questions, propose a solution with defaults.
+
+### WRONG (Endless Question Loop)
+
+```
+Agent: "What fields should the Projects table have?"
+User: "generate some for me"
+Agent: "What fields do you think are necessary for the Projects table?" ← WRONG
+```
+
+### RIGHT (Propose with Defaults)
+
+```
+Agent: "What fields should the Projects table have?"
+User: "generate some for me"
+
+# Agent flow:
+# 1. Uses discovery tools to find relevant capability
+# 2. Gets capability guidance for valid field types
+# 3. Checks workspace context for existing patterns
+# 4. Proposes based on guidance
+
+Agent: "I'll create a Projects table with these fields:
+- name (text) - Project title
+- description (text) - Details about the project
+- status (single-select: Active, Completed, On Hold)
+- due_date (date) - Target completion date
+- priority (single-select: High, Medium, Low)
+
+Reply 'yes' to proceed, or let me know what changes you'd like."
+```
+
+### Key Principles
+
+1. **Research first** - Call get_capability() to understand valid field types before proposing
+2. **Use workspace context** - Check existing tables to understand domain patterns
+3. **Always have a default** - Never ask without offering an answer
+4. **Allow customization** - User can modify the proposal
+5. **Be specific** - Include actual field names and types from capability guidance
+
+### Deriving Defaults (Capability-Agnostic)
+
+Instead of hardcoded domain templates, derive defaults from:
+
+1. **Capability guidance** - `get_capability("agent:schema_builder")` returns:
+   - Valid field types (text, number, single-select, date, relation, etc.)
+   - Examples of proper field definitions
+   - Anti-patterns to avoid
+
+2. **Workspace context** - Existing tables show:
+   - What domain the user is working in
+   - Naming patterns they prefer
+   - Field structures already established
+
+3. **Logical field structure** - For any entity, consider:
+   - Name/title field (text)
+   - Description/notes (text)
+   - Status tracking (single-select)
+   - Key dates (date fields)
+   - Relations to other entities (relation type)

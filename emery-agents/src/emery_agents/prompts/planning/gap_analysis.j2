@@ -11,20 +11,26 @@ Analyze the user's request to determine what information is clear vs. what needs
 ## CRITICAL: Delegation Detection
 
 If the user's request contains ANY of these delegation phrases, they want YOU to decide:
+
+**Direct delegation:**
 - "make something up", "anything", "random", "you pick", "you decide", "any"
 - "surprise me", "I don't care", "doesn't matter", "whatever", "just pick"
 - "up to you", "your choice", "anything is fine", "dealer's choice"
 
+**Request for suggestion:**
+- "what do you think", "what would you suggest", "you suggest"
+- "suggest something", "make a suggestion", "your suggestion"
+- "generate some", "create some", "come up with"
+- "figure it out", "use your judgment", "use your best judgment"
+- "typical", "standard", "default", "common"
+
 **When delegation detected:**
 - Mark ALL concerns as `clear_concerns` (no gaps)
-- Do NOT ask clarifying questions - the user explicitly delegated choice to you
-- Use reasonable domain defaults in your response
-
-**Reasonable defaults:**
-- Tables: Standard tables for the domain (CRM = customers, orders, products)
-- Fields: Essential fields (name, email, phone, status, notes, created_at)
-- Types: Most appropriate field type for the data
-- Relations: Logical links between related tables
+- Do NOT ask clarifying questions - the user delegated choice to you
+- Research and propose reasonable defaults based on:
+  1. Capability guidance (get field types from schema_builder, etc.)
+  2. Workspace context (existing tables show domain patterns)
+  3. Logical field structure for the entity type
 
 ## Domain Concerns for {{ agent_name }}
 These are the things this agent needs to know to do its job:
