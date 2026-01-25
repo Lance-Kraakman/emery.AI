@@ -89,15 +89,19 @@ class PlanService:
         self.use_dspy = use_dspy
 
         # Initialize generator based on mode
-        if use_dspy:
-            self._generator: PlanGenerator | DSPyPlanGenerator = DSPyPlanGenerator(
-                model_provider=model_provider,
-                discovery_tools=discovery_tools,
+        # AIDEV-NOTE: smolagents is temporarily disabled to test DSPy implementation
+        if not use_dspy:
+            raise RuntimeError(
+                "🚫 smolagents PlanGenerator is DISABLED for testing. "
+                "DSPy is now the only supported generator. "
+                "Remove use_dspy=False to use DSPy."
             )
-            logger.info("📋 PlanService initialized with DSPy generator")
-        else:
-            self._generator = PlanGenerator(model_provider=model_provider)
-            logger.info("📋 PlanService initialized with smolagents generator")
+
+        self._generator: DSPyPlanGenerator = DSPyPlanGenerator(
+            model_provider=model_provider,
+            discovery_tools=discovery_tools,
+        )
+        logger.info("📋 PlanService initialized with DSPy generator (smolagents disabled)")
 
         # Initialize other delegates
         self._repository = PlanRepository(grpc_client=grpc_client)
