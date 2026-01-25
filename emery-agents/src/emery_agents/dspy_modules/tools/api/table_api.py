@@ -53,12 +53,14 @@ class TableAPI:
         Returns:
             List of Table objects
         """
-        endpoint = "tables?format=llm"
+        endpoint = "tables"
+        params = []
         if database_id:
-            endpoint += f"&databaseId={database_id}"
+            params.append(f"databaseId={database_id}")
         if filters:
-            for key, value in filters.items():
-                endpoint += f"&{key}={value}"
+            params.extend(f"{key}={value}" for key, value in filters.items())
+        if params:
+            endpoint += "?" + "&".join(params)
 
         result = make_request(
             endpoint=endpoint,

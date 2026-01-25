@@ -46,10 +46,10 @@ class DatabaseAPI:
         Returns:
             List of Database objects
         """
-        endpoint = "databases?format=llm"
+        endpoint = "databases"
         if filters:
-            for key, value in filters.items():
-                endpoint += f"&{key}={value}"
+            params = "&".join(f"{key}={value}" for key, value in filters.items())
+            endpoint += f"?{params}"
 
         result = make_request(
             endpoint=endpoint,
