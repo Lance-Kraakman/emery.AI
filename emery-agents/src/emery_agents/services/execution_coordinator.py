@@ -12,7 +12,7 @@ import logging
 import re
 import uuid
 from dataclasses import dataclass, field
-from typing import List, Optional, Any, AsyncIterator, Dict, Callable, Tuple, TYPE_CHECKING
+from typing import List, Optional, Any, AsyncIterator, Dict, Callable, Tuple, Sequence, TYPE_CHECKING
 from enum import Enum
 
 from ..agents.evaluator_agent import EvaluationTool
@@ -421,7 +421,7 @@ class ExecutionCoordinator:
             organization_id: Organization ID for RLS context and research agent
             conversation_history: Chat history for resolving references in planning (ACE pattern)
         """
-        self.plan_service = plan_service or PlanService(use_dspy=True)
+        self.plan_service = plan_service or PlanService()
         self.evaluator_factory = evaluator_factory
         self.plan_step_executor = plan_step_executor
         self.evaluate_after_steps = evaluate_after_steps
@@ -694,7 +694,7 @@ class ExecutionCoordinator:
         self,
         task: str,
         tools: List[Any],
-        managed_agents: Optional[List[ManagedAgent]] = None,
+        managed_agents: Optional[Sequence[ManagedAgent]] = None,
         context: Optional[str] = None,
         is_template_generation: bool = False,
     ) -> AsyncIterator[Any]:

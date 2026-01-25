@@ -5,8 +5,11 @@ Handles execution coordinator integration for two-phase execution.
 Extracted from ChatProcessingService for maintainability.
 """
 
+import json
 import logging
 from typing import AsyncIterator, Optional, List, Any, TYPE_CHECKING
+
+import dspy
 
 from ..services.execution_coordinator import (
     ExecutionCoordinator,
@@ -21,6 +24,9 @@ from ..agents.evaluator_agent import create_evaluator_factory
 from ..models.plan import Plan
 from ..tools.tool_modes import ToolMode
 from ..services.agent_executor import AgentExecutor
+from ..dspy_modules.config import get_dspy_lm
+from ..dspy_modules.modules.executor import ExecutorModule
+from ..dspy_modules.tools import create_all_tools, QuestionCollector, create_ask_question_tool
 from .coordinator_event_converter import convert_coordinator_event
 from .mappers import format_clarifying_questions
 from .approval_handler import (
@@ -36,6 +42,25 @@ if TYPE_CHECKING:
     from ..services.plan_service import PlanService
 
 logger = logging.getLogger(__name__)
+
+
+def _format_dict_questions(questions: List[dict[str, Any]]) -> List[dict[str, Any]]:
+    """Format dict-based questions from QuestionCollector for serialization."""
+    questions_data = []
+    for i, q in enumerate(questions):
+        q_dict = {
+            "questionId": f"q_{i}",
+            "question": q.get("question", ""),
+            "questionType": q.get("question_type", "text"),
+            "required": q.get("required", True),
+            "allowOther": q.get("allow_other", True),
+        }
+        if q.get("options"):
+            q_dict["options"] = q["options"]
+        if q.get("context"):
+            q_dict["context"] = q["context"]
+        questions_data.append(q_dict)
+    return questions_data
 
 
 class CoordinatorStreamingHandler:
@@ -127,17 +152,27 @@ class CoordinatorStreamingHandler:
                 yield event
 
         elif sm and sm.phase == Phase.EXECUTING:
-            # User sent message during EXECUTING state
+            # User sent message during EXECUTING state - treat as new task
             logger.info(f"📋 Coordinator: User input during EXECUTING phase, treating as new task: {task[:100]}...")
             sm.context.clear()
-            yield "FALL_THROUGH"
+            async for event in self._handle_direct_execution(
+                context=context,
+                task=task,
+                org_model=org_model,
+            ):
+                yield event
             return
 
         elif sm and sm.phase == Phase.AWAITING_QUESTIONS:
-            # Managed agent HITL response
-            logger.info("📋 Coordinator: Managed agent HITL response, falling through to agent.run()")
+            # Questions response - process with DSPy
+            logger.info("📋 Coordinator: Questions response, processing with DSPy direct execution")
             sm.context.clear()
-            yield "FALL_THROUGH"
+            async for event in self._handle_direct_execution(
+                context=context,
+                task=task,
+                org_model=org_model,
+            ):
+                yield event
 
     async def _handle_autonomous_execution(
         self,
@@ -160,9 +195,9 @@ class CoordinatorStreamingHandler:
         managed_agents_list = self._get_managed_agents_list(managed_agents)
 
         plan_step_executor = PlanStepExecutor(
-            tools=tools,
-            managed_agents=managed_agents_list,
-            model=model,
+            api_key=context.tool_provider.api_key,
+            org_id=str(context.tool_provider.organization_id),
+            org_model=org_model,
             max_steps=10,
             capability_registry=capability_registry,
         )
@@ -233,18 +268,21 @@ class CoordinatorStreamingHandler:
 
         managed_agents_list = self._get_managed_agents_list(managed_agents)
 
+        if context.tool_provider is None:
+            logger.error("❌ ToolProvider not set on context - cannot create coordinator")
+            yield create_error_response(
+                "CONFIGURATION_ERROR",
+                "Tool provider not configured. Please try again.",
+            )
+            return
+
         plan_step_executor = PlanStepExecutor(
-            tools=tools,
-            managed_agents=managed_agents_list,
-            model=model,
+            api_key=context.tool_provider.api_key,
+            org_id=str(context.tool_provider.organization_id),
+            org_model=org_model,
             max_steps=10,
             capability_registry=capability_registry,
         )
-
-        if context.tool_provider is None:
-            logger.error("❌ ToolProvider not set on context - cannot create coordinator")
-            yield "FALL_THROUGH"
-            return
 
         coordinator = ExecutionCoordinator(
             plan_service=self.plan_service,
@@ -303,8 +341,105 @@ class CoordinatorStreamingHandler:
             sm.on_plan_created(coordinator, plan, task)
             yield create_awaiting_input_for_plan(plan)
         elif plan is None:
-            logger.warning("📋 Coordinator: No plan created, falling through to normal flow")
-            yield "FALL_THROUGH"
+            # Direct execution without plan - use DSPy ExecutorModule
+            logger.info("📋 Coordinator: No plan needed, executing directly with DSPy")
+            async for event in self._handle_direct_execution(
+                context=context,
+                task=task,
+                org_model=org_model,
+            ):
+                yield event
+
+    async def _handle_direct_execution(
+        self,
+        context: 'ExecutionContext',
+        task: str,
+        org_model: Optional[str],
+    ) -> AsyncIterator[Any]:
+        """
+        Handle direct execution without a plan using DSPy.
+
+        Used for simple tasks that don't require planning.
+        """
+        assert context.tool_provider is not None, "tool_provider required for direct execution"
+
+        logger.info("🚀 Direct execution: Starting DSPy ReAct execution...")
+
+        # Create DSPy tools with auth
+        tools = create_all_tools(
+            api_key=context.tool_provider.api_key,
+            org_id=str(context.tool_provider.organization_id),
+        )
+
+        # Add ask_question tool for clarification
+        question_collector = QuestionCollector()
+        ask_question_tool = create_ask_question_tool(question_collector)
+        all_tools = [ask_question_tool] + tools
+
+        # Create executor
+        executor = ExecutorModule(
+            execution_tools=all_tools,
+            max_iters=10,
+        )
+
+        # Get DSPy LM
+        lm = get_dspy_lm(org_model=org_model)
+
+        # Build minimal context
+        execution_context = {
+            "task": task,
+            "org_id": str(context.tool_provider.organization_id),
+        }
+
+        try:
+            # Execute with DSPy
+            with dspy.context(lm=lm):
+                result = executor(
+                    step_description=task,
+                    context=json.dumps(execution_context),
+                )
+
+            result_str = str(result)
+
+            # Check for clarification questions
+            if question_collector.has_questions():
+                questions = question_collector.get_questions()
+                logger.info(f"❓ Direct execution needs clarification: {len(questions)} question(s)")
+                yield {
+                    "type": "awaiting_input",
+                    "data": {
+                        "input_type": "questions",
+                        "title": "Clarification Needed",
+                        "content": "I need some additional information to complete this task.",
+                        "questions": _format_dict_questions(questions),
+                        "options": [],
+                        "plan_json": ""
+                    }
+                }
+                return
+
+            logger.info(f"✅ Direct execution completed: {len(result_str)} chars")
+
+            # Yield result as content chunks
+            yield {
+                "type": "step_progress",
+                "step_type": "ACTION",
+                "step_name": "Direct Execution",
+                "content": "Task executed directly",
+                "metadata": {},
+                "step_index": 0
+            }
+            yield {
+                "type": "content_chunk",
+                "content": result_str
+            }
+
+        except Exception as e:
+            logger.error(f"❌ Direct execution failed: {e}", exc_info=True)
+            yield create_error_response(
+                "DIRECT_EXECUTION_FAILED",
+                f"Failed to execute task: {e}",
+            )
 
     async def _handle_approval_response(
         self,
@@ -381,10 +516,15 @@ class CoordinatorStreamingHandler:
             logger.info("✅ Coordinator: Execution complete, state cleared")
 
         else:
-            # Feedback (not approval) - clear state and reprocess
-            logger.info("📝 Coordinator: Feedback received (not approval), clearing state and reprocessing")
+            # Feedback (not approval) - clear state and process with DSPy
+            logger.info("📝 Coordinator: Feedback received (not approval), processing with DSPy direct execution")
             sm.context.clear()
-            yield "FALL_THROUGH"
+            async for event in self._handle_direct_execution(
+                context=context,
+                task=task,
+                org_model=None,  # Use default model
+            ):
+                yield event
             return
 
     def _get_managed_agents_list(self, managed_agents: Optional[List[Any]]) -> List[Any]:

@@ -29,7 +29,8 @@ from .message_processor import extract_file_attachments
 from .agent_streaming import AgentStreamingHandler
 from .coordinator_streaming import CoordinatorStreamingHandler
 from .response_converter import convert_response_to_proto
-from .agents import ManagedAgentsFactory
+from .agents.agent_models import get_builder_descriptors
+from ..services.capability_registry import CapabilityRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
             self.model_provider = SmolagentsModelProvider()
             self.agent_factory = AgentFactory(self.model_provider)
-            self.managed_agents_factory = ManagedAgentsFactory(self.model_provider)
+            # CapabilityRegistry replaces ManagedAgentsFactory.capability_registry
+            self.capability_registry = CapabilityRegistry()
 
             self.skill_executor_service = SkillExecutorService(
                 tool_loader=self.tool_loader,
@@ -82,7 +84,6 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             self.plan_service = PlanService(
                 grpc_client=None,
                 model_provider=self.model_provider,
-                use_dspy=True,  # Use DSPy-based plan generation
             )
 
             self._coordinator_handler = CoordinatorStreamingHandler(
@@ -91,12 +92,12 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             )
             self._agent_handler = AgentStreamingHandler(
                 session_manager=self.session_manager,
-                managed_agents_factory=self.managed_agents_factory,
                 model_provider=self.model_provider,
                 skill_executor_service=self.skill_executor_service,
                 tool_loader=self.tool_loader,
                 plan_service=self.plan_service,
                 coordinator_handler=self._coordinator_handler,
+                capability_registry=self.capability_registry,
             )
 
             logger.info("✅ ChatProcessingService initialized successfully")
@@ -404,10 +405,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 organization_id=request.organization_id
             )
 
-            managed_agents, capability_registry = self.managed_agents_factory.create_all_agents(
-                tool_provider=tool_provider,
-                org_model=request.model or None
-            )
+            # Get agent descriptors for plan generation (replaces ManagedAgentsFactory.create_all_agents)
+            managed_agents = get_builder_descriptors()
+            capability_registry = self.capability_registry
 
             skill_inputs: List[SkillInputDefinition] = [
                 SkillInputDefinition(name=i.name, type=i.type or "text", required=i.required)

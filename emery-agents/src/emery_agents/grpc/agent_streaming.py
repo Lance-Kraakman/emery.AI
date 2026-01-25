@@ -5,15 +5,11 @@ Handles the core agent execution flow with streaming responses.
 Extracted from ChatProcessingService for maintainability.
 """
 
-import ast
 import asyncio
 import json
 import logging
 from pathlib import Path
 from typing import AsyncIterator, Optional, List, Dict, Any, TYPE_CHECKING
-
-from smolagents.memory import ActionStep, PlanningStep, FinalAnswerStep
-from smolagents import AgentText
 
 from ..tools.skill_tool import SkillTool
 from ..tools.tool_modes import filter_tools_for_mode, ToolMode
@@ -38,11 +34,6 @@ from .message_processor import (
     extract_images_from_message,
     extract_text_from_message,
 )
-from .step_converter import (
-    extract_planning_step,
-    extract_action_step,
-    extract_final_step,
-)
 from .approval_handler import is_approval_response
 from .tool_setup import detect_stored_plan_from_skills
 from .response_types import (
@@ -64,9 +55,11 @@ if TYPE_CHECKING:
     from ..services.skill_executor import SkillExecutorService
     from ..services.plan_service import PlanService
     from ..clients import HuggingFaceInferenceClient
-    from .agents import ManagedAgentsFactory
     from .generated import agent_worker_pb2
     from .coordinator_streaming import CoordinatorStreamingHandler
+
+from .agents.agent_models import ChatAgent, AgentDescriptor, get_builder_descriptors
+from ..services.capability_registry import CapabilityRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -88,20 +81,21 @@ class AgentStreamingHandler:
     def __init__(
         self,
         session_manager: 'SessionManager',
-        managed_agents_factory: 'ManagedAgentsFactory',
         model_provider: 'SmolagentsModelProvider',
         skill_executor_service: 'SkillExecutorService',
         tool_loader: Optional['UnifiedToolLoader'],
         plan_service: 'PlanService',
         coordinator_handler: 'CoordinatorStreamingHandler',
+        capability_registry: Optional[CapabilityRegistry] = None,
     ):
         self.session_manager = session_manager
-        self.managed_agents_factory = managed_agents_factory
         self.model_provider = model_provider
         self.skill_executor_service = skill_executor_service
         self.tool_loader = tool_loader
         self.plan_service = plan_service
         self.coordinator_handler = coordinator_handler
+        # Capability registry for agent/skill discovery (replaces managed_agents_factory.capability_registry)
+        self.capability_registry = capability_registry or CapabilityRegistry()
 
         # Lazy-initialized inference client for operation skills
         self._inference_client: Optional['HuggingFaceInferenceClient'] = None
@@ -265,85 +259,24 @@ class AgentStreamingHandler:
         workspace_path: Optional[Path] = None,
         workspace_id: Optional[str] = None,
         workspace_prefix: Optional[str] = None,
-    ) -> Any:
-        """Create new agent and restore from history (COLD PATH)."""
-        # Create managed agents using factory
-        skill_builder_agent = self.managed_agents_factory.create_skill_builder(
-            tool_provider=tool_provider, org_model=org_model
-        )
-        document_builder_agent = self.managed_agents_factory.create_document_builder(
-            tool_provider=tool_provider, org_model=org_model
-        )
-        table_builder_agent = self.managed_agents_factory.create_table_builder(
-            tool_provider=tool_provider, org_model=org_model
-        )
-        schema_builder_agent = self.managed_agents_factory.create_schema_builder(
-            tool_provider=tool_provider, org_model=org_model
-        )
-        app_builder_agent = self.managed_agents_factory.create_app_builder(
-            tool_provider=tool_provider, org_model=org_model
-        )
-        agent_builder_agent = self.managed_agents_factory.create_agent_builder(
-            tool_provider=tool_provider, org_model=org_model
+    ) -> ChatAgent:
+        """Create new agent and restore from history (COLD PATH).
+
+        AIDEV-NOTE: This now creates a ChatAgent (dataclass) instead of smolagents
+        ToolCallingAgent. Execution happens via DSPy ExecutorModule, not agent.run().
+        The ChatAgent only stores managed_agents descriptors for prompt templates.
+        """
+        # Get builder descriptors (replaces smolagents agent creation)
+        descriptors = get_builder_descriptors()
+        logger.info(f"📋 Loaded {len(descriptors)} agent descriptors for prompt templates")
+
+        # Create ChatAgent with descriptors
+        agent = ChatAgent.create(
+            managed_agents=descriptors,
+            system_prompt="",  # Not used - DSPy handles prompts
         )
 
-        # Research agent may fail if ddgs package is missing
-        research_agent = None
-        try:
-            research_agent = self.managed_agents_factory.create_research_agent(
-                api_key=tool_provider.api_key,
-                organization_id=tool_provider.organization_id,
-                org_model=org_model
-            )
-        except ImportError as e:
-            logger.warning(f"Research agent unavailable (missing dependency): {e}")
-
-        # Discover tools agent
-        discover_tools_agent = None
-        try:
-            discover_tools_agent = self.managed_agents_factory.create_discover_tools(
-                api_key=tool_provider.api_key,
-                organization_id=tool_provider.organization_id,
-                org_model=org_model
-            )
-        except Exception as e:
-            logger.warning(f"Discover tools agent unavailable: {e}")
-
-        # Load user-defined agents
-        user_agent_executors, user_agents_metadata = await self.managed_agents_factory.load_user_agents(
-            tool_provider, org_model
-        )
-
-        # Create system_designer agent
-        system_designer_agent = self.managed_agents_factory.create_system_designer(
-            tool_provider=tool_provider, org_model=org_model
-        )
-
-        # Build managed agents list
-        managed_agents = [a for a in [
-            skill_builder_agent, document_builder_agent,
-            table_builder_agent, schema_builder_agent,
-            app_builder_agent, agent_builder_agent, research_agent,
-            discover_tools_agent, system_designer_agent,
-        ] if a is not None]
-
-        managed_agents.extend(user_agent_executors)
-        logger.info(f"📋 Total managed agents: {len(managed_agents)} ({len(user_agent_executors)} user-defined)")
-
-        # Filter tools for chat_router - only read-only tools
-        router_tools = filter_tools_for_mode(smolagents_tools, ToolMode.PLANNING)
-        logger.info(f"🔒 chat_router gets {len(router_tools)} read-only tools (filtered from {len(smolagents_tools)})")
-
-        agent = self.managed_agents_factory.create_chat_planner(
-            router_tools,
-            org_model=org_model,
-            has_images=has_images,
-            managed_agents=managed_agents,
-            user_agents=user_agents_metadata,
-            session_attachments=file_attachments
-        )
-
-        logger.info(f"🧠 [MEMORY-DEBUG] New agent created, memory steps: {len(agent.memory.steps)}")
+        logger.info(f"🧠 [MEMORY-DEBUG] New ChatAgent created, memory steps: {len(agent.memory.steps)}")
 
         # Restore agent memory from conversation history
         if conversation_history and len(conversation_history) > 0:
@@ -481,12 +414,11 @@ class AgentStreamingHandler:
 
         # Register user-defined skills to capability registry for discovery
         if agent_config and agent_config.skills:
-            registry = self.managed_agents_factory.capability_registry
             for skill in agent_config.skills:
                 skill_id = f"skill:{skill.id}"
                 # Only register if not already present
-                if not registry.get(skill_id):
-                    registry.register(Capability(
+                if not self.capability_registry.get(skill_id):
+                    self.capability_registry.register(Capability(
                         id=skill_id,
                         name=skill.name,
                         type=CapabilityType.TOOL,
@@ -510,156 +442,99 @@ class AgentStreamingHandler:
                 managed_agents=managed_agents,
                 stored_plan=stored_plan,
                 conversation_history=conversation_history,
-                capability_registry=self.managed_agents_factory.capability_registry,
+                capability_registry=self.capability_registry,
             ):
                 if isinstance(event, dict):
-                    yield event
+                    yield event  # type: ignore[misc]  # Coordinator returns compatible dicts
                 elif event == "FALL_THROUGH":
                     should_fall_through = True
 
         if not should_fall_through:
             return
 
-        # Execute with ToolCallingAgent
-        logger.info("🚀 Executing ToolCallingAgent with stream=True...")
+        # DSPy direct execution fallback (for skip_coordinator case)
+        # This replaces the smolagents ToolCallingAgent execution
+        logger.info("🚀 DSPy fallback: Executing task directly with DSPy...")
 
-        for step in agent.run(
-            task=current_task,
-            stream=True,
-            images=images if images else None,
-            reset=False
-        ):
-            logger.info(f"📊 Step {step_index}: {type(step).__name__}")
+        try:
+            from ..dspy_modules.config import get_dspy_lm
+            from ..dspy_modules.modules.executor import ExecutorModule
+            from ..dspy_modules.tools import create_all_tools
 
-            step_data: StepProgressDict | None = None
+            import dspy
 
-            if isinstance(step, PlanningStep):
-                step_data = extract_planning_step(step, step_index)
-                logger.info(f"🧠 Planning: {step_data['content'][:100]}...")
+            # Create DSPy tools
+            dspy_tools = create_all_tools(
+                api_key=tool_provider.api_key,
+                org_id=str(tool_provider.organization_id),
+            )
 
-            elif isinstance(step, ActionStep):
-                # Skip final_answer tool call
-                if step.tool_calls and len(step.tool_calls) > 0:
-                    if step.tool_calls[0].name == "final_answer":
-                        step_index += 1
-                        continue
+            # Create executor
+            executor = ExecutorModule(
+                execution_tools=dspy_tools,
+                max_iters=10,
+            )
 
-                step_data = extract_action_step(step, step_index)
-                logger.info(f"🔧 Action: {step_data['step_name']}")
+            # Get DSPy LM
+            lm = get_dspy_lm(org_model=org_model)
 
-                # Check for permission errors
-                if step.observations and "PERMISSION_DENIED" in str(step.observations):
-                    try:
-                        obs = step.observations
-                        if isinstance(obs, str):
-                            try:
-                                obs = json.loads(obs)
-                            except json.JSONDecodeError:
-                                obs = ast.literal_eval(obs)
-                        if isinstance(obs, dict) and obs.get("error_type") == "PERMISSION_DENIED":
-                            logger.warning(
-                                f"🔒 Permission denied detected - permission: {obs.get('permission')}, "
-                                f"resource: {obs.get('resource')}"
-                            )
-                            yield create_permission_request_event(
-                                permission=obs.get("permission", "unknown"),
-                                resource=obs.get("resource"),
-                                resource_id=obs.get("resource_id"),
-                                action=obs.get("action", "access"),
-                                context=f"Agent needs '{obs.get('permission', 'access')}' permission to continue",
-                            )
-                    except (ValueError, SyntaxError, TypeError) as e:
-                        logger.debug(f"Could not parse observations as dict: {e}")
+            # Build context
+            execution_context = {
+                "task": current_task,
+                "org_id": str(tool_provider.organization_id),
+            }
 
-                # Yield collected nested steps
-                if collected_nested_steps:
-                    logger.info(f"📤 Yielding {len(collected_nested_steps)} nested steps from skill execution")
-                    for nested_step in collected_nested_steps:
-                        nested_step_data: StepProgressDict = {
-                            "type": "step_progress",
-                            "step_type": nested_step.get('type', 'ACTION').upper(),
-                            "step_name": nested_step.get('step_name', 'Nested step'),
-                            "content": nested_step.get('content', ''),
-                            "metadata": nested_step.get('metadata', {}),
-                            "step_index": step_index
-                        }
-                        yield nested_step_data
-                    collected_nested_steps.clear()
+            # Execute with DSPy
+            with dspy.context(lm=lm):
+                result = executor(
+                    step_description=current_task,
+                    context=json.dumps(execution_context),
+                )
 
-            elif isinstance(step, (FinalAnswerStep, AgentText)):
-                step_data = extract_final_step(step_index)
+            result_str = str(result)
+            logger.info(f"✅ DSPy execution completed: {len(result_str)} chars")
 
-                if isinstance(step, FinalAnswerStep):
-                    logger.debug(f"FinalAnswerStep attributes: {dir(step)}")
-                    final_answer_text = str(step.output)
-                else:
-                    final_answer_text = str(step)
+            # Yield progress and result
+            yield {
+                "type": "step_progress",
+                "step_type": "ACTION",
+                "step_name": "Direct Execution",
+                "content": "Task executed with DSPy",
+                "metadata": {},
+                "step_index": 0
+            }
 
-                logger.info(f"✅ Final answer: {len(final_answer_text)} chars")
+            # Stream result in chunks
+            async for chunk in self._stream_text_chunks(result_str):
+                yield {
+                    "type": "content_chunk",
+                    "content": chunk
+                }
 
-                yield step_data
-
-                async for chunk in self._stream_text_chunks(final_answer_text):
-                    content_chunk: ContentChunkDict = {
-                        "type": "content_chunk",
-                        "content": chunk
-                    }
-                    yield content_chunk
-
-                step_index += 1
-                continue
-
-            if step_data:
-                logger.debug(f"Yielding step {step_index}: type={step_data['step_type']}, name={step_data['step_name']}")
-                yield step_data
-
-            step_index += 1
+        except Exception as e:
+            logger.error(f"❌ DSPy fallback execution failed: {e}", exc_info=True)
+            error_response: ErrorResponseDict = {
+                "type": "error",
+                "error": {
+                    "error_code": "EXECUTION_FAILED",
+                    "error_message": f"Failed to execute task: {e}",
+                    "error_details": {
+                        "severity": "error",
+                    },
+                    "hint": "Please try again or rephrase your request.",
+                    "can_retry": True,
+                    "auto_retry": False,
+                    "session_reset": False,
+                }
+            }
+            yield error_response
 
         # Clear execution context
         if file_attachments:
             AgentExecutor.set_current_context(None)
             logger.debug("📎 Cleared execution context")
 
-        logger.info(f"✅ Completed streaming with {step_index} steps")
-
-        # Log memory state
-        logger.info(f"🧠 [MEMORY-DEBUG] After execution, agent memory has {len(agent.memory.steps)} steps")
-        step_types_after = [type(step).__name__ for step in agent.memory.steps]
-        logger.info(f"🧠 [MEMORY-DEBUG] Step types after execution: {step_types_after}")
-
-        # Extract token usage
-        self.last_token_usage = TokenUsageExtractor.extract_from_agent_memory(agent=agent)
-        if self.last_token_usage:
-            logger.info(f"💰 Token usage captured: {self.last_token_usage.total_tokens} tokens, ${self.last_token_usage.cost_usd:.6f}")
-        else:
-            logger.warning("⚠️ No token usage found in agent memory")
-
-        logger.info(f"✅ Completed streaming with {step_index} steps")
-
-        # Yield plan metadata
-        if current_plan:
-            plan_metadata: Dict[str, Any] = {
-                "type": "plan_metadata",
-                "plan": {
-                    'id': current_plan.id,
-                    'goal': current_plan.goal,
-                    'status': current_plan.status,
-                    'steps': [
-                        {
-                            'id': step.step_id,
-                            'description': step.description,
-                            'status': step.status,
-                            'tool_call': step.tool_call,
-                            'result': step.result
-                        }
-                        for step in current_plan.steps
-                    ],
-                    'generated_at': current_plan.generated_at.isoformat() if current_plan.generated_at else None,
-                    'approved_at': current_plan.approved_at.isoformat() if current_plan.approved_at else None
-                }
-            }
-            yield plan_metadata
-            logger.info(f"📋 Yielded plan metadata for {current_plan.id}")
+        logger.info("✅ DSPy fallback completed")
 
     async def _handle_execution_error(
         self,

@@ -11,10 +11,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, Optional, Any, List, TYPE_CHECKING
 from dataclasses import dataclass, field
-from smolagents import ToolCallingAgent
-from smolagents.memory import FinalAnswerStep
 
 from .coordinator_state_machine import CoordinatorStateMachine, Phase
+
+if TYPE_CHECKING:
+    from ..grpc.agents.agent_models import ChatAgent
 
 if TYPE_CHECKING:
     from .execution_coordinator import ExecutionCoordinator
@@ -79,7 +80,7 @@ class SessionManager:
             max_lifetime: Maximum session lifetime in seconds (default 4 hours)
             workspace_sync: WorkspaceSync instance for S3 workspace persistence
         """
-        self.agents: Dict[str, ToolCallingAgent] = {}
+        self.agents: Dict[str, 'ChatAgent'] = {}
         self.metadata: Dict[str, SessionMetadata] = {}
         self.locks: Dict[str, asyncio.Lock] = {}
         self.state_machines: Dict[str, CoordinatorStateMachine] = {}
@@ -155,7 +156,7 @@ class SessionManager:
             self.locks[session_id] = asyncio.Lock()
         return self.locks[session_id]
 
-    def get_agent(self, session_id: str) -> Optional[ToolCallingAgent]:
+    def get_agent(self, session_id: str) -> Optional['ChatAgent']:
         """
         Get existing agent for session if in memory.
 
@@ -163,7 +164,7 @@ class SessionManager:
             session_id: Unique session identifier
 
         Returns:
-            ToolCallingAgent if session exists, None otherwise
+            ChatAgent if session exists, None otherwise
         """
         logger.info(f"🔍 [SESSION-MANAGER] Looking up session: {session_id}")
         logger.info(f"🔍 [SESSION-MANAGER] Active sessions: {list(self.agents.keys())}")
@@ -185,7 +186,7 @@ class SessionManager:
     def register_agent(
         self,
         session_id: str,
-        agent: ToolCallingAgent,
+        agent: 'ChatAgent',
         organization_id: int,
         user_id: str,
         restored_from_history: bool = False,
@@ -232,31 +233,27 @@ class SessionManager:
 
     async def restore_agent_from_history(
         self,
-        agent: ToolCallingAgent,
+        agent: 'ChatAgent',
         conversation_history: List[Any]
     ) -> int:
         """
         Restore agent memory from conversation history.
 
-        Converts database conversation history to smolagents memory steps:
-        - User messages → TaskStep (required for conversation context)
-        - Assistant messages → ActionStep (with is_final_answer=True for proper LLM context)
+        Converts database conversation history to simple MemoryStep objects:
+        - User messages → MemoryStep(role="user")
+        - Assistant messages → MemoryStep(role="assistant")
 
-        AIDEV-NOTE: We use ActionStep instead of FinalAnswerStep because:
-        - FinalAnswerStep.to_messages() returns empty list (not visible to LLM)
-        - ActionStep.to_messages() properly converts to ASSISTANT messages
-        - This ensures the LLM sees the full conversation history
+        AIDEV-NOTE: Using simple MemoryStep instead of smolagents types.
+        The DSPy executor handles conversation context differently.
 
         Args:
-            agent: ToolCallingAgent to restore memory into
+            agent: ChatAgent to restore memory into
             conversation_history: List of HistoryMessage protobuf objects
 
         Returns:
             Number of messages restored
         """
-        from smolagents.memory import TaskStep, ActionStep
-        from smolagents.monitoring import Timing
-        import time
+        from ..grpc.agents.agent_models import MemoryStep
 
         restored_count = 0
 
@@ -267,32 +264,15 @@ class SessionManager:
 
             logger.info(f"📚 [RESTORE-DEBUG] Message {i}: role={msg.role}, text_length={len(text_content)}, preview={text_content[:50]}...")
 
-            if msg.role == 'user':
-                # Restore user messages as TaskSteps (required for conversation context)
-                # AIDEV-NOTE: TaskSteps allow agent to reference previous user messages
-                # when answering questions like "what was my first message?"
-                step = TaskStep(
-                    task=text_content,
-                    task_images=None  # AIDEV-TODO: Extract images from content_parts
-                )
-                agent.memory.steps.append(step)
-                restored_count += 1
-                logger.info(f"✅ [RESTORE-DEBUG] Added TaskStep: {text_content[:30]}...")
-
-            elif msg.role == 'assistant':
-                # Restore assistant messages as ActionSteps with is_final_answer=True
-                # This ensures they appear in LLM context via write_memory_to_messages()
-                step = ActionStep(
-                    step_number=restored_count + 1,
-                    timing=Timing(start_time=time.time(), end_time=time.time()),
-                    model_output=text_content,  # What the LLM sees as ASSISTANT message
-                    is_final_answer=True,  # Mark as complete response (no tool calls)
-                    observations=None,
-                    action_output=text_content
-                )
-                agent.memory.steps.append(step)
-                restored_count += 1
-                logger.info(f"✅ [RESTORE-DEBUG] Added ActionStep: {text_content[:30]}...")
+            # Create simple MemoryStep for both user and assistant messages
+            step = MemoryStep(
+                role=msg.role,
+                content=text_content,
+                step_number=restored_count + 1,
+            )
+            agent.memory.steps.append(step)
+            restored_count += 1
+            logger.info(f"✅ [RESTORE-DEBUG] Added MemoryStep ({msg.role}): {text_content[:30]}...")
 
         if restored_count > 0:
             logger.info(f"📚 Restored {restored_count} messages to agent memory (user + assistant)")

@@ -1,8 +1,8 @@
 """
-PlanStepExecutor - Executes plan steps via sub-agent with managed agents
+PlanStepExecutor - Executes plan steps via DSPy ReAct
 
-AIDEV-NOTE: This shared module allows ExecutionCoordinator to execute
-plan steps using smolagents' native managed agent routing.
+AIDEV-NOTE: This module uses DSPy's ReAct pattern for step execution,
+replacing the previous smolagents-based implementation.
 
 Architecture:
     ExecutionCoordinator.execute_plan()
@@ -10,75 +10,91 @@ Architecture:
                 └── Generates prompt using mode-specific templates:
                     - Autonomous: step_executor_autonomous.j2 (has prompt_template)
                     - Interactive: step_executor_interactive.j2 (description-based)
-                └── Creates ToolCallingAgent with managed_agents
-                └── Smolagents routes based on agent descriptions
-                └── Returns result from appropriate managed agent
+                └── Creates DSPy ExecutorModule with tools
+                └── Executes via ReAct pattern
+                └── Returns result from execution
 
 This is different from StepExecutorService which handles DAG workflow steps.
 """
 
+from __future__ import annotations
+
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-from smolagents import ToolCallingAgent
+import dspy
 
 from ..ace import StepResult
+from ..dspy_modules.config import get_dspy_lm
+from ..dspy_modules.modules.executor import ExecutorModule, SimpleExecutorModule
+from ..dspy_modules.tools import (
+    ClarificationRequestedException,
+    QuestionCollector,
+    create_all_tools,
+    create_ask_question_tool,
+)
 from ..models.plan import Plan, PlanStep, PlanStepStatus
 from ..prompts import render_template
-from ..utils.session_logger import get_session_logger
-from ..tools.ask_question_tool import AskQuestionTool, ClarificationRequestedException
 from ..services.capability_registry import CapabilityRegistry
-from .protocols import ModelProvider
+from ..utils.session_logger import get_session_logger
 from .prompt_template_resolver import resolve_prompt_template
+from .protocols import ModelProvider
 
 logger = logging.getLogger(__name__)
 
 
 class PlanStepExecutor:
     """
-    Executes plan steps via sub-agent with managed agent routing.
+    Executes plan steps via DSPy ReAct.
 
-    Uses smolagents' native managed_agents feature - the LLM reads
-    agent descriptions and automatically routes to the right agent.
+    Uses DSPy's ReAct pattern for tool-based execution with reasoning.
     """
 
     def __init__(
         self,
-        tools: List[Any],
-        managed_agents: List[Any],
-        model: Any,
+        api_key: str,
+        org_id: str,
+        org_model: str | None = None,
         max_steps: int = 10,
-        skill_inputs: Optional[Dict[str, Any]] = None,
-        capability_registry: Optional[CapabilityRegistry] = None,
+        skill_inputs: dict[str, Any] | None = None,
+        capability_registry: CapabilityRegistry | None = None,
     ):
         """
         Initialize PlanStepExecutor.
 
         Args:
-            tools: Available tools for sub-agent
-            managed_agents: Managed agents for routing (skill_builder, etc.)
-            model: LLM model for sub-agent
-            max_steps: Max steps for sub-agent execution
+            api_key: Bearer token for API authentication
+            org_id: Organization ID for RLS context
+            org_model: Model ID to use for execution
+            max_steps: Max iterations for ReAct loop
             skill_inputs: Runtime inputs for skill execution (used with prompt templates)
             capability_registry: Registry of capabilities for dynamic discovery in templates
         """
-        self.tools = tools
-        self.managed_agents = managed_agents
-        self.model = model
+        self.api_key = api_key
+        self.org_id = org_id
+        self.org_model = org_model
         self.max_steps = max_steps
         self.skill_inputs = skill_inputs or {}
         self.capability_registry = capability_registry
-        # Track results from previous steps for prompt template resolution and ACE curation
-        self._step_results: Dict[str, StepResult] = {}
-        # Tool for asking clarifying questions when step lacks needed information
-        self._ask_question_tool = AskQuestionTool()
 
-        agent_names = [getattr(a, 'name', '?') for a in managed_agents]
-        logger.info(f"✨ Created PlanStepExecutor with {len(tools)} tools, agents: {agent_names}")
+        # Create DSPy tools with auth captured
+        self._crud_tools = create_all_tools(api_key=api_key, org_id=org_id)
+
+        # Question collector for clarification handling
+        self._question_collector = QuestionCollector()
+        self._ask_question_tool = create_ask_question_tool(self._question_collector)
+
+        # All tools including ask_question
+        self._all_tools = [self._ask_question_tool] + self._crud_tools
+
+        # Track results from previous steps for prompt template resolution and ACE curation
+        self._step_results: dict[str, StepResult] = {}
+
+        logger.info(f"✨ Created PlanStepExecutor with {len(self._all_tools)} DSPy tools")
 
     @property
-    def step_results(self) -> Dict[str, StepResult]:
+    def step_results(self) -> dict[str, StepResult]:
         """
         Get results from all executed steps.
 
@@ -127,7 +143,7 @@ class PlanStepExecutor:
                 "total_steps": len(plan.steps),
             })
 
-        result = self._execute_with_routing(plan, current_step, session_logger)
+        result = self._execute_with_dspy(plan, current_step, session_logger)
 
         # Store result for use in subsequent step templates and ACE curation
         self._step_results[current_step.step_id] = StepResult(
@@ -154,22 +170,14 @@ class PlanStepExecutor:
 
         return result
 
-    def _execute_with_routing(
+    def _execute_with_dspy(
         self,
         plan: Plan,
         current_step: PlanStep,
         session_logger: Any = None,
     ) -> str:
         """
-        Execute step with normal smolagents routing.
-
-        Uses smolagents' native managed agent routing.
-        If the step has a prompt_template, uses step_executor_autonomous.j2 with resolved variables.
-        Otherwise uses step_executor_interactive.j2 with the description field.
-
-        Special handling for target_agent="direct_execution":
-        - Executes directly via LLM without managed agent routing
-        - No platform operations, just LLM processing/transformation
+        Execute step using DSPy ReAct.
 
         Args:
             plan: The approved Plan object
@@ -178,7 +186,7 @@ class PlanStepExecutor:
         Returns:
             Result from step execution
         """
-        # Handle direct execution (pure LLM tasks without managed agent routing)
+        # Handle direct execution (pure LLM tasks without tool use)
         if current_step.target_agent == "direct_execution":
             return self._execute_direct(plan, current_step, session_logger)
 
@@ -192,26 +200,23 @@ class PlanStepExecutor:
         ]
         remaining_steps = [
             s
-            for s in plan.steps[step_index + 1 :]
+            for s in plan.steps[step_index + 1:]
             if s.status == PlanStepStatus.PENDING.value
         ]
 
         # Determine prompt and template based on execution mode
-        # - Autonomous mode: uses prompt_template with resolved variables
-        # - Interactive mode: uses description field with HITL context
         if current_step.prompt_template:
             # Autonomous mode: resolve template variables and use autonomous executor
             resolved_prompt = resolve_prompt_template(
                 template=current_step.prompt_template,
                 skill_inputs=self.skill_inputs,
-                discovered_context={},  # TODO: Implement context discovery
+                discovered_context={},
                 previous_results=self._step_results,
             )
             logger.info(
                 f"📝 Autonomous mode: resolved prompt template for step {step_index + 1} "
                 f"({len(resolved_prompt)} chars)"
             )
-            # Get capabilities for template display
             capabilities = self.capability_registry.all() if self.capability_registry else []
             prompt = render_template(
                 "execution/step_executor_autonomous.j2",
@@ -229,7 +234,6 @@ class PlanStepExecutor:
             logger.info(
                 f"📝 Interactive mode: using description for step {step_index + 1}"
             )
-            # Get capabilities for template display
             capabilities = self.capability_registry.all() if self.capability_registry else []
             prompt = render_template(
                 "execution/step_executor_interactive.j2",
@@ -263,48 +267,44 @@ class PlanStepExecutor:
                 },
             )
 
-        # Disable HITL on all managed agents during execution
-        # (already approved at high-level during planning phase)
-        original_intervals = {}
-        for agent in self.managed_agents:
-            if hasattr(agent, 'planning_interval'):
-                original_intervals[id(agent)] = agent.planning_interval
-                agent.planning_interval = None
-        if original_intervals:
-            logger.debug(f"🔧 Disabled planning_interval for {len(original_intervals)} managed agents")
-
         try:
-            # Reset the ask question tool for this step
-            self._ask_question_tool.reset()
+            # Reset the question collector for this step
+            self._question_collector.reset()
 
-            # Create sub-agent with managed agents
-            # Smolagents reads agent descriptions and routes automatically
-            # Include ask_clarifying_question tool so agent can ask for missing info
-            step_tools = [self._ask_question_tool] + list(self.tools)
+            # Get DSPy LM for execution
+            lm = get_dspy_lm(org_model=self.org_model)
 
-            sub_agent = ToolCallingAgent(
-                tools=step_tools,
-                managed_agents=self.managed_agents,
-                model=self.model,
-                max_steps=self.max_steps,
+            # Create executor with tools
+            executor = ExecutorModule(
+                execution_tools=self._all_tools,
+                max_iters=self.max_steps,
             )
 
-            # Execute step - smolagents handles routing
-            result = sub_agent.run(task=prompt, reset=True)
+            # Build context for executor
+            context = self._build_context(plan, current_step, completed_steps)
+
+            # Execute with DSPy context
+            with dspy.context(lm=lm):
+                result = executor(
+                    step_description=prompt,
+                    context=json.dumps(context),
+                )
+
             result_str = str(result)
 
-            # Check if the agent asked clarifying questions instead of completing
-            # (fallback check in case exception wasn't raised)
-            if self._ask_question_tool.has_questions():
-                questions = self._ask_question_tool.get_questions()
-                logger.info(f"❓ Step asked {len(questions)} clarifying question(s) instead of completing")
+            # Check if questions were collected (fallback check)
+            if self._question_collector.has_questions():
+                questions = self._question_collector.get_questions()
+                logger.info(
+                    f"❓ Step asked {len(questions)} clarifying question(s) instead of completing"
+                )
                 return json.dumps({
                     "__needs_clarification__": True,
                     "questions": questions,
                     "partial_result": result_str,
                 })
 
-            logger.info(f"✅ PlanStepExecutor: Step completed")
+            logger.info("✅ PlanStepExecutor: Step completed")
             logger.debug(f"🔧 PlanStepExecutor: Result preview: {result_str[:200]}...")
 
             return result_str
@@ -323,13 +323,6 @@ class PlanStepExecutor:
             logger.error(f"❌ PlanStepExecutor: {error_msg}", exc_info=True)
             raise
 
-        finally:
-            # Restore original planning_intervals
-            for agent in self.managed_agents:
-                agent_id = id(agent)
-                if agent_id in original_intervals:
-                    agent.planning_interval = original_intervals[agent_id]
-
     def _execute_direct(
         self,
         plan: Plan,
@@ -337,13 +330,10 @@ class PlanStepExecutor:
         session_logger: Any = None,
     ) -> str:
         """
-        Execute a direct LLM task without managed agent routing.
+        Execute a direct LLM task without tool use.
 
         Used for pure LLM tasks: analysis, classification, routing,
         summarization, transformation, decision-making.
-
-        These tasks don't create platform entities (tables, apps, agents)
-        and don't need managed agent routing.
 
         Args:
             plan: The approved Plan object
@@ -364,7 +354,6 @@ class PlanStepExecutor:
 
         # Determine the task from prompt_template or description
         if current_step.prompt_template:
-            # Autonomous mode: resolve template variables
             task = resolve_prompt_template(
                 template=current_step.prompt_template,
                 skill_inputs=self.skill_inputs,
@@ -373,9 +362,8 @@ class PlanStepExecutor:
             )
             logger.info(f"📝 Direct execution (autonomous): resolved template ({len(task)} chars)")
         else:
-            # Interactive mode: use description
             task = current_step.description
-            logger.info(f"📝 Direct execution (interactive): using description")
+            logger.info("📝 Direct execution (interactive): using description")
 
         # Log full task for debugging
         if session_logger:
@@ -392,28 +380,30 @@ class PlanStepExecutor:
             )
 
         try:
-            # Reset the ask question tool for this step
-            self._ask_question_tool.reset()
+            # Reset the question collector for this step
+            self._question_collector.reset()
 
-            # Create agent with NO managed agents (direct LLM task)
-            # Tools are still available for structured output if needed
-            # Include ask_clarifying_question tool so agent can ask for missing info
-            step_tools = [self._ask_question_tool] + list(self.tools)
+            # Get DSPy LM for execution
+            lm = get_dspy_lm(org_model=self.org_model)
 
-            direct_agent = ToolCallingAgent(
-                tools=step_tools,
-                managed_agents=[],  # No managed agents for direct execution
-                model=self.model,
-                max_steps=3,  # Direct tasks should be quick
-            )
+            # Use SimpleExecutorModule for direct tasks (no tools needed)
+            executor = SimpleExecutorModule()
 
-            # Execute the direct task
-            result = direct_agent.run(task=task, reset=True)
+            # Build minimal context
+            context = {"goal": plan.goal, "step_description": current_step.description}
+
+            # Execute with DSPy context
+            with dspy.context(lm=lm):
+                result = executor(
+                    step_description=task,
+                    context=json.dumps(context),
+                )
+
             result_str = str(result)
 
-            # Check if the agent asked clarifying questions instead of completing
-            if self._ask_question_tool.has_questions():
-                questions = self._ask_question_tool.get_questions()
+            # Check if questions were collected
+            if self._question_collector.has_questions():
+                questions = self._question_collector.get_questions()
                 logger.info(f"❓ Direct step asked {len(questions)} clarifying question(s)")
                 return json.dumps({
                     "__needs_clarification__": True,
@@ -421,13 +411,12 @@ class PlanStepExecutor:
                     "partial_result": result_str,
                 })
 
-            logger.info(f"✅ Direct execution completed")
+            logger.info("✅ Direct execution completed")
             logger.debug(f"🔧 Direct execution result preview: {result_str[:200]}...")
 
             return result_str
 
         except ClarificationRequestedException as e:
-            # Agent asked clarifying questions - return them to caller
             logger.info(f"❓ Direct step interrupted for clarification: {len(e.questions)} question(s)")
             return json.dumps({
                 "__needs_clarification__": True,
@@ -440,6 +429,45 @@ class PlanStepExecutor:
             logger.error(f"❌ Direct execution failed: {error_msg}", exc_info=True)
             raise
 
+    def _build_context(
+        self,
+        plan: Plan,
+        current_step: PlanStep,
+        completed_steps: list[PlanStep],
+    ) -> dict[str, Any]:
+        """
+        Build execution context for DSPy executor.
+
+        Args:
+            plan: The full plan
+            current_step: Current step being executed
+            completed_steps: Already completed steps
+
+        Returns:
+            Context dict for executor
+        """
+        # Include results from previous steps
+        previous_results = {}
+        for step in completed_steps:
+            if step.step_id in self._step_results:
+                result = self._step_results[step.step_id]
+                previous_results[step.step_id] = {
+                    "description": result.description,
+                    "result": result.result[:500] if result.result else None,  # Truncate for context
+                }
+
+        return {
+            "goal": plan.goal,
+            "current_step": {
+                "step_id": current_step.step_id,
+                "description": current_step.description,
+                "target_agent": current_step.target_agent,
+                "phase_name": current_step.phase_name,
+            },
+            "previous_results": previous_results,
+            "org_id": self.org_id,
+        }
+
 
 class PlanStepExecutorFactory:
     """Factory for creating PlanStepExecutor instances."""
@@ -447,14 +475,14 @@ class PlanStepExecutorFactory:
     def __init__(
         self,
         model_provider: ModelProvider,
-        org_model: Optional[str] = None,
-        capability_registry: Optional[CapabilityRegistry] = None,
+        org_model: str | None = None,
+        capability_registry: CapabilityRegistry | None = None,
     ):
         """
         Initialize factory.
 
         Args:
-            model_provider: Provider for getting LLM models
+            model_provider: Provider for getting LLM models (legacy, kept for compatibility)
             org_model: Organization model ID for model resolution
             capability_registry: Registry for dynamic capability discovery in templates
         """
@@ -464,26 +492,25 @@ class PlanStepExecutorFactory:
 
     def create(
         self,
-        tools: List[Any],
-        managed_agents: List[Any],
+        api_key: str,
+        org_id: str,
         max_steps: int = 10,
     ) -> PlanStepExecutor:
         """
-        Create a PlanStepExecutor with tools and managed agents.
+        Create a PlanStepExecutor with DSPy tools.
 
         Args:
-            tools: Available tools for sub-agent
-            managed_agents: Managed agents for routing
-            max_steps: Max steps for sub-agent execution
+            api_key: Bearer token for API authentication
+            org_id: Organization ID for RLS context
+            max_steps: Max iterations for ReAct loop
 
         Returns:
             Configured PlanStepExecutor instance
         """
-        model = self.model_provider.get_model(model_id=self.org_model)
         return PlanStepExecutor(
-            tools=tools,
-            managed_agents=managed_agents,
-            model=model,
+            api_key=api_key,
+            org_id=org_id,
+            org_model=self.org_model,
             max_steps=max_steps,
             capability_registry=self.capability_registry,
         )

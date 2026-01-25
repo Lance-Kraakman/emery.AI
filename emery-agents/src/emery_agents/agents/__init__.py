@@ -1,20 +1,14 @@
 """
-Managed Agents Module
+Agents Module
 
-Contains specialized managed agents that can be used as sub-agents
-within the main chat agent via smolagents' managed_agents pattern.
+Contains core agent utilities that are still used by the system.
+Most builder agents have been replaced by DSPy modules in dspy_modules/modules/agents/.
 
-AIDEV-NOTE: Agents use native smolagents features:
-- planning_interval: Generate plans at regular intervals
-- step_callbacks: Interrupt for human-in-the-loop approval
-- reset=False: Preserve memory between messages
+AIDEV-NOTE: This module is being deprecated. New code should use:
+- dspy_modules/modules/agents/ for builder agents
+- grpc/agents/agent_models.py for ChatAgent/AgentDescriptor
 """
 
-from .skill_builder_agent import create_skill_builder_agent
-from .planning_utils import create_planning_callback
-from .document_builder_agent import (
-    create_document_builder_agent,
-)
 from .evaluator_agent import (
     EvaluationTool,
     create_evaluator_agent,
@@ -27,34 +21,29 @@ from .interrupt_classifier import (
     create_interrupt_classifier_factory,
     build_classification_prompt,
 )
-from .research_agent import create_research_agent
 from .research_emery_agent import create_research_emery_agent
-from .app_builder_agent import create_app_builder_agent
-from .page_builder_agent import create_page_builder_agent
-from .agent_builder_agent import create_agent_builder_agent
 from .agent_executor_agent import create_agent_executor
-from .stateful_managed_agent import StatefulManagedAgent
 from .interrupt_aware_agent import InterruptAwareToolCallingAgent, InterruptAwareCodeAgent
+from .planning_agent import PlanningAgent
 
 __all__ = [
-    "create_skill_builder_agent",
-    "create_planning_callback",
-    "create_document_builder_agent",
+    # Evaluator
     "EvaluationTool",
     "create_evaluator_agent",
     "create_evaluator_factory",
+    # Interrupt classification
     "InterruptClassification",
     "InterruptClassificationTool",
     "create_interrupt_classifier",
     "create_interrupt_classifier_factory",
     "build_classification_prompt",
-    "create_research_agent",
+    # Research
     "create_research_emery_agent",
-    "create_app_builder_agent",
-    "create_page_builder_agent",
-    "create_agent_builder_agent",
+    # Agent execution
     "create_agent_executor",
-    "StatefulManagedAgent",
+    # Interrupt-aware agents (still used by agent_factory)
     "InterruptAwareToolCallingAgent",
     "InterruptAwareCodeAgent",
+    # Planning
+    "PlanningAgent",
 ]

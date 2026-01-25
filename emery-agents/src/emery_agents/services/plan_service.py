@@ -63,16 +63,15 @@ class PlanService:
 
     Maintains backward-compatible interface.
 
-    AIDEV-NOTE: DSPy is now the default for plan generation.
+    AIDEV-NOTE: DSPy is the only supported plan generation backend.
     DSPy offers typed outputs, automatic prompt optimization, and
-    ChainOfThought reasoning. Set use_dspy=False to revert to smolagents.
+    ChainOfThought reasoning.
     """
 
     def __init__(
         self,
         grpc_client: Optional[GRPCClient] = None,
         model_provider: Optional[ModelProvider] = None,
-        use_dspy: bool = True,  # DSPy is now the default
         discovery_tools: Optional[List[Tool]] = None,
     ):
         """
@@ -81,22 +80,12 @@ class PlanService:
         Args:
             grpc_client: gRPC client for communication with Next.js server
             model_provider: Model provider for LLM access and model resolution
-            use_dspy: Use DSPy-based plan generation (default: True)
             discovery_tools: Optional tools for planning phase (read-only discovery)
         """
         self.grpc_client = grpc_client
         self.model_provider = model_provider
-        self.use_dspy = use_dspy
 
-        # Initialize generator based on mode
-        # AIDEV-NOTE: smolagents is temporarily disabled to test DSPy implementation
-        if not use_dspy:
-            raise RuntimeError(
-                "🚫 smolagents PlanGenerator is DISABLED for testing. "
-                "DSPy is now the only supported generator. "
-                "Remove use_dspy=False to use DSPy."
-            )
-
+        # Initialize DSPy generator
         self._generator: DSPyPlanGenerator = DSPyPlanGenerator(
             model_provider=model_provider,
             discovery_tools=discovery_tools,
@@ -313,7 +302,6 @@ class PlanServiceFactory:
         self,
         grpc_client: Optional[GRPCClient] = None,
         model_provider: Optional[ModelProvider] = None,
-        use_dspy: bool = True,  # DSPy is now the default
         discovery_tools: Optional[List[Tool]] = None,
     ) -> None:
         """
@@ -322,12 +310,10 @@ class PlanServiceFactory:
         Args:
             grpc_client: gRPC client to use for all plan services
             model_provider: Model provider for LLM access
-            use_dspy: Use DSPy-based plan generation (default: True)
             discovery_tools: Optional tools for planning phase
         """
         self.grpc_client = grpc_client
         self.model_provider = model_provider
-        self.use_dspy = use_dspy
         self.discovery_tools = discovery_tools
 
     def create(self) -> PlanService:
@@ -335,6 +321,5 @@ class PlanServiceFactory:
         return PlanService(
             grpc_client=self.grpc_client,
             model_provider=self.model_provider,
-            use_dspy=self.use_dspy,
             discovery_tools=self.discovery_tools,
         )
