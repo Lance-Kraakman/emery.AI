@@ -59,13 +59,15 @@ class DatabaseAPI:
             org_id=self._org_id,
         )
 
+        logger.info(f"📡 DatabaseAPI.list response: {result[:200]}..." if len(result) > 200 else f"📡 DatabaseAPI.list response: {result}")
+
         if result.startswith("ERROR"):
-            logger.debug(f"Database list failed: {result}")
+            logger.warning(f"Database list failed: {result}")
             return []
 
         try:
             data = json.loads(result)
-            return [
+            databases = [
                 Database(
                     id=db["id"],
                     name=db.get("name", ""),
@@ -75,8 +77,10 @@ class DatabaseAPI:
                 )
                 for db in data.get("data", [])
             ]
+            logger.info(f"📁 Parsed {len(databases)} databases from API")
+            return databases
         except (json.JSONDecodeError, KeyError) as e:
-            logger.debug(f"Database parse failed: {e}")
+            logger.warning(f"Database parse failed: {e}, raw: {result[:200]}")
             return []
 
     def get(self, database_id: int) -> Optional[Database]:

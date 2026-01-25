@@ -760,6 +760,12 @@ class ExecutionCoordinator:
         """
         org_id = str(self._organization_id) if self._organization_id else ""
 
+        # Debug: log auth context
+        logger.info(
+            f"📊 Building workspace context: api_key={'present' if self._api_key else 'MISSING'}, "
+            f"org_id={org_id or 'MISSING'}"
+        )
+
         # Use shared typed APIs
         db_api = DatabaseAPI(self._api_key, org_id)
         table_api = TableAPI(self._api_key, org_id)
