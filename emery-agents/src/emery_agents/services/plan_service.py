@@ -63,17 +63,16 @@ class PlanService:
 
     Maintains backward-compatible interface.
 
-    AIDEV-NOTE: Set use_dspy=True to use DSPy-based plan generation.
+    AIDEV-NOTE: DSPy is now the default for plan generation.
     DSPy offers typed outputs, automatic prompt optimization, and
-    ChainOfThought reasoning. The default remains smolagents-based
-    for backward compatibility.
+    ChainOfThought reasoning. Set use_dspy=False to revert to smolagents.
     """
 
     def __init__(
         self,
         grpc_client: Optional[GRPCClient] = None,
         model_provider: Optional[ModelProvider] = None,
-        use_dspy: bool = False,
+        use_dspy: bool = True,  # DSPy is now the default
         discovery_tools: Optional[List[Tool]] = None,
     ):
         """
@@ -82,7 +81,7 @@ class PlanService:
         Args:
             grpc_client: gRPC client for communication with Next.js server
             model_provider: Model provider for LLM access and model resolution
-            use_dspy: If True, use DSPy-based plan generation instead of smolagents
+            use_dspy: Use DSPy-based plan generation (default: True)
             discovery_tools: Optional tools for planning phase (read-only discovery)
         """
         self.grpc_client = grpc_client
@@ -310,7 +309,7 @@ class PlanServiceFactory:
         self,
         grpc_client: Optional[GRPCClient] = None,
         model_provider: Optional[ModelProvider] = None,
-        use_dspy: bool = False,
+        use_dspy: bool = True,  # DSPy is now the default
         discovery_tools: Optional[List[Tool]] = None,
     ) -> None:
         """
@@ -319,7 +318,7 @@ class PlanServiceFactory:
         Args:
             grpc_client: gRPC client to use for all plan services
             model_provider: Model provider for LLM access
-            use_dspy: If True, use DSPy-based plan generation
+            use_dspy: Use DSPy-based plan generation (default: True)
             discovery_tools: Optional tools for planning phase
         """
         self.grpc_client = grpc_client

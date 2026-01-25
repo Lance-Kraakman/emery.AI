@@ -421,7 +421,7 @@ class ExecutionCoordinator:
             organization_id: Organization ID for RLS context and research agent
             conversation_history: Chat history for resolving references in planning (ACE pattern)
         """
-        self.plan_service = plan_service or PlanService()
+        self.plan_service = plan_service or PlanService(use_dspy=True)
         self.evaluator_factory = evaluator_factory
         self.plan_step_executor = plan_step_executor
         self.evaluate_after_steps = evaluate_after_steps

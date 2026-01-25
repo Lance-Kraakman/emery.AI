@@ -82,6 +82,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             self.plan_service = PlanService(
                 grpc_client=None,
                 model_provider=self.model_provider,
+                use_dspy=True,  # Use DSPy-based plan generation
             )
 
             self._coordinator_handler = CoordinatorStreamingHandler(
