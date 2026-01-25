@@ -33,6 +33,7 @@ from .capability_registry import CapabilityRegistry
 from emery_agents.ace import StrategyAccumulationService
 from .planning import (
     PlanGenerator,
+    DSPyPlanGenerator,
     PlanRepository,
     FailureAnalyzer,
     PlanGenerationRequest,
@@ -56,17 +57,24 @@ class PlanService:
     Facade for plan management.
 
     Delegates to:
-    - PlanGenerator for plan creation
+    - PlanGenerator (or DSPyPlanGenerator) for plan creation
     - PlanRepository for persistence
     - FailureAnalyzer for recovery analysis
 
     Maintains backward-compatible interface.
+
+    AIDEV-NOTE: Set use_dspy=True to use DSPy-based plan generation.
+    DSPy offers typed outputs, automatic prompt optimization, and
+    ChainOfThought reasoning. The default remains smolagents-based
+    for backward compatibility.
     """
 
     def __init__(
         self,
         grpc_client: Optional[GRPCClient] = None,
         model_provider: Optional[ModelProvider] = None,
+        use_dspy: bool = False,
+        discovery_tools: Optional[List[Tool]] = None,
     ):
         """
         Initialize plan service.
@@ -74,12 +82,25 @@ class PlanService:
         Args:
             grpc_client: gRPC client for communication with Next.js server
             model_provider: Model provider for LLM access and model resolution
+            use_dspy: If True, use DSPy-based plan generation instead of smolagents
+            discovery_tools: Optional tools for planning phase (read-only discovery)
         """
         self.grpc_client = grpc_client
         self.model_provider = model_provider
+        self.use_dspy = use_dspy
 
-        # Initialize delegates
-        self._generator = PlanGenerator(model_provider=model_provider)
+        # Initialize generator based on mode
+        if use_dspy:
+            self._generator: PlanGenerator | DSPyPlanGenerator = DSPyPlanGenerator(
+                model_provider=model_provider,
+                discovery_tools=discovery_tools,
+            )
+            logger.info("📋 PlanService initialized with DSPy generator")
+        else:
+            self._generator = PlanGenerator(model_provider=model_provider)
+            logger.info("📋 PlanService initialized with smolagents generator")
+
+        # Initialize other delegates
         self._repository = PlanRepository(grpc_client=grpc_client)
         self._analyzer = FailureAnalyzer(model_provider=model_provider)
 
@@ -289,6 +310,8 @@ class PlanServiceFactory:
         self,
         grpc_client: Optional[GRPCClient] = None,
         model_provider: Optional[ModelProvider] = None,
+        use_dspy: bool = False,
+        discovery_tools: Optional[List[Tool]] = None,
     ) -> None:
         """
         Initialize factory.
@@ -296,13 +319,19 @@ class PlanServiceFactory:
         Args:
             grpc_client: gRPC client to use for all plan services
             model_provider: Model provider for LLM access
+            use_dspy: If True, use DSPy-based plan generation
+            discovery_tools: Optional tools for planning phase
         """
         self.grpc_client = grpc_client
         self.model_provider = model_provider
+        self.use_dspy = use_dspy
+        self.discovery_tools = discovery_tools
 
     def create(self) -> PlanService:
         """Create a PlanService instance."""
         return PlanService(
             grpc_client=self.grpc_client,
             model_provider=self.model_provider,
+            use_dspy=self.use_dspy,
+            discovery_tools=self.discovery_tools,
         )

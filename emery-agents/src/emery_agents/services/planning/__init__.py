@@ -23,6 +23,7 @@ from .models import (
     FailureAnalysisRequest,
 )
 from .plan_generator import PlanGenerator
+from .dspy_plan_generator import DSPyPlanGenerator
 from .plan_repository import PlanRepository
 from .failure_analyzer import FailureAnalyzer
 from .plan_differ import PlanDiff, PlanDiffer
@@ -35,6 +36,7 @@ __all__ = [
     "FailureAnalysisRequest",
     # Services
     "PlanGenerator",
+    "DSPyPlanGenerator",  # DSPy-based alternative
     "PlanRepository",
     "FailureAnalyzer",
     # Plan Diffs
