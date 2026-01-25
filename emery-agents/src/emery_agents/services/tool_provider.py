@@ -12,15 +12,14 @@ SECURITY: The ToolProvider exposes an http_client property for authenticated
 requests, NOT the raw api_key. This prevents credential exposure to skills/agents.
 
 AIDEV-NOTE: DSPy Migration (Jan 2026)
-- Now uses DSPy tool factories from dspy_modules/tools/crud/
-- DSPyToolWrapper provides smolagents-like attributes for backward compatibility
+- Uses DSPy tool factories from dspy_modules/tools/crud/
+- Returns plain callables for DSPy ReAct (no wrapper needed)
 """
 
 import warnings
-from typing import Dict, List, Optional, Any, TYPE_CHECKING
+from typing import Dict, List, Optional, Any, Callable, TYPE_CHECKING
 import logging
 
-from ..types import ToolProtocol
 from ..dspy_modules.tools import (
     create_database_crud,
     create_skill_crud,
@@ -32,7 +31,6 @@ from ..dspy_modules.tools import (
     create_app_crud,
     create_page_crud,
     create_view_crud,
-    DSPyToolWrapper,
 )
 from ..tools.security_report_tool import load_security_report_tool
 from .authenticated_http_client import AuthenticatedHttpClient
@@ -57,12 +55,19 @@ class ToolProvider:
         schema_tools = provider.get_schema_builder_tools()
     """
 
-    # Supported tool names
-    TOOL_NAMES = [
-        "database_crud", "table_crud", "field_crud", "row_crud",
-        "skill_crud", "document_crud", "app_crud", "page_crud",
-        "agent_crud", "view_crud", "security_report",
-    ]
+    # Registry of DSPy tool factories
+    DSPY_FACTORIES: Dict[str, Callable[[str, str], Callable[..., str]]] = {
+        "database_crud": create_database_crud,
+        "table_crud": create_table_crud,
+        "field_crud": create_field_crud,
+        "row_crud": create_row_crud,
+        "skill_crud": create_skill_crud,
+        "document_crud": create_document_crud,
+        "app_crud": create_app_crud,
+        "page_crud": create_page_crud,
+        "agent_crud": create_agent_crud,
+        "view_crud": create_view_crud,
+    }
 
     def __init__(self, api_key: str, organization_id: int):
         """
@@ -75,7 +80,7 @@ class ToolProvider:
         self._api_key = api_key
         self._organization_id = organization_id
         self._org_id_str = str(organization_id) if organization_id else ""
-        self._cache: Dict[str, ToolProtocol] = {}
+        self._cache: Dict[str, Any] = {}
         self._http_client = AuthenticatedHttpClient(api_key, organization_id)
         logger.info(f"[TOOL-PROVIDER] Initialized (api_key present: {bool(api_key)}, org_id: {organization_id})")
 
@@ -111,7 +116,7 @@ class ToolProvider:
         """Get the organization ID (for passing to ExecutionContext)."""
         return self._organization_id
 
-    def get(self, name: str) -> ToolProtocol:
+    def get(self, name: str) -> Any:
         """
         Get tool by name (lazy creation, cached).
 
@@ -119,7 +124,7 @@ class ToolProvider:
             name: Tool name (e.g., "database_crud", "table_crud")
 
         Returns:
-            Tool instance with auth credentials baked in
+            Callable tool function for DSPy ReAct
 
         Raises:
             ValueError: If tool name is not supported
@@ -129,9 +134,9 @@ class ToolProvider:
             logger.debug(f"🔧 Created and cached tool: {name}")
         return self._cache[name]
 
-    def get_all(self) -> Dict[str, ToolProtocol]:
+    def get_all(self) -> Dict[str, Any]:
         """Get all tools (creates any not yet cached)."""
-        for name in self.TOOL_NAMES:
+        for name in list(self.DSPY_FACTORIES.keys()) + ["security_report"]:
             self.get(name)
         return self._cache.copy()
 
@@ -139,79 +144,49 @@ class ToolProvider:
     # Category Helpers
     # -------------------------
 
-    def get_schema_builder_tools(self) -> List[ToolProtocol]:
-        """
-        Get tools for schema builder agent.
-
-        Includes database, table, and field CRUD for:
-        - Listing existing databases (context)
-        - Creating/modifying tables
-        - Creating/modifying fields
-        """
+    def get_schema_builder_tools(self) -> List[Any]:
+        """Get tools for schema builder agent."""
         return [
             self.get("database_crud"),
             self.get("table_crud"),
             self.get("field_crud"),
         ]
 
-    def get_table_builder_tools(self) -> List[ToolProtocol]:
-        """
-        Get tools for table builder agent.
-
-        For single-table operations (quick additions/modifications).
-        """
+    def get_table_builder_tools(self) -> List[Any]:
+        """Get tools for table builder agent."""
         return [self.get("table_crud"), self.get("field_crud")]
 
-    def get_skill_builder_tools(self) -> List[ToolProtocol]:
+    def get_skill_builder_tools(self) -> List[Any]:
         """Get tools for skill builder agent."""
         return [self.get("skill_crud")]
 
-    def get_document_builder_tools(self) -> List[ToolProtocol]:
+    def get_document_builder_tools(self) -> List[Any]:
         """Get tools for document builder agent."""
         return [self.get("document_crud")]
 
-    def get_app_builder_tools(self) -> List[ToolProtocol]:
+    def get_app_builder_tools(self) -> List[Any]:
         """Get tools for app builder agent."""
         return [self.get("app_crud"), self.get("page_crud"), self.get("view_crud")]
 
-    def get_agent_builder_tools(self) -> List[ToolProtocol]:
+    def get_agent_builder_tools(self) -> List[Any]:
         """Get tools for agent builder agent."""
         return [self.get("agent_crud"), self.get("skill_crud")]
 
-    def get_view_builder_tools(self) -> List[ToolProtocol]:
+    def get_view_builder_tools(self) -> List[Any]:
         """Get tools for view builder agent."""
         return [
-            self.get("database_crud"),  # Understand database structure
-            self.get("table_crud"),      # List/read tables
-            self.get("field_crud"),      # Understand field types
-            self.get("view_crud"),       # Create/manage views
+            self.get("database_crud"),
+            self.get("table_crud"),
+            self.get("field_crud"),
+            self.get("view_crud"),
         ]
 
-    def get_system_designer_tools(self) -> List[ToolProtocol]:
-        """
-        Get tools for system designer agent.
-
-        System designer is READ-ONLY - it doesn't have CRUD tools directly.
-        It uses:
-        - research_emery (as managed agent) for system introspection
-        - research tools (web_search, visit_webpage) added separately in factory
-        - security_report tool for security analysis
-
-        AIDEV-NOTE: System designer delegates mutations to specialized builders
-        (schema_builder, app_builder, agent_builder, skill_builder) via
-        managed agents. It only needs research capability and security analysis.
-
-        Returns security_report tool - other tools added in ManagedAgentsFactory.
-        """
+    def get_system_designer_tools(self) -> List[Any]:
+        """Get tools for system designer agent (security analysis)."""
         return [self.get("security_report")]
 
-    def get_security_tools(self) -> List[ToolProtocol]:
-        """
-        Get security-related tools.
-
-        Currently includes security_report for generating security analysis.
-        Can be used by system_designer and via tool_executor.
-        """
+    def get_security_tools(self) -> List[Any]:
+        """Get security-related tools."""
         return [self.get("security_report")]
 
     # -------------------------
@@ -222,44 +197,14 @@ class ToolProvider:
         """
         Create tool with auth credentials captured in closure.
 
-        Uses DSPy tool factories with DSPyToolWrapper for backward compatibility.
-
-        Args:
-            name: Tool name to create
-
-        Returns:
-            Tool instance (DSPyToolWrapper)
-
-        Raises:
-            ValueError: If tool name is not supported
+        Returns plain callable for DSPy - no wrapper needed.
         """
-        # DSPy tool factories - return plain callables, wrap with DSPyToolWrapper
-        dspy_factories = {
-            "database_crud": create_database_crud,
-            "table_crud": create_table_crud,
-            "field_crud": create_field_crud,
-            "row_crud": create_row_crud,
-            "skill_crud": create_skill_crud,
-            "document_crud": create_document_crud,
-            "app_crud": create_app_crud,
-            "page_crud": create_page_crud,
-            "agent_crud": create_agent_crud,
-            "view_crud": create_view_crud,
-        }
+        # Check DSPy factories first
+        if name in self.DSPY_FACTORIES:
+            return self.DSPY_FACTORIES[name](self._api_key, self._org_id_str)
 
-        # Legacy smolagents tools (not yet ported to DSPy)
-        legacy_loaders = {
-            "security_report": lambda: load_security_report_tool(None, self._api_key, self._organization_id),
-        }
+        # Legacy tools not yet ported
+        if name == "security_report":
+            return load_security_report_tool(None, self._api_key, self._organization_id)
 
-        if name in dspy_factories:
-            # Create DSPy tool with factory, wrap for backward compatibility
-            func = dspy_factories[name](self._api_key, self._org_id_str)
-            return DSPyToolWrapper(func, name=name)
-        elif name in legacy_loaders:
-            # Use legacy smolagents loader - these still use smolagents.Tool
-            # which satisfies ToolProtocol (has name, description, __call__)
-            tool: Any = legacy_loaders[name]()
-            return tool
-        else:
-            raise ValueError(f"Unknown tool: {name}. Supported: {list(dspy_factories.keys()) + list(legacy_loaders.keys())}")
+        raise ValueError(f"Unknown tool: {name}. Supported: {list(self.DSPY_FACTORIES.keys()) + ['security_report']}")

@@ -1,4 +1,8 @@
-"""Tool modules for emery-agents."""
+"""Tool modules for emery-agents.
+
+AIDEV-NOTE: Most tools have been migrated to dspy_modules/tools/.
+This module now only exports tool_modes utilities.
+"""
 
 from .tool_modes import (
     ToolMode,
@@ -8,8 +12,8 @@ from .tool_modes import (
     get_execution_tool_permissions,
     READ_ONLY_TOOLS,
     MUTATION_ONLY_TOOLS,
+    MUTATION_METHODS,
 )
-from .step_output_tool import StepOutputTool
 
 __all__ = [
     "ToolMode",
@@ -19,5 +23,5 @@ __all__ = [
     "get_execution_tool_permissions",
     "READ_ONLY_TOOLS",
     "MUTATION_ONLY_TOOLS",
-    "StepOutputTool",
+    "MUTATION_METHODS",
 ]

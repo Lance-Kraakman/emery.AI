@@ -5,8 +5,8 @@ Loads tools from the unified metadata JSON file that serves as the single
 source of truth for both frontend and backend tool configurations.
 
 AIDEV-NOTE: DSPy Migration (Jan 2026)
-- CRUD tools now use DSPy factories from dspy_modules/tools/crud/
-- DSPyToolWrapper provides smolagents-like attributes (name, description, inputs)
+- CRUD tools use DSPy factories from dspy_modules/tools/crud/
+- Returns plain callables for DSPy ReAct (no wrapper needed)
 - Other tools (pipedream, skills, base) still use smolagents temporarily
 """
 
@@ -30,7 +30,6 @@ from ..dspy_modules.tools import (
     create_view_crud,
     create_app_crud,
     create_page_crud,
-    DSPyToolWrapper,
 )
 
 if TYPE_CHECKING:
@@ -41,10 +40,26 @@ class UnifiedToolLoader:
     """
     Loads tools from the unified metadata containing both Pipedream and Emery tools.
 
-    AIDEV-NOTE: Enhanced with consolidated methods from:
-    - agent_executor: create_tool_configs_with_context
-    - chat_processing_service: load_tools_from_configs
+    AIDEV-NOTE: DSPy Migration (Jan 2026)
+    - CRUD tools use simple registry mapping to DSPy factories
+    - No individual loader methods - just factory functions
     """
+
+    # Registry: maps CRUD tool type to DSPy factory function
+    CRUD_FACTORIES: Dict[str, Callable[[str, str], Callable[..., str]]] = {
+        "agent": create_agent_crud,
+        "document": create_document_crud,
+        "file": create_file_crud,
+        "table": create_table_crud,
+        "row": create_row_crud,
+        "field": create_field_crud,
+        "team": create_team_crud,
+        "database": create_database_crud,
+        "skill": create_skill_crud,
+        "view": create_view_crud,
+        "app": create_app_crud,
+        "page": create_page_crud,
+    }
 
     def __init__(self, metadata_path: Optional[str] = None):
         """Initialize with path to unified metadata file."""
@@ -121,81 +136,37 @@ class UnifiedToolLoader:
 
         return None
 
-    def _get_crud_tool_loader(self, tool_name: str) -> Optional[Callable]:
+    def _get_crud_factory(self, tool_name: str) -> Optional[Callable[[str, str], Callable[..., str]]]:
         """
-        Get the appropriate CRUD tool loader function for a given tool name.
+        Get DSPy factory function for a CRUD tool by name.
 
-        Maps CRUD tool names from the database (e.g., 'emery-create-row') to their
-        loader functions without needing unified_metadata.json.
+        Extracts entity type from tool name (e.g., 'emery-create-agent' -> 'agent')
+        and returns the corresponding factory from CRUD_FACTORIES registry.
 
         Args:
             tool_name: Tool name from frontend (e.g., "emery-create-agent")
 
         Returns:
-            Loader function or None if not a CRUD tool
+            DSPy factory function or None if not a CRUD tool
         """
-        # AIDEV-NOTE: Explicit mapping for all CRUD tools seeded in database
-        CRUD_TOOL_ROUTING = {
-            # Agent operations
-            "emery-create-agent": self._load_agent_crud_tool,
-            "emery-read-agent": self._load_agent_crud_tool,
-            "emery-update-agent": self._load_agent_crud_tool,
-            "emery-delete-agent": self._load_agent_crud_tool,
-            "emery-list-agents": self._load_agent_crud_tool,
+        if not tool_name.startswith("emery-"):
+            return None
 
-            # Document operations
-            "emery-create-document": self._load_document_crud_tool,
-            "emery-read-document": self._load_document_crud_tool,
-            "emery-update-document": self._load_document_crud_tool,
-            "emery-delete-document": self._load_document_crud_tool,
-            "emery-list-documents": self._load_document_crud_tool,
+        # Extract entity type: "emery-create-agent" -> "agent", "emery-list-agents" -> "agent"
+        parts = tool_name.replace("emery-", "").split("-")
+        if len(parts) < 2:
+            return None
 
-            # File operations
-            "emery-create-file": self._load_file_crud_tool,
-            "emery-read-file": self._load_file_crud_tool,
-            "emery-update-file": self._load_file_crud_tool,
-            "emery-delete-file": self._load_file_crud_tool,
-            "emery-list-files": self._load_file_crud_tool,
+        # Handle plural forms: "agents" -> "agent", "rows" -> "row"
+        entity = parts[-1].rstrip("s")
 
-            # Table operations
-            "emery-create-table": self._load_table_crud_tool,
-            "emery-read-table": self._load_table_crud_tool,
-            "emery-update-table": self._load_table_crud_tool,
-            "emery-delete-table": self._load_table_crud_tool,
-            "emery-list-tables": self._load_table_crud_tool,
+        # Special cases
+        if entity == "row" and parts[0] == "get":
+            entity = "row"  # emery-get-rows
+        elif entity == "field" and parts[0] == "list":
+            entity = "field"  # emery-list-fields
 
-            # Row operations (use row_crud)
-            "emery-create-row": self._load_row_crud_tool,
-            "emery-get-rows": self._load_row_crud_tool,
-            "emery-update-row": self._load_row_crud_tool,
-            "emery-delete-row": self._load_row_crud_tool,
-
-            # Field/column operations (use field_crud)
-            "emery-create-field": self._load_field_crud_tool,
-            "emery-list-fields": self._load_field_crud_tool,
-            "emery-delete-field": self._load_field_crud_tool,
-
-            # Team operations
-            "emery-create-team": self._load_team_crud_tool,
-            "emery-read-team": self._load_team_crud_tool,
-            "emery-update-team": self._load_team_crud_tool,
-            "emery-delete-team": self._load_team_crud_tool,
-            "emery-list-teams": self._load_team_crud_tool,
-
-            # Database operations
-            "emery-create-database": self._load_database_crud_tool,
-            "emery-read-database": self._load_database_crud_tool,
-            "emery-update-database": self._load_database_crud_tool,
-            "emery-delete-database": self._load_database_crud_tool,
-            "emery-list-databases": self._load_database_crud_tool,
-
-            # Skill operations
-            "emery-read-skill": self._load_skill_crud_tool,
-            "emery-update-skill": self._load_skill_crud_tool,
-            "emery-list-skills": self._load_skill_crud_tool,
-        }
-
-        return CRUD_TOOL_ROUTING.get(tool_name)
+        return self.CRUD_FACTORIES.get(entity)
 
     def load_tool(
         self,
@@ -250,11 +221,10 @@ class UnifiedToolLoader:
 
         # AIDEV-NOTE: Handle CRUD tools from database - they don't need unified_metadata
         # These tools are seeded in the DB and sent with full config via gRPC
-        crud_loader = self._get_crud_tool_loader(tool_config.name)
-        if crud_loader:
-            # Create a minimal unified_tool dict just to satisfy the loader signature
-            unified_tool = {"id": tool_config.name, "source": "emery"}
-            return crud_loader(tool_config, unified_tool, api_key, api_key_mode, organization_id)
+        crud_factory = self._get_crud_factory(tool_config.name)
+        if crud_factory:
+            org_id = str(organization_id) if organization_id else ""
+            return crud_factory(api_key, org_id)
 
         # Regular tool loading (existing logic)
         # Convert tool name from hyphen to underscore format for lookup (frontend uses hyphens, backend uses underscores)
@@ -297,25 +267,24 @@ class UnifiedToolLoader:
             config=enhanced_config
         )
 
-    def _load_emery_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+    def _load_emery_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None) -> Any:
         """Load an Emery tool using the unified configuration."""
         tool_id = unified_tool["id"]
 
-        # Map tool IDs to their implementations
-        # AIDEV-NOTE: table/row/field operations split into separate tools
-        emery_tool_mapping = {
+        # Check if it's a CRUD tool first (use registry)
+        if tool_id.endswith("_crud"):
+            entity = tool_id.replace("_crud", "")
+            factory = self.CRUD_FACTORIES.get(entity)
+            if factory:
+                org_id = str(organization_id) if organization_id else ""
+                return factory(api_key, org_id)
+
+        # Non-CRUD tools (still using smolagents temporarily)
+        non_crud_mapping = {
             "file_reader": self._load_file_reader_tool,
             "calculator": self._load_calculator_tool,
             "document_reader": self._load_document_reader_tool,
             "table_query": self._load_table_query_tool,
-            "agent_crud": self._load_agent_crud_tool,
-            "document_crud": self._load_document_crud_tool,
-            "file_crud": self._load_file_crud_tool,
-            "table_crud": self._load_table_crud_tool,
-            "row_crud": self._load_row_crud_tool,
-            "field_crud": self._load_field_crud_tool,
-            "team_crud": self._load_team_crud_tool,
-            "database_crud": self._load_database_crud_tool,
             "emery_database": self._load_emery_database_tool,
             "table_schema": self._load_table_schema_tool,
             "table_data": self._load_table_data_tool,
@@ -325,7 +294,7 @@ class UnifiedToolLoader:
             "process_api": self._load_process_api_tool,
         }
 
-        loader_func = emery_tool_mapping.get(tool_id)
+        loader_func = non_crud_mapping.get(tool_id)
         if not loader_func:
             raise ValueError(f"Unknown Emery tool ID: {tool_id}")
 
@@ -351,60 +320,6 @@ class UnifiedToolLoader:
         """Load Table Query tool."""
         from ..tools.base_tools import load_table_query_tool
         return load_table_query_tool(tool_config)
-
-    def _load_agent_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None) -> Any:
-        """Load Agent CRUD tool using DSPy factory."""
-        org_id = str(organization_id) if organization_id else ""
-        func = create_agent_crud(api_key, org_id)
-        return DSPyToolWrapper(func, name="agent_crud")
-
-    def _load_document_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None) -> Any:
-        """Load Document CRUD tool using DSPy factory."""
-        org_id = str(organization_id) if organization_id else ""
-        func = create_document_crud(api_key, org_id)
-        return DSPyToolWrapper(func, name="document_crud")
-
-    def _load_file_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None) -> Any:
-        """Load File CRUD tool using DSPy factory."""
-        org_id = str(organization_id) if organization_id else ""
-        func = create_file_crud(api_key, org_id)
-        return DSPyToolWrapper(func, name="file_crud")
-
-    def _load_table_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None) -> Any:
-        """Load Table CRUD tool using DSPy factory."""
-        org_id = str(organization_id) if organization_id else ""
-        func = create_table_crud(api_key, org_id)
-        return DSPyToolWrapper(func, name="table_crud")
-
-    def _load_row_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None) -> Any:
-        """Load Row CRUD tool using DSPy factory."""
-        org_id = str(organization_id) if organization_id else ""
-        func = create_row_crud(api_key, org_id)
-        return DSPyToolWrapper(func, name="row_crud")
-
-    def _load_field_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None) -> Any:
-        """Load Field CRUD tool using DSPy factory."""
-        org_id = str(organization_id) if organization_id else ""
-        func = create_field_crud(api_key, org_id)
-        return DSPyToolWrapper(func, name="field_crud")
-
-    def _load_team_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None) -> Any:
-        """Load Team CRUD tool using DSPy factory."""
-        org_id = str(organization_id) if organization_id else ""
-        func = create_team_crud(api_key, org_id)
-        return DSPyToolWrapper(func, name="team_crud")
-
-    def _load_database_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None) -> Any:
-        """Load Database CRUD tool using DSPy factory."""
-        org_id = str(organization_id) if organization_id else ""
-        func = create_database_crud(api_key, org_id)
-        return DSPyToolWrapper(func, name="database_crud")
-
-    def _load_skill_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None) -> Any:
-        """Load Skill CRUD tool using DSPy factory."""
-        org_id = str(organization_id) if organization_id else ""
-        func = create_skill_crud(api_key, org_id)
-        return DSPyToolWrapper(func, name="skill_crud")
 
     def _load_emery_database_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load Emery Database tool."""
