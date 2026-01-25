@@ -212,7 +212,7 @@ export function ApprovalInputBar({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [disabled, options, effectiveOptions, selectedIndex, customInput, onRespond, isQuestions, isMultiSelect, currentQuestion, currentQuestionIndex, allQuestions])
 
-  // Handle input keydown
+  // Handle input keydown for custom input field
   const handleInputKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && customInput.trim()) {
       e.preventDefault()
@@ -221,6 +221,30 @@ export function ApprovalInputBar({
     } else if (e.key === 'Escape') {
       e.preventDefault()
       setCustomInput('')
+      inputRef.current?.blur()
+    }
+  }
+
+  // Handle input keydown for text-type questions (uses batchedAnswers, not customInput)
+  const handleTextQuestionKeyDown = (e: React.KeyboardEvent, questionId: string) => {
+    const answer = batchedAnswers[questionId]?.trim()
+    if (e.key === 'Enter' && answer) {
+      e.preventDefault()
+      if (allQuestions.length > 1) {
+        // Wizard mode: move to next or submit
+        if (currentQuestionIndex === allQuestions.length - 1) {
+          submitBatchedAnswers()
+        } else {
+          setCurrentQuestionIndex(prev => prev + 1)
+          setSelectedIndex(0)
+        }
+      } else {
+        // Single question: respond directly
+        onRespond(answer)
+        setBatchedAnswers({})
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
       inputRef.current?.blur()
     }
   }
@@ -357,7 +381,7 @@ export function ApprovalInputBar({
             ref={inputRef}
             value={batchedAnswers[currentQuestion.questionId] || ''}
             onChange={(e) => setBatchedAnswer(currentQuestion.questionId, e.target.value)}
-            onKeyDown={handleInputKeyDown}
+            onKeyDown={(e) => handleTextQuestionKeyDown(e, currentQuestion.questionId)}
             placeholder="Type your answer..."
             disabled={disabled}
             className="w-full px-2 py-1 text-sm bg-background border border-input rounded"
