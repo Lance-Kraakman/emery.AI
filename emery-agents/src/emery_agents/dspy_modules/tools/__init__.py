@@ -34,10 +34,14 @@ from .output import (
     create_ask_question_tool,
     create_step_output_tool,
 )
+from .wrapper import DSPyToolWrapper, wrap_tool
 
 __all__ = [
     "create_all_tools",
     "create_crud_tools",
+    # Wrapper for smolagents compatibility
+    "DSPyToolWrapper",
+    "wrap_tool",
     # Re-export individual factories
     "create_agent_crud",
     "create_app_crud",

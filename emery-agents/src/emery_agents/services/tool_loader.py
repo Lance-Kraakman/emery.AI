@@ -3,6 +3,11 @@ Unified Tool Loader
 
 Loads tools from the unified metadata JSON file that serves as the single
 source of truth for both frontend and backend tool configurations.
+
+AIDEV-NOTE: DSPy Migration (Jan 2026)
+- CRUD tools now use DSPy factories from dspy_modules/tools/crud/
+- DSPyToolWrapper provides smolagents-like attributes (name, description, inputs)
+- Other tools (pipedream, skills, base) still use smolagents temporarily
 """
 
 import json
@@ -12,6 +17,21 @@ from pathlib import Path
 
 from ..grpc.generated.agent_worker_pb2 import ToolConfig, AgentConfig, SkillConfig
 from ..tools.skill_tool import SkillTool
+from ..dspy_modules.tools import (
+    create_table_crud,
+    create_field_crud,
+    create_row_crud,
+    create_database_crud,
+    create_agent_crud,
+    create_document_crud,
+    create_file_crud,
+    create_skill_crud,
+    create_team_crud,
+    create_view_crud,
+    create_app_crud,
+    create_page_crud,
+    DSPyToolWrapper,
+)
 
 if TYPE_CHECKING:
     from ..clients import HuggingFaceInferenceClient
@@ -324,93 +344,102 @@ class UnifiedToolLoader:
 
     def _load_document_reader_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load Document Reader tool."""
-        from ..tools.base_tools import load_document_reader
-        return load_document_reader(tool_config)
+        from ..tools.base_tools import load_document_reader_tool
+        return load_document_reader_tool(tool_config)
 
     def _load_table_query_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load Table Query tool."""
-        from ..tools.base_tools import load_table_query
-        return load_table_query(tool_config)
+        from ..tools.base_tools import load_table_query_tool
+        return load_table_query_tool(tool_config)
 
     def _load_agent_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None) -> Any:
-        """Load Agent CRUD tool."""
-        from ..tools.crud_tools import load_agent_crud
-        return load_agent_crud(tool_config, api_key, organization_id)
+        """Load Agent CRUD tool using DSPy factory."""
+        org_id = str(organization_id) if organization_id else ""
+        func = create_agent_crud(api_key, org_id)
+        return DSPyToolWrapper(func, name="agent_crud")
 
     def _load_document_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None) -> Any:
-        """Load Document CRUD tool."""
-        from ..tools.crud_tools import load_document_crud
-        return load_document_crud(tool_config, api_key, organization_id)
+        """Load Document CRUD tool using DSPy factory."""
+        org_id = str(organization_id) if organization_id else ""
+        func = create_document_crud(api_key, org_id)
+        return DSPyToolWrapper(func, name="document_crud")
 
     def _load_file_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None) -> Any:
-        """Load File CRUD tool."""
-        from ..tools.crud_tools import load_file_crud
-        return load_file_crud(tool_config, api_key, organization_id)
+        """Load File CRUD tool using DSPy factory."""
+        org_id = str(organization_id) if organization_id else ""
+        func = create_file_crud(api_key, org_id)
+        return DSPyToolWrapper(func, name="file_crud")
 
     def _load_table_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None) -> Any:
-        """Load Table CRUD tool."""
-        from ..tools.table_tools import load_table_crud
-        return load_table_crud(tool_config, api_key, organization_id)
+        """Load Table CRUD tool using DSPy factory."""
+        org_id = str(organization_id) if organization_id else ""
+        func = create_table_crud(api_key, org_id)
+        return DSPyToolWrapper(func, name="table_crud")
 
     def _load_row_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None) -> Any:
-        """Load Row CRUD tool."""
-        from ..tools.row_tools import load_row_crud
-        return load_row_crud(tool_config, api_key, organization_id)
+        """Load Row CRUD tool using DSPy factory."""
+        org_id = str(organization_id) if organization_id else ""
+        func = create_row_crud(api_key, org_id)
+        return DSPyToolWrapper(func, name="row_crud")
 
     def _load_field_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None) -> Any:
-        """Load Field CRUD tool."""
-        from ..tools.field_tools import load_field_crud
-        return load_field_crud(tool_config, api_key, organization_id)
+        """Load Field CRUD tool using DSPy factory."""
+        org_id = str(organization_id) if organization_id else ""
+        func = create_field_crud(api_key, org_id)
+        return DSPyToolWrapper(func, name="field_crud")
 
     def _load_team_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None) -> Any:
-        """Load Team CRUD tool."""
-        from ..tools.crud_tools import load_team_crud
-        return load_team_crud(tool_config, api_key, organization_id)
+        """Load Team CRUD tool using DSPy factory."""
+        org_id = str(organization_id) if organization_id else ""
+        func = create_team_crud(api_key, org_id)
+        return DSPyToolWrapper(func, name="team_crud")
 
     def _load_database_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None) -> Any:
-        """Load Database CRUD tool."""
-        from ..tools.crud_tools import load_database_crud
-        return load_database_crud(tool_config, api_key, organization_id)
+        """Load Database CRUD tool using DSPy factory."""
+        org_id = str(organization_id) if organization_id else ""
+        func = create_database_crud(api_key, org_id)
+        return DSPyToolWrapper(func, name="database_crud")
 
     def _load_skill_crud_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None) -> Any:
-        """Load Skill CRUD tool."""
-        from ..tools.crud_tools import load_skill_crud
-        return load_skill_crud(tool_config, api_key, organization_id)
+        """Load Skill CRUD tool using DSPy factory."""
+        org_id = str(organization_id) if organization_id else ""
+        func = create_skill_crud(api_key, org_id)
+        return DSPyToolWrapper(func, name="skill_crud")
 
     def _load_emery_database_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load Emery Database tool."""
-        from ..tools.organizational_tools import EmeryDatabaseTool
-        return EmeryDatabaseTool(tool_config.name, tool_config.description)
+        from ..tools.organizational_tools import load_emery_database
+        return load_emery_database(tool_config)
 
     def _load_table_schema_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load Table Schema tool."""
-        from ..tools.organizational_tools import TableSchemaTool
-        return TableSchemaTool(tool_config.name, tool_config.description)
+        from ..tools.organizational_tools import load_table_schema
+        return load_table_schema(tool_config)
 
     def _load_table_data_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load Table Data tool."""
-        from ..tools.organizational_tools import TableDataTool
-        return TableDataTool(tool_config.name, tool_config.description)
+        from ..tools.organizational_tools import load_table_data
+        return load_table_data(tool_config)
 
     def _load_measurement_api_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load Measurement API tool."""
-        from ..tools.api_tools import MeasurementAPITool
-        return MeasurementAPITool(tool_config.name, tool_config.description)
+        from ..tools.api_tools import load_measurement_api_tool
+        return load_measurement_api_tool(tool_config)
 
     def _load_kpi_api_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load KPI API tool."""
-        from ..tools.api_tools import KPIAPITool
-        return KPIAPITool(tool_config.name, tool_config.description)
+        from ..tools.api_tools import load_kpi_api_tool
+        return load_kpi_api_tool(tool_config)
 
     def _load_analysis_api_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load Analysis API tool."""
-        from ..tools.api_tools import AnalysisAPITool
-        return AnalysisAPITool(tool_config.name, tool_config.description)
+        from ..tools.api_tools import load_analysis_api_tool
+        return load_analysis_api_tool(tool_config)
 
     def _load_process_api_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load Process API tool."""
-        from ..tools.api_tools import ProcessAPITool
-        return ProcessAPITool(tool_config.name, tool_config.description)
+        from ..tools.api_tools import load_process_api_tool
+        return load_process_api_tool(tool_config)
 
     def load_tools(self, tool_configs: List[ToolConfig], api_key: str = "", api_key_mode: str = "agent") -> List[Any]:
         """Load multiple tools from configurations."""
