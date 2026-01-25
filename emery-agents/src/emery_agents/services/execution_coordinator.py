@@ -765,6 +765,12 @@ class ExecutionCoordinator:
         existing_tables: List[TableInfo] = []
         existing_apps: List[AppInfo] = []
 
+        if not tools:
+            logger.info(
+                "⚠️ No tools provided for workspace context building - "
+                "workspace context will be empty. Check that AgentConfig includes tools."
+            )
+
         if tools:
             # First pass: get databases (needed for table name lookup)
             for tool in tools:

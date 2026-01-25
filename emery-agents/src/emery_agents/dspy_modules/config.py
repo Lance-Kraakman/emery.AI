@@ -114,6 +114,39 @@ class DSPyModelProvider:
         )
 
 
+def get_dspy_lm(
+    model_id: Optional[str] = None,
+    skill_model: Optional[str] = None,
+    agent_model: Optional[str] = None,
+    org_model: Optional[str] = None,
+) -> dspy.LM:
+    """
+    Get a DSPy LM without calling dspy.configure() (safe for async contexts).
+
+    Use this with dspy.context(lm=lm) in async code:
+
+        lm = get_dspy_lm(org_model="google/gemini-2.0-flash")
+        with dspy.context(lm=lm):
+            result = planner(request=request, ...)
+
+    Args:
+        model_id: Explicit model ID to use
+        skill_model: Model specified by skill configuration
+        agent_model: Model specified by agent configuration
+        org_model: Model specified by organization settings
+
+    Returns:
+        DSPy LM instance (not configured globally)
+    """
+    provider = DSPyModelProvider()
+    return provider.get_dspy_lm(
+        model_id=model_id,
+        skill_model=skill_model,
+        agent_model=agent_model,
+        org_model=org_model,
+    )
+
+
 def configure_dspy(
     model_id: Optional[str] = None,
     skill_model: Optional[str] = None,
@@ -121,9 +154,10 @@ def configure_dspy(
     org_model: Optional[str] = None,
 ) -> dspy.LM:
     """
-    Configure DSPy with a model from the registry.
+    Configure DSPy with a model from the registry (for sync contexts only).
 
-    Uses the same model selection hierarchy as the current system.
+    WARNING: Do not call this from async code! Use get_dspy_lm() with
+    dspy.context(lm=lm) instead.
 
     Args:
         model_id: Explicit model ID to use
@@ -133,13 +167,8 @@ def configure_dspy(
 
     Returns:
         Configured DSPy LM instance
-
-    Example:
-        >>> lm = configure_dspy(org_model="google/gemini-2.0-flash")
-        >>> dspy.configure(lm=lm)  # Already called internally
     """
-    provider = DSPyModelProvider()
-    lm = provider.get_dspy_lm(
+    lm = get_dspy_lm(
         model_id=model_id,
         skill_model=skill_model,
         agent_model=agent_model,

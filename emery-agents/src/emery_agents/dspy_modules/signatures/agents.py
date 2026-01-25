@@ -8,7 +8,7 @@ and app building operations.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 import dspy
 from pydantic import BaseModel, Field
@@ -212,7 +212,7 @@ class PageComponent(BaseModel):
     component_type: str = Field(
         description="Type: table_view, form, chart, text, button, etc."
     )
-    config: dict[str, str] = Field(description="Component-specific configuration")
+    config: dict[str, Any] = Field(description="Component-specific configuration (values can be strings, numbers, lists, etc.)")
     position: int = Field(description="Position/order on the page")
 
 

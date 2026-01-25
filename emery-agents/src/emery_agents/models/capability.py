@@ -110,10 +110,11 @@ class Capability:
     def to_summary(self) -> dict[str, Any]:
         """Convert to summary dict for planner context.
 
-        Loads the capability's planning template (capabilities/{name}/planning.j2)
-        if it exists, providing domain-specific guidance to the planner.
+        Note: Planning guidance is now provided by dspy_modules/capabilities/
+        instead of the old Jinja templates. This method returns basic capability
+        info only.
         """
-        summary: dict[str, Any] = {
+        return {
             "id": self.id,
             "name": self.name,
             "type": self.type.value,
@@ -122,16 +123,3 @@ class Capability:
             "actions": self.actions,
             "entities": self.entities,
         }
-
-        # Load planning instructions from capability's planning template
-        # This keeps planning guidance in the capability's own template file
-        try:
-            from ..prompts import get_capability_instructions
-            planning_instructions = get_capability_instructions(self.id, mode="planning")
-            if planning_instructions:
-                summary["planning_instructions"] = planning_instructions
-        except Exception:
-            # Template not found or import error - that's okay
-            pass
-
-        return summary

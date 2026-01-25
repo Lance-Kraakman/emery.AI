@@ -6,7 +6,7 @@ These signatures handle goal evaluation after execution and error recovery.
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 import dspy
 from pydantic import BaseModel, Field
@@ -44,14 +44,25 @@ class EvaluateGoal(dspy.Signature):  # type: ignore[misc]
 
 
 class RecoveryAction(BaseModel):
-    """Proposed action to recover from a failure."""
+    """Proposed action to recover from a failure.
+
+    Aligned with models/plan.py RecoveryResult for consistency.
+    """
 
     action_type: str = Field(
         description="Type of recovery: 'retry', 'skip', 'replan', or 'escalate'"
     )
-    reason: str = Field(description="Why this recovery action was chosen")
-    modified_step: Optional[dict[str, str]] = Field(
-        default=None, description="Modified step configuration for retry"
+    confidence: float = Field(
+        ge=0.0, le=1.0, description="Confidence in the recovery (0.0 to 1.0)"
+    )
+    corrected_parameters: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Parameters to add/change for retry attempts",
+    )
+    reasoning: str = Field(description="Why this recovery action was chosen")
+    questions: list[str] = Field(
+        default_factory=list,
+        description="Questions to ask user if low confidence",
     )
 
 
@@ -60,6 +71,7 @@ class AnalyzeRecovery(dspy.Signature):  # type: ignore[misc]
 
     Determine the best way to recover from a step failure.
     Consider whether the error is transient, permanent, or requires replanning.
+    Return high confidence (>0.8) for auto-fix, medium (0.5-0.8) for user confirmation.
     """
 
     failed_step: str = dspy.InputField(desc="Description of the step that failed")
