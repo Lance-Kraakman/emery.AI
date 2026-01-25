@@ -291,11 +291,22 @@ class CoordinatorMode(Enum):
 
 @dataclass
 class ClarifyingQuestion:
-    """A structured clarifying question with optional choices."""
+    """A structured clarifying question with optional choices.
+
+    Attributes:
+        question: The question text to display
+        question_type: 'text' | 'single_select' | 'multi_select'
+        options: List of answer options (for single_select/multi_select)
+        context: Optional explanation of why this info is needed
+        required: Whether the question must be answered
+        allow_other: Show "Or type your own..." option (default: True, like Claude)
+    """
     question: str
+    question_type: str = "text"  # 'text' | 'single_select' | 'multi_select'
     options: Optional[List[str]] = None
     context: Optional[str] = None
     required: bool = True
+    allow_other: bool = True  # Show custom input option (like Claude)
 
     @classmethod
     def from_string(cls, question: str) -> "ClarifyingQuestion":
@@ -328,9 +339,11 @@ class AwaitingClarificationEvent:
         structured_questions = [
             ClarifyingQuestion(
                 question=q.get("question", ""),
+                question_type=q.get("question_type", "text"),
                 options=q.get("options"),
                 context=q.get("context"),
                 required=q.get("required", True),
+                allow_other=q.get("allow_other", True),
             )
             for q in questions
         ]

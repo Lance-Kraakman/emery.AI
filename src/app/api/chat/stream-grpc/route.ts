@@ -41,6 +41,7 @@ import { assignApiKeyToUser } from '@/lib/auth/user-api-keys';
 // Import shared chat utilities
 import { getMessageContent } from '@/lib/chat/message-helpers';
 import { processStepProgress, processContentChunk, processCompletion, encodeSSEEvent } from '@/lib/chat/event-processors';
+import { formatPlanToMarkdown } from '@/lib/chat/format-utils';
 import { generateChatTitleFromMessage } from '@/lib/utils/chat-title';
 
 // Import gRPC client
@@ -1042,11 +1043,16 @@ export async function POST(req: NextRequest) {
                   }
                 }
 
+                // For plan_approval, generate markdown content from planJson if available
+                const planDisplayContent = isPlanApproval && response.awaitingInput.planJson
+                  ? formatPlanToMarkdown(response.awaitingInput.planJson)
+                  : '';
+
                 const awaitingInputEvent = {
                   type: 'awaiting_input',
                   inputType: normalizedInputType,
                   title: response.awaitingInput.title,
-                  content: isPlanApproval ? '' : displayContent, // Plan content already in message
+                  content: isPlanApproval ? planDisplayContent : displayContent,
                   options: response.awaitingInput.options || [],
                   planJson: response.awaitingInput.planJson || null,
                   questionSections: questionSections

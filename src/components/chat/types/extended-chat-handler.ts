@@ -59,8 +59,11 @@ export interface ActivePlanExecution {
 export interface BatchedQuestion {
   questionId: string
   question: string
-  options?: string[]  // For multiple choice
+  questionType?: 'text' | 'single_select' | 'multi_select'  // Default: 'text' or 'single_select' if options
+  options?: string[]  // For multiple choice (single_select or multi_select)
   context?: string    // Why the agent needs this info
+  required?: boolean  // Whether answer is required (default: true)
+  allowOther?: boolean  // Show "Or type your own..." option (default: true)
 }
 
 /**

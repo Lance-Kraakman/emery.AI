@@ -48,16 +48,18 @@ When to use:
 - Scope clarification: "Any other requirements?"
 
 Format:
-- Use "options" for multiple choice (faster for user to answer)
-- Omit "options" for open-ended free text response
+- Use "question_type": "single_select" for single choice (default when options provided)
+- Use "question_type": "multi_select" for multiple selections
+- Use "question_type": "text" for open-ended free text (default when no options)
 - Use "context" to explain why you need the information
+- Set "allow_other": false to disable custom input (default: true, like Claude)
 
 Example (gather multiple questions at once):
 {
     "questions": [
-        {"question": "What data do you need to track?", "options": ["Customers", "Orders", "Products", "Custom"]},
-        {"question": "Should we add audit fields (created_at, updated_at)?", "options": ["Yes", "No"]},
-        {"question": "Any specific requirements or constraints?"}
+        {"question": "What features do you need?", "question_type": "multi_select", "options": ["Auth", "Database", "API", "UI"]},
+        {"question": "Which framework?", "question_type": "single_select", "options": ["React", "Vue", "Angular"]},
+        {"question": "Any specific requirements or constraints?", "question_type": "text"}
     ]
 }
 
@@ -79,10 +81,15 @@ Example (single open-ended question):
                         "type": "string",
                         "description": "The question to ask the user. Be specific and clear.",
                     },
+                    "question_type": {
+                        "type": "string",
+                        "enum": ["text", "single_select", "multi_select"],
+                        "description": "Type of question: text (free-form), single_select (one option), multi_select (multiple options). Default: 'text' if no options, 'single_select' if options provided.",
+                    },
                     "options": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "Optional list of answer options for multiple choice. Omit for free-text answer.",
+                        "description": "List of answer options for single_select or multi_select. Omit for text questions.",
                     },
                     "context": {
                         "type": "string",
@@ -92,10 +99,14 @@ Example (single open-ended question):
                         "type": "boolean",
                         "description": "Whether this question must be answered. Defaults to true.",
                     },
+                    "allow_other": {
+                        "type": "boolean",
+                        "description": "Show 'Or type your own...' option for custom answers. Default: true (like Claude).",
+                    },
                 },
                 "required": ["question"],
             },
-            "description": "List of questions to ask the user. Each question has: question (required), options, context, required.",
+            "description": "List of questions to ask the user. Each question has: question (required), question_type, options, context, required, allow_other.",
         },
     }
     output_type = "string"
@@ -133,11 +144,19 @@ Example (single open-ended question):
             if not question_text:
                 continue
 
+            # Infer question_type from options if not specified
+            options = q.get("options")
+            question_type = q.get("question_type")
+            if question_type is None:
+                question_type = "single_select" if options else "text"
+
             question_data = {
                 "question": question_text,
-                "options": q.get("options"),
+                "question_type": question_type,
+                "options": options,
                 "context": q.get("context"),
                 "required": q.get("required", True),
+                "allow_other": q.get("allow_other", True),
             }
 
             self.collected_questions.append(question_data)

@@ -91,8 +91,11 @@ export interface QuestionSection {
   questions: Array<{
     questionId: string
     question: string
+    questionType?: 'text' | 'single_select' | 'multi_select'  // Default: 'text' or 'single_select' if options
     options?: string[]
     context?: string
+    required?: boolean
+    allowOther?: boolean  // Show "Or type your own..." option (default: true)
   }>
 }
 
