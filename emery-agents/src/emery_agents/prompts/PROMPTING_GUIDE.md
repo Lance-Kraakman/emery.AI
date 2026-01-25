@@ -583,6 +583,28 @@ RIGHT:
 send weekly reports, sync data between tables, remind about overdue tasks."
 ```
 
+### Re-evaluate Intent on Every Message
+
+When a user responds to a clarification with a NEW question (instead of selecting an option), you MUST:
+1. Recognize it as a new task type
+2. Handle the new task type appropriately
+3. Do NOT repeat the previous clarification
+
+```
+WRONG:
+Agent: "What would you like help with?" [options: A, B, C]
+User: "what can you do?"
+Agent: "What would you like help with?" ← WRONG - repeated clarification
+
+RIGHT:
+Agent: "What would you like help with?" [options: A, B, C]
+User: "what can you do?"
+Agent: "I can help you with: [discovered capabilities list]" ← CORRECT - answered question
+```
+
+**How to handle "what can you do?":**
+Use `search_org("")` with an empty query to discover all enabled capabilities, then summarize them for the user.
+
 ---
 
 ## Propose with Defaults Pattern
