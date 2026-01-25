@@ -10,25 +10,30 @@ ensuring consistent auth configuration across the entire request.
 
 SECURITY: The ToolProvider exposes an http_client property for authenticated
 requests, NOT the raw api_key. This prevents credential exposure to skills/agents.
+
+AIDEV-NOTE: DSPy Migration (Jan 2026)
+- Now uses DSPy tool factories from dspy_modules/tools/crud/
+- DSPyToolWrapper provides smolagents-like attributes for backward compatibility
 """
 
 import warnings
 from typing import Dict, List, Optional, Any, TYPE_CHECKING
 import logging
 
-from smolagents import Tool
-
-from ..tools.crud_tools import (
-    load_database_crud,
-    load_skill_crud,
-    load_document_crud,
-    load_agent_crud,
+from ..types import ToolProtocol
+from ..dspy_modules.tools import (
+    create_database_crud,
+    create_skill_crud,
+    create_document_crud,
+    create_agent_crud,
+    create_table_crud,
+    create_field_crud,
+    create_row_crud,
+    create_app_crud,
+    create_page_crud,
+    create_view_crud,
+    DSPyToolWrapper,
 )
-from ..tools.table_tools import load_table_crud
-from ..tools.field_tools import load_field_crud
-from ..tools.row_tools import load_row_crud
-from ..tools.app_tools import load_app_crud, load_page_crud
-from ..tools.view_tools import load_view_crud
 from ..tools.security_report_tool import load_security_report_tool
 from .authenticated_http_client import AuthenticatedHttpClient
 
@@ -69,7 +74,8 @@ class ToolProvider:
         """
         self._api_key = api_key
         self._organization_id = organization_id
-        self._cache: Dict[str, Tool] = {}
+        self._org_id_str = str(organization_id) if organization_id else ""
+        self._cache: Dict[str, ToolProtocol] = {}
         self._http_client = AuthenticatedHttpClient(api_key, organization_id)
         logger.info(f"[TOOL-PROVIDER] Initialized (api_key present: {bool(api_key)}, org_id: {organization_id})")
 
@@ -105,7 +111,7 @@ class ToolProvider:
         """Get the organization ID (for passing to ExecutionContext)."""
         return self._organization_id
 
-    def get(self, name: str) -> Tool:
+    def get(self, name: str) -> ToolProtocol:
         """
         Get tool by name (lazy creation, cached).
 
@@ -123,7 +129,7 @@ class ToolProvider:
             logger.debug(f"🔧 Created and cached tool: {name}")
         return self._cache[name]
 
-    def get_all(self) -> Dict[str, Tool]:
+    def get_all(self) -> Dict[str, ToolProtocol]:
         """Get all tools (creates any not yet cached)."""
         for name in self.TOOL_NAMES:
             self.get(name)
@@ -133,7 +139,7 @@ class ToolProvider:
     # Category Helpers
     # -------------------------
 
-    def get_schema_builder_tools(self) -> List[Tool]:
+    def get_schema_builder_tools(self) -> List[ToolProtocol]:
         """
         Get tools for schema builder agent.
 
@@ -148,7 +154,7 @@ class ToolProvider:
             self.get("field_crud"),
         ]
 
-    def get_table_builder_tools(self) -> List[Tool]:
+    def get_table_builder_tools(self) -> List[ToolProtocol]:
         """
         Get tools for table builder agent.
 
@@ -156,23 +162,23 @@ class ToolProvider:
         """
         return [self.get("table_crud"), self.get("field_crud")]
 
-    def get_skill_builder_tools(self) -> List[Tool]:
+    def get_skill_builder_tools(self) -> List[ToolProtocol]:
         """Get tools for skill builder agent."""
         return [self.get("skill_crud")]
 
-    def get_document_builder_tools(self) -> List[Tool]:
+    def get_document_builder_tools(self) -> List[ToolProtocol]:
         """Get tools for document builder agent."""
         return [self.get("document_crud")]
 
-    def get_app_builder_tools(self) -> List[Tool]:
+    def get_app_builder_tools(self) -> List[ToolProtocol]:
         """Get tools for app builder agent."""
         return [self.get("app_crud"), self.get("page_crud"), self.get("view_crud")]
 
-    def get_agent_builder_tools(self) -> List[Tool]:
+    def get_agent_builder_tools(self) -> List[ToolProtocol]:
         """Get tools for agent builder agent."""
         return [self.get("agent_crud"), self.get("skill_crud")]
 
-    def get_view_builder_tools(self) -> List[Tool]:
+    def get_view_builder_tools(self) -> List[ToolProtocol]:
         """Get tools for view builder agent."""
         return [
             self.get("database_crud"),  # Understand database structure
@@ -181,7 +187,7 @@ class ToolProvider:
             self.get("view_crud"),       # Create/manage views
         ]
 
-    def get_system_designer_tools(self) -> List[Tool]:
+    def get_system_designer_tools(self) -> List[ToolProtocol]:
         """
         Get tools for system designer agent.
 
@@ -199,7 +205,7 @@ class ToolProvider:
         """
         return [self.get("security_report")]
 
-    def get_security_tools(self) -> List[Tool]:
+    def get_security_tools(self) -> List[ToolProtocol]:
         """
         Get security-related tools.
 
@@ -212,36 +218,48 @@ class ToolProvider:
     # Tool Factory
     # -------------------------
 
-    def _create_tool(self, name: str) -> Tool:
+    def _create_tool(self, name: str) -> Any:
         """
         Create tool with auth credentials captured in closure.
+
+        Uses DSPy tool factories with DSPyToolWrapper for backward compatibility.
 
         Args:
             name: Tool name to create
 
         Returns:
-            Tool instance
+            Tool instance (DSPyToolWrapper)
 
         Raises:
             ValueError: If tool name is not supported
         """
-        loaders = {
-            "database_crud": load_database_crud,
-            "table_crud": load_table_crud,
-            "field_crud": load_field_crud,
-            "row_crud": load_row_crud,
-            "skill_crud": load_skill_crud,
-            "document_crud": load_document_crud,
-            "app_crud": load_app_crud,
-            "page_crud": load_page_crud,
-            "agent_crud": load_agent_crud,
-            "view_crud": load_view_crud,
-            "security_report": load_security_report_tool,
+        # DSPy tool factories - return plain callables, wrap with DSPyToolWrapper
+        dspy_factories = {
+            "database_crud": create_database_crud,
+            "table_crud": create_table_crud,
+            "field_crud": create_field_crud,
+            "row_crud": create_row_crud,
+            "skill_crud": create_skill_crud,
+            "document_crud": create_document_crud,
+            "app_crud": create_app_crud,
+            "page_crud": create_page_crud,
+            "agent_crud": create_agent_crud,
+            "view_crud": create_view_crud,
         }
 
-        if name not in loaders:
-            raise ValueError(f"Unknown tool: {name}. Supported: {list(loaders.keys())}")
+        # Legacy smolagents tools (not yet ported to DSPy)
+        legacy_loaders = {
+            "security_report": lambda: load_security_report_tool(None, self._api_key, self._organization_id),
+        }
 
-        # All loaders have same signature: (config, api_key, org_id)
-        # config=None is fine - tools use env vars for base URL
-        return loaders[name](None, self._api_key, self._organization_id)
+        if name in dspy_factories:
+            # Create DSPy tool with factory, wrap for backward compatibility
+            func = dspy_factories[name](self._api_key, self._org_id_str)
+            return DSPyToolWrapper(func, name=name)
+        elif name in legacy_loaders:
+            # Use legacy smolagents loader - these still use smolagents.Tool
+            # which satisfies ToolProtocol (has name, description, __call__)
+            tool: Any = legacy_loaders[name]()
+            return tool
+        else:
+            raise ValueError(f"Unknown tool: {name}. Supported: {list(dspy_factories.keys()) + list(legacy_loaders.keys())}")
