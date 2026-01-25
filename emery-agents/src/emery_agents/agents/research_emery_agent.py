@@ -21,7 +21,7 @@ from smolagents.memory import PlanningStep
 from smolagents.monitoring import LogLevel
 
 from ..prompts import build_agent_instructions, render_capabilities
-from ..tools.system_research_tool import create_system_research_tool
+from ..dspy_modules.tools.analysis import create_system_research_tool
 
 logger = logging.getLogger(__name__)
 

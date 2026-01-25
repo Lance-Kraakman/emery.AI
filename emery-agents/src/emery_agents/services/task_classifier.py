@@ -21,7 +21,7 @@ from smolagents import ToolCallingAgent
 
 from .protocols import ModelProvider
 from ..prompts import render_template
-from ..tools.task_classifier_tool import TaskClassifierTool
+from ..dspy_modules.tools.analysis import TaskClassifierTool
 from ..utils.session_logger import get_session_logger
 
 logger = logging.getLogger(__name__)

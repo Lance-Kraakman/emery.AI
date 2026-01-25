@@ -32,7 +32,7 @@ from ..dspy_modules.tools import (
     create_page_crud,
     create_view_crud,
 )
-from ..tools.security_report_tool import load_security_report_tool
+from ..dspy_modules.tools.analysis import create_security_report_tool
 from .authenticated_http_client import AuthenticatedHttpClient
 
 logger = logging.getLogger(__name__)
@@ -203,8 +203,8 @@ class ToolProvider:
         if name in self.DSPY_FACTORIES:
             return self.DSPY_FACTORIES[name](self._api_key, self._org_id_str)
 
-        # Legacy tools not yet ported
+        # Security report tool
         if name == "security_report":
-            return load_security_report_tool(None, self._api_key, self._organization_id)
+            return create_security_report_tool(self._api_key, self._organization_id)
 
         raise ValueError(f"Unknown tool: {name}. Supported: {list(self.DSPY_FACTORIES.keys()) + ['security_report']}")

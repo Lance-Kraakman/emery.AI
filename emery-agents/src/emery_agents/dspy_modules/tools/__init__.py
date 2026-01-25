@@ -33,6 +33,77 @@ from .output import (
     StepCollector,
     create_ask_question_tool,
     create_step_output_tool,
+    # Agent output
+    OutputCollector,
+    CapturedOutput,
+    ExtractionStats,
+    TargetFieldMetadata,
+    create_output_tool,
+    # Plan output
+    PlanCollector,
+    CapturedPlan,
+    NormalizedStepData,
+    create_plan_output_tool,
+    # Recovery output
+    RecoveryCollector,
+    RecoveryResult,
+    create_recovery_output_tool,
+)
+from .execution import (
+    # Bash
+    create_bash_tool,
+    # Skill invoker
+    create_skill_invoker_tool,
+    create_skill_invoker_tools,
+    # Skill tool
+    SkillTool,
+)
+from .integrations import (
+    # Pipedream
+    PipedreamTool,
+    PIPEDREAM_TOOLS,
+    get_pipedream_tool_info,
+    list_pipedream_tools_by_app,
+    # Base tools
+    create_file_reader_tool,
+    create_calculator_tool,
+    create_document_reader_tool,
+    create_table_query_tool,
+    # API tools
+    MeasurementAPITool,
+    KPIAPITool,
+    AnalysisAPITool,
+    ProcessAPITool,
+    load_measurement_api_tool,
+    load_kpi_api_tool,
+    load_analysis_api_tool,
+    load_process_api_tool,
+    API_TOOLS,
+    # Organizational tools
+    EmeryDatabaseTool,
+    TableSchemaTool,
+    TableDataTool,
+    load_emery_database,
+    load_table_schema,
+    load_table_data,
+    ORGANIZATIONAL_TOOLS,
+)
+from .analysis import (
+    # Security
+    SecurityAction,
+    FindingCounts,
+    SecuritySummary,
+    SaveLocation,
+    SecurityReportResult,
+    SecurityReportTool,
+    create_security_report_tool,
+    # Research
+    SystemResearchTool,
+    create_system_research_tool,
+    # Classifier
+    ClassificationResult,
+    TaskClassifierTool,
+    create_task_classifier_tool,
 )
 from .wrapper import DSPyToolWrapper, wrap_tool
 
@@ -42,7 +113,7 @@ __all__ = [
     # Wrapper for smolagents compatibility
     "DSPyToolWrapper",
     "wrap_tool",
-    # Re-export individual factories
+    # Re-export individual CRUD factories
     "create_agent_crud",
     "create_app_crud",
     "create_database_crud",
@@ -55,12 +126,67 @@ __all__ = [
     "create_table_crud",
     "create_team_crud",
     "create_view_crud",
-    # Output tools (require collector instances)
+    # Output tools
     "ClarificationRequestedException",
     "QuestionCollector",
     "StepCollector",
     "create_ask_question_tool",
     "create_step_output_tool",
+    "OutputCollector",
+    "CapturedOutput",
+    "ExtractionStats",
+    "TargetFieldMetadata",
+    "create_output_tool",
+    "PlanCollector",
+    "CapturedPlan",
+    "NormalizedStepData",
+    "create_plan_output_tool",
+    "RecoveryCollector",
+    "RecoveryResult",
+    "create_recovery_output_tool",
+    # Execution tools
+    "create_bash_tool",
+    "create_skill_invoker_tool",
+    "create_skill_invoker_tools",
+    "SkillTool",
+    # Integration tools
+    "PipedreamTool",
+    "PIPEDREAM_TOOLS",
+    "get_pipedream_tool_info",
+    "list_pipedream_tools_by_app",
+    "create_file_reader_tool",
+    "create_calculator_tool",
+    "create_document_reader_tool",
+    "create_table_query_tool",
+    "MeasurementAPITool",
+    "KPIAPITool",
+    "AnalysisAPITool",
+    "ProcessAPITool",
+    "load_measurement_api_tool",
+    "load_kpi_api_tool",
+    "load_analysis_api_tool",
+    "load_process_api_tool",
+    "API_TOOLS",
+    "EmeryDatabaseTool",
+    "TableSchemaTool",
+    "TableDataTool",
+    "load_emery_database",
+    "load_table_schema",
+    "load_table_data",
+    "ORGANIZATIONAL_TOOLS",
+    # Analysis tools
+    "SecurityAction",
+    "FindingCounts",
+    "SecuritySummary",
+    "SaveLocation",
+    "SecurityReportResult",
+    "SecurityReportTool",
+    "create_security_report_tool",
+    "SystemResearchTool",
+    "create_system_research_tool",
+    "ClassificationResult",
+    "TaskClassifierTool",
+    "create_task_classifier_tool",
 ]
 
 
