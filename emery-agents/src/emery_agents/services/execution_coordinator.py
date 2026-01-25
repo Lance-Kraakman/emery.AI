@@ -761,10 +761,24 @@ class ExecutionCoordinator:
         org_id = str(self._organization_id) if self._organization_id else ""
 
         # Debug: log auth context
+        api_key_status = f"present ({len(self._api_key)} chars)" if self._api_key else "EMPTY/NONE"
         logger.info(
-            f"📊 Building workspace context: api_key={'present' if self._api_key else 'MISSING'}, "
+            f"📊 Building workspace context: api_key={api_key_status}, "
             f"org_id={org_id or 'MISSING'}"
         )
+
+        # Skip API calls if no auth - avoids failed requests
+        if not self._api_key or not org_id:
+            logger.warning(
+                f"⚠️ Cannot fetch workspace data: "
+                f"api_key={'missing' if not self._api_key else 'ok'}, "
+                f"org_id={'missing' if not org_id else 'ok'}"
+            )
+            return WorkspaceContext(
+                existing_databases=[],
+                existing_tables=[],
+                existing_apps=[],
+            )
 
         # Use shared typed APIs
         db_api = DatabaseAPI(self._api_key, org_id)
