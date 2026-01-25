@@ -124,3 +124,52 @@ export function formatQuestionAnswers(
 export function formatSingleAnswer(question: string, answer: string): string {
   return `**Q:** ${question}\n**A:** ${answer}`
 }
+
+/**
+ * Question section structure for clarifying questions
+ */
+interface QuestionSection {
+  agentName: string
+  stepId: string
+  questions: Array<{
+    questionId: string
+    question: string
+    questionType?: 'text' | 'single_select' | 'multi_select'
+    options?: string[]
+    context?: string
+  }>
+}
+
+/**
+ * Format clarifying questions as markdown for display in chat history
+ *
+ * Shows questions as a numbered list with options (if any).
+ * This is displayed as an assistant message so users can see what was asked.
+ *
+ * @param sections - Question sections from the backend
+ * @returns Formatted markdown string
+ */
+export function formatQuestionsForChat(sections: QuestionSection[]): string {
+  const parts: string[] = []
+
+  for (const section of sections) {
+    for (const q of section.questions) {
+      parts.push(`**${q.question}**`)
+
+      if (q.context) {
+        parts.push(`_${q.context}_`)
+      }
+
+      if (q.options && q.options.length > 0) {
+        parts.push('')
+        q.options.forEach((opt, i) => {
+          parts.push(`${i + 1}. ${opt}`)
+        })
+      }
+
+      parts.push('')
+    }
+  }
+
+  return parts.join('\n').trim()
+}

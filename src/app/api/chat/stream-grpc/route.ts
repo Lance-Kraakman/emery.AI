@@ -41,7 +41,7 @@ import { assignApiKeyToUser } from '@/lib/auth/user-api-keys';
 // Import shared chat utilities
 import { getMessageContent } from '@/lib/chat/message-helpers';
 import { processStepProgress, processContentChunk, processCompletion, encodeSSEEvent } from '@/lib/chat/event-processors';
-import { formatPlanToMarkdown } from '@/lib/chat/format-utils';
+import { formatPlanToMarkdown, formatQuestionsForChat } from '@/lib/chat/format-utils';
 import { generateChatTitleFromMessage } from '@/lib/utils/chat-title';
 
 // Import gRPC client
@@ -1036,7 +1036,8 @@ export async function POST(req: NextRequest) {
                         stepId: 'clarification',
                         questions: questions
                       }];
-                      displayContent = ''; // Don't display raw JSON
+                      // Format questions as markdown for chat history display
+                      displayContent = formatQuestionsForChat(questionSections);
                     }
                   } catch {
                     // Not JSON, keep as-is (legacy format)

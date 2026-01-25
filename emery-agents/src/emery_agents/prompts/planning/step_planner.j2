@@ -114,6 +114,12 @@ This skill must produce these outputs. Your plan MUST include steps that generat
 {% endfor %}
 
 Use `search_org(query)` to find capabilities by what they do.
+
+{# Render capability-specific planning guidance from their planning.j2 templates #}
+{% for cap in agent_caps if cap.planning_instructions %}
+
+{{ cap.planning_instructions }}
+{% endfor %}
 {% else %}
 | Capability | Use For |
 |------------|---------|

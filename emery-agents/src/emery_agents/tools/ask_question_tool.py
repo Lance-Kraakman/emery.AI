@@ -6,7 +6,7 @@ agents explicitly call this tool to record structured questions for the user.
 
 AIDEV-NOTE: This enables intentional question-asking during planning.
 Sub-agents call ask_clarifying_questions with a list of questions.
-Questions are collected, then checked after agent run completes.
+When called, raises ClarificationRequestedException to interrupt agent execution.
 """
 
 import logging
@@ -15,6 +15,19 @@ from typing import Any, Dict, List
 from smolagents import Tool
 
 logger = logging.getLogger(__name__)
+
+
+class ClarificationRequestedException(Exception):
+    """
+    Raised when a clarifying question is asked to interrupt agent execution.
+
+    This exception should be caught by the caller (plan_step_executor) to
+    return the questions to the user instead of continuing execution.
+    """
+
+    def __init__(self, questions: List[Dict[str, Any]]):
+        self.questions = questions
+        super().__init__(f"Clarification requested: {len(questions)} question(s)")
 
 
 class AskQuestionTool(Tool):  # type: ignore[misc]
@@ -165,13 +178,11 @@ Example (single open-ended question):
             option_info = f" ({option_count} options)" if option_count else " (free text)"
             logger.info(f"❓ Question recorded{option_info}: {question_text[:60]}...")
 
-        logger.info(f"📤 Collected {len(self.collected_questions)} question(s), waiting for user")
+        logger.info(f"📤 Collected {len(self.collected_questions)} question(s), interrupting execution")
 
-        # Return stop signal - do NOT raise exception (smolagents treats exceptions as errors)
-        return (
-            f"[QUESTIONS_COLLECTED] {len(self.collected_questions)} question(s) recorded. "
-            "STOP now and wait for user response. Do not call any other tools."
-        )
+        # Raise exception to interrupt agent execution immediately
+        # This prevents the agent from calling final_answer with "waiting for response"
+        raise ClarificationRequestedException(self.collected_questions)
 
     def get_questions(self) -> List[Dict[str, Any]]:
         """

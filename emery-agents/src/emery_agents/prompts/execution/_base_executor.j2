@@ -13,19 +13,25 @@ If you cannot complete this step because you lack specific details:
    - question: What you need to know
    - options: Choices (if applicable)
    - context: Why you need this information
-2. STOP execution and wait for user response
+2. **IMMEDIATELY STOP** - Do NOT call any other tools after ask_clarifying_question
+
+**CRITICAL: When you call ask_clarifying_question:**
+- The question tool IS your final action for this turn
+- Do NOT call `final_answer` after it
+- Do NOT output "Waiting for user response"
+- Just STOP - the system handles pausing execution
 
 <example>
 Step says: "Create the customers table"
 But doesn't specify fields.
 
-DO: ask_clarifying_question(
-    question="What fields should the customers table have?",
-    options=["Name, email, phone", "Name, email, address, company", "Custom fields"],
-    context="I need to know the table structure to create it"
-)
+CORRECT:
+1. ask_clarifying_question(question="What fields?", options=["A", "B", "C"])
+2. [STOP HERE - no more tool calls]
 
-DON'T: Just output "I need more information" as text and mark complete.
+WRONG (causes session to break):
+1. ask_clarifying_question(question="What fields?", options=["A", "B", "C"])
+2. final_answer("Waiting for user response")  ← NEVER DO THIS
 </example>
 
 ## Resource Discovery (CRITICAL)

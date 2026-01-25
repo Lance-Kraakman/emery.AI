@@ -94,9 +94,13 @@ class ManagedAgentsFactory:
         actions: List[str],
         entities: List[str],
         domain: str = "emery",
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
         Register an agent as a capability in the registry.
+
+        Planning guidance for each capability comes from its planning.j2 template
+        (capabilities/{name}/planning.j2), not from metadata here.
 
         Args:
             agent: The agent instance (for metadata)
@@ -105,8 +109,13 @@ class ManagedAgentsFactory:
             actions: List of actions it can perform
             entities: List of entities it works with
             domain: Source domain (default: "emery")
+            metadata: Additional metadata (executor instance, etc.)
         """
         name = agent_id.split(":", 1)[1] if ":" in agent_id else agent_id
+        cap_metadata: Dict[str, Any] = {"executor": agent}
+        if metadata:
+            cap_metadata.update(metadata)
+
         capability = Capability(
             id=agent_id,
             name=name,
@@ -115,7 +124,7 @@ class ManagedAgentsFactory:
             description=description,
             actions=actions,
             entities=entities,
-            metadata={"executor": agent},
+            metadata=cap_metadata,
         )
         self.capability_registry.register(capability)
         logger.debug(f"Registered capability: {agent_id}")
@@ -357,6 +366,7 @@ class ManagedAgentsFactory:
         )
 
         # Register capability for discovery
+        # Planning guidance (field types, etc.) comes from capabilities/schema_builder/planning.j2
         self._register_agent_capability(
             agent=schema_builder,
             agent_id="agent:schema_builder",

@@ -27,7 +27,7 @@ from ..ace import StepResult
 from ..models.plan import Plan, PlanStep, PlanStepStatus
 from ..prompts import render_template
 from ..utils.session_logger import get_session_logger
-from ..tools.ask_question_tool import AskQuestionTool
+from ..tools.ask_question_tool import AskQuestionTool, ClarificationRequestedException
 from ..services.capability_registry import CapabilityRegistry
 from .protocols import ModelProvider
 from .prompt_template_resolver import resolve_prompt_template
@@ -294,11 +294,10 @@ class PlanStepExecutor:
             result_str = str(result)
 
             # Check if the agent asked clarifying questions instead of completing
+            # (fallback check in case exception wasn't raised)
             if self._ask_question_tool.has_questions():
                 questions = self._ask_question_tool.get_questions()
                 logger.info(f"❓ Step asked {len(questions)} clarifying question(s) instead of completing")
-                # Return special marker so caller knows to handle questions
-                # Format: JSON with questions array
                 return json.dumps({
                     "__needs_clarification__": True,
                     "questions": questions,
@@ -309,6 +308,15 @@ class PlanStepExecutor:
             logger.debug(f"🔧 PlanStepExecutor: Result preview: {result_str[:200]}...")
 
             return result_str
+
+        except ClarificationRequestedException as e:
+            # Agent asked clarifying questions - return them to caller
+            logger.info(f"❓ Step interrupted for clarification: {len(e.questions)} question(s)")
+            return json.dumps({
+                "__needs_clarification__": True,
+                "questions": e.questions,
+                "partial_result": "",
+            })
 
         except Exception as e:
             error_msg = f"Step execution error: {str(e)}"
@@ -417,6 +425,15 @@ class PlanStepExecutor:
             logger.debug(f"🔧 Direct execution result preview: {result_str[:200]}...")
 
             return result_str
+
+        except ClarificationRequestedException as e:
+            # Agent asked clarifying questions - return them to caller
+            logger.info(f"❓ Direct step interrupted for clarification: {len(e.questions)} question(s)")
+            return json.dumps({
+                "__needs_clarification__": True,
+                "questions": e.questions,
+                "partial_result": "",
+            })
 
         except Exception as e:
             error_msg = f"Direct execution error: {str(e)}"
