@@ -6,11 +6,42 @@ Consolidated from chat_processing_service.py, step_converter.py,
 and coordinator_event_converter.py to avoid duplication.
 """
 
+from enum import Enum
 from typing import List, Literal, TypedDict, Union
 
 
 # Step types
 StepType = Literal["PLANNING", "ACTION", "REASONING", "FINAL", "CODE_EXECUTION", "PHASE", "INFO"]
+
+
+class MetadataType(str, Enum):
+    """Metadata event type identifiers for frontend routing."""
+    GOAL_ACHIEVED = "goal_achieved"
+    REPLAN = "replan"
+    FINAL_SYNTHESIS = "final_synthesis"
+    RECOVERY_ANALYSIS = "recovery_analysis"
+    AUTO_FIX_STARTED = "auto_fix_started"
+    AUTO_FIX_COMPLETED = "auto_fix_completed"
+    PLAN_REJECTED = "plan_rejected"
+    PLAN_FEEDBACK = "plan_feedback"
+    PHASE_STARTED = "phase_started"
+    PHASE_COMPLETED = "phase_completed"
+    PLANNING_STARTED = "planning_started"
+    PLAN_APPROVED = "plan_approved"
+    PLAN_UPDATED = "plan_updated"
+    PLAN_CANCELLED = "plan_cancelled"
+    INTERRUPT_QUEUED = "interrupt_queued"
+    INTERRUPT_RECEIVED = "interrupt_received"
+    INTERRUPT_PROCESSING = "interrupt_processing"
+    CONTEXT_INJECTED = "context_injected"
+
+
+class InputType(str, Enum):
+    """Input type identifiers for awaiting_input events."""
+    PLAN_APPROVAL = "plan_approval"
+    RECOVERY_APPROVAL = "recovery_approval"
+    APPROVAL = "approval"
+    QUESTIONS = "questions"
 
 
 class StepMetadata(TypedDict, total=False):

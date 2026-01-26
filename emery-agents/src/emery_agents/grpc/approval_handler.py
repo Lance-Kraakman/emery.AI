@@ -75,28 +75,3 @@ def create_awaiting_input_for_plan(plan: Plan) -> AwaitingInputResponseDict:
             })
         }
     }
-
-
-def create_error_response(error_code: str, error_message: str) -> ErrorResponseDict:
-    """
-    Create a typed error response dict.
-
-    Args:
-        error_code: Error code for the error
-        error_message: Human-readable error message
-
-    Returns:
-        ErrorResponseDict ready for streaming to client
-    """
-    return {
-        "type": "error",
-        "error": {
-            "error_code": error_code,
-            "error_message": error_message,
-            "error_details": {"severity": "recoverable"},
-            "hint": "",
-            "can_retry": True,
-            "auto_retry": False,
-            "session_reset": False
-        }
-    }

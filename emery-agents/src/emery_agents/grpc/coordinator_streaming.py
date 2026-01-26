@@ -28,11 +28,8 @@ from ..dspy_modules.modules.executor import ExecutorModule
 from ..dspy_modules.tools import create_all_tools, QuestionCollector, create_ask_question_tool
 from .coordinator_event_converter import convert_coordinator_event
 from .mappers import format_clarifying_questions
-from .approval_handler import (
-    is_approval_response,
-    create_awaiting_input_for_plan,
-    create_error_response,
-)
+from .approval_handler import is_approval_response, create_awaiting_input_for_plan
+from .response_types import create_error_response
 
 if TYPE_CHECKING:
     from ..entities.execution_context import ExecutionContext

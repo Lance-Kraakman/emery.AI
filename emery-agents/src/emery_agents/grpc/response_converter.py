@@ -2,10 +2,27 @@
 
 import json
 import time
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, NamedTuple, Optional
 
 from .generated import agent_worker_pb2
 from .response_types import StreamResponseDict
+
+
+class ConversionResult(NamedTuple):
+    """Result of converting a response dict to protobuf.
+
+    Attributes:
+        proto_response: The converted protobuf message (None if not applicable)
+        content_to_add: Content string to accumulate (for content_chunk events)
+        plan_data: Plan metadata dict (for plan_metadata events)
+        should_break: Whether to stop streaming (e.g., on error)
+        seq_increment: How much to increment sequence number
+    """
+    proto_response: Optional[agent_worker_pb2.ProcessMessageResponse]
+    content_to_add: str
+    plan_data: Optional[Dict[str, Any]]
+    should_break: bool
+    seq_increment: int
 
 
 def _populate_protobuf_map(proto_map: Any, data: Dict[str, str]) -> None:
@@ -135,33 +152,31 @@ def convert_permission_request(response_dict: Dict[str, Any]) -> agent_worker_pb
 def convert_response_to_proto(
     response_dict: StreamResponseDict,
     sequence: int,
-) -> Tuple[Optional[agent_worker_pb2.ProcessMessageResponse], str, Optional[Dict[str, Any]], bool, int]:
-    """
-    Returns: (proto_response, content_to_add, plan_data, should_break, seq_increment)
-    """
+) -> ConversionResult:
+    """Convert a response dict to protobuf message with metadata."""
     response_type = response_dict.get("type")
 
     if response_type == "step_progress":
-        return (convert_step_progress(response_dict), "", None, False, 0)
+        return ConversionResult(convert_step_progress(response_dict), "", None, False, 0)
 
     elif response_type == "content_chunk":
         chunk = str(response_dict.get("content", ""))
-        return (convert_content_chunk(response_dict, sequence), chunk, None, False, 1)
+        return ConversionResult(convert_content_chunk(response_dict, sequence), chunk, None, False, 1)
 
     elif response_type == "error":
-        return (convert_error(response_dict), "", None, True, 0)
+        return ConversionResult(convert_error(response_dict), "", None, True, 0)
 
     elif response_type == "interrupted":
-        return (convert_interrupted(response_dict, sequence), "", None, False, 1)
+        return ConversionResult(convert_interrupted(response_dict, sequence), "", None, False, 1)
 
     elif response_type == "awaiting_input":
-        return (convert_awaiting_input(response_dict), "", None, False, 0)
+        return ConversionResult(convert_awaiting_input(response_dict), "", None, False, 0)
 
     elif response_type == "plan_metadata":
-        return (None, "", response_dict.get("plan"), False, 0)
+        return ConversionResult(None, "", response_dict.get("plan"), False, 0)
 
     elif response_type == "permission_request":
-        return (convert_permission_request(response_dict), "", None, False, 0)
+        return ConversionResult(convert_permission_request(response_dict), "", None, False, 0)
 
     else:
-        return (None, "", None, False, 0)
+        return ConversionResult(None, "", None, False, 0)
