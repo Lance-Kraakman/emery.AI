@@ -12,7 +12,7 @@ from io import BytesIO
 from typing import Any, List, Optional
 from PIL import Image
 
-from ..grpc.generated import agent_worker_pb2
+from ...grpc.generated import agent_worker_pb2
 
 logger = logging.getLogger(__name__)
 

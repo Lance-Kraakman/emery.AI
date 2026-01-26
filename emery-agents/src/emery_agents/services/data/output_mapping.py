@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 
-from ..entities.output_mapping import (
+from ...entities.output_mapping import (
     OutputMappingConfig,
     FieldMapping,
     FieldSource,
@@ -25,7 +25,7 @@ from ..entities.output_mapping import (
     RowIdSource,
     get_extension_for_mime
 )
-from ..entities.task import SkillInputValue, SkillOutputValue, RowMappingContext
+from ...entities.task import SkillInputValue, SkillOutputValue, RowMappingContext
 
 logger = logging.getLogger(__name__)
 

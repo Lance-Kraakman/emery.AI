@@ -21,7 +21,7 @@ from emery_agents.entities.models.task_ledger import TaskLedger
 from emery_agents.entities.models.context_mapping import ResolvedContext
 
 from .protocols import ModelProviderProtocol, GRPCClient, Tool
-from .capability_registry import CapabilityRegistry
+from .tools import CapabilityRegistry
 from emery_agents.ace import StrategyAccumulationService
 from .planning import (
     DSPyPlanGenerator,

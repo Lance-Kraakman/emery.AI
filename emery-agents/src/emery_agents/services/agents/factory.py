@@ -16,8 +16,8 @@ from dataclasses import dataclass
 
 import dspy
 
-from .model_provider import ModelProvider
-from ..reasoning.modules import ExecutorModule, DelegatingExecutorModule
+from ..models import ModelProvider
+from ...reasoning.modules import ExecutorModule, DelegatingExecutorModule
 
 logger = logging.getLogger(__name__)
 

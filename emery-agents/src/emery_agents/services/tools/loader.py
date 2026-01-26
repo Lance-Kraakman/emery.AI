@@ -15,8 +15,8 @@ import os
 from typing import Any, Dict, List, Optional, Callable, TYPE_CHECKING
 from pathlib import Path
 
-from ..grpc.generated.agent_worker_pb2 import ToolConfig, AgentConfig, SkillConfig
-from ..reasoning.tools import (
+from ...grpc.generated.agent_worker_pb2 import ToolConfig, AgentConfig, SkillConfig
+from ...reasoning.tools import (
     create_table_crud,
     create_field_crud,
     create_row_crud,
@@ -30,8 +30,8 @@ from ..reasoning.tools import (
     create_app_crud,
     create_page_crud,
 )
-from ..reasoning.tools.execution import SkillTool
-from ..reasoning.tools.integrations import (
+from ...reasoning.tools.execution import SkillTool
+from ...reasoning.tools.integrations import (
     PipedreamTool,
     create_file_reader_tool,
     create_calculator_tool,

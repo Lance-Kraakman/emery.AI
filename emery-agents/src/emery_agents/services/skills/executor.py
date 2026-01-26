@@ -9,16 +9,16 @@ from PIL import Image
 from emery_agents.infrastructure.clients.base import TaskResult
 from emery_agents.infrastructure.clients.huggingface_inference import HuggingFaceInferenceClient
 
-from ..entities.task import SkillOutputValue
-from ..grpc.generated import agent_worker_pb2
-from ..reasoning.modules.extractor import OutputExtractorModule
-from ..types import SkillExecutionResult
-from ..utils import run_async_in_thread
-from ..utils.step_utils import step_to_progress_dict, RawProgressDict
-from .agent_factory import AgentFactory, AgentConfig
-from .output_mapping_service import MappingContext, OutputMappingService
+from ...entities.task import SkillOutputValue
+from ...grpc.generated import agent_worker_pb2
+from ...reasoning.modules.extractor import OutputExtractorModule
+from ...types import SkillExecutionResult
+from ...utils import run_async_in_thread
+from ...utils.step_utils import step_to_progress_dict, RawProgressDict
+from ..agents import AgentFactory, AgentConfig
+from ..data import MappingContext, OutputMappingService
 from .step_executor import StepExecutorService, execute_steps_sync
-from .tool_loader import UnifiedToolLoader
+from ..tools import UnifiedToolLoader
 
 logger = logging.getLogger(__name__)
 

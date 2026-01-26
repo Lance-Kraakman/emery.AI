@@ -25,18 +25,18 @@ from typing import Any
 
 import dspy
 
-from ..ace import StepResult
-from ..reasoning.config import get_dspy_lm
-from ..reasoning.modules.executor import ExecutorModule, SimpleExecutorModule
-from ..reasoning.tools import (
+from ...ace import StepResult
+from ...reasoning.config import get_dspy_lm
+from ...reasoning.modules.executor import ExecutorModule, SimpleExecutorModule
+from ...reasoning.tools import (
     ClarificationRequestedException,
     QuestionCollector,
     create_all_tools,
     create_ask_question_tool,
 )
-from ..entities.models.plan import Plan, PlanStep, PlanStepStatus
-from ..services.capability_registry import CapabilityRegistry
-from ..utils.session_logger import get_session_logger
+from ...entities.models.plan import Plan, PlanStep, PlanStepStatus
+from ..tools import CapabilityRegistry
+from ...utils.session_logger import get_session_logger
 from .prompt_template_resolver import resolve_prompt_template
 from .protocols import ModelProviderProtocol
 

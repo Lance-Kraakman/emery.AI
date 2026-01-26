@@ -17,12 +17,12 @@ from tenacity import (
     RetryError
 )
 
-from ..grpc.generated import agent_worker_pb2
-from ..reasoning.modules.extractor import OutputExtractorModule
-from ..types import SkillExecutionResult
-from ..utils.error_classifier import classify_error
-from .agent_factory import AgentFactory, AgentConfig
-from .tool_loader import UnifiedToolLoader
+from ...grpc.generated import agent_worker_pb2
+from ...reasoning.modules.extractor import OutputExtractorModule
+from ...types import SkillExecutionResult
+from ...utils.error_classifier import classify_error
+from ..agents import AgentFactory, AgentConfig
+from ..tools import UnifiedToolLoader
 
 logger = logging.getLogger(__name__)
 

@@ -23,31 +23,30 @@ from emery_agents.infrastructure.clients.huggingface_inference import HuggingFac
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
-from ..entities.execution_context import ExecutionContext
-from ..types import ExecutionMode, AgentId, OrganizationId
-from ..grpc.generated.agent_worker_pb2 import SkillConfig, ToolConfig, TokenUsage as TokenUsageProto, ImageAttachment
-from ..entities.task import TaskRequest
-from .model_provider import ModelProvider
-from .tool_loader import UnifiedToolLoader
-from .image_processor import ImageProcessor
-from .agent_factory import AgentFactory, AgentConfig
-from .token_usage_extractor import TokenUsageExtractor
-from ..reasoning.tools.execution import SkillTool, create_bash_tool
-from ..reasoning.modules.extractor import OutputExtractorModule
-# from ..infrastructure.clients import HuggingFaceInferenceClient, TaskResult
-from .skill_executor import SkillExecutorService
-from .step_executor import StepExecutorService
-from .context_manager import (
+from ...entities.execution_context import ExecutionContext
+from ...types import ExecutionMode, AgentId, OrganizationId
+from ...grpc.generated.agent_worker_pb2 import SkillConfig, ToolConfig, TokenUsage as TokenUsageProto, ImageAttachment
+from ...entities.task import TaskRequest
+from ..models import ModelProvider
+from ..tools import UnifiedToolLoader
+from ..data import ImageProcessor
+from .factory import AgentFactory, AgentConfig
+from ..analysis import TokenUsageExtractor
+from ...reasoning.tools.execution import SkillTool, create_bash_tool
+from ...reasoning.modules.extractor import OutputExtractorModule
+# from ...infrastructure.clients import HuggingFaceInferenceClient, TaskResult
+from ..skills import SkillExecutorService, StepExecutorService
+from ..context import (
     get_current_context as _get_context,
     set_current_context as _set_context,
     execution_scope as _execution_scope,
 )
-from ..entities.output_mapping import (
+from ...entities.output_mapping import (
     OutputMappingConfig, FieldMapping, OutputMappingMode, RowAction,
     extract_field_value, get_extension_for_mime
 )
-from ..entities.task import SkillOutputValue
-from .output_mapping_service import OutputMappingService, MappingContext
+from ...entities.task import SkillOutputValue
+from ..data import OutputMappingService, MappingContext
 from .execution_coordinator import (
     ExecutionCoordinator,
     ExecutionCoordinatorFactory,

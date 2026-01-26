@@ -17,7 +17,7 @@ from contextlib import contextmanager
 from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ..entities.execution_context import ExecutionContext
+    from ...entities.execution_context import ExecutionContext
 
 
 # Async-safe context variable for ExecutionContext

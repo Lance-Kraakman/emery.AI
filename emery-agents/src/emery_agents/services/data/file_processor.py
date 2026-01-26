@@ -14,7 +14,7 @@ from typing import Optional
 import httpx
 import pymupdf  # PyMuPDF for PDF processing
 
-from .transcription_service import transcribe_audio
+from ..http import transcribe_audio
 
 logger = logging.getLogger(__name__)
 

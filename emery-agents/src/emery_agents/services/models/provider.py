@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 import dspy
 
-from .model_registry import (
+from .registry import (
     get_model_metadata,
     get_default_model_for_tier,
     get_default_vision_model,

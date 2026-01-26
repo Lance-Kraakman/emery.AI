@@ -8,9 +8,12 @@ Extracted components from ExecutionCoordinator for maintainability.
 - ReplanHandler: Handles diff-based replanning
 - ExecutionState: Unified state management
 - Phase: Simplified phase enum (IDLE, WORKING, AWAITING_INPUT, COMPLETE, FAILED)
+- Events: All coordinator event types for UI feedback
+- Config: Coordinator configuration classes
 """
 
 from .step_executor import StepExecutor
+from .plan_step_executor import PlanStepExecutor
 from .interrupt_handler import InterruptHandler, QueuedInterrupt
 from .replan_handler import ReplanHandler, ReplanNeedsClarificationError
 from .state import (
@@ -22,6 +25,44 @@ from .state import (
     StepResult,
     ExecutionState,
 )
+from .config import (
+    CoordinatorMode,
+    ExecutionCoordinatorConfig,
+)
+from .events import (
+    PendingContext,
+    PlanCreatedEvent,
+    PlanApprovedEvent,
+    PlanRejectedEvent,
+    PlanFeedbackEvent,
+    StepStartedEvent,
+    StepCompletedEvent,
+    StepFailedEvent,
+    ExecutionCompletedEvent,
+    FinalSynthesisEvent,
+    EvaluationResult,
+    EvaluationCompletedEvent,
+    ReplanTriggeredEvent,
+    PlanUpdatedEvent,
+    PhaseStartedEvent,
+    PhaseCompletedEvent,
+    GoalAchievedEvent,
+    ExecutionBlockedEvent,
+    RecoveryAnalysisEvent,
+    AutoFixStartedEvent,
+    AutoFixCompletedEvent,
+    RecoveryPlanProposedEvent,
+    ErrorEvent,
+    InterruptQueuedEvent,
+    InterruptReceivedEvent,
+    InterruptProcessingEvent,
+    PlanCancelledEvent,
+    ContextInjectedEvent,
+    ClarifyingQuestion as EventClarifyingQuestion,  # More detailed version for events
+    AwaitingClarificationEvent,
+    PlanningStartedEvent,
+)
+
 
 class TaskBuilder:
     """Utility for composing task strings with various feedback types."""
@@ -44,6 +85,7 @@ class TaskBuilder:
 
 __all__ = [
     "StepExecutor",
+    "PlanStepExecutor",
     "InterruptHandler",
     "QueuedInterrupt",
     "ReplanHandler",
@@ -57,4 +99,39 @@ __all__ = [
     "PendingInput",
     "StepResult",
     "ExecutionState",
+    # Config
+    "CoordinatorMode",
+    "ExecutionCoordinatorConfig",
+    # Events
+    "PendingContext",
+    "PlanCreatedEvent",
+    "PlanApprovedEvent",
+    "PlanRejectedEvent",
+    "PlanFeedbackEvent",
+    "StepStartedEvent",
+    "StepCompletedEvent",
+    "StepFailedEvent",
+    "ExecutionCompletedEvent",
+    "FinalSynthesisEvent",
+    "EvaluationResult",
+    "EvaluationCompletedEvent",
+    "ReplanTriggeredEvent",
+    "PlanUpdatedEvent",
+    "PhaseStartedEvent",
+    "PhaseCompletedEvent",
+    "GoalAchievedEvent",
+    "ExecutionBlockedEvent",
+    "RecoveryAnalysisEvent",
+    "AutoFixStartedEvent",
+    "AutoFixCompletedEvent",
+    "RecoveryPlanProposedEvent",
+    "ErrorEvent",
+    "InterruptQueuedEvent",
+    "InterruptReceivedEvent",
+    "InterruptProcessingEvent",
+    "PlanCancelledEvent",
+    "ContextInjectedEvent",
+    "EventClarifyingQuestion",
+    "AwaitingClarificationEvent",
+    "PlanningStartedEvent",
 ]
