@@ -866,9 +866,9 @@ class SkillExecutorService:
         logger.info(f"📎 Processing {len(skill_config.content)} attachments from skill config")
 
         try:
-            from ..grpc.mappers.message_mapper import proto_parts_to_smolagents_content
+            from ..grpc.mappers.message_mapper import proto_parts_to_content
             content_list = run_async_in_thread(
-                proto_parts_to_smolagents_content(skill_config.content)
+                proto_parts_to_content(skill_config.content)
             )
 
             for content_item in content_list:

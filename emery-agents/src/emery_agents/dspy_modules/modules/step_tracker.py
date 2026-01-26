@@ -193,9 +193,3 @@ class StepTracker:
             "total_steps": len(self.steps),
             "total_tokens": self.get_total_tokens().__dict__,
         }
-
-
-# Type aliases for backward compatibility with smolagents-style code
-ActionStep = TrackedStep
-PlanningStep = TrackedStep
-FinalAnswerStep = TrackedStep

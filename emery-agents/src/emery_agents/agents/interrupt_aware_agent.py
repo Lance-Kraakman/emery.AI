@@ -55,14 +55,8 @@ def create_interruptible_executor(
     )
 
 
-# Backward compatibility aliases
-InterruptAwareToolCallingAgent = InterruptibleModule
-InterruptAwareCodeAgent = InterruptibleModule
-
 __all__ = [
     "create_interruptible_executor",
-    "InterruptAwareToolCallingAgent",
-    "InterruptAwareCodeAgent",
     "InterruptibleModule",
     "InterruptRequested",
     "wrap_interruptible",

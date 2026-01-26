@@ -13,7 +13,7 @@ from ..services.context_manager import get_current_context
 from ..tools.tool_modes import ToolMode
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -119,38 +119,3 @@ def create_final_step(result: str) -> TrackedStep:
         step_type=StepType.FINAL,
         content=result,
     )
-
-
-# Backward compatibility
-class HITLMixin:
-    """
-    Legacy mixin for HITL support.
-
-    Deprecated: Use HITLState and handle_hitl_resume() instead.
-    """
-
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
-        self._hitl_state = HITLState()
-
-    @property
-    def _interrupted_agent_name(self) -> str | None:
-        return self._hitl_state.interrupted_agent_name
-
-    @_interrupted_agent_name.setter
-    def _interrupted_agent_name(self, value: str | None) -> None:
-        self._hitl_state.interrupted_agent_name = value
-
-    @property
-    def interrupt_switch(self) -> bool:
-        return self._hitl_state.interrupt_switch
-
-    @interrupt_switch.setter
-    def interrupt_switch(self, value: bool) -> None:
-        self._hitl_state.interrupt_switch = value
-
-    def _is_approval_response(self, task: str) -> bool:
-        return is_approval_response(task)
-
-    def _handle_interrupt(self, agent_name: str) -> None:
-        self._hitl_state.store_interrupt(agent_name)

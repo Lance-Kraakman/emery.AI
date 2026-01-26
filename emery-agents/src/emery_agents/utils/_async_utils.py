@@ -39,6 +39,3 @@ def run_async_in_thread(
     except Exception as e:
         logger.error(f"Async operation failed: {e}")
         raise
-
-
-_run_async_in_thread = run_async_in_thread  # Alias for compatibility

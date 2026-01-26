@@ -140,10 +140,6 @@ async def proto_parts_to_content(
     return content_parts
 
 
-# Backward compatibility alias
-proto_parts_to_smolagents_content = proto_parts_to_content
-
-
 def extract_text_from_parts(message_parts: List[agent_worker_pb2.MessagePart]) -> str:
     """
     Extract all text content from message parts for logging/preview.

@@ -4,7 +4,7 @@ Message mappers for converting between protobuf and domain formats.
 
 from .message_mapper import (
     download_image_from_url,
-    proto_parts_to_smolagents_content,
+    proto_parts_to_content,
     extract_text_from_parts,
     has_images,
     build_conversation_messages,
@@ -31,7 +31,7 @@ from .question_mapper import format_clarifying_questions
 __all__ = [
     # Message mapping functions (chat/vision)
     'download_image_from_url',
-    'proto_parts_to_smolagents_content',
+    'proto_parts_to_content',
     'extract_text_from_parts',
     'has_images',
     'build_conversation_messages',
