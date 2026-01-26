@@ -9,7 +9,7 @@ Extracted from ChatProcessingService for maintainability.
 import json
 from typing import Any, Dict
 
-from ..models.plan import Plan
+from ..entities.models.plan import Plan
 from .response_types import (
     AwaitingInputResponseDict,
     ErrorResponseDict,

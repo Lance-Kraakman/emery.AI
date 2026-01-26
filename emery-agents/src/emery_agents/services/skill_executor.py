@@ -6,7 +6,9 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union, o
 
 from PIL import Image
 
-from ..clients import HuggingFaceInferenceClient, TaskResult
+from emery_agents.infrastructure.clients.base import TaskResult
+from emery_agents.infrastructure.clients.huggingface_inference import HuggingFaceInferenceClient
+
 from ..entities.task import SkillOutputValue
 from ..grpc.generated import agent_worker_pb2
 from ..reasoning.modules.extractor import OutputExtractorModule

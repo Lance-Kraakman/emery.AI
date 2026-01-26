@@ -6,9 +6,12 @@ ChainOfThought with AnalyzeRecovery signature.
 """
 
 import logging
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import dspy
+
+if TYPE_CHECKING:
+    from ..protocols import ModelProviderProtocol
 
 from emery_agents.entities.models.plan import PlanStep, RecoveryResult
 from emery_agents.entities.models.task_ledger import TaskLedger
@@ -50,14 +53,20 @@ class FailureAnalyzer:
     ChainOfThought with AnalyzeRecovery signature.
     """
 
-    def __init__(self, lm: Optional[dspy.LM] = None):
+    def __init__(
+        self,
+        lm: Optional[dspy.LM] = None,
+        model_provider: Optional["ModelProviderProtocol"] = None,
+    ):
         """
         Initialize analyzer.
 
         Args:
             lm: DSPy language model (uses global settings if not provided)
+            model_provider: Model provider for LM resolution (alternative to lm)
         """
         self.lm = lm
+        self.model_provider = model_provider
         self._module = FailureAnalyzerModule()
 
     def analyze(

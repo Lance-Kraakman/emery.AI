@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
 if TYPE_CHECKING:
     from .execution_coordinator import ExecutionCoordinator
-    from ..models.plan import Plan
+    from ..entities.models.plan import Plan
     from ..infrastructure.workspace_sync import WorkspaceSync
 
 logger = logging.getLogger(__name__)

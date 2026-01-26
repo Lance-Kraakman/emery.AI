@@ -36,7 +36,7 @@ from .result_storage import (
 from .agent_api_service import AgentAPIService, AgentData, SkillData
 from .capability_registry import CapabilityRegistry
 
-from ..models.task_ledger import TaskLedger, create_ledger_from_plan
+from ..entities.models.task_ledger import TaskLedger, create_ledger_from_plan
 
 __all__ = [
     "ModelProvider",

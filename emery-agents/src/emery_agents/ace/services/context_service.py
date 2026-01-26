@@ -14,13 +14,8 @@ from typing import Any, Dict, List, Optional
 
 import dspy
 
-from ..models.execution_context import (
-    ExecutionContext,
-    ExecutionInsight,
-    InsightType,
-    StepResult,
-    create_insight,
-)
+
+from emery_agents.ace.models.execution_context import ExecutionContext, ExecutionInsight, InsightType, StepResult, create_insight
 from emery_agents.reasoning.signatures.evaluation import (
     ExtractExecutionInsights,
     ExecutionInsightsResult,

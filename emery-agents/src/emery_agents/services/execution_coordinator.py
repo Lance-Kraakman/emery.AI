@@ -16,16 +16,11 @@ from typing import List, Optional, Any, AsyncIterator, Dict, Callable, Tuple, Se
 from enum import Enum
 
 import dspy
-from ..agents.interrupt_classifier import (
-    InterruptClassification,
-    create_interrupt_classifier,
-    build_classification_prompt,
-)
-from ..models.plan import Plan, PlanStep, PlanStatus, PlanStepStatus, RecoveryResult, create_plan
-from ..models.task_ledger import TaskLedger, create_ledger_from_plan, LedgerEventType
-from ..models.capability import CapabilityType
+
+from emery_agents.entities.models.context_mapping import ResolvedContext
+from ..entities.models.plan import Plan, PlanStep, PlanStatus, PlanStepStatus, RecoveryResult, create_plan
+from ..entities.models.task_ledger import TaskLedger, create_ledger_from_plan, LedgerEventType
 from ..utils.session_logger import SessionLogger, get_session_logger
-from ..models.context_mapping import ResolvedContext
 from ..reasoning.modules.evaluator import EvaluatorModule
 from ..reasoning.config import get_dspy_lm
 from ..tools.tool_modes import ToolMode, filter_tools_for_mode

@@ -10,7 +10,7 @@ import asyncio
 import logging
 from typing import Any, List, Optional
 
-from ...models.plan import Plan, PlanStep
+from ...entities.models.plan import Plan, PlanStep
 from ..plan_step_executor import PlanStepExecutor
 from ...utils.session_logger import SessionLogger
 

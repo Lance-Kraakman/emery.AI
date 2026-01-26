@@ -15,12 +15,7 @@ from typing import Any, Dict, List, Optional
 
 import dspy
 
-from ..models.strategy_accumulation import (
-    ExecutionPattern,
-    StrategyOutcome,
-    StrategyRecord,
-    StrategyRegistry,
-)
+from emery_agents.ace.models.strategy_accumulation import ExecutionPattern, StrategyOutcome, StrategyRecord, StrategyRegistry
 from emery_agents.entities.models.plan import Plan
 from emery_agents.reasoning.signatures.evaluation import (
     RankStrategies,

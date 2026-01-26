@@ -47,7 +47,7 @@ from ..reasoning.tools.integrations import (
 )
 
 if TYPE_CHECKING:
-    from ..clients import HuggingFaceInferenceClient
+    from ..infrastructure.clients import HuggingFaceInferenceClient
 
 
 class UnifiedToolLoader:

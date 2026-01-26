@@ -30,7 +30,7 @@ from typing import Any, Callable, Dict, Optional, Set, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .execution_coordinator import ExecutionCoordinator
-    from ..models.plan import Plan
+    from ..entities.models.plan import Plan
 
 logger = logging.getLogger(__name__)
 

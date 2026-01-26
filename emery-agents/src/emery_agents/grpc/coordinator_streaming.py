@@ -20,7 +20,7 @@ from ..services.execution_coordinator import (
     ErrorEvent,
 )
 from ..services.plan_step_executor import PlanStepExecutor
-from ..models.plan import Plan
+from ..entities.models.plan import Plan
 from ..tools.tool_modes import ToolMode
 from ..services.agent_executor import AgentExecutor
 from ..reasoning.config import get_dspy_lm

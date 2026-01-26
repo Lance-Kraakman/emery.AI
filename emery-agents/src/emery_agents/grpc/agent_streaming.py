@@ -20,8 +20,8 @@ from ..services.coordinator_state_machine import (
 )
 from ..entities.execution_context import ExecutionContext
 from ..types import ExecutionMode
-from ..models.plan import Plan, create_plan
-from ..models.capability import Capability, CapabilityType
+from ..entities.models.plan import Plan, create_plan
+from ..entities.models.capability import Capability, CapabilityType
 from ..services.tool_provider import ToolProvider
 from ..utils.error_classifier import classify_error
 from ..utils.error_messages import ErrorSeverity
@@ -47,7 +47,7 @@ if TYPE_CHECKING:
     from ..services.tool_loader import UnifiedToolLoader
     from ..services.skill_executor import SkillExecutorService
     from ..services.plan_service import PlanService
-    from ..clients import HuggingFaceInferenceClient
+    from ..infrastructure.clients import HuggingFaceInferenceClient
     from .generated import agent_worker_pb2
     from .coordinator_streaming import CoordinatorStreamingHandler
 
@@ -735,7 +735,7 @@ class AgentStreamingHandler:
     def _get_or_create_inference_client(self) -> 'HuggingFaceInferenceClient':
         """Get or create the HuggingFace inference client for operation skills."""
         if self._inference_client is None:
-            from ..clients import HuggingFaceInferenceClient
+            from ..infrastructure.clients import HuggingFaceInferenceClient
             self._inference_client = HuggingFaceInferenceClient()
         return self._inference_client
 

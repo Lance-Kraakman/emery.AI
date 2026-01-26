@@ -28,7 +28,7 @@ from ....types import SkillExecutionResult
 from ....utils import run_async_in_thread
 
 if TYPE_CHECKING:
-    from ....clients import HuggingFaceInferenceClient
+    from ....infrastructure.clients import HuggingFaceInferenceClient
 
 logger = logging.getLogger(__name__)
 

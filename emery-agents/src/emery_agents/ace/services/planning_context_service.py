@@ -12,11 +12,8 @@ from typing import Any, Dict, List, Optional
 
 import dspy
 
-from ..models.planning_context import (
-    PlanningContext,
-    PlanningInsight,
-    PlanningInsightType,
-)
+
+from emery_agents.ace.models.planning_context import PlanningContext, PlanningInsight, PlanningInsightType
 from emery_agents.reasoning.signatures.evaluation import (
     ExtractPlanningInsights,
     PlanningInsightsResult,

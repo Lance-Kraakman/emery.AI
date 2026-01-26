@@ -16,8 +16,8 @@ from ...agents.interrupt_classifier import (
     create_interrupt_classifier,
     build_classification_prompt,
 )
-from ...models.plan import Plan, PlanStepStatus
-from ...models.task_ledger import TaskLedger, LedgerEventType
+from ...entities.models.plan import Plan, PlanStepStatus
+from ...entities.models.task_ledger import TaskLedger, LedgerEventType
 from ..protocols import ModelProviderProtocol
 
 logger = logging.getLogger(__name__)

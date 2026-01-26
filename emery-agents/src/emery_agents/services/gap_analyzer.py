@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 import dspy
 
 from ..reasoning.signatures.planning import AnalyzeGaps, GapAnalysisResultModel
-from ..models.domain_concerns import (
+from ..entities.models.domain_concerns import (
     ConcernGap,
     DomainConcern,
     GapAnalysisResult,

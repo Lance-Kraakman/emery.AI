@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from ...models.plan import Plan, PlanStep
+from ...entities.models.plan import Plan, PlanStep
 from ..protocols import Tool, ManagedAgent
 
 

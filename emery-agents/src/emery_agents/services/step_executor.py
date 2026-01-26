@@ -1476,7 +1476,7 @@ class StepExecutorService:
         organization_id: Optional[int]
     ) -> Any:
         """Execute a direct inference step (no LLM orchestration)."""
-        from ..clients import HuggingFaceInferenceClient, TaskResult
+        from ..infrastructure.clients import HuggingFaceInferenceClient, TaskResult
         from ..utils import run_async_in_thread
 
         task_config = step.task_model_config

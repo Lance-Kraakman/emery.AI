@@ -10,7 +10,7 @@ import logging
 from pathlib import Path
 from typing import Callable
 
-from ....sandbox.bwrap_executor import BwrapExecutor
+from emery_agents.services.sandbox.bwrap_executor import BwrapExecutor
 
 logger = logging.getLogger(__name__)
 
