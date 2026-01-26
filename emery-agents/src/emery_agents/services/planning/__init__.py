@@ -1,19 +1,7 @@
 """
 Planning Module
 
-Modular planning infrastructure for plan generation, persistence, and analysis.
-
-This module provides:
-- PlanGenerator: Core logic for generating plans using capability discovery
-- PlanRepository: gRPC persistence for plans
-- FailureAnalyzer: Step failure analysis and recovery
-- Dataclasses: PlanGenerationRequest, PlanGenerationResult, etc.
-
-AIDEV-NOTE: Plan generation uses capability-based discovery instead of
-domain-specific planners (schema, app, automation). The PlanGenerator:
-1. Uses capability discovery tools to find relevant capabilities
-2. Generates plan steps with target agents from discovered capabilities
-3. Outputs structured plan via submit_plan tool
+Plan generation, persistence, and analysis using DSPy.
 """
 
 from .models import (
@@ -22,24 +10,19 @@ from .models import (
     PlanGenerationResult,
     FailureAnalysisRequest,
 )
-from .plan_generator import PlanGenerator
 from .dspy_plan_generator import DSPyPlanGenerator
 from .plan_repository import PlanRepository
 from .failure_analyzer import FailureAnalyzer
 from .plan_differ import PlanDiff, PlanDiffer
 
 __all__ = [
-    # Models
     "ToolResultSummary",
     "PlanGenerationRequest",
     "PlanGenerationResult",
     "FailureAnalysisRequest",
-    # Services
-    "PlanGenerator",
-    "DSPyPlanGenerator",  # DSPy-based alternative
+    "DSPyPlanGenerator",
     "PlanRepository",
     "FailureAnalyzer",
-    # Plan Diffs
     "PlanDiff",
     "PlanDiffer",
 ]

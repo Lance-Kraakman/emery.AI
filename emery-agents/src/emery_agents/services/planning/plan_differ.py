@@ -1,30 +1,19 @@
 """
-Plan Differ - Generates diffs for incremental plan updates.
+Plan Differ - DSPy-based plan diff generation.
 
-Instead of regenerating all pending steps from scratch, this module
-generates minimal diffs that preserve continuity and avoid duplicating work.
-
-AIDEV-NOTE: This addresses the issue where _handle_replan() would discard
-all pending steps and regenerate them, losing context and potentially
-duplicating already-planned work.
-
-Diff operations:
-- SKIP: Mark step as skipped (failed or no longer needed)
-- MODIFY: Update a step's description/parameters
-- INSERT: Add new step at a specific position
-- APPEND: Add new steps at the end
+Generates minimal diffs for incremental plan updates using DSPy
+ChainOfThought with GeneratePlanDiff signature.
 """
 
+import json
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
-from smolagents import Tool, ToolCallingAgent
+import dspy
 
 from emery_agents.models.plan import Plan, PlanStep, PlanStatus, PlanStepStatus, create_step
-from emery_agents.prompts import render_template
-from emery_agents.services.protocols import ModelProvider
-from emery_agents.tools.ask_question_tool import AskQuestionTool
+from emery_agents.dspy_modules.signatures.planning import GeneratePlanDiff, PlanDiffResult
 
 logger = logging.getLogger(__name__)
 
@@ -84,128 +73,80 @@ class PlanDiff:
             parts.append(f"append {len(self.steps_to_append)} steps")
         return ", ".join(parts) if parts else "no changes"
 
-
-class DiffOutputTool(Tool):  # type: ignore[misc]
-    """Tool for LLM to output plan diff operations."""
-
-    skip_forward_signature_validation = True
-
-    name = "output_plan_diff"
-    description = """Output the plan diff operations.
-
-Specify minimal changes to address the replan reason:
-- steps_to_skip: List of step IDs to mark as skipped
-- steps_to_modify: List of {step_id, new_description} to update existing steps
-- steps_to_append: List of new steps to add at the end
-- reasoning: Why these changes are needed
-
-Only include changes that are necessary. Preserve existing steps when possible.
-"""
-
-    inputs = {
-        "steps_to_skip": {
-            "type": "array",
-            "items": {"type": "string"},
-            "description": "Step IDs to mark as SKIPPED",
-        },
-        "steps_to_modify": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "step_id": {"type": "string"},
-                    "new_description": {"type": "string"},
-                },
-            },
-            "description": "Steps to modify with new descriptions",
-        },
-        "steps_to_append": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "description": {"type": "string"},
-                    "target_agent": {"type": "string"},
-                    "phase_name": {"type": "string"},
-                    "phase_order": {"type": "integer"},
-                },
-            },
-            "description": "New steps to add at the end",
-        },
-        "reasoning": {
-            "type": "string",
-            "description": "Explanation of why these changes are needed",
-        },
-    }
-    output_type = "string"
-
-    def __init__(self) -> None:
-        super().__init__()
-        self._diff: Optional[PlanDiff] = None
-
-    def forward(
-        self,
-        steps_to_skip: Optional[List[str]] = None,
-        steps_to_modify: Optional[List[Dict[str, str]]] = None,
-        steps_to_append: Optional[List[Dict[str, Any]]] = None,
-        reasoning: str = "",
-    ) -> str:
-        """Capture the diff operations."""
+    @classmethod
+    def from_result(cls, result: PlanDiffResult) -> "PlanDiff":
+        """Convert from DSPy result model."""
         # Build PlanStep objects for append
         append_steps = []
-        if steps_to_append:
-            for s in steps_to_append:
-                step = create_step(
-                    description=s.get("description", ""),
-                    target_agent=s.get("target_agent"),
-                    phase_name=s.get("phase_name"),
-                    phase_order=s.get("phase_order"),
-                )
-                append_steps.append(step)
+        for s in result.steps_to_append:
+            step = create_step(
+                description=s.get("description", ""),
+                target_agent=s.get("target_agent"),
+                phase_name=s.get("phase_name"),
+                phase_order=s.get("phase_order"),
+            )
+            append_steps.append(step)
 
         # Build modify tuples
         modify_tuples: List[Tuple[str, Dict[str, Any]]] = []
-        if steps_to_modify:
-            for m in steps_to_modify:
-                step_id = m.get("step_id", "")
-                mods = {"description": m.get("new_description", "")}
-                modify_tuples.append((step_id, mods))
+        for m in result.steps_to_modify:
+            step_id = m.get("step_id", "")
+            mods = {"description": m.get("new_description", "")}
+            modify_tuples.append((step_id, mods))
 
-        self._diff = PlanDiff(
-            steps_to_skip=steps_to_skip or [],
+        return cls(
+            steps_to_skip=result.steps_to_skip,
             steps_to_modify=modify_tuples,
-            steps_to_insert=[],  # LLM doesn't handle insert positions well, use append
+            steps_to_insert=[],  # DSPy doesn't handle insert positions well
             steps_to_append=append_steps,
-            reasoning=reasoning,
+            reasoning=result.reasoning,
+            clarifying_questions=result.clarifying_questions if result.needs_clarification else [],
         )
 
-        summary = self._diff.summary()
-        logger.info(f"📋 Plan diff captured: {summary}")
-        return f"Diff captured: {summary}"
 
-    def get_diff(self) -> Optional[PlanDiff]:
-        """Get the captured diff."""
-        return self._diff
+class PlanDifferModule(dspy.Module):
+    """DSPy module for plan diff generation."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.differ = dspy.ChainOfThought(GeneratePlanDiff)
+
+    def forward(
+        self,
+        goal: str,
+        reason: str,
+        failed_step_info: str,
+        completed_context: str,
+        pending_steps_json: str,
+    ) -> PlanDiffResult:
+        """Generate minimal diff to address replan reason."""
+        result = self.differ(
+            goal=goal,
+            reason=reason,
+            failed_step_info=failed_step_info,
+            completed_context=completed_context,
+            pending_steps_json=pending_steps_json,
+        )
+        return result.diff
 
 
 class PlanDiffer:
     """
-    Generates and applies diffs to plans.
+    DSPy-based plan diff generation.
 
-    Instead of regenerating all pending steps, this generates minimal
-    diffs that preserve continuity and avoid duplicating work.
+    Generates minimal diffs for incremental plan updates using
+    ChainOfThought with GeneratePlanDiff signature.
     """
 
-    def __init__(self, model_provider: ModelProvider):
+    def __init__(self, lm: Optional[dspy.LM] = None):
         """
         Initialize differ.
 
         Args:
-            model_provider: Model provider for LLM access
+            lm: DSPy language model (uses global settings if not provided)
         """
-        if model_provider is None:
-            raise ValueError("PlanDiffer requires model_provider")
-        self.model_provider = model_provider
+        self.lm = lm
+        self._module = PlanDifferModule()
 
     async def generate_diff(
         self,
@@ -223,7 +164,7 @@ class PlanDiffer:
             reason: Why replanning was triggered
             failed_step: The step that triggered replanning (if any)
             completed_context: Summary of completed step results
-            org_model: Organization model ID for model resolution
+            org_model: Organization model ID (unused in DSPy version)
 
         Returns:
             PlanDiff with minimal changes needed
@@ -238,52 +179,62 @@ class PlanDiffer:
             logger.info("No pending steps to diff")
             return PlanDiff(reasoning="No pending steps remain")
 
-        # Build prompt
-        prompt = render_template(
-            "planning/plan_diff.j2",
-            goal=current_plan.goal,
-            reason=reason,
-            failed_step=failed_step,
-            completed_context=completed_context,
-            pending_steps=pending_steps,
-        )
+        # Serialize pending steps to JSON
+        pending_data = [
+            {
+                "step_id": s.step_id,
+                "description": s.description,
+                "target_agent": s.target_agent,
+                "phase_name": s.phase_name,
+            }
+            for s in pending_steps
+        ]
+        pending_steps_json = json.dumps(pending_data)
 
-        # Use DiffOutputTool and AskQuestionTool for structured output
-        diff_tool = DiffOutputTool()
-        ask_question_tool = AskQuestionTool()
-        model_id = self.model_provider.resolve_model_selection(org_model=org_model)
-        model = self.model_provider.get_model(model_id=model_id)
+        # Build failed step info
+        failed_step_info = ""
+        if failed_step:
+            failed_step_info = f"Step '{failed_step.step_id}': {failed_step.description}"
+            if failed_step.error:
+                failed_step_info += f"\nError: {failed_step.error}"
 
-        agent = ToolCallingAgent(
-            tools=[diff_tool, ask_question_tool],
-            model=model,
-            max_steps=5,  # More steps to allow for questions + diff
-        )
+        context_str = completed_context or "No completed step context available."
+
+        logger.info(f"📋 Generating plan diff for reason: {reason[:100]}...")
 
         try:
-            agent.run(prompt)
-
-            # Check if clarifying questions were asked
-            if ask_question_tool.has_questions():
-                questions = ask_question_tool.get_questions()
-                logger.info(f"❓ Replan needs clarification: {len(questions)} question(s)")
-                return PlanDiff(
-                    clarifying_questions=questions,
-                    reasoning="Need more information before replanning",
+            # Use provided LM or global settings
+            if self.lm:
+                with dspy.context(lm=self.lm):
+                    result = self._module(
+                        goal=current_plan.goal,
+                        reason=reason,
+                        failed_step_info=failed_step_info,
+                        completed_context=context_str,
+                        pending_steps_json=pending_steps_json,
+                    )
+            else:
+                result = self._module(
+                    goal=current_plan.goal,
+                    reason=reason,
+                    failed_step_info=failed_step_info,
+                    completed_context=context_str,
+                    pending_steps_json=pending_steps_json,
                 )
 
-            diff = diff_tool.get_diff()
+            diff = PlanDiff.from_result(result)
 
-            if diff is None:
-                logger.warning("LLM did not call diff tool, returning empty diff")
-                return PlanDiff(reasoning="LLM did not generate diff")
+            # Check for clarifying questions
+            if diff.needs_clarification:
+                logger.info(f"❓ Replan needs clarification: {len(diff.clarifying_questions)} question(s)")
+                return diff
 
             # If failed_step provided, ensure it's in steps_to_skip
             if failed_step and failed_step.step_id not in diff.steps_to_skip:
                 diff.steps_to_skip.append(failed_step.step_id)
                 logger.info(f"Added failed step {failed_step.step_id} to skip list")
 
-            logger.info(f"Generated diff: {diff.summary()}")
+            logger.info(f"✅ Generated diff: {diff.summary()}")
             return diff
 
         except Exception as e:

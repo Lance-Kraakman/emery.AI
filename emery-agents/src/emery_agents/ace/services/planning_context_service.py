@@ -1,116 +1,65 @@
 """
-Planning Context Service - curates context between planning phases.
+Planning Context Service - DSPy-based context curation between planning phases.
 
 Part of ACE (Agentic Context Engineering).
 
-AIDEV-NOTE: This complements context_service.py (ExecutionContextService)
-which handles execution phase. This service:
-- Extracts insights from phase output using LLM
-- Curates context between planning phases
-- Manages token budget for context passing
-
-Usage:
-    planning_context_service = PlanningContextService(model_provider, org_model)
-    planning_context = PlanningContext(overall_goal=instructions)
-
-    # After each phase completes:
-    planning_context = planning_context_service.curate_after_phase(
-        planning_context=planning_context,
-        phase_name="Schema",
-        raw_context=result.context,
-        raw_analysis=result.analysis,
-    )
-
-    # Before next phase:
-    curated_context = planning_context.format_for_phase("App")
+Uses DSPy ChainOfThought with ExtractPlanningInsights signature.
 """
 
 import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from smolagents import Tool, ToolCallingAgent
-from smolagents.monitoring import LogLevel
+import dspy
 
 from ..models.planning_context import (
     PlanningContext,
     PlanningInsight,
     PlanningInsightType,
 )
-from emery_agents.services.protocols import ModelProvider
-from emery_agents.prompts import render_template
+from emery_agents.dspy_modules.signatures.evaluation import (
+    ExtractPlanningInsights,
+    PlanningInsightsResult,
+)
 
 logger = logging.getLogger(__name__)
 
 
-class PlanningInsightTool(Tool):  # type: ignore[misc]
-    """Tool for LLM to report planning insights extracted from phase output."""
-
-    skip_forward_signature_validation = True
-    name = "report_planning_insights"
-    description = """Extract planning insights from phase output.
-
-For each significant finding, create an insight with:
-- type: One of "entity", "decision", "constraint", "dependency"
-- summary: Brief description of the insight
-- key_facts: List of key facts related to this insight
-
-Types:
-- entity: Found entity (table, app, field, skill)
-- decision: Planning decision that affects other phases
-- constraint: Limitation discovered
-- dependency: Dependency between phases
-"""
-    inputs = {
-        "insights": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "type": {
-                        "type": "string",
-                        "description": "Type: entity, decision, constraint, or dependency",
-                    },
-                    "summary": {
-                        "type": "string",
-                        "description": "Brief description of the insight",
-                    },
-                    "key_facts": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Key facts related to this insight",
-                    },
-                },
-            },
-            "description": "List of planning insights",
-        }
-    }
-    output_type = "string"
+class PlanningInsightExtractorModule(dspy.Module):
+    """DSPy module for extracting planning insights from phase output."""
 
     def __init__(self) -> None:
         super().__init__()
-        self._insights: List[Dict[str, Any]] = []
+        self.extractor = dspy.ChainOfThought(ExtractPlanningInsights)
 
-    def forward(self, insights: List[Dict[str, Any]]) -> str:
-        """Capture the insights reported by the LLM."""
-        self._insights = insights
-        return f"Recorded {len(insights)} planning insights"
-
-    def get_insights(self) -> List[Dict[str, Any]]:
-        """Get the captured insights."""
-        return self._insights
+    def forward(
+        self,
+        phase_name: str,
+        context: str,
+        analysis: str,
+    ) -> PlanningInsightsResult:
+        """Extract planning insights from phase output."""
+        result = self.extractor(
+            phase_name=phase_name,
+            context=context,
+            analysis=analysis,
+        )
+        return result.result
 
 
 @dataclass
 class PlanningContextService:
     """
-    Curates context between planning phases using LLM.
+    DSPy-based context curation between planning phases.
 
     Extracts insights from raw phase output and adds them to the
     PlanningContext for use by subsequent phases.
     """
-    model_provider: ModelProvider
-    org_model: Optional[str] = None
+
+    lm: Optional[dspy.LM] = None
+
+    def __post_init__(self) -> None:
+        self._module = PlanningInsightExtractorModule()
 
     def curate_after_phase(
         self,
@@ -122,7 +71,7 @@ class PlanningContextService:
         """
         Curate context after a phase completes.
 
-        Uses LLM to extract insights from raw context/analysis,
+        Uses DSPy to extract insights from raw context/analysis,
         then adds them to the planning context.
 
         Args:
@@ -140,7 +89,7 @@ class PlanningContextService:
             planning_context.mark_phase_completed(phase_name)
             return planning_context
 
-        # Extract insights via LLM
+        # Extract insights via DSPy
         new_insights = self._extract_insights(phase_name, raw_context, raw_analysis)
 
         # Add insights to context
@@ -163,7 +112,7 @@ class PlanningContextService:
         analysis: str,
     ) -> List[PlanningInsight]:
         """
-        Use LLM to extract planning insights from phase output.
+        Use DSPy to extract planning insights from phase output.
 
         Args:
             phase_name: Name of the phase
@@ -173,28 +122,23 @@ class PlanningContextService:
         Returns:
             List of PlanningInsight objects
         """
-        model_id = self.model_provider.resolve_model_selection(org_model=self.org_model)
-        model = self.model_provider.get_model(model_id=model_id)
-        tool = PlanningInsightTool()
-
-        prompt = render_template(
-            "ace/planning_insight_extraction.j2",
-            phase_name=phase_name,
-            context=context,
-            analysis=analysis,
-        )
-
         try:
-            agent = ToolCallingAgent(
-                tools=[tool],
-                model=model,
-                max_steps=2,
-                verbosity_level=LogLevel.OFF,
-            )
-            agent.run(task=prompt, reset=True)
+            # Use provided LM or global settings
+            if self.lm:
+                with dspy.context(lm=self.lm):
+                    result = self._module(
+                        phase_name=phase_name,
+                        context=context or "",
+                        analysis=analysis or "",
+                    )
+            else:
+                result = self._module(
+                    phase_name=phase_name,
+                    context=context or "",
+                    analysis=analysis or "",
+                )
 
-            raw_insights = tool.get_insights()
-            return self._convert_to_planning_insights(phase_name, raw_insights)
+            return self._convert_to_planning_insights(phase_name, result)
 
         except Exception as e:
             logger.warning(f"Failed to extract insights from phase '{phase_name}': {e}")
@@ -203,30 +147,23 @@ class PlanningContextService:
     def _convert_to_planning_insights(
         self,
         phase_name: str,
-        raw_insights: List[Dict[str, Any]],
+        result: PlanningInsightsResult,
     ) -> List[PlanningInsight]:
-        """Convert raw insight dicts to PlanningInsight objects."""
+        """Convert DSPy result to PlanningInsight objects."""
         insights = []
-        for i, ins in enumerate(raw_insights):
+        for i, ins in enumerate(result.insights):
             try:
-                insight_type_str = ins.get("type", "entity").lower()
+                insight_type_str = ins.insight_type.lower()
                 # Map to valid enum value
                 if insight_type_str not in ("entity", "decision", "constraint", "dependency"):
                     insight_type_str = "entity"
-
-                # Type-safe key_facts extraction (LLM may return string instead of list)
-                key_facts_raw = ins.get("key_facts", [])
-                if isinstance(key_facts_raw, str):
-                    key_facts_raw = [key_facts_raw]
-                elif not isinstance(key_facts_raw, list):
-                    key_facts_raw = []
 
                 insights.append(
                     PlanningInsight(
                         insight_id=f"{phase_name}_{i}",
                         insight_type=PlanningInsightType(insight_type_str),
-                        summary=ins.get("summary", ""),
-                        key_facts=tuple(key_facts_raw),
+                        summary=ins.summary,
+                        key_facts=tuple(ins.key_facts),
                         source_phase=phase_name,
                     )
                 )

@@ -1,16 +1,24 @@
-"""Executes agent tasks with routing and tool loading."""
+"""Executes agent tasks with routing and tool loading.
+
+AIDEV-NOTE: DSPy Migration - Uses ExecutorModule (dspy.ReAct) instead of
+smolagents ToolCallingAgent. Agent execution now uses module.forward() pattern.
+"""
+
+from __future__ import annotations
 
 import logging
 import os
 import time
 import json
 import uuid
-from typing import Dict, Any, List, Optional, Union, AsyncIterator
+from typing import TYPE_CHECKING, Any
 
+import dspy
 import httpx
-
-from smolagents import CodeAgent, ToolCallingAgent
 from PIL import Image
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 from ..entities.execution_context import ExecutionContext
 from ..types import ExecutionMode, AgentId, OrganizationId
@@ -21,9 +29,12 @@ from .tool_loader import UnifiedToolLoader
 from .image_processor import ImageProcessor
 from .agent_factory import AgentFactory, AgentConfig
 from .token_usage_extractor import TokenUsageExtractor
-from ..tools.skill_tool import SkillTool
-from ..tools.output_tool import OutputTool, build_target_field_metadata_from_mappings
-from ..tools.bash_tool import BashTool
+from ..dspy_modules.tools.execution import SkillTool, create_bash_tool
+from ..dspy_modules.tools.output import (
+    OutputCollector,
+    create_output_tool,
+    build_target_field_metadata_from_mappings,
+)
 from ..clients import HuggingFaceInferenceClient, TaskResult
 from .skill_executor import SkillExecutorService
 from .step_executor import StepExecutorService
@@ -37,7 +48,7 @@ from ..entities.output_mapping import (
     extract_field_value, get_extension_for_mime
 )
 from ..entities.skill_io import SkillOutputValue
-from ..prompts import render_output_instructions
+from ..utils.output_instructions import render_output_instructions
 from .output_mapping_service import OutputMappingService, MappingContext
 from .execution_coordinator import (
     ExecutionCoordinator,
@@ -53,8 +64,6 @@ from .execution_coordinator import (
     ReplanTriggeredEvent,
     ExecutionBlockedEvent,
 )
-from ..agents.evaluator_agent import create_evaluator_factory
-
 logger = logging.getLogger(__name__)
 
 
@@ -428,11 +437,17 @@ class AgentExecutor:
                     "progress_percent": 50.0
                 }
 
-                # Execute task with text + images (smolagents format)
-                result = agent.run(task=context.task, images=pil_images or None, reset=False)
-
-                # Extract token usage from result
-                token_usage_proto = self._extract_token_usage(result)
+                # Execute task using DSPy module
+                # Build context string with image info if present
+                context_str = json.dumps({
+                    "task": context.task,
+                    "has_images": len(pil_images) > 0,
+                    "image_count": len(pil_images),
+                })
+                result = agent.forward(
+                    step_description=context.task,
+                    context=context_str,
+                )
 
                 yield {
                     "status": "completed",
@@ -440,7 +455,6 @@ class AgentExecutor:
                     "error_message": "",
                     "timestamp_ms": int(time.time() * 1000),
                     "progress_percent": 100.0,
-                    "token_usage": token_usage_proto
                 }
 
                 return
@@ -468,7 +482,7 @@ class AgentExecutor:
                         yield progress
                     return
 
-                # Standard agentic execution (LLM orchestration via smolagents)
+                # Standard agentic execution (LLM orchestration via DSPy ReAct)
                 tool_count = len(skill.tools) if skill.tools else 0
                 logger.info(f"Using skill '{skill.name}' with {tool_count} tools")
 
@@ -480,7 +494,7 @@ class AgentExecutor:
                     "progress_percent": 20.0
                 }
 
-                # Create smolagents agent for this skill
+                # Create DSPy executor module for this skill
                 agent = await self._create_skill_agent(skill, context)
 
                 # Download images if any (multimodal support)
@@ -503,22 +517,28 @@ class AgentExecutor:
                     "progress_percent": 50.0
                 }
 
-                # Execute task with text + images (smolagents format)
-                result = agent.run(task=task_instructions, images=pil_images or None)
+                # Execute task using DSPy module
+                context_str = json.dumps({
+                    "task": task_instructions,
+                    "skill": skill.name,
+                    "has_images": len(pil_images) > 0,
+                    "image_count": len(pil_images),
+                })
+                result = agent.forward(
+                    step_description=task_instructions,
+                    context=context_str,
+                )
 
-                # Extract token usage from result
-                token_usage_proto = self._extract_token_usage(result)
-
-                # Get captured outputs if OutputTool was used
+                # Get captured outputs if output tool was used
                 captured_outputs = None
-                if context.output_tool and context.output_tool.was_called():
-                    captured_outputs = context.output_tool.get_captured_values()
+                if context.output_collector and context.output_collector.was_called():
+                    captured_outputs = context.output_collector.get_captured_values()
                     # Apply agent output mappings
                     await self._apply_agent_output_mappings(
                         skill=skill,
                         captured_values=captured_outputs,
                         api_key=context.api_key,
-                        organization_id=context.organization_id
+                        organization_id=context.organization_id,
                     )
 
                 # Final completion
@@ -530,12 +550,11 @@ class AgentExecutor:
                         "message": "Task completed successfully",
                         "duration_ms": duration_ms,
                         "skill": skill.name,
-                        "captured_outputs": captured_outputs
+                        "captured_outputs": captured_outputs,
                     }),
                     "error_message": "",
                     "timestamp_ms": int(time.time() * 1000),
                     "progress_percent": 100.0,
-                    "token_usage": token_usage_proto
                 }
 
         except Exception as e:
@@ -837,15 +856,11 @@ class AgentExecutor:
             except Exception as e:
                 logger.warning(f"Failed to load some tools: {e}")
 
-        # Create evaluator factory with org model
-        model = context.org_model or "anthropic/claude-sonnet-4-20250514"
-        evaluator_factory = create_evaluator_factory(model)
-
         # Create coordinator
         coordinator = ExecutionCoordinator(
-            evaluator_factory=evaluator_factory,
             evaluate_after_steps=1,
             max_replans=3,
+            org_model=context.org_model,
         )
 
         yield {
@@ -1093,9 +1108,9 @@ class AgentExecutor:
 
     async def _create_direct_execution_agent(
         self,
-        context: ExecutionContext
-    ) -> Union[CodeAgent, ToolCallingAgent]:
-        """Create agent for direct tool execution using AgentFactory."""
+        context: ExecutionContext,
+    ) -> dspy.Module:
+        """Create DSPy executor module for direct tool execution."""
         # Load tools from context using consolidated method
         tools = []
         if context.available_tools:
@@ -1105,27 +1120,26 @@ class AgentExecutor:
             )
             tools = self.tool_loader.load_tools(tool_configs)
 
-        # Add BashTool if workspace_path is available (filesystem-based execution)
+        # Add bash tool if workspace_path is available (filesystem-based execution)
         if context.workspace_path:
-            bash_tool = BashTool(
-                workspace_path=context.workspace_path,
+            from pathlib import Path
+            bash_tool = create_bash_tool(
+                workspace_path=Path(context.workspace_path),
                 allow_network=False,  # Network disabled by default for security
                 timeout=300,
             )
             tools.append(bash_tool)
-            logger.info(f"Added BashTool with workspace: {context.workspace_path}")
+            logger.info(f"Added bash tool with workspace: {context.workspace_path}")
 
-        # Create agent using AgentFactory
+        # Create DSPy executor module using AgentFactory
         agent_config = AgentConfig(
             tools=tools,
             agent_model=context.agent_model,
             org_model=context.org_model,
-            max_steps=context.max_steps,
+            max_iters=context.max_steps,
             agent_name="direct_executor",
             agent_description="Direct tool execution agent",
             enable_caching=False,
-            agent_type="skill_executor",
-            context_type="autonomous"
         )
 
         return self.agent_factory.create_agent(agent_config)
@@ -1173,9 +1187,9 @@ class AgentExecutor:
     async def _create_skill_agent(
         self,
         skill: SkillConfig,
-        context: ExecutionContext
-    ) -> Union[CodeAgent, ToolCallingAgent]:
-        """Create smolagents agent from skill configuration using AgentFactory."""
+        context: ExecutionContext,
+    ) -> dspy.Module:
+        """Create DSPy executor module from skill configuration."""
 
         # Load tools for this skill
         tools = []
@@ -1186,15 +1200,16 @@ class AgentExecutor:
             except Exception as e:
                 logger.warning(f"Failed to load some tools for skill {skill.name}: {e}")
 
-        # Add BashTool if workspace_path is available (filesystem-based execution)
+        # Add bash tool if workspace_path is available (filesystem-based execution)
         if context.workspace_path:
-            bash_tool = BashTool(
-                workspace_path=context.workspace_path,
+            from pathlib import Path
+            bash_tool = create_bash_tool(
+                workspace_path=Path(context.workspace_path),
                 allow_network=False,  # Network disabled by default for security
                 timeout=300,
             )
             tools.append(bash_tool)
-            logger.info(f"Added BashTool with workspace: {context.workspace_path}")
+            logger.info(f"Added bash tool with workspace: {context.workspace_path}")
 
         # Load available skills as SkillTools for delegation
         if context.available_skills:
@@ -1207,38 +1222,38 @@ class AgentExecutor:
             tools.extend(skill_tools)
             logger.info(f"Added {len(skill_tools)} skills as tools for delegation")
 
-        # Add OutputTool if skill has output mappings
-        output_tool = None
+        # Add output tool if skill has output mappings
+        output_collector = None
         if self._has_output_mappings(skill):
             # Extract target field metadata from output mappings for rich LLM guidance
             target_metadata = build_target_field_metadata_from_mappings(list(skill.outputs))
-            output_tool = OutputTool(
+            output_collector = OutputCollector()
+            output_tool = create_output_tool(
+                output_collector,
                 skill_outputs=list(skill.outputs),
                 target_field_metadata=target_metadata
             )
             tools.append(output_tool)
-            # Store on context so we can check it after execution
-            context.output_tool = output_tool
-            logger.info(f"Added OutputTool for {len(skill.outputs)} outputs")
+            # Store collector on context so we can check it after execution
+            context.output_collector = output_collector
+            logger.info(f"Added output tool for {len(skill.outputs)} outputs")
 
-        # Extract skill model and agent type if present
+        # Extract skill model if present
         # SkillConfig is protobuf - string fields are empty string if not set
         skill_model = skill.model or None
-        skill_agent_type = skill.agent_type or None
+        use_code_execution = skill.agent_type == "code_agent"
 
-        # Create agent using AgentFactory with autonomous context
+        # Create DSPy executor module
         agent_config = AgentConfig(
             tools=tools,
             skill_model=skill_model,
             agent_model=context.agent_model,
             org_model=context.org_model,
-            max_steps=context.max_steps,
+            max_iters=context.max_steps,
             agent_name=skill.name,
             agent_description=skill.description,
             enable_caching=False,  # Tasks are stateless - no caching
-            agent_type="skill_executor",
-            context_type="autonomous",
-            skill_agent_type=skill_agent_type  # "tool_calling" (default) or "code_agent"
+            use_code_execution=use_code_execution,
         )
 
         return self.agent_factory.create_agent(agent_config)
@@ -1335,22 +1350,22 @@ class AgentExecutor:
         """Get list of available tool names."""
         return self.tool_loader.get_available_tools()
 
-    async def health_check(self) -> Dict[str, Any]:
+    async def health_check(self) -> dict[str, Any]:
         """Check health of execution system."""
         try:
             available_tools = await self.get_available_tools()
             return {
                 "status": "healthy",
                 "available_tools_count": len(available_tools),
-                "service": "smolagents",
-                "initialized": True
+                "service": "dspy_executor",
+                "initialized": True,
             }
         except Exception as e:
             return {
                 "status": "unhealthy",
                 "error": str(e),
-                "service": "smolagents",
-                "initialized": False
+                "service": "dspy_executor",
+                "initialized": False,
             }
 
     def clear_cache(self):
@@ -1467,11 +1482,11 @@ class AgentExecutor:
         organization_id: Optional[str]
     ) -> None:
         """
-        Apply output mappings for agent mode skills using captured OutputTool values.
+        Apply output mappings for agent mode skills using captured output tool values.
 
         Args:
             skill: SkillConfig with output definitions
-            captured_values: Values captured from OutputTool (keyed by output name)
+            captured_values: Values captured from output tool (keyed by output name)
             api_key: API key for authenticated calls
             organization_id: Organization ID for RLS context
         """

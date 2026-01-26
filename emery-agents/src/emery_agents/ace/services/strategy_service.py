@@ -1,23 +1,19 @@
 """
-Strategy Accumulation Service
+Strategy Accumulation Service - DSPy-based strategy ranking.
 
 Records successful execution patterns and surfaces them to the planner.
 Part of the ACE (Agentic Context Engineering) pattern.
 
-Used in BOTH phases:
-- Planning: get_relevant_strategies() uses LLM for semantic matching
-- Execution: record_execution() captures successful patterns
+Uses DSPy ChainOfThought with RankStrategies signature.
 """
 
 import hashlib
+import json
 import logging
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from jinja2 import Environment, FileSystemLoader
-from smolagents import Tool, ToolCallingAgent
-from smolagents.monitoring import LogLevel
+import dspy
 
 from ..models.strategy_accumulation import (
     ExecutionPattern,
@@ -26,74 +22,41 @@ from ..models.strategy_accumulation import (
     StrategyRegistry,
 )
 from emery_agents.models.plan import Plan
-from emery_agents.services.protocols import ModelProvider
+from emery_agents.dspy_modules.signatures.evaluation import (
+    RankStrategies,
+    StrategyRankingsResult,
+)
 
 logger = logging.getLogger(__name__)
 
-# Load Jinja environment for templates
-_PROMPTS_DIR = Path(__file__).parent.parent.parent / "prompts" / "ace"
-_jinja_env = Environment(loader=FileSystemLoader(str(_PROMPTS_DIR)))
 
-
-class StrategyRankingTool(Tool):  # type: ignore[misc]
-    """Tool for LLM to rank strategies by relevance to a goal."""
-
-    skip_forward_signature_validation = True
-    name = "rank_strategies"
-    description = """Rank strategies by relevance to the goal.
-
-Provide a list of strategy IDs in order of relevance (most relevant first).
-Only include strategies that are actually relevant - omit irrelevant ones.
-
-Example:
-{
-    "rankings": [
-        {"pattern_id": "abc123", "relevance": 0.9, "reason": "Same domain and action type"},
-        {"pattern_id": "def456", "relevance": 0.6, "reason": "Similar entity manipulation"}
-    ]
-}
-"""
-
-    inputs = {
-        "rankings": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "pattern_id": {"type": "string", "description": "Strategy pattern ID"},
-                    "relevance": {"type": "number", "description": "Relevance score 0.0-1.0"},
-                    "reason": {"type": "string", "description": "Brief reason for ranking"},
-                },
-                "required": ["pattern_id", "relevance"],
-            },
-            "description": "Strategies ranked by relevance",
-        },
-    }
-    output_type = "string"
+class StrategyRankingModule(dspy.Module):
+    """DSPy module for ranking strategies by relevance."""
 
     def __init__(self) -> None:
         super().__init__()
-        self.rankings: List[Dict[str, Any]] = []
+        self.ranker = dspy.ChainOfThought(RankStrategies)
 
-    def forward(self, rankings: List[Dict[str, Any]]) -> str:
-        self.rankings = rankings
-        return f"Ranked {len(rankings)} strategies"
-
-    def get_rankings(self) -> List[Dict[str, Any]]:
-        return self.rankings
+    def forward(self, goal: str, strategies_json: str) -> StrategyRankingsResult:
+        """Rank strategies by relevance to the goal."""
+        result = self.ranker(goal=goal, strategies_json=strategies_json)
+        return result.result
 
 
 @dataclass
 class StrategyAccumulationService:
     """
-    Records successful execution patterns and surfaces them to planner.
+    DSPy-based strategy ranking and pattern accumulation.
 
-    Uses LLM for semantic matching when finding relevant strategies.
+    Records successful execution patterns and surfaces them to planner
+    using semantic matching via DSPy.
     """
 
     registry: StrategyRegistry = field(default_factory=StrategyRegistry)
-    model_provider: Optional[ModelProvider] = None
-    org_model: Optional[str] = None
+    lm: Optional[dspy.LM] = None
+
+    def __post_init__(self) -> None:
+        self._module = StrategyRankingModule()
 
     def record_execution(
         self,
@@ -139,9 +102,7 @@ class StrategyAccumulationService:
         min_confidence: float = 0.3,
     ) -> List[StrategyRecord]:
         """
-        Find strategies relevant to a goal using LLM semantic matching.
-
-        Falls back to keyword matching if no model_provider available.
+        Find strategies relevant to a goal using DSPy semantic matching.
         """
         # Filter by confidence first
         candidates = [
@@ -153,29 +114,22 @@ class StrategyAccumulationService:
             logger.info("📊 No strategies above confidence threshold")
             return []
 
-        # Use LLM for semantic matching if available
-        ranked = []
-        if self.model_provider and len(candidates) > 0:
-            ranked = self._llm_rank_strategies(goal, candidates)
-            if ranked:
-                logger.info(f"📊 LLM ranked {len(ranked)} relevant strategies")
-                return ranked[:max_results]
-        else:
-            logger.info("📊 LLM did not find relevant strategies")
-            return []
+        # Use DSPy for semantic matching
+        ranked = self._llm_rank_strategies(goal, candidates)
+        if ranked:
+            logger.info(f"📊 LLM ranked {len(ranked)} relevant strategies")
+            return ranked[:max_results]
 
-        return ranked[:max_results]
+        logger.info("📊 LLM did not find relevant strategies")
+        return []
 
     def _llm_rank_strategies(
         self,
         goal: str,
         candidates: List[StrategyRecord],
     ) -> List[StrategyRecord]:
-        """Use LLM to rank strategies by semantic relevance."""
-        if not self.model_provider:
-            return []
-
-        # Prepare strategy summaries for LLM
+        """Use DSPy to rank strategies by semantic relevance."""
+        # Prepare strategy summaries as JSON
         strategy_summaries = []
         for record in candidates:
             pattern = record.pattern
@@ -187,34 +141,30 @@ class StrategyAccumulationService:
                 "success_rate": f"{record.success_rate:.0%}",
             })
 
-        # Build prompt
-        template = _jinja_env.get_template("strategy_matching.j2")
-        prompt = template.render(goal=goal, strategies=strategy_summaries)
+        strategies_json = json.dumps(strategy_summaries)
 
-        # Get model and run ranking
-        model_id = self.model_provider.resolve_model_selection(org_model=self.org_model)
-        model = self.model_provider.get_model(model_id=model_id)
+        try:
+            # Use provided LM or global settings
+            if self.lm:
+                with dspy.context(lm=self.lm):
+                    result = self._module(goal=goal, strategies_json=strategies_json)
+            else:
+                result = self._module(goal=goal, strategies_json=strategies_json)
 
-        ranking_tool = StrategyRankingTool()
-        ranker = ToolCallingAgent(
-            tools=[ranking_tool],
-            model=model,
-            max_steps=2,
-            verbosity_level=LogLevel.OFF,
-        )
-        ranker.run(task=prompt, reset=True)  # reset=True for context isolation
+            # Map rankings back to records
+            id_to_record = {r.pattern.pattern_id: r for r in candidates}
 
-        # Map rankings back to records
-        rankings = ranking_tool.get_rankings()
-        id_to_record = {r.pattern.pattern_id: r for r in candidates}
+            ranked_records = []
+            for rank in result.rankings:
+                pattern_id = rank.pattern_id
+                if pattern_id and pattern_id in id_to_record:
+                    ranked_records.append(id_to_record[pattern_id])
 
-        ranked_records = []
-        for rank in rankings:
-            pattern_id = rank.get("pattern_id")
-            if pattern_id and pattern_id in id_to_record:
-                ranked_records.append(id_to_record[pattern_id])
+            return ranked_records
 
-        return ranked_records
+        except Exception as e:
+            logger.warning(f"Strategy ranking failed: {e}")
+            return []
 
     def format_for_planner(self, strategies: List[StrategyRecord]) -> str:
         """Format strategies as guidance text for the planner prompt."""
@@ -284,12 +234,10 @@ class StrategyAccumulationService:
 
 def create_strategy_accumulation_service(
     registry: Optional[StrategyRegistry] = None,
-    model_provider: Optional[ModelProvider] = None,
-    org_model: Optional[str] = None,
+    lm: Optional[dspy.LM] = None,
 ) -> StrategyAccumulationService:
     """Factory function to create StrategyAccumulationService."""
     return StrategyAccumulationService(
         registry=registry or StrategyRegistry(),
-        model_provider=model_provider,
-        org_model=org_model,
+        lm=lm,
     )

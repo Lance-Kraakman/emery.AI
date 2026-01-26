@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Any, AsyncIterator, Dict, Callable, Tuple, Sequence, TYPE_CHECKING
 from enum import Enum
 
-from ..agents.evaluator_agent import EvaluationTool
+import dspy
 from ..agents.interrupt_classifier import (
     InterruptClassification,
     create_interrupt_classifier,
@@ -28,11 +28,12 @@ from ..utils.toon_format import to_toon
 from ..utils.session_logger import SessionLogger, get_session_logger
 from ..models.context_mapping import ResolvedContext
 from ..models.execution import StepExecutionResult, EvaluatorInput, ReplanContext
-from ..prompts import render_template
+from ..dspy_modules.modules.evaluator import EvaluatorModule
+from ..dspy_modules.config import get_dspy_lm
 from ..tools.tool_modes import ToolMode, filter_tools_for_mode
 from .plan_service import PlanService
 from .plan_step_executor import PlanStepExecutor
-from .protocols import EvaluatorAgent, Tool, ModelProvider, ManagedAgent
+from .protocols import Tool, ModelProvider, ManagedAgent
 # AIDEV-NOTE: TaskClassifier removed - planner handles clarification inline
 from .research_tools_provider import get_research_tools, detect_research_intent
 from .execution import (
@@ -359,15 +360,10 @@ class PlanningStartedEvent:
 
 @dataclass
 class ExecutionCoordinatorConfig:
-    """
-    Configuration for ExecutionCoordinator with full type safety.
-
-    AIDEV-NOTE: Consolidates constructor params into a typed dataclass.
-    """
+    """Configuration for ExecutionCoordinator."""
 
     plan_service: PlanService
-    model_provider: Optional[ModelProvider] = None  # For TaskClassifier
-    evaluator_factory: Optional[Callable[[], Tuple[EvaluatorAgent, EvaluationTool]]] = None
+    model_provider: Optional[ModelProvider] = None
     plan_step_executor: Optional[PlanStepExecutor] = None
     evaluate_after_steps: int = 1
     max_replans: int = 3
@@ -397,7 +393,6 @@ class ExecutionCoordinator:
         self,
         plan_service: Optional[PlanService] = None,
         model_provider: Optional[ModelProvider] = None,
-        evaluator_factory: Optional[Callable[[], Tuple[EvaluatorAgent, EvaluationTool]]] = None,
         plan_step_executor: Optional[PlanStepExecutor] = None,
         evaluate_after_steps: int = 1,
         max_replans: int = 3,
@@ -412,19 +407,18 @@ class ExecutionCoordinator:
 
         Args:
             plan_service: Service for plan persistence
-            model_provider: Provider for LLM access (used by TaskClassifier)
-            evaluator_factory: Factory for creating (agent, tool) tuples for evaluation
-            plan_step_executor: Executor for plan steps using smolagents routing
+            model_provider: Provider for LLM access
+            plan_step_executor: Executor for plan steps
             evaluate_after_steps: Run evaluation after this many steps (default: 1)
             max_replans: Maximum number of replans before stopping (default: 3)
             org_model: Organization model ID for model resolution hierarchy
-            api_key: API key for model providers that require authentication (e.g., Gemini)
-            organization_id: Organization ID for RLS context and research agent
-            conversation_history: Chat history for resolving references in planning (ACE pattern)
+            api_key: API key for model providers
+            organization_id: Organization ID for RLS context
+            conversation_history: Chat history for resolving references
         """
         self.plan_service = plan_service or PlanService()
-        self.evaluator_factory = evaluator_factory
         self.plan_step_executor = plan_step_executor
+        self._evaluator: Optional[EvaluatorModule] = None
         self.evaluate_after_steps = evaluate_after_steps
         self.max_replans = max_replans
         self._org_model = org_model
@@ -505,7 +499,6 @@ class ExecutionCoordinator:
         return cls(
             plan_service=config.plan_service,
             model_provider=config.model_provider,
-            evaluator_factory=config.evaluator_factory,
             plan_step_executor=config.plan_step_executor,
             evaluate_after_steps=config.evaluate_after_steps,
             max_replans=config.max_replans,
@@ -1314,7 +1307,7 @@ class ExecutionCoordinator:
 
                     # Evaluate progress periodically
                     steps_since_eval += 1
-                    if self.evaluator_factory and steps_since_eval >= self.evaluate_after_steps:
+                    if steps_since_eval >= self.evaluate_after_steps:
                         evaluation = await self._evaluate_progress()
                         last_evaluation = evaluation  # Store for end-of-plan check
                         steps_since_eval = 0
@@ -1549,10 +1542,7 @@ class ExecutionCoordinator:
 
     async def _synthesize_final_answer(self) -> str:
         """
-        ACE: Use evaluator to synthesize all step results into coherent final answer.
-
-        This is called AFTER all steps complete, before ExecutionCompletedEvent.
-        Takes all step results + curated insights and creates a unified response.
+        Use DSPy evaluator to synthesize all step results into coherent final answer.
 
         Returns:
             Synthesized final answer string
@@ -1560,7 +1550,7 @@ class ExecutionCoordinator:
         if not self._ledger:
             return ""
 
-        # Get all step results (including empty ones)
+        # Get all step results
         step_results = self._ledger.get_step_results()
         if not step_results:
             return ""
@@ -1570,29 +1560,23 @@ class ExecutionCoordinator:
         if self._ledger.execution_context:
             curated_context = self._ledger.execution_context.format_insights(max_tokens=1000)
 
-        # Build synthesis prompt from template
         goal = self._current_plan.goal if self._current_plan else "Unknown"
         formatted_results = self._format_step_results_for_synthesis(step_results)
 
-        synthesis_prompt = render_template(
-            "execution/step_synthesis.j2",
-            goal=goal,
-            step_results=formatted_results,
-            curated_context=curated_context,
-        )
-
-        # Use evaluator model for synthesis (runs synchronously in thread)
-        if not self.evaluator_factory:
-            logger.warning("No evaluator_factory for synthesis - using raw results")
-            return self._format_step_results_for_synthesis(step_results)
-
         try:
-            evaluator, _ = self.evaluator_factory()
-            result = await asyncio.to_thread(evaluator.run, synthesis_prompt)
-            return result if isinstance(result, str) else str(result)
+            lm = get_dspy_lm(org_model=self._org_model)
+            evaluator = self._get_evaluator()
+
+            with dspy.context(lm=lm):
+                result = await asyncio.to_thread(
+                    evaluator.synthesize_answer,
+                    goal,
+                    formatted_results,
+                    curated_context,
+                )
+            return result
         except Exception as e:
-            logger.error(f"Synthesis LLM call failed: {e}")
-            # Fallback: concatenate results
+            logger.error(f"Synthesis failed: {e}")
             return self._format_step_results_for_synthesis(step_results)
 
     def _format_step_results_for_synthesis(self, step_results: Dict[str, Optional[str]]) -> str:
@@ -1614,61 +1598,59 @@ class ExecutionCoordinator:
 
         return "\n\n".join(parts)
 
+    def _get_evaluator(self) -> EvaluatorModule:
+        """Get or create evaluator module."""
+        if self._evaluator is None:
+            self._evaluator = EvaluatorModule()
+        return self._evaluator
+
     async def _evaluate_progress(self) -> EvaluationResult:
         """
-        Run evaluator agent on current state.
-
-        Uses EvaluationTool pattern - the evaluator LLM calls report_evaluation
-        tool with structured output instead of returning raw JSON.
+        Run DSPy evaluator on current state.
 
         Returns:
             EvaluationResult with goal status and recommendations
         """
-        if not self.evaluator_factory:
-            return EvaluationResult(
-                goal_achieved=False,
-                blocking_issues=False,
-                should_continue=True,
-                needs_replan=False,
-                reason="No evaluator configured",
-            )
-
         try:
-            # Factory returns (agent, tool) tuple
-            evaluator, eval_tool = self.evaluator_factory()
-            ledger_data = self.get_ledger_for_evaluator() or {}
-
-            # Build evaluation prompt from template with TOON for minimal token usage
             goal = self._current_plan.goal if self._current_plan else "Unknown"
-            prompt = render_template(
-                "execution/step_evaluation.j2",
-                goal=goal,
-                ledger_state=to_toon(ledger_data),
-            )
 
-            # Run evaluator - it will call report_evaluation tool
-            # Wrap in thread since evaluator.run() is synchronous (calls blocking LLM APIs)
-            await asyncio.to_thread(evaluator.run, prompt)
+            # Get plan steps and results
+            plan_steps: list[str] = []
+            step_results: list[str] = []
 
-            # Get structured result from tool
-            result = eval_tool.get_result()
-            if result:
-                return EvaluationResult(
-                    goal_achieved=bool(result.get("goal_achieved", False)),
-                    blocking_issues=bool(result.get("blocking_issues", False)),
-                    should_continue=bool(result.get("should_continue", True)),
-                    needs_replan=bool(result.get("needs_replan", False)),
-                    reason=str(result.get("reason", "")),
+            if self._current_plan:
+                for step in self._current_plan.steps:
+                    plan_steps.append(step.description)
+                    if step.result:
+                        step_results.append(step.result)
+                    elif step.status == PlanStepStatus.FAILED:
+                        step_results.append(f"FAILED: {step.error or 'Unknown error'}")
+                    else:
+                        step_results.append("Pending")
+
+            # Get DSPy LM and run evaluator
+            lm = get_dspy_lm(org_model=self._org_model)
+            evaluator = self._get_evaluator()
+
+            with dspy.context(lm=lm):
+                result = await asyncio.to_thread(
+                    evaluator.evaluate_goal,
+                    goal,
+                    plan_steps,
+                    step_results,
                 )
 
-            # Fallback if tool wasn't called (shouldn't happen with proper instructions)
-            logger.warning("Evaluator did not call report_evaluation tool")
+            # Map GoalEvaluation to EvaluationResult
             return EvaluationResult(
-                goal_achieved=False,
-                blocking_issues=True,
-                should_continue=False,
-                needs_replan=False,
-                reason="Evaluator did not call report_evaluation tool",
+                goal_achieved=result.achieved,
+                blocking_issues=len(result.blockers) > 0,
+                should_continue=not result.achieved and len(result.remaining_items) > 0,
+                needs_replan=len(result.blockers) > 0 and not result.achieved,
+                reason=f"Confidence: {result.confidence:.0%}. " + (
+                    f"Blockers: {', '.join(result.blockers)}" if result.blockers
+                    else f"Remaining: {', '.join(result.remaining_items)}" if result.remaining_items
+                    else "Goal achieved"
+                ),
             )
 
         except Exception as e:
@@ -2243,25 +2225,13 @@ class ExecutionCoordinatorFactory:
     def __init__(
         self,
         plan_service: Optional[PlanService] = None,
-        evaluator_factory: Optional[Callable[[], Tuple[EvaluatorAgent, EvaluationTool]]] = None,
         plan_step_executor: Optional[PlanStepExecutor] = None,
         evaluate_after_steps: int = 1,
         max_replans: int = 3,
         org_model: Optional[str] = None,
     ):
-        """
-        Initialize factory.
-
-        Args:
-            plan_service: Plan service for persistence
-            evaluator_factory: Factory for creating (agent, tool) tuples for evaluation
-            plan_step_executor: Executor for plan steps using smolagents routing
-            evaluate_after_steps: Run evaluation after this many steps
-            max_replans: Maximum number of replans before stopping
-            org_model: Organization model ID for model resolution hierarchy
-        """
+        """Initialize factory."""
         self.plan_service = plan_service
-        self.evaluator_factory = evaluator_factory
         self.plan_step_executor = plan_step_executor
         self.evaluate_after_steps = evaluate_after_steps
         self.max_replans = max_replans
@@ -2271,7 +2241,6 @@ class ExecutionCoordinatorFactory:
         """Create a new ExecutionCoordinator instance."""
         return ExecutionCoordinator(
             plan_service=self.plan_service,
-            evaluator_factory=self.evaluator_factory,
             plan_step_executor=self.plan_step_executor,
             evaluate_after_steps=self.evaluate_after_steps,
             max_replans=self.max_replans,

@@ -109,3 +109,92 @@ class AnalyzeTask(dspy.Signature):  # type: ignore[misc]
     domain: str = dspy.OutputField(desc="Domain: emery|web|automation|research")
     entities: list[str] = dspy.OutputField(desc="Key entities mentioned in the request")
     complexity: str = dspy.OutputField(desc="Complexity level: simple|medium|complex")
+
+
+class TaskClassificationResult(BaseModel):
+    """Result of classifying a task for execution routing."""
+
+    mode: str = Field(description="Execution mode: 'DIRECT' (simple) or 'PLAN_AND_APPROVE' (complex)")
+    needs_clarification: bool = Field(description="Whether clarification questions are needed")
+    clarification_questions: list[str] = Field(
+        default_factory=list, description="Questions to ask if clarification needed"
+    )
+    reasoning: str = Field(description="Explanation of the classification decision")
+
+
+class ClassifyTask(dspy.Signature):  # type: ignore[misc]
+    """Classify a task to determine execution mode and clarification needs.
+
+    DIRECT mode: Simple, clear command with all details provided.
+    PLAN_AND_APPROVE mode: Complex task, multiple steps, or needs clarification.
+
+    Be conservative - only use DIRECT for truly simple, unambiguous tasks.
+    """
+
+    task: str = dspy.InputField(desc="The user's task or request")
+    context: str = dspy.InputField(desc="Available context about the system state")
+
+    classification: TaskClassificationResult = dspy.OutputField()
+
+
+class GapAnalysisResultModel(BaseModel):
+    """Result of analyzing gaps between request and domain concerns."""
+
+    clear_concerns: list[str] = Field(
+        default_factory=list, description="Concern IDs that are clearly addressed"
+    )
+    gaps: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Gaps needing questions: [{concern_id, reason_unclear, suggested_question, suggested_options?}]"
+    )
+    context_summary: str = Field(description="Summary of what was understood from the request")
+
+
+class AnalyzeGaps(dspy.Signature):  # type: ignore[misc]
+    """Analyze user request against domain concerns to find gaps.
+
+    Check each concern against the request and context. Only generate questions
+    for genuine gaps - not for things already specified.
+    """
+
+    agent_name: str = dspy.InputField(desc="Name of agent to check concerns for")
+    user_request: str = dspy.InputField(desc="The user's original request")
+    gathered_context: str = dspy.InputField(desc="Additional context gathered")
+    concerns_json: str = dspy.InputField(desc="JSON list of domain concerns to check")
+
+    analysis: GapAnalysisResultModel = dspy.OutputField()
+
+
+class PlanDiffResult(BaseModel):
+    """Result of generating a plan diff for incremental updates."""
+
+    steps_to_skip: list[str] = Field(
+        default_factory=list, description="Step IDs to mark as skipped"
+    )
+    steps_to_modify: list[dict[str, str]] = Field(
+        default_factory=list, description="Steps to modify: [{step_id, new_description}]"
+    )
+    steps_to_append: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="New steps to add: [{description, target_agent?, phase_name?, phase_order?}]"
+    )
+    reasoning: str = Field(description="Why these changes are needed")
+    needs_clarification: bool = Field(default=False, description="Whether user input is needed")
+    clarifying_questions: list[dict[str, Any]] = Field(
+        default_factory=list, description="Questions if clarification needed"
+    )
+
+
+class GeneratePlanDiff(dspy.Signature):  # type: ignore[misc]
+    """Generate minimal diff to address a replan reason.
+
+    Preserve existing steps when possible. Only include changes that are necessary.
+    """
+
+    goal: str = dspy.InputField(desc="The plan's overall goal")
+    reason: str = dspy.InputField(desc="Why replanning was triggered")
+    failed_step_info: str = dspy.InputField(desc="Info about the failed step (if any)")
+    completed_context: str = dspy.InputField(desc="Summary of completed step results")
+    pending_steps_json: str = dspy.InputField(desc="JSON of pending steps")
+
+    diff: PlanDiffResult = dspy.OutputField()

@@ -1,9 +1,7 @@
 """
 Image Processing Utility
 
-Consolidates image downloading and processing functionality used across:
-- agent_executor.py
-- chat_processing_service.py
+Consolidates image downloading and processing functionality.
 
 Provides consistent image handling for vision model support.
 """
@@ -11,10 +9,9 @@ Provides consistent image handling for vision model support.
 import logging
 import aiohttp
 from io import BytesIO
-from typing import List, Optional
+from typing import Any, List, Optional
 from PIL import Image
 
-from smolagents.models import ChatMessage
 from ..grpc.generated import agent_worker_pb2
 
 logger = logging.getLogger(__name__)
@@ -28,15 +25,15 @@ class ImageProcessor:
         """
         Download images from URLs and convert to PIL.Image objects.
 
-        AIDEV-NOTE: Consolidates image downloading from:
-        - agent_executor._download_images() for ImageAttachment objects
-        - chat message_mapper.py for URL-based downloads
+        Consolidates image downloading for:
+        - ImageAttachment objects
+        - URL-based downloads
 
         Args:
             urls: List of image URLs (S3 pre-signed URLs, HTTP URLs, etc.)
 
         Returns:
-            List of PIL.Image objects ready for agent.run(images=...)
+            List of PIL.Image objects ready for vision models
         """
         if not urls:
             return []
@@ -78,7 +75,7 @@ class ImageProcessor:
         return await ImageProcessor.download_images_from_urls(urls)
 
     @staticmethod
-    def extract_images_from_message(message: ChatMessage) -> List[Image.Image]:
+    def extract_images_from_message(message: Any) -> List[Image.Image]:
         """
         Extract PIL Image objects from ChatMessage content.
 
@@ -88,9 +85,8 @@ class ImageProcessor:
         Returns:
             List of PIL.Image objects (empty if no images)
 
-        AIDEV-NOTE: Used to pass images to agent.run() via the official images parameter.
-        Smolagents expects list[PIL.Image], not URLs or base64 strings.
-        Content is always MessageContentList (list of content parts).
+        Used to pass images to vision models.
+        Content is always list of content parts.
         """
         if not message or not message.content:
             return []

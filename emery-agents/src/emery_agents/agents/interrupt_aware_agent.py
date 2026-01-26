@@ -1,67 +1,69 @@
-"""Agents that propagate interrupts from managed agents for HITL workflows."""
+"""
+Interrupt-aware DSPy executors for HITL workflows.
+
+These wrappers add interrupt handling to DSPy execution modules,
+enabling Human-In-The-Loop workflows where execution can be paused
+for user approval and resumed later.
+"""
+
+from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Union
+from typing import TYPE_CHECKING, Any
 
-from smolagents import ToolCallingAgent, CodeAgent
-from smolagents.utils import AgentError, AgentToolExecutionError
-from smolagents.agents import RunResult
+from ..dspy_modules.modules import (
+    ExecutorModule,
+    InterruptibleModule,
+    InterruptRequested,
+    wrap_interruptible,
+)
 
-from ._hitl_mixin import HITLMixin
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
 
-class InterruptAwareToolCallingAgent(HITLMixin, ToolCallingAgent):  # type: ignore[misc]
-    """ToolCallingAgent that propagates interrupts and handles HITL resume via mixin."""
+def create_interruptible_executor(
+    tools: list[Callable[..., Any]],
+    max_iters: int = 10,
+    interrupt_check: Callable[[], bool] | None = None,
+    on_interrupt: Callable[[str, dict[str, Any]], None] | None = None,
+) -> InterruptibleModule:
+    """
+    Create an ExecutorModule wrapped with interrupt support.
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
+    This enables HITL workflows where:
+    1. Execution can be paused via interrupt_check callback
+    2. State is preserved for later resume
+    3. Interrupts from nested tools are propagated
 
-    def run(self, task: str, **kwargs: Any) -> Union[RunResult, str]:
-        """Try HITL resume first, then normal flow."""
-        resume_result = self._handle_hitl_resume(task, stream=kwargs.get('stream', False))
-        if resume_result is not None:
-            return resume_result
-        return super().run(task, **kwargs)
+    Args:
+        tools: List of callable tools for the executor
+        max_iters: Maximum ReAct iterations
+        interrupt_check: Callback that returns True if interrupt requested
+        on_interrupt: Optional callback when interrupt is triggered
 
-    def execute_tool_call(self, tool_name: str, arguments: Union[Dict[str, str], str]) -> Any:
-        """Execute tool, re-raising interrupts as AgentError for HITL propagation."""
-        try:
-            return super().execute_tool_call(tool_name, arguments)
-        except AgentToolExecutionError as e:
-            if "interrupted" in str(e).lower():
-                logger.info(f"⏸️ Detected interrupt from managed agent '{tool_name}', propagating")
-                self._handle_interrupt(tool_name)
-                raise AgentError("Agent interrupted.", self.logger) from e
-            raise
+    Returns:
+        InterruptibleModule wrapping an ExecutorModule
+    """
+    executor = ExecutorModule(execution_tools=tools, max_iters=max_iters)
+    return InterruptibleModule(
+        inner_module=executor,
+        interrupt_check=interrupt_check,
+        on_interrupt=on_interrupt,
+    )
 
 
-class InterruptAwareCodeAgent(HITLMixin, CodeAgent):  # type: ignore[misc]
-    """CodeAgent that propagates interrupts and handles HITL resume via mixin."""
+# Backward compatibility aliases
+InterruptAwareToolCallingAgent = InterruptibleModule
+InterruptAwareCodeAgent = InterruptibleModule
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
-
-    def run(self, task: str, **kwargs: Any) -> Union[RunResult, str]:
-        """Try HITL resume first, then normal flow."""
-        resume_result = self._handle_hitl_resume(task, stream=kwargs.get('stream', False))
-        if resume_result is not None:
-            return resume_result
-        return super().run(task, **kwargs)
-
-    def python_executor(self, code: str, **kwargs: Any) -> Any:
-        """Execute code, re-raising interrupts as AgentError for HITL propagation."""
-        try:
-            return super().python_executor(code, **kwargs)
-        except Exception as e:
-            if "interrupted" in str(e).lower():
-                for agent_name in self.managed_agents:
-                    if agent_name in code or agent_name in str(e):
-                        logger.info(f"⏸️ Detected interrupt from managed agent '{agent_name}', propagating")
-                        self._handle_interrupt(agent_name)
-                        break
-                else:
-                    self.interrupt_switch = True
-                raise AgentError("Agent interrupted.", self.logger) from e
-            raise
+__all__ = [
+    "create_interruptible_executor",
+    "InterruptAwareToolCallingAgent",
+    "InterruptAwareCodeAgent",
+    "InterruptibleModule",
+    "InterruptRequested",
+    "wrap_interruptible",
+]

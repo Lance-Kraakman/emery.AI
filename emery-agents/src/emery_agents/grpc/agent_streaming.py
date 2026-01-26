@@ -11,7 +11,7 @@ import logging
 from pathlib import Path
 from typing import AsyncIterator, Optional, List, Dict, Any, TYPE_CHECKING
 
-from ..tools.skill_tool import SkillTool
+from ..dspy_modules.tools.execution import SkillTool
 from ..tools.tool_modes import filter_tools_for_mode, ToolMode
 from ..services.agent_executor import AgentExecutor
 from ..services.token_usage_extractor import TokenUsageExtractor
@@ -48,7 +48,6 @@ from .response_types import (
 )
 
 if TYPE_CHECKING:
-    from smolagents.models import ChatMessage
     from ..services.session_manager import SessionManager
     from ..services.model_provider import SmolagentsModelProvider
     from ..services.tool_loader import UnifiedToolLoader
@@ -58,6 +57,7 @@ if TYPE_CHECKING:
     from .generated import agent_worker_pb2
     from .coordinator_streaming import CoordinatorStreamingHandler
 
+from .mappers.message_types import ChatMessage
 from .agents.agent_models import ChatAgent, AgentDescriptor, get_builder_descriptors
 from ..services.capability_registry import CapabilityRegistry
 
@@ -212,7 +212,6 @@ class AgentStreamingHandler:
                     agent_mention=agent_mention,
                     task=cleaned_task,
                     tool_provider=tool_provider,
-                    model_provider=self.model_provider,
                     skill_executor_service=self.skill_executor_service,
                     org_model=org_model,
                     images=images,

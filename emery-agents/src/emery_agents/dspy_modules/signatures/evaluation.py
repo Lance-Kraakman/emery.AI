@@ -106,3 +106,152 @@ class EvaluateStep(dspy.Signature):  # type: ignore[misc]
     expected_outcome: str = dspy.InputField(desc="What outcome was expected")
 
     evaluation: StepEvaluation = dspy.OutputField()
+
+
+class InterruptClassificationResult(BaseModel):
+    """Result of classifying a user interrupt during plan execution."""
+
+    classification: str = Field(
+        description="Classification: 'CONTEXT_ADD', 'SCOPE_CHANGE', or 'CANCEL'"
+    )
+    requires_replan: bool = Field(
+        description="Whether this interrupt requires replanning"
+    )
+    is_cancel: bool = Field(
+        description="Whether this is a cancellation request"
+    )
+    reasoning: str = Field(
+        description="Brief explanation of the classification"
+    )
+    suggested_action: str = Field(
+        default="", description="Suggested next action (especially for SCOPE_CHANGE)"
+    )
+
+
+class ClassifyInterrupt(dspy.Signature):  # type: ignore[misc]
+    """Classify a user interrupt during plan execution.
+
+    Categories:
+    - CONTEXT_ADD: User provides additional info/clarification - continue with new context
+    - SCOPE_CHANGE: User wants to change direction - requires replanning
+    - CANCEL: User wants to stop execution entirely
+
+    Default to CONTEXT_ADD if unclear - it's the safest option.
+    """
+
+    interrupt_message: str = dspy.InputField(desc="The user's interrupt message")
+    current_plan_summary: str = dspy.InputField(desc="Summary of current plan goal")
+    completed_steps: str = dspy.InputField(desc="Summary of completed steps")
+    remaining_steps: str = dspy.InputField(desc="Summary of remaining steps")
+
+    classification: InterruptClassificationResult = dspy.OutputField()
+
+
+# ACE (Agentic Context Engineering) Signatures
+
+class PlanningInsightModel(BaseModel):
+    """A single planning insight extracted from phase output."""
+
+    insight_type: str = Field(
+        description="Type: 'entity', 'decision', 'constraint', or 'dependency'"
+    )
+    summary: str = Field(description="Brief description of the insight")
+    key_facts: list[str] = Field(description="Key facts related to this insight")
+
+
+class PlanningInsightsResult(BaseModel):
+    """Result of extracting planning insights."""
+
+    insights: list[PlanningInsightModel] = Field(description="List of planning insights")
+
+
+class ExtractPlanningInsights(dspy.Signature):  # type: ignore[misc]
+    """Extract planning insights from phase output.
+
+    Types:
+    - entity: Found entity (table, app, field, skill)
+    - decision: Planning decision that affects other phases
+    - constraint: Limitation discovered
+    - dependency: Dependency between phases
+    """
+
+    phase_name: str = dspy.InputField(desc="Name of the phase that completed")
+    context: str = dspy.InputField(desc="Raw context output from the phase")
+    analysis: str = dspy.InputField(desc="Raw analysis output from the phase")
+
+    result: PlanningInsightsResult = dspy.OutputField()
+
+
+class ExecutionInsightModel(BaseModel):
+    """A single execution insight extracted from step results."""
+
+    insight_type: str = Field(
+        description="Type: 'DISCOVERY', 'DECISION', 'ARTIFACT', 'CONSTRAINT', or 'ERROR_RECOVERY'"
+    )
+    summary: str = Field(description="1-2 sentence actionable summary")
+    key_facts: list[str] = Field(description="Bullet points of essential facts")
+    source_step_ids: list[str] = Field(description="Step IDs that contributed to this insight")
+
+
+class ExecutionInsightsResult(BaseModel):
+    """Result of extracting execution insights."""
+
+    insights: list[ExecutionInsightModel] = Field(description="List of execution insights")
+
+
+class ExtractExecutionInsights(dspy.Signature):  # type: ignore[misc]
+    """Extract insights from step execution results.
+
+    Focus on ACTIONABLE insights that help future steps:
+    - DISCOVERY: Found something new (entity, pattern, relationship)
+    - DECISION: Made a choice affecting future steps
+    - ARTIFACT: Created something (record, field, table)
+    - CONSTRAINT: Learned a limitation or requirement
+    - ERROR_RECOVERY: How an error was resolved
+    """
+
+    step_results_json: str = dspy.InputField(desc="JSON of step results to analyze")
+
+    result: ExecutionInsightsResult = dspy.OutputField()
+
+
+class StrategyRankingModel(BaseModel):
+    """A single strategy ranking."""
+
+    pattern_id: str = Field(description="Strategy pattern ID")
+    relevance: float = Field(ge=0.0, le=1.0, description="Relevance score 0.0-1.0")
+    reason: str = Field(default="", description="Brief reason for ranking")
+
+
+class StrategyRankingsResult(BaseModel):
+    """Result of ranking strategies."""
+
+    rankings: list[StrategyRankingModel] = Field(
+        description="Strategies ranked by relevance (most relevant first)"
+    )
+
+
+class RankStrategies(dspy.Signature):  # type: ignore[misc]
+    """Rank strategies by relevance to a goal.
+
+    Only include strategies that are actually relevant - omit irrelevant ones.
+    """
+
+    goal: str = dspy.InputField(desc="The goal to match strategies against")
+    strategies_json: str = dspy.InputField(desc="JSON list of strategy summaries")
+
+    result: StrategyRankingsResult = dspy.OutputField()
+
+
+class SynthesizeAnswer(dspy.Signature):  # type: ignore[misc]
+    """Synthesize step results into a coherent final answer.
+
+    Create a well-organized summary that directly addresses the goal.
+    Do NOT just list the steps - synthesize into a unified response.
+    """
+
+    goal: str = dspy.InputField(desc="The original goal or request")
+    step_results: str = dspy.InputField(desc="Formatted results from each step")
+    curated_context: str = dspy.InputField(desc="Additional insights from execution")
+
+    answer: str = dspy.OutputField(desc="Synthesized, coherent final answer")

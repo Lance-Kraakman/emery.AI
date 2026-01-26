@@ -1,7 +1,7 @@
 """
 DSPy Evaluator Module.
 
-This module handles goal evaluation and recovery analysis.
+Handles goal evaluation, recovery analysis, and answer synthesis.
 """
 
 from __future__ import annotations
@@ -15,12 +15,13 @@ from emery_agents.dspy_modules.signatures.evaluation import (
     GoalEvaluation,
     RecoveryAction,
     StepEvaluation,
+    SynthesizeAnswer,
 )
 
 
 class EvaluatorModule(dspy.Module):  # type: ignore[misc]
     """
-    DSPy module for evaluating goal achievement and step quality.
+    DSPy module for evaluating goal achievement, step quality, and synthesis.
     """
 
     def __init__(self) -> None:
@@ -29,6 +30,7 @@ class EvaluatorModule(dspy.Module):  # type: ignore[misc]
         self.goal_evaluator = dspy.ChainOfThought(EvaluateGoal)
         self.step_evaluator = dspy.ChainOfThought(EvaluateStep)
         self.recovery_analyzer = dspy.ChainOfThought(AnalyzeRecovery)
+        self.synthesizer = dspy.ChainOfThought(SynthesizeAnswer)
 
     def evaluate_goal(
         self,
@@ -101,6 +103,30 @@ class EvaluatorModule(dspy.Module):  # type: ignore[misc]
             context=context,
         )
         return result.recovery  # type: ignore[no-any-return]
+
+    def synthesize_answer(
+        self,
+        goal: str,
+        step_results: str,
+        curated_context: str = "",
+    ) -> str:
+        """
+        Synthesize step results into a coherent final answer.
+
+        Args:
+            goal: The original goal or request
+            step_results: Formatted results from each step
+            curated_context: Additional insights from execution
+
+        Returns:
+            Synthesized, coherent final answer
+        """
+        result = self.synthesizer(
+            goal=goal,
+            step_results=step_results,
+            curated_context=curated_context or "No additional context.",
+        )
+        return result.answer  # type: ignore[no-any-return]
 
     def forward(
         self,

@@ -9,8 +9,12 @@ from PIL import Image
 from ..clients import HuggingFaceInferenceClient, TaskResult
 from ..entities.skill_io import SkillOutputValue
 from ..grpc.generated import agent_worker_pb2
-from ..prompts import render_output_instructions
-from ..tools.output_tool import OutputTool, build_target_field_metadata_from_mappings
+from ..utils.output_instructions import render_output_instructions
+from ..dspy_modules.tools.output import (
+    OutputCollector,
+    create_output_tool,
+    build_target_field_metadata_from_mappings,
+)
 from ..types import SkillExecutionResult
 from ..utils import run_async_in_thread
 from ..utils.step_utils import step_to_progress_dict, RawProgressDict
@@ -234,24 +238,26 @@ class SkillExecutorService:
             )
             logger.info(f"🔧 Loaded {len(skill_tools)} tools for skill {skill_config.name}")
 
-        # 2. Add OutputTool if capturing outputs
+        # 2. Add output tool if capturing outputs
         #
         # TODO: Support node→skill output separation
-        # Currently OutputTool uses skill_config.outputs directly.
-        # Future enhancement: Use step.output_defs for OutputTool, then map
+        # Currently output tool uses skill_config.outputs directly.
+        # Future enhancement: Use step.output_defs for output tool, then map
         # captured node outputs → skill outputs based on output.source config.
         # See: OutputSource type in skill.ts (nodeId, outputName)
         #
-        output_tool = None
+        output_collector = None
         if capture_outputs and skill_config.outputs:
             # Extract target field metadata from output mappings for rich LLM guidance
             target_metadata = build_target_field_metadata_from_mappings(list(skill_config.outputs))
-            output_tool = OutputTool(
+            output_collector = OutputCollector()
+            output_tool = create_output_tool(
+                output_collector,
                 skill_outputs=list(skill_config.outputs),
                 target_field_metadata=target_metadata
             )
             skill_tools.append(output_tool)
-            logger.info(f"📤 Added OutputTool for {len(list(skill_config.outputs))} outputs")
+            logger.info(f"📤 Added output tool for {len(list(skill_config.outputs))} outputs")
 
         # 3. Process attachments from skill_config.content
         images, text_parts = self._process_skill_attachments(skill_config)
@@ -304,40 +310,45 @@ class SkillExecutorService:
             agent_name=f"skill_{skill_config.name}",
             agent_description=skill_config.description,
             enable_caching=False,
-            context_type="autonomous",
-            skill_agent_type=skill_agent_type
+            use_code_execution=skill_agent_type == "code_agent",
         )
-        sub_agent = self.agent_factory.create_agent(agent_config)
-        logger.info(f"✨ Created sub-agent for skill {skill_config.name} (has_images={has_images})")
+        executor_module = self.agent_factory.create_agent(agent_config)
+        logger.info(f"✨ Created DSPy executor for skill {skill_config.name} (has_images={has_images})")
 
-        # 6. Execute with streaming for progress visibility
-        # AIDEV-NOTE: stream=True allows us to capture intermediate steps for UI feedback
-        from smolagents.agent_types import AgentText, AgentImage, AgentAudio
-        from smolagents.memory import ActionStep, PlanningStep, FinalAnswerStep
+        # 6. Execute using DSPy module
+        # Build context with task and image info
+        import json as json_module
+        context_str = json_module.dumps({
+            "task": task,
+            "skill": skill_config.name,
+            "has_images": len(images) > 0 if images else False,
+            "image_count": len(images) if images else 0,
+        })
 
-        result = None
-        step_index = 0
+        # Emit progress start if callback provided
+        if progress_callback:
+            progress_callback({
+                "skill_name": skill_config.name,
+                "step_type": "action",
+                "step_index": 0,
+                "content": f"Executing skill: {skill_config.name}",
+            })
 
-        for step in sub_agent.run(task=task, images=images if images else None, stream=True, reset=True):
-            # Emit progress if callback provided
-            if progress_callback:
-                step_dict = self._step_to_progress_dict(step, step_index, skill_config.name)
-                if step_dict:
-                    progress_callback(step_dict)
+        result = executor_module.forward(
+            step_description=task,
+            context=context_str,
+        )
 
-            # Capture final result
-            if isinstance(step, FinalAnswerStep):
-                result = step.output
-            elif isinstance(step, AgentText):
-                result = step
+        # Emit progress complete if callback provided
+        if progress_callback:
+            progress_callback({
+                "skill_name": skill_config.name,
+                "step_type": "final",
+                "step_index": 1,
+                "content": "Skill execution completed",
+            })
 
-            step_index += 1
-
-        # Fallback if no explicit final answer
-        if result is None:
-            result = sub_agent.memory.steps[-1] if sub_agent.memory.steps else ""
-
-        logger.info(f"🔍 Skill output type: {type(result).__name__} ({step_index} steps)")
+        logger.info(f"🔍 Skill output type: {type(result).__name__}")
 
         # 7. Build result
         if return_message_parts:
@@ -349,12 +360,12 @@ class SkillExecutorService:
 
         # 8. Return with captured outputs if requested
         if capture_outputs:
-            was_called = output_tool.was_called() if output_tool else False
-            captured = output_tool.get_captured_values() if output_tool and was_called else None
+            was_called = output_collector.was_called() if output_collector else False
+            captured = output_collector.get_captured_values() if output_collector and was_called else None
 
             # Check for extraction failure
             if not was_called:
-                logger.error("❌ OutputTool was NOT called - skill execution failed")
+                logger.error("❌ Output tool was NOT called - skill execution failed")
                 return SkillExecutionResult(
                     result="FAILED: Skill did not submit results. Data extraction may have failed.",
                     captured_outputs=None
@@ -873,37 +884,39 @@ class SkillExecutorService:
         return images, text_parts
 
     def _build_message_parts_json(self, result: Any) -> str:
-        """Build MessageParts JSON from agent result (for chat mode)."""
-        from smolagents.agent_types import AgentText, AgentImage, AgentAudio
+        """Build MessageParts JSON from DSPy module result (for chat mode).
 
+        DSPy modules return strings or dicts, so we convert to MessageParts format.
+        """
         message_parts = []
 
-        if isinstance(result, AgentImage):
-            temp_path = result.to_string()
-            logger.info(f"📸 Skill generated image: {temp_path}")
-            message_parts.append({'type': 'image', 'url': temp_path})
-
-        elif isinstance(result, AgentAudio):
-            temp_path = result.to_string()
-            logger.info(f"🔊 Skill generated audio: {temp_path}")
-            message_parts.append({
-                'type': 'file',
-                'url': temp_path,
-                'mime_type': 'audio/wav',
-                'filename': 'audio.wav'
-            })
-
-        elif isinstance(result, (AgentText, str)):
+        if isinstance(result, dict):
+            # Handle structured dict results
+            if "image" in result or "image_url" in result:
+                url = result.get("image") or result.get("image_url")
+                logger.info(f"📸 Skill generated image: {url}")
+                message_parts.append({"type": "image", "url": url})
+            elif "audio" in result or "audio_url" in result:
+                url = result.get("audio") or result.get("audio_url")
+                logger.info(f"🔊 Skill generated audio: {url}")
+                message_parts.append({
+                    "type": "file",
+                    "url": url,
+                    "mime_type": "audio/wav",
+                    "filename": "audio.wav",
+                })
+            else:
+                # Convert dict to text
+                text_content = json.dumps(result)
+                logger.info(f"📝 Skill generated dict result")
+                message_parts.append({"type": "text", "text": text_content})
+        else:
+            # String or other type - convert to text
             text_content = str(result)
             logger.info(f"📝 Skill generated text: {text_content[:100]}...")
-            message_parts.append({'type': 'text', 'text': text_content})
+            message_parts.append({"type": "text", "text": text_content})
 
-        else:
-            text_content = str(result)
-            logger.info(f"❓ Skill generated unknown type, converting to text")
-            message_parts.append({'type': 'text', 'text': text_content})
-
-        return json.dumps({'parts': message_parts})
+        return json.dumps({"parts": message_parts})
 
     async def _apply_operation_output_mappings(
         self,

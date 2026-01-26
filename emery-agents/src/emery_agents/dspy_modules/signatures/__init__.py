@@ -11,6 +11,12 @@ from emery_agents.dspy_modules.signatures.planning import (
     Plan,
     ClarifyingQuestion,
     PlanOrQuestions,
+    ClassifyTask,
+    TaskClassificationResult,
+    AnalyzeGaps,
+    GapAnalysisResultModel,
+    GeneratePlanDiff,
+    PlanDiffResult,
 )
 from emery_agents.dspy_modules.signatures.agents import (
     BuildSchema,
@@ -27,6 +33,18 @@ from emery_agents.dspy_modules.signatures.evaluation import (
     AnalyzeRecovery,
     GoalEvaluation,
     RecoveryAction,
+    ClassifyInterrupt,
+    InterruptClassificationResult,
+    # ACE signatures
+    ExtractPlanningInsights,
+    PlanningInsightsResult,
+    PlanningInsightModel,
+    ExtractExecutionInsights,
+    ExecutionInsightsResult,
+    ExecutionInsightModel,
+    RankStrategies,
+    StrategyRankingsResult,
+    StrategyRankingModel,
 )
 
 __all__ = [
@@ -37,6 +55,15 @@ __all__ = [
     "Plan",
     "ClarifyingQuestion",
     "PlanOrQuestions",
+    # Task Classification
+    "ClassifyTask",
+    "TaskClassificationResult",
+    # Gap Analysis
+    "AnalyzeGaps",
+    "GapAnalysisResultModel",
+    # Plan Diffing
+    "GeneratePlanDiff",
+    "PlanDiffResult",
     # Agents
     "BuildSchema",
     "BuildSkill",
@@ -51,4 +78,17 @@ __all__ = [
     "AnalyzeRecovery",
     "GoalEvaluation",
     "RecoveryAction",
+    # Interrupt Classification
+    "ClassifyInterrupt",
+    "InterruptClassificationResult",
+    # ACE (Agentic Context Engineering)
+    "ExtractPlanningInsights",
+    "PlanningInsightsResult",
+    "PlanningInsightModel",
+    "ExtractExecutionInsights",
+    "ExecutionInsightsResult",
+    "ExecutionInsightModel",
+    "RankStrategies",
+    "StrategyRankingsResult",
+    "StrategyRankingModel",
 ]

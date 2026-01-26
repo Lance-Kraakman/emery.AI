@@ -16,7 +16,6 @@ from typing import Any, Dict, List, Optional, Callable, TYPE_CHECKING
 from pathlib import Path
 
 from ..grpc.generated.agent_worker_pb2 import ToolConfig, AgentConfig, SkillConfig
-from ..tools.skill_tool import SkillTool
 from ..dspy_modules.tools import (
     create_table_crud,
     create_field_crud,
@@ -30,6 +29,21 @@ from ..dspy_modules.tools import (
     create_view_crud,
     create_app_crud,
     create_page_crud,
+)
+from ..dspy_modules.tools.execution import SkillTool
+from ..dspy_modules.tools.integrations import (
+    PipedreamTool,
+    create_file_reader_tool,
+    create_calculator_tool,
+    create_document_reader_tool,
+    create_table_query_tool,
+    load_emery_database,
+    load_table_schema,
+    load_table_data,
+    load_measurement_api_tool,
+    load_kpi_api_tool,
+    load_analysis_api_tool,
+    load_process_api_tool,
 )
 
 if TYPE_CHECKING:
@@ -249,8 +263,6 @@ class UnifiedToolLoader:
 
     def _load_pipedream_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load a Pipedream tool using the unified configuration."""
-        from ..tools.pipedream_tools import PipedreamTool
-
         if not api_key:
             raise ValueError(f"API key required for Pipedream tool '{tool_config.name}'")
 
@@ -300,60 +312,49 @@ class UnifiedToolLoader:
 
         return loader_func(tool_config, unified_tool, api_key, api_key_mode)
 
-    # Emery tool loaders
+    # Emery tool loaders - using DSPy factory functions
     def _load_file_reader_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load File Reader tool."""
-        from ..tools.base_tools import load_file_reader
-        return load_file_reader(tool_config)
+        return create_file_reader_tool()
 
     def _load_calculator_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load Calculator tool."""
-        from ..tools.base_tools import load_calculator
-        return load_calculator(tool_config)
+        return create_calculator_tool()
 
     def _load_document_reader_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load Document Reader tool."""
-        from ..tools.base_tools import load_document_reader_tool
-        return load_document_reader_tool(tool_config)
+        return create_document_reader_tool()
 
     def _load_table_query_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load Table Query tool."""
-        from ..tools.base_tools import load_table_query_tool
-        return load_table_query_tool(tool_config)
+        return create_table_query_tool()
 
     def _load_emery_database_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load Emery Database tool."""
-        from ..tools.organizational_tools import load_emery_database
         return load_emery_database(tool_config)
 
     def _load_table_schema_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load Table Schema tool."""
-        from ..tools.organizational_tools import load_table_schema
         return load_table_schema(tool_config)
 
     def _load_table_data_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load Table Data tool."""
-        from ..tools.organizational_tools import load_table_data
         return load_table_data(tool_config)
 
     def _load_measurement_api_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load Measurement API tool."""
-        from ..tools.api_tools import load_measurement_api_tool
         return load_measurement_api_tool(tool_config)
 
     def _load_kpi_api_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load KPI API tool."""
-        from ..tools.api_tools import load_kpi_api_tool
         return load_kpi_api_tool(tool_config)
 
     def _load_analysis_api_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load Analysis API tool."""
-        from ..tools.api_tools import load_analysis_api_tool
         return load_analysis_api_tool(tool_config)
 
     def _load_process_api_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load Process API tool."""
-        from ..tools.api_tools import load_process_api_tool
         return load_process_api_tool(tool_config)
 
     def load_tools(self, tool_configs: List[ToolConfig], api_key: str = "", api_key_mode: str = "agent") -> List[Any]:

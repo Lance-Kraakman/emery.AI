@@ -23,11 +23,13 @@ logger = logging.getLogger(__name__)
 # Shared thread pool for HTTP requests to prevent blocking gRPC event loop
 _http_thread_pool = ThreadPoolExecutor(max_workers=10, thread_name_prefix="pipedream-http")
 
-# Load metadata once
-METADATA_PATH = Path(__file__).parent.parent.parent.parent / "tools" / "pipedream_metadata.json"
+# Load metadata once from unified_metadata.json
+METADATA_PATH = Path(__file__).parent.parent.parent.parent / "execution" / "tools" / "unified_metadata.json"
 try:
     with open(METADATA_PATH) as f:
-        PIPEDREAM_METADATA = json.load(f)
+        _unified = json.load(f)
+        PIPEDREAM_METADATA = _unified.get("pipedream_tools", {})
+    logger.info(f"[PIPEDREAM-TOOLS] Loaded {len(PIPEDREAM_METADATA)} tools from unified metadata")
 except FileNotFoundError:
     logger.warning(f"Pipedream metadata not found at {METADATA_PATH}")
     PIPEDREAM_METADATA = {}

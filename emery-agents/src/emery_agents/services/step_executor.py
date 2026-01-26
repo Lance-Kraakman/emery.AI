@@ -18,8 +18,8 @@ from tenacity import (
 )
 
 from ..grpc.generated import agent_worker_pb2
-from ..prompts import render_output_instructions
-from ..tools.output_tool import OutputTool
+from ..utils.output_instructions import render_output_instructions
+from ..dspy_modules.tools.output import OutputCollector, create_output_tool
 from ..types import SkillExecutionResult
 from ..utils.error_classifier import classify_error
 from ..utils.toon_format import to_toon
@@ -1219,13 +1219,14 @@ class StepExecutorService:
             except Exception as e:
                 logger.warning(f"Failed to load some step tools: {e}")
 
-        # Add OutputTool if step has output_defs
-        output_tool = None
+        # Add output tool if step has output_defs
+        output_collector = None
         if step.output_defs:
             proto_outputs = [{'name': d.name, 'type': d.type} for d in step.output_defs]
-            output_tool = OutputTool(skill_outputs=proto_outputs)
+            output_collector = OutputCollector()
+            output_tool = create_output_tool(output_collector, skill_outputs=proto_outputs)
             step_tools.append(output_tool)
-            logger.info(f"📤 Added OutputTool for {len(step.output_defs)} step outputs")
+            logger.info(f"📤 Added output tool for {len(step.output_defs)} step outputs")
 
         task_parts = [instruction]
         if step_inputs:
@@ -1233,8 +1234,8 @@ class StepExecutorService:
             for key, value in step_inputs.items():
                 task_parts.append(f"- {key}: {value}")
 
-        # Add output instructions if OutputTool was added
-        if output_tool:
+        # Add output instructions if output tool was added
+        if output_collector:
             output_instructions = render_output_instructions(
                 [{'name': d.name, 'type': d.type} for d in step.output_defs]
             )
@@ -1256,9 +1257,9 @@ class StepExecutorService:
         sub_agent = self.agent_factory.create_agent(agent_config)
         result = sub_agent.run(task=task, stream=False, reset=True)
 
-        # Return captured outputs if OutputTool was used
-        if output_tool and output_tool.was_called():
-            captured = output_tool.get_captured_values()
+        # Return captured outputs if output tool was used
+        if output_collector and output_collector.was_called():
+            captured = output_collector.get_captured_values()
             logger.info(f"📤 Step {step.name} captured outputs: {list(captured.keys())}")
             return captured
 

@@ -35,13 +35,80 @@ from ..dspy_modules.tools import (
     create_ask_question_tool,
 )
 from ..models.plan import Plan, PlanStep, PlanStepStatus
-from ..prompts import render_template
 from ..services.capability_registry import CapabilityRegistry
 from ..utils.session_logger import get_session_logger
 from .prompt_template_resolver import resolve_prompt_template
 from .protocols import ModelProvider
 
 logger = logging.getLogger(__name__)
+
+
+def _build_step_prompt(
+    goal: str,
+    current_step: PlanStep,
+    step_index: int,
+    total_steps: int,
+    completed_steps: list[PlanStep],
+    remaining_steps: list[PlanStep],
+    capabilities: list[Any],
+    resolved_prompt: str | None = None,
+) -> str:
+    """Build execution prompt for a plan step."""
+    parts = [
+        f"You are executing step {step_index + 1} of {total_steps} in the approved plan.",
+        "",
+        "## Plan Goal",
+        goal,
+        "",
+        "## Critical Rule: Ask Questions If Missing Information",
+        "",
+        "If you cannot complete this step because you lack specific details:",
+        "1. Call `ask_clarifying_question` with question, options, and context",
+        "2. **IMMEDIATELY STOP** - Do NOT call any other tools after",
+        "",
+        "## Resource Discovery",
+        "",
+        "BEFORE asking for any ID, try to discover it first:",
+        "- Use `table_crud(method=\"list\")` to find tables",
+        "- Match by name before asking the user",
+    ]
+
+    if current_step.phase_name:
+        parts.extend(["", f"## Phase: {current_step.phase_name}"])
+
+    # Content section
+    if resolved_prompt:
+        parts.extend(["", "## Execute", resolved_prompt])
+    else:
+        parts.extend(["", "## Current Step", current_step.description])
+
+    # Completed steps
+    if completed_steps:
+        parts.extend(["", "## Previously Completed Steps"])
+        for i, step in enumerate(completed_steps, 1):
+            result = step.result or 'completed'
+            parts.append(f"- Step {i}: {step.description}")
+            parts.append(f"  Result: {result}")
+
+    # Remaining steps
+    if remaining_steps:
+        parts.extend(["", "## Remaining Steps After This"])
+        for step in remaining_steps:
+            parts.append(f"- {step.description}")
+
+    # Capabilities
+    agent_caps = [c for c in capabilities if hasattr(c, 'type') and c.type.value == 'agent']
+    if agent_caps:
+        parts.extend(["", "## Available Capabilities (Agents)"])
+        for cap in agent_caps:
+            actions = ', '.join(cap.actions) if cap.actions else ''
+            parts.append(f"- **{cap.name}**: {cap.description}")
+            if actions:
+                parts.append(f"  Actions: {actions}")
+
+    parts.extend(["", "---", "", "Execute directly. Report concrete results."])
+
+    return "\n".join(parts)
 
 
 class PlanStepExecutor:
@@ -218,8 +285,7 @@ class PlanStepExecutor:
                 f"({len(resolved_prompt)} chars)"
             )
             capabilities = self.capability_registry.all() if self.capability_registry else []
-            prompt = render_template(
-                "execution/step_executor_autonomous.j2",
+            prompt = _build_step_prompt(
                 goal=plan.goal,
                 current_step=current_step,
                 step_index=step_index,
@@ -235,8 +301,7 @@ class PlanStepExecutor:
                 f"📝 Interactive mode: using description for step {step_index + 1}"
             )
             capabilities = self.capability_registry.all() if self.capability_registry else []
-            prompt = render_template(
-                "execution/step_executor_interactive.j2",
+            prompt = _build_step_prompt(
                 goal=plan.goal,
                 current_step=current_step,
                 step_index=step_index,

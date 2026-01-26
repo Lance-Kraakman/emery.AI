@@ -24,7 +24,6 @@ import logging
 from typing import Any, AsyncIterator, List, Optional
 
 from ..services.tool_provider import ToolProvider
-from ..services.model_provider import SmolagentsModelProvider
 from ..services.skill_executor import SkillExecutorService
 from ..services.agent_api_service import AgentAPIService
 from ..agents.agent_executor_agent import create_agent_executor
@@ -46,7 +45,6 @@ async def handle_agent_mention_routing(
     agent_mention: str,
     task: str,
     tool_provider: ToolProvider,
-    model_provider: SmolagentsModelProvider,
     skill_executor_service: Optional[SkillExecutorService] = None,
     org_model: Optional[str] = None,
     images: Optional[List[Any]] = None,
@@ -64,7 +62,6 @@ async def handle_agent_mention_routing(
         agent_mention: The agent name from @agent:name mention
         task: The cleaned task (with mention removed)
         tool_provider: ToolProvider for API calls
-        model_provider: Model provider for creating agent
         skill_executor_service: Optional service for skill execution callbacks
         org_model: Organization model override
         images: Optional images from the message
@@ -101,10 +98,6 @@ async def handle_agent_mention_routing(
     logger.info(f"[MENTION-ROUTING] Loaded {len(skills)} skills for agent {agent_id}")
 
     # 3. Create AgentExecutor
-    model = model_provider.get_model(
-        model_provider.resolve_model_selection(org_model=org_model)
-    )
-
     # Create skill executor callback for skill invocation
     skill_executor_callback = None
     if skills and skill_executor_service:
@@ -118,7 +111,6 @@ async def handle_agent_mention_routing(
     agent_executor = create_agent_executor(
         agent_config=agent_config,
         skills=skills,
-        model=model,
         api_key=tool_provider.api_key,
         organization_id=tool_provider.organization_id,
         skill_executor_callback=skill_executor_callback,
@@ -140,7 +132,7 @@ async def handle_agent_mention_routing(
 
     try:
         # Run the agent in a thread pool to avoid blocking async loop
-        # AIDEV-NOTE: smolagents agents are synchronous, so we run in executor
+        # DSPy ExecutorModule is synchronous, so we run in executor
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
             None,

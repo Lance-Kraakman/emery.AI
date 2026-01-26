@@ -20,7 +20,6 @@ from ..services.execution_coordinator import (
     ErrorEvent,
 )
 from ..services.plan_step_executor import PlanStepExecutor
-from ..agents.evaluator_agent import create_evaluator_factory
 from ..models.plan import Plan
 from ..tools.tool_modes import ToolMode
 from ..services.agent_executor import AgentExecutor
@@ -189,9 +188,6 @@ class CoordinatorStreamingHandler:
         assert context.tool_provider is not None, "tool_provider required for autonomous execution"
         logger.info(f"📋 Coordinator: AUTONOMOUS mode - executing stored plan '{stored_plan.id}' directly")
 
-        model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
-        evaluator_factory = create_evaluator_factory(model)
-
         managed_agents_list = self._get_managed_agents_list(managed_agents)
 
         plan_step_executor = PlanStepExecutor(
@@ -205,7 +201,6 @@ class CoordinatorStreamingHandler:
         coordinator = ExecutionCoordinator(
             plan_service=self.plan_service,
             model_provider=self.model_provider,
-            evaluator_factory=evaluator_factory,
             plan_step_executor=plan_step_executor,
             evaluate_after_steps=1,
             max_replans=3,
@@ -263,9 +258,6 @@ class CoordinatorStreamingHandler:
         """Handle new request - coordinator determines mode."""
         logger.info("📋 Coordinator: Analyzing task to determine execution mode...")
 
-        model = self.model_provider.get_model(model_id=org_model) if org_model else self.model_provider.get_model()
-        evaluator_factory = create_evaluator_factory(model)
-
         managed_agents_list = self._get_managed_agents_list(managed_agents)
 
         if context.tool_provider is None:
@@ -287,7 +279,6 @@ class CoordinatorStreamingHandler:
         coordinator = ExecutionCoordinator(
             plan_service=self.plan_service,
             model_provider=self.model_provider,
-            evaluator_factory=evaluator_factory,
             plan_step_executor=plan_step_executor,
             evaluate_after_steps=1,
             max_replans=3,

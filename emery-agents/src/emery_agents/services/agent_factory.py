@@ -1,170 +1,143 @@
 """
-Agent Factory Utility
+Agent Factory - DSPy Module Creation.
 
-Consolidates ToolCallingAgent creation functionality used across:
-- agent_executor.py (_create_direct_execution_agent, _create_skill_agent)
-- chat_processing_service.py (_create_agent_with_model_provider)
+Creates DSPy modules for agent execution. Replaces smolagents ToolCallingAgent
+with dspy.ReAct via ExecutorModule.
 
-Provides standardized agent creation with model selection and caching support.
-
-AIDEV-NOTE: Uses Jinja2 templates from prompts/ directory for agent instructions.
-Templates are modular and composable via {% include %} directives.
-
-SECURITY: CodeAgent uses ModalExecutor for sandboxed code execution.
-This prevents LLM-generated code from accessing local resources.
+AIDEV-NOTE: DSPy modules use signatures and ChainOfThought/ReAct strategies
+instead of Jinja2 templates. Instructions are now part of signature docstrings.
 """
 
+from __future__ import annotations
+
 import logging
-import os
-from typing import List, Any, Optional, Dict
+from typing import Any, Callable
 from dataclasses import dataclass
 
-from smolagents import ToolCallingAgent, CodeAgent
-from smolagents.monitoring import LogLevel
+import dspy
+
 from .model_provider import SmolagentsModelProvider
-from ..agents.interrupt_aware_agent import InterruptAwareToolCallingAgent
-from ..prompts import build_agent_instructions
+from ..dspy_modules.modules import ExecutorModule, DelegatingExecutorModule
 
 logger = logging.getLogger(__name__)
 
 
-def _get_code_executor():
-    """Get Modal executor for sandboxed CodeAgent execution.
-
-    SECURITY: Always uses Modal for code execution isolation.
-    Requires MODAL_TOKEN_ID and MODAL_TOKEN_SECRET env vars.
-    """
-    import modal
-    from smolagents import ModalExecutor
-
-    image = modal.Image.debian_slim().pip_install([
-        "pandas", "numpy", "requests", "beautifulsoup4"
-    ])
-
-    logger.info("🔒 Using ModalExecutor for sandboxed CodeAgent execution")
-    return ModalExecutor(image=image)
-
-
 @dataclass
 class AgentConfig:
-    """Configuration for creating a ToolCallingAgent."""
-    tools: List[Any]
-    model_id: Optional[str] = None  # Explicit model override
-    agent_model: Optional[str] = None  # Agent default model
-    org_model: Optional[str] = None  # Organization default model
-    skill_model: Optional[str] = None  # Skill model override
+    """Configuration for creating a DSPy execution module."""
+
+    tools: list[Any]
+    model_id: str | None = None  # Explicit model override
+    agent_model: str | None = None  # Agent default model
+    org_model: str | None = None  # Organization default model
+    skill_model: str | None = None  # Skill model override
     has_images: bool = False  # Whether input contains images (for vision model)
-    max_steps: int = 10
-    agent_name: str = "tool_calling_agent"
-    agent_description: str = "ToolCallingAgent with configured tools"
+    max_iters: int = 10  # Max ReAct iterations
+    agent_name: str = "executor"
+    agent_description: str = "DSPy ReAct executor with tools"
     enable_caching: bool = False
-    managed_agents: Optional[List[Any]] = None  # Sub-agents for multi-agent routing
-    instructions: Optional[str] = None  # Additional custom instructions (appended to defaults)
-    agent_type: str = "default"  # Agent type for instruction loading
-    context_type: str = "interactive"  # Execution context (interactive/autonomous)
-    skill_agent_type: Optional[str] = None  # "tool_calling" (default) or "code_agent"
+    agent_modules: dict[str, dspy.Module] | None = None  # Specialized agent modules for delegation
+    use_code_execution: bool = False  # Use ProgramOfThought instead of ReAct
 
 
 class AgentFactory:
     """
-    Factory for creating ToolCallingAgent instances with standardized configuration.
+    Factory for creating DSPy execution modules.
 
-    AIDEV-NOTE: Consolidates agent creation patterns from:
-    - agent_executor: Creates agents for task execution with caching
-    - chat_processing_service: Creates agents for chat with vision model support
+    Creates ExecutorModule (dspy.ReAct) for tool-calling tasks
+    and DelegatingExecutorModule for multi-agent routing.
     """
 
-    def __init__(self, model_provider: SmolagentsModelProvider):
+    def __init__(self, model_provider: SmolagentsModelProvider) -> None:
         """
         Initialize agent factory.
 
         Args:
-            model_provider: Model provider for getting AI models
+            model_provider: Model provider for getting DSPy LM
         """
         self.model_provider = model_provider
-        self.agent_cache: Dict[str, ToolCallingAgent] = {}
+        self._module_cache: dict[str, dspy.Module] = {}
 
-    def create_agent(self, config: AgentConfig) -> ToolCallingAgent:
+    def create_agent(self, config: AgentConfig) -> dspy.Module:
         """
-        Create a ToolCallingAgent with standardized configuration.
+        Create a DSPy execution module.
 
         Args:
             config: Agent configuration
 
         Returns:
-            Configured ToolCallingAgent instance
+            Configured DSPy module (ExecutorModule or DelegatingExecutorModule)
         """
         # Check cache if enabled
         if config.enable_caching:
             cache_key = self._get_cache_key(config)
-            if cache_key in self.agent_cache:
-                logger.info(f"♻️ Returning cached agent: {cache_key}")
-                return self.agent_cache[cache_key]
+            if cache_key in self._module_cache:
+                logger.info(f"♻️ Returning cached module: {cache_key}")
+                return self._module_cache[cache_key]
 
-        # Resolve model using hierarchy
+        # Resolve and configure model
         model_id = self._resolve_model(config)
-        logger.info(f"🤖 Creating agent with model: {model_id}")
+        logger.info(f"🤖 Creating DSPy module with model: {model_id}")
 
-        # Get model instance
-        model = self.model_provider.get_model(model_id=model_id)
+        # Configure DSPy with the resolved model
+        self.model_provider.configure_dspy(model_id)
 
-        # Build instructions using centralized function with agent_type and context_type
-        default_instructions = build_agent_instructions(
-            tools=config.tools,
-            agent_type=config.agent_type,
-            context_type=config.context_type
-        )
-        # Append any additional custom instructions if provided
-        if config.instructions:
-            instructions = f"{default_instructions}\n\n{config.instructions}"
-        else:
-            instructions = default_instructions
-
-        # Create agent with optional managed agents for multi-agent routing
-        # AIDEV-NOTE: Use InterruptAwareToolCallingAgent to propagate interrupts from managed agents
-        # This enables HITL workflows where managed agents can pause for user approval
-        if config.skill_agent_type == "code_agent":
-            # CodeAgent writes Python code to execute tools
-            # Better for complex multi-step reasoning with conditionals and loops
-            # SECURITY: Uses ModalExecutor for sandboxed execution when configured
-            logger.info("🐍 Creating CodeAgent for skill execution")
-            executor = _get_code_executor()
-            agent = CodeAgent(
-                tools=config.tools,
-                model=model,
-                max_steps=config.max_steps,
-                additional_authorized_imports=["json", "re", "datetime", "math"],
-                verbosity_level=LogLevel.OFF,
-                executor=executor,  # None = local execution, ModalExecutor = sandboxed
+        # Create appropriate module type
+        if config.agent_modules:
+            # Use delegating executor for multi-agent routing
+            base_executor = ExecutorModule(
+                execution_tools=config.tools,
+                max_iters=config.max_iters,
             )
-        else:
-            # ToolCallingAgent uses structured function calls (default)
-            # More reliable and predictable for simple tasks
-            agent = InterruptAwareToolCallingAgent(
-                tools=config.tools,
-                model=model,
-                max_steps=config.max_steps,
-                managed_agents=config.managed_agents or [],
-                instructions=instructions,
-                verbosity_level=LogLevel.OFF,
+            module = DelegatingExecutorModule(
+                agent_modules=config.agent_modules,
+                default_executor=base_executor,
             )
-
-        agent.name = config.agent_name
-        agent.description = config.agent_description
+            logger.info(f"🔀 Created DelegatingExecutorModule with {len(config.agent_modules)} agents")
+        else:
+            # Standard executor with ReAct
+            module = ExecutorModule(
+                execution_tools=config.tools,
+                max_iters=config.max_iters,
+            )
+            logger.info(f"⚡ Created ExecutorModule with {len(config.tools)} tools")
 
         # Cache if enabled
         if config.enable_caching:
             cache_key = self._get_cache_key(config)
-            self.agent_cache[cache_key] = agent
-            logger.info(f"💾 Cached agent: {cache_key}")
+            self._module_cache[cache_key] = module
+            logger.info(f"💾 Cached module: {cache_key}")
 
-        return agent
+        return module
+
+    def create_executor(
+        self,
+        tools: list[Callable[..., Any]],
+        max_iters: int = 10,
+        model_id: str | None = None,
+    ) -> ExecutorModule:
+        """
+        Create an ExecutorModule directly (convenience method).
+
+        Args:
+            tools: List of callable tools
+            max_iters: Maximum ReAct iterations
+            model_id: Optional model override
+
+        Returns:
+            Configured ExecutorModule
+        """
+        if model_id:
+            self.model_provider.configure_dspy(model_id)
+
+        return ExecutorModule(
+            execution_tools=tools,
+            max_iters=max_iters,
+        )
 
     def _resolve_model(self, config: AgentConfig) -> str:
         """
         Resolve which model to use based on configuration.
-
-        Uses model provider's resolve_model_selection with full hierarchy support.
 
         Args:
             config: Agent configuration
@@ -172,34 +145,27 @@ class AgentFactory:
         Returns:
             Model ID to use
         """
-        # Use explicit model_id if provided (highest priority)
         if config.model_id:
             logger.info(f"📌 Using explicit model override: {config.model_id}")
             return config.model_id
 
-        # Otherwise use hierarchy: skill > agent > org > vision(if has_images) > default
         return self.model_provider.resolve_model_selection(
             skill_model=config.skill_model,
             agent_model=config.agent_model,
             org_model=config.org_model,
-            has_images=config.has_images
+            has_images=config.has_images,
         )
 
     def _get_cache_key(self, config: AgentConfig) -> str:
-        """
-        Generate cache key for agent configuration.
-
-        Args:
-            config: Agent configuration
-
-        Returns:
-            Cache key string
-        """
+        """Generate cache key for module configuration."""
         model_id = self._resolve_model(config)
-        tool_names = sorted([tool.name for tool in config.tools if hasattr(tool, 'name')])
-        return f"{model_id}_{','.join(tool_names)}_{config.max_steps}"
+        tool_names = sorted([
+            getattr(tool, "name", getattr(tool, "__name__", str(tool)))
+            for tool in config.tools
+        ])
+        return f"{model_id}_{','.join(tool_names)}_{config.max_iters}"
 
-    def clear_cache(self):
-        """Clear the agent cache."""
-        self.agent_cache.clear()
-        logger.info("🧹 Agent cache cleared")
+    def clear_cache(self) -> None:
+        """Clear the module cache."""
+        self._module_cache.clear()
+        logger.info("🧹 Module cache cleared")

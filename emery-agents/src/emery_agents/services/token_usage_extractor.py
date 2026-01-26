@@ -1,18 +1,19 @@
 """
 Token Usage Extraction Utility
 
-Consolidates token usage extraction functionality used across:
-- agent_executor.py (extract from RunResult)
-- chat_processing_service.py (extract from agent.memory.steps)
+Consolidates token usage extraction functionality.
+Supports DSPy TrackedStep types for token tracking.
 
 Provides consistent token tracking and cost calculation.
 """
 
 import logging
-from typing import Optional, Any
+from typing import Any, Optional
 
 from ..grpc.generated import agent_worker_pb2
-from .model_provider import TokenUsage, calculate_token_cost
+from ..dspy_modules.modules.step_tracker import TrackedStep, TokenUsage as DSPyTokenUsage
+from .model_provider import TokenUsage
+from .model_registry import calculate_token_cost
 
 logger = logging.getLogger(__name__)
 
@@ -21,14 +22,14 @@ class TokenUsageExtractor:
     """Utility class for extracting and converting token usage data."""
 
     @staticmethod
-    def extract_from_result(result) -> Optional[agent_worker_pb2.TokenUsage]:
+    def extract_from_result(result: Any) -> Optional[agent_worker_pb2.TokenUsage]:
         """
         Extract token usage from agent execution result.
 
         Used by agent_executor.py for task execution.
 
         Args:
-            result: RunResult object from smolagents agent.run()
+            result: Result object from DSPy module or legacy agent
 
         Returns:
             TokenUsage protobuf if token usage data exists, None otherwise
@@ -49,83 +50,55 @@ class TokenUsageExtractor:
         )
 
     @staticmethod
-    def extract_from_agent_memory(agent, default_model_name: str = '') -> Optional[TokenUsage]:
+    def extract_from_tracked_steps(
+        steps: list[TrackedStep],
+        default_model_name: str = ''
+    ) -> Optional[TokenUsage]:
         """
-        Extract accumulated token usage from agent's memory steps.
-
-        Used by chat_processing_service.py for streaming chat.
+        Extract accumulated token usage from DSPy TrackedStep list.
 
         Args:
-            agent: ToolCallingAgent with memory.steps containing token usage
-            default_model_name: Default model name to use if not found in steps
+            steps: List of TrackedStep from StepTracker
+            default_model_name: Default model name to use if not found
 
         Returns:
             TokenUsage object if data exists, None otherwise
         """
         try:
-            # Use agent.memory.steps instead of deprecated agent.logs
-            if not hasattr(agent, 'memory') or not agent.memory.steps:
-                logger.warning("No memory steps found in agent")
+            if not steps:
+                logger.warning("No steps provided for token extraction")
                 return None
 
-            logger.info(f"📊 Agent has {len(agent.memory.steps)} memory steps")
-
-            # Import step types from smolagents
-            from smolagents.memory import ActionStep, PlanningStep
+            logger.info(f"📊 Extracting tokens from {len(steps)} tracked steps")
 
             # Aggregate token usage from all steps
             total_input = 0
             total_output = 0
             model_name = ""
 
-            for i, step in enumerate(agent.memory.steps):
-                # Only ActionStep and PlanningStep have token_usage
-                if isinstance(step, (ActionStep, PlanningStep)):
-                    if step.token_usage:
-                        total_input += step.token_usage.input_tokens
-                        total_output += step.token_usage.output_tokens
-                        if not model_name:
-                            model_name = getattr(step.token_usage, 'model_name', '')
-                        logger.info(f"✅ Step {i} ({type(step).__name__}): input={step.token_usage.input_tokens}, output={step.token_usage.output_tokens}")
-                    else:
-                        logger.info(f"⚠️ Step {i} ({type(step).__name__}) has no token usage")
+            for i, step in enumerate(steps):
+                if step.token_usage:
+                    total_input += step.token_usage.input_tokens
+                    total_output += step.token_usage.output_tokens
+                    if not model_name:
+                        model_name = step.token_usage.model_name or ""
+                    logger.info(
+                        f"✅ Step {i} ({step.step_type.value}): "
+                        f"input={step.token_usage.input_tokens}, "
+                        f"output={step.token_usage.output_tokens}"
+                    )
                 else:
-                    logger.info(f"ℹ️ Step {i}: {type(step).__name__} (no token tracking)")
+                    logger.info(f"ℹ️ Step {i}: {step.step_type.value} (no token tracking)")
 
-            # If step-based extraction found nothing, try agent.monitor
-            # This is needed for OpenAIModel (Google/Gemini) which tracks tokens in monitor
-            # instead of on individual steps
-            if total_input == 0 and total_output == 0:
-                if hasattr(agent, 'monitor') and agent.monitor:
-                    try:
-                        token_counts = agent.monitor.get_total_token_counts()
-                        if token_counts:
-                            total_input = token_counts.get('input_tokens', 0)
-                            total_output = token_counts.get('output_tokens', 0)
-                            logger.info(f"📊 Extracted from agent.monitor: input={total_input}, output={total_output}")
-                    except Exception as e:
-                        logger.warning(f"⚠️ BILLING: Failed to get token counts from monitor: {e}")
-                else:
-                    logger.warning(f"⚠️ BILLING: No token usage in steps and no monitor available")
-
-            # Try to get model name from agent.model if not found in steps
-            # OpenAIModel stores model_id, CustomInferenceModel stores model_name
-            if not model_name:
-                if hasattr(agent, 'model'):
-                    model_name = getattr(agent.model, 'model_id', '') or getattr(agent.model, 'model_name', '')
-                    if model_name:
-                        logger.info(f"📊 Got model name from agent.model: {model_name}")
-                    else:
-                        logger.warning(f"⚠️ BILLING: Could not get model name from agent.model (no model_id or model_name)")
-                else:
-                    logger.warning(f"⚠️ BILLING: Agent has no model attribute, cannot determine model name")
-
-            # Note: 0 tokens is valid (future free models) - only log, don't fail
             if total_input == 0 and total_output == 0:
                 logger.info(f"📊 Token usage is zero (may be valid for free models)")
 
             # Calculate cost using model registry
-            cost = calculate_token_cost(model_name or default_model_name, total_input, total_output)
+            cost = calculate_token_cost(
+                model_name or default_model_name,
+                total_input,
+                total_output
+            )
 
             return TokenUsage(
                 input_tokens=total_input,
@@ -134,6 +107,46 @@ class TokenUsageExtractor:
                 cost_usd=cost,
                 model_name=model_name or default_model_name
             )
+
+        except Exception as e:
+            logger.error(f"Failed to extract token usage from tracked steps: {e}")
+            return None
+
+    @staticmethod
+    def extract_from_agent_memory(
+        agent: Any,
+        default_model_name: str = ''
+    ) -> Optional[TokenUsage]:
+        """
+        Extract accumulated token usage from agent's memory.
+
+        Supports both DSPy StepTracker and ChatAgent with TrackedSteps.
+
+        Args:
+            agent: Agent with memory/steps containing token usage
+            default_model_name: Default model name to use if not found in steps
+
+        Returns:
+            TokenUsage object if data exists, None otherwise
+        """
+        try:
+            # Check for DSPy-style tracked steps
+            if hasattr(agent, 'step_tracker') and agent.step_tracker:
+                steps = agent.step_tracker.steps
+                return TokenUsageExtractor.extract_from_tracked_steps(
+                    steps, default_model_name
+                )
+
+            # Check for ChatAgent with memory.steps (TrackedStep list)
+            if hasattr(agent, 'memory') and hasattr(agent.memory, 'steps'):
+                steps = agent.memory.steps
+                if steps and isinstance(steps[0], TrackedStep):
+                    return TokenUsageExtractor.extract_from_tracked_steps(
+                        steps, default_model_name
+                    )
+
+            logger.warning("No compatible memory structure found in agent")
+            return None
 
         except Exception as e:
             logger.error(f"Failed to extract token usage from agent memory: {e}")

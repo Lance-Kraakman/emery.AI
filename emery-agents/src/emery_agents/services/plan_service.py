@@ -1,16 +1,7 @@
 """
 Plan Service
 
-Facade for plan management - generation, storage, and retrieval.
-Delegates to modular components in services/planning/.
-
-AIDEV-NOTE: This is now a thin facade that maintains backward compatibility
-while delegating to:
-- PlanGenerator: Core plan generation logic
-- PlanRepository: gRPC persistence
-- FailureAnalyzer: Step failure recovery
-
-The original 700+ line class has been split into focused modules.
+Facade for plan management using DSPy.
 """
 
 import logging
@@ -32,7 +23,6 @@ from .protocols import ModelProvider, GRPCClient, Tool
 from .capability_registry import CapabilityRegistry
 from emery_agents.ace import StrategyAccumulationService
 from .planning import (
-    PlanGenerator,
     DSPyPlanGenerator,
     PlanRepository,
     FailureAnalyzer,
@@ -44,7 +34,6 @@ from .context import SessionConfig, WorkspaceContext
 
 logger = logging.getLogger(__name__)
 
-# Re-export dataclasses for backward compatibility
 __all__ = [
     "PlanService",
     "PlanServiceFactory",
@@ -53,20 +42,7 @@ __all__ = [
 
 
 class PlanService:
-    """
-    Facade for plan management.
-
-    Delegates to:
-    - PlanGenerator (or DSPyPlanGenerator) for plan creation
-    - PlanRepository for persistence
-    - FailureAnalyzer for recovery analysis
-
-    Maintains backward-compatible interface.
-
-    AIDEV-NOTE: DSPy is the only supported plan generation backend.
-    DSPy offers typed outputs, automatic prompt optimization, and
-    ChainOfThought reasoning.
-    """
+    """Facade for plan management using DSPy."""
 
     def __init__(
         self,
@@ -117,10 +93,7 @@ class PlanService:
         workspace: Optional[WorkspaceContext] = None,
     ) -> PlanGenerationResult:
         """
-        Generate plan using phased domain routing.
-
-        Delegates to PlanGenerator which routes to domain-specific planners
-        (schema, app, automation) via PlannerRouter.
+        Generate plan using DSPy PlannerModule.
 
         Args:
             basic_instructions: Human-readable instructions to convert to plan
