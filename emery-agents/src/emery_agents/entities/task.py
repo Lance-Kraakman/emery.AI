@@ -22,6 +22,22 @@ class SkillInputValue:
 
 
 @dataclass
+class SkillOutputValue:
+    """A single skill output value at runtime."""
+    name: str
+    value: Any
+    value_type: Optional[str] = None
+
+
+@dataclass
+class RowMappingContext:
+    """Context for row mapping operations."""
+    source_row_id: Optional[str] = None
+    item_index: Optional[int] = None
+    current_item: Any = None
+
+
+@dataclass
 class TriggerData:
     """Trigger data with typed skill inputs for task execution."""
     skill_inputs: List[SkillInputValue]

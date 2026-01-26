@@ -10,9 +10,12 @@ Files (PDFs, audio, documents) are processed to extract text content.
 """
 import logging
 import asyncio
-from typing import List, Dict, Any
+from typing import List, Dict, Any, TYPE_CHECKING
 from io import BytesIO
 from concurrent.futures import ThreadPoolExecutor
+
+if TYPE_CHECKING:
+    from emery_agents.services.execution_coordinator import ClarifyingQuestion
 
 import requests
 from PIL import Image
@@ -206,3 +209,31 @@ async def build_conversation_messages(
     ))
 
     return messages
+
+
+def format_clarifying_questions(questions: "List[ClarifyingQuestion]") -> List[Dict[str, Any]]:
+    """
+    Format ClarifyingQuestion objects as structured data for serialization.
+
+    Args:
+        questions: List of ClarifyingQuestion dataclass objects
+
+    Returns:
+        List of dicts with questionId, question, questionType, required, allowOther,
+        and optional options/context
+    """
+    questions_data: List[Dict[str, Any]] = []
+    for i, q in enumerate(questions):
+        q_dict: Dict[str, Any] = {
+            "questionId": f"q_{i}",
+            "question": q.question,
+            "questionType": q.question_type,  # 'text' | 'single_select' | 'multi_select'
+            "required": q.required,
+            "allowOther": q.allow_other,  # Show "Or type your own..." option
+        }
+        if q.options:
+            q_dict["options"] = q.options
+        if q.context:
+            q_dict["context"] = q.context
+        questions_data.append(q_dict)
+    return questions_data

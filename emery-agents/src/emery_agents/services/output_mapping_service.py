@@ -25,7 +25,7 @@ from ..entities.output_mapping import (
     RowIdSource,
     get_extension_for_mime
 )
-from ..entities.skill_io import SkillInputValue, SkillOutputValue, RowMappingContext
+from ..entities.task import SkillInputValue, SkillOutputValue, RowMappingContext
 
 logger = logging.getLogger(__name__)
 

@@ -13,7 +13,6 @@ Extracted components from ExecutionCoordinator for maintainability.
 from .step_executor import StepExecutor
 from .interrupt_handler import InterruptHandler, QueuedInterrupt
 from .replan_handler import ReplanHandler, ReplanNeedsClarificationError
-from .task_builder import TaskBuilder
 from .state import (
     Phase,
     InputType,
@@ -23,6 +22,25 @@ from .state import (
     StepResult,
     ExecutionState,
 )
+
+class TaskBuilder:
+    """Utility for composing task strings with various feedback types."""
+
+    @staticmethod
+    def with_clarification(original: str, response: str) -> str:
+        """Compose task with user clarification."""
+        return f"{original}\n\nUser's clarification: {response}"
+
+    @staticmethod
+    def with_feedback(original: str, feedback: str) -> str:
+        """Compose task with user feedback on plan."""
+        return f"{original}\n\nUser feedback on plan: {feedback}"
+
+    @staticmethod
+    def with_interrupt(goal: str, interrupt: str) -> str:
+        """Compose task with user interrupt/update."""
+        return f"{goal}\n\nUser feedback: {interrupt}"
+
 
 __all__ = [
     "StepExecutor",

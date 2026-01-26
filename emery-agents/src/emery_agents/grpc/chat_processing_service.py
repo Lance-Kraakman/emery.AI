@@ -23,8 +23,7 @@ from ..services.skill_executor import SkillExecutorService
 from ..services.plan_service import PlanService
 from ..services.execution_coordinator import ExecutionCoordinator, PlanCreatedEvent, AwaitingClarificationEvent
 from ..services.tool_provider import ToolProvider
-from ..models.plan import Plan
-from ..models.skill_definition import SkillInputDefinition, SkillOutputDefinition
+from ..models.plan import Plan, SkillInputDefinition, SkillOutputDefinition
 from .message_processor import extract_file_attachments
 from .agent_streaming import AgentStreamingHandler
 from .coordinator_streaming import CoordinatorStreamingHandler

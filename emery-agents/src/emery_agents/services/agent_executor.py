@@ -43,7 +43,7 @@ from ..entities.output_mapping import (
     OutputMappingConfig, FieldMapping, OutputMappingMode, RowAction,
     extract_field_value, get_extension_for_mime
 )
-from ..entities.skill_io import SkillOutputValue
+from ..entities.task import SkillOutputValue
 from .output_mapping_service import OutputMappingService, MappingContext
 from .execution_coordinator import (
     ExecutionCoordinator,

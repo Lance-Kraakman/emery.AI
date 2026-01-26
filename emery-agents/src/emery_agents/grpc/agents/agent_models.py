@@ -15,7 +15,7 @@ These models provide the same interface without smolagents dependency.
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Literal, Optional
 
 from .agent_descriptors import AgentDescriptor, get_builder_descriptors
 
@@ -23,7 +23,7 @@ from .agent_descriptors import AgentDescriptor, get_builder_descriptors
 @dataclass
 class MemoryStep:
     """A single step in agent memory (replaces smolagents TaskStep/ActionStep)."""
-    role: str  # "user" or "assistant"
+    role: Literal["user", "assistant"]
     content: str
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
     step_number: Optional[int] = None

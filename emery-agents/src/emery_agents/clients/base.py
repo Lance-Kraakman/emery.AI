@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emery_agents.entities.skill_io import SkillOutputValue
+    from emery_agents.entities.task import SkillOutputValue
 from enum import Enum
 
 
@@ -63,7 +63,7 @@ class TaskResult:
         Returns:
             List of SkillOutputValue for output mapping service
         """
-        from emery_agents.entities.skill_io import SkillOutputValue
+        from emery_agents.entities.task import SkillOutputValue
 
         outputs: List[SkillOutputValue] = []
 

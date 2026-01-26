@@ -6,10 +6,39 @@ These signatures replace the Jinja2 planning templates with typed I/O contracts.
 
 from __future__ import annotations
 
+from enum import Enum
 from typing import Any, Optional
 
 import dspy
 from pydantic import BaseModel, Field
+
+
+class TaskDomain(str, Enum):
+    """Domain classification for tasks."""
+    EMERY = "emery"
+    WEB = "web"
+    AUTOMATION = "automation"
+    RESEARCH = "research"
+
+
+class TaskComplexity(str, Enum):
+    """Complexity level for tasks."""
+    SIMPLE = "simple"
+    MEDIUM = "medium"
+    COMPLEX = "complex"
+
+
+class TaskExecutionMode(str, Enum):
+    """Execution mode for task routing."""
+    DIRECT = "DIRECT"
+    PLAN_AND_APPROVE = "PLAN_AND_APPROVE"
+
+
+class QuestionType(str, Enum):
+    """Types of clarifying questions."""
+    CHOICE = "choice"
+    TEXT = "text"
+    CONFIRMATION = "confirmation"
 
 
 class PlanStep(BaseModel):
@@ -58,7 +87,7 @@ class ClarifyingQuestion(BaseModel):
     """A question to ask the user for clarification."""
 
     question: str = Field(description="The question to ask")
-    question_type: str = Field(
+    question_type: QuestionType = Field(
         description="Type of question: 'choice', 'text', or 'confirmation'"
     )
     options: Optional[list[str]] = Field(
@@ -106,15 +135,15 @@ class AnalyzeTask(dspy.Signature):  # type: ignore[misc]
     context: str = dspy.InputField(desc="Workspace context")
 
     intent: str = dspy.OutputField(desc="What the user wants to achieve")
-    domain: str = dspy.OutputField(desc="Domain: emery|web|automation|research")
+    domain: TaskDomain = dspy.OutputField(desc="Domain: emery|web|automation|research")
     entities: list[str] = dspy.OutputField(desc="Key entities mentioned in the request")
-    complexity: str = dspy.OutputField(desc="Complexity level: simple|medium|complex")
+    complexity: TaskComplexity = dspy.OutputField(desc="Complexity level: simple|medium|complex")
 
 
 class TaskClassificationResult(BaseModel):
     """Result of classifying a task for execution routing."""
 
-    mode: str = Field(description="Execution mode: 'DIRECT' (simple) or 'PLAN_AND_APPROVE' (complex)")
+    mode: TaskExecutionMode = Field(description="Execution mode: 'DIRECT' (simple) or 'PLAN_AND_APPROVE' (complex)")
     needs_clarification: bool = Field(description="Whether clarification questions are needed")
     clarification_questions: list[str] = Field(
         default_factory=list, description="Questions to ask if clarification needed"

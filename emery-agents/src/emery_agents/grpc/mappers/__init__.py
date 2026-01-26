@@ -8,6 +8,7 @@ from .message_mapper import (
     extract_text_from_parts,
     has_images,
     build_conversation_messages,
+    format_clarifying_questions,
 )
 
 from .proto_mapper import (
@@ -25,8 +26,6 @@ from .message_types import (
     ContentPart,
     MessageContentList,
 )
-
-from .question_mapper import format_clarifying_questions
 
 __all__ = [
     # Message mapping functions (chat/vision)

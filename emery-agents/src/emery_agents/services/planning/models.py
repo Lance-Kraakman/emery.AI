@@ -15,8 +15,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from emery_agents.models.context_mapping import ResolvedContext
-from emery_agents.models.skill_definition import SkillInputDefinition, SkillOutputDefinition
-from emery_agents.models.plan import Plan
+from emery_agents.models.plan import Plan, SkillInputDefinition, SkillOutputDefinition
 from emery_agents.services.protocols import Tool, ManagedAgent
 from emery_agents.services.capability_registry import CapabilityRegistry
 from emery_agents.services.context import SessionConfig, WorkspaceContext

@@ -14,10 +14,11 @@ from emery_agents.models.plan import (
     PlanStatus,
     RecoveryResult,
     create_plan,
+    SkillInputDefinition,
+    SkillOutputDefinition,
 )
 from emery_agents.models.task_ledger import TaskLedger
 from emery_agents.models.context_mapping import ResolvedContext
-from emery_agents.models.skill_definition import SkillInputDefinition, SkillOutputDefinition
 
 from .protocols import ModelProviderProtocol, GRPCClient, Tool
 from .capability_registry import CapabilityRegistry

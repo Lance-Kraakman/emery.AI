@@ -21,6 +21,42 @@ if TYPE_CHECKING:
     from ..grpc.generated.agent_worker_pb2 import StoredSubPlan as StoredSubPlanProto
 
 
+# --- Skill Definition Models (used in plan generation templates) ---
+
+@dataclass
+class SkillInputDefinition:
+    """Definition of a skill input variable."""
+
+    name: str
+    type: str = "text"
+    required: bool = False
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dict for Jinja template."""
+        return {
+            "name": self.name,
+            "type": self.type,
+            "required": self.required,
+        }
+
+
+@dataclass
+class SkillOutputDefinition:
+    """Definition of a skill output variable."""
+
+    name: str
+    type: str = "text"
+
+    def to_dict(self) -> Dict[str, str]:
+        """Convert to dict for Jinja template."""
+        return {
+            "name": self.name,
+            "type": self.type,
+        }
+
+
+# --- Plan Status Enums ---
+
 class PlanStepStatus(str, Enum):
     """Status of a plan step during execution."""
     PENDING = "pending"

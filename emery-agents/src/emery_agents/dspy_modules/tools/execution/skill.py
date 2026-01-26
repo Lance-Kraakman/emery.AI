@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any, Callable
 from jinja2 import Template
 
 from ....entities.output_mapping import OutputMappingConfig
-from ....entities.skill_io import SkillOutputValue
+from ....entities.task import SkillOutputValue
 from ....grpc.generated.agent_worker_pb2 import SkillConfig
 from ....services.file_processor import download_file
 from ....services.image_processor import ImageProcessor

@@ -7,7 +7,7 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union, o
 from PIL import Image
 
 from ..clients import HuggingFaceInferenceClient, TaskResult
-from ..entities.skill_io import SkillOutputValue
+from ..entities.task import SkillOutputValue
 from ..grpc.generated import agent_worker_pb2
 from ..dspy_modules.modules.extractor import OutputExtractorModule
 from ..types import SkillExecutionResult
