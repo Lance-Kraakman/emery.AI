@@ -8,11 +8,13 @@ Uses DSPy ChainOfThought with ExtractExecutionInsights signature.
 
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import dspy
+
+from emery_agents.services.protocols import ModelProviderProtocol
 
 
 from emery_agents.ace.models.execution_context import ExecutionContext, ExecutionInsight, InsightType, StepResult, create_insight
@@ -50,6 +52,8 @@ class ExecutionContextService:
 
     lm: Optional[dspy.LM] = None
     curate_after_steps: int = 3
+    model_provider: Optional[ModelProviderProtocol] = None
+    org_model: Optional[str] = None
 
     def __post_init__(self) -> None:
         self._module = InsightExtractionModule()
@@ -158,6 +162,8 @@ class ExecutionContextService:
 def create_execution_context_service(
     lm: Optional[dspy.LM] = None,
     curate_after_steps: int = 3,
+    model_provider: Optional[ModelProviderProtocol] = None,
+    org_model: Optional[str] = None,
 ) -> ExecutionContextService:
     """
     Factory function to create ExecutionContextService.
@@ -165,6 +171,8 @@ def create_execution_context_service(
     Args:
         lm: DSPy language model (uses global settings if not provided)
         curate_after_steps: Number of steps between curation runs
+        model_provider: Model provider for LM resolution
+        org_model: Organization model ID
 
     Returns:
         Configured ExecutionContextService
@@ -172,4 +180,6 @@ def create_execution_context_service(
     return ExecutionContextService(
         lm=lm,
         curate_after_steps=curate_after_steps,
+        model_provider=model_provider,
+        org_model=org_model,
     )

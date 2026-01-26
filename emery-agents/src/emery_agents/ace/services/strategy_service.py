@@ -15,6 +15,8 @@ from typing import Any, Dict, List, Optional
 
 import dspy
 
+from emery_agents.services.protocols import ModelProviderProtocol
+
 from emery_agents.ace.models.strategy_accumulation import ExecutionPattern, StrategyOutcome, StrategyRecord, StrategyRegistry
 from emery_agents.entities.models.plan import Plan
 from emery_agents.reasoning.signatures.evaluation import (
@@ -49,6 +51,8 @@ class StrategyAccumulationService:
 
     registry: StrategyRegistry = field(default_factory=StrategyRegistry)
     lm: Optional[dspy.LM] = None
+    model_provider: Optional[ModelProviderProtocol] = None
+    org_model: Optional[str] = None
 
     def __post_init__(self) -> None:
         self._module = StrategyRankingModule()
@@ -230,9 +234,13 @@ class StrategyAccumulationService:
 def create_strategy_accumulation_service(
     registry: Optional[StrategyRegistry] = None,
     lm: Optional[dspy.LM] = None,
+    model_provider: Optional[ModelProviderProtocol] = None,
+    org_model: Optional[str] = None,
 ) -> StrategyAccumulationService:
     """Factory function to create StrategyAccumulationService."""
     return StrategyAccumulationService(
         registry=registry or StrategyRegistry(),
         lm=lm,
+        model_provider=model_provider,
+        org_model=org_model,
     )
