@@ -64,19 +64,6 @@ class GRPCClient(Protocol):
 
 
 @runtime_checkable
-class EvaluatorAgent(Protocol):
-    """
-    Protocol for evaluator agents that assess task progress.
-
-    Implementors: ToolCallingAgent configured as evaluator
-    """
-
-    def run(self, task: str) -> str:
-        """Run evaluation and return JSON result."""
-        ...
-
-
-@runtime_checkable
 class Tool(Protocol):
     """
     Protocol for smolagents tools.
