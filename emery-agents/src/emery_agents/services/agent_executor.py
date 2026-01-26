@@ -291,7 +291,6 @@ class AgentExecutor:
             org_model=org_model,
             images=images,
             attachments=attachments,
-            api_key=api_key,  # For output mappings
             environment={},
             skill_inputs=skill_inputs,  # Runtime values for skill inputs
             resolved_context=request.resolved_context,  # Context table mappings

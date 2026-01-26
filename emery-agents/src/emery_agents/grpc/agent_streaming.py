@@ -434,7 +434,6 @@ class AgentStreamingHandler:
             session_attachments=session_attachments,
             progress_callback=progress_callback,
             tool_mode=ToolMode.EXECUTION,
-            api_key=tool_provider.api_key,
             organization_id=str(tool_provider.organization_id),
             tool_provider=tool_provider,
             workspace_path=workspace_path,
@@ -505,7 +504,6 @@ class AgentStreamingHandler:
 
             # Create DSPy tools
             dspy_tools = create_all_tools(
-                api_key=tool_provider.api_key,
                 org_id=str(tool_provider.organization_id),
             )
 

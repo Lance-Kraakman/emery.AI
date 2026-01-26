@@ -8,9 +8,12 @@ ChainOfThought with GeneratePlanDiff signature.
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import dspy
+
+if TYPE_CHECKING:
+    from ..protocols import ModelProviderProtocol
 
 from emery_agents.entities.models.plan import Plan, PlanStep, PlanStatus, PlanStepStatus, create_step
 from emery_agents.reasoning.signatures.planning import GeneratePlanDiff, PlanDiffResult
@@ -148,14 +151,20 @@ class PlanDiffer:
     ChainOfThought with GeneratePlanDiff signature.
     """
 
-    def __init__(self, lm: Optional[dspy.LM] = None):
+    def __init__(
+        self,
+        lm: Optional[dspy.LM] = None,
+        model_provider: Optional["ModelProviderProtocol"] = None,
+    ):
         """
         Initialize differ.
 
         Args:
             lm: DSPy language model (uses global settings if not provided)
+            model_provider: Model provider for LM resolution (alternative to lm)
         """
         self.lm = lm
+        self.model_provider = model_provider
         self._module = PlanDifferModule()
 
     async def generate_diff(
