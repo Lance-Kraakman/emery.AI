@@ -89,7 +89,6 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
                 self.workspace_sync.prepare_task_history(
                     workspace_id=workspace_id,
                     task_id=task_request.task_id,
-                    workspace_path=workspace_path,
                 )
             except Exception as e:
                 logger.error(f"Failed to download workspace: {e}")

@@ -17,6 +17,7 @@ https://www.anthropic.com/engineering/claude-code-sandboxing
 
 import logging
 import os
+import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -85,7 +86,11 @@ class BwrapExecutor:
         "--die-with-parent",
     ]
 
-    def __init__(self) -> None:
+    # Default base path for workspaces
+    DEFAULT_BASE_PATH = Path("/tmp/workspace")
+
+    def __init__(self, base_path: Optional[Path] = None) -> None:
+        self._base_path = base_path or self.DEFAULT_BASE_PATH
         self._verify_bwrap_available()
 
     def _verify_bwrap_available(self) -> None:
@@ -97,6 +102,67 @@ class BwrapExecutor:
                 "Sandboxed execution will fall back to direct execution. "
                 "Install with: apt-get install bubblewrap"
             )
+
+    def _validate_workspace_id(self, workspace_id: str) -> Path:
+        """Validate workspace_id and return safe workspace path.
+
+        Raises ValueError if workspace_id contains path traversal characters
+        or other dangerous patterns.
+
+        Args:
+            workspace_id: Alphanumeric workspace identifier (e.g., agent_id, user_id)
+
+        Returns:
+            Validated Path within base_path
+        """
+        if not workspace_id:
+            raise ValueError("workspace_id cannot be empty")
+
+        # Reject path traversal attempts
+        if ".." in workspace_id:
+            raise ValueError("Invalid workspace_id: contains path traversal '..'")
+
+        # Reject path separators
+        if "/" in workspace_id or "\\" in workspace_id:
+            raise ValueError("Invalid workspace_id: contains path separator")
+
+        # Length limit
+        if len(workspace_id) > 255:
+            raise ValueError("workspace_id exceeds maximum length of 255")
+
+        # Character whitelist: alphanumeric, dash, underscore only
+        if not re.match(r"^[a-zA-Z0-9_-]+$", workspace_id):
+            raise ValueError(
+                "Invalid workspace_id: must contain only alphanumeric, dash, underscore"
+            )
+
+        workspace_path = self._base_path / workspace_id
+
+        # Double-check: ensure resolved path is within base_path
+        try:
+            workspace_path.resolve().relative_to(self._base_path.resolve())
+        except ValueError:
+            raise ValueError(f"Path traversal detected for workspace_id: {workspace_id}")
+
+        return workspace_path
+
+    def get_shell_for_id(
+        self, workspace_id: str, allow_network: bool = False
+    ) -> "WorkspaceShell":
+        """Get a sandboxed shell for a workspace ID.
+
+        This is the preferred method for getting shells. It validates the
+        workspace_id internally and constructs the path safely.
+
+        Args:
+            workspace_id: Alphanumeric workspace identifier
+            allow_network: Whether to allow network access (default False)
+
+        Returns:
+            WorkspaceShell bound to the validated workspace path
+        """
+        workspace_path = self._validate_workspace_id(workspace_id)
+        return WorkspaceShell(self, workspace_path, allow_network)
 
     def _build_command(
         self,

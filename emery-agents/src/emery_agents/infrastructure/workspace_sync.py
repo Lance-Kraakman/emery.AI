@@ -76,28 +76,40 @@ class WorkspaceSync:
         self.prefix = prefix
         self.local_base = local_base or Path("/tmp/workspace")
         self.s3 = boto3.client("s3")
-        self._executor = BwrapExecutor()
-        self._shell_cache: "dict[str, WorkspaceShell]" = {}
+        self._executor = BwrapExecutor(base_path=self.local_base)
+        self._shell_cache: dict[str, WorkspaceShell] = {}
 
         logger.info(
             f"WorkspaceSync initialized: bucket={bucket}, prefix={prefix}, local={self.local_base}"
         )
 
-    def _get_shell(self, workspace_path: Path) -> WorkspaceShell:
-        """Get or create a sandboxed shell for the workspace."""
-        key = str(workspace_path)
-        if key not in self._shell_cache:
-            self._shell_cache[key] = self._executor.get_shell(workspace_path)
-        return self._shell_cache[key]
+    def _get_shell(self, workspace_id: str) -> WorkspaceShell:
+        """Get or create a sandboxed shell for the workspace ID.
+
+        Uses BwrapExecutor.get_shell_for_id() which validates the workspace_id
+        internally and ensures path safety.
+        """
+        if workspace_id not in self._shell_cache:
+            self._shell_cache[workspace_id] = self._executor.get_shell_for_id(workspace_id)
+        return self._shell_cache[workspace_id]
 
     def _s3_key(self, workspace_id: str, prefix: Optional[str] = None) -> str:
-        """Generate S3 key for workspace."""
+        """Generate S3 key for workspace.
+
+        Validates workspace_id via BwrapExecutor's validation.
+        """
+        # Validate via executor (raises ValueError if invalid)
+        self._executor._validate_workspace_id(workspace_id)
         actual_prefix = prefix or self.prefix
         return f"{actual_prefix}/{workspace_id}.tar.gz"
 
     def _local_path(self, workspace_id: str) -> Path:
-        """Get local path for workspace."""
-        return self.local_base / workspace_id
+        """Get local path for workspace.
+
+        Uses BwrapExecutor's validation to ensure path safety.
+        """
+        # BwrapExecutor validates and returns the safe path
+        return self._executor._validate_workspace_id(workspace_id)
 
     def _tar_path(self, workspace_id: str) -> Path:
         """Get local path for workspace tar archive."""
@@ -149,7 +161,7 @@ class WorkspaceSync:
                 # New workspace or no permissions yet - create empty workspace
                 # 403/AccessDenied can happen when file doesn't exist and bucket has restrictive policies
                 logger.info(f"No existing workspace for {workspace_id} (error: {error_code}), creating new one")
-                self._create_empty_workspace(local_path, workspace_id)
+                self._create_empty_workspace(workspace_id)
             else:
                 logger.error(f"S3 download failed: {e}")
                 raise
@@ -157,13 +169,14 @@ class WorkspaceSync:
         except Exception as e:
             logger.error(f"Workspace download failed: {e}")
             # Create empty workspace on any error
-            self._create_empty_workspace(local_path, workspace_id)
+            self._create_empty_workspace(workspace_id)
 
         return local_path
 
-    def _create_empty_workspace(self, local_path: Path, workspace_id: str) -> None:
+    def _create_empty_workspace(self, workspace_id: str) -> None:
         """Create empty workspace with default structure using sandboxed execution."""
-        shell = self._get_shell(local_path)
+        shell = self._get_shell(workspace_id)
+        local_path = self._local_path(workspace_id)
 
         # Create directories via sandbox
         for subdir in self.DEFAULT_WORKSPACE_STRUCTURE:
@@ -263,7 +276,6 @@ class WorkspaceSync:
         self,
         workspace_id: str,
         task_id: str,
-        workspace_path: Optional[Path] = None,
     ) -> Path:
         """
         Prepare history directory for a new task execution using sandboxed execution.
@@ -273,13 +285,12 @@ class WorkspaceSync:
         Args:
             workspace_id: Workspace ID (agent_id or user_id)
             task_id: Task ID
-            workspace_path: Optional workspace path (uses workspace if not provided)
 
         Returns:
             Path to task history directory
         """
-        ws_path = workspace_path or self._local_path(workspace_id)
-        shell = self._get_shell(ws_path)
+        shell = self._get_shell(workspace_id)
+        ws_path = self._local_path(workspace_id)
         date_str = datetime.now().strftime("%Y-%m-%d")
         relative_history_dir = f"history/{date_str}/{task_id}"
 
@@ -294,7 +305,6 @@ class WorkspaceSync:
         workspace_id: str,
         task_id: str,
         result: dict[str, Any],
-        workspace_path: Optional[Path] = None,
     ) -> Path:
         """
         Save task result to workspace history using sandboxed execution.
@@ -303,13 +313,12 @@ class WorkspaceSync:
             workspace_id: Workspace ID (agent_id or user_id)
             task_id: Task ID
             result: Result data to save
-            workspace_path: Optional workspace path
 
         Returns:
             Path to result file
         """
-        ws_path = workspace_path or self._local_path(workspace_id)
-        shell = self._get_shell(ws_path)
+        shell = self._get_shell(workspace_id)
+        ws_path = self._local_path(workspace_id)
         date_str = datetime.now().strftime("%Y-%m-%d")
         relative_history_dir = f"history/{date_str}/{task_id}"
 
@@ -324,7 +333,6 @@ class WorkspaceSync:
         workspace_id: str,
         task_id: str,
         entry: dict[str, Any],
-        workspace_path: Optional[Path] = None,
     ) -> None:
         """
         Append entry to task session log using sandboxed execution.
@@ -333,10 +341,8 @@ class WorkspaceSync:
             workspace_id: Workspace ID (agent_id or user_id)
             task_id: Task ID
             entry: Log entry to append
-            workspace_path: Optional workspace path
         """
-        ws_path = workspace_path or self._local_path(workspace_id)
-        shell = self._get_shell(ws_path)
+        shell = self._get_shell(workspace_id)
         date_str = datetime.now().strftime("%Y-%m-%d")
         relative_history_dir = f"history/{date_str}/{task_id}"
 
