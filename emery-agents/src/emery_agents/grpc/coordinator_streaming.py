@@ -91,20 +91,7 @@ class CoordinatorStreamingHandler:
         conversation_history: Optional[List[Any]] = None,
         capability_registry: Optional[Any] = None,
     ) -> AsyncIterator[Any]:
-        """
-        Coordinator-driven execution path.
-
-        Args:
-            context: Execution context with tool_mode
-            tools: Available smolagents tools
-            task: Current user message/task
-            session_id: Session ID for state persistence
-            org_model: Organization model for evaluator
-            sm: State machine for phase handling
-            managed_agents: Available managed agents for mode detection
-            stored_plan: Pre-approved plan from skill's agentic step config
-            conversation_history: Chat history for ACE pattern
-        """
+        """Coordinator-driven execution path. Yields streaming events."""
         # Import Phase here to avoid circular imports at module level
         from ..services.coordinator_state_machine import Phase
 

@@ -42,15 +42,6 @@ class AuthenticatedHttpClient:
         base_url: Optional[str] = None,
         timeout: float = 30.0,
     ):
-        """
-        Initialize the authenticated HTTP client.
-
-        Args:
-            api_key: API key for authentication (stored privately)
-            organization_id: Organization ID for RLS context
-            base_url: Base URL for API requests (defaults to NEXTJS_BASE_URL env var)
-            timeout: Request timeout in seconds
-        """
         self._api_key = api_key  # PRIVATE: Never expose this
         self._organization_id = organization_id
         self._base_url = base_url or os.getenv("NEXTJS_BASE_URL", "http://localhost:3000")
@@ -95,18 +86,7 @@ class AuthenticatedHttpClient:
         headers: Optional[Dict[str, str]] = None,
         **kwargs,
     ) -> httpx.Response:
-        """
-        Make an authenticated GET request.
-
-        Args:
-            path: API path (e.g., "/api/rows")
-            params: Query parameters
-            headers: Additional headers
-            **kwargs: Additional httpx arguments
-
-        Returns:
-            httpx.Response object
-        """
+        """Make an authenticated GET request."""
         url = self._build_url(path)
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             response = await client.get(
@@ -125,19 +105,7 @@ class AuthenticatedHttpClient:
         headers: Optional[Dict[str, str]] = None,
         **kwargs,
     ) -> httpx.Response:
-        """
-        Make an authenticated POST request.
-
-        Args:
-            path: API path (e.g., "/api/rows")
-            json: JSON body data
-            data: Form data
-            headers: Additional headers
-            **kwargs: Additional httpx arguments
-
-        Returns:
-            httpx.Response object
-        """
+        """Make an authenticated POST request."""
         url = self._build_url(path)
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             response = await client.post(
@@ -157,19 +125,7 @@ class AuthenticatedHttpClient:
         headers: Optional[Dict[str, str]] = None,
         **kwargs,
     ) -> httpx.Response:
-        """
-        Make an authenticated PUT request.
-
-        Args:
-            path: API path (e.g., "/api/rows/123")
-            json: JSON body data
-            data: Form data
-            headers: Additional headers
-            **kwargs: Additional httpx arguments
-
-        Returns:
-            httpx.Response object
-        """
+        """Make an authenticated PUT request."""
         url = self._build_url(path)
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             response = await client.put(
@@ -189,19 +145,7 @@ class AuthenticatedHttpClient:
         headers: Optional[Dict[str, str]] = None,
         **kwargs,
     ) -> httpx.Response:
-        """
-        Make an authenticated PATCH request.
-
-        Args:
-            path: API path (e.g., "/api/rows/123")
-            json: JSON body data
-            data: Form data
-            headers: Additional headers
-            **kwargs: Additional httpx arguments
-
-        Returns:
-            httpx.Response object
-        """
+        """Make an authenticated PATCH request."""
         url = self._build_url(path)
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             response = await client.patch(
@@ -220,18 +164,7 @@ class AuthenticatedHttpClient:
         headers: Optional[Dict[str, str]] = None,
         **kwargs,
     ) -> httpx.Response:
-        """
-        Make an authenticated DELETE request.
-
-        Args:
-            path: API path (e.g., "/api/rows/123")
-            params: Query parameters
-            headers: Additional headers
-            **kwargs: Additional httpx arguments
-
-        Returns:
-            httpx.Response object
-        """
+        """Make an authenticated DELETE request."""
         url = self._build_url(path)
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             response = await client.delete(

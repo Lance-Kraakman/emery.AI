@@ -63,13 +63,6 @@ class DSPyPlanGenerator:
         model_provider: Optional["ModelProviderProtocol"] = None,
         discovery_tools: Optional[list["Tool"]] = None,
     ) -> None:
-        """
-        Initialize DSPy plan generator.
-
-        Args:
-            model_provider: Model provider for LLM access and model resolution
-            discovery_tools: Optional tools for planning phase (read-only discovery)
-        """
         self.model_provider = model_provider
         self.discovery_tools = discovery_tools or []
         self._last_strategy_guidance: str = ""
@@ -90,16 +83,7 @@ class DSPyPlanGenerator:
         request: PlanGenerationRequest,
         strategy_service: Optional[StrategyAccumulationService] = None,
     ) -> PlanGenerationResult:
-        """
-        Generate plan using DSPy PlannerModule.
-
-        Args:
-            request: Plan generation request with all inputs
-            strategy_service: Optional service for surfacing proven patterns
-
-        Returns:
-            PlanGenerationResult with plan or clarifying questions
-        """
+        """Generate plan using DSPy PlannerModule. Returns plan or clarifying questions."""
         logger.info("📋 Generating plan using DSPy PlannerModule")
 
         # ACE: Get strategy guidance from past successful executions
@@ -183,12 +167,7 @@ class DSPyPlanGenerator:
         self,
         request: PlanGenerationRequest,
     ) -> str:
-        """Get capability planning guidance from DSPy capabilities module.
-
-        Returns formatted guidance for all enabled capabilities, helping the
-        planner understand WHEN to choose each capability and HOW to structure
-        plan steps.
-        """
+        """Get capability planning guidance for the planner."""
         from emery_agents.dspy_modules.capabilities import (
             format_planning_guidance,
             get_all_planning_guidance,

@@ -162,16 +162,7 @@ class AgentExecutor:
         return skill.execution_type in ('agentic', '', None) or not skill.execution_type
 
     def _extract_runtime_inputs(self, context: ExecutionContext) -> Dict[str, Any]:
-        """
-        Extract runtime inputs from execution context for direct skill execution.
-
-        Maps skill inputs from context to a dictionary for inference client.
-        Includes:
-        - skill_inputs: Runtime values from automation inputMappings (trigger_data.payload)
-        - prompt/text: From task instructions
-        - images: Image attachments
-        - audio: Audio attachments
-        """
+        """Extract runtime inputs from execution context for inference client."""
         inputs = {}
 
         # Include skill inputs from automation inputMappings (resolved from trigger_data.payload)
@@ -207,18 +198,7 @@ class AgentExecutor:
     # =========================================================================
 
     def determine_execution_context(self, request: TaskRequest) -> ExecutionContext:
-        """
-        Determine execution context from TaskRequest.
-
-        Args:
-            request: TaskRequest from protobuf with either skill_name or instruction_config
-
-        Returns:
-            ExecutionContext for task execution
-
-        Raises:
-            ValueError: If no valid execution mode specified
-        """
+        """Determine execution context from TaskRequest (skill-based or instruction-based)."""
         if request.skill_name:
             return self._create_skill_context(request)
         elif request.instruction_config:
@@ -370,17 +350,7 @@ class AgentExecutor:
     # =========================================================================
 
     async def execute_task(self, context: ExecutionContext) -> AsyncIterator[Dict[str, Any]]:
-        """
-        Execute a task with given execution context.
-
-        Yields progress updates as task executes.
-
-        Args:
-            context: ExecutionContext with mode, instructions, tools, etc.
-
-        Yields:
-            Dict with status, output, progress updates
-        """
+        """Execute a task with given execution context. Yields progress updates."""
         logger.info(f"Executing task with context: {context.mode.value}")
 
         start_time = time.time()
@@ -576,22 +546,7 @@ class AgentExecutor:
         context: ExecutionContext,
         start_time: float
     ) -> AsyncIterator[Dict[str, Any]]:
-        """
-        Execute skill directly without LLM orchestration.
-
-        Uses the model specified in taskModelConfig to perform a single task:
-        - text-to-image: Generate image from prompt
-        - speech-to-text: Transcribe audio
-        - feature-extraction: Generate embeddings
-        - etc.
-
-        Args:
-            context: ExecutionContext with skill configuration
-            start_time: Task start time for duration calculation
-
-        Yields:
-            Dict with status, output, progress updates
-        """
+        """Execute skill directly without LLM orchestration (operation skills)."""
         skill = context.skill
         task_config = skill.task_model_config
 
@@ -705,20 +660,7 @@ class AgentExecutor:
         context: ExecutionContext,
         start_time: float
     ) -> AsyncIterator[Dict[str, Any]]:
-        """
-        Execute skill via step-based DAG workflow.
-
-        Each step can either:
-        - Execute an inline instruction with a sub-agent
-        - Delegate to another skill by skill_id
-
-        Args:
-            context: ExecutionContext with skill configuration
-            start_time: Task start time for duration calculation
-
-        Yields:
-            Dict with status, output, progress updates
-        """
+        """Execute skill via step-based DAG workflow."""
         skill = context.skill
 
         logger.info(f"🔗 Step-based execution: {skill.name} ({len(skill.steps)} steps)")
@@ -826,22 +768,7 @@ class AgentExecutor:
         context: ExecutionContext,
         start_time: float
     ) -> AsyncIterator[Dict[str, Any]]:
-        """
-        Execute task using ExecutionCoordinator for two-phase execution.
-
-        This enables:
-        - Planning phase with read-only tools
-        - HITL approval gate before execution
-        - Execution phase with full tools
-        - Evaluation loop for goal detection and replanning
-
-        Args:
-            context: ExecutionContext with task details
-            start_time: Task start time for duration calculation
-
-        Yields:
-            Dict with status, output, progress updates
-        """
+        """Execute task using ExecutionCoordinator for two-phase execution (plan → approve → execute)."""
         skill = context.skill
         skill_name = skill.name if skill else "coordinator"
 
@@ -939,17 +866,7 @@ class AgentExecutor:
         skill_name: str,
         start_time: float
     ) -> Dict[str, Any]:
-        """
-        Convert ExecutionCoordinator events to progress dicts.
-
-        Args:
-            event: Event from ExecutionCoordinator
-            skill_name: Name of skill being executed
-            start_time: Task start time
-
-        Returns:
-            Progress dict compatible with gRPC TaskProgress
-        """
+        """Convert ExecutionCoordinator events to progress dicts."""
         timestamp_ms = int(time.time() * 1000)
         duration_ms = int((time.time() - start_time) * 1000)
 
@@ -1228,21 +1145,7 @@ class AgentExecutor:
         api_key: Optional[str] = None,
         organization_id: Optional[int] = None
     ) -> List[SkillTool]:
-        """
-        Create SkillTool instances for each skill.
-
-        These allow the agent to delegate work to other skills.
-        For operation skills, passes the inference client for direct execution.
-
-        Args:
-            skills: List of SkillConfig objects to wrap as tools
-            org_model: Organization default model (used as fallback)
-            api_key: Optional API key for output mapping (calls emery-api)
-            organization_id: Optional org ID for output mapping (RLS context)
-
-        Returns:
-            List of SkillTool instances
-        """
+        """Create SkillTool instances for skill delegation."""
         skill_tools = []
 
         # Check if any skills need inference client
@@ -1347,20 +1250,7 @@ class AgentExecutor:
         organization_id: Optional[str],
         source_row_id: Optional[str] = None
     ) -> None:
-        """
-        Apply output mappings to save skill results to tables.
-
-        Supports two modes:
-        - single_row: Map to one row (classification - top result)
-        - multi_row: Create row per array item (object detection)
-
-        Args:
-            skill: SkillConfig with output definitions
-            result: The TaskResult from inference execution
-            api_key: API key for authenticated calls
-            organization_id: Organization ID for RLS context
-            source_row_id: Optional source row ID for linking back
-        """
+        """Apply output mappings to save skill results to tables."""
         # Check if we have auth for API calls
         if not api_key or not organization_id:
             logger.warning("📊 Output mapping skipped: missing api_key or organization_id")
@@ -1444,15 +1334,7 @@ class AgentExecutor:
         api_key: Optional[str],
         organization_id: Optional[str]
     ) -> None:
-        """
-        Apply output mappings for agent mode skills using captured output tool values.
-
-        Args:
-            skill: SkillConfig with output definitions
-            captured_values: Values captured from output tool (keyed by output name)
-            api_key: API key for authenticated calls
-            organization_id: Organization ID for RLS context
-        """
+        """Apply output mappings for agent mode skills using captured values."""
         if not api_key or not organization_id:
             logger.warning("📊 Agent output mapping skipped: missing api_key or organization_id")
             return

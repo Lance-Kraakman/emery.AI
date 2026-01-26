@@ -51,14 +51,6 @@ class PlanService:
         model_provider: Optional[ModelProviderProtocol] = None,
         discovery_tools: Optional[List[Tool]] = None,
     ):
-        """
-        Initialize plan service.
-
-        Args:
-            grpc_client: gRPC client for communication with Next.js server
-            model_provider: Model provider for LLM access and model resolution
-            discovery_tools: Optional tools for planning phase (read-only discovery)
-        """
         self.grpc_client = grpc_client
         self.model_provider = model_provider
 
@@ -93,33 +85,7 @@ class PlanService:
         config: Optional[SessionConfig] = None,
         workspace: Optional[WorkspaceContext] = None,
     ) -> PlanGenerationResult:
-        """
-        Generate plan using DSPy PlannerModule.
-
-        Args:
-            basic_instructions: Human-readable instructions to convert to plan
-            context_tables: Resolved context mappings (tables available for the plan)
-            available_tools: Tool names as strings (for logging, unused)
-            goal: Optional explicit goal (defaults to LLM-generated goal)
-            tools: Actual tool objects (for prompt template)
-            managed_agents: Available managed agents (planner sees their descriptions)
-            research_tools: Optional web research tools (web_search, visit_webpage)
-            skill_inputs: Optional skill input definitions for variable-aware planning
-            previous_plan_json: Optional previous plan JSON for regeneration with feedback
-            user_feedback: Optional user feedback for plan regeneration
-            skill_outputs: Optional skill output definitions for result-aware planning
-            is_template_generation: If True, plan is for a reusable skill (no hardcoded IDs)
-            conversation_history: Optional chat history for resolving references
-            strategy_service: Optional service for surfacing proven patterns
-            capability_registry: Optional registry for capability discovery
-            config: Session config with auth/identity (org_id, org_model, api_key)
-            workspace: Pre-resolved workspace state (agents, tables, apps)
-
-        Returns:
-            PlanGenerationResult with either:
-            - plan: Generated Plan object (if details were sufficient)
-            - clarifying_questions: Questions for user (if details were missing)
-        """
+        """Generate plan using DSPy PlannerModule. Returns plan or clarifying questions."""
         # Build request dataclass (includes all config for plan generation)
         request = PlanGenerationRequest(
             basic_instructions=basic_instructions,
@@ -233,24 +199,7 @@ class PlanService:
         organization_id: Optional[int] = None,
         capability_registry: Optional[CapabilityRegistry] = None,
     ) -> RecoveryResult:
-        """
-        Analyze a failed step and determine how to fix it.
-
-        Delegates to FailureAnalyzer.
-
-        Args:
-            failed_step: The step that failed
-            error_message: The error from execution
-            plan: The original plan (for context)
-            ledger: Current execution state
-            org_model: Organization model ID for model resolution hierarchy
-            api_key: API key for research_emery auth
-            organization_id: Organization ID for research_emery RLS context
-            capability_registry: Registry for agent lookup (avoids creating new agents)
-
-        Returns:
-            RecoveryResult with corrected_parameters and confidence
-        """
+        """Analyze a failed step and determine recovery strategy."""
         return self._analyzer.analyze(
             failed_step=failed_step,
             error_message=error_message,
@@ -278,14 +227,6 @@ class PlanServiceFactory:
         model_provider: Optional[ModelProviderProtocol] = None,
         discovery_tools: Optional[List[Tool]] = None,
     ) -> None:
-        """
-        Initialize factory.
-
-        Args:
-            grpc_client: gRPC client to use for all plan services
-            model_provider: Model provider for LLM access
-            discovery_tools: Optional tools for planning phase
-        """
         self.grpc_client = grpc_client
         self.model_provider = model_provider
         self.discovery_tools = discovery_tools

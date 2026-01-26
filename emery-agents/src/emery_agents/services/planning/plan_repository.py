@@ -27,22 +27,10 @@ class PlanRepository:
     """
 
     def __init__(self, grpc_client: Optional[GRPCClient] = None):
-        """
-        Initialize repository.
-
-        Args:
-            grpc_client: gRPC client for communication with Next.js server
-        """
         self.grpc_client = grpc_client
 
     async def save_agent_plan(self, agent_id: int, plan: Plan) -> None:
-        """
-        Save plan to agent entity via gRPC.
-
-        Args:
-            agent_id: ID of the agent to save the plan to
-            plan: Plan to save
-        """
+        """Save plan to agent entity via gRPC."""
         if not self.grpc_client:
             logger.warning(
                 f"No gRPC client available, skipping save for agent {agent_id}"
@@ -65,14 +53,7 @@ class PlanRepository:
         step_id: str,
         plan: StepPlan,
     ) -> None:
-        """
-        Save plan to skill step via gRPC.
-
-        Args:
-            skill_id: ID of the parent skill
-            step_id: ID of the step within the skill
-            plan: StepPlan to save
-        """
+        """Save plan to skill step via gRPC."""
         if not self.grpc_client:
             logger.warning(
                 f"No gRPC client available, skipping save for step {step_id}"
@@ -93,15 +74,7 @@ class PlanRepository:
             raise
 
     async def load_agent_plan(self, agent_id: int) -> Optional[Plan]:
-        """
-        Load plan from agent entity.
-
-        Args:
-            agent_id: ID of the agent to load the plan from
-
-        Returns:
-            Plan if exists, None otherwise
-        """
+        """Load plan from agent entity. Returns None if not found."""
         if not self.grpc_client:
             logger.warning(
                 f"No gRPC client available, cannot load plan for agent {agent_id}"
@@ -124,16 +97,7 @@ class PlanRepository:
         skill_id: int,
         step_id: str,
     ) -> Optional[StepPlan]:
-        """
-        Load plan from skill step.
-
-        Args:
-            skill_id: ID of the parent skill
-            step_id: ID of the step within the skill
-
-        Returns:
-            StepPlan if exists, None otherwise
-        """
+        """Load plan from skill step. Returns None if not found."""
         if not self.grpc_client:
             logger.warning(
                 f"No gRPC client available, cannot load plan for step {step_id}"

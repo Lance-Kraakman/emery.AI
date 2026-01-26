@@ -49,25 +49,11 @@ class AgentFactory:
     """
 
     def __init__(self, model_provider: ModelProvider) -> None:
-        """
-        Initialize agent factory.
-
-        Args:
-            model_provider: Model provider for getting DSPy LM
-        """
         self.model_provider = model_provider
         self._module_cache: dict[str, dspy.Module] = {}
 
     def create_agent(self, config: AgentConfig) -> dspy.Module:
-        """
-        Create a DSPy execution module.
-
-        Args:
-            config: Agent configuration
-
-        Returns:
-            Configured DSPy module (ExecutorModule or DelegatingExecutorModule)
-        """
+        """Create a DSPy execution module from config."""
         # Check cache if enabled
         if config.enable_caching:
             cache_key = self._get_cache_key(config)
@@ -116,17 +102,7 @@ class AgentFactory:
         max_iters: int = 10,
         model_id: str | None = None,
     ) -> ExecutorModule:
-        """
-        Create an ExecutorModule directly (convenience method).
-
-        Args:
-            tools: List of callable tools
-            max_iters: Maximum ReAct iterations
-            model_id: Optional model override
-
-        Returns:
-            Configured ExecutorModule
-        """
+        """Create an ExecutorModule directly (convenience method)."""
         if model_id:
             self.model_provider.configure_dspy(model_id)
 
@@ -136,15 +112,7 @@ class AgentFactory:
         )
 
     def _resolve_model(self, config: AgentConfig) -> str:
-        """
-        Resolve which model to use based on configuration.
-
-        Args:
-            config: Agent configuration
-
-        Returns:
-            Model ID to use
-        """
+        """Resolve which model to use based on configuration hierarchy."""
         if config.model_id:
             logger.info(f"📌 Using explicit model override: {config.model_id}")
             return config.model_id

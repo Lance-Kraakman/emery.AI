@@ -30,13 +30,6 @@ class StepExecutor:
         plan_step_executor: Optional[PlanStepExecutor] = None,
         session_logger: Optional[SessionLogger] = None,
     ):
-        """
-        Initialize step executor.
-
-        Args:
-            plan_step_executor: Executor for smolagents-based step execution
-            session_logger: Optional logger for session tracking
-        """
         self.plan_step_executor = plan_step_executor
         self.session_logger = session_logger
 
@@ -47,24 +40,7 @@ class StepExecutor:
         tools: List[Any],
         managed_agents: Optional[List[Any]] = None,
     ) -> Optional[str]:
-        """
-        Execute a single plan step.
-
-        Uses smolagents' native managed agent routing - the LLM reads
-        agent descriptions and automatically routes to the right agent.
-
-        The executor receives the Plan object and generates a prompt from it,
-        ensuring the sub-agent has proper context (goal, progress, agents).
-
-        Args:
-            current_plan: The current plan being executed
-            step: The step to execute
-            tools: Available tools
-            managed_agents: Available managed agents (unused - handled by executor)
-
-        Returns:
-            Result string from step execution
-        """
+        """Execute a single plan step using smolagents routing."""
         logger.info(f"Executing step {step.step_id}: {step.description[:100]}...")
 
         # Use PlanStepExecutor - pass Plan object, executor generates prompt from it
@@ -90,18 +66,7 @@ class StepExecutor:
         step: PlanStep,
         tools: List[Any],
     ) -> str:
-        """
-        Execute a tool directly without smolagents routing.
-
-        Used as fallback when no PlanStepExecutor is configured.
-
-        Args:
-            step: Step with tool_call specified
-            tools: Available tools
-
-        Returns:
-            Result string from tool execution
-        """
+        """Execute a tool directly (fallback when no PlanStepExecutor configured)."""
         tool = None
         # Extract base tool name (before ':' if present, e.g., "tool:action" -> "tool")
         tool_call_parts = step.tool_call.lower().split(':') if step.tool_call else []
