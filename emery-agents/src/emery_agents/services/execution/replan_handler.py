@@ -9,7 +9,8 @@ Extracted from ExecutionCoordinator for maintainability.
 import logging
 from typing import Any, List, Optional
 
-from ...models.plan import Plan, PlanStep, PlanStatus, PlanStepStatus
+from emery_agents.entities.models.plan import Plan, PlanStatus, PlanStep, PlanStepStatus
+
 from ..planning.plan_differ import PlanDiffer, PlanDiff
 from ..protocols import ModelProviderProtocol
 from ...utils.session_logger import get_session_logger

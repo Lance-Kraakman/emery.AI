@@ -26,10 +26,10 @@ from emery_agents.ace import StrategyAccumulationService
 from emery_agents.reasoning.config import get_dspy_lm
 from emery_agents.reasoning.modules.planner import PlannerModule
 from emery_agents.reasoning.signatures.planning import (
-    ClarifyingQuestion,
-    Plan as DSPyPlan,
-    PlanOrQuestions,
-    PlanStep as DSPyPlanStep,
+    ClarifyingQuestionOutputOutput,
+    PlanOutput,
+    PlanOrQuestionsOutputOutput,
+    PlanStepOutput,
 )
 from emery_agents.entities.models.plan import Plan, PlanStep, create_plan, create_step
 from emery_agents.services.context import WorkspaceContext
@@ -118,7 +118,7 @@ class DSPyPlanGenerator:
         # Call the DSPy planner with async-safe context
         try:
             with dspy.context(lm=lm):
-                result: PlanOrQuestions = planner(
+                result: PlanOrQuestionsOutput = planner(
                     request=request.basic_instructions,
                     workspace_context=workspace_context,
                     capability_guidance=capability_guidance,
@@ -201,9 +201,9 @@ class DSPyPlanGenerator:
 
     def _convert_questions(
         self,
-        dspy_questions: list[ClarifyingQuestion],
+        dspy_questions: list[ClarifyingQuestionOutput],
     ) -> list[dict[str, Any]]:
-        """Convert DSPy ClarifyingQuestion to dict format for compatibility."""
+        """Convert DSPy ClarifyingQuestionOutput to dict format for compatibility."""
         return [
             {
                 "question": q.question,
@@ -216,7 +216,7 @@ class DSPyPlanGenerator:
 
     def _convert_plan(
         self,
-        dspy_plan: DSPyPlan,
+        dspy_plan: PlanOutput,
         basic_instructions: str,
     ) -> Plan:
         """Convert DSPy Plan to the existing Plan model."""

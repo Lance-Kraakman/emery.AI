@@ -7,10 +7,10 @@ Signatures define typed I/O contracts that replace Jinja2 templates.
 from emery_agents.reasoning.signatures.planning import (
     CreatePlan,
     AnalyzeTask,
-    PlanStep,
-    Plan,
-    ClarifyingQuestion,
-    PlanOrQuestions,
+    PlanStepOutput,
+    PlanOutput,
+    ClarifyingQuestionOutput,
+    PlanOrQuestionsOutput,
     ClassifyTask,
     TaskClassificationResult,
     AnalyzeGaps,
@@ -52,13 +52,13 @@ from emery_agents.reasoning.signatures.extraction import (
 )
 
 __all__ = [
-    # Planning
+    # Planning (DSPy output schemas)
     "CreatePlan",
     "AnalyzeTask",
-    "PlanStep",
-    "Plan",
-    "ClarifyingQuestion",
-    "PlanOrQuestions",
+    "PlanStepOutput",
+    "PlanOutput",
+    "ClarifyingQuestionOutput",
+    "PlanOrQuestionsOutput",
     # Task Classification
     "ClassifyTask",
     "TaskClassificationResult",

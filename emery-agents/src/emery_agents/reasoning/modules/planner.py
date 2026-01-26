@@ -13,9 +13,9 @@ import dspy
 
 from emery_agents.reasoning.signatures.planning import (
     AnalyzeTask,
-    ClarifyingQuestion,
+    ClarifyingQuestionOutput,
     CreatePlan,
-    PlanOrQuestions,
+    PlanOrQuestionsOutputOutput,
 )
 
 if TYPE_CHECKING:
@@ -72,7 +72,7 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         workspace_context: str,
         capability_guidance: str,
         proven_strategies: str,
-    ) -> PlanOrQuestions:
+    ) -> PlanOrQuestionsOutput:
         """
         Generate a plan or clarifying questions for a user request.
 
@@ -83,16 +83,16 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
             proven_strategies: ACE patterns for similar goals
 
         Returns:
-            PlanOrQuestions with either a plan or clarifying questions
+            PlanOrQuestionsOutput with either a plan or clarifying questions
         """
         # Step 1: Classify intent (Python logic, not LLM-dependent)
         intent = self._classify_intent(request)
 
         # Handle greetings with a clarifying question
         if intent == "greeting":
-            return PlanOrQuestions(
+            return PlanOrQuestionsOutput(
                 questions=[
-                    ClarifyingQuestion(
+                    ClarifyingQuestionOutput(
                         question="What would you like help with today?",
                         question_type="text",
                         options=None,
@@ -202,7 +202,7 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
 
         return "\n".join(lines)
 
-    def _validate_result(self, result: PlanOrQuestions) -> None:
+    def _validate_result(self, result: PlanOrQuestionsOutput) -> None:
         """
         Validate the planner output.
 
@@ -242,7 +242,7 @@ class SimplePlannerModule(dspy.Module):  # type: ignore[misc]
         workspace_context: str,
         capability_guidance: str = "",
         proven_strategies: str = "",
-    ) -> PlanOrQuestions:
+    ) -> PlanOrQuestionsOutput:
         """
         Generate a plan directly without pre-analysis.
 
@@ -253,7 +253,7 @@ class SimplePlannerModule(dspy.Module):  # type: ignore[misc]
             proven_strategies: ACE patterns for similar goals
 
         Returns:
-            PlanOrQuestions with either a plan or clarifying questions
+            PlanOrQuestionsOutput with either a plan or clarifying questions
         """
         tool_names = [
             getattr(t, "name", str(t)) for t in self.discovery_tools

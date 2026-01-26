@@ -41,8 +41,8 @@ class QuestionType(str, Enum):
     CONFIRMATION = "confirmation"
 
 
-class PlanStep(BaseModel):
-    """A single step in an execution plan."""
+class PlanStepOutput(BaseModel):
+    """DSPy output schema for a single plan step."""
 
     step_id: str = Field(description="Unique identifier for this step")
     description: str = Field(description="Human-readable description of what this step does")
@@ -73,18 +73,18 @@ class PlanStep(BaseModel):
     )
 
 
-class Plan(BaseModel):
-    """A complete execution plan."""
+class PlanOutput(BaseModel):
+    """DSPy output schema for a complete execution plan."""
 
     plan_id: str = Field(description="Unique identifier for this plan")
     goal: str = Field(description="The high-level goal this plan achieves")
     context: str = Field(description="Summary of workspace context used for planning")
     analysis: str = Field(description="Analysis of the request and approach")
-    steps: list[PlanStep] = Field(description="Ordered list of steps to execute")
+    steps: list[PlanStepOutput] = Field(description="Ordered list of steps to execute")
 
 
-class ClarifyingQuestion(BaseModel):
-    """A question to ask the user for clarification."""
+class ClarifyingQuestionOutput(BaseModel):
+    """DSPy output schema for a clarifying question."""
 
     question: str = Field(description="The question to ask")
     question_type: QuestionType = Field(
@@ -96,11 +96,11 @@ class ClarifyingQuestion(BaseModel):
     reason: str = Field(description="Why this clarification is needed")
 
 
-class PlanOrQuestions(BaseModel):
-    """Result of planning: either a plan or clarifying questions."""
+class PlanOrQuestionsOutput(BaseModel):
+    """DSPy output schema: either a plan or clarifying questions."""
 
-    plan: Optional[Plan] = Field(default=None, description="The execution plan if ready")
-    questions: Optional[list[ClarifyingQuestion]] = Field(
+    plan: Optional[PlanOutput] = Field(default=None, description="The execution plan if ready")
+    questions: Optional[list[ClarifyingQuestionOutput]] = Field(
         default=None, description="Questions if clarification is needed"
     )
 
@@ -122,7 +122,7 @@ class CreatePlan(dspy.Signature):  # type: ignore[misc]
     )
     proven_strategies: str = dspy.InputField(desc="ACE patterns for similar goals")
 
-    result: PlanOrQuestions = dspy.OutputField()
+    result: PlanOrQuestionsOutput = dspy.OutputField()
 
 
 class AnalyzeTask(dspy.Signature):  # type: ignore[misc]
