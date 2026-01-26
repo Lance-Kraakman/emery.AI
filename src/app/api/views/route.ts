@@ -5,9 +5,6 @@
  * Views are filtered/sorted views of database tables used by Puck components.
  */
 
-// Force dynamic rendering to prevent build-time database connections
-export const dynamic = 'force-dynamic';
-
 import { NextRequest } from 'next/server';
 import { withAuthenticatedRoute } from '@/lib/api/base';
 import { getViewApplicationService } from '@/ddd/application/di/getters';

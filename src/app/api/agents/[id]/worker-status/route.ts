@@ -5,9 +5,6 @@ import { agents } from '@/ddd/infrastructure/db/schema';
 import { eq } from 'drizzle-orm';
 import { getAgentTaskApplicationService } from '@/ddd/application/di/container';
 
-// AIDEV-NOTE: Force dynamic rendering to prevent build-time database connections
-export const dynamic = 'force-dynamic';
-
 /**
  * Get worker health status for an agent's organization
  */

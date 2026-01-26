@@ -1,5 +1,3 @@
-export const dynamic = 'force-dynamic';
-
 /**
  * Document List/Create API Endpoint
  *

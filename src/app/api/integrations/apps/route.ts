@@ -9,8 +9,6 @@
  * - offset: Pagination offset (default 0)
  */
 
-export const dynamic = 'force-dynamic';
-
 import { NextRequest } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
 import { getAvailableAppsPaginated } from '@/app/actions/connections';

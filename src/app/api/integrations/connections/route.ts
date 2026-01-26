@@ -5,8 +5,6 @@
  * Returns the user's active OAuth connections
  */
 
-export const dynamic = 'force-dynamic';
-
 import { NextRequest } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
 import { getUserOAuthConnections } from '@/app/actions/connections';

@@ -1,6 +1,3 @@
-// AIDEV-NOTE: Force dynamic rendering to prevent build-time database connections
-export const dynamic = 'force-dynamic';
-
 /**
  * Table management API endpoint using TableApplicationService
  */

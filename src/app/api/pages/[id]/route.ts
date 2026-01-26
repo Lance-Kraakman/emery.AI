@@ -4,9 +4,6 @@
  * AIDEV-NOTE: This endpoint provides CRUD access to a single page for the AppBuilder agent.
  */
 
-// Force dynamic rendering to prevent build-time database connections
-export const dynamic = 'force-dynamic';
-
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
 import { getAppApplicationService, getPuckPageApplicationService } from '@/ddd/application/di/getters';

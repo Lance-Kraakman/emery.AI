@@ -7,8 +7,6 @@
  * POST /api/security/generate
  */
 
-export const dynamic = 'force-dynamic';
-
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
 import { getSecurityAnalyzerService } from '@/ddd/application/di/container';

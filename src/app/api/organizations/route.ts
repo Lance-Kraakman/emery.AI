@@ -3,9 +3,6 @@
  * Returns organization info for the authenticated user's current organization
  */
 
-// AIDEV-NOTE: Force dynamic rendering to prevent build-time database connections
-export const dynamic = 'force-dynamic';
-
 import { NextRequest } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
 import { getOrganizationRepository } from '@/ddd/application/di/container';

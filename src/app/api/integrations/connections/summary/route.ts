@@ -5,8 +5,6 @@
  * Returns summary of user's OAuth connections
  */
 
-export const dynamic = 'force-dynamic';
-
 import { NextRequest } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
 import { getConnectionSummary } from '@/app/actions/connections';

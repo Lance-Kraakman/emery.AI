@@ -5,9 +5,6 @@
  * Used by Puck components (DataBlock, TableBlock) and agent tools.
  */
 
-// Force dynamic rendering to prevent build-time database connections
-export const dynamic = 'force-dynamic';
-
 import { NextRequest } from 'next/server';
 import { withAuthenticatedRoute } from '@/lib/api/base';
 import { getViewApplicationService } from '@/ddd/application/di/getters';

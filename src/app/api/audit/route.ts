@@ -7,9 +7,6 @@
  * It supports filtering by event type, resource, actor, and time range.
  */
 
-// Force dynamic rendering to prevent build-time database connections
-export const dynamic = 'force-dynamic';
-
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
 import { getAuditApplicationService } from '@/ddd/application/di/getters';
