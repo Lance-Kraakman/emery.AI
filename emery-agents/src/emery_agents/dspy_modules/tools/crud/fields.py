@@ -132,7 +132,7 @@ def create_field_crud(api_key: str, org_id: str) -> Callable[..., str]:
                 create_data["metadata"] = field_config
 
             return make_request(
-                endpoint="fields?format=llm",
+                endpoint="fields",
                 method="POST",
                 data=create_data,
                 auth_token=api_key,
@@ -143,7 +143,7 @@ def create_field_crud(api_key: str, org_id: str) -> Callable[..., str]:
             if not table_id:
                 return "ERROR: table_id is required for list_fields operation"
             return make_request(
-                endpoint=f"fields?tableId={table_id}&format=llm",
+                endpoint=f"fields?tableId={table_id}",
                 method="GET",
                 data=None,
                 auth_token=api_key,
@@ -158,7 +158,7 @@ def create_field_crud(api_key: str, org_id: str) -> Callable[..., str]:
 
             encoded_field_name = urllib.parse.quote(field_name)
             return make_request(
-                endpoint=f"fields?tableId={table_id}&fieldName={encoded_field_name}&format=llm",
+                endpoint=f"fields?tableId={table_id}&fieldName={encoded_field_name}",
                 method="DELETE",
                 data=None,
                 auth_token=api_key,

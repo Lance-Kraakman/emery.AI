@@ -99,7 +99,7 @@ Plan Goal: {plan_goal}
 Plan Context: {plan_context or 'None'}
 
 Execution State:
-{ledger.to_toon_summary()}
+{ledger.to_json_summary()}
 """
 
         try:

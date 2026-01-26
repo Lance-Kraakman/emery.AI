@@ -23,6 +23,7 @@ from emery_agents.dspy_modules.modules.interruptible import (
     InterruptRequested,
     wrap_interruptible,
 )
+from emery_agents.dspy_modules.modules.extractor import OutputExtractorModule
 
 __all__ = [
     "PlannerModule",
@@ -38,4 +39,5 @@ __all__ = [
     "InterruptibleModule",
     "InterruptRequested",
     "wrap_interruptible",
+    "OutputExtractorModule",
 ]

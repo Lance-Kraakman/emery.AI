@@ -138,7 +138,7 @@ Examples:
     def _research_organization(self, include_details: bool) -> dict[str, Any]:
         """Research current organization."""
         endpoint = "organizations"
-        params = ["format=llm"]
+        params: list[str] = []
         if include_details:
             params.append("meta=1")
         if params:
@@ -271,10 +271,7 @@ Examples:
     ) -> dict[str, Any]:
         """Research databases - list or get by ID."""
         if query and query.isdigit():
-            format_param = "format=llm" if not include_details else ""
             endpoint = f"databases/{query}"
-            if format_param:
-                endpoint += f"?{format_param}"
             result = make_request(
                 endpoint=endpoint,
                 method="GET",
@@ -283,9 +280,9 @@ Examples:
                 org_id=self._org_id,
             )
         else:
-            endpoint = "databases?format=llm"
+            endpoint = "databases"
             if filters.get("limit"):
-                endpoint += f"&limit={filters['limit']}"
+                endpoint += f"?limit={filters['limit']}"
             result = make_request(
                 endpoint=endpoint,
                 method="GET",
@@ -303,10 +300,7 @@ Examples:
     ) -> dict[str, Any]:
         """Research tables - list or get schema by ID."""
         if query and query.isdigit():
-            format_param = "format=llm" if not include_details else ""
             endpoint = f"tables/{query}"
-            if format_param:
-                endpoint += f"?{format_param}"
             result = make_request(
                 endpoint=endpoint,
                 method="GET",
@@ -315,9 +309,9 @@ Examples:
                 org_id=self._org_id,
             )
         else:
-            endpoint = "tables?format=llm"
+            endpoint = "tables"
             if filters.get("database_id"):
-                endpoint += f"&databaseId={filters['database_id']}"
+                endpoint += f"?databaseId={filters['database_id']}"
             result = make_request(
                 endpoint=endpoint,
                 method="GET",
@@ -335,10 +329,7 @@ Examples:
     ) -> dict[str, Any]:
         """Research apps - list or get by ID."""
         if query and query.isdigit():
-            format_param = "format=llm" if not include_details else ""
             endpoint = f"apps/{query}"
-            if format_param:
-                endpoint += f"?{format_param}"
             result = make_request(
                 endpoint=endpoint,
                 method="GET",
@@ -347,9 +338,9 @@ Examples:
                 org_id=self._org_id,
             )
         else:
-            endpoint = "apps?format=llm"
+            endpoint = "apps"
             if filters.get("limit"):
-                endpoint += f"&limit={filters['limit']}"
+                endpoint += f"?limit={filters['limit']}"
             result = make_request(
                 endpoint=endpoint,
                 method="GET",
@@ -367,10 +358,7 @@ Examples:
     ) -> dict[str, Any]:
         """Research pages - get by ID with content, or list pages in an app."""
         if query and query.isdigit():
-            if include_details:
-                endpoint = f"pages/{query}"
-            else:
-                endpoint = f"pages/{query}?format=llm"
+            endpoint = f"pages/{query}"
             result = make_request(
                 endpoint=endpoint,
                 method="GET",
@@ -385,9 +373,9 @@ Examples:
                     "success": False,
                     "error": "app_id filter required to list pages. Example: filters={'app_id': 15}",
                 }
-            endpoint = f"apps/{app_id}/pages?format=llm"
+            endpoint = f"apps/{app_id}/pages"
             if filters.get("limit"):
-                endpoint += f"&limit={filters['limit']}"
+                endpoint += f"?limit={filters['limit']}"
             result = make_request(
                 endpoint=endpoint,
                 method="GET",
@@ -405,12 +393,9 @@ Examples:
     ) -> dict[str, Any]:
         """Research audit events - query with filters."""
         endpoint = "audit"
-        params = []
+        params: list[str] = []
 
-        if not include_details:
-            params.append("format=llm")
-        else:
-            params.append("format=llm")
+        if include_details:
             params.append("meta=1")
 
         if filters.get("resourceType"):

@@ -126,7 +126,7 @@ class DatabaseAPI:
             Created Database or None on failure
         """
         result = make_request(
-            endpoint="databases?format=llm",
+            endpoint="databases",
             method="POST",
             data={"name": name, "description": description},
             auth_token=self._api_key,
@@ -160,7 +160,7 @@ class DatabaseAPI:
             Updated Database or None on failure
         """
         result = make_request(
-            endpoint=f"databases/{database_id}?format=llm",
+            endpoint=f"databases/{database_id}",
             method="PUT",
             data=data,
             auth_token=self._api_key,
@@ -190,7 +190,7 @@ class DatabaseAPI:
             True on success, False on failure
         """
         result = make_request(
-            endpoint=f"databases/{database_id}?format=llm",
+            endpoint=f"databases/{database_id}",
             method="DELETE",
             data=None,
             auth_token=self._api_key,

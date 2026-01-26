@@ -24,7 +24,6 @@ from ..agents.interrupt_classifier import (
 from ..models.plan import Plan, PlanStep, PlanStatus, PlanStepStatus, RecoveryResult, create_plan
 from ..models.task_ledger import TaskLedger, create_ledger_from_plan, LedgerEventType
 from ..models.capability import CapabilityType
-from ..utils.toon_format import to_toon
 from ..utils.session_logger import SessionLogger, get_session_logger
 from ..models.context_mapping import ResolvedContext
 from ..models.execution import StepExecutionResult, EvaluatorInput, ReplanContext

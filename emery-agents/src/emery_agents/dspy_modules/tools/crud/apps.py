@@ -80,7 +80,7 @@ def create_app_crud(api_key: str, org_id: str) -> Callable[..., str]:
 
         if method == "list":
             return make_request(
-                endpoint="apps?format=llm",
+                endpoint="apps",
                 method="GET",
                 data=None,
                 auth_token=api_key,
@@ -91,7 +91,7 @@ def create_app_crud(api_key: str, org_id: str) -> Callable[..., str]:
             if not app_id:
                 return "ERROR: app_id required for read"
             return make_request(
-                endpoint=f"apps/{app_id}?format=llm",
+                endpoint=f"apps/{app_id}",
                 method="GET",
                 data=None,
                 auth_token=api_key,
@@ -102,7 +102,7 @@ def create_app_crud(api_key: str, org_id: str) -> Callable[..., str]:
             if not data or not data.get("name"):
                 return "ERROR: data.name required for create"
             return make_request(
-                endpoint="apps?format=llm",
+                endpoint="apps",
                 method="POST",
                 data=data,
                 auth_token=api_key,
@@ -113,7 +113,7 @@ def create_app_crud(api_key: str, org_id: str) -> Callable[..., str]:
             if not app_id:
                 return "ERROR: app_id required for update"
             return make_request(
-                endpoint=f"apps/{app_id}?format=llm",
+                endpoint=f"apps/{app_id}",
                 method="PUT",
                 data=data,
                 auth_token=api_key,
@@ -124,7 +124,7 @@ def create_app_crud(api_key: str, org_id: str) -> Callable[..., str]:
             if not app_id:
                 return "ERROR: app_id required for delete"
             return make_request(
-                endpoint=f"apps/{app_id}?format=llm",
+                endpoint=f"apps/{app_id}",
                 method="DELETE",
                 data=None,
                 auth_token=api_key,
@@ -179,7 +179,7 @@ def create_page_crud(api_key: str, org_id: str) -> Callable[..., str]:
             if not app_id:
                 return "ERROR: app_id required for list"
             return make_request(
-                endpoint=f"apps/{app_id}/pages?format=llm",
+                endpoint=f"apps/{app_id}/pages",
                 method="GET",
                 data=None,
                 auth_token=api_key,
@@ -190,7 +190,7 @@ def create_page_crud(api_key: str, org_id: str) -> Callable[..., str]:
             if not page_id:
                 return "ERROR: page_id required for read"
             return make_request(
-                endpoint=f"pages/{page_id}?format=llm",
+                endpoint=f"pages/{page_id}",
                 method="GET",
                 data=None,
                 auth_token=api_key,
@@ -205,7 +205,7 @@ def create_page_crud(api_key: str, org_id: str) -> Callable[..., str]:
             if data.get("templateData"):
                 data["templateData"] = _ensure_block_ids(data["templateData"])
             return make_request(
-                endpoint=f"apps/{app_id}/pages?format=llm",
+                endpoint=f"apps/{app_id}/pages",
                 method="POST",
                 data=data,
                 auth_token=api_key,
@@ -216,7 +216,7 @@ def create_page_crud(api_key: str, org_id: str) -> Callable[..., str]:
             if not page_id:
                 return "ERROR: page_id required for update"
             return make_request(
-                endpoint=f"pages/{page_id}?format=llm",
+                endpoint=f"pages/{page_id}",
                 method="PUT",
                 data=data,
                 auth_token=api_key,
@@ -243,7 +243,7 @@ def create_page_crud(api_key: str, org_id: str) -> Callable[..., str]:
             data["templateData"] = _ensure_block_ids(template_data)
 
             return make_request(
-                endpoint=f"pages/{page_id}/content?format=llm",
+                endpoint=f"pages/{page_id}/content",
                 method="PUT",
                 data=data,
                 auth_token=api_key,
@@ -254,7 +254,7 @@ def create_page_crud(api_key: str, org_id: str) -> Callable[..., str]:
             if not page_id:
                 return "ERROR: page_id required for publish"
             return make_request(
-                endpoint=f"pages/{page_id}/publish?action=publish&format=llm",
+                endpoint=f"pages/{page_id}/publish?action=publish",
                 method="POST",
                 data=None,
                 auth_token=api_key,
@@ -265,7 +265,7 @@ def create_page_crud(api_key: str, org_id: str) -> Callable[..., str]:
             if not page_id:
                 return "ERROR: page_id required for unpublish"
             return make_request(
-                endpoint=f"pages/{page_id}/publish?action=unpublish&format=llm",
+                endpoint=f"pages/{page_id}/publish?action=unpublish",
                 method="POST",
                 data=None,
                 auth_token=api_key,
@@ -276,7 +276,7 @@ def create_page_crud(api_key: str, org_id: str) -> Callable[..., str]:
             if not page_id:
                 return "ERROR: page_id required for delete"
             return make_request(
-                endpoint=f"pages/{page_id}?format=llm",
+                endpoint=f"pages/{page_id}",
                 method="DELETE",
                 data=None,
                 auth_token=api_key,

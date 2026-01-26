@@ -18,11 +18,9 @@ from tenacity import (
 )
 
 from ..grpc.generated import agent_worker_pb2
-from ..utils.output_instructions import render_output_instructions
-from ..dspy_modules.tools.output import OutputCollector, create_output_tool
+from ..dspy_modules.modules.extractor import OutputExtractorModule
 from ..types import SkillExecutionResult
 from ..utils.error_classifier import classify_error
-from ..utils.toon_format import to_toon
 from .agent_factory import AgentFactory, AgentConfig
 from .tool_loader import UnifiedToolLoader
 
@@ -1219,28 +1217,14 @@ class StepExecutorService:
             except Exception as e:
                 logger.warning(f"Failed to load some step tools: {e}")
 
-        # Add output tool if step has output_defs
-        output_collector = None
-        if step.output_defs:
-            proto_outputs = [{'name': d.name, 'type': d.type} for d in step.output_defs]
-            output_collector = OutputCollector()
-            output_tool = create_output_tool(output_collector, skill_outputs=proto_outputs)
-            step_tools.append(output_tool)
-            logger.info(f"📤 Added output tool for {len(step.output_defs)} step outputs")
+        # Note: Output capture now uses separate extraction step after execution
+        # No output tool needed - agent focuses on the task
 
         task_parts = [instruction]
         if step_inputs:
             task_parts.append("\n\nInputs:")
             for key, value in step_inputs.items():
                 task_parts.append(f"- {key}: {value}")
-
-        # Add output instructions if output tool was added
-        if output_collector:
-            output_instructions = render_output_instructions(
-                [{'name': d.name, 'type': d.type} for d in step.output_defs]
-            )
-            if output_instructions:
-                task_parts.append(f"\n\n{output_instructions}")
 
         task = "\n".join(task_parts)
 
@@ -1257,10 +1241,17 @@ class StepExecutorService:
         sub_agent = self.agent_factory.create_agent(agent_config)
         result = sub_agent.run(task=task, stream=False, reset=True)
 
-        # Return captured outputs if output tool was used
-        if output_collector and output_collector.was_called():
-            captured = output_collector.get_captured_values()
-            logger.info(f"📤 Step {step.name} captured outputs: {list(captured.keys())}")
+        # Extract outputs using DSPy module if step has output_defs
+        if step.output_defs:
+            extractor = OutputExtractorModule(
+                skill_outputs=[{
+                    'name': d.name,
+                    'type': d.type,
+                    'description': getattr(d, 'description', '')
+                } for d in step.output_defs]
+            )
+            captured = extractor.extract(content=str(result))
+            logger.info(f"Extracted outputs from step {step.name}: {list(captured.keys())}")
             return captured
 
         return result
@@ -1614,14 +1605,14 @@ class StepExecutorService:
         logger.debug(f"📤 Captured outputs: {list(output_mappings.values())}")
 
     def _inject_context(self, instruction: str, context: Dict[str, Any]) -> str:
-        """Replace {{var}} placeholders in instruction with TOON format for token efficiency."""
+        """Replace {{var}} placeholders in instruction with compact JSON."""
         result = instruction
         for key, value in context.items():
             placeholder = f"{{{{{key}}}}}"
             if placeholder in result:
                 if isinstance(value, (dict, list)):
-                    # Use TOON format for structured data - saves ~40-60% tokens
-                    value_str = to_toon(value)
+                    # Use compact JSON - DSPy adapters handle token efficiency
+                    value_str = json.dumps(value, separators=(',', ':'))
                 else:
                     value_str = str(value)
                 result = result.replace(placeholder, value_str)

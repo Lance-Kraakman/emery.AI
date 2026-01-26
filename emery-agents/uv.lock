@@ -884,7 +884,6 @@ dependencies = [
     { name = "schedule" },
     { name = "sqlalchemy" },
     { name = "tenacity" },
-    { name = "toon-format" },
     { name = "typing-extensions" },
     { name = "websockets" },
 ]
@@ -961,7 +960,6 @@ requires-dist = [
     { name = "schedule", specifier = ">=1.2.0" },
     { name = "sqlalchemy", specifier = ">=2.0.0" },
     { name = "tenacity", specifier = ">=8.2.0" },
-    { name = "toon-format", specifier = ">=0.1.0" },
     { name = "typing-extensions", specifier = ">=4.8.0" },
     { name = "websockets", specifier = ">=11.0.0" },
 ]
@@ -3466,15 +3464,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/5b/b9/1ed31d167be802da0fc95020d04cd27b7d7065cc6fbefdd2f9186f60d7bd/tomli-2.2.1-cp313-cp313-win32.whl", hash = "sha256:d3f5614314d758649ab2ab3a62d4f2004c825922f9e370b29416484086b264ec", size = 98724 },
     { url = "https://files.pythonhosted.org/packages/c7/32/b0963458706accd9afcfeb867c0f9175a741bf7b19cd424230714d722198/tomli-2.2.1-cp313-cp313-win_amd64.whl", hash = "sha256:a38aa0308e754b0e3c67e344754dff64999ff9b513e691d0e786265c93583c69", size = 109383 },
     { url = "https://files.pythonhosted.org/packages/6e/c2/61d3e0f47e2b74ef40a68b9e6ad5984f6241a942f7cd3bbfbdbd03861ea9/tomli-2.2.1-py3-none-any.whl", hash = "sha256:cb55c73c5f4408779d0cf3eef9f762b9c9f147a77de7b258bef0a5628adc85cc", size = 14257 },
-]
-
-[[package]]
-name = "toon-format"
-version = "0.1.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/d4/5c/f74ab4f7faaa00ffc0c13aea4acfdd5e1fdecf4a1e81196f39203e56dc10/toon_format-0.1.0.tar.gz", hash = "sha256:77303c9b06956fe8b0066d2bca52dfdc63e2b3abba439c3c3545dbbd43a97d48", size = 3078 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/ee/ae/c52d28ce93490f82cfbbf49e1b9a85f33449c89fc1a5aa53d476d3a69666/toon_format-0.1.0-py3-none-any.whl", hash = "sha256:f0c7bf3f63f1fc08739127ca895a55922617193f942f84474489770d7cd1ffc2", size = 4803 },
 ]
 
 [[package]]

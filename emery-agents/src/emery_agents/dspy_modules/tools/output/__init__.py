@@ -2,18 +2,12 @@
 Output tool factories for DSPy.
 
 These tools capture structured output from agent execution.
+Note: Agent output capture (submit_result) has been replaced by OutputExtractorModule
+in dspy_modules/modules/extractor.py - extraction is now a post-processing step.
 """
 
 from __future__ import annotations
 
-from .agent_output import (
-    CapturedOutput,
-    ExtractionStats,
-    OutputCollector,
-    TargetFieldMetadata,
-    build_target_field_metadata_from_mappings,
-    create_output_tool,
-)
 from .ask_question import (
     ClarificationRequestedException,
     QuestionCollector,
@@ -40,13 +34,6 @@ __all__ = [
     # Step Output
     "StepCollector",
     "create_step_output_tool",
-    # Agent Output (submit_result)
-    "CapturedOutput",
-    "ExtractionStats",
-    "OutputCollector",
-    "TargetFieldMetadata",
-    "build_target_field_metadata_from_mappings",
-    "create_output_tool",
     # Plan Output (submit_plan)
     "CapturedPlan",
     "NormalizedStepData",

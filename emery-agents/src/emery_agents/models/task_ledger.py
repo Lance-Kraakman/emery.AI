@@ -18,8 +18,9 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any, TYPE_CHECKING
 from enum import Enum
 
+import json
+
 from emery_agents.models.plan import PlanStepStatus
-from emery_agents.utils.toon_format import to_toon
 
 if TYPE_CHECKING:
     from emery_agents.ace import ExecutionContext, ExecutionEvolutionTracker, StrategyRegistry
@@ -352,11 +353,11 @@ class TaskLedger:
 
         return result
 
-    def to_toon_summary(self) -> str:
+    def to_json_summary(self) -> str:
         """
-        Generate a concise TOON summary for the evaluator.
+        Generate a compact JSON summary for the evaluator.
 
-        Uses TOON format for minimal LLM token usage.
+        Uses compact JSON format - DSPy adapters handle token efficiency.
         Smaller than full to_dict() - focuses on what evaluator needs.
 
         Includes ACE execution context if available:
@@ -383,7 +384,7 @@ class TaskLedger:
             summary["context_warning"] = "Context degradation detected - consider recovery"
             summary["degradation_warnings"] = self.evolution_tracker.degradation_warnings[-3:]
 
-        return to_toon(summary)
+        return json.dumps(summary, separators=(',', ':'))
 
 
 def create_ledger_from_plan(task_id: str, goal: str, plan_steps: List[Dict[str, Any]]) -> TaskLedger:

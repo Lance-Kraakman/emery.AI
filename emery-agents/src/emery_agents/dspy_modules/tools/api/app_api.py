@@ -121,7 +121,7 @@ class AppAPI:
             Created App or None on failure
         """
         result = make_request(
-            endpoint="apps?format=llm",
+            endpoint="apps",
             method="POST",
             data={"name": name, "description": description},
             auth_token=self._api_key,
@@ -153,7 +153,7 @@ class AppAPI:
             Updated App or None on failure
         """
         result = make_request(
-            endpoint=f"apps/{app_id}?format=llm",
+            endpoint=f"apps/{app_id}",
             method="PUT",
             data=data,
             auth_token=self._api_key,
@@ -183,7 +183,7 @@ class AppAPI:
             True on success, False on failure
         """
         result = make_request(
-            endpoint=f"apps/{app_id}?format=llm",
+            endpoint=f"apps/{app_id}",
             method="DELETE",
             data=None,
             auth_token=self._api_key,

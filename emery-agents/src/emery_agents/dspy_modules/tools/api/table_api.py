@@ -140,7 +140,7 @@ class TableAPI:
             Created Table or None on failure
         """
         result = make_request(
-            endpoint="tables?format=llm",
+            endpoint="tables",
             method="POST",
             data={
                 "name": name,
@@ -177,7 +177,7 @@ class TableAPI:
             Updated Table or None on failure
         """
         result = make_request(
-            endpoint=f"tables/{table_id}?format=llm",
+            endpoint=f"tables/{table_id}",
             method="PUT",
             data=data,
             auth_token=self._api_key,
@@ -208,7 +208,7 @@ class TableAPI:
             True on success, False on failure
         """
         result = make_request(
-            endpoint=f"tables/{table_id}?format=llm",
+            endpoint=f"tables/{table_id}",
             method="DELETE",
             data=None,
             auth_token=self._api_key,

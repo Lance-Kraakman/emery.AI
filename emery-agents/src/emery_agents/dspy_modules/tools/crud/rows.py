@@ -62,7 +62,7 @@ def create_row_crud(api_key: str, org_id: str) -> Callable[..., str]:
             if not data:
                 return "ERROR: Row data is required for create_row. Provide {field_name: value, ...}"
             return make_request(
-                endpoint="rows?format=llm",
+                endpoint="rows",
                 method="POST",
                 data={"tableId": int(table_id), "data": data},
                 auth_token=api_key,
@@ -73,7 +73,7 @@ def create_row_crud(api_key: str, org_id: str) -> Callable[..., str]:
             if not table_id:
                 return "ERROR: table_id is required for get_rows operation"
 
-            query_params = [f"tableId={table_id}", "format=llm"]
+            query_params = [f"tableId={table_id}"]
             query_params.append(f"limit={limit or 100}")
             query_params.append(f"offset={offset or 0}")
 
@@ -99,7 +99,7 @@ def create_row_crud(api_key: str, org_id: str) -> Callable[..., str]:
             if not data:
                 return "ERROR: Row data is required for update_row"
             return make_request(
-                endpoint="rows?format=llm",
+                endpoint="rows",
                 method="PUT",
                 data={"tableId": int(table_id), "rowId": row_id, "data": data},
                 auth_token=api_key,
@@ -112,7 +112,7 @@ def create_row_crud(api_key: str, org_id: str) -> Callable[..., str]:
             if not row_id:
                 return "ERROR: row_id is required for delete_row operation"
             return make_request(
-                endpoint=f"rows?tableId={table_id}&rowId={row_id}&format=llm",
+                endpoint=f"rows?tableId={table_id}&rowId={row_id}",
                 method="DELETE",
                 data=None,
                 auth_token=api_key,

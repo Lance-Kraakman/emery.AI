@@ -46,6 +46,10 @@ from emery_agents.dspy_modules.signatures.evaluation import (
     StrategyRankingsResult,
     StrategyRankingModel,
 )
+from emery_agents.dspy_modules.signatures.extraction import (
+    create_extraction_signature,
+    SKILL_TYPE_MAP,
+)
 
 __all__ = [
     # Planning
@@ -91,4 +95,7 @@ __all__ = [
     "RankStrategies",
     "StrategyRankingsResult",
     "StrategyRankingModel",
+    # Output Extraction
+    "create_extraction_signature",
+    "SKILL_TYPE_MAP",
 ]

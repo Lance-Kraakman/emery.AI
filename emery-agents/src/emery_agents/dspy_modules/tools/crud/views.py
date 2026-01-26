@@ -57,7 +57,7 @@ def create_view_crud(api_key: str, org_id: str) -> Callable[..., str]:
         method = method.lower()
 
         if method == "list":
-            endpoint = "views?format=llm"
+            endpoint = "views"
             if table_id:
                 endpoint += f"&table_id={table_id}"
             return make_request(
@@ -72,7 +72,7 @@ def create_view_crud(api_key: str, org_id: str) -> Callable[..., str]:
             if not view_id:
                 return "ERROR: view_id required for read"
             return make_request(
-                endpoint=f"views/{view_id}?format=llm",
+                endpoint=f"views/{view_id}",
                 method="GET",
                 data=None,
                 auth_token=api_key,
@@ -89,7 +89,7 @@ def create_view_crud(api_key: str, org_id: str) -> Callable[..., str]:
             if not data.get("viewType"):
                 data["viewType"] = "grid"  # Default to grid
             return make_request(
-                endpoint="views?format=llm",
+                endpoint="views",
                 method="POST",
                 data=data,
                 auth_token=api_key,
@@ -100,7 +100,7 @@ def create_view_crud(api_key: str, org_id: str) -> Callable[..., str]:
             if not view_id:
                 return "ERROR: view_id required for update"
             return make_request(
-                endpoint=f"views/{view_id}?format=llm",
+                endpoint=f"views/{view_id}",
                 method="PUT",
                 data=data,
                 auth_token=api_key,
@@ -111,7 +111,7 @@ def create_view_crud(api_key: str, org_id: str) -> Callable[..., str]:
             if not view_id:
                 return "ERROR: view_id required for delete"
             return make_request(
-                endpoint=f"views/{view_id}?format=llm",
+                endpoint=f"views/{view_id}",
                 method="DELETE",
                 data=None,
                 auth_token=api_key,
@@ -128,7 +128,7 @@ def create_view_crud(api_key: str, org_id: str) -> Callable[..., str]:
                 if "additionalFilters" in data:
                     execute_data["additionalFilters"] = data["additionalFilters"]
             return make_request(
-                endpoint=f"views/{view_id}/execute?format=llm",
+                endpoint=f"views/{view_id}/execute",
                 method="POST",
                 data=execute_data if execute_data else None,
                 auth_token=api_key,

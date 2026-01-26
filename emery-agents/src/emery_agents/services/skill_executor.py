@@ -9,12 +9,7 @@ from PIL import Image
 from ..clients import HuggingFaceInferenceClient, TaskResult
 from ..entities.skill_io import SkillOutputValue
 from ..grpc.generated import agent_worker_pb2
-from ..utils.output_instructions import render_output_instructions
-from ..dspy_modules.tools.output import (
-    OutputCollector,
-    create_output_tool,
-    build_target_field_metadata_from_mappings,
-)
+from ..dspy_modules.modules.extractor import OutputExtractorModule
 from ..types import SkillExecutionResult
 from ..utils import run_async_in_thread
 from ..utils.step_utils import step_to_progress_dict, RawProgressDict
@@ -238,26 +233,8 @@ class SkillExecutorService:
             )
             logger.info(f"🔧 Loaded {len(skill_tools)} tools for skill {skill_config.name}")
 
-        # 2. Add output tool if capturing outputs
-        #
-        # TODO: Support node→skill output separation
-        # Currently output tool uses skill_config.outputs directly.
-        # Future enhancement: Use step.output_defs for output tool, then map
-        # captured node outputs → skill outputs based on output.source config.
-        # See: OutputSource type in skill.ts (nodeId, outputName)
-        #
-        output_collector = None
-        if capture_outputs and skill_config.outputs:
-            # Extract target field metadata from output mappings for rich LLM guidance
-            target_metadata = build_target_field_metadata_from_mappings(list(skill_config.outputs))
-            output_collector = OutputCollector()
-            output_tool = create_output_tool(
-                output_collector,
-                skill_outputs=list(skill_config.outputs),
-                target_field_metadata=target_metadata
-            )
-            skill_tools.append(output_tool)
-            logger.info(f"📤 Added output tool for {len(list(skill_config.outputs))} outputs")
+        # 2. Note: Output capture now uses separate extraction step after execution
+        # This is cleaner than requiring the agent to call a submit_result tool
 
         # 3. Process attachments from skill_config.content
         images, text_parts = self._process_skill_attachments(skill_config)
@@ -273,25 +250,7 @@ class SkillExecutorService:
         # Add text parts from attachments
         task_parts.extend(text_parts)
 
-        # Add output instructions if capturing
-        if capture_outputs and skill_config.outputs:
-            # Build target field metadata for type-aware guidance
-            target_metadata = build_target_field_metadata_from_mappings(list(skill_config.outputs))
-            target_meta_dict = {
-                name: {
-                    'field_type': meta.field_type,
-                    'options': meta.options,
-                    'max_selections': meta.max_selections
-                }
-                for name, meta in target_metadata.items()
-            }
-            output_instructions = render_output_instructions(
-                list(skill_config.outputs),
-                target_field_metadata=target_meta_dict
-            )
-            if output_instructions:
-                task_parts.append(f"\n\n{output_instructions}")
-                logger.info(f"📤 Added output capture instructions ({len(output_instructions)} chars)")
+        # Note: Output capture instructions removed - extraction happens after execution
 
         task = "\n".join(task_parts)
         logger.info(f"📝 Skill task: {task[:200]}...")
@@ -359,21 +318,20 @@ class SkillExecutorService:
         logger.info(f"✅ Skill {skill_config.name} completed")
 
         # 8. Return with captured outputs if requested
-        if capture_outputs:
-            was_called = output_collector.was_called() if output_collector else False
-            captured = output_collector.get_captured_values() if output_collector and was_called else None
-
-            # Check for extraction failure
-            if not was_called:
-                logger.error("❌ Output tool was NOT called - skill execution failed")
-                return SkillExecutionResult(
-                    result="FAILED: Skill did not submit results. Data extraction may have failed.",
-                    captured_outputs=None
-                )
+        if capture_outputs and skill_config.outputs:
+            # Extract outputs using DSPy module (separate extraction step)
+            extractor = OutputExtractorModule(
+                skill_outputs=[{
+                    'name': o.name,
+                    'type': o.type,
+                    'description': o.description
+                } for o in skill_config.outputs]
+            )
+            captured = extractor.extract(content=result_json)
 
             # Check if all values are null (complete extraction failure)
             if captured and all(v is None for v in captured.values()):
-                logger.error("❌ No data was extracted - all fields were null")
+                logger.error("No data was extracted - all fields were null")
                 return SkillExecutionResult(
                     result="FAILED: No data could be extracted from the input.",
                     captured_outputs=None
@@ -381,11 +339,11 @@ class SkillExecutorService:
 
             if captured:
                 extracted = sum(1 for v in captured.values() if v is not None)
-                logger.info(f"📤 Captured {extracted}/{len(captured)} outputs from submit_result")
-            else:
-                logger.warning(f"⚠️ No captured outputs")
+                logger.info(f"Extracted {extracted}/{len(captured)} outputs")
 
             return SkillExecutionResult(result=result_json, captured_outputs=captured)
+        elif capture_outputs:
+            return SkillExecutionResult(result=result_json, captured_outputs=None)
         else:
             return result_json
 

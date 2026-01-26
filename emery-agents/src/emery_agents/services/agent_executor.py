@@ -30,11 +30,7 @@ from .image_processor import ImageProcessor
 from .agent_factory import AgentFactory, AgentConfig
 from .token_usage_extractor import TokenUsageExtractor
 from ..dspy_modules.tools.execution import SkillTool, create_bash_tool
-from ..dspy_modules.tools.output import (
-    OutputCollector,
-    create_output_tool,
-    build_target_field_metadata_from_mappings,
-)
+from ..dspy_modules.modules.extractor import OutputExtractorModule
 from ..clients import HuggingFaceInferenceClient, TaskResult
 from .skill_executor import SkillExecutorService
 from .step_executor import StepExecutorService
@@ -48,7 +44,6 @@ from ..entities.output_mapping import (
     extract_field_value, get_extension_for_mime
 )
 from ..entities.skill_io import SkillOutputValue
-from ..utils.output_instructions import render_output_instructions
 from .output_mapping_service import OutputMappingService, MappingContext
 from .execution_coordinator import (
     ExecutionCoordinator,
@@ -501,9 +496,7 @@ class AgentExecutor:
                 pil_images = await self._download_images(context.images)
 
                 # Enhance instructions if skill has output mappings
-                task_instructions = context.task
-                if self._has_output_mappings(skill):
-                    task_instructions = self._enhance_instructions_for_outputs(skill)
+                task_instructions = self._get_task_instructions(skill) if skill.instructions else context.task
 
                 # Execute the skill instructions
                 yield {
@@ -529,10 +522,17 @@ class AgentExecutor:
                     context=context_str,
                 )
 
-                # Get captured outputs if output tool was used
+                # Extract outputs using DSPy module if skill has output mappings
                 captured_outputs = None
-                if context.output_collector and context.output_collector.was_called():
-                    captured_outputs = context.output_collector.get_captured_values()
+                if self._has_output_mappings(skill) and skill.outputs:
+                    extractor = OutputExtractorModule(
+                        skill_outputs=[{
+                            'name': o.name,
+                            'type': o.type,
+                            'description': o.description
+                        } for o in skill.outputs]
+                    )
+                    captured_outputs = extractor.extract(content=str(result))
                     # Apply agent output mappings
                     await self._apply_agent_output_mappings(
                         skill=skill,
@@ -1153,36 +1153,12 @@ class AgentExecutor:
                 return True
         return False
 
-    def _enhance_instructions_for_outputs(self, skill: SkillConfig) -> str:
-        """Add output tool guidance to skill instructions."""
-        instructions = skill.instructions
+    def _get_task_instructions(self, skill: SkillConfig) -> str:
+        """Get task instructions from skill config.
 
-        outputs_with_mappings = [
-            o for o in skill.outputs
-            if o.HasField('output_mapping') and len(o.output_mapping.table_mappings) > 0
-        ]
-        if not outputs_with_mappings:
-            return instructions
-
-        # Build target field metadata for type-aware guidance
-        target_metadata = build_target_field_metadata_from_mappings(outputs_with_mappings)
-        target_meta_dict = {
-            name: {
-                'field_type': meta.field_type,
-                'options': meta.options,
-                'max_selections': meta.max_selections
-            }
-            for name, meta in target_metadata.items()
-        }
-
-        # Use template for detailed output instructions
-        output_instructions = render_output_instructions(
-            outputs_with_mappings,
-            target_field_metadata=target_meta_dict
-        )
-        if output_instructions:
-            return instructions + "\n\n" + output_instructions
-        return instructions
+        Note: Output capture instructions removed - extraction happens after execution.
+        """
+        return skill.instructions
 
     async def _create_skill_agent(
         self,
@@ -1222,21 +1198,8 @@ class AgentExecutor:
             tools.extend(skill_tools)
             logger.info(f"Added {len(skill_tools)} skills as tools for delegation")
 
-        # Add output tool if skill has output mappings
-        output_collector = None
-        if self._has_output_mappings(skill):
-            # Extract target field metadata from output mappings for rich LLM guidance
-            target_metadata = build_target_field_metadata_from_mappings(list(skill.outputs))
-            output_collector = OutputCollector()
-            output_tool = create_output_tool(
-                output_collector,
-                skill_outputs=list(skill.outputs),
-                target_field_metadata=target_metadata
-            )
-            tools.append(output_tool)
-            # Store collector on context so we can check it after execution
-            context.output_collector = output_collector
-            logger.info(f"Added output tool for {len(skill.outputs)} outputs")
+        # Note: Output capture now uses separate extraction step after execution
+        # No output tool needed - agent focuses on the task
 
         # Extract skill model if present
         # SkillConfig is protobuf - string fields are empty string if not set
