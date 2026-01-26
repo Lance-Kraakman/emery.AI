@@ -194,22 +194,28 @@ class AnalyzeGaps(dspy.Signature):  # type: ignore[misc]
     analysis: GapAnalysisResultModel = dspy.OutputField()
 
 
+class StepModificationOutput(BaseModel):
+    """DSPy output schema for a step modification."""
+
+    step_id: str = Field(description="ID of the step to modify")
+    new_description: str = Field(description="Updated description for the step")
+
+
 class PlanDiffResult(BaseModel):
     """Result of generating a plan diff for incremental updates."""
 
     steps_to_skip: list[str] = Field(
         default_factory=list, description="Step IDs to mark as skipped"
     )
-    steps_to_modify: list[dict[str, str]] = Field(
-        default_factory=list, description="Steps to modify: [{step_id, new_description}]"
+    steps_to_modify: list[StepModificationOutput] = Field(
+        default_factory=list, description="Steps to modify"
     )
-    steps_to_append: list[dict[str, Any]] = Field(
-        default_factory=list,
-        description="New steps to add: [{description, target_agent?, phase_name?, phase_order?}]"
+    steps_to_append: list[PlanStepOutput] = Field(
+        default_factory=list, description="New steps to add at the end"
     )
     reasoning: str = Field(description="Why these changes are needed")
     needs_clarification: bool = Field(default=False, description="Whether user input is needed")
-    clarifying_questions: list[dict[str, Any]] = Field(
+    clarifying_questions: list[ClarifyingQuestionOutput] = Field(
         default_factory=list, description="Questions if clarification needed"
     )
 

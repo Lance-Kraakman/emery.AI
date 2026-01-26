@@ -26,9 +26,9 @@ from emery_agents.ace import StrategyAccumulationService
 from emery_agents.reasoning.config import get_dspy_lm
 from emery_agents.reasoning.modules.planner import PlannerModule
 from emery_agents.reasoning.signatures.planning import (
-    ClarifyingQuestionOutputOutput,
+    ClarifyingQuestionOutput,
     PlanOutput,
-    PlanOrQuestionsOutputOutput,
+    PlanOrQuestionsOutput,
     PlanStepOutput,
 )
 from emery_agents.entities.models.plan import Plan, PlanStep, create_plan, create_step

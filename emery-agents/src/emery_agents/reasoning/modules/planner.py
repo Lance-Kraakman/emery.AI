@@ -15,7 +15,7 @@ from emery_agents.reasoning.signatures.planning import (
     AnalyzeTask,
     ClarifyingQuestionOutput,
     CreatePlan,
-    PlanOrQuestionsOutputOutput,
+    PlanOrQuestionsOutput,
 )
 
 if TYPE_CHECKING:

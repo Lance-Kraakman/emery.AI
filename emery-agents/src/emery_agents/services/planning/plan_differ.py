@@ -76,23 +76,33 @@ class PlanDiff:
     @classmethod
     def from_result(cls, result: PlanDiffResult) -> "PlanDiff":
         """Convert from DSPy result model."""
-        # Build PlanStep objects for append
+        # Build PlanStep objects for append (typed access)
         append_steps = []
         for s in result.steps_to_append:
             step = create_step(
-                description=s.get("description", ""),
-                target_agent=s.get("target_agent"),
-                phase_name=s.get("phase_name"),
-                phase_order=s.get("phase_order"),
+                description=s.description,
+                target_agent=s.target_agent,
+                phase_name=s.phase_name,
+                phase_order=s.phase_order,
             )
             append_steps.append(step)
 
-        # Build modify tuples
+        # Build modify tuples (typed access)
         modify_tuples: List[Tuple[str, Dict[str, Any]]] = []
         for m in result.steps_to_modify:
-            step_id = m.get("step_id", "")
-            mods = {"description": m.get("new_description", "")}
-            modify_tuples.append((step_id, mods))
+            mods = {"description": m.new_description}
+            modify_tuples.append((m.step_id, mods))
+
+        # Convert clarifying questions to dicts for runtime representation
+        questions = [
+            {
+                "question": q.question,
+                "question_type": q.question_type.value,
+                "options": q.options,
+                "reason": q.reason,
+            }
+            for q in result.clarifying_questions
+        ] if result.needs_clarification else []
 
         return cls(
             steps_to_skip=result.steps_to_skip,
@@ -100,7 +110,7 @@ class PlanDiff:
             steps_to_insert=[],  # DSPy doesn't handle insert positions well
             steps_to_append=append_steps,
             reasoning=result.reasoning,
-            clarifying_questions=result.clarifying_questions if result.needs_clarification else [],
+            clarifying_questions=questions,
         )
 
 
