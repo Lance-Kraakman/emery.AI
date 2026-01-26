@@ -117,6 +117,23 @@ class SkillInfo:
         }
 
 
+@dataclass
+class ViewInfo:
+    """Data view information for context injection."""
+    name: str
+    id: Optional[str] = None
+    table_id: Optional[str] = None
+    view_type: str = "grid"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "id": self.id,
+            "table_id": self.table_id,
+            "view_type": self.view_type,
+        }
+
+
 @dataclass(frozen=True)
 class SessionConfig:
     """
@@ -143,6 +160,7 @@ class WorkspaceContext:
     - Apps (user's apps with pages)
     - Agents (user's custom agents)
     - Skills (user's custom skills)
+    - Views (data views for tables)
 
     This gives the planner awareness of existing resources to avoid duplicates.
     CapabilityRegistry handles runtime capability routing separately.
@@ -152,6 +170,7 @@ class WorkspaceContext:
     existing_apps: List[AppInfo] = field(default_factory=list)
     existing_agents: List[AgentInfo] = field(default_factory=list)
     existing_skills: List[SkillInfo] = field(default_factory=list)
+    existing_views: List[ViewInfo] = field(default_factory=list)
 
     @property
     def has_databases(self) -> bool:
@@ -173,6 +192,10 @@ class WorkspaceContext:
     def has_skills(self) -> bool:
         return len(self.existing_skills) > 0
 
+    @property
+    def has_views(self) -> bool:
+        return len(self.existing_views) > 0
+
     def to_template_context(self) -> Dict[str, Any]:
         """
         Build dict for template rendering.
@@ -186,11 +209,13 @@ class WorkspaceContext:
             "existing_apps": [a.to_dict() for a in self.existing_apps],
             "existing_agents": [a.to_dict() for a in self.existing_agents],
             "existing_skills": [s.to_dict() for s in self.existing_skills],
+            "existing_views": [v.to_dict() for v in self.existing_views],
             "has_databases": self.has_databases,
             "has_tables": self.has_tables,
             "has_apps": self.has_apps,
             "has_agents": self.has_agents,
             "has_skills": self.has_skills,
+            "has_views": self.has_views,
         }
 
     def get_database_by_name(self, name: str) -> Optional[DatabaseInfo]:
@@ -226,4 +251,11 @@ class WorkspaceContext:
         for skill in self.existing_skills:
             if skill.name == name:
                 return skill
+        return None
+
+    def get_view_by_name(self, name: str) -> Optional[ViewInfo]:
+        """Look up view by name."""
+        for view in self.existing_views:
+            if view.name == name:
+                return view
         return None

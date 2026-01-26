@@ -9,6 +9,7 @@ from .table_api import TableAPI, Table
 from .app_api import AppAPI, App
 from .agent_api import AgentAPI, Agent
 from .skill_api import SkillAPI, Skill
+from .workspace_api import WorkspaceAPI, WorkspaceData, WorkspaceApp, WorkspaceAgent, WorkspaceSkill, WorkspaceDatabase, WorkspaceTable, WorkspaceView, WorkspacePage
 
 __all__ = [
     "DatabaseAPI",
@@ -21,4 +22,13 @@ __all__ = [
     "Agent",
     "SkillAPI",
     "Skill",
+    "WorkspaceAPI",
+    "WorkspaceData",
+    "WorkspaceApp",
+    "WorkspaceAgent",
+    "WorkspaceSkill",
+    "WorkspaceDatabase",
+    "WorkspaceTable",
+    "WorkspaceView",
+    "WorkspacePage",
 ]

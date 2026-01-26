@@ -48,8 +48,8 @@ from emery_agents.ace import (
 )
 from ..types import ExecutionMode
 from .planning.plan_differ import PlanDiffer
-from .context import SessionConfig, WorkspaceContext, TableInfo, AppInfo, DatabaseInfo, PageInfo, AgentInfo, SkillInfo
-from ..reasoning.tools.api import DatabaseAPI, TableAPI, AppAPI, AgentAPI, SkillAPI
+from .context import SessionConfig, WorkspaceContext, TableInfo, AppInfo, DatabaseInfo, PageInfo, AgentInfo, SkillInfo, ViewInfo
+from ..reasoning.tools.api import WorkspaceAPI
 
 logger = logging.getLogger(__name__)
 
@@ -733,10 +733,10 @@ class ExecutionCoordinator:
         tools: Optional[List[Tool]] = None,
     ) -> WorkspaceContext:
         """
-        Build workspace context using typed API layer.
+        Build workspace context using unified Workspace API.
 
-        Uses typed APIs for clean access to existing workspace resources.
-        Includes databases, tables, apps, agents, and skills.
+        Single API call fetches all workspace resources:
+        databases, tables, apps (with pages), agents, skills, and views.
 
         Args:
             tools: Unused, kept for interface compatibility
@@ -753,7 +753,7 @@ class ExecutionCoordinator:
             f"org_id={org_id or 'MISSING'}"
         )
 
-        # Skip API calls if no auth - avoids failed requests
+        # Skip API call if no auth - avoids failed requests
         if not self._api_key or not org_id:
             logger.warning(
                 f"⚠️ Cannot fetch workspace data: "
@@ -766,50 +766,45 @@ class ExecutionCoordinator:
                 existing_apps=[],
                 existing_agents=[],
                 existing_skills=[],
+                existing_views=[],
             )
 
-        # Use shared typed APIs
-        db_api = DatabaseAPI(self._api_key, org_id)
-        table_api = TableAPI(self._api_key, org_id)
-        app_api = AppAPI(self._api_key, org_id)
-        agent_api = AgentAPI(self._api_key, org_id)
-        skill_api = SkillAPI(self._api_key, org_id)
-
-        # Fetch all workspace resources
-        databases = db_api.list()
-        tables = table_api.list()
-        apps = app_api.list()
-        agents = agent_api.list()
-        skills = skill_api.list()
+        # Use unified workspace API - single call for all resources
+        workspace_api = WorkspaceAPI(self._api_key, org_id)
+        data = workspace_api.get_all()
 
         logger.info(
-            f"📊 Workspace context: {len(databases)} databases, {len(tables)} tables, "
-            f"{len(apps)} apps, {len(agents)} agents, {len(skills)} skills"
+            f"📊 Workspace context: {len(data.databases)} databases, "
+            f"{len(data.apps)} apps ({sum(len(a.pages) for a in data.apps)} pages), "
+            f"{len(data.agents)} agents, {len(data.skills)} skills, {len(data.views)} views"
         )
 
-        # Build database name lookup
-        db_lookup = {db.id: db.name for db in databases}
+        # Build database name lookup for tables
+        db_lookup = {db.id: db.name for db in data.databases}
+
+        # Build flat table list from nested databases
+        all_tables = []
+        for db in data.databases:
+            for t in db.tables:
+                all_tables.append(TableInfo(
+                    name=t.name,
+                    id=str(t.id),
+                    database_id=str(db.id),
+                    database_name=db.name,
+                    field_count=t.field_count,
+                    fields=[],
+                ))
 
         return WorkspaceContext(
             existing_databases=[
                 DatabaseInfo(
                     name=db.name,
                     id=str(db.id),
-                    table_count=db.table_count,
+                    table_count=len(db.tables),
                 )
-                for db in databases
+                for db in data.databases
             ],
-            existing_tables=[
-                TableInfo(
-                    name=t.name,
-                    id=str(t.id),
-                    database_id=str(t.database_id) if t.database_id else None,
-                    database_name=db_lookup.get(t.database_id, "") if t.database_id else "",
-                    field_count=t.field_count,
-                    fields=t.fields,
-                )
-                for t in tables
-            ],
+            existing_tables=all_tables,
             existing_apps=[
                 AppInfo(
                     name=app.name,
@@ -817,14 +812,14 @@ class ExecutionCoordinator:
                     description=app.description,
                     pages=[
                         PageInfo(
-                            name=p.get("name", ""),
-                            id=str(p.get("id", "")),
+                            name=p.name,
+                            id=str(p.id),
                             app_id=str(app.id),
                         )
                         for p in app.pages
-                    ] if app.pages else [],
+                    ],
                 )
-                for app in apps
+                for app in data.apps
             ],
             existing_agents=[
                 AgentInfo(
@@ -832,7 +827,7 @@ class ExecutionCoordinator:
                     id=str(agent.id),
                     description=agent.description,
                 )
-                for agent in agents
+                for agent in data.agents
             ],
             existing_skills=[
                 SkillInfo(
@@ -841,7 +836,16 @@ class ExecutionCoordinator:
                     description=skill.description,
                     agent_id=str(skill.agent_id) if skill.agent_id else None,
                 )
-                for skill in skills
+                for skill in data.skills
+            ],
+            existing_views=[
+                ViewInfo(
+                    name=view.name,
+                    id=str(view.id),
+                    table_id=str(view.table_id),
+                    view_type=view.view_type,
+                )
+                for view in data.views
             ],
         )
 
