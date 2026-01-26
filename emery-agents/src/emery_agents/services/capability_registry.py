@@ -13,7 +13,7 @@ Uses semantic search (HuggingFace embeddings) for accurate capability matching.
 
 import logging
 from typing import Optional
-
+from .embedding_service import get_embedding, cosine_similarity
 from emery_agents.models.capability import Capability, CapabilityType
 
 logger = logging.getLogger(__name__)
@@ -199,7 +199,6 @@ class CapabilityRegistry:
             return []
 
         try:
-            from .embedding_service import get_embedding, cosine_similarity
 
             query_embedding = get_embedding(query)
 

@@ -37,7 +37,7 @@ from emery_agents.services.context import WorkspaceContext
 from .models import PlanGenerationRequest, PlanGenerationResult
 
 if TYPE_CHECKING:
-    from emery_agents.services.protocols import ModelProvider, Tool
+    from emery_agents.services.protocols import ModelProviderProtocol, Tool
 
 logger = logging.getLogger(__name__)
 
@@ -60,8 +60,8 @@ class DSPyPlanGenerator:
 
     def __init__(
         self,
-        model_provider: Optional[ModelProvider] = None,
-        discovery_tools: Optional[list[Tool]] = None,
+        model_provider: Optional["ModelProviderProtocol"] = None,
+        discovery_tools: Optional[list["Tool"]] = None,
     ) -> None:
         """
         Initialize DSPy plan generator.

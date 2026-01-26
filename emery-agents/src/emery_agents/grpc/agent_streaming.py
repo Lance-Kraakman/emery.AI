@@ -14,9 +14,7 @@ from typing import AsyncIterator, Optional, List, Dict, Any, TYPE_CHECKING
 from ..dspy_modules.tools.execution import SkillTool
 from ..tools.tool_modes import filter_tools_for_mode, ToolMode
 from ..services.agent_executor import AgentExecutor
-from ..services.token_usage_extractor import TokenUsageExtractor
 from ..services.coordinator_state_machine import (
-    CoordinatorStateMachine,
     Phase,
     ActionType,
 )
@@ -37,19 +35,16 @@ from .message_processor import (
 from .approval_handler import is_approval_response
 from .tool_setup import detect_stored_plan_from_skills
 from .response_types import (
-    StepProgressDict,
-    ContentChunkDict,
     ErrorDetailsDict,
     ErrorDataDict,
     ErrorResponseDict,
     AwaitingInputResponseDict,
     StreamResponseDict,
-    create_permission_request_event,
 )
 
 if TYPE_CHECKING:
     from ..services.session_manager import SessionManager
-    from ..services.model_provider import SmolagentsModelProvider
+    from ..services.model_provider import ModelProvider
     from ..services.tool_loader import UnifiedToolLoader
     from ..services.skill_executor import SkillExecutorService
     from ..services.plan_service import PlanService
@@ -81,7 +76,7 @@ class AgentStreamingHandler:
     def __init__(
         self,
         session_manager: 'SessionManager',
-        model_provider: 'SmolagentsModelProvider',
+        model_provider: 'ModelProvider',
         skill_executor_service: 'SkillExecutorService',
         tool_loader: Optional['UnifiedToolLoader'],
         plan_service: 'PlanService',

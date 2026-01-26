@@ -146,7 +146,6 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             logger.info(f"[{context}] Fields in schema not in input (null-filled): {sorted(extra)}")
 
     
-
     def _get_delta_table_safe(self, s3_uri: str, storage_options: Dict[str, str], method: str, must_exist: bool = True, use_cache: bool = True) -> Tuple[Optional[DeltaTable], Optional[str]]:
         """Safely load Delta table with error handling.
 

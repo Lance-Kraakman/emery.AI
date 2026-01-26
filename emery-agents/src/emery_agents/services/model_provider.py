@@ -35,7 +35,7 @@ class TokenUsage:
     model_name: str = ""
 
 
-class SmolagentsModelProvider:
+class ModelProvider:
     """
     Model provider with DSPy and registry support.
 
@@ -45,7 +45,7 @@ class SmolagentsModelProvider:
     - Model registry integration for pricing and capabilities
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize provider with HuggingFace token."""
         self.hf_token = self._get_hf_token()
         logger.info("ModelProvider initialized with model registry support")

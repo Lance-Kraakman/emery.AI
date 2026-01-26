@@ -14,7 +14,7 @@ from .generated import agent_worker_pb2, agent_worker_pb2_grpc
 from .mappers.message_mapper import build_conversation_messages, has_images, extract_text_from_parts
 from .mappers import format_clarifying_questions
 from ..infrastructure.workspace_sync import WorkspaceSync
-from ..services.model_provider import SmolagentsModelProvider
+from ..services.model_provider import ModelProvider
 from ..services.tool_loader import UnifiedToolLoader
 from ..services.session_manager import SessionManager
 from ..services.agent_factory import AgentFactory
@@ -71,8 +71,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             except ImportError:
                 self.tool_loader = None
 
-            self.model_provider = SmolagentsModelProvider()
-            self.agent_factory = AgentFactory(self.model_provider)
+            self.model_provider: Optional[ModelProvider] = ModelProvider()
+            self.agent_factory: Optional[AgentFactory] = AgentFactory(self.model_provider)
             # CapabilityRegistry replaces ManagedAgentsFactory.capability_registry
             self.capability_registry = CapabilityRegistry()
 

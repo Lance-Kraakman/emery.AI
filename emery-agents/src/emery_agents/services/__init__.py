@@ -5,7 +5,7 @@ Business logic services without DDD interfaces or dependency injection.
 Direct imports and concrete implementations only.
 """
 
-from .model_provider import SmolagentsModelProvider, TokenUsage
+from .model_provider import ModelProvider, TokenUsage
 from .tool_loader import UnifiedToolLoader
 from .agent_executor import AgentExecutor
 from .context_resolver import ContextResolver
@@ -39,7 +39,7 @@ from .capability_registry import CapabilityRegistry
 from ..models.task_ledger import TaskLedger, create_ledger_from_plan
 
 __all__ = [
-    "SmolagentsModelProvider",
+    "ModelProvider",
     "TokenUsage",
     "UnifiedToolLoader",
     "AgentExecutor",

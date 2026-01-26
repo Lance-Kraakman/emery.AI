@@ -32,7 +32,7 @@ from ..dspy_modules.config import get_dspy_lm
 from ..tools.tool_modes import ToolMode, filter_tools_for_mode
 from .plan_service import PlanService
 from .plan_step_executor import PlanStepExecutor
-from .protocols import Tool, ModelProvider, ManagedAgent
+from .protocols import Tool, ModelProviderProtocol, ManagedAgent
 # AIDEV-NOTE: TaskClassifier removed - planner handles clarification inline
 from .research_tools_provider import get_research_tools, detect_research_intent
 from .execution import (
@@ -362,7 +362,7 @@ class ExecutionCoordinatorConfig:
     """Configuration for ExecutionCoordinator."""
 
     plan_service: PlanService
-    model_provider: Optional[ModelProvider] = None
+    model_provider: Optional[ModelProviderProtocol] = None
     plan_step_executor: Optional[PlanStepExecutor] = None
     evaluate_after_steps: int = 1
     max_replans: int = 3
@@ -391,7 +391,7 @@ class ExecutionCoordinator:
     def __init__(
         self,
         plan_service: Optional[PlanService] = None,
-        model_provider: Optional[ModelProvider] = None,
+        model_provider: Optional[ModelProviderProtocol] = None,
         plan_step_executor: Optional[PlanStepExecutor] = None,
         evaluate_after_steps: int = 1,
         max_replans: int = 3,

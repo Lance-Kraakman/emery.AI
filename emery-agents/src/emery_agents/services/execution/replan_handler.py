@@ -11,7 +11,7 @@ from typing import Any, List, Optional
 
 from ...models.plan import Plan, PlanStep, PlanStatus, PlanStepStatus
 from ..planning.plan_differ import PlanDiffer, PlanDiff
-from ..protocols import ModelProvider
+from ..protocols import ModelProviderProtocol
 from ...utils.session_logger import get_session_logger
 
 
@@ -36,7 +36,7 @@ class ReplanHandler:
 
     def __init__(
         self,
-        model_provider: Optional[ModelProvider] = None,
+        model_provider: Optional[ModelProviderProtocol] = None,
         org_model: Optional[str] = None,
     ):
         """

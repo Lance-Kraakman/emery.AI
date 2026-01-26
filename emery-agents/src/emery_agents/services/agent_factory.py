@@ -16,7 +16,7 @@ from dataclasses import dataclass
 
 import dspy
 
-from .model_provider import SmolagentsModelProvider
+from .model_provider import ModelProvider
 from ..dspy_modules.modules import ExecutorModule, DelegatingExecutorModule
 
 logger = logging.getLogger(__name__)
@@ -48,7 +48,7 @@ class AgentFactory:
     and DelegatingExecutorModule for multi-agent routing.
     """
 
-    def __init__(self, model_provider: SmolagentsModelProvider) -> None:
+    def __init__(self, model_provider: ModelProvider) -> None:
         """
         Initialize agent factory.
 

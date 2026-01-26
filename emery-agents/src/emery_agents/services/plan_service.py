@@ -19,7 +19,7 @@ from emery_agents.models.task_ledger import TaskLedger
 from emery_agents.models.context_mapping import ResolvedContext
 from emery_agents.models.skill_definition import SkillInputDefinition, SkillOutputDefinition
 
-from .protocols import ModelProvider, GRPCClient, Tool
+from .protocols import ModelProviderProtocol, GRPCClient, Tool
 from .capability_registry import CapabilityRegistry
 from emery_agents.ace import StrategyAccumulationService
 from .planning import (
@@ -47,7 +47,7 @@ class PlanService:
     def __init__(
         self,
         grpc_client: Optional[GRPCClient] = None,
-        model_provider: Optional[ModelProvider] = None,
+        model_provider: Optional[ModelProviderProtocol] = None,
         discovery_tools: Optional[List[Tool]] = None,
     ):
         """
@@ -274,7 +274,7 @@ class PlanServiceFactory:
     def __init__(
         self,
         grpc_client: Optional[GRPCClient] = None,
-        model_provider: Optional[ModelProvider] = None,
+        model_provider: Optional[ModelProviderProtocol] = None,
         discovery_tools: Optional[List[Tool]] = None,
     ) -> None:
         """

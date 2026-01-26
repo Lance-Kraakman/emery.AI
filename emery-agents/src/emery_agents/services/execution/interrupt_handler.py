@@ -18,7 +18,7 @@ from ...agents.interrupt_classifier import (
 )
 from ...models.plan import Plan, PlanStepStatus
 from ...models.task_ledger import TaskLedger, LedgerEventType
-from ..protocols import ModelProvider
+from ..protocols import ModelProviderProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ class InterruptHandler:
 
     def __init__(
         self,
-        model_provider: Optional[ModelProvider] = None,
+        model_provider: Optional[ModelProviderProtocol] = None,
         org_model: Optional[str] = None,
     ):
         """

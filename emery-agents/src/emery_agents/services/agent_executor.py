@@ -24,7 +24,7 @@ from ..entities.execution_context import ExecutionContext
 from ..types import ExecutionMode, AgentId, OrganizationId
 from ..grpc.generated.agent_worker_pb2 import SkillConfig, ToolConfig, TokenUsage as TokenUsageProto, ImageAttachment
 from ..entities.task import TaskRequest
-from .model_provider import SmolagentsModelProvider
+from .model_provider import ModelProvider
 from .tool_loader import UnifiedToolLoader
 from .image_processor import ImageProcessor
 from .agent_factory import AgentFactory, AgentConfig
@@ -99,13 +99,13 @@ class AgentExecutor:
 
     def __init__(
         self,
-        model_provider: Optional[SmolagentsModelProvider] = None,
+        model_provider: Optional[ModelProvider] = None,
         tool_loader: Optional[UnifiedToolLoader] = None,
         agent_factory: Optional[AgentFactory] = None,
         inference_client: Optional[HuggingFaceInferenceClient] = None
     ):
         """Initialize with optional dependencies (creates defaults if not provided)."""
-        self.model_provider = model_provider or SmolagentsModelProvider()
+        self.model_provider = model_provider or ModelProvider()
         self.tool_loader = tool_loader or UnifiedToolLoader()
         self.agent_factory = agent_factory or AgentFactory(self.model_provider)
         # Inference client for direct operation execution (lazy initialization)

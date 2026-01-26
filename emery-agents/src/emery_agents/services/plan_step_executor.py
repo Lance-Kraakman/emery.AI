@@ -38,7 +38,7 @@ from ..models.plan import Plan, PlanStep, PlanStepStatus
 from ..services.capability_registry import CapabilityRegistry
 from ..utils.session_logger import get_session_logger
 from .prompt_template_resolver import resolve_prompt_template
-from .protocols import ModelProvider
+from .protocols import ModelProviderProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -539,7 +539,7 @@ class PlanStepExecutorFactory:
 
     def __init__(
         self,
-        model_provider: ModelProvider,
+        model_provider: ModelProviderProtocol,
         org_model: str | None = None,
         capability_registry: CapabilityRegistry | None = None,
     ):

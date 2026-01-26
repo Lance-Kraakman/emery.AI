@@ -10,11 +10,11 @@ from typing import Protocol, Optional, Any, Dict, List, runtime_checkable
 
 
 @runtime_checkable
-class ModelProvider(Protocol):
+class ModelProviderProtocol(Protocol):
     """
     Protocol for model provider services.
 
-    Implementors: SmolagentsModelProvider
+    Implementors: ModelProvider
     """
 
     def resolve_model_selection(
@@ -27,8 +27,12 @@ class ModelProvider(Protocol):
         """Resolve model ID using hierarchy: skill > agent > org > default."""
         ...
 
-    def get_model(self, model_id: Optional[str] = None) -> Any:
-        """Get model instance by ID."""
+    def get_dspy_lm(self, model_id: Optional[str] = None) -> Any:
+        """Get a DSPy LM instance for the given model."""
+        ...
+
+    def configure_dspy(self, model_id: Optional[str] = None) -> None:
+        """Configure DSPy global settings with the specified model."""
         ...
 
 

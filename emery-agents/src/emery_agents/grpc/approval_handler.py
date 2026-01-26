@@ -15,22 +15,8 @@ from .response_types import (
     ErrorResponseDict,
 )
 
-
 def is_approval_response(task: str) -> bool:
-    """
-    Check if the user response is an approval.
-
-    Only accepts structured 'approve' from UI button.
-    Any other text is feedback that routes to orchestrator.
-
-    Args:
-        task: The user's response text
-
-    Returns:
-        True if this is an approval, False otherwise
-    """
     return task.lower().strip() == "approve"
-
 
 def create_awaiting_input_for_plan(plan: Plan) -> AwaitingInputResponseDict:
     """

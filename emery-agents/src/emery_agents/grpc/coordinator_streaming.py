@@ -37,7 +37,7 @@ from .approval_handler import (
 if TYPE_CHECKING:
     from ..entities.execution_context import ExecutionContext
     from ..services.coordinator_state_machine import CoordinatorStateMachine, Phase
-    from ..services.model_provider import SmolagentsModelProvider
+    from ..services.model_provider import ModelProvider
     from ..services.plan_service import PlanService
 
 logger = logging.getLogger(__name__)
@@ -76,7 +76,7 @@ class CoordinatorStreamingHandler:
     def __init__(
         self,
         plan_service: 'PlanService',
-        model_provider: 'SmolagentsModelProvider',
+        model_provider: 'ModelProvider',
     ):
         self.plan_service = plan_service
         self.model_provider = model_provider
