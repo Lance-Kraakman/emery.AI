@@ -537,7 +537,7 @@ class AgentExecutor:
                     await self._apply_agent_output_mappings(
                         skill=skill,
                         captured_values=captured_outputs,
-                        api_key=context.api_key,
+                        api_key=context.tool_provider.api_key if context.tool_provider else None,
                         organization_id=context.organization_id,
                     )
 
@@ -656,7 +656,7 @@ class AgentExecutor:
         await self._apply_output_mappings_for_skill(
             skill=skill,
             result=result,
-            api_key=context.api_key,
+            api_key=context.tool_provider.api_key if context.tool_provider else None,
             organization_id=context.organization_id
         )
 
@@ -749,7 +749,7 @@ class AgentExecutor:
             skill_executor_callback=self.skill_executor_service.create_executor_callback(
                 org_model=context.org_model,
                 return_message_parts=False,
-                api_key=context.api_key,
+                api_key=context.tool_provider.api_key if context.tool_provider else None,
                 organization_id=context.organization_id
             )
         )
@@ -761,7 +761,7 @@ class AgentExecutor:
             available_skills=available_skills,
             initial_inputs=context.skill_inputs or {},
             org_model=context.org_model,
-            api_key=context.api_key,
+            api_key=context.tool_provider.api_key if context.tool_provider else None,
             organization_id=context.organization_id
         ):
             # Calculate overall progress (10% base + 80% for steps + 10% for completion)
@@ -1192,7 +1192,7 @@ class AgentExecutor:
             skill_tools = self._create_skill_tools(
                 context.available_skills,
                 context.org_model,
-                api_key=context.api_key,
+                api_key=context.tool_provider.api_key if context.tool_provider else None,
                 organization_id=context.organization_id
             )
             tools.extend(skill_tools)
