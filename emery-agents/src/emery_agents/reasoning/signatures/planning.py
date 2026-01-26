@@ -166,15 +166,26 @@ class ClassifyTask(dspy.Signature):  # type: ignore[misc]
     classification: TaskClassificationResult = dspy.OutputField()
 
 
+class GapItemOutput(BaseModel):
+    """A single gap identified in request analysis."""
+
+    concern_id: str = Field(description="ID of the concern that has a gap")
+    context_found: str = Field(default="", description="What context was found (if any)")
+    reason_unclear: str = Field(description="Why this concern is unclear from the request")
+    suggested_question: str = Field(description="Question to ask to clarify this gap")
+    suggested_options: Optional[list[str]] = Field(
+        default=None, description="Suggested options if applicable"
+    )
+
+
 class GapAnalysisResultModel(BaseModel):
     """Result of analyzing gaps between request and domain concerns."""
 
     clear_concerns: list[str] = Field(
         default_factory=list, description="Concern IDs that are clearly addressed"
     )
-    gaps: list[dict[str, Any]] = Field(
-        default_factory=list,
-        description="Gaps needing questions: [{concern_id, reason_unclear, suggested_question, suggested_options?}]"
+    gaps: list[GapItemOutput] = Field(
+        default_factory=list, description="Gaps needing clarification questions"
     )
     context_summary: str = Field(description="Summary of what was understood from the request")
 

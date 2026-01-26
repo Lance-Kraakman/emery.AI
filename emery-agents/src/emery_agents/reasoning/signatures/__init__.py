@@ -15,6 +15,7 @@ from emery_agents.reasoning.signatures.planning import (
     TaskClassificationResult,
     AnalyzeGaps,
     GapAnalysisResultModel,
+    GapItemOutput,
     GeneratePlanDiff,
     PlanDiffResult,
     StepModificationOutput,
@@ -66,6 +67,7 @@ __all__ = [
     # Gap Analysis
     "AnalyzeGaps",
     "GapAnalysisResultModel",
+    "GapItemOutput",
     # Plan Diffing
     "GeneratePlanDiff",
     "PlanDiffResult",

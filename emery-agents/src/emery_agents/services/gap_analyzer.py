@@ -146,18 +146,17 @@ class GapAnalyzer:
         # Parse clear concerns
         clear_concerns = result.clear_concerns
 
-        # Parse gaps
+        # Parse gaps (typed access from GapItemOutput)
         gaps: List[ConcernGap] = []
-        for gap_data in result.gaps:
-            concern_id = gap_data.get("concern_id", "")
-            concern = concern_map.get(concern_id)
+        for gap in result.gaps:
+            concern = concern_map.get(gap.concern_id)
             if concern:
                 gaps.append(ConcernGap(
                     concern=concern,
-                    context_found=gap_data.get("context_found", ""),
-                    reason_unclear=gap_data.get("reason_unclear", ""),
-                    suggested_question=gap_data.get("suggested_question", ""),
-                    suggested_options=gap_data.get("suggested_options"),
+                    context_found=gap.context_found,
+                    reason_unclear=gap.reason_unclear,
+                    suggested_question=gap.suggested_question,
+                    suggested_options=gap.suggested_options,
                 ))
 
         logger.info(f"✅ Gap analysis: {len(clear_concerns)} clear, {len(gaps)} gaps")
