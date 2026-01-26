@@ -17,6 +17,9 @@ import dspy
 import httpx
 from PIL import Image
 
+from emery_agents.infrastructure.clients.base import TaskResult
+from emery_agents.infrastructure.clients.huggingface_inference import HuggingFaceInferenceClient
+
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
@@ -31,7 +34,7 @@ from .agent_factory import AgentFactory, AgentConfig
 from .token_usage_extractor import TokenUsageExtractor
 from ..reasoning.tools.execution import SkillTool, create_bash_tool
 from ..reasoning.modules.extractor import OutputExtractorModule
-from ..clients import HuggingFaceInferenceClient, TaskResult
+# from ..clients import HuggingFaceInferenceClient, TaskResult
 from .skill_executor import SkillExecutorService
 from .step_executor import StepExecutorService
 from .context_manager import (

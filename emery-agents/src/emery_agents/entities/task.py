@@ -9,8 +9,9 @@ import uuid
 from datetime import datetime
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
+
+from emery_agents.entities.models.context_mapping import ResolvedContext
 from ..types import AgentId, OrganizationId, TaskId, OwnerId, InstructionConfig
-from ..models.context_mapping import ResolvedContext
 
 
 @dataclass

@@ -8,8 +8,9 @@ Uses direct types (int, str) instead of wrapper classes.
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Dict, Any, Callable
+
+from emery_agents.entities.models.context_mapping import ResolvedContext
 from ..types import AgentId, OrganizationId, ExecutionMode
-from ..models.context_mapping import ResolvedContext
 from ..tools.tool_modes import ToolMode
 
 # Import from generated protobuf
