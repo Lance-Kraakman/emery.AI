@@ -11,7 +11,7 @@ missing gRPC client gracefully with warnings.
 import logging
 from typing import Optional
 
-from emery_agents.models.plan import Plan, StepPlan
+from emery_agents.entities.models.plan import Plan, StepPlan
 from ..protocols import GRPCClient
 
 logger = logging.getLogger(__name__)

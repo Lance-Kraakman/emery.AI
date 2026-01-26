@@ -3,7 +3,7 @@ Output tool factories for DSPy.
 
 These tools capture structured output from agent execution.
 Note: Agent output capture (submit_result) has been replaced by OutputExtractorModule
-in dspy_modules/modules/extractor.py - extraction is now a post-processing step.
+in reasoning/modules/extractor.py - extraction is now a post-processing step.
 """
 
 from __future__ import annotations

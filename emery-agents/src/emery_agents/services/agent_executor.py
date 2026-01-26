@@ -29,8 +29,8 @@ from .tool_loader import UnifiedToolLoader
 from .image_processor import ImageProcessor
 from .agent_factory import AgentFactory, AgentConfig
 from .token_usage_extractor import TokenUsageExtractor
-from ..dspy_modules.tools.execution import SkillTool, create_bash_tool
-from ..dspy_modules.modules.extractor import OutputExtractorModule
+from ..reasoning.tools.execution import SkillTool, create_bash_tool
+from ..reasoning.modules.extractor import OutputExtractorModule
 from ..clients import HuggingFaceInferenceClient, TaskResult
 from .skill_executor import SkillExecutorService
 from .step_executor import StepExecutorService

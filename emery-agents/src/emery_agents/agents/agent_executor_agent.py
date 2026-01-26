@@ -20,8 +20,8 @@ from typing import TYPE_CHECKING, Any
 
 import dspy
 
-from ..dspy_modules.modules import ExecutorModule
-from ..dspy_modules.tools.execution import create_skill_invoker_tools
+from ..reasoning.modules import ExecutorModule
+from ..reasoning.tools.execution import create_skill_invoker_tools
 from ..utils.persona_sanitizer import sanitize_persona, sanitize_description
 from ..services.skill_permission_validator import create_validator_from_skills
 

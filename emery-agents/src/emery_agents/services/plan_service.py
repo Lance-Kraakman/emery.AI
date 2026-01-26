@@ -7,7 +7,7 @@ Facade for plan management using DSPy.
 import logging
 from typing import List, Optional, Any
 
-from emery_agents.models.plan import (
+from emery_agents.entities.models.plan import (
     Plan,
     PlanStep,
     StepPlan,
@@ -17,8 +17,8 @@ from emery_agents.models.plan import (
     SkillInputDefinition,
     SkillOutputDefinition,
 )
-from emery_agents.models.task_ledger import TaskLedger
-from emery_agents.models.context_mapping import ResolvedContext
+from emery_agents.entities.models.task_ledger import TaskLedger
+from emery_agents.entities.models.context_mapping import ResolvedContext
 
 from .protocols import ModelProviderProtocol, GRPCClient, Tool
 from .capability_registry import CapabilityRegistry

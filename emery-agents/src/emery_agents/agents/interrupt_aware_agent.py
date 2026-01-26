@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from ..dspy_modules.modules import (
+from ..reasoning.modules import (
     ExecutorModule,
     InterruptibleModule,
     InterruptRequested,

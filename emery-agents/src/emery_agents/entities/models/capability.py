@@ -110,7 +110,7 @@ class Capability:
     def to_summary(self) -> dict[str, Any]:
         """Convert to summary dict for planner context.
 
-        Note: Planning guidance is now provided by dspy_modules/capabilities/
+        Note: Planning guidance is now provided by reasoning/capabilities/
         instead of the old Jinja templates. This method returns basic capability
         info only.
         """

@@ -26,9 +26,9 @@ from typing import Any
 import dspy
 
 from ..ace import StepResult
-from ..dspy_modules.config import get_dspy_lm
-from ..dspy_modules.modules.executor import ExecutorModule, SimpleExecutorModule
-from ..dspy_modules.tools import (
+from ..reasoning.config import get_dspy_lm
+from ..reasoning.modules.executor import ExecutorModule, SimpleExecutorModule
+from ..reasoning.tools import (
     ClarificationRequestedException,
     QuestionCollector,
     create_all_tools,

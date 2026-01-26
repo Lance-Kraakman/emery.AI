@@ -8,7 +8,7 @@ Respects hierarchy: agent -> skill -> step (later levels override).
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
-from emery_agents.models.context_mapping import (
+from emery_agents.entities.models.context_mapping import (
     ContextMapping,
     ContextMappingTargetType,
     ContextMappingAccessMode,

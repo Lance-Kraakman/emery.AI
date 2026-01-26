@@ -23,15 +23,15 @@ from typing import TYPE_CHECKING, Any, Optional
 import dspy
 
 from emery_agents.ace import StrategyAccumulationService
-from emery_agents.dspy_modules.config import get_dspy_lm
-from emery_agents.dspy_modules.modules.planner import PlannerModule
-from emery_agents.dspy_modules.signatures.planning import (
+from emery_agents.reasoning.config import get_dspy_lm
+from emery_agents.reasoning.modules.planner import PlannerModule
+from emery_agents.reasoning.signatures.planning import (
     ClarifyingQuestion,
     Plan as DSPyPlan,
     PlanOrQuestions,
     PlanStep as DSPyPlanStep,
 )
-from emery_agents.models.plan import Plan, PlanStep, create_plan, create_step
+from emery_agents.entities.models.plan import Plan, PlanStep, create_plan, create_step
 from emery_agents.services.context import WorkspaceContext
 
 from .models import PlanGenerationRequest, PlanGenerationResult
@@ -168,7 +168,7 @@ class DSPyPlanGenerator:
         request: PlanGenerationRequest,
     ) -> str:
         """Get capability planning guidance for the planner."""
-        from emery_agents.dspy_modules.capabilities import (
+        from emery_agents.reasoning.capabilities import (
             format_planning_guidance,
             get_all_planning_guidance,
         )

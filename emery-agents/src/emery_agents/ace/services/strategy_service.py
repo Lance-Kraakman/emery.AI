@@ -21,8 +21,8 @@ from ..models.strategy_accumulation import (
     StrategyRecord,
     StrategyRegistry,
 )
-from emery_agents.models.plan import Plan
-from emery_agents.dspy_modules.signatures.evaluation import (
+from emery_agents.entities.models.plan import Plan
+from emery_agents.reasoning.signatures.evaluation import (
     RankStrategies,
     StrategyRankingsResult,
 )

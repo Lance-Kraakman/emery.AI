@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any, Literal, TypedDict
 
-from ..dspy_modules.modules.step_tracker import TrackedStep, StepType
+from ..reasoning.modules.step_tracker import TrackedStep, StepType
 
 
 # Type for step progress type field

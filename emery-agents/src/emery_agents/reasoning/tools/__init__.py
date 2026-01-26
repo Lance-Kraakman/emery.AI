@@ -99,14 +99,9 @@ from .analysis import (
     TaskClassifierTool,
     create_task_classifier_tool,
 )
-from .wrapper import DSPyToolWrapper, wrap_tool
-
 __all__ = [
     "create_all_tools",
     "create_crud_tools",
-    # Wrapper for smolagents compatibility
-    "DSPyToolWrapper",
-    "wrap_tool",
     # Re-export individual CRUD factories
     "create_agent_crud",
     "create_app_crud",

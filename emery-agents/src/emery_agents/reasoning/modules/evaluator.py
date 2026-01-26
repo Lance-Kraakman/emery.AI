@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import dspy
 
-from emery_agents.dspy_modules.signatures.evaluation import (
+from emery_agents.reasoning.signatures.evaluation import (
     AnalyzeRecovery,
     EvaluateGoal,
     EvaluateStep,

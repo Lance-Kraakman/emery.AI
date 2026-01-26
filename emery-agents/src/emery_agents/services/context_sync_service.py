@@ -16,7 +16,7 @@ from emery_agents.infrastructure.workspace import (
     ContextCache,
     TableMetadata,
 )
-from emery_agents.models.context_mapping import (
+from emery_agents.entities.models.context_mapping import (
     ContextMapping,
     ResolvedContext,
 )

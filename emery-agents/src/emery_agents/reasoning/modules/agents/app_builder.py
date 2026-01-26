@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 import dspy
 
-from emery_agents.dspy_modules.signatures.agents import (
+from emery_agents.reasoning.signatures.agents import (
     AppDefinition,
     BuildApp,
     ExistingTable,

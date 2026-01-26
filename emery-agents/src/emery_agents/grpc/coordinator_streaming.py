@@ -23,9 +23,9 @@ from ..services.plan_step_executor import PlanStepExecutor
 from ..models.plan import Plan
 from ..tools.tool_modes import ToolMode
 from ..services.agent_executor import AgentExecutor
-from ..dspy_modules.config import get_dspy_lm
-from ..dspy_modules.modules.executor import ExecutorModule
-from ..dspy_modules.tools import create_all_tools, QuestionCollector, create_ask_question_tool
+from ..reasoning.config import get_dspy_lm
+from ..reasoning.modules.executor import ExecutorModule
+from ..reasoning.tools import create_all_tools, QuestionCollector, create_ask_question_tool
 from .coordinator_event_converter import convert_coordinator_event
 from .mappers import format_clarifying_questions
 from .approval_handler import is_approval_response, create_awaiting_input_for_plan

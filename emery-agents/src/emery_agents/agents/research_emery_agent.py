@@ -15,8 +15,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from ..dspy_modules.modules import ExecutorModule
-from ..dspy_modules.tools.analysis import create_system_research_tool
+from ..reasoning.modules import ExecutorModule
+from ..reasoning.tools.analysis import create_system_research_tool
 
 if TYPE_CHECKING:
     from collections.abc import Callable

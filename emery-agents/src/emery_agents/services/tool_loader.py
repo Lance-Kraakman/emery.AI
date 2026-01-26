@@ -5,7 +5,7 @@ Loads tools from the unified metadata JSON file that serves as the single
 source of truth for both frontend and backend tool configurations.
 
 AIDEV-NOTE: DSPy Migration (Jan 2026)
-- CRUD tools use DSPy factories from dspy_modules/tools/crud/
+- CRUD tools use DSPy factories from reasoning/tools/crud/
 - Returns plain callables for DSPy ReAct (no wrapper needed)
 - Other tools (pipedream, skills, base) still use smolagents temporarily
 """
@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Optional, Callable, TYPE_CHECKING
 from pathlib import Path
 
 from ..grpc.generated.agent_worker_pb2 import ToolConfig, AgentConfig, SkillConfig
-from ..dspy_modules.tools import (
+from ..reasoning.tools import (
     create_table_crud,
     create_field_crud,
     create_row_crud,
@@ -30,8 +30,8 @@ from ..dspy_modules.tools import (
     create_app_crud,
     create_page_crud,
 )
-from ..dspy_modules.tools.execution import SkillTool
-from ..dspy_modules.tools.integrations import (
+from ..reasoning.tools.execution import SkillTool
+from ..reasoning.tools.integrations import (
     PipedreamTool,
     create_file_reader_tool,
     create_calculator_tool,

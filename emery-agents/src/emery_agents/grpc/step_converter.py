@@ -11,7 +11,7 @@ import json
 import logging
 from typing import Any, Dict
 
-from ..dspy_modules.modules.step_tracker import TrackedStep, StepType as DSPyStepType
+from ..reasoning.modules.step_tracker import TrackedStep, StepType as DSPyStepType
 from .response_types import StepType, StepMetadata, StepProgressDict
 
 logger = logging.getLogger(__name__)

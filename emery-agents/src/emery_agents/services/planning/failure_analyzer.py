@@ -10,9 +10,9 @@ from typing import Optional
 
 import dspy
 
-from emery_agents.models.plan import PlanStep, RecoveryResult
-from emery_agents.models.task_ledger import TaskLedger
-from emery_agents.dspy_modules.signatures.evaluation import AnalyzeRecovery, RecoveryAction
+from emery_agents.entities.models.plan import PlanStep, RecoveryResult
+from emery_agents.entities.models.task_ledger import TaskLedger
+from emery_agents.reasoning.signatures.evaluation import AnalyzeRecovery, RecoveryAction
 
 from ..capability_registry import CapabilityRegistry
 from .models import FailureAnalysisRequest
@@ -146,7 +146,7 @@ Execution State:
             RecoveryResult with corrected_parameters and confidence
         """
         # Create minimal step for analysis
-        from emery_agents.models.plan import create_step
+        from emery_agents.entities.models.plan import create_step
         failed_step = create_step(
             description=request.step_description,
         )

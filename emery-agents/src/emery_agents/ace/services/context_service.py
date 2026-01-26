@@ -21,7 +21,7 @@ from ..models.execution_context import (
     StepResult,
     create_insight,
 )
-from emery_agents.dspy_modules.signatures.evaluation import (
+from emery_agents.reasoning.signatures.evaluation import (
     ExtractExecutionInsights,
     ExecutionInsightsResult,
 )

@@ -16,7 +16,7 @@ from typing import Callable, Optional, Tuple
 
 import dspy
 
-from ..dspy_modules.signatures.evaluation import (
+from ..reasoning.signatures.evaluation import (
     ClassifyInterrupt,
     InterruptClassificationResult,
 )

@@ -20,7 +20,7 @@ from enum import Enum
 
 import json
 
-from emery_agents.models.plan import PlanStepStatus
+from emery_agents.entities.models.plan import PlanStepStatus
 
 if TYPE_CHECKING:
     from emery_agents.ace import ExecutionContext, ExecutionEvolutionTracker, StrategyRegistry

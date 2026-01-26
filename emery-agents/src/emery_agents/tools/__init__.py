@@ -1,6 +1,6 @@
 """Tool modules for emery-agents.
 
-AIDEV-NOTE: Most tools have been migrated to dspy_modules/tools/.
+AIDEV-NOTE: Most tools have been migrated to reasoning/tools/.
 This module now only exports tool_modes utilities.
 """
 

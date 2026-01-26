@@ -18,7 +18,7 @@ from tenacity import (
 )
 
 from ..grpc.generated import agent_worker_pb2
-from ..dspy_modules.modules.extractor import OutputExtractorModule
+from ..reasoning.modules.extractor import OutputExtractorModule
 from ..types import SkillExecutionResult
 from ..utils.error_classifier import classify_error
 from .agent_factory import AgentFactory, AgentConfig

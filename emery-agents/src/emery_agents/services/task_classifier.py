@@ -11,7 +11,7 @@ from typing import Any, List, Optional
 
 import dspy
 
-from ..dspy_modules.signatures.planning import ClassifyTask, TaskClassificationResult
+from ..reasoning.signatures.planning import ClassifyTask, TaskClassificationResult
 from ..utils.session_logger import get_session_logger
 
 logger = logging.getLogger(__name__)

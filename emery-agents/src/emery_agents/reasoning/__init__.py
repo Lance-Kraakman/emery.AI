@@ -5,6 +5,6 @@ This package replaces Jinja2 templates with DSPy Signatures and Modules,
 providing typed I/O contracts and automatic prompt optimization.
 """
 
-from emery_agents.dspy_modules.config import configure_dspy, DSPyModelProvider
+from emery_agents.reasoning.config import configure_dspy, DSPyModelProvider
 
 __all__ = ["configure_dspy", "DSPyModelProvider"]

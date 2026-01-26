@@ -11,7 +11,7 @@ import logging
 from pathlib import Path
 from typing import AsyncIterator, Optional, List, Dict, Any, TYPE_CHECKING
 
-from ..dspy_modules.tools.execution import SkillTool
+from ..reasoning.tools.execution import SkillTool
 from ..tools.tool_modes import filter_tools_for_mode, ToolMode
 from ..services.agent_executor import AgentExecutor
 from ..services.coordinator_state_machine import (
@@ -497,9 +497,9 @@ class AgentStreamingHandler:
         logger.info("🚀 DSPy fallback: Executing task directly with DSPy...")
 
         try:
-            from ..dspy_modules.config import get_dspy_lm
-            from ..dspy_modules.modules.executor import ExecutorModule
-            from ..dspy_modules.tools import create_all_tools
+            from ..reasoning.config import get_dspy_lm
+            from ..reasoning.modules.executor import ExecutorModule
+            from ..reasoning.tools import create_all_tools
 
             import dspy
 

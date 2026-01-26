@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 import dspy
 
-from emery_agents.dspy_modules.signatures.planning import (
+from emery_agents.reasoning.signatures.planning import (
     AnalyzeTask,
     ClarifyingQuestion,
     CreatePlan,

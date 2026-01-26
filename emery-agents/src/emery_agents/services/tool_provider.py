@@ -12,7 +12,7 @@ SECURITY: The ToolProvider exposes an http_client property for authenticated
 requests, NOT the raw api_key. This prevents credential exposure to skills/agents.
 
 AIDEV-NOTE: DSPy Migration (Jan 2026)
-- Uses DSPy tool factories from dspy_modules/tools/crud/
+- Uses DSPy tool factories from reasoning/tools/crud/
 - Returns plain callables for DSPy ReAct (no wrapper needed)
 """
 
@@ -20,7 +20,7 @@ import warnings
 from typing import Dict, List, Optional, Any, Callable, TYPE_CHECKING
 import logging
 
-from ..dspy_modules.tools import (
+from ..reasoning.tools import (
     create_database_crud,
     create_skill_crud,
     create_document_crud,
@@ -32,7 +32,7 @@ from ..dspy_modules.tools import (
     create_page_crud,
     create_view_crud,
 )
-from ..dspy_modules.tools.analysis import create_security_report_tool
+from ..reasoning.tools.analysis import create_security_report_tool
 from .authenticated_http_client import AuthenticatedHttpClient
 
 logger = logging.getLogger(__name__)

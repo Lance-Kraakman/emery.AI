@@ -17,7 +17,7 @@ from ..models.planning_context import (
     PlanningInsight,
     PlanningInsightType,
 )
-from emery_agents.dspy_modules.signatures.evaluation import (
+from emery_agents.reasoning.signatures.evaluation import (
     ExtractPlanningInsights,
     PlanningInsightsResult,
 )

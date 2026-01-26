@@ -26,8 +26,8 @@ from ..models.task_ledger import TaskLedger, create_ledger_from_plan, LedgerEven
 from ..models.capability import CapabilityType
 from ..utils.session_logger import SessionLogger, get_session_logger
 from ..models.context_mapping import ResolvedContext
-from ..dspy_modules.modules.evaluator import EvaluatorModule
-from ..dspy_modules.config import get_dspy_lm
+from ..reasoning.modules.evaluator import EvaluatorModule
+from ..reasoning.config import get_dspy_lm
 from ..tools.tool_modes import ToolMode, filter_tools_for_mode
 from .plan_service import PlanService
 from .plan_step_executor import PlanStepExecutor
@@ -54,7 +54,7 @@ from emery_agents.ace import (
 from ..types import ExecutionMode
 from .planning.plan_differ import PlanDiffer
 from .context import SessionConfig, WorkspaceContext, TableInfo, AppInfo, DatabaseInfo
-from ..dspy_modules.tools.api import DatabaseAPI, TableAPI
+from ..reasoning.tools.api import DatabaseAPI, TableAPI
 
 logger = logging.getLogger(__name__)
 

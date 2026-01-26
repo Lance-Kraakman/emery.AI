@@ -12,8 +12,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import dspy
 
-from emery_agents.models.plan import Plan, PlanStep, PlanStatus, PlanStepStatus, create_step
-from emery_agents.dspy_modules.signatures.planning import GeneratePlanDiff, PlanDiffResult
+from emery_agents.entities.models.plan import Plan, PlanStep, PlanStatus, PlanStepStatus, create_step
+from emery_agents.reasoning.signatures.planning import GeneratePlanDiff, PlanDiffResult
 
 logger = logging.getLogger(__name__)
 

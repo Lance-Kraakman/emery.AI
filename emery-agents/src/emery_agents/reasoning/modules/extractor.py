@@ -12,7 +12,7 @@ from typing import Any
 
 import dspy
 
-from emery_agents.dspy_modules.signatures.extraction import create_extraction_signature
+from emery_agents.reasoning.signatures.extraction import create_extraction_signature
 
 logger = logging.getLogger(__name__)
 

@@ -4,26 +4,26 @@ DSPy Modules for the Emery agent system.
 Modules wrap Signatures with inference strategies (ChainOfThought, ReAct, etc.)
 """
 
-from emery_agents.dspy_modules.modules.planner import PlannerModule
-from emery_agents.dspy_modules.modules.executor import (
+from emery_agents.reasoning.modules.planner import PlannerModule
+from emery_agents.reasoning.modules.executor import (
     ExecutorModule,
     SimpleExecutorModule,
     DelegatingExecutorModule,
 )
-from emery_agents.dspy_modules.modules.evaluator import EvaluatorModule
-from emery_agents.dspy_modules.modules.step_tracker import (
+from emery_agents.reasoning.modules.evaluator import EvaluatorModule
+from emery_agents.reasoning.modules.step_tracker import (
     StepType,
     TokenUsage,
     ToolCall,
     TrackedStep,
     StepTracker,
 )
-from emery_agents.dspy_modules.modules.interruptible import (
+from emery_agents.reasoning.modules.interruptible import (
     InterruptibleModule,
     InterruptRequested,
     wrap_interruptible,
 )
-from emery_agents.dspy_modules.modules.extractor import OutputExtractorModule
+from emery_agents.reasoning.modules.extractor import OutputExtractorModule
 
 __all__ = [
     "PlannerModule",

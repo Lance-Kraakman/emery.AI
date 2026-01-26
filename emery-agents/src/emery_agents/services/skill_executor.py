@@ -9,7 +9,7 @@ from PIL import Image
 from ..clients import HuggingFaceInferenceClient, TaskResult
 from ..entities.task import SkillOutputValue
 from ..grpc.generated import agent_worker_pb2
-from ..dspy_modules.modules.extractor import OutputExtractorModule
+from ..reasoning.modules.extractor import OutputExtractorModule
 from ..types import SkillExecutionResult
 from ..utils import run_async_in_thread
 from ..utils.step_utils import step_to_progress_dict, RawProgressDict

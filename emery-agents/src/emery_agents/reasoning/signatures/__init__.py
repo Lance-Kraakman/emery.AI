@@ -4,7 +4,7 @@ DSPy Signatures for the Emery agent system.
 Signatures define typed I/O contracts that replace Jinja2 templates.
 """
 
-from emery_agents.dspy_modules.signatures.planning import (
+from emery_agents.reasoning.signatures.planning import (
     CreatePlan,
     AnalyzeTask,
     PlanStep,
@@ -18,7 +18,7 @@ from emery_agents.dspy_modules.signatures.planning import (
     GeneratePlanDiff,
     PlanDiffResult,
 )
-from emery_agents.dspy_modules.signatures.agents import (
+from emery_agents.reasoning.signatures.agents import (
     BuildSchema,
     BuildSkill,
     BuildApp,
@@ -28,7 +28,7 @@ from emery_agents.dspy_modules.signatures.agents import (
     SkillDefinition,
     AppDefinition,
 )
-from emery_agents.dspy_modules.signatures.evaluation import (
+from emery_agents.reasoning.signatures.evaluation import (
     EvaluateGoal,
     AnalyzeRecovery,
     GoalEvaluation,
@@ -46,7 +46,7 @@ from emery_agents.dspy_modules.signatures.evaluation import (
     StrategyRankingsResult,
     StrategyRankingModel,
 )
-from emery_agents.dspy_modules.signatures.extraction import (
+from emery_agents.reasoning.signatures.extraction import (
     create_extraction_signature,
     SKILL_TYPE_MAP,
 )
