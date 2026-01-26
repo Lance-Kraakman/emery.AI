@@ -48,8 +48,8 @@ from emery_agents.ace import (
 )
 from ..types import ExecutionMode
 from .planning.plan_differ import PlanDiffer
-from .context import SessionConfig, WorkspaceContext, TableInfo, AppInfo, DatabaseInfo
-from ..reasoning.tools.api import DatabaseAPI, TableAPI
+from .context import SessionConfig, WorkspaceContext, TableInfo, AppInfo, DatabaseInfo, PageInfo, AgentInfo, SkillInfo
+from ..reasoning.tools.api import DatabaseAPI, TableAPI, AppAPI, AgentAPI, SkillAPI
 
 logger = logging.getLogger(__name__)
 
@@ -735,14 +735,14 @@ class ExecutionCoordinator:
         """
         Build workspace context using typed API layer.
 
-        Uses DatabaseAPI and TableAPI directly for clean, typed access to
-        existing workspace data. No tool interface complexity needed.
+        Uses typed APIs for clean access to existing workspace resources.
+        Includes databases, tables, apps, agents, and skills.
 
         Args:
             tools: Unused, kept for interface compatibility
 
         Returns:
-            WorkspaceContext with existing databases, tables and apps
+            WorkspaceContext with all existing workspace resources
         """
         org_id = str(self._organization_id) if self._organization_id else ""
 
@@ -764,19 +764,28 @@ class ExecutionCoordinator:
                 existing_databases=[],
                 existing_tables=[],
                 existing_apps=[],
+                existing_agents=[],
+                existing_skills=[],
             )
 
         # Use shared typed APIs
         db_api = DatabaseAPI(self._api_key, org_id)
         table_api = TableAPI(self._api_key, org_id)
+        app_api = AppAPI(self._api_key, org_id)
+        agent_api = AgentAPI(self._api_key, org_id)
+        skill_api = SkillAPI(self._api_key, org_id)
 
-        # Fetch databases
+        # Fetch all workspace resources
         databases = db_api.list()
-        logger.info(f"📁 Found {len(databases)} existing databases")
-
-        # Fetch tables
         tables = table_api.list()
-        logger.info(f"📋 Found {len(tables)} existing tables")
+        apps = app_api.list()
+        agents = agent_api.list()
+        skills = skill_api.list()
+
+        logger.info(
+            f"📊 Workspace context: {len(databases)} databases, {len(tables)} tables, "
+            f"{len(apps)} apps, {len(agents)} agents, {len(skills)} skills"
+        )
 
         # Build database name lookup
         db_lookup = {db.id: db.name for db in databases}
@@ -785,7 +794,7 @@ class ExecutionCoordinator:
             existing_databases=[
                 DatabaseInfo(
                     name=db.name,
-                    id=db.id,
+                    id=str(db.id),
                     table_count=db.table_count,
                 )
                 for db in databases
@@ -793,7 +802,7 @@ class ExecutionCoordinator:
             existing_tables=[
                 TableInfo(
                     name=t.name,
-                    id=t.id,
+                    id=str(t.id),
                     database_id=str(t.database_id) if t.database_id else None,
                     database_name=db_lookup.get(t.database_id, "") if t.database_id else "",
                     field_count=t.field_count,
@@ -801,7 +810,39 @@ class ExecutionCoordinator:
                 )
                 for t in tables
             ],
-            existing_apps=[],
+            existing_apps=[
+                AppInfo(
+                    name=app.name,
+                    id=str(app.id),
+                    description=app.description,
+                    pages=[
+                        PageInfo(
+                            name=p.get("name", ""),
+                            id=str(p.get("id", "")),
+                            app_id=str(app.id),
+                        )
+                        for p in app.pages
+                    ] if app.pages else [],
+                )
+                for app in apps
+            ],
+            existing_agents=[
+                AgentInfo(
+                    name=agent.name,
+                    id=str(agent.id),
+                    description=agent.description,
+                )
+                for agent in agents
+            ],
+            existing_skills=[
+                SkillInfo(
+                    name=skill.name,
+                    id=str(skill.id),
+                    description=skill.description,
+                    agent_id=str(skill.agent_id) if skill.agent_id else None,
+                )
+                for skill in skills
+            ],
         )
 
     async def create_plan(
