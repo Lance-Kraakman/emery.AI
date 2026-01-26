@@ -4,6 +4,8 @@ Workspace Sync - S3-based workspace persistence for agents.
 Downloads/uploads agent workspaces as tar.gz archives from/to S3.
 Provides persistent storage across task executions.
 
+All file writes within workspaces go through bwrap sandbox for isolation.
+
 Workspace structure:
     /workspace/
     ├── .agent/
@@ -22,15 +24,16 @@ Workspace structure:
 
 import json
 import logging
-import os
 import shutil
 import tarfile
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import boto3
 from botocore.exceptions import ClientError
+
+from ..services.sandbox import BwrapExecutor, WorkspaceShell
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +44,7 @@ class WorkspaceSync:
 
     Each agent has a persistent workspace stored as a tar.gz archive in S3.
     Workspaces are downloaded at task start and uploaded at task end.
+    All file writes go through bwrap sandbox via WorkspaceShell.
     """
 
     # Default directories to create in a new workspace
@@ -72,10 +76,19 @@ class WorkspaceSync:
         self.prefix = prefix
         self.local_base = local_base or Path("/tmp/workspace")
         self.s3 = boto3.client("s3")
+        self._executor = BwrapExecutor()
+        self._shell_cache: "dict[str, WorkspaceShell]" = {}
 
         logger.info(
             f"WorkspaceSync initialized: bucket={bucket}, prefix={prefix}, local={self.local_base}"
         )
+
+    def _get_shell(self, workspace_path: Path) -> WorkspaceShell:
+        """Get or create a sandboxed shell for the workspace."""
+        key = str(workspace_path)
+        if key not in self._shell_cache:
+            self._shell_cache[key] = self._executor.get_shell(workspace_path)
+        return self._shell_cache[key]
 
     def _s3_key(self, workspace_id: str, prefix: Optional[str] = None) -> str:
         """Generate S3 key for workspace."""
@@ -149,19 +162,20 @@ class WorkspaceSync:
         return local_path
 
     def _create_empty_workspace(self, local_path: Path, workspace_id: str) -> None:
-        """Create empty workspace with default structure."""
-        for subdir in self.DEFAULT_WORKSPACE_STRUCTURE:
-            (local_path / subdir).mkdir(parents=True, exist_ok=True)
+        """Create empty workspace with default structure using sandboxed execution."""
+        shell = self._get_shell(local_path)
 
-        # Create initial config
-        config_path = local_path / ".agent" / "config.json"
+        # Create directories via sandbox
+        for subdir in self.DEFAULT_WORKSPACE_STRUCTURE:
+            shell.mkdir(subdir)
+
+        # Create initial config via sandbox
         config = {
             "workspace_id": workspace_id,
             "created_at": datetime.now().isoformat(),
             "version": 1,
         }
-        with open(config_path, "w") as f:
-            json.dump(config, f, indent=2)
+        shell.write_file(".agent/config.json", json.dumps(config, indent=2))
 
         logger.info(f"Created empty workspace at {local_path}")
 
@@ -252,7 +266,7 @@ class WorkspaceSync:
         workspace_path: Optional[Path] = None,
     ) -> Path:
         """
-        Prepare history directory for a new task execution.
+        Prepare history directory for a new task execution using sandboxed execution.
 
         Creates: history/{date}/{task_id}/
 
@@ -265,26 +279,25 @@ class WorkspaceSync:
             Path to task history directory
         """
         ws_path = workspace_path or self._local_path(workspace_id)
+        shell = self._get_shell(ws_path)
         date_str = datetime.now().strftime("%Y-%m-%d")
-        history_dir = ws_path / "history" / date_str / task_id
+        relative_history_dir = f"history/{date_str}/{task_id}"
 
-        history_dir.mkdir(parents=True, exist_ok=True)
+        # Create directory and empty session log via sandbox
+        shell.mkdir(relative_history_dir)
+        shell.touch(f"{relative_history_dir}/session.jsonl")
 
-        # Create empty session log
-        session_log = history_dir / "session.jsonl"
-        session_log.touch()
-
-        return history_dir
+        return ws_path / "history" / date_str / task_id
 
     def save_task_result(
         self,
         workspace_id: str,
         task_id: str,
-        result: dict,
+        result: dict[str, Any],
         workspace_path: Optional[Path] = None,
     ) -> Path:
         """
-        Save task result to workspace history.
+        Save task result to workspace history using sandboxed execution.
 
         Args:
             workspace_id: Workspace ID (agent_id or user_id)
@@ -296,26 +309,25 @@ class WorkspaceSync:
             Path to result file
         """
         ws_path = workspace_path or self._local_path(workspace_id)
+        shell = self._get_shell(ws_path)
         date_str = datetime.now().strftime("%Y-%m-%d")
-        history_dir = ws_path / "history" / date_str / task_id
+        relative_history_dir = f"history/{date_str}/{task_id}"
 
-        history_dir.mkdir(parents=True, exist_ok=True)
+        # Create directory if needed and write result via sandbox
+        shell.mkdir(relative_history_dir)
+        shell.write_file(f"{relative_history_dir}/result.json", json.dumps(result, indent=2, default=str))
 
-        result_path = history_dir / "result.json"
-        with open(result_path, "w") as f:
-            json.dump(result, f, indent=2, default=str)
-
-        return result_path
+        return ws_path / "history" / date_str / task_id / "result.json"
 
     def append_to_session_log(
         self,
         workspace_id: str,
         task_id: str,
-        entry: dict,
+        entry: dict[str, Any],
         workspace_path: Optional[Path] = None,
     ) -> None:
         """
-        Append entry to task session log.
+        Append entry to task session log using sandboxed execution.
 
         Args:
             workspace_id: Workspace ID (agent_id or user_id)
@@ -324,14 +336,16 @@ class WorkspaceSync:
             workspace_path: Optional workspace path
         """
         ws_path = workspace_path or self._local_path(workspace_id)
+        shell = self._get_shell(ws_path)
         date_str = datetime.now().strftime("%Y-%m-%d")
-        session_log = ws_path / "history" / date_str / task_id / "session.jsonl"
+        relative_history_dir = f"history/{date_str}/{task_id}"
 
-        session_log.parent.mkdir(parents=True, exist_ok=True)
+        # Ensure directory exists via sandbox
+        shell.mkdir(relative_history_dir)
 
         # Add timestamp if not present
         if "timestamp" not in entry:
             entry["timestamp"] = datetime.now().isoformat()
 
-        with open(session_log, "a") as f:
-            f.write(json.dumps(entry) + "\n")
+        # Append to session log via sandbox
+        shell.append_file(f"{relative_history_dir}/session.jsonl", json.dumps(entry) + "\n")

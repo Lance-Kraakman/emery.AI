@@ -9,33 +9,47 @@ from __future__ import annotations
 import ast
 import math
 import operator
-from typing import Any, Callable
+from pathlib import Path
+from typing import Any, Callable, Optional
+
+from ....services.sandbox import BwrapExecutor
 
 
-def create_file_reader_tool() -> Callable[[str], str]:
-    """Factory: Create file reader function."""
+def create_file_reader_tool(workspace_path: Optional[Path] = None) -> Callable[[str], str]:
+    """Factory: Create file reader that uses bwrap sandbox when workspace_path is provided.
+
+    Args:
+        workspace_path: If provided, file reads go through bwrap sandbox.
+                       The sandbox ensures isolation to the workspace directory.
+    """
+    # Create shell if workspace_path provided
+    shell = BwrapExecutor().get_shell(workspace_path) if workspace_path else None
 
     def file_reader(file_path: str) -> str:
-        """Read and return the content of a text file from the filesystem.
+        """Read and return the content of a text file.
 
         Args:
-            file_path: The path to the text file to read.
-                Must be a valid file path accessible to the system.
+            file_path: Path to the text file to read (relative to workspace if sandboxed).
 
         Returns:
             The text content of the file, or an error message if reading fails.
         """
-        try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                return f.read()
-        except FileNotFoundError:
-            return f"Error: File '{file_path}' not found."
-        except PermissionError:
-            return f"Error: Permission denied reading '{file_path}'."
-        except UnicodeDecodeError:
-            return f"Error: Unable to decode '{file_path}' as text file."
-        except Exception as e:
-            return f"Error reading file '{file_path}': {str(e)}"
+        if shell:
+            # Read via bwrap sandbox - isolated to workspace
+            return shell.read_file(file_path)
+        else:
+            # Fallback for non-sandboxed context (shouldn't happen in production)
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    return f.read()
+            except FileNotFoundError:
+                return f"Error: File '{file_path}' not found."
+            except PermissionError:
+                return f"Error: Permission denied reading '{file_path}'."
+            except UnicodeDecodeError:
+                return f"Error: Unable to decode '{file_path}' as text file."
+            except Exception as e:
+                return f"Error reading file '{file_path}': {str(e)}"
 
     return file_reader
 

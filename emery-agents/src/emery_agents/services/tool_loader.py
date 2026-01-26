@@ -190,7 +190,8 @@ class UnifiedToolLoader:
         agent_config: Optional[AgentConfig] = None,
         skill_executor: Optional[Callable[[SkillConfig, Dict[str, Any]], str]] = None,
         organization_id: Optional[int] = None,
-        inference_client: Optional["HuggingFaceInferenceClient"] = None
+        inference_client: Optional["HuggingFaceInferenceClient"] = None,
+        workspace_path: Optional[Path] = None
     ) -> Any:
         """
         Load a tool instance from ToolConfig using unified metadata.
@@ -203,6 +204,7 @@ class UnifiedToolLoader:
             skill_executor: Optional callback for executing skills
             organization_id: Optional org ID for RLS context
             inference_client: Optional client for operation skills (direct HF API calls)
+            workspace_path: Optional workspace path for sandboxed file operations
 
         Returns:
             Tool instance (either regular tool or SkillTool)
@@ -257,7 +259,7 @@ class UnifiedToolLoader:
         if source == "pipedream":
             return self._load_pipedream_tool(tool_config, unified_tool, api_key, api_key_mode)
         elif source == "emery":
-            return self._load_emery_tool(tool_config, unified_tool, api_key, api_key_mode)
+            return self._load_emery_tool(tool_config, unified_tool, api_key, api_key_mode, organization_id, workspace_path)
         else:
             raise ValueError(f"Unknown tool source: {source}")
 
@@ -279,7 +281,7 @@ class UnifiedToolLoader:
             config=enhanced_config
         )
 
-    def _load_emery_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None) -> Any:
+    def _load_emery_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None, workspace_path: Optional[Path] = None) -> Any:
         """Load an Emery tool using the unified configuration."""
         tool_id = unified_tool["id"]
 
@@ -291,9 +293,12 @@ class UnifiedToolLoader:
                 org_id = str(organization_id) if organization_id else ""
                 return factory(api_key, org_id)
 
-        # Non-CRUD tools (still using smolagents temporarily)
+        # Non-CRUD tools
+        # file_reader needs special handling for workspace_path
+        if tool_id == "file_reader":
+            return self._load_file_reader_tool(tool_config, unified_tool, api_key, api_key_mode, workspace_path)
+
         non_crud_mapping = {
-            "file_reader": self._load_file_reader_tool,
             "calculator": self._load_calculator_tool,
             "document_reader": self._load_document_reader_tool,
             "table_query": self._load_table_query_tool,
@@ -313,9 +318,9 @@ class UnifiedToolLoader:
         return loader_func(tool_config, unified_tool, api_key, api_key_mode)
 
     # Emery tool loaders - using DSPy factory functions
-    def _load_file_reader_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
-        """Load File Reader tool."""
-        return create_file_reader_tool()
+    def _load_file_reader_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, workspace_path: Optional[Path] = None) -> Any:
+        """Load File Reader tool with optional workspace sandboxing."""
+        return create_file_reader_tool(workspace_path)
 
     def _load_calculator_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
         """Load Calculator tool."""
@@ -458,7 +463,8 @@ class UnifiedToolLoader:
         agent_config: Optional[AgentConfig] = None,
         skill_executor: Optional[Callable[[SkillConfig, Dict[str, Any]], str]] = None,
         organization_id: Optional[int] = None,
-        inference_client: Optional["HuggingFaceInferenceClient"] = None
+        inference_client: Optional["HuggingFaceInferenceClient"] = None,
+        workspace_path: Optional[Path] = None
     ) -> List[Any]:
         """
         Load smolagents tools from ToolConfig protobuf objects.
@@ -474,6 +480,7 @@ class UnifiedToolLoader:
             skill_executor: Optional callback for executing skills
             organization_id: Optional org ID for RLS context
             inference_client: Optional client for operation skills (direct HF API calls)
+            workspace_path: Optional workspace path for sandboxed file operations
 
         Returns:
             List of successfully loaded tool instances
@@ -503,7 +510,8 @@ class UnifiedToolLoader:
                     agent_config=agent_config,
                     skill_executor=skill_executor,
                     organization_id=organization_id,
-                    inference_client=inference_client
+                    inference_client=inference_client,
+                    workspace_path=workspace_path
                 )
                 smolagents_tools.append(tool_instance)
                 logger.info(f"✅ Successfully loaded tool: {tool_config.name}")

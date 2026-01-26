@@ -85,7 +85,7 @@ class BwrapExecutor:
         "--die-with-parent",
     ]
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._verify_bwrap_available()
 
     def _verify_bwrap_available(self) -> None:
@@ -136,7 +136,7 @@ class BwrapExecutor:
         workspace_path: Path,
         timeout: int = 300,
         allow_network: bool = False,
-        env: Optional[dict] = None,
+        env: Optional[dict[str, str]] = None,
     ) -> ExecutionResult:
         """
         Execute a command in an isolated bwrap sandbox.
@@ -155,13 +155,6 @@ class BwrapExecutor:
         if not workspace_path.exists():
             workspace_path.mkdir(parents=True, exist_ok=True)
             logger.info(f"Created workspace directory: {workspace_path}")
-
-        # Check if bwrap is available
-        import shutil
-        if not shutil.which("bwrap"):
-            # Fallback to direct execution (for development/testing)
-            logger.warning("bwrap not available, executing without sandbox")
-            return self._execute_direct(command, workspace_path, timeout, env)
 
         # Build bwrap command
         cmd = self._build_command(command, workspace_path, allow_network)
@@ -202,47 +195,54 @@ class BwrapExecutor:
                 timed_out=False,
             )
 
-    def _execute_direct(
-        self,
-        command: str,
-        workspace_path: Path,
-        timeout: int,
-        env: Optional[dict],
-    ) -> ExecutionResult:
-        """
-        Fallback: Execute command directly without sandboxing.
+    def get_shell(self, workspace_path: Path, allow_network: bool = False) -> "WorkspaceShell":
+        """Get a shell bound to a specific workspace."""
+        return WorkspaceShell(self, workspace_path, allow_network)
 
-        Only used when bwrap is not available (development/testing).
-        """
-        logger.warning("Executing without sandbox isolation")
 
-        try:
-            result = subprocess.run(
-                command,
-                shell=True,
-                capture_output=True,
-                timeout=timeout,
-                cwd=str(workspace_path),
-                env=env,
-            )
-            return ExecutionResult(
-                exit_code=result.returncode,
-                stdout=result.stdout.decode("utf-8", errors="replace"),
-                stderr=result.stderr.decode("utf-8", errors="replace"),
-                timed_out=False,
-            )
-        except subprocess.TimeoutExpired:
-            return ExecutionResult(
-                exit_code=-1,
-                stdout="",
-                stderr=f"Command timed out after {timeout} seconds",
-                timed_out=True,
-            )
-        except Exception as e:
-            return ExecutionResult(
-                exit_code=-1,
-                stdout="",
-                stderr=f"Direct execution error: {str(e)}",
-                timed_out=False,
-            )
+class WorkspaceShell:
+    """
+    A bound shell for executing commands in a specific workspace.
 
+    Created via BwrapExecutor.get_shell(workspace_path).
+    All commands run in bwrap sandbox with workspace mounted at /workspace.
+    """
+
+    def __init__(
+        self, executor: BwrapExecutor, workspace_path: Path, allow_network: bool = False
+    ):
+        self._executor = executor
+        self._workspace_path = workspace_path
+        self._allow_network = allow_network
+
+    def run(self, command: str, timeout: int = 300) -> ExecutionResult:
+        """Run a bash command in the sandbox. Command runs in /workspace."""
+        return self._executor.execute(
+            command=command,
+            workspace_path=self._workspace_path,
+            timeout=timeout,
+            allow_network=self._allow_network,
+        )
+
+    def read_file(self, path: str) -> str:
+        """Read file content. Returns content or error string."""
+        result = self.run(f"cat '{path}'", timeout=30)
+        return result.stdout if result.success else f"Error: {result.stderr}"
+
+    def write_file(self, path: str, content: str) -> bool:
+        """Write content to file (overwrites)."""
+        cmd = f"cat > '{path}' << 'EOF'\n{content}\nEOF"
+        return self.run(cmd, timeout=30).success
+
+    def append_file(self, path: str, content: str) -> bool:
+        """Append content to file."""
+        cmd = f"cat >> '{path}' << 'EOF'\n{content}\nEOF"
+        return self.run(cmd, timeout=30).success
+
+    def mkdir(self, path: str) -> bool:
+        """Create directory (with parents)."""
+        return self.run(f"mkdir -p '{path}'", timeout=30).success
+
+    def touch(self, path: str) -> bool:
+        """Create empty file or update timestamp."""
+        return self.run(f"touch '{path}'", timeout=30).success
