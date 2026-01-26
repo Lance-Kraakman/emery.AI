@@ -1,10 +1,6 @@
 /**
  * Organization API endpoint
  * Returns organization info for the authenticated user's current organization
- *
- * Query params for GET:
- * - format: 'llm' for TOON format output (simplified)
- * - meta: '1' to include additional metadata
  */
 
 // AIDEV-NOTE: Force dynamic rendering to prevent build-time database connections
@@ -38,37 +34,6 @@ export async function GET(request: NextRequest): Promise<Response> {
 
     if (!org) {
       return Response.json({ error: 'Organization not found' }, { status: 404 });
-    }
-
-    // Check for LLM-optimized format
-    const format = request.nextUrl.searchParams.get('format');
-    const includeMeta = request.nextUrl.searchParams.get('meta') === '1';
-
-    if (format === 'llm') {
-      // Return simplified format for LLM consumption
-      const llmResponse = {
-        organization: {
-          id: org.id.value,
-          name: org.name.value,
-          slug: org.slug,
-          mission: org.mission,
-          plan: org.plan,
-          defaultModel: org.defaultModel,
-          availableModels: org.availableModels,
-        }
-      };
-
-      if (includeMeta) {
-        return Response.json({
-          ...llmResponse,
-          _meta: {
-            createdAt: org.createdAt,
-            plan: org.plan,
-          }
-        });
-      }
-
-      return Response.json(llmResponse);
     }
 
     // Full response

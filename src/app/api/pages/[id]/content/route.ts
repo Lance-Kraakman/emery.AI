@@ -2,9 +2,6 @@
  * Page Content API - Update page Puck content
  *
  * AIDEV-NOTE: This endpoint updates the Puck visual editor content for the AppBuilder agent.
- *
- * Supports TOON format for LLM-optimized responses:
- * - ?format=llm → minimal TOON format
  */
 
 // Force dynamic rendering to prevent build-time database connections
@@ -15,7 +12,6 @@ import { authenticateRequest } from '@/lib/auth/test-auth';
 import { getAppApplicationService, getPuckPageApplicationService } from '@/ddd/application/di/getters';
 import { PageId } from '@/ddd/domain/puck/value-objects/page-id';
 import { PuckPageMapper } from '@/app/mappers/puck-page-mapper';
-import { operationToToon } from '@/lib/toon-format';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -28,9 +24,6 @@ interface RouteParams {
  *
  * Body:
  * - templateData: object (required, Puck JSON structure)
- *
- * Query parameters:
- * - format: 'llm' for TOON format response
  */
 export async function PUT(request: NextRequest, { params }: RouteParams): Promise<NextResponse> {
   try {
@@ -46,9 +39,6 @@ export async function PUT(request: NextRequest, { params }: RouteParams): Promis
     if (isNaN(pageId)) {
       return NextResponse.json({ error: 'Invalid page ID' }, { status: 400 });
     }
-
-    const { searchParams } = new URL(request.url);
-    const format = searchParams.get('format');
 
     const body = await request.json();
 
@@ -82,20 +72,6 @@ export async function PUT(request: NextRequest, { params }: RouteParams): Promis
     }
 
     const dto = PuckPageMapper.toDTO(result.data);
-
-    // Return TOON format if requested
-    if (format === 'llm') {
-      const toon = operationToToon({
-        action: 'updated',
-        entity: 'page_content',
-        id: dto.id,
-        data: { name: dto.name },
-      });
-      return new NextResponse(toon, {
-        status: 200,
-        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-      });
-    }
 
     return NextResponse.json({
       success: true,

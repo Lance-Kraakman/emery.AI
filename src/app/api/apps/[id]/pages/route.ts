@@ -2,10 +2,6 @@
  * Pages API - List and Create pages for an app
  *
  * AIDEV-NOTE: This endpoint provides CRUD access to pages for the AppBuilder agent.
- *
- * Supports TOON format for LLM-optimized responses:
- * - ?format=llm → minimal TOON format
- * - ?format=llm&meta=1 → TOON with metadata
  */
 
 // Force dynamic rendering to prevent build-time database connections
@@ -17,7 +13,6 @@ import { getAppApplicationService, getPuckPageApplicationService } from '@/ddd/a
 import { AppId } from '@/ddd/domain/puck/value-objects/app-id';
 import { UserId } from '@/ddd/domain/shared/value-objects';
 import { PuckPageMapper } from '@/app/mappers/puck-page-mapper';
-import { pagesToToon, operationToToon } from '@/lib/toon-format';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -27,10 +22,6 @@ interface RouteParams {
  * GET /api/apps/[id]/pages
  *
  * List all pages for an app.
- *
- * Query parameters:
- * - format: 'llm' for TOON format
- * - meta: '1' to include metadata in TOON format
  */
 export async function GET(request: NextRequest, { params }: RouteParams): Promise<NextResponse> {
   try {
@@ -47,10 +38,6 @@ export async function GET(request: NextRequest, { params }: RouteParams): Promis
       return NextResponse.json({ error: 'Invalid app ID' }, { status: 400 });
     }
 
-    const { searchParams } = new URL(request.url);
-    const format = searchParams.get('format');
-    const includeMeta = searchParams.get('meta') === '1';
-
     // Verify app exists and belongs to user's organization
     const appService = getAppApplicationService();
     const app = await appService.getApp(AppId.fromNumber(appId));
@@ -66,15 +53,6 @@ export async function GET(request: NextRequest, { params }: RouteParams): Promis
     const pages = await pageService.getPagesByApp(AppId.fromNumber(appId));
 
     const dtos = PuckPageMapper.toDTOs(pages);
-
-    // Return TOON format if requested
-    if (format === 'llm') {
-      const toon = pagesToToon(dtos, { includeMeta });
-      return new NextResponse(toon, {
-        status: 200,
-        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-      });
-    }
 
     return NextResponse.json({
       success: true,
@@ -99,9 +77,6 @@ export async function GET(request: NextRequest, { params }: RouteParams): Promis
  * - slug?: string (optional, auto-generated from name if not provided)
  * - description?: string (optional)
  * - templateData?: object (optional, Puck JSON structure)
- *
- * Query parameters:
- * - format: 'llm' for TOON format response
  */
 export async function POST(request: NextRequest, { params }: RouteParams): Promise<NextResponse> {
   try {
@@ -117,9 +92,6 @@ export async function POST(request: NextRequest, { params }: RouteParams): Promi
     if (isNaN(appId)) {
       return NextResponse.json({ error: 'Invalid app ID' }, { status: 400 });
     }
-
-    const { searchParams } = new URL(request.url);
-    const format = searchParams.get('format');
 
     const body = await request.json();
 
@@ -166,20 +138,6 @@ export async function POST(request: NextRequest, { params }: RouteParams): Promi
     }
 
     const dto = PuckPageMapper.toDTO(result.data);
-
-    // Return TOON format if requested
-    if (format === 'llm') {
-      const toon = operationToToon({
-        action: 'created',
-        entity: 'page',
-        id: dto.id,
-        data: { name: dto.name, slug: dto.slug, appId: dto.appId },
-      });
-      return new NextResponse(toon, {
-        status: 201,
-        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-      });
-    }
 
     return NextResponse.json({
       success: true,

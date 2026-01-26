@@ -2,10 +2,6 @@
  * Apps API - List and Create apps
  *
  * AIDEV-NOTE: This endpoint provides CRUD access to apps for the AppBuilder agent.
- *
- * Supports TOON format for LLM-optimized responses:
- * - ?format=llm → minimal TOON format
- * - ?format=llm&meta=1 → TOON with metadata
  */
 
 // Force dynamic rendering to prevent build-time database connections
@@ -16,16 +12,11 @@ import { authenticateRequest } from '@/lib/auth/test-auth';
 import { getAppApplicationService } from '@/ddd/application/di/getters';
 import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import { AppMapper } from '@/app/mappers/puck-app-mapper';
-import { appsToToon, operationToToon } from '@/lib/toon-format';
 
 /**
  * GET /api/apps
  *
  * List all apps for the organization.
- *
- * Query parameters:
- * - format: 'llm' for TOON format
- * - meta: '1' to include metadata in TOON format
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
@@ -39,25 +30,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'User has no organization' }, { status: 400 });
     }
 
-    const { searchParams } = new URL(request.url);
-    const format = searchParams.get('format');
-    const includeMeta = searchParams.get('meta') === '1';
-
     const appService = getAppApplicationService();
     const apps = await appService.getAppsByOrganization(
       OrganizationId.fromNumber(authResult.user.organizationId)
     );
 
     const dtos = AppMapper.toDTOs(apps);
-
-    // Return TOON format if requested
-    if (format === 'llm') {
-      const toon = appsToToon(dtos, { includeMeta });
-      return new NextResponse(toon, {
-        status: 200,
-        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-      });
-    }
 
     return NextResponse.json({
       success: true,
@@ -81,9 +59,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
  * - name: string (required)
  * - slug?: string (optional, auto-generated from name if not provided)
  * - description?: string (optional)
- *
- * Query parameters:
- * - format: 'llm' for TOON format response
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
@@ -96,9 +71,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (!authResult.user.organizationId) {
       return NextResponse.json({ error: 'User has no organization' }, { status: 400 });
     }
-
-    const { searchParams } = new URL(request.url);
-    const format = searchParams.get('format');
 
     const body = await request.json();
 
@@ -133,20 +105,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     const dto = AppMapper.toDTO(result.data);
-
-    // Return TOON format if requested
-    if (format === 'llm') {
-      const toon = operationToToon({
-        action: 'created',
-        entity: 'app',
-        id: dto.id,
-        data: { name: dto.name, slug: dto.slug },
-      });
-      return new NextResponse(toon, {
-        status: 201,
-        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-      });
-    }
 
     return NextResponse.json({
       success: true,

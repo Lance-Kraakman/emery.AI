@@ -3,9 +3,6 @@
  *
  * AIDEV-NOTE: This endpoint updates the page state (variables, persistence) for the
  * page_builder and app_builder agents to create dynamic pages.
- *
- * Supports TOON format for LLM-optimized responses:
- * - ?format=llm -> minimal TOON format
  */
 
 // Force dynamic rendering to prevent build-time database connections
@@ -16,7 +13,6 @@ import { authenticateRequest } from '@/lib/auth/test-auth';
 import { getAppApplicationService, getPuckPageApplicationService, getPuckPageRepository } from '@/ddd/application/di/getters';
 import { PageId } from '@/ddd/domain/puck/value-objects/page-id';
 import { PuckPageMapper } from '@/app/mappers/puck-page-mapper';
-import { operationToToon } from '@/lib/toon-format';
 import type { PageStateConfig } from '@/components/puck/types/state';
 
 interface RouteParams {
@@ -31,9 +27,6 @@ interface RouteParams {
  * Body:
  * - variables: StateVariable[] (optional, array of state variable definitions)
  * - persistence: 'none' | 'session' | 'localStorage' (optional)
- *
- * Query parameters:
- * - format: 'llm' for TOON format response
  */
 export async function PUT(request: NextRequest, { params }: RouteParams): Promise<NextResponse> {
   try {
@@ -49,9 +42,6 @@ export async function PUT(request: NextRequest, { params }: RouteParams): Promis
     if (isNaN(pageId)) {
       return NextResponse.json({ error: 'Invalid page ID' }, { status: 400 });
     }
-
-    const { searchParams } = new URL(request.url);
-    const format = searchParams.get('format');
 
     const body = await request.json();
 
@@ -92,24 +82,6 @@ export async function PUT(request: NextRequest, { params }: RouteParams): Promis
     const updatedPage = await pageRepository.update(existingPage);
 
     const dto = PuckPageMapper.toDTO(updatedPage);
-
-    // Return TOON format if requested
-    if (format === 'llm') {
-      const toon = operationToToon({
-        action: 'updated',
-        entity: 'page_state',
-        id: dto.id,
-        data: {
-          name: dto.name,
-          variablesCount: pageState.variables.length,
-          persistence: pageState.persistence,
-        },
-      });
-      return new NextResponse(toon, {
-        status: 200,
-        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-      });
-    }
 
     return NextResponse.json({
       success: true,

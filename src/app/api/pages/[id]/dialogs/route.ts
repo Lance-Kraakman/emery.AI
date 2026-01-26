@@ -3,9 +3,6 @@
  *
  * AIDEV-NOTE: This endpoint adds dialogs to a page for the page_builder and
  * app_builder agents to create interactive apps with modal content.
- *
- * Supports TOON format for LLM-optimized responses:
- * - ?format=llm -> minimal TOON format
  */
 
 // Force dynamic rendering to prevent build-time database connections
@@ -16,7 +13,6 @@ import { authenticateRequest } from '@/lib/auth/test-auth';
 import { getAppApplicationService, getPuckPageApplicationService, getPuckPageRepository } from '@/ddd/application/di/getters';
 import { PageId } from '@/ddd/domain/puck/value-objects/page-id';
 import { PuckPageMapper } from '@/app/mappers/puck-page-mapper';
-import { operationToToon } from '@/lib/toon-format';
 import type { PageDialog, PageDialogsConfig } from '@/ddd/domain/puck/value-objects/page-dialogs';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -38,9 +34,6 @@ interface RouteParams {
  * - closeOnOutsideClick: boolean (optional, default true)
  * - closeOnEscape: boolean (optional, default true)
  * - content: PuckData (optional, dialog body content)
- *
- * Query parameters:
- * - format: 'llm' for TOON format response
  */
 export async function POST(request: NextRequest, { params }: RouteParams): Promise<NextResponse> {
   try {
@@ -56,9 +49,6 @@ export async function POST(request: NextRequest, { params }: RouteParams): Promi
     if (isNaN(pageId)) {
       return NextResponse.json({ error: 'Invalid page ID' }, { status: 400 });
     }
-
-    const { searchParams } = new URL(request.url);
-    const format = searchParams.get('format');
 
     const body = await request.json();
 
@@ -116,25 +106,6 @@ export async function POST(request: NextRequest, { params }: RouteParams): Promi
     const updatedPage = await pageRepository.update(existingPage);
 
     const dto = PuckPageMapper.toDTO(updatedPage);
-
-    // Return TOON format if requested
-    if (format === 'llm') {
-      const toon = operationToToon({
-        action: 'created',
-        entity: 'page_dialog',
-        id: dto.id,
-        data: {
-          dialogId: newDialog.id,
-          dialogName: newDialog.name,
-          stateKey: newDialog.stateKey,
-          totalDialogs: pageDialogs.dialogs.length,
-        },
-      });
-      return new NextResponse(toon, {
-        status: 200,
-        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-      });
-    }
 
     return NextResponse.json({
       success: true,

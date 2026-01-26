@@ -5,10 +5,6 @@
  *
  * AIDEV-NOTE: This endpoint is READ-ONLY and designed for system introspection.
  * It supports filtering by event type, resource, actor, and time range.
- *
- * Supports TOON format for LLM-optimized responses:
- * - ?format=llm → minimal TOON format
- * - ?format=llm&meta=1 → TOON with metadata
  */
 
 // Force dynamic rendering to prevent build-time database connections
@@ -19,7 +15,6 @@ import { authenticateRequest } from '@/lib/auth/test-auth';
 import { getAuditApplicationService } from '@/ddd/application/di/getters';
 import { OrganizationId } from '@/ddd/domain/shared/value-objects';
 import type { AuditQueryFilters, AuditEventType, AuditActorType } from '@/ddd/domain/audit/types';
-import { auditEventsToToon } from '@/lib/toon-format';
 
 /**
  * GET /api/audit
@@ -47,8 +42,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 
     const { searchParams } = new URL(request.url);
-    const format = searchParams.get('format');
-    const includeMeta = searchParams.get('meta') === '1';
 
     // Build filters from query parameters
     const filters: AuditQueryFilters = {};
@@ -113,15 +106,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const auditService = getAuditApplicationService();
     const organizationId = OrganizationId.fromNumber(authResult.user.organizationId!);
     const events = await auditService.queryEvents(organizationId, filters);
-
-    // Return TOON format if requested
-    if (format === 'llm') {
-      const toon = auditEventsToToon(events, { includeMeta });
-      return new NextResponse(toon, {
-        status: 200,
-        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-      });
-    }
 
     return NextResponse.json({
       success: true,
