@@ -1,8 +1,8 @@
 """
-Planning Nodes
+Planning Node
 
-Handles plan generation and replanning within the LangGraph orchestrator.
-Wraps existing PlanService and PlanDiffer.
+Handles plan generation within the LangGraph orchestrator.
+Wraps existing PlanService for plan creation.
 """
 
 import logging
@@ -27,14 +27,10 @@ from ...services.execution.events import (
     PlanningStartedEvent,
     AwaitingClarificationEvent,
     ErrorEvent,
-    ReplanTriggeredEvent,
-    PlanUpdatedEvent,
 )
 from ...services.tools import get_research_tools, detect_research_intent
 from ...tools.tool_modes import ToolMode, filter_tools_for_mode
 from ...reasoning.tools.api import WorkspaceAPI
-from ...services.planning.plan_differ import PlanDiffer
-from ...services.execution.replan_handler import ReplanHandler, ReplanNeedsClarificationError
 from ..state import PlanExecuteState
 from ..runtime import RuntimeContext
 
@@ -130,7 +126,6 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
     """
     Generate a plan using PlanService.
 
-    Replaces ExecutionCoordinator.create_plan().
     Returns plan or clarifying questions.
     """
     task = state.get("task", "")
@@ -138,18 +133,16 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
         logger.error("generate_plan_node called without a task")
         return {"error": "No task provided", "events": [ErrorEvent(error="No task provided")]}
 
-    # Read non-serializable objects from runtime (NOT from state)
+    # Read non-serializable objects from runtime
     tools = runtime.tools
     managed_agents = runtime.managed_agents
     capability_registry = runtime.capability_registry
     conversation_history = runtime.conversation_history
-    strategy_service = runtime.strategy_service
 
     # Read serializable session config from state
     api_key = state.get("api_key")
     org_id = state.get("org_id")
     org_model = state.get("org_model")
-    organization_id = state.get("organization_id")
 
     events: List[Any] = []
 
@@ -190,7 +183,7 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
             managed_agents=managed_agents,
             research_tools=research_tools,
             conversation_history=conversation_history,
-            strategy_service=strategy_service,
+            strategy_service=None,
             capability_registry=capability_registry,
             config=config,
             workspace=workspace_context,
@@ -227,10 +220,6 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
     )
     ledger.record_plan_created({"plan_id": plan.id, "step_count": len(plan.steps)})
 
-    # Store strategy guidance on ledger
-    if plan_service.last_strategy_guidance:
-        ledger.strategy_guidance = plan_service.last_strategy_guidance
-
     logger.info(f"Plan {plan.id} created with {len(plan.steps)} steps, awaiting approval")
     events.append(PlanCreatedEvent(plan_id=plan.id, plan=plan))
 
@@ -238,76 +227,5 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
         "plan": plan,
         "ledger": ledger,
         "awaiting_input": "approval",
-        "events": events,
-    }
-
-
-async def replan_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[str, Any]:
-    """
-    Replan using diff-based approach.
-
-    Replaces ExecutionCoordinator._trigger_replan() + ReplanHandler.
-    """
-    plan = state.get("plan")
-    replan_count = state.get("replan_count", 0)
-    max_replans = state.get("max_replans", 3)
-    org_model = state.get("org_model")
-    error = state.get("error")
-
-    # Read tools from runtime
-    tools = runtime.tools
-
-    events: List[Any] = []
-
-    assert plan is not None, "Cannot replan without a plan"
-
-    replan_count += 1
-
-    events.append(ReplanTriggeredEvent(
-        plan_id=plan.id,
-        reason=error or "Evaluation triggered replan",
-        replan_number=replan_count,
-    ))
-
-    # Use ReplanHandler for diff-based replanning
-    replan_handler = ReplanHandler(model_provider=None, org_model=org_model)
-
-    old_pending_count = len(plan.get_pending_steps())
-
-    try:
-        updated_plan = await replan_handler.handle_replan(
-            current_plan=plan,
-            failed_step=None,
-            reason=error or "Evaluation triggered replan",
-            tools=tools,
-        )
-    except ReplanNeedsClarificationError as e:
-        events.append(AwaitingClarificationEvent.from_dict_list(
-            questions=e.questions,
-            reasoning=e.reasoning or "Need more information to replan",
-        ))
-        return {
-            "awaiting_input": "clarification",
-            "clarifying_questions": e.questions,
-            "replan_count": replan_count,
-            "events": events,
-        }
-
-    new_pending_count = len(updated_plan.get_pending_steps())
-
-    events.append(PlanUpdatedEvent(
-        plan_id=plan.id,
-        reason=error or "Evaluation triggered replan",
-        added_steps=max(0, new_pending_count - old_pending_count),
-        removed_steps=max(0, old_pending_count - new_pending_count),
-        replan_number=replan_count,
-    ))
-
-    logger.info(f"Replan complete ({replan_count}): {new_pending_count} pending steps")
-
-    return {
-        "plan": updated_plan,
-        "replan_count": replan_count,
-        "error": None,  # Clear error after successful replan
         "events": events,
     }

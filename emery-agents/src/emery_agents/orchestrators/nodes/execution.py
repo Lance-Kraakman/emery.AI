@@ -2,15 +2,11 @@
 Execution Node
 
 Executes a single plan step using PlanStepExecutor.
-The graph loops back to this node for each step.
-
-Handles:
-- Fresh PlanStepExecutor per step (created from RuntimeContext)
-- Phase tracking with PhaseStartedEvent/PhaseCompletedEvent
+The graph always routes to the replan node after execution (success or failure).
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from ...entities.models.plan import Plan, PlanStep, PlanStepStatus
 from ...services.plan_service import PlanService
@@ -20,8 +16,6 @@ from ...services.execution.events import (
     StepStartedEvent,
     StepCompletedEvent,
     StepFailedEvent,
-    PhaseStartedEvent,
-    PhaseCompletedEvent,
 )
 from ..state import PlanExecuteState
 from ..runtime import RuntimeContext
@@ -29,76 +23,16 @@ from ..runtime import RuntimeContext
 logger = logging.getLogger(__name__)
 
 
-def _handle_phase_transition(
-    step: PlanStep,
-    plan: Plan,
-    current_phase_name: Optional[str],
-    phase_step_results: Dict[str, List[str]],
-    pending_steps: List[PlanStep],
-    events: List[Any],
-) -> tuple[Optional[str], Dict[str, List[str]], bool]:
-    """
-    Handle phase transitions between steps.
-
-    Returns:
-        (new_phase_name, updated_phase_step_results, needs_phase_replan)
-    """
-    step_phase = step.phase_name
-    needs_phase_replan = False
-
-    if step_phase == current_phase_name:
-        return current_phase_name, phase_step_results, False
-
-    # Phase changed — emit PhaseCompletedEvent for previous phase
-    if current_phase_name is not None:
-        phase_results = phase_step_results.get(current_phase_name, [])
-        results_summary = f"Completed {len(phase_results)} step(s)"
-        if phase_results:
-            results_summary = "; ".join(r[:100] for r in phase_results if r)[:500]
-
-        # Check if any step in completed phase has replan_after=True
-        phase_steps = [s for s in plan.steps if s.phase_name == current_phase_name]
-        needs_phase_replan = any(s.replan_after for s in phase_steps)
-
-        events.append(PhaseCompletedEvent(
-            plan_id=plan.id,
-            phase_name=current_phase_name,
-            results_summary=results_summary,
-            needs_replan=needs_phase_replan,
-        ))
-
-    # Start new phase
-    if step_phase:
-        phase_step_count = sum(1 for s in pending_steps if s.phase_name == step_phase)
-        events.append(PhaseStartedEvent(
-            plan_id=plan.id,
-            phase_name=step_phase,
-            phase_goal=f"Executing {step_phase} phase",
-            step_count=phase_step_count,
-        ))
-        if step_phase not in phase_step_results:
-            phase_step_results[step_phase] = []
-
-    return step_phase, phase_step_results, needs_phase_replan
-
-
 async def execute_step_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[str, Any]:
     """
     Execute the current plan step.
 
-    Replaces the inner loop of ExecutionCoordinator.execute_plan().
-    Executes one step at a time - the graph loops back for each step.
-
-    Handles:
-    - Fresh PlanStepExecutor per step (created from RuntimeContext)
-    - Phase tracking with PhaseStarted/PhaseCompleted events
+    Executes one step at a time. After execution (success or failure),
+    the graph routes to the replan node which decides what to do next.
     """
     plan = state.get("plan")
-    current_step_index = state.get("current_step_index", 0)
     step_results = dict(state.get("step_results", {}))
     ledger = state.get("ledger")
-    current_phase_name = state.get("current_phase_name")
-    phase_step_results = dict(state.get("phase_step_results", {}))
 
     # Read non-serializable objects from runtime
     tools = runtime.tools
@@ -117,16 +51,6 @@ async def execute_step_node(state: PlanExecuteState, runtime: RuntimeContext) ->
 
     # Get current step (first pending)
     step = pending_steps[0]
-
-    # === Phase tracking ===
-    new_phase_name, phase_step_results, needs_phase_replan = _handle_phase_transition(
-        step=step,
-        plan=plan,
-        current_phase_name=current_phase_name,
-        phase_step_results=phase_step_results,
-        pending_steps=pending_steps,
-        events=events,
-    )
 
     # Update ledger - step started
     if ledger:
@@ -178,22 +102,12 @@ async def execute_step_node(state: PlanExecuteState, runtime: RuntimeContext) ->
         # Store result
         step_results[step.step_id] = result
 
-        # Track result for phase summary
-        if step.phase_name and result:
-            if step.phase_name not in phase_step_results:
-                phase_step_results[step.phase_name] = []
-            phase_step_results[step.phase_name].append(result)
-
         logger.info(f"Step {step.step_id} completed")
 
         return {
             "plan": plan,
-            "current_step_index": current_step_index + 1,
             "step_results": step_results,
-            "steps_since_eval": state.get("steps_since_eval", 0) + 1,
             "ledger": ledger,
-            "current_phase_name": new_phase_name,
-            "phase_step_results": phase_step_results,
             "error": None,
             "events": events,
         }
@@ -221,8 +135,6 @@ async def execute_step_node(state: PlanExecuteState, runtime: RuntimeContext) ->
             "plan": plan,
             "step_results": step_results,
             "ledger": ledger,
-            "current_phase_name": new_phase_name,
-            "phase_step_results": phase_step_results,
             "error": error_msg,
             "events": events,
         }

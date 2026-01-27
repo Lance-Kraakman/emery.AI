@@ -13,11 +13,8 @@ import dspy
 from langgraph.types import Command
 
 from ..services.execution.events import (
-    PlanCreatedEvent,
     ExecutionCompletedEvent,
     FinalSynthesisEvent,
-    AwaitingClarificationEvent,
-    ErrorEvent,
 )
 from ..entities.models.plan import Plan
 from ..tools.tool_modes import ToolMode
@@ -26,8 +23,7 @@ from ..reasoning.config import get_dspy_lm
 from ..reasoning.modules.executor import ExecutorModule
 from ..reasoning.tools import create_all_tools, QuestionCollector, create_ask_question_tool
 from .coordinator_event_converter import convert_coordinator_event
-from .mappers import format_clarifying_questions
-from .approval_handler import is_approval_response, create_awaiting_input_for_plan
+from .approval_handler import is_approval_response
 from .response_types import create_error_response
 from ..orchestrators import create_session_graph, RuntimeContext
 from ..orchestrators.state import DEFAULT_STATE
@@ -260,15 +256,9 @@ class CoordinatorStreamingHandler:
         """
         Stream events from graph execution (shared by initial invocation and resume).
 
-        IMPORTANT: We do NOT return early when we see AwaitingClarificationEvent
-        or PlanCreatedEvent. Instead, we yield the UI event and let the graph
-        continue to await_approval_node's interrupt() call naturally. This ensures
-        the checkpoint is saved at the correct point (after interrupt) so that
-        resume works correctly with the full state.
-
         Handles:
-        - Converting coordinator events to streaming format
-        - Yielding UI events for clarification/approval
+        - Converting coordinator events to streaming format via convert_coordinator_event()
+        - Tracking awaiting_input events for interrupt detection
         - Detecting completion and yielding final summary
         """
         step_index = 0
@@ -303,30 +293,14 @@ class CoordinatorStreamingHandler:
                             yield converted
                             step_index += 1
 
+                            # Track awaiting_input events (approval/clarification)
+                            if converted.get("type") == "awaiting_input":
+                                awaiting_ui_sent = True
+
                         if isinstance(event, FinalSynthesisEvent):
                             final_synthesis = event.synthesis
                         elif isinstance(event, ExecutionCompletedEvent):
                             execution_success = event.success
-
-                        # Yield UI events for clarification/approval.
-                        # Do NOT return early — let the graph reach interrupt() naturally.
-                        if isinstance(event, AwaitingClarificationEvent):
-                            yield {
-                                "type": "awaiting_input",
-                                "data": {
-                                    "input_type": "questions",
-                                    "title": "Clarification Needed",
-                                    "content": event.reasoning,
-                                    "questions": format_clarifying_questions(event.questions),
-                                    "options": [],
-                                    "plan_json": ""
-                                }
-                            }
-                            awaiting_ui_sent = True
-
-                        elif isinstance(event, PlanCreatedEvent):
-                            yield create_awaiting_input_for_plan(event.plan)
-                            awaiting_ui_sent = True
 
         except Exception as e:
             logger.error(f"LangGraph execution failed: {e}", exc_info=True)

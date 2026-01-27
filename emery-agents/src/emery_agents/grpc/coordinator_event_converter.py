@@ -28,8 +28,6 @@ from ..services.execution.events import (
     PlanRejectedEvent,
     PlanFeedbackEvent,
     ErrorEvent,
-    PhaseStartedEvent,
-    PhaseCompletedEvent,
     PlanningStartedEvent,
     PlanCreatedEvent,
     PlanApprovedEvent,
@@ -256,37 +254,6 @@ def convert_coordinator_event(event: Any, step_index: int) -> Optional[Coordinat
                 "type": "plan_feedback",
                 "plan_id": event.plan_id,
                 "feedback": event.feedback,
-            },
-            "step_index": step_index
-        }
-
-    # Phase execution events
-    elif isinstance(event, PhaseStartedEvent):
-        return {
-            "type": "step_progress",
-            "step_type": "PHASE",
-            "step_name": f"Phase: {event.phase_name}",
-            "content": event.phase_goal,
-            "metadata": {
-                "type": "phase_started",
-                "plan_id": event.plan_id,
-                "phase_name": event.phase_name,
-                "step_count": str(event.step_count),
-            },
-            "step_index": step_index
-        }
-
-    elif isinstance(event, PhaseCompletedEvent):
-        return {
-            "type": "step_progress",
-            "step_type": "PHASE",
-            "step_name": f"Completed: {event.phase_name}",
-            "content": event.results_summary,
-            "metadata": {
-                "type": "phase_completed",
-                "plan_id": event.plan_id,
-                "phase_name": event.phase_name,
-                "needs_replan": str(event.needs_replan),
             },
             "step_index": step_index
         }

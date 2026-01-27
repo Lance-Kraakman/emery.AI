@@ -29,7 +29,6 @@ class RuntimeContext:
         org_model: Optional model override
         capability_registry: Stateful service with HF embeddings (NOT serializable)
         conversation_history: Chat history for context
-        strategy_service: ACE strategy service (NOT serializable)
     """
     tools: List[Any] = field(default_factory=list)
     managed_agents: List[Any] = field(default_factory=list)
@@ -38,4 +37,3 @@ class RuntimeContext:
     org_model: Optional[str] = None
     capability_registry: Optional[Any] = None
     conversation_history: Optional[List[Any]] = None
-    strategy_service: Optional[Any] = None

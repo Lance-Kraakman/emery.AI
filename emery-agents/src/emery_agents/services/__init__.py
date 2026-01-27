@@ -49,8 +49,6 @@ from .execution.events import (
     ReplanTriggeredEvent,
     GoalAchievedEvent,
     ExecutionBlockedEvent,
-    PhaseStartedEvent,
-    PhaseCompletedEvent,
 )
 
 # NOTE: ExecutionCoordinator has been replaced by LangGraph orchestrators.
@@ -82,8 +80,6 @@ __all__ = [
     "ReplanTriggeredEvent",
     "GoalAchievedEvent",
     "ExecutionBlockedEvent",
-    "PhaseStartedEvent",
-    "PhaseCompletedEvent",
     "ResultStorageService",
     "ResultStorageServiceFactory",
     "StoredResult",
