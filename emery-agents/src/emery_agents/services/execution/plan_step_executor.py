@@ -38,7 +38,7 @@ from ...entities.models.plan import Plan, PlanStep, PlanStepStatus
 from ..tools import CapabilityRegistry
 from ...utils.session_logger import get_session_logger
 from .prompt_template_resolver import resolve_prompt_template
-from .protocols import ModelProviderProtocol
+from ..protocols import ModelProviderProtocol
 
 logger = logging.getLogger(__name__)
 

@@ -13,8 +13,8 @@ from typing import AsyncIterator, Optional, List, Dict, Any, TYPE_CHECKING
 
 from ..reasoning.tools.execution import SkillTool
 from ..tools.tool_modes import filter_tools_for_mode, ToolMode
-from ..services.agent_executor import AgentExecutor
-from ..services.coordinator_state_machine import (
+from ..services.agents.executor import AgentExecutor
+from ..services.execution.state_machine import (
     Phase,
     ActionType,
 )
@@ -22,7 +22,7 @@ from ..entities.execution_context import ExecutionContext
 from ..types import ExecutionMode
 from ..entities.models.plan import Plan, create_plan
 from ..entities.models.capability import Capability, CapabilityType
-from ..services.tool_provider import ToolProvider
+from ..services.tools.provider import ToolProvider
 from ..utils.error_classifier import classify_error
 from ..utils.error_messages import ErrorSeverity
 from ..utils.mention_parser import parse_agent_mention
@@ -42,10 +42,10 @@ from .response_types import (
 )
 
 if TYPE_CHECKING:
-    from ..services.session_manager import SessionManager
-    from ..services.model_provider import ModelProvider
-    from ..services.tool_loader import UnifiedToolLoader
-    from ..services.skill_executor import SkillExecutorService
+    from ..services.context.session_manager import SessionManager
+    from ..services.models.provider import ModelProvider
+    from ..services.tools.loader import UnifiedToolLoader
+    from ..services.skills.executor import SkillExecutorService
     from ..services.plan_service import PlanService
     from ..infrastructure.clients import HuggingFaceInferenceClient
     from .generated import agent_worker_pb2
@@ -53,7 +53,7 @@ if TYPE_CHECKING:
 
 from .mappers.message_types import ChatMessage
 from .agents.agent_models import ChatAgent, AgentDescriptor, get_builder_descriptors
-from ..services.capability_registry import CapabilityRegistry
+from ..services.tools.capability_registry import CapabilityRegistry
 
 logger = logging.getLogger(__name__)
 

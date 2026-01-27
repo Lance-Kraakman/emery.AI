@@ -14,22 +14,22 @@ from .generated import agent_worker_pb2, agent_worker_pb2_grpc
 from .mappers.message_mapper import build_conversation_messages, has_images, extract_text_from_parts
 from .mappers import format_clarifying_questions
 from ..infrastructure.workspace_sync import WorkspaceSync
-from ..services.model_provider import ModelProvider
-from ..services.tool_loader import UnifiedToolLoader
-from ..services.session_manager import SessionManager
-from ..services.agent_factory import AgentFactory
-from ..services.token_usage_extractor import TokenUsageExtractor
-from ..services.skill_executor import SkillExecutorService
+from ..services.models.provider import ModelProvider
+from ..services.tools.loader import UnifiedToolLoader
+from ..services.context.session_manager import SessionManager
+from ..services.agents.factory import AgentFactory
+from ..services.analysis.token_usage import TokenUsageExtractor
+from ..services.skills.executor import SkillExecutorService
 from ..services.plan_service import PlanService
 from ..services.execution_coordinator import ExecutionCoordinator, PlanCreatedEvent, AwaitingClarificationEvent
-from ..services.tool_provider import ToolProvider
+from ..services.tools.provider import ToolProvider
 from ..entities.models.plan import Plan, SkillInputDefinition, SkillOutputDefinition
 from .message_processor import extract_file_attachments
 from .agent_streaming import AgentStreamingHandler
 from .coordinator_streaming import CoordinatorStreamingHandler
 from .response_converter import convert_response_to_proto
 from .agents.agent_models import get_builder_descriptors
-from ..services.capability_registry import CapabilityRegistry
+from ..services.tools.capability_registry import CapabilityRegistry
 
 logger = logging.getLogger(__name__)
 

@@ -12,7 +12,7 @@ from PIL import Image
 
 from .mappers.message_types import ChatMessage, MessageContentList
 from .generated import agent_worker_pb2
-from ..services.image_processor import ImageProcessor
+from ..services.data.image_processor import ImageProcessor
 
 logger = logging.getLogger(__name__)
 

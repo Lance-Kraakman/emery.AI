@@ -28,7 +28,7 @@ from .message_types import (
     TextContentPart,
     ImageContentPart,
 )
-from ...services.file_processor import process_file
+from ...services.data.file_processor import process_file
 
 logger = logging.getLogger(__name__)
 

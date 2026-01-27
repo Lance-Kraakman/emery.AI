@@ -23,9 +23,9 @@ import asyncio
 import logging
 from typing import Any, AsyncIterator, List, Optional
 
-from ..services.tool_provider import ToolProvider
-from ..services.skill_executor import SkillExecutorService
-from ..services.agent_api_service import AgentAPIService
+from ..services.tools.provider import ToolProvider
+from ..services.skills.executor import SkillExecutorService
+from ..services.agents.api import AgentAPIService
 from ..agents.agent_executor_agent import create_agent_executor
 from .response_types import StreamResponseDict, create_error_response
 

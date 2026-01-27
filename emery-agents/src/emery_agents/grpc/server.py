@@ -10,8 +10,8 @@ from grpc import aio
 from .generated import agent_worker_pb2, agent_worker_pb2_grpc
 from .generated import table_service_pb2, table_service_pb2_grpc
 from .mappers import ProtoMapper
-from ..services.agent_executor import AgentExecutor
-from ..services.tool_loader import UnifiedToolLoader
+from ..services.agents.executor import AgentExecutor
+from ..services.tools.loader import UnifiedToolLoader
 from ..infrastructure.workspace_sync import WorkspaceSync
 import concurrent.futures
 

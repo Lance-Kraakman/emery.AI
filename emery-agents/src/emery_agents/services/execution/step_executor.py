@@ -11,7 +11,7 @@ import logging
 from typing import Any, List, Optional
 
 from ...entities.models.plan import Plan, PlanStep
-from ..plan_step_executor import PlanStepExecutor
+from .plan_step_executor import PlanStepExecutor
 from ...utils.session_logger import SessionLogger
 
 logger = logging.getLogger(__name__)

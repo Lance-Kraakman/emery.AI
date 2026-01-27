@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable
 
-from ....services.skill_permission_validator import SkillPermissionValidator
+from ....services.skills.validator import SkillPermissionValidator
 
 logger = logging.getLogger(__name__)
 

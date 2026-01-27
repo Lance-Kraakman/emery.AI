@@ -17,6 +17,7 @@ from .registry import (
     ModelMetadata,
     normalize_model_id,
     get_model_metadata,
+    get_default_model_for_tier,
     get_all_models,
     get_models_for_tier,
 )
@@ -35,6 +36,7 @@ __all__ = [
     "ModelMetadata",
     "normalize_model_id",
     "get_model_metadata",
+    "get_default_model_for_tier",
     "get_all_models",
     "get_models_for_tier",
 ]

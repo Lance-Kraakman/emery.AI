@@ -19,10 +19,10 @@ from ..services.execution_coordinator import (
     AwaitingClarificationEvent,
     ErrorEvent,
 )
-from ..services.plan_step_executor import PlanStepExecutor
+from ..services.execution.plan_step_executor import PlanStepExecutor
 from ..entities.models.plan import Plan
 from ..tools.tool_modes import ToolMode
-from ..services.agent_executor import AgentExecutor
+from ..services.agents.executor import AgentExecutor
 from ..reasoning.config import get_dspy_lm
 from ..reasoning.modules.executor import ExecutorModule
 from ..reasoning.tools import create_all_tools, QuestionCollector, create_ask_question_tool
@@ -30,11 +30,15 @@ from .coordinator_event_converter import convert_coordinator_event
 from .mappers import format_clarifying_questions
 from .approval_handler import is_approval_response, create_awaiting_input_for_plan
 from .response_types import create_error_response
+from ..orchestrators import create_plan_execute_graph
+from ..orchestrators.state import DEFAULT_STATE
+
+from ..services.execution.state_machine import Phase
 
 if TYPE_CHECKING:
     from ..entities.execution_context import ExecutionContext
-    from ..services.coordinator_state_machine import CoordinatorStateMachine, Phase
-    from ..services.model_provider import ModelProvider
+    from ..services.execution.state_machine import CoordinatorStateMachine
+    from ..services.models.provider import ModelProvider
     from ..services.plan_service import PlanService
 
 logger = logging.getLogger(__name__)
@@ -92,9 +96,6 @@ class CoordinatorStreamingHandler:
         capability_registry: Optional[Any] = None,
     ) -> AsyncIterator[Any]:
         """Coordinator-driven execution path. Yields streaming events."""
-        # Import Phase here to avoid circular imports at module level
-        from ..services.coordinator_state_machine import Phase
-
         # === AUTONOMOUS MODE: Execute stored plan directly ===
         if stored_plan and (not sm or sm.phase == Phase.IDLE):
             async for event in self._handle_autonomous_execution(
@@ -509,3 +510,114 @@ class CoordinatorStreamingHandler:
                 return list(managed_agents.values())
             return list(managed_agents)
         return []
+
+    # ============================================================
+    # LangGraph-based execution (new)
+    # ============================================================
+
+    async def stream_with_graph(
+        self,
+        context: 'ExecutionContext',
+        tools: List[Any],
+        task: str,
+        org_model: Optional[str],
+        managed_agents: Optional[List[Any]] = None,
+        stored_plan: Optional[Plan] = None,
+        conversation_history: Optional[List[Any]] = None,
+        capability_registry: Optional[Any] = None,
+        thread_id: Optional[str] = None,
+    ) -> AsyncIterator[Any]:
+        """
+        LangGraph-based execution path.
+
+        Drop-in replacement for stream_response() using the plan-execute graph.
+        Uses LangGraph's built-in interrupt for human-in-the-loop.
+        """
+        assert context.tool_provider is not None, "tool_provider required"
+
+        # Build initial state
+        initial_state = {
+            **DEFAULT_STATE,
+            "task": task,
+            "tools": tools,
+            "managed_agents": self._get_managed_agents_list(managed_agents),
+            "api_key": context.tool_provider.api_key,
+            "org_id": str(context.tool_provider.organization_id),
+            "org_model": org_model,
+            "organization_id": context.tool_provider.organization_id,
+            "conversation_history": conversation_history,
+            "capability_registry": capability_registry,
+            "stored_plan": stored_plan,
+        }
+
+        # Create graph
+        graph = create_plan_execute_graph()
+
+        # Config for thread-based checkpointing
+        config = {"configurable": {"thread_id": thread_id or "default"}}
+
+        step_index = 0
+        final_synthesis: Optional[str] = None
+        execution_success = False
+
+        try:
+            # Stream events from graph execution
+            async for event_chunk in graph.astream(initial_state, config=config):
+                # Each chunk is a dict of {node_name: state_update}
+                for node_name, state_update in event_chunk.items():
+                    if node_name == "__end__":
+                        continue
+
+                    # Extract events from node output
+                    node_events = state_update.get("events", [])
+                    for event in node_events:
+                        converted = convert_coordinator_event(event, step_index)
+                        if converted:
+                            yield converted
+                            step_index += 1
+
+                        if isinstance(event, FinalSynthesisEvent):
+                            final_synthesis = event.synthesis
+                        elif isinstance(event, ExecutionCompletedEvent):
+                            execution_success = event.success
+
+                        # Handle clarification events
+                        if isinstance(event, AwaitingClarificationEvent):
+                            yield {
+                                "type": "awaiting_input",
+                                "data": {
+                                    "input_type": "questions",
+                                    "title": "Clarification Needed",
+                                    "content": event.reasoning,
+                                    "questions": format_clarifying_questions(event.questions),
+                                    "options": [],
+                                    "plan_json": ""
+                                }
+                            }
+                            return
+
+                        # Handle plan created (for approval UI)
+                        if isinstance(event, PlanCreatedEvent):
+                            yield create_awaiting_input_for_plan(event.plan)
+                            return
+
+        except Exception as e:
+            logger.error(f"LangGraph execution failed: {e}", exc_info=True)
+            yield create_error_response(
+                "GRAPH_EXECUTION_FAILED",
+                f"Graph execution failed: {e}",
+            )
+            return
+
+        # Send final summary
+        if execution_success:
+            summary = final_synthesis or f"Plan executed successfully with {step_index} steps."
+            yield {
+                "type": "content_chunk",
+                "content": f"\n\n{summary}"
+            }
+        else:
+            yield {
+                "type": "content_chunk",
+                "content": "\n\nExecution completed with issues. Some steps may have failed."
+            }

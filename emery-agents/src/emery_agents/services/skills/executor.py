@@ -15,10 +15,10 @@ from ...reasoning.modules.extractor import OutputExtractorModule
 from ...types import SkillExecutionResult
 from ...utils import run_async_in_thread
 from ...utils.step_utils import step_to_progress_dict, RawProgressDict
-from ..agents import AgentFactory, AgentConfig
+from ..agents.factory import AgentFactory, AgentConfig
 from ..data import MappingContext, OutputMappingService
 from .step_executor import StepExecutorService, execute_steps_sync
-from ..tools import UnifiedToolLoader
+from ..tools.loader import UnifiedToolLoader
 
 logger = logging.getLogger(__name__)
 

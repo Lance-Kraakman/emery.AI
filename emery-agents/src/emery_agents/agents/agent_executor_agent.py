@@ -23,7 +23,7 @@ import dspy
 from ..reasoning.modules import ExecutorModule
 from ..reasoning.tools.execution import create_skill_invoker_tools
 from ..utils.persona_sanitizer import sanitize_persona, sanitize_description
-from ..services.skill_permission_validator import create_validator_from_skills
+from ..services.skills.validator import create_validator_from_skills
 
 if TYPE_CHECKING:
     from collections.abc import Callable

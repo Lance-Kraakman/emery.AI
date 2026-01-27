@@ -12,14 +12,14 @@ from typing import TYPE_CHECKING, Optional
 
 import dspy
 
-from emery_agents.services.model_registry import (
+from emery_agents.services.models import (
     ModelTier,
     get_default_model_for_tier,
     get_model_metadata,
 )
 
 if TYPE_CHECKING:
-    from emery_agents.services.model_registry import ModelMetadata
+    from emery_agents.services.models import ModelMetadata
 
 
 class DSPyModelProvider:
@@ -209,7 +209,7 @@ def get_lm_for_task(
     Returns:
         Configured DSPy LM instance
     """
-    from emery_agents.services.model_registry import get_default_vision_model
+    from emery_agents.services.models.registry import get_default_vision_model
 
     provider = DSPyModelProvider()
 

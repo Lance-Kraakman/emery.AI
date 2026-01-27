@@ -9,7 +9,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from ..reasoning.modules import InterruptRequested, TrackedStep, StepType
-from ..services.context_manager import get_current_context
+from ..services.context import get_current_context
 from ..tools.tool_modes import ToolMode
 
 if TYPE_CHECKING:

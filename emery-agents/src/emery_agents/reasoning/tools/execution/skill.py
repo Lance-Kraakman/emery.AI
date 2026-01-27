@@ -21,9 +21,9 @@ from jinja2 import Template
 from ....entities.output_mapping import OutputMappingConfig
 from ....entities.task import SkillOutputValue
 from ....grpc.generated.agent_worker_pb2 import SkillConfig
-from ....services.file_processor import download_file
-from ....services.image_processor import ImageProcessor
-from ....services.output_mapping_service import MappingContext, OutputMappingService
+from ....services.data.file_processor import download_file
+from ....services.data.image_processor import ImageProcessor
+from ....services.data.output_mapping import MappingContext, OutputMappingService
 from ....types import SkillExecutionResult
 from ....utils import run_async_in_thread
 
@@ -221,7 +221,7 @@ class SkillTool:
             else:
                 enriched_kwargs = run_async_in_thread(self._resolve_input_mappings(kwargs))
 
-                from ....services.agent_executor import AgentExecutor
+                from ....services.agents.executor import AgentExecutor
 
                 parent_ctx = AgentExecutor.get_current_context()
                 progress_callback = parent_ctx.progress_callback if parent_ctx else None
@@ -303,7 +303,7 @@ class SkillTool:
 
     def _inject_context_inputs(self, kwargs: dict[str, Any]) -> dict[str, Any]:
         """Inject images/audio from parent execution context into skill inputs."""
-        from ....services.agent_executor import AgentExecutor
+        from ....services.agents.executor import AgentExecutor
 
         parent_context = AgentExecutor.get_current_context()
         if not parent_context:
@@ -698,7 +698,7 @@ class SkillTool:
 
     def _resolve_row_id(self, row_source: Any, context: dict[str, Any]) -> str | None:
         """Resolve row ID from RowIdSource configuration."""
-        from ....services.agent_executor import AgentExecutor
+        from ....services.agents.executor import AgentExecutor
 
         if row_source.use_source_row:
             if "__row_id__" in context:

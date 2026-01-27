@@ -55,6 +55,9 @@ from .execution_coordinator import (
 
 from ..entities.models.task_ledger import TaskLedger, create_ledger_from_plan
 
+# Orchestrators (LangGraph-based)
+from ..orchestrators import create_plan_execute_graph
+
 __all__ = [
     "ModelProvider",
     "TokenUsage",
@@ -89,4 +92,6 @@ __all__ = [
     "AgentData",
     "SkillData",
     "CapabilityRegistry",
+    # Orchestrators
+    "create_plan_execute_graph",
 ]

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from emery_agents.services.context_manager import get_current_context
+from emery_agents.services.context import get_current_context
 from emery_agents.tools.tool_modes import MUTATION_METHODS, ToolMode
 
 if TYPE_CHECKING:

@@ -18,7 +18,7 @@ from huggingface_hub.utils import HfHubHTTPError
 from PIL import Image
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
 
-from emery_agents.services.model_registry import get_model_metadata
+from emery_agents.services.models import get_model_metadata
 from emery_agents.types import is_nested_list
 
 from .base import BaseInferenceClient, TaskResult, TaskResultType

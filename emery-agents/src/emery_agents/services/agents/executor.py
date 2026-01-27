@@ -28,14 +28,16 @@ from ...types import ExecutionMode, AgentId, OrganizationId
 from ...grpc.generated.agent_worker_pb2 import SkillConfig, ToolConfig, TokenUsage as TokenUsageProto, ImageAttachment
 from ...entities.task import TaskRequest
 from ..models import ModelProvider
-from ..tools import UnifiedToolLoader
 from ..data import ImageProcessor
 from .factory import AgentFactory, AgentConfig
 from ..analysis import TokenUsageExtractor
-from ...reasoning.tools.execution import SkillTool, create_bash_tool
+from ...reasoning.tools.execution.skill import SkillTool
+from ...reasoning.tools.execution.bash import create_bash_tool
 from ...reasoning.modules.extractor import OutputExtractorModule
 # from ...infrastructure.clients import HuggingFaceInferenceClient, TaskResult
-from ..skills import SkillExecutorService, StepExecutorService
+from ..skills.executor import SkillExecutorService
+from ..skills.step_executor import StepExecutorService
+from ..tools.loader import UnifiedToolLoader
 from ..context import (
     get_current_context as _get_context,
     set_current_context as _set_context,
@@ -47,7 +49,7 @@ from ...entities.output_mapping import (
 )
 from ...entities.task import SkillOutputValue
 from ..data import OutputMappingService, MappingContext
-from .execution_coordinator import (
+from ..execution_coordinator import (
     ExecutionCoordinator,
     ExecutionCoordinatorFactory,
     PlanCreatedEvent,

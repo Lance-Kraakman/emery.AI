@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional
 from emery_agents.entities.models.context_mapping import ResolvedContext
 from emery_agents.entities.models.plan import Plan, SkillInputDefinition, SkillOutputDefinition
 from emery_agents.services.protocols import Tool, ManagedAgent
-from emery_agents.services.capability_registry import CapabilityRegistry
+from emery_agents.services.tools import CapabilityRegistry
 from emery_agents.services.context import SessionConfig, WorkspaceContext
 
 
