@@ -24,6 +24,7 @@ from ..services.plan_service import PlanService
 from ..services.execution.events import PlanCreatedEvent, AwaitingClarificationEvent
 from ..orchestrators.nodes.planning import generate_plan_node
 from ..orchestrators.state import PlanExecuteState
+from ..orchestrators.runtime import RuntimeContext
 from ..services.tools.provider import ToolProvider
 from ..entities.models.plan import Plan, SkillInputDefinition, SkillOutputDefinition
 from .message_processor import extract_file_attachments
@@ -445,19 +446,26 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
             yield _make_progress("Creating plan...", "planning")
 
+            # Build RuntimeContext for non-serializable objects
+            runtime = RuntimeContext(
+                tools=[],
+                managed_agents=managed_agents,
+                api_key=tool_provider.api_key,
+                org_id=str(tool_provider.organization_id),
+                org_model=request.model or None,
+                capability_registry=capability_registry,
+            )
+
             # Call generate_plan_node directly (no graph needed for plan-only)
             plan_state = {
                 "task": task_instructions,
-                "tools": [],
-                "managed_agents": managed_agents,
                 "api_key": tool_provider.api_key,
                 "org_id": str(tool_provider.organization_id),
                 "org_model": request.model or None,
                 "organization_id": tool_provider.organization_id,
-                "capability_registry": capability_registry,
             }
 
-            result = await generate_plan_node(cast(PlanExecuteState, plan_state))
+            result = await generate_plan_node(cast(PlanExecuteState, plan_state), runtime)
 
             # Check for clarification
             result_events = result.get("events", [])

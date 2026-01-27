@@ -36,6 +36,7 @@ from ...reasoning.tools.api import WorkspaceAPI
 from ...services.planning.plan_differ import PlanDiffer
 from ...services.execution.replan_handler import ReplanHandler, ReplanNeedsClarificationError
 from ..state import PlanExecuteState
+from ..runtime import RuntimeContext
 
 logger = logging.getLogger(__name__)
 
@@ -125,23 +126,30 @@ def _build_workspace_context(
     )
 
 
-async def generate_plan_node(state: PlanExecuteState) -> Dict[str, Any]:
+async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[str, Any]:
     """
     Generate a plan using PlanService.
 
     Replaces ExecutionCoordinator.create_plan().
     Returns plan or clarifying questions.
     """
-    task = state["task"]
-    tools = state.get("tools", [])
-    managed_agents = state.get("managed_agents", [])
+    task = state.get("task", "")
+    if not task:
+        logger.error("generate_plan_node called without a task")
+        return {"error": "No task provided", "events": [ErrorEvent(error="No task provided")]}
+
+    # Read non-serializable objects from runtime (NOT from state)
+    tools = runtime.tools
+    managed_agents = runtime.managed_agents
+    capability_registry = runtime.capability_registry
+    conversation_history = runtime.conversation_history
+    strategy_service = runtime.strategy_service
+
+    # Read serializable session config from state
     api_key = state.get("api_key")
     org_id = state.get("org_id")
     org_model = state.get("org_model")
     organization_id = state.get("organization_id")
-    conversation_history = state.get("conversation_history")
-    capability_registry = state.get("capability_registry")
-    strategy_service = state.get("strategy_service")
 
     events: List[Any] = []
 
@@ -234,18 +242,20 @@ async def generate_plan_node(state: PlanExecuteState) -> Dict[str, Any]:
     }
 
 
-async def replan_node(state: PlanExecuteState) -> Dict[str, Any]:
+async def replan_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[str, Any]:
     """
     Replan using diff-based approach.
 
     Replaces ExecutionCoordinator._trigger_replan() + ReplanHandler.
     """
-    plan = state["plan"]
+    plan = state.get("plan")
     replan_count = state.get("replan_count", 0)
     max_replans = state.get("max_replans", 3)
-    tools = state.get("tools", [])
     org_model = state.get("org_model")
     error = state.get("error")
+
+    # Read tools from runtime
+    tools = runtime.tools
 
     events: List[Any] = []
 

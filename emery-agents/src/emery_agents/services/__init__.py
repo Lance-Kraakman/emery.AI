@@ -54,12 +54,12 @@ from .execution.events import (
 )
 
 # NOTE: ExecutionCoordinator has been replaced by LangGraph orchestrators.
-# All callers now use create_plan_execute_graph() or generate_plan_node() directly.
+# All callers now use create_session_graph() or generate_plan_node() directly.
 
 from ..entities.models.task_ledger import TaskLedger, create_ledger_from_plan
 
 # Orchestrators (LangGraph-based — primary orchestration path)
-from ..orchestrators import create_plan_execute_graph, create_plan_only_graph
+from ..orchestrators import create_session_graph, create_session_plan_only_graph, RuntimeContext
 
 __all__ = [
     "ModelProvider",
@@ -94,6 +94,7 @@ __all__ = [
     "SkillData",
     "CapabilityRegistry",
     # Orchestrators
-    "create_plan_execute_graph",
-    "create_plan_only_graph",
+    "create_session_graph",
+    "create_session_plan_only_graph",
+    "RuntimeContext",
 ]

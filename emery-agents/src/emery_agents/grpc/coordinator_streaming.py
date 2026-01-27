@@ -29,7 +29,7 @@ from .coordinator_event_converter import convert_coordinator_event
 from .mappers import format_clarifying_questions
 from .approval_handler import is_approval_response, create_awaiting_input_for_plan
 from .response_types import create_error_response
-from ..orchestrators import create_plan_execute_graph
+from ..orchestrators import create_session_graph, RuntimeContext
 from ..orchestrators.state import DEFAULT_STATE
 
 if TYPE_CHECKING:
@@ -39,9 +39,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Thread-local storage for graph instances keyed by thread_id.
-# This allows resuming interrupted graphs across requests.
-_graph_cache: Dict[str, Any] = {}
+# Session-scoped graph cache keyed by thread_id.
+# Each session gets its own graph with RuntimeContext bound via closures.
+_session_cache: Dict[str, Any] = {}
 
 
 def _format_dict_questions(questions: List[dict[str, Any]]) -> List[dict[str, Any]]:
@@ -63,16 +63,20 @@ def _format_dict_questions(questions: List[dict[str, Any]]) -> List[dict[str, An
     return questions_data
 
 
-def _get_or_create_graph(thread_id: str) -> Any:
-    """Get a cached graph instance or create a new one."""
-    if thread_id not in _graph_cache:
-        _graph_cache[thread_id] = create_plan_execute_graph()
-    return _graph_cache[thread_id]
+def _get_or_create_session_graph(
+    thread_id: str,
+    runtime: Optional[RuntimeContext] = None,
+) -> Any:
+    """Get a cached session graph or create a new one with RuntimeContext."""
+    if thread_id not in _session_cache:
+        assert runtime is not None, "RuntimeContext required for new session graph"
+        _session_cache[thread_id] = create_session_graph(runtime)
+    return _session_cache[thread_id]
 
 
-def _clear_graph(thread_id: str) -> None:
-    """Remove a cached graph instance after completion."""
-    _graph_cache.pop(thread_id, None)
+def _clear_session(thread_id: str) -> None:
+    """Remove a cached session graph after completion."""
+    _session_cache.pop(thread_id, None)
 
 
 class CoordinatorStreamingHandler:
@@ -116,8 +120,20 @@ class CoordinatorStreamingHandler:
         """
         thread_id = session_id or "default"
 
+        # Build RuntimeContext with non-serializable objects
+        assert context.tool_provider is not None, "tool_provider required"
+        runtime = RuntimeContext(
+            tools=tools,
+            managed_agents=self._get_managed_agents_list(managed_agents),
+            api_key=context.tool_provider.api_key,
+            org_id=str(context.tool_provider.organization_id),
+            org_model=org_model,
+            capability_registry=capability_registry,
+            conversation_history=conversation_history,
+        )
+
         # Check if there's a pending graph interrupt to resume
-        graph = _get_or_create_graph(thread_id)
+        graph = _get_or_create_session_graph(thread_id, runtime)
         config = {"configurable": {"thread_id": thread_id}}
 
         has_pending_interrupt = False
@@ -149,13 +165,10 @@ class CoordinatorStreamingHandler:
         # === NEW REQUEST or AUTONOMOUS ===
         async for event in self.stream_with_graph(
             context=context,
-            tools=tools,
+            runtime=runtime,
             task=task,
             org_model=org_model,
-            managed_agents=managed_agents,
             stored_plan=stored_plan,
-            conversation_history=conversation_history,
-            capability_registry=capability_registry,
             thread_id=thread_id,
         ):
             yield event
@@ -163,13 +176,10 @@ class CoordinatorStreamingHandler:
     async def stream_with_graph(
         self,
         context: 'ExecutionContext',
-        tools: List[Any],
+        runtime: RuntimeContext,
         task: str,
         org_model: Optional[str],
-        managed_agents: Optional[List[Any]] = None,
         stored_plan: Optional[Plan] = None,
-        conversation_history: Optional[List[Any]] = None,
-        capability_registry: Optional[Any] = None,
         thread_id: Optional[str] = None,
     ) -> AsyncIterator[Any]:
         """
@@ -179,27 +189,21 @@ class CoordinatorStreamingHandler:
         The graph will pause at interrupt() for approval/clarification
         and can be resumed later via _resume_graph().
         """
-        assert context.tool_provider is not None, "tool_provider required"
-
         effective_thread_id = thread_id or "default"
 
-        # Build initial state
+        # Build initial state — ONLY serializable data
         initial_state = {
             **DEFAULT_STATE,
             "task": task,
-            "tools": tools,
-            "managed_agents": self._get_managed_agents_list(managed_agents),
-            "api_key": context.tool_provider.api_key,
-            "org_id": str(context.tool_provider.organization_id),
+            "api_key": runtime.api_key,
+            "org_id": runtime.org_id,
             "org_model": org_model,
-            "organization_id": context.tool_provider.organization_id,
-            "conversation_history": conversation_history,
-            "capability_registry": capability_registry,
+            "organization_id": context.tool_provider.organization_id if context.tool_provider else None,
             "stored_plan": stored_plan,
         }
 
-        # Get or create graph (uses cached instance for thread_id)
-        graph = _get_or_create_graph(effective_thread_id)
+        # Get or create session graph (uses cached instance for thread_id)
+        graph = _get_or_create_session_graph(effective_thread_id, runtime)
         config = {"configurable": {"thread_id": effective_thread_id}}
 
         async for event in self._stream_graph_events(
@@ -256,20 +260,39 @@ class CoordinatorStreamingHandler:
         """
         Stream events from graph execution (shared by initial invocation and resume).
 
+        IMPORTANT: We do NOT return early when we see AwaitingClarificationEvent
+        or PlanCreatedEvent. Instead, we yield the UI event and let the graph
+        continue to await_approval_node's interrupt() call naturally. This ensures
+        the checkpoint is saved at the correct point (after interrupt) so that
+        resume works correctly with the full state.
+
         Handles:
         - Converting coordinator events to streaming format
-        - Detecting interrupts (approval, clarification) and yielding UI events
+        - Yielding UI events for clarification/approval
         - Detecting completion and yielding final summary
         """
         step_index = 0
         final_synthesis: Optional[str] = None
         execution_success = False
-        graph_paused = False
+        awaiting_ui_sent = False  # Track whether we sent an awaiting_input UI event
 
         try:
             async for event_chunk in graph.astream(input_data, config=config):
                 for node_name, state_update in event_chunk.items():
                     if node_name == "__end__":
+                        continue
+
+                    # Skip LangGraph internal events (e.g. __interrupt__)
+                    # __interrupt__ yields (Interrupt(...),) — a tuple, not a dict
+                    if node_name.startswith("__"):
+                        continue
+
+                    # Guard: state_update must be a dict (node output)
+                    if not isinstance(state_update, dict):
+                        logger.warning(
+                            f"Unexpected state_update type from node '{node_name}': "
+                            f"{type(state_update).__name__}"
+                        )
                         continue
 
                     # Extract events from node output
@@ -285,7 +308,8 @@ class CoordinatorStreamingHandler:
                         elif isinstance(event, ExecutionCompletedEvent):
                             execution_success = event.success
 
-                        # Handle clarification — graph will pause at interrupt
+                        # Yield UI events for clarification/approval.
+                        # Do NOT return early — let the graph reach interrupt() naturally.
                         if isinstance(event, AwaitingClarificationEvent):
                             yield {
                                 "type": "awaiting_input",
@@ -298,14 +322,11 @@ class CoordinatorStreamingHandler:
                                     "plan_json": ""
                                 }
                             }
-                            graph_paused = True
-                            return
+                            awaiting_ui_sent = True
 
-                        # Handle plan created — graph will pause at interrupt for approval
-                        if isinstance(event, PlanCreatedEvent):
+                        elif isinstance(event, PlanCreatedEvent):
                             yield create_awaiting_input_for_plan(event.plan)
-                            graph_paused = True
-                            return
+                            awaiting_ui_sent = True
 
         except Exception as e:
             logger.error(f"LangGraph execution failed: {e}", exc_info=True)
@@ -313,32 +334,47 @@ class CoordinatorStreamingHandler:
                 "GRAPH_EXECUTION_FAILED",
                 f"Graph execution failed: {e}",
             )
-            _clear_graph(thread_id)
+            _clear_session(thread_id)
+            return
+
+        # Check if graph is paused at an interrupt (approval/clarification/recovery)
+        graph_paused = False
+        try:
+            graph_state = graph.get_state(config)
+            if graph_state and graph_state.next:
+                graph_paused = True
+        except Exception:
+            pass
+
+        if graph_paused:
+            # Graph paused at interrupt — UI event was already yielded above.
+            # If we somehow missed sending the UI event, send a generic one.
+            if not awaiting_ui_sent:
+                logger.warning("Graph paused at interrupt but no UI event was yielded")
             return
 
         # Graph completed (not paused) — send final summary and clean up
-        if not graph_paused:
-            if execution_success:
-                summary = final_synthesis or f"Plan executed successfully with {step_index} steps."
-                yield {
-                    "type": "content_chunk",
-                    "content": f"\n\n{summary}"
-                }
-            elif step_index > 0:
-                yield {
-                    "type": "content_chunk",
-                    "content": "\n\nExecution completed with issues. Some steps may have failed."
-                }
-            else:
-                # No steps executed — direct execution fallback
-                async for event in self._handle_direct_execution(
-                    context=context,
-                    task="",  # Task already processed by graph
-                    org_model=None,
-                ):
-                    yield event
+        if execution_success:
+            summary = final_synthesis or f"Plan executed successfully with {step_index} steps."
+            yield {
+                "type": "content_chunk",
+                "content": f"\n\n{summary}"
+            }
+        elif step_index > 0:
+            yield {
+                "type": "content_chunk",
+                "content": "\n\nExecution completed with issues. Some steps may have failed."
+            }
+        else:
+            # No steps executed — direct execution fallback
+            async for event in self._handle_direct_execution(
+                context=context,
+                task="",  # Task already processed by graph
+                org_model=None,
+            ):
+                yield event
 
-            _clear_graph(thread_id)
+        _clear_session(thread_id)
 
     async def _handle_direct_execution(
         self,

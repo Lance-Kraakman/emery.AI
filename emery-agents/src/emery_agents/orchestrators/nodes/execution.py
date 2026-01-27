@@ -5,14 +5,13 @@ Executes a single plan step using PlanStepExecutor.
 The graph loops back to this node for each step.
 
 Handles:
-- PlanStepExecutor reuse across steps (Gap 6)
-- Phase tracking with PhaseStartedEvent/PhaseCompletedEvent (Gap 2)
-- ACE context curation every N steps (Gap 3)
+- Fresh PlanStepExecutor per step (created from RuntimeContext)
+- Phase tracking with PhaseStartedEvent/PhaseCompletedEvent
 """
 
 import json
 import logging
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, Optional
 
 from ...entities.models.plan import Plan, PlanStep, PlanStepStatus
 from ...services.plan_service import PlanService
@@ -27,23 +26,9 @@ from ...services.execution.events import (
     PhaseCompletedEvent,
 )
 from ..state import PlanExecuteState
+from ..runtime import RuntimeContext
 
 logger = logging.getLogger(__name__)
-
-
-def _get_or_create_executor(state: PlanExecuteState) -> PlanStepExecutor:
-    """Get existing PlanStepExecutor from state or create a new one."""
-    existing = state.get("plan_step_executor")
-    if existing is not None:
-        return cast(PlanStepExecutor, existing)
-
-    return PlanStepExecutor(
-        api_key=state.get("api_key", ""),
-        org_id=state.get("org_id", ""),
-        org_model=state.get("org_model"),
-        max_steps=10,
-        capability_registry=state.get("capability_registry"),
-    )
 
 
 def _handle_phase_transition(
@@ -99,75 +84,7 @@ def _handle_phase_transition(
     return step_phase, phase_step_results, needs_phase_replan
 
 
-def _curate_context_if_needed(
-    state: PlanExecuteState,
-    plan: Plan,
-    plan_step_executor: PlanStepExecutor,
-    ledger: Any,
-    step: PlanStep,
-    steps_since_curation: int,
-    curated_step_ids: List[str],
-) -> tuple[int, List[str]]:
-    """
-    ACE: Run context curation periodically after step completion.
-
-    Returns:
-        Updated (steps_since_curation, curated_step_ids)
-    """
-    steps_since_curation += 1
-
-    execution_context_service = state.get("execution_context_service")
-    if not (
-        execution_context_service
-        and ledger
-        and hasattr(ledger, "execution_context")
-        and ledger.execution_context
-        and hasattr(plan_step_executor, "step_results")
-        and steps_since_curation >= execution_context_service.curate_after_steps
-    ):
-        return steps_since_curation, curated_step_ids
-
-    # Get step results since last curation
-    recent_step_ids = [
-        s.step_id for s in plan.steps
-        if s.status == PlanStepStatus.COMPLETED.value
-        and s.step_id not in curated_step_ids
-    ]
-
-    if not recent_step_ids:
-        return steps_since_curation, curated_step_ids
-
-    # Collect StepResult objects for curation
-    step_results_to_curate = [
-        plan_step_executor.step_results[step_id]
-        for step_id in recent_step_ids
-        if step_id in plan_step_executor.step_results
-    ]
-
-    if not step_results_to_curate:
-        return steps_since_curation, curated_step_ids
-
-    logger.info(f"Running context curation for {len(step_results_to_curate)} steps")
-    ledger.execution_context = execution_context_service.curate(
-        execution_context=ledger.execution_context,
-        step_results=step_results_to_curate,
-    )
-    curated_step_ids = list(curated_step_ids) + recent_step_ids
-
-    # Take snapshot and check for degradation
-    if hasattr(ledger, "evolution_tracker") and ledger.evolution_tracker:
-        ledger.evolution_tracker.take_snapshot(
-            step_id=step.step_id,
-            context_state=ledger.execution_context.to_dict(),
-            summary=ledger.execution_context.format_insights(500),
-        )
-        if ledger.evolution_tracker.detect_degradation():
-            logger.warning("Context degradation detected during execution")
-
-    return 0, curated_step_ids
-
-
-async def execute_step_node(state: PlanExecuteState) -> Dict[str, Any]:
+async def execute_step_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[str, Any]:
     """
     Execute the current plan step.
 
@@ -175,20 +92,19 @@ async def execute_step_node(state: PlanExecuteState) -> Dict[str, Any]:
     Executes one step at a time - the graph loops back for each step.
 
     Handles:
-    - Reuses PlanStepExecutor across steps via state
+    - Fresh PlanStepExecutor per step (created from RuntimeContext)
     - Phase tracking with PhaseStarted/PhaseCompleted events
-    - ACE context curation every N steps
     """
-    plan = state["plan"]
+    plan = state.get("plan")
     current_step_index = state.get("current_step_index", 0)
     step_results = dict(state.get("step_results", {}))
-    tools = state.get("tools", [])
-    managed_agents = state.get("managed_agents", [])
     ledger = state.get("ledger")
     current_phase_name = state.get("current_phase_name")
     phase_step_results = dict(state.get("phase_step_results", {}))
-    steps_since_curation = state.get("steps_since_curation", 0)
-    curated_step_ids = list(state.get("curated_step_ids", []))
+
+    # Read non-serializable objects from runtime
+    tools = runtime.tools
+    managed_agents = runtime.managed_agents
 
     events: List[Any] = []
 
@@ -228,8 +144,14 @@ async def execute_step_node(state: PlanExecuteState) -> Dict[str, Any]:
     plan_service = PlanService()
     plan = await plan_service.update_step_status(plan, step.step_id, "in_progress")
 
-    # === Reuse PlanStepExecutor across steps ===
-    plan_step_executor = _get_or_create_executor(state)
+    # Create fresh PlanStepExecutor per step from RuntimeContext
+    plan_step_executor = PlanStepExecutor(
+        api_key=runtime.api_key,
+        org_id=runtime.org_id,
+        org_model=runtime.org_model,
+        max_steps=10,
+        capability_registry=runtime.capability_registry,
+    )
     step_executor = StepExecutor(plan_step_executor=plan_step_executor)
 
     try:
@@ -254,7 +176,6 @@ async def execute_step_node(state: PlanExecuteState) -> Dict[str, Any]:
                     ))
                     return {
                         "plan": plan,
-                        "plan_step_executor": plan_step_executor,
                         "awaiting_input": "clarification",
                         "clarifying_questions": questions,
                         "current_phase_name": new_phase_name,
@@ -288,31 +209,6 @@ async def execute_step_node(state: PlanExecuteState) -> Dict[str, Any]:
                 phase_step_results[step.phase_name] = []
             phase_step_results[step.phase_name].append(result)
 
-        # ACE: Track execution context evolution
-        if (
-            ledger
-            and hasattr(ledger, "evolution_tracker")
-            and ledger.evolution_tracker
-            and plan_step_executor
-        ):
-            ledger.evolution_tracker.record_context_change(
-                step_id=step.step_id,
-                key=f"step_{step.step_id}_result",
-                before_value=None,
-                after_value=result,
-            )
-
-        # === ACE context curation ===
-        steps_since_curation, curated_step_ids = _curate_context_if_needed(
-            state=state,
-            plan=plan,
-            plan_step_executor=plan_step_executor,
-            ledger=ledger,
-            step=step,
-            steps_since_curation=steps_since_curation,
-            curated_step_ids=curated_step_ids,
-        )
-
         logger.info(f"Step {step.step_id} completed")
 
         return {
@@ -321,11 +217,8 @@ async def execute_step_node(state: PlanExecuteState) -> Dict[str, Any]:
             "step_results": step_results,
             "steps_since_eval": state.get("steps_since_eval", 0) + 1,
             "ledger": ledger,
-            "plan_step_executor": plan_step_executor,
             "current_phase_name": new_phase_name,
             "phase_step_results": phase_step_results,
-            "steps_since_curation": steps_since_curation,
-            "curated_step_ids": curated_step_ids,
             "error": None,
             "events": events,
         }
@@ -353,7 +246,6 @@ async def execute_step_node(state: PlanExecuteState) -> Dict[str, Any]:
             "plan": plan,
             "step_results": step_results,
             "ledger": ledger,
-            "plan_step_executor": plan_step_executor,
             "current_phase_name": new_phase_name,
             "phase_step_results": phase_step_results,
             "error": error_msg,

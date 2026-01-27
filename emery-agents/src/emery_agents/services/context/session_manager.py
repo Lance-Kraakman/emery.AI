@@ -250,7 +250,7 @@ class SessionManager:
         Returns:
             Number of messages restored
         """
-        from ..grpc.agents.agent_models import MemoryStep
+        from ...grpc.agents.agent_models import MemoryStep
 
         restored_count = 0
 
@@ -314,7 +314,7 @@ class SessionManager:
         Returns:
             List of FileAttachment protobuf objects
         """
-        from ..grpc.generated import agent_worker_pb2
+        from ...grpc.generated import agent_worker_pb2
 
         attachments = []
         seen_urls = set()  # Avoid duplicates

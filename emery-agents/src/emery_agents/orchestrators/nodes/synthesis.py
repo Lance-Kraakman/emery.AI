@@ -20,22 +20,25 @@ from ...services.plan_service import PlanService
 from ...entities.models.plan import PlanStatus
 from ...ace import StrategyOutcome
 from ..state import PlanExecuteState
+from ..runtime import RuntimeContext
 
 logger = logging.getLogger(__name__)
 
 
-async def synthesize_node(state: PlanExecuteState) -> Dict[str, Any]:
+async def synthesize_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[str, Any]:
     """
     Synthesize final answer from all step results.
 
     Replaces ExecutionCoordinator._synthesize_final_answer() and
     the completion logic at the end of execute_plan().
     """
-    plan = state["plan"]
+    plan = state.get("plan")
     ledger = state.get("ledger")
     org_model = state.get("org_model")
-    strategy_service = state.get("strategy_service")
     error = state.get("error")
+
+    # Read non-serializable objects from runtime
+    strategy_service = runtime.strategy_service
 
     events: List[Any] = []
 

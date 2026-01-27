@@ -4,9 +4,9 @@ Orchestration Graphs
 LangGraph graph definitions for different orchestration patterns.
 """
 
-from .plan_execute import create_plan_execute_graph, create_plan_only_graph
+from .plan_execute import create_session_graph, create_session_plan_only_graph
 
 __all__ = [
-    "create_plan_execute_graph",
-    "create_plan_only_graph",
+    "create_session_graph",
+    "create_session_plan_only_graph",
 ]

@@ -63,7 +63,7 @@ from ..execution.events import (
     FinalSynthesisEvent,
 )
 from ...orchestrators.nodes.planning import generate_plan_node
-from ...orchestrators import create_plan_execute_graph
+from ...orchestrators import create_session_graph, RuntimeContext
 from ...orchestrators.state import DEFAULT_STATE
 logger = logging.getLogger(__name__)
 
@@ -802,17 +802,26 @@ class AgentExecutor:
 
         instructions = context.task or "Execute task"
 
+        # Build RuntimeContext for non-serializable objects
+        api_key = context.tool_provider.api_key if context.tool_provider else ""
+        org_id = str(context.tool_provider.organization_id) if context.tool_provider else ""
+        runtime = RuntimeContext(
+            tools=tools,
+            managed_agents=[],
+            api_key=api_key,
+            org_id=org_id,
+            org_model=context.org_model,
+        )
+
         # Phase 1: Generate plan using generate_plan_node directly
         plan_state = {
             "task": instructions,
-            "tools": tools,
-            "managed_agents": [],
             "org_model": context.org_model,
-            "api_key": getattr(context, "api_key", ""),
-            "org_id": getattr(context, "org_id", ""),
+            "api_key": api_key,
+            "org_id": org_id,
         }
 
-        result = await generate_plan_node(plan_state)
+        result = await generate_plan_node(plan_state, runtime)
 
         plan = result.get("plan")
         for event in result.get("events", []):
@@ -844,18 +853,16 @@ class AgentExecutor:
             "progress_percent": 40.0
         }
 
-        # Phase 3: Execute plan via LangGraph
-        graph = create_plan_execute_graph()
+        # Phase 3: Execute plan via LangGraph (session-scoped graph with RuntimeContext)
+        graph = create_session_graph(runtime)
         config = {"configurable": {"thread_id": f"executor-{plan.id}"}}
 
         initial_state = {
             **DEFAULT_STATE,
             "task": instructions,
-            "tools": tools,
-            "managed_agents": [],
             "org_model": context.org_model,
-            "api_key": getattr(context, "api_key", ""),
-            "org_id": getattr(context, "org_id", ""),
+            "api_key": runtime.api_key,
+            "org_id": runtime.org_id,
             "stored_plan": approved_plan,
         }
 

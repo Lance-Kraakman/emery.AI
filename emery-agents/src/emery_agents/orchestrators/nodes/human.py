@@ -32,12 +32,16 @@ async def await_approval_node(state: PlanExecuteState) -> Dict[str, Any]:
     """
     awaiting_type = state.get("awaiting_input")
     plan = state.get("plan")
+    task = state.get("task", "")
 
     events: List[Any] = []
 
     if awaiting_type == "approval":
         # Pause for plan approval
-        assert plan is not None, "Cannot await approval without a plan"
+        if plan is None:
+            logger.error("Cannot await approval without a plan")
+            events.append(ErrorEvent(error="No plan available for approval"))
+            return {"awaiting_input": None, "events": events}
 
         response = interrupt({
             "type": "approval",
@@ -87,7 +91,7 @@ async def await_approval_node(state: PlanExecuteState) -> Dict[str, Any]:
             logger.info(f"Received feedback on plan {plan.id}")
             events.append(PlanFeedbackEvent(plan_id=plan.id, feedback=response))
             return {
-                "task": f"{state['task']}\n\nUser feedback on plan: {response}",
+                "task": f"{task}\n\nUser feedback on plan: {response}",
                 "awaiting_input": None,
                 "user_response": str(response),
                 "plan": None,  # Clear plan so generate_plan runs again
@@ -107,7 +111,7 @@ async def await_approval_node(state: PlanExecuteState) -> Dict[str, Any]:
         logger.info("Clarification received, will re-plan with combined task")
 
         return {
-            "task": f"{state['task']}\n\nUser's clarification: {response}",
+            "task": f"{task}\n\nUser's clarification: {response}",
             "awaiting_input": None,
             "user_response": str(response),
             "clarifying_questions": [],
@@ -126,7 +130,7 @@ async def await_approval_node(state: PlanExecuteState) -> Dict[str, Any]:
         logger.info(f"Recovery response received: {str(response)[:50]}")
 
         return {
-            "task": f"{state['task']}\n\nUser's recovery guidance: {response}",
+            "task": f"{task}\n\nUser's recovery guidance: {response}",
             "awaiting_input": None,
             "user_response": str(response),
             "error": None,

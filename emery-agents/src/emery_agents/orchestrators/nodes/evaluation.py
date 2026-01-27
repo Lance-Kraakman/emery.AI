@@ -31,8 +31,10 @@ async def evaluate_node(state: PlanExecuteState) -> Dict[str, Any]:
 
     Replaces ExecutionCoordinator._evaluate_progress().
     Runs after each step (or batch of steps based on evaluate_after_steps).
+
+    Returns explicit boolean fields for routing (instead of hidden _evaluation).
     """
-    plan = state["plan"]
+    plan = state.get("plan")
     evaluation_count = state.get("evaluation_count", 0)
     org_model = state.get("org_model")
     ledger = state.get("ledger")
@@ -122,7 +124,10 @@ async def evaluate_node(state: PlanExecuteState) -> Dict[str, Any]:
         "evaluation_count": evaluation_count,
         "steps_since_eval": 0,  # Reset counter
         "ledger": ledger,
-        # Store evaluation result for routing
-        "_evaluation": evaluation,
+        # Explicit boolean fields for routing (replaces hidden _evaluation)
+        "eval_goal_achieved": evaluation.goal_achieved,
+        "eval_needs_replan": evaluation.needs_replan,
+        "eval_should_continue": evaluation.should_continue,
+        "eval_has_blocking_issues": evaluation.blocking_issues,
         "events": events,
     }
