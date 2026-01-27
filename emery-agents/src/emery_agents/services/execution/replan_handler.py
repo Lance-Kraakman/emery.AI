@@ -13,6 +13,7 @@ from emery_agents.entities.models.plan import Plan, PlanStatus, PlanStep, PlanSt
 
 from ..planning.plan_differ import PlanDiffer, PlanDiff
 from ..protocols import ModelProviderProtocol
+from ...reasoning.config import get_dspy_lm
 from ...utils.session_logger import get_session_logger
 
 
@@ -85,9 +86,8 @@ class ReplanHandler:
         ]) if completed_steps else None
 
         # Use PlanDiffer for minimal changes
-        if self.model_provider is None:
-            raise ValueError("Cannot replan without model_provider")
-        differ = PlanDiffer(model_provider=self.model_provider)
+        lm = get_dspy_lm(org_model=self.org_model)
+        differ = PlanDiffer(lm=lm)
 
         try:
             diff = await differ.generate_diff(
