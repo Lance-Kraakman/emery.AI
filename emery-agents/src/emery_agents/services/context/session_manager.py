@@ -16,7 +16,6 @@ from ..execution.state_machine import CoordinatorStateMachine, Phase
 
 if TYPE_CHECKING:
     from ...grpc.agents.agent_models import ChatAgent
-    from ..execution_coordinator import ExecutionCoordinator
     from ...entities.models.plan import Plan
     from ...infrastructure.workspace_sync import WorkspaceSync
 

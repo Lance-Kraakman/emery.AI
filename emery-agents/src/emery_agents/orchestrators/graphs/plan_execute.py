@@ -20,7 +20,8 @@ from ..nodes.evaluation import evaluate_node
 from ..nodes.recovery import handle_failure_node
 from ..nodes.human import await_approval_node
 from ..nodes.synthesis import synthesize_node
-from ...services.execution.events import EvaluationResult
+from ...entities.models.task_ledger import create_ledger_from_plan
+from ...services.execution.events import EvaluationResult, PlanCreatedEvent, PlanApprovedEvent
 
 logger = logging.getLogger(__name__)
 
@@ -158,9 +159,6 @@ def handle_autonomous_entry(state: PlanExecuteState) -> Dict[str, Any]:
 
     Replaces ExecutionCoordinator.execute() autonomous branch.
     """
-    from ...entities.models.task_ledger import create_ledger_from_plan
-    from ...services.execution.events import PlanCreatedEvent, PlanApprovedEvent
-
     stored_plan = state["stored_plan"]
     assert stored_plan is not None
 
@@ -286,3 +284,65 @@ def create_plan_execute_graph(
     logger.info("Plan-execute graph compiled successfully")
 
     return compiled
+
+
+def create_plan_only_graph(
+    checkpointer: Optional[Any] = None,
+) -> Any:
+    """
+    Create a plan-only LangGraph (no execution).
+
+    Used by GeneratePlan RPC for skill editor plan generation.
+    Generates a plan and stops — no approval or execution.
+
+    Args:
+        checkpointer: Optional checkpointer for persistence.
+
+    Returns:
+        Compiled LangGraph that terminates after plan generation.
+    """
+    graph = StateGraph(PlanExecuteState)
+
+    # Only needs planning and approval nodes
+    graph.add_node("generate_plan", generate_plan_node)
+    graph.add_node("await_approval", await_approval_node)
+
+    # Entry
+    graph.set_entry_point("generate_plan")
+
+    # After plan generation: if clarification needed, go to await_approval then re-plan.
+    # Otherwise terminate (plan created or error).
+    graph.add_conditional_edges("generate_plan", route_after_plan, {
+        "await_approval": "await_approval",
+        "end": END,
+    })
+
+    # After clarification: re-generate plan or terminate
+    graph.add_conditional_edges("await_approval", route_after_approval_plan_only, {
+        "generate_plan": "generate_plan",
+        "end": END,
+    })
+
+    if checkpointer is None:
+        checkpointer = MemorySaver()
+
+    compiled = graph.compile(checkpointer=checkpointer)
+
+    logger.info("Plan-only graph compiled successfully")
+
+    return compiled
+
+
+def route_after_approval_plan_only(state: PlanExecuteState) -> str:
+    """Route after approval in plan-only mode. Never executes — just re-plans or ends."""
+    error = state.get("error")
+    if error:
+        return "end"
+
+    plan = state.get("plan")
+    if plan is None:
+        # Feedback or clarification — re-generate
+        return "generate_plan"
+
+    # Plan exists (approved or created) — we're done in plan-only mode
+    return "end"

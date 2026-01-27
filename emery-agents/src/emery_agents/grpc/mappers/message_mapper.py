@@ -15,7 +15,7 @@ from io import BytesIO
 from concurrent.futures import ThreadPoolExecutor
 
 if TYPE_CHECKING:
-    from emery_agents.services.execution_coordinator import ClarifyingQuestion
+    from emery_agents.services.execution.events import ClarifyingQuestion
 
 import requests
 from PIL import Image

@@ -29,7 +29,6 @@ from enum import Enum, auto
 from typing import Any, Callable, Dict, Optional, Set, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .execution_coordinator import ExecutionCoordinator
     from ..entities.models.plan import Plan
 
 logger = logging.getLogger(__name__)
@@ -81,7 +80,6 @@ class StateContext:
     """All context needed for state machine decisions."""
     phase: Phase = field(default=Phase.IDLE)
     original_task: Optional[str] = None
-    coordinator: Optional["ExecutionCoordinator"] = None
     plan: Optional["Plan"] = None
     # Recovery context (for AWAITING_RECOVERY phase)
     blocked_reason: Optional[str] = None
@@ -92,7 +90,6 @@ class StateContext:
         """Reset to idle state."""
         self.phase = Phase.IDLE
         self.original_task = None
-        self.coordinator = None
         self.plan = None
         self.blocked_reason = None
         self.failed_step = None
@@ -154,8 +151,8 @@ class CoordinatorStateMachine:
         action = sm.handle_input("task", "Create a CRM app")
         # action.action_type == ActionType.RUN_COORDINATOR
 
-        # Coordinator creates plan
-        sm.on_plan_created(coordinator, plan, task)
+        # Plan created
+        sm.on_plan_created(plan, task)
         # sm.context.phase == Phase.AWAITING_APPROVAL
 
         # User approves
@@ -381,18 +378,16 @@ class CoordinatorStateMachine:
 
     def on_plan_created(
         self,
-        coordinator: "ExecutionCoordinator",
         plan: "Plan",
         task: str
     ) -> None:
         """
-        Coordinator created a plan ready for user approval.
+        Plan created, ready for user approval.
 
         Transitions: IDLE → AWAITING_APPROVAL
         """
         self.transition(
             Phase.AWAITING_APPROVAL,
-            coordinator=coordinator,
             plan=plan,
             original_task=task
         )
@@ -482,7 +477,6 @@ class CoordinatorStateMachine:
         return {
             "session_id": self.session_id,
             "phase": self.context.phase.name,
-            "has_coordinator": self.context.coordinator is not None,
             "has_plan": self.context.plan is not None,
             "has_original_task": self.context.original_task is not None,
             "blocked_reason": self.context.blocked_reason,

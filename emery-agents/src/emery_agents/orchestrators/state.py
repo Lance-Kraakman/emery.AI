@@ -5,7 +5,6 @@ Defines the typed state that flows through orchestration graphs.
 """
 
 import operator
-from dataclasses import dataclass, field
 from typing import TypedDict, Annotated, List, Optional, Any, Dict
 
 from ..entities.models.plan import Plan, PlanStep
@@ -55,6 +54,17 @@ class PlanExecuteState(TypedDict, total=False):
     evaluate_after_steps: int
     steps_since_eval: int
 
+    # === Reusable executors (created once, reused across steps) ===
+    plan_step_executor: Optional[Any]  # PlanStepExecutor instance
+
+    # === Phase tracking (for hierarchical plans) ===
+    current_phase_name: Optional[str]
+    phase_step_results: Dict[str, List[str]]
+
+    # === ACE context curation tracking ===
+    steps_since_curation: int
+    curated_step_ids: List[str]
+
     # === Human-in-the-loop ===
     # What kind of input we're waiting for: "approval", "clarification", "recovery"
     awaiting_input: Optional[str]
@@ -87,6 +97,11 @@ DEFAULT_STATE: Dict[str, Any] = {
     "evaluation_count": 0,
     "evaluate_after_steps": 1,
     "steps_since_eval": 0,
+    "plan_step_executor": None,
+    "current_phase_name": None,
+    "phase_step_results": {},
+    "steps_since_curation": 0,
+    "curated_step_ids": [],
     "awaiting_input": None,
     "clarifying_questions": [],
     "user_response": None,

@@ -1,25 +1,24 @@
 """
 Coordinator Streaming Handler
 
-Handles execution coordinator integration for two-phase execution.
-Extracted from ChatProcessingService for maintainability.
+Handles execution orchestration via LangGraph plan-execute graph.
+Replaces the old ExecutionCoordinator-based two-phase execution.
 """
 
 import json
 import logging
-from typing import AsyncIterator, Optional, List, Any, TYPE_CHECKING
+from typing import AsyncIterator, Optional, List, Any, Dict, TYPE_CHECKING
 
 import dspy
+from langgraph.types import Command
 
-from ..services.execution_coordinator import (
-    ExecutionCoordinator,
+from ..services.execution.events import (
     PlanCreatedEvent,
     ExecutionCompletedEvent,
     FinalSynthesisEvent,
     AwaitingClarificationEvent,
     ErrorEvent,
 )
-from ..services.execution.plan_step_executor import PlanStepExecutor
 from ..entities.models.plan import Plan
 from ..tools.tool_modes import ToolMode
 from ..services.agents.executor import AgentExecutor
@@ -33,15 +32,16 @@ from .response_types import create_error_response
 from ..orchestrators import create_plan_execute_graph
 from ..orchestrators.state import DEFAULT_STATE
 
-from ..services.execution.state_machine import Phase
-
 if TYPE_CHECKING:
     from ..entities.execution_context import ExecutionContext
-    from ..services.execution.state_machine import CoordinatorStateMachine
     from ..services.models.provider import ModelProvider
     from ..services.plan_service import PlanService
 
 logger = logging.getLogger(__name__)
+
+# Thread-local storage for graph instances keyed by thread_id.
+# This allows resuming interrupted graphs across requests.
+_graph_cache: Dict[str, Any] = {}
 
 
 def _format_dict_questions(questions: List[dict[str, Any]]) -> List[dict[str, Any]]:
@@ -63,15 +63,27 @@ def _format_dict_questions(questions: List[dict[str, Any]]) -> List[dict[str, An
     return questions_data
 
 
+def _get_or_create_graph(thread_id: str) -> Any:
+    """Get a cached graph instance or create a new one."""
+    if thread_id not in _graph_cache:
+        _graph_cache[thread_id] = create_plan_execute_graph()
+    return _graph_cache[thread_id]
+
+
+def _clear_graph(thread_id: str) -> None:
+    """Remove a cached graph instance after completion."""
+    _graph_cache.pop(thread_id, None)
+
+
 class CoordinatorStreamingHandler:
     """
-    Handles coordinator-driven execution paths.
+    Handles orchestration via LangGraph plan-execute graph.
 
-    The coordinator internally decides the mode:
-    - PASSTHROUGH: Single managed agent task (agent has own HITL)
-    - DIRECT: Simple task, execute without plan
-    - PLAN_AND_APPROVE: Complex task, create plan and await approval
-    - AUTONOMOUS: Pre-approved stored plan, execute directly (skip HITL)
+    Execution modes:
+    - NEW REQUEST: Starts the graph from scratch (generate_plan -> await_approval -> execute)
+    - AUTONOMOUS: Pre-approved stored plan executed directly
+    - RESUME: Resumes a paused graph (approval, clarification, recovery)
+    - DIRECT: Simple task without plan (DSPy ReAct execution)
     """
 
     def __init__(
@@ -89,242 +101,244 @@ class CoordinatorStreamingHandler:
         task: str,
         session_id: Optional[str],
         org_model: Optional[str],
-        sm: Optional['CoordinatorStateMachine'],
+        sm: Optional[Any] = None,
         managed_agents: Optional[List[Any]] = None,
         stored_plan: Optional[Plan] = None,
         conversation_history: Optional[List[Any]] = None,
         capability_registry: Optional[Any] = None,
     ) -> AsyncIterator[Any]:
-        """Coordinator-driven execution path. Yields streaming events."""
-        # === AUTONOMOUS MODE: Execute stored plan directly ===
-        if stored_plan and (not sm or sm.phase == Phase.IDLE):
-            async for event in self._handle_autonomous_execution(
+        """
+        Main entry point for coordinator-driven execution.
+
+        Uses LangGraph for all orchestration paths. The `sm` parameter is
+        accepted for backward compatibility but LangGraph's checkpointer
+        handles state management internally.
+        """
+        thread_id = session_id or "default"
+
+        # Check if there's a pending graph interrupt to resume
+        graph = _get_or_create_graph(thread_id)
+        config = {"configurable": {"thread_id": thread_id}}
+
+        has_pending_interrupt = False
+        try:
+            graph_state = graph.get_state(config)
+            if graph_state and graph_state.next:
+                has_pending_interrupt = True
+        except Exception:
+            pass  # No state yet — fresh graph
+
+        if has_pending_interrupt:
+            # === RESUME: Graph is paused at interrupt, resume with user's response ===
+            if is_approval_response(task):
+                response = "approve"
+            else:
+                response = task
+
+            async for event in self._resume_graph(
+                graph=graph,
+                config=config,
+                response=response,
                 context=context,
                 tools=tools,
-                task=task,
-                org_model=org_model,
-                managed_agents=managed_agents,
-                stored_plan=stored_plan,
-                conversation_history=conversation_history,
-                capability_registry=capability_registry,
+                thread_id=thread_id,
             ):
                 yield event
             return
 
-        if not sm or sm.phase == Phase.IDLE:
-            # === NEW REQUEST - Let coordinator determine mode ===
-            async for event in self._handle_new_request(
-                context=context,
-                tools=tools,
-                task=task,
-                org_model=org_model,
-                sm=sm,
-                managed_agents=managed_agents,
-                conversation_history=conversation_history,
-                capability_registry=capability_registry,
-            ):
-                yield event
+        # === NEW REQUEST or AUTONOMOUS ===
+        async for event in self.stream_with_graph(
+            context=context,
+            tools=tools,
+            task=task,
+            org_model=org_model,
+            managed_agents=managed_agents,
+            stored_plan=stored_plan,
+            conversation_history=conversation_history,
+            capability_registry=capability_registry,
+            thread_id=thread_id,
+        ):
+            yield event
 
-        elif sm and sm.phase == Phase.AWAITING_APPROVAL:
-            # === CHECK FOR APPROVAL ===
-            async for event in self._handle_approval_response(
-                context=context,
-                tools=tools,
-                task=task,
-                sm=sm,
-            ):
-                yield event
-
-        elif sm and sm.phase == Phase.EXECUTING:
-            # User sent message during EXECUTING state - treat as new task
-            logger.info(f"📋 Coordinator: User input during EXECUTING phase, treating as new task: {task[:100]}...")
-            sm.context.clear()
-            async for event in self._handle_direct_execution(
-                context=context,
-                task=task,
-                org_model=org_model,
-            ):
-                yield event
-            return
-
-        elif sm and sm.phase == Phase.AWAITING_QUESTIONS:
-            # Questions response - process with DSPy
-            logger.info("📋 Coordinator: Questions response, processing with DSPy direct execution")
-            sm.context.clear()
-            async for event in self._handle_direct_execution(
-                context=context,
-                task=task,
-                org_model=org_model,
-            ):
-                yield event
-
-    async def _handle_autonomous_execution(
+    async def stream_with_graph(
         self,
         context: 'ExecutionContext',
         tools: List[Any],
         task: str,
         org_model: Optional[str],
-        managed_agents: Optional[List[Any]],
-        stored_plan: Plan,
-        conversation_history: Optional[List[Any]],
+        managed_agents: Optional[List[Any]] = None,
+        stored_plan: Optional[Plan] = None,
+        conversation_history: Optional[List[Any]] = None,
         capability_registry: Optional[Any] = None,
+        thread_id: Optional[str] = None,
     ) -> AsyncIterator[Any]:
-        """Handle autonomous mode with pre-approved stored plan."""
-        assert context.tool_provider is not None, "tool_provider required for autonomous execution"
-        logger.info(f"📋 Coordinator: AUTONOMOUS mode - executing stored plan '{stored_plan.id}' directly")
+        """
+        LangGraph-based execution path.
 
-        managed_agents_list = self._get_managed_agents_list(managed_agents)
+        Starts the plan-execute graph from scratch with the given task.
+        The graph will pause at interrupt() for approval/clarification
+        and can be resumed later via _resume_graph().
+        """
+        assert context.tool_provider is not None, "tool_provider required"
 
-        plan_step_executor = PlanStepExecutor(
-            api_key=context.tool_provider.api_key,
-            org_id=str(context.tool_provider.organization_id),
-            org_model=org_model,
-            max_steps=10,
-            capability_registry=capability_registry,
-        )
+        effective_thread_id = thread_id or "default"
 
-        coordinator = ExecutionCoordinator(
-            plan_service=self.plan_service,
-            model_provider=self.model_provider,
-            plan_step_executor=plan_step_executor,
-            evaluate_after_steps=1,
-            max_replans=3,
-            org_model=org_model,
-            api_key=context.tool_provider.api_key,
-            organization_id=context.tool_provider.organization_id,
-            conversation_history=conversation_history,
-            capability_registry=capability_registry,
-        )
+        # Build initial state
+        initial_state = {
+            **DEFAULT_STATE,
+            "task": task,
+            "tools": tools,
+            "managed_agents": self._get_managed_agents_list(managed_agents),
+            "api_key": context.tool_provider.api_key,
+            "org_id": str(context.tool_provider.organization_id),
+            "org_model": org_model,
+            "organization_id": context.tool_provider.organization_id,
+            "conversation_history": conversation_history,
+            "capability_registry": capability_registry,
+            "stored_plan": stored_plan,
+        }
 
+        # Get or create graph (uses cached instance for thread_id)
+        graph = _get_or_create_graph(effective_thread_id)
+        config = {"configurable": {"thread_id": effective_thread_id}}
+
+        async for event in self._stream_graph_events(
+            graph=graph,
+            input_data=initial_state,
+            config=config,
+            context=context,
+            thread_id=effective_thread_id,
+        ):
+            yield event
+
+    async def _resume_graph(
+        self,
+        graph: Any,
+        config: Dict[str, Any],
+        response: str,
+        context: 'ExecutionContext',
+        tools: List[Any],
+        thread_id: str,
+    ) -> AsyncIterator[Any]:
+        """
+        Resume a paused graph with the user's response.
+
+        Called when the graph has a pending interrupt (approval, clarification, recovery).
+        Uses LangGraph's Command(resume=response) to continue execution.
+        """
+        logger.info(f"Resuming graph for thread {thread_id} with response: {response[:100]}")
+
+        # Set execution context for tool mode
+        if context.tool_provider:
+            context.tool_mode = ToolMode.EXECUTION
+            AgentExecutor.set_current_context(context)
+
+        # Resume with Command
+        resume_input: Any = Command(resume=response)
+
+        async for event in self._stream_graph_events(
+            graph=graph,
+            input_data=resume_input,
+            config=config,
+            context=context,
+            thread_id=thread_id,
+        ):
+            yield event
+
+    async def _stream_graph_events(
+        self,
+        graph: Any,
+        input_data: Any,
+        config: Dict[str, Any],
+        context: 'ExecutionContext',
+        thread_id: str,
+    ) -> AsyncIterator[Any]:
+        """
+        Stream events from graph execution (shared by initial invocation and resume).
+
+        Handles:
+        - Converting coordinator events to streaming format
+        - Detecting interrupts (approval, clarification) and yielding UI events
+        - Detecting completion and yielding final summary
+        """
         step_index = 0
         final_synthesis: Optional[str] = None
         execution_success = False
+        graph_paused = False
 
-        async for event in coordinator.execute(
-            task=task,
-            tools=tools,
-            managed_agents=managed_agents,
-            stored_plan=stored_plan,
-        ):
-            converted = convert_coordinator_event(event, step_index)
-            if converted:
-                yield converted
-                step_index += 1
+        try:
+            async for event_chunk in graph.astream(input_data, config=config):
+                for node_name, state_update in event_chunk.items():
+                    if node_name == "__end__":
+                        continue
 
-            if isinstance(event, FinalSynthesisEvent):
-                final_synthesis = event.synthesis
-            elif isinstance(event, ExecutionCompletedEvent):
-                execution_success = event.success
+                    # Extract events from node output
+                    node_events = state_update.get("events", [])
+                    for event in node_events:
+                        converted = convert_coordinator_event(event, step_index)
+                        if converted:
+                            yield converted
+                            step_index += 1
 
-        # Send final summary
-        if execution_success:
-            summary = final_synthesis or f"Plan executed successfully with {step_index} steps."
-            yield {
-                "type": "content_chunk",
-                "content": f"\n\n{summary}"
-            }
-        else:
-            yield {
-                "type": "content_chunk",
-                "content": "\n\nExecution completed with issues. Some steps may have failed."
-            }
+                        if isinstance(event, FinalSynthesisEvent):
+                            final_synthesis = event.synthesis
+                        elif isinstance(event, ExecutionCompletedEvent):
+                            execution_success = event.success
 
-    async def _handle_new_request(
-        self,
-        context: 'ExecutionContext',
-        tools: List[Any],
-        task: str,
-        org_model: Optional[str],
-        sm: Optional['CoordinatorStateMachine'],
-        managed_agents: Optional[List[Any]],
-        conversation_history: Optional[List[Any]],
-        capability_registry: Optional[Any] = None,
-    ) -> AsyncIterator[Any]:
-        """Handle new request - coordinator determines mode."""
-        logger.info("📋 Coordinator: Analyzing task to determine execution mode...")
+                        # Handle clarification — graph will pause at interrupt
+                        if isinstance(event, AwaitingClarificationEvent):
+                            yield {
+                                "type": "awaiting_input",
+                                "data": {
+                                    "input_type": "questions",
+                                    "title": "Clarification Needed",
+                                    "content": event.reasoning,
+                                    "questions": format_clarifying_questions(event.questions),
+                                    "options": [],
+                                    "plan_json": ""
+                                }
+                            }
+                            graph_paused = True
+                            return
 
-        managed_agents_list = self._get_managed_agents_list(managed_agents)
+                        # Handle plan created — graph will pause at interrupt for approval
+                        if isinstance(event, PlanCreatedEvent):
+                            yield create_awaiting_input_for_plan(event.plan)
+                            graph_paused = True
+                            return
 
-        if context.tool_provider is None:
-            logger.error("❌ ToolProvider not set on context - cannot create coordinator")
+        except Exception as e:
+            logger.error(f"LangGraph execution failed: {e}", exc_info=True)
             yield create_error_response(
-                "CONFIGURATION_ERROR",
-                "Tool provider not configured. Please try again.",
+                "GRAPH_EXECUTION_FAILED",
+                f"Graph execution failed: {e}",
             )
+            _clear_graph(thread_id)
             return
 
-        plan_step_executor = PlanStepExecutor(
-            api_key=context.tool_provider.api_key,
-            org_id=str(context.tool_provider.organization_id),
-            org_model=org_model,
-            max_steps=10,
-            capability_registry=capability_registry,
-        )
-
-        coordinator = ExecutionCoordinator(
-            plan_service=self.plan_service,
-            model_provider=self.model_provider,
-            plan_step_executor=plan_step_executor,
-            evaluate_after_steps=1,
-            max_replans=3,
-            org_model=org_model,
-            api_key=context.tool_provider.api_key,
-            organization_id=context.tool_provider.organization_id,
-            conversation_history=conversation_history,
-            capability_registry=capability_registry,
-        )
-
-        plan: Optional[Plan] = None
-        async for event in coordinator.execute(
-            task=task,
-            tools=tools,
-            managed_agents=managed_agents,
-        ):
-            if isinstance(event, AwaitingClarificationEvent):
-                logger.info(f"📋 Coordinator: Task needs clarification - {len(event.questions)} questions")
-
+        # Graph completed (not paused) — send final summary and clean up
+        if not graph_paused:
+            if execution_success:
+                summary = final_synthesis or f"Plan executed successfully with {step_index} steps."
                 yield {
-                    "type": "awaiting_input",
-                    "data": {
-                        "input_type": "questions",
-                        "title": "Clarification Needed",
-                        "content": event.reasoning,
-                        "questions": format_clarifying_questions(event.questions),
-                        "options": [],
-                        "plan_json": ""
-                    }
+                    "type": "content_chunk",
+                    "content": f"\n\n{summary}"
                 }
+            elif step_index > 0:
+                yield {
+                    "type": "content_chunk",
+                    "content": "\n\nExecution completed with issues. Some steps may have failed."
+                }
+            else:
+                # No steps executed — direct execution fallback
+                async for event in self._handle_direct_execution(
+                    context=context,
+                    task="",  # Task already processed by graph
+                    org_model=None,
+                ):
+                    yield event
 
-                if sm:
-                    sm.on_clarification_needed(task)
-                return
-
-            elif isinstance(event, PlanCreatedEvent):
-                plan = event.plan
-                logger.info(f"📋 Coordinator: PLAN_AND_APPROVE mode - plan {plan.id} with {len(plan.steps)} steps")
-
-            elif isinstance(event, ErrorEvent):
-                logger.error(f"📋 Coordinator: Plan generation error - {event.error}")
-                yield create_error_response(
-                    "PLAN_GENERATION_FAILED",
-                    event.error,
-                )
-                if sm:
-                    sm.on_error(event.error)
-                return
-
-        if plan and sm:
-            sm.on_plan_created(coordinator, plan, task)
-            yield create_awaiting_input_for_plan(plan)
-        elif plan is None:
-            # Direct execution without plan - use DSPy ExecutorModule
-            logger.info("📋 Coordinator: No plan needed, executing directly with DSPy")
-            async for event in self._handle_direct_execution(
-                context=context,
-                task=task,
-                org_model=org_model,
-            ):
-                yield event
+            _clear_graph(thread_id)
 
     async def _handle_direct_execution(
         self,
@@ -339,7 +353,7 @@ class CoordinatorStreamingHandler:
         """
         assert context.tool_provider is not None, "tool_provider required for direct execution"
 
-        logger.info("🚀 Direct execution: Starting DSPy ReAct execution...")
+        logger.info("Direct execution: Starting DSPy ReAct execution...")
 
         # Create DSPy tools with auth
         tools = create_all_tools(
@@ -380,7 +394,7 @@ class CoordinatorStreamingHandler:
             # Check for clarification questions
             if question_collector.has_questions():
                 questions = question_collector.get_questions()
-                logger.info(f"❓ Direct execution needs clarification: {len(questions)} question(s)")
+                logger.info(f"Direct execution needs clarification: {len(questions)} question(s)")
                 yield {
                     "type": "awaiting_input",
                     "data": {
@@ -394,7 +408,7 @@ class CoordinatorStreamingHandler:
                 }
                 return
 
-            logger.info(f"✅ Direct execution completed: {len(result_str)} chars")
+            logger.info(f"Direct execution completed: {len(result_str)} chars")
 
             # Yield result as content chunks
             yield {
@@ -411,97 +425,11 @@ class CoordinatorStreamingHandler:
             }
 
         except Exception as e:
-            logger.error(f"❌ Direct execution failed: {e}", exc_info=True)
+            logger.error(f"Direct execution failed: {e}", exc_info=True)
             yield create_error_response(
                 "DIRECT_EXECUTION_FAILED",
                 f"Failed to execute task: {e}",
             )
-
-    async def _handle_approval_response(
-        self,
-        context: 'ExecutionContext',
-        tools: List[Any],
-        task: str,
-        sm: 'CoordinatorStateMachine',
-    ) -> AsyncIterator[Any]:
-        """Handle approval response for pending plan."""
-        if is_approval_response(task):
-            context.tool_mode = ToolMode.EXECUTION
-            AgentExecutor.set_current_context(context)
-            logger.info("✅ Coordinator: User approved, starting execution phase")
-
-            coordinator_from_session = sm.context.coordinator
-            plan_from_session = sm.context.plan
-
-            if not coordinator_from_session or not plan_from_session:
-                logger.error("📋 Coordinator: No coordinator/plan found in state machine")
-                yield create_error_response(
-                    "SESSION_STATE_ERROR",
-                    "Session state lost. Please start over.",
-                )
-                sm.on_error("Session state lost")
-                return
-
-            sm.on_execution_started()
-
-            try:
-                await coordinator_from_session.approve_plan(plan_from_session.id)
-            except Exception as e:
-                logger.error(f"📋 Coordinator: Plan approval failed: {e}")
-                sm.on_error(f"Plan approval failed: {e}")
-                yield create_error_response(
-                    "PLAN_APPROVAL_FAILED",
-                    f"Failed to approve plan: {e}",
-                )
-                return
-
-            # === PHASE 2: EXECUTION ===
-            step_index = 0
-            final_synthesis: Optional[str] = None
-            execution_success = False
-
-            async for event in coordinator_from_session.execute_plan(plan_from_session.id, tools):
-                converted = convert_coordinator_event(event, step_index)
-                if converted:
-                    yield converted
-                    step_index += 1
-
-                # Check if execution paused for clarification - return early
-                if isinstance(event, AwaitingClarificationEvent):
-                    logger.info(f"📋 Execution paused for clarification: {len(event.questions)} question(s)")
-                    return  # Don't show completion message - UI shows clarification questions
-
-                if isinstance(event, FinalSynthesisEvent):
-                    final_synthesis = event.synthesis
-                elif isinstance(event, ExecutionCompletedEvent):
-                    execution_success = event.success
-
-            if execution_success:
-                summary = final_synthesis or f"Plan executed successfully with {step_index} steps."
-                yield {
-                    "type": "content_chunk",
-                    "content": f"\n\n✅ **Execution Complete**\n\n{summary}"
-                }
-            else:
-                yield {
-                    "type": "content_chunk",
-                    "content": "\n\n⚠️ **Execution completed with issues.** Some steps may have failed."
-                }
-
-            sm.on_execution_complete()
-            logger.info("✅ Coordinator: Execution complete, state cleared")
-
-        else:
-            # Feedback (not approval) - clear state and process with DSPy
-            logger.info("📝 Coordinator: Feedback received (not approval), processing with DSPy direct execution")
-            sm.context.clear()
-            async for event in self._handle_direct_execution(
-                context=context,
-                task=task,
-                org_model=None,  # Use default model
-            ):
-                yield event
-            return
 
     def _get_managed_agents_list(self, managed_agents: Optional[List[Any]]) -> List[Any]:
         """Convert managed_agents to list format."""
@@ -510,114 +438,3 @@ class CoordinatorStreamingHandler:
                 return list(managed_agents.values())
             return list(managed_agents)
         return []
-
-    # ============================================================
-    # LangGraph-based execution (new)
-    # ============================================================
-
-    async def stream_with_graph(
-        self,
-        context: 'ExecutionContext',
-        tools: List[Any],
-        task: str,
-        org_model: Optional[str],
-        managed_agents: Optional[List[Any]] = None,
-        stored_plan: Optional[Plan] = None,
-        conversation_history: Optional[List[Any]] = None,
-        capability_registry: Optional[Any] = None,
-        thread_id: Optional[str] = None,
-    ) -> AsyncIterator[Any]:
-        """
-        LangGraph-based execution path.
-
-        Drop-in replacement for stream_response() using the plan-execute graph.
-        Uses LangGraph's built-in interrupt for human-in-the-loop.
-        """
-        assert context.tool_provider is not None, "tool_provider required"
-
-        # Build initial state
-        initial_state = {
-            **DEFAULT_STATE,
-            "task": task,
-            "tools": tools,
-            "managed_agents": self._get_managed_agents_list(managed_agents),
-            "api_key": context.tool_provider.api_key,
-            "org_id": str(context.tool_provider.organization_id),
-            "org_model": org_model,
-            "organization_id": context.tool_provider.organization_id,
-            "conversation_history": conversation_history,
-            "capability_registry": capability_registry,
-            "stored_plan": stored_plan,
-        }
-
-        # Create graph
-        graph = create_plan_execute_graph()
-
-        # Config for thread-based checkpointing
-        config = {"configurable": {"thread_id": thread_id or "default"}}
-
-        step_index = 0
-        final_synthesis: Optional[str] = None
-        execution_success = False
-
-        try:
-            # Stream events from graph execution
-            async for event_chunk in graph.astream(initial_state, config=config):
-                # Each chunk is a dict of {node_name: state_update}
-                for node_name, state_update in event_chunk.items():
-                    if node_name == "__end__":
-                        continue
-
-                    # Extract events from node output
-                    node_events = state_update.get("events", [])
-                    for event in node_events:
-                        converted = convert_coordinator_event(event, step_index)
-                        if converted:
-                            yield converted
-                            step_index += 1
-
-                        if isinstance(event, FinalSynthesisEvent):
-                            final_synthesis = event.synthesis
-                        elif isinstance(event, ExecutionCompletedEvent):
-                            execution_success = event.success
-
-                        # Handle clarification events
-                        if isinstance(event, AwaitingClarificationEvent):
-                            yield {
-                                "type": "awaiting_input",
-                                "data": {
-                                    "input_type": "questions",
-                                    "title": "Clarification Needed",
-                                    "content": event.reasoning,
-                                    "questions": format_clarifying_questions(event.questions),
-                                    "options": [],
-                                    "plan_json": ""
-                                }
-                            }
-                            return
-
-                        # Handle plan created (for approval UI)
-                        if isinstance(event, PlanCreatedEvent):
-                            yield create_awaiting_input_for_plan(event.plan)
-                            return
-
-        except Exception as e:
-            logger.error(f"LangGraph execution failed: {e}", exc_info=True)
-            yield create_error_response(
-                "GRAPH_EXECUTION_FAILED",
-                f"Graph execution failed: {e}",
-            )
-            return
-
-        # Send final summary
-        if execution_success:
-            summary = final_synthesis or f"Plan executed successfully with {step_index} steps."
-            yield {
-                "type": "content_chunk",
-                "content": f"\n\n{summary}"
-            }
-        else:
-            yield {
-                "type": "content_chunk",
-                "content": "\n\nExecution completed with issues. Some steps may have failed."
-            }

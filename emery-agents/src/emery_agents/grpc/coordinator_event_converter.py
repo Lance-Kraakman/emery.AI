@@ -11,7 +11,7 @@ from typing import Any, Optional, Union
 
 logger = logging.getLogger(__name__)
 
-from ..services.execution_coordinator import (
+from ..services.execution.events import (
     StepStartedEvent,
     StepCompletedEvent,
     StepFailedEvent,
@@ -25,14 +25,11 @@ from ..services.execution_coordinator import (
     AutoFixStartedEvent,
     AutoFixCompletedEvent,
     RecoveryPlanProposedEvent,
-    # Unified message handling events (Step 1 additions)
     PlanRejectedEvent,
     PlanFeedbackEvent,
     ErrorEvent,
-    # Phase execution events
     PhaseStartedEvent,
     PhaseCompletedEvent,
-    # Planning events
     PlanningStartedEvent,
     PlanCreatedEvent,
     PlanApprovedEvent,

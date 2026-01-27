@@ -49,9 +49,7 @@ from ...entities.output_mapping import (
 )
 from ...entities.task import SkillOutputValue
 from ..data import OutputMappingService, MappingContext
-from ..execution_coordinator import (
-    ExecutionCoordinator,
-    ExecutionCoordinatorFactory,
+from ..execution.events import (
     PlanCreatedEvent,
     PlanApprovedEvent,
     StepStartedEvent,
@@ -62,7 +60,11 @@ from ..execution_coordinator import (
     GoalAchievedEvent,
     ReplanTriggeredEvent,
     ExecutionBlockedEvent,
+    FinalSynthesisEvent,
 )
+from ...orchestrators.nodes.planning import generate_plan_node
+from ...orchestrators import create_plan_execute_graph
+from ...orchestrators.state import DEFAULT_STATE
 logger = logging.getLogger(__name__)
 
 
@@ -771,84 +773,102 @@ class AgentExecutor:
         context: ExecutionContext,
         start_time: float
     ) -> AsyncIterator[Dict[str, Any]]:
-        """Execute task using ExecutionCoordinator for two-phase execution (plan → approve → execute)."""
+        """Execute task using LangGraph plan-execute graph (plan → auto-approve → execute)."""
         skill = context.skill
         skill_name = skill.name if skill else "coordinator"
 
-        logger.info(f"🎯 Using ExecutionCoordinator for two-phase execution: {skill_name}")
+        logger.info(f"Using LangGraph plan-execute graph: {skill_name}")
 
         # Load all tools
         tools = []
         if skill and skill.tools:
             try:
                 tools = self.tool_loader.load_tools(list(skill.tools))
-                logger.info(f"Loaded {len(tools)} tools for coordinator")
+                logger.info(f"Loaded {len(tools)} tools for graph execution")
             except Exception as e:
                 logger.warning(f"Failed to load some tools: {e}")
-
-        # Create coordinator
-        coordinator = ExecutionCoordinator(
-            evaluate_after_steps=1,
-            max_replans=3,
-            org_model=context.org_model,
-        )
 
         yield {
             "status": "in_progress",
             "output": json.dumps({
                 "skill": skill_name,
-                "execution_type": "coordinator",
-                "message": "Starting two-phase execution (planning → approval → execution)"
+                "execution_type": "langgraph",
+                "message": "Starting plan-execute graph (planning → auto-approve → execution)"
             }),
             "error_message": "",
             "timestamp_ms": int(time.time() * 1000),
             "progress_percent": 15.0
         }
 
-        # Determine goal and instructions
-        goal = context.task[:200] if context.task else "Execute task"
-        instructions = context.task
+        instructions = context.task or "Execute task"
 
-        # Phase 1: Create plan
-        plan_id = None
-        async for event in coordinator.create_plan(
-            goal=goal,
-            instructions=instructions,
-            tools=tools,
-            context_tables=context.resolved_context,
-        ):
+        # Phase 1: Generate plan using generate_plan_node directly
+        plan_state = {
+            "task": instructions,
+            "tools": tools,
+            "managed_agents": [],
+            "org_model": context.org_model,
+            "api_key": getattr(context, "api_key", ""),
+            "org_id": getattr(context, "org_id", ""),
+        }
+
+        result = await generate_plan_node(plan_state)
+
+        plan = result.get("plan")
+        for event in result.get("events", []):
             progress = self._coordinator_event_to_progress(event, skill_name, start_time)
             yield progress
 
-            if isinstance(event, PlanCreatedEvent):
-                plan_id = event.plan_id
-
-        if not plan_id:
+        if not plan:
             yield {
                 "status": "failed",
                 "output": json.dumps({"error": "Plan creation failed"}),
-                "error_message": "Plan creation failed",
+                "error_message": result.get("error", "Plan creation failed"),
                 "timestamp_ms": int(time.time() * 1000),
                 "progress_percent": 0.0
             }
             return
 
-        # Phase 2: Auto-approve for now (HITL approval would be external)
-        # In production, this would wait for external approval signal
+        # Phase 2: Auto-approve and execute via graph with stored_plan (autonomous mode)
+        approved_plan = plan.approve().start_execution()
+
+        yield {
+            "status": "in_progress",
+            "output": json.dumps({
+                "skill": skill_name,
+                "plan_id": plan.id,
+                "message": "Plan auto-approved, starting execution"
+            }),
+            "error_message": "",
+            "timestamp_ms": int(time.time() * 1000),
+            "progress_percent": 40.0
+        }
+
+        # Phase 3: Execute plan via LangGraph
+        graph = create_plan_execute_graph()
+        config = {"configurable": {"thread_id": f"executor-{plan.id}"}}
+
+        initial_state = {
+            **DEFAULT_STATE,
+            "task": instructions,
+            "tools": tools,
+            "managed_agents": [],
+            "org_model": context.org_model,
+            "api_key": getattr(context, "api_key", ""),
+            "org_id": getattr(context, "org_id", ""),
+            "stored_plan": approved_plan,
+        }
+
         try:
-            await coordinator.approve_plan(plan_id)
-            yield {
-                "status": "in_progress",
-                "output": json.dumps({
-                    "skill": skill_name,
-                    "plan_id": plan_id,
-                    "message": "Plan approved, starting execution"
-                }),
-                "error_message": "",
-                "timestamp_ms": int(time.time() * 1000),
-                "progress_percent": 40.0
-            }
-        except ValueError as e:
+            async for event_chunk in graph.astream(initial_state, config=config):
+                for node_name, state_update in event_chunk.items():
+                    if node_name == "__end__":
+                        continue
+                    for event in state_update.get("events", []):
+                        progress = self._coordinator_event_to_progress(event, skill_name, start_time)
+                        yield progress
+        except Exception as e:
+            logger.error(f"Graph execution failed: {e}", exc_info=True)
             yield {
                 "status": "failed",
                 "output": json.dumps({"error": str(e)}),
@@ -856,12 +876,6 @@ class AgentExecutor:
                 "timestamp_ms": int(time.time() * 1000),
                 "progress_percent": 0.0
             }
-            return
-
-        # Phase 3: Execute plan
-        async for event in coordinator.execute_plan(plan_id, tools):
-            progress = self._coordinator_event_to_progress(event, skill_name, start_time)
-            yield progress
 
     def _coordinator_event_to_progress(
         self,
@@ -995,6 +1009,20 @@ class AgentExecutor:
                 "error_message": event.reason,
                 "timestamp_ms": timestamp_ms,
                 "progress_percent": 0.0
+            }
+
+        elif isinstance(event, FinalSynthesisEvent):
+            return {
+                "status": "in_progress",
+                "output": json.dumps({
+                    "skill": skill_name,
+                    "plan_id": event.plan_id,
+                    "synthesis": event.synthesis,
+                    "message": f"Final synthesis: {event.synthesis[:200]}"
+                }),
+                "error_message": "",
+                "timestamp_ms": timestamp_ms,
+                "progress_percent": 95.0
             }
 
         elif isinstance(event, ExecutionCompletedEvent):

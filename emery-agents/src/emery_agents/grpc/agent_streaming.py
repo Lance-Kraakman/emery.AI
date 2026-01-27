@@ -379,33 +379,22 @@ class AgentStreamingHandler:
         step_index = 0
         final_answer_text = ""
 
-        # Check coordinator phase
+        # Check for managed agent HITL state (state machine only used for managed agent HITL now)
+        # Coordinator routing is handled by LangGraph graph interrupt/resume in stream_response()
         sm = self.session_manager.get_or_create_state_machine(session_id) if session_id else None
         skip_coordinator = False
 
-        # Handle non-IDLE phases via state machine
-        if sm and sm.phase != Phase.IDLE:
-            original_phase = sm.phase
-
-            if sm.phase == Phase.AWAITING_CLARIFICATION:
-                input_type = "clarification"
-                logger.info("📋 Processing clarification response via state machine")
-            elif sm.phase == Phase.AWAITING_QUESTIONS:
-                input_type = "approval" if is_approval_response(current_task) else "feedback"
-                logger.info(f"📋 Processing managed agent HITL response: {input_type}")
-            else:
-                input_type = "task"
-
+        if sm and sm.phase == Phase.AWAITING_QUESTIONS:
+            # Managed agent HITL response — skip coordinator and fall through to agent.run()
+            input_type = "approval" if is_approval_response(current_task) else "feedback"
+            logger.info(f"Processing managed agent HITL response: {input_type}")
             action = sm.handle_input(input_type, current_task)
 
-            if original_phase == Phase.AWAITING_QUESTIONS and action.action_type == ActionType.FALL_THROUGH:
+            if action.action_type == ActionType.FALL_THROUGH:
                 skip_coordinator = True
                 if action.combined_task:
                     current_task = action.combined_task
-                logger.info("📋 HITL response, skipping coordinator - will resume managed agent")
-            elif action.combined_task:
-                current_task = action.combined_task
-                logger.info("📋 State machine combined task for replan")
+                logger.info("HITL response, skipping coordinator - will resume managed agent")
 
         # Create Plan for tracking
         current_plan: Plan | None = None
@@ -477,7 +466,6 @@ class AgentStreamingHandler:
                 task=current_task,
                 session_id=session_id,
                 org_model=org_model,
-                sm=sm,
                 managed_agents=managed_agents,
                 stored_plan=stored_plan,
                 conversation_history=conversation_history,
@@ -485,8 +473,6 @@ class AgentStreamingHandler:
             ):
                 if isinstance(event, dict):
                     yield event  # type: ignore[misc]  # Coordinator returns compatible dicts
-                elif event == "FALL_THROUGH":
-                    should_fall_through = True
 
         if not should_fall_through:
             return

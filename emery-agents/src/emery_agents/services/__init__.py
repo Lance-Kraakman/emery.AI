@@ -35,9 +35,9 @@ from .agents import AgentExecutor, AgentAPIService, AgentData, SkillData
 
 # Root-level services
 from .plan_service import PlanService, PlanServiceFactory
-from .execution_coordinator import (
-    ExecutionCoordinator,
-    ExecutionCoordinatorFactory,
+
+# Events (from execution events module — canonical source)
+from .execution.events import (
     PlanCreatedEvent,
     PlanApprovedEvent,
     StepStartedEvent,
@@ -53,10 +53,13 @@ from .execution_coordinator import (
     PhaseCompletedEvent,
 )
 
+# NOTE: ExecutionCoordinator has been replaced by LangGraph orchestrators.
+# All callers now use create_plan_execute_graph() or generate_plan_node() directly.
+
 from ..entities.models.task_ledger import TaskLedger, create_ledger_from_plan
 
-# Orchestrators (LangGraph-based)
-from ..orchestrators import create_plan_execute_graph
+# Orchestrators (LangGraph-based — primary orchestration path)
+from ..orchestrators import create_plan_execute_graph, create_plan_only_graph
 
 __all__ = [
     "ModelProvider",
@@ -68,8 +71,6 @@ __all__ = [
     "ContextSyncServiceFactory",
     "PlanService",
     "PlanServiceFactory",
-    "ExecutionCoordinator",
-    "ExecutionCoordinatorFactory",
     "PlanCreatedEvent",
     "PlanApprovedEvent",
     "StepStartedEvent",
@@ -94,4 +95,5 @@ __all__ = [
     "CapabilityRegistry",
     # Orchestrators
     "create_plan_execute_graph",
+    "create_plan_only_graph",
 ]

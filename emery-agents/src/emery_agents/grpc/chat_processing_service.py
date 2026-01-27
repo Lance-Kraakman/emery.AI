@@ -6,7 +6,7 @@ import os
 import time
 import asyncio
 from pathlib import Path
-from typing import AsyncIterator, Optional, List, Dict, Any, Tuple
+from typing import AsyncIterator, Optional, List, Dict, Any, Tuple, cast
 
 import grpc
 
@@ -21,7 +21,9 @@ from ..services.agents.factory import AgentFactory
 from ..services.analysis.token_usage import TokenUsageExtractor
 from ..services.skills.executor import SkillExecutorService
 from ..services.plan_service import PlanService
-from ..services.execution_coordinator import ExecutionCoordinator, PlanCreatedEvent, AwaitingClarificationEvent
+from ..services.execution.events import PlanCreatedEvent, AwaitingClarificationEvent
+from ..orchestrators.nodes.planning import generate_plan_node
+from ..orchestrators.state import PlanExecuteState
 from ..services.tools.provider import ToolProvider
 from ..entities.models.plan import Plan, SkillInputDefinition, SkillOutputDefinition
 from .message_processor import extract_file_attachments
@@ -441,25 +443,27 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
             yield _make_progress("Analyzing instructions...", "analyzing")
 
-            coordinator = ExecutionCoordinator(
-                plan_service=self.plan_service,
-                model_provider=self.model_provider,
-                org_model=request.model or None,
-                api_key=tool_provider.api_key,
-                organization_id=tool_provider.organization_id,
-                capability_registry=capability_registry,
-            )
-
             yield _make_progress("Creating plan...", "planning")
 
-            async for event in coordinator.create_plan_only(
-                task=task_instructions,
-                tools=[],
-                managed_agents=managed_agents,
-                is_template_generation=True,
-            ):
+            # Call generate_plan_node directly (no graph needed for plan-only)
+            plan_state = {
+                "task": task_instructions,
+                "tools": [],
+                "managed_agents": managed_agents,
+                "api_key": tool_provider.api_key,
+                "org_id": str(tool_provider.organization_id),
+                "org_model": request.model or None,
+                "organization_id": tool_provider.organization_id,
+                "capability_registry": capability_registry,
+            }
+
+            result = await generate_plan_node(cast(PlanExecuteState, plan_state))
+
+            # Check for clarification
+            result_events = result.get("events", [])
+            for event in result_events:
                 if isinstance(event, AwaitingClarificationEvent):
-                    logger.info(f"📋 GeneratePlan: Needs clarification - {len(event.questions)} questions")
+                    logger.info(f"GeneratePlan: Needs clarification - {len(event.questions)} questions")
 
                     await self.session_manager.store_plan_session(session_id, {
                         "instructions": request.instructions,
@@ -472,7 +476,6 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                         "user_feedback": user_feedback,
                     })
 
-                    # Serialize questions as JSON in content (protobuf doesn't have questions field)
                     questions_json = json.dumps(format_clarifying_questions(event.questions))
 
                     yield agent_worker_pb2.GeneratePlanResponse(
@@ -490,10 +493,10 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 elif isinstance(event, PlanCreatedEvent):
                     plan = event.plan
                     planning_time_ms = int((time.time() - start_time) * 1000)
-                    logger.info(f"📋 GeneratePlan: Created plan {plan.id} with {len(plan.steps)} steps in {planning_time_ms}ms")
+                    logger.info(f"GeneratePlan: Created plan {plan.id} with {len(plan.steps)} steps in {planning_time_ms}ms")
 
                     if not plan.steps:
-                        logger.error(f"📋 GeneratePlan: Plan has no steps - generation failed")
+                        logger.error("GeneratePlan: Plan has no steps - generation failed")
                         yield _make_error(
                             "PLAN_GENERATION_FAILED",
                             "Plan generation failed - no steps were created. Check that the model can access database context."
@@ -501,6 +504,10 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                         return
 
                     yield self._make_plan_complete_response(plan, planning_time_ms)
+
+            # Check for error
+            if result.get("error"):
+                yield _make_error("PLAN_GENERATION_FAILED", result["error"])
 
         except asyncio.TimeoutError:
             logger.error(f"📋 GeneratePlan: Timed out after {request.timeout_seconds}s")
