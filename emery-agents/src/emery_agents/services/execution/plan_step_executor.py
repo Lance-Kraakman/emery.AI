@@ -29,10 +29,7 @@ from ...ace import StepResult
 from ...reasoning.config import get_dspy_lm
 from ...reasoning.modules.executor import ExecutorModule, SimpleExecutorModule
 from ...reasoning.tools import (
-    ClarificationRequestedException,
-    QuestionCollector,
     create_all_tools,
-    create_ask_question_tool,
 )
 from ...entities.models.plan import Plan, PlanStep, PlanStepStatus
 from ..tools import CapabilityRegistry
@@ -148,12 +145,11 @@ class PlanStepExecutor:
         # Create DSPy tools with auth captured
         self._crud_tools = create_all_tools(api_key=api_key, org_id=org_id)
 
-        # Question collector for clarification handling
-        self._question_collector = QuestionCollector()
-        self._ask_question_tool = create_ask_question_tool(self._question_collector)
-
-        # All tools including ask_question
-        self._all_tools = [self._ask_question_tool] + self._crud_tools
+        # Step execution tools — NO ask_question tool.
+        # Step execution should be deterministic: complete or fail.
+        # Failures trigger recovery/replanning, not user clarification.
+        # ask_question is only for planning phase and direct (no-plan) execution.
+        self._all_tools = list(self._crud_tools)
 
         # Track results from previous steps for prompt template resolution and ACE curation
         self._step_results: dict[str, StepResult] = {}
@@ -333,9 +329,6 @@ class PlanStepExecutor:
             )
 
         try:
-            # Reset the question collector for this step
-            self._question_collector.reset()
-
             # Get DSPy LM for execution
             lm = get_dspy_lm(org_model=self.org_model)
 
@@ -357,31 +350,10 @@ class PlanStepExecutor:
 
             result_str = str(result)
 
-            # Check if questions were collected (fallback check)
-            if self._question_collector.has_questions():
-                questions = self._question_collector.get_questions()
-                logger.info(
-                    f"❓ Step asked {len(questions)} clarifying question(s) instead of completing"
-                )
-                return json.dumps({
-                    "__needs_clarification__": True,
-                    "questions": questions,
-                    "partial_result": result_str,
-                })
-
-            logger.info("✅ PlanStepExecutor: Step completed")
-            logger.debug(f"🔧 PlanStepExecutor: Result preview: {result_str[:200]}...")
+            logger.info("PlanStepExecutor: Step completed")
+            logger.debug(f"PlanStepExecutor: Result preview: {result_str[:200]}...")
 
             return result_str
-
-        except ClarificationRequestedException as e:
-            # Agent asked clarifying questions - return them to caller
-            logger.info(f"❓ Step interrupted for clarification: {len(e.questions)} question(s)")
-            return json.dumps({
-                "__needs_clarification__": True,
-                "questions": e.questions,
-                "partial_result": "",
-            })
 
         except Exception as e:
             error_msg = f"Step execution error: {str(e)}"
@@ -445,9 +417,6 @@ class PlanStepExecutor:
             )
 
         try:
-            # Reset the question collector for this step
-            self._question_collector.reset()
-
             # Get DSPy LM for execution
             lm = get_dspy_lm(org_model=self.org_model)
 
@@ -466,32 +435,14 @@ class PlanStepExecutor:
 
             result_str = str(result)
 
-            # Check if questions were collected
-            if self._question_collector.has_questions():
-                questions = self._question_collector.get_questions()
-                logger.info(f"❓ Direct step asked {len(questions)} clarifying question(s)")
-                return json.dumps({
-                    "__needs_clarification__": True,
-                    "questions": questions,
-                    "partial_result": result_str,
-                })
-
-            logger.info("✅ Direct execution completed")
-            logger.debug(f"🔧 Direct execution result preview: {result_str[:200]}...")
+            logger.info("Direct execution completed")
+            logger.debug(f"Direct execution result preview: {result_str[:200]}...")
 
             return result_str
 
-        except ClarificationRequestedException as e:
-            logger.info(f"❓ Direct step interrupted for clarification: {len(e.questions)} question(s)")
-            return json.dumps({
-                "__needs_clarification__": True,
-                "questions": e.questions,
-                "partial_result": "",
-            })
-
         except Exception as e:
             error_msg = f"Direct execution error: {str(e)}"
-            logger.error(f"❌ Direct execution failed: {error_msg}", exc_info=True)
+            logger.error(f"Direct execution failed: {error_msg}", exc_info=True)
             raise
 
     def _build_context(

@@ -9,7 +9,6 @@ Handles:
 - Phase tracking with PhaseStartedEvent/PhaseCompletedEvent
 """
 
-import json
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -21,7 +20,6 @@ from ...services.execution.events import (
     StepStartedEvent,
     StepCompletedEvent,
     StepFailedEvent,
-    AwaitingClarificationEvent,
     PhaseStartedEvent,
     PhaseCompletedEvent,
 )
@@ -161,29 +159,6 @@ async def execute_step_node(state: PlanExecuteState, runtime: RuntimeContext) ->
             tools=tools,
             managed_agents=managed_agents,
         )
-
-        # Check if step needs clarification
-        if result and "__needs_clarification__" in result:
-            try:
-                clarification_data = json.loads(result)
-                if clarification_data.get("__needs_clarification__"):
-                    questions = clarification_data.get("questions", [])
-                    logger.info(f"Step {step.step_id} needs clarification: {len(questions)} question(s)")
-
-                    events.append(AwaitingClarificationEvent.from_dict_list(
-                        questions=questions,
-                        reasoning=f"Step '{step.description}' needs more information",
-                    ))
-                    return {
-                        "plan": plan,
-                        "awaiting_input": "clarification",
-                        "clarifying_questions": questions,
-                        "current_phase_name": new_phase_name,
-                        "phase_step_results": phase_step_results,
-                        "events": events,
-                    }
-            except json.JSONDecodeError:
-                pass  # Not JSON, treat as normal result
 
         # Mark step as completed
         plan = await plan_service.update_step_status(

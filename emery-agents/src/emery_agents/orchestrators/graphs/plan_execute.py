@@ -98,11 +98,6 @@ def route_after_step(state: PlanExecuteState) -> str:
     if error:
         return "step_failed"
 
-    # Check for clarification needed
-    awaiting = state.get("awaiting_input")
-    if awaiting == "clarification":
-        return "needs_clarification"
-
     # Check if we should evaluate
     steps_since_eval = state.get("steps_since_eval", 0)
     evaluate_after = state.get("evaluate_after_steps", 1)
@@ -267,7 +262,6 @@ def create_session_graph(
         "evaluate": "evaluate",
         "continue": "execute_step",
         "step_failed": "handle_failure",
-        "needs_clarification": "await_approval",
     })
 
     # === Evaluation ===
