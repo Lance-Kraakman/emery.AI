@@ -427,6 +427,13 @@ async def _do_replan(
 
     logger.info(f"Replan complete ({replan_count}): {new_pending_count} pending steps")
 
+    if new_pending_count == 0:
+        # Differ couldn't generate new steps — finish with what we have
+        # instead of looping back to execute_step with nothing to execute
+        logger.info("Replan produced no new steps, finishing")
+        evaluation = await _evaluate_progress(updated_plan, org_model, events)
+        return await _finish(updated_plan, state, org_model, evaluation, events)
+
     return {
         "plan": updated_plan,
         "replan_count": replan_count,
