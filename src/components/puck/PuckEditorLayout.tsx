@@ -317,7 +317,6 @@ function PuckEditorLayoutInner({
 
             {/* Blocks Tab */}
             <TabsContent value="blocks" className="flex-1 overflow-auto m-0 p-2">
-              <DataFieldsPanel />
               <Puck.Components />
             </TabsContent>
 
@@ -364,6 +363,7 @@ function PuckEditorLayoutInner({
                   </div>
                 </>
               )}
+              <DataFieldsPanel />
               <Puck.Fields />
             </TabsContent>
 

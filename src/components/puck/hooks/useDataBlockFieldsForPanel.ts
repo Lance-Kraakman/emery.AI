@@ -5,12 +5,18 @@
  * Detects when the user is editing a DataBlock (either selected directly or
  * editing inside its slot) and returns the available fields + insertion helpers.
  *
- * Uses Puck's selector-based usePuck for minimal re-renders:
- * - Only re-renders when selectedItem type or zone changes
+ * Detection paths:
+ * 1. DataBlock directly selected → read _fields from its props via getItemById
+ * 2. Inside a DataBlock slot → reuse useDataBlockContextForSelection
+ *    (which traverses the full component tree for deep nesting)
+ *
+ * Follows the same proven reactive pattern as useDataBlockContextForSelection:
+ * subscribe to primitive selectors only, read everything else on-demand via getPuck().
  */
 
 import { useMemo, useCallback } from 'react';
 import { createUsePuck, useGetPuck } from '@measured/puck';
+import { useDataBlockContextForSelection } from './useDataBlockContextForSelection';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
 import type { FieldType } from '@/ddd/domain/tables/value-objects/table-field';
 
@@ -42,105 +48,90 @@ export interface DataBlockFieldsPanelState {
   isActive: boolean;
   /** Available fields from the DataBlock's view */
   fields: FieldDTO[];
+  /** The DataBlock component ID to insert into */
+  dataBlockId: string | undefined;
   /** Insert a field component into the DataBlock's children slot */
   insertField: (field: FieldDTO) => void;
 }
 
-/**
- * Find the ID of the DataBlock that the current selection belongs to.
- * Handles both direct DataBlock selection and selection inside its slot.
- */
-function findDataBlockId(
-  selectedType: string | undefined,
-  selectedId: string | undefined,
-  zone: string | undefined,
-  getItemById: (id: string) => { type: string; props: Record<string, unknown> } | undefined,
-): string | undefined {
-  // Case 1: DataBlock itself is selected
-  if (selectedType === 'DataBlock' && selectedId) {
-    return selectedId;
-  }
-
-  // Case 2: Something inside a DataBlock's slot is selected
-  if (zone) {
-    const parentId = zone.split(':')[0];
-    const parent = getItemById(parentId);
-    if (parent?.type === 'DataBlock') {
-      return parentId;
-    }
-  }
-
-  return undefined;
-}
-
-/**
- * Get field metadata from a DataBlock component's resolved props.
- */
-function getFieldsFromDataBlock(
-  dataBlockId: string,
-  getItemById: (id: string) => { type: string; props: Record<string, unknown> } | undefined,
-): FieldDTO[] {
-  const item = getItemById(dataBlockId);
-  if (!item) return [];
-  return (item.props._fields as FieldDTO[]) || [];
-}
-
 export function useDataBlockFieldsForPanel(): DataBlockFieldsPanelState {
-  // Subscribe only to selection changes (type + zone)
-  const selectedType = usePuck((s) => s.selectedItem?.type);
+  // Subscribe to primitive selection signals only (avoids object-reference re-renders)
+  // Zone changes when selection moves between slots; index changes within the same slot
   const zone = usePuck((s) => s.appState.ui.itemSelector?.zone);
-
+  const index = usePuck((s) => s.appState.ui.itemSelector?.index);
   const getPuck = useGetPuck();
 
-  // Derive state from current selection
+  // Handles deep nesting detection (selection inside Container inside DataBlock, etc.)
+  const ancestorContext = useDataBlockContextForSelection();
+
+  // Compute DataBlock context from current selection
   const { isActive, fields, dataBlockId } = useMemo(() => {
     const { selectedItem, getItemById } = getPuck();
-    const selectedId = selectedItem?.props?.id as string | undefined;
 
-    const dbId = findDataBlockId(selectedType, selectedId, zone, getItemById);
-    if (!dbId) {
-      return { isActive: false, fields: [] as FieldDTO[], dataBlockId: undefined };
+    // Path 1: DataBlock directly selected
+    if (selectedItem?.type === 'DataBlock') {
+      const id = selectedItem.props?.id as string | undefined;
+      if (id) {
+        const item = getItemById(id);
+        const dbFields = (item?.props._fields as FieldDTO[]) || [];
+        return { isActive: true, fields: dbFields, dataBlockId: id };
+      }
     }
 
-    const dbFields = getFieldsFromDataBlock(dbId, getItemById);
-    return { isActive: true, fields: dbFields, dataBlockId: dbId };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedType, zone]);
+    // Path 2: Inside a DataBlock slot (detected by ancestor hook)
+    if (ancestorContext) {
+      // Try to resolve the DataBlock's component ID from the zone
+      let dbId: string | undefined;
+      if (zone) {
+        const parentId = zone.split(':')[0];
+        const parent = getItemById(parentId);
+        if (parent?.type === 'DataBlock') {
+          dbId = parentId;
+        }
+      }
+      return { isActive: true, fields: ancestorContext.fields, dataBlockId: dbId };
+    }
 
-  // Insert a field component into the DataBlock's children slot
+    return { isActive: false, fields: [] as FieldDTO[], dataBlockId: undefined };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zone, index, ancestorContext]);
+
+  // Insert a field component into the DataBlock's children slot.
+  // Uses Puck's `insert` action (pushes to undo history) then patches the fieldId.
   const insertField = useCallback((field: FieldDTO) => {
     if (!dataBlockId) return;
 
-    const { appState, dispatch } = getPuck();
+    const { appState, dispatch, getItemById } = getPuck();
     const componentType = FIELD_TYPE_TO_COMPONENT[field.type] || 'TextField';
-
-    // Generate unique ID
     const newId = `${componentType}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
-    // Build new component with pre-configured fieldId
-    const newComponent = {
-      type: componentType,
-      props: {
-        id: newId,
-        fieldId: field.id,
-      },
-    };
+    // Determine children count for insertion index
+    const dataBlock = getItemById(dataBlockId);
+    const children = (dataBlock?.props?.children ?? []) as unknown[];
+    const destinationZone = `${dataBlockId}:children`;
 
-    // Clone data tree and find the DataBlock to insert into
-    const newData = structuredClone(appState.data);
+    // Step 1: Insert via Puck action (records in undo history)
+    dispatch({
+      type: 'insert',
+      componentType,
+      destinationZone,
+      destinationIndex: children.length,
+      id: newId,
+    });
 
-    const insertIntoDataBlock = (items: Array<{ type: string; props: Record<string, unknown> }>): boolean => {
+    // Step 2: Patch the fieldId onto the newly inserted component.
+    // Read fresh state after insert, clone, find the component, set fieldId.
+    const { appState: freshState } = getPuck();
+    const newData = structuredClone(freshState.data);
+
+    const patchFieldId = (items: Array<{ type: string; props: Record<string, unknown> }>): boolean => {
       for (const item of items) {
-        if (item.props?.id === dataBlockId) {
-          if (!Array.isArray(item.props.children)) {
-            item.props.children = [];
-          }
-          (item.props.children as unknown[]).push(newComponent);
+        if (item.props?.id === newId) {
+          item.props.fieldId = field.id;
           return true;
         }
-        // Recurse into slot arrays
         for (const value of Object.values(item.props || {})) {
-          if (Array.isArray(value) && insertIntoDataBlock(value as Array<{ type: string; props: Record<string, unknown> }>)) {
+          if (Array.isArray(value) && patchFieldId(value as typeof items)) {
             return true;
           }
         }
@@ -148,10 +139,10 @@ export function useDataBlockFieldsForPanel(): DataBlockFieldsPanelState {
       return false;
     };
 
-    if (insertIntoDataBlock(newData.content as Array<{ type: string; props: Record<string, unknown> }>)) {
+    if (patchFieldId(newData.content as Array<{ type: string; props: Record<string, unknown> }>)) {
       dispatch({ type: 'setData', data: newData });
     }
   }, [dataBlockId, getPuck]);
 
-  return { isActive, fields, insertField };
+  return { isActive, fields, dataBlockId, insertField };
 }

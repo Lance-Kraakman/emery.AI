@@ -75,7 +75,7 @@ const FIELD_TYPE_LABELS: Record<FieldType, string> = {
 const UNSUPPORTED_FIELD_TYPES = new Set<FieldType>(['embedding', 'json']);
 
 export function DataFieldsPanel() {
-  const { isActive, fields, insertField } = useDataBlockFieldsForPanel();
+  const { isActive, fields, dataBlockId, insertField } = useDataBlockFieldsForPanel();
 
   if (!isActive) return null;
 
