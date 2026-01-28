@@ -356,17 +356,14 @@ class SkillTemplatePlannerModule(PlannerModule):
         template_rules = """
 TEMPLATE MODE - You are creating a REUSABLE skill template:
 
-CRITICAL: ALL VARIABLES MUST USE {{ }} SYNTAX:
-- ALWAYS wrap variable names: {{ name }}, {{ age }}, {{ family }}
+TWO FIELDS - DIFFERENT SYNTAX RULES:
+1. description: Human-readable step description. Use {{ variable }}. NO {% if %}.
+2. prompt_template: ALL execution instructions. NOTHING from request should be lost.
+   Include every rule, condition, example from the request. {% if %} allowed here.
+
+VARIABLE SYNTAX:
+- ALWAYS wrap skill input variables in {{ }}: {{ input_var }}
 - NEVER use bare variable names without {{ }}
-- {% if %} conditionals are allowed, but variables inside MUST still use {{ }}
-
-GOOD: "{{ name }} is {{ age }} years old."
-GOOD: "{% if family %}{{ name }} has family: {{ family }}.{% endif %}"
-BAD: "name is age years old" - WRONG: bare variable names
-BAD: "{% if family %}name has family{% endif %}" - WRONG: bare names inside {% if %}
-
-Every step MUST have prompt_template. Outputs are extracted post-execution.
 """
         return f"{template_rules}\n\n{base_guidance}"
 

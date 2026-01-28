@@ -97,8 +97,8 @@ class SkillTemplateStepOutput(BaseModel):
 
     step_id: str = Field(description="Unique identifier for this step")
     description: str = Field(
-        description="Human-readable description. Use {{ variable }} for inputs. "
-                    "NO {% if %} control structures - only {{ }} placeholders allowed."
+        description="Human-readable description of what this step does. "
+                    "Can use {{ variable }} for inputs. NO {% if %} control structures allowed."
     )
     tool_call: Optional[str] = Field(
         default=None, description="Tool to call for this step (e.g., 'table_crud')"
@@ -126,7 +126,9 @@ class SkillTemplateStepOutput(BaseModel):
     )
     # REQUIRED for templates (vs optional in PlanStepOutput)
     prompt_template: str = Field(
-        description="REQUIRED: Jinja2 template with {{ variable }} placeholders for input references."
+        description="REQUIRED: Contains ALL execution instructions from the user's request. "
+                    "Include every rule, condition, example, and requirement - NOTHING should be lost. "
+                    "Use {{ variable }} for inputs. {% if %} conditionals allowed here."
     )
 
 
@@ -201,27 +203,20 @@ class CreatePlan(dspy.Signature):  # type: ignore[misc]
 class CreateSkillTemplate(dspy.Signature):  # type: ignore[misc]
     """Create a reusable skill template with {{ variable }} placeholders.
 
-    You have full workspace context - use it to create templates that work
-    with existing resources.
+    TWO FIELDS - DIFFERENT SYNTAX RULES:
 
-    CRITICAL: VARIABLES MUST ALWAYS USE {{ }} SYNTAX:
-    - EVERY variable reference MUST be wrapped: {{ name }}, {{ age }}, {{ family }}
-    - In parameters: {"record_data": {"name": "{{ name }}"}}
-    - NEVER use bare variable names like: name, age, family
+    1. description: Human-readable step description
+       - Can use {{ variable }} for inputs
+       - NO {% if %} control structures allowed
 
-    CONDITIONALS ({% if %}) ARE ALLOWED:
-    - Use {% if family %}...{% endif %} for optional inputs
-    - BUT variables inside MUST still use {{ }}: {% if family %}{{ name }} has {{ family }}{% endif %}
+    2. prompt_template: Full execution instructions
+       - Must contain ALL rules, conditions, examples from the request
+       - NOTHING from the request should be lost
+       - {% if %} conditionals allowed here
 
-    GOOD EXAMPLES:
-      "Write a summary for {{ name }}, age {{ age }}."
-      "{% if family %}{{ name }} has family: {{ family }}.{% endif %}"
-
-    BAD EXAMPLES (NEVER DO THIS):
-      "name is age years old" - WRONG: bare variable names
-      "{% if family %}name has family{% endif %}" - WRONG: bare names inside {% if %}
-
-    Every step MUST have prompt_template. All variable refs MUST use {{ }}.
+    VARIABLE SYNTAX:
+    - ALWAYS wrap skill input variables in {{ }}: {{ input_var }}
+    - NEVER use bare variable names without {{ }}
     """
 
     request: str = dspy.InputField(desc="What the skill should accomplish")
