@@ -354,16 +354,24 @@ class SkillTemplatePlannerModule(PlannerModule):
     def _build_template_guidance(self, base_guidance: str) -> str:
         """Add template-specific guidance to capability guidance."""
         template_rules = """
-TEMPLATE MODE - You are creating a REUSABLE skill template:
+TEMPLATE MODE - Creating a REUSABLE skill template.
 
-TWO FIELDS - DIFFERENT SYNTAX RULES:
-1. description: Human-readable step description. Use {{ variable }}. NO {% if %}.
-2. prompt_template: ALL execution instructions. NOTHING from request should be lost.
-   Include every rule, condition, example from the request. {% if %} allowed here.
+CRITICAL - PRESERVE EVERY RULE:
+- Count the rules in the user's request
+- The prompt_template MUST contain ALL of them
+- Do NOT summarize rules - copy the conditional logic
+- "if X then Y" -> {% if X %}Y{% endif %}
+- "use Z format" -> include Z format instruction
+- "when A do B" -> {% if A %}B{% endif %}
 
-VARIABLE SYNTAX:
-- ALWAYS wrap skill input variables in {{ }}: {{ input_var }}
-- NEVER use bare variable names without {{ }}
+VARIABLE SYNTAX - {{ }} EVERYWHERE:
+- In text: "{{ name }} is {{ age }}"
+- Inside {% if %}: {% if family %}{{ name }} has {{ family }}{% endif %}
+- WRONG: {% if family %}name has family{% endif %}
+
+TWO FIELDS:
+1. description: Summarize task + mention rules. {{ variable }} OK. NO {% if %}.
+2. prompt_template: ALL rules using {% if %} for conditionals. {{ }} for variables.
 """
         return f"{template_rules}\n\n{base_guidance}"
 

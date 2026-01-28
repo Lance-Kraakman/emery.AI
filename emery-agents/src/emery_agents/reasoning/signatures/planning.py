@@ -97,8 +97,9 @@ class SkillTemplateStepOutput(BaseModel):
 
     step_id: str = Field(description="Unique identifier for this step")
     description: str = Field(
-        description="Human-readable description of what this step does. "
-                    "Can use {{ variable }} for inputs. NO {% if %} control structures allowed."
+        description="Human-readable description summarizing the task AND key rules/conditions. "
+                    "Example: 'Generate report for {{ topic }}. Uses bullet points, comma formatting.' "
+                    "Can use {{ variable }}. NO {% if %} control structures."
     )
     tool_call: Optional[str] = Field(
         default=None, description="Tool to call for this step (e.g., 'table_crud')"
@@ -126,9 +127,11 @@ class SkillTemplateStepOutput(BaseModel):
     )
     # REQUIRED for templates (vs optional in PlanStepOutput)
     prompt_template: str = Field(
-        description="REQUIRED: Contains ALL execution instructions from the user's request. "
-                    "Include every rule, condition, example, and requirement - NOTHING should be lost. "
-                    "Use {{ variable }} for inputs. {% if %} conditionals allowed here."
+        description="REQUIRED: Must preserve EVERY rule from the user's request. "
+                    "If user says 'if X then Y' or 'use Z format' - include it verbatim. "
+                    "Do NOT summarize rules - copy them. "
+                    "Use {{ variable }} EVERYWHERE including inside {% if %} blocks: "
+                    "{% if family %}{{ name }} has {{ family }}{% endif %} (NOT: name has family)."
     )
 
 
@@ -203,20 +206,30 @@ class CreatePlan(dspy.Signature):  # type: ignore[misc]
 class CreateSkillTemplate(dspy.Signature):  # type: ignore[misc]
     """Create a reusable skill template with {{ variable }} placeholders.
 
-    TWO FIELDS - DIFFERENT SYNTAX RULES:
+    CRITICAL - PRESERVE EVERY RULE:
+    Count the rules in the user's request. The prompt_template MUST contain ALL of them.
+    Do NOT summarize rules. Do NOT paraphrase. Copy the conditional logic verbatim.
 
-    1. description: Human-readable step description
-       - Can use {{ variable }} for inputs
-       - NO {% if %} control structures allowed
+    EXAMPLE - Request has 3 rules:
+    "Write a summary. (1) If female use she/her. (2) If male use he/him. (3) Include family if provided."
 
-    2. prompt_template: Full execution instructions
-       - Must contain ALL rules, conditions, examples from the request
-       - NOTHING from the request should be lost
-       - {% if %} conditionals allowed here
+    WRONG (only 1 rule preserved):
+        "Write a summary of {{ name }}. Include family: {{ family }}."
 
-    VARIABLE SYNTAX:
-    - ALWAYS wrap skill input variables in {{ }}: {{ input_var }}
-    - NEVER use bare variable names without {{ }}
+    CORRECT (all 3 rules preserved):
+        "Write a summary of {{ name }} who is {{ age }} years old.
+         {% if gender == 'female' %}Use she/her/hers pronouns.{% elif gender == 'male' %}Use he/him/his pronouns.{% endif %}
+         {% if family %}{{ name }} has {{ family }}.{% endif %}"
+
+    VARIABLE SYNTAX - {{ }} EVERYWHERE:
+    - In text: "{{ name }} is {{ age }}"
+    - Inside {% if %} blocks: "{% if family %}{{ name }} has {{ family }}{% endif %}"
+    - WRONG: {% if family %}name has family{% endif %}
+    - CORRECT: {% if family %}{{ name }} has {{ family }}{% endif %}
+
+    TWO FIELDS:
+    1. description: Summarize task + mention key rules. {{ variable }} OK. NO {% if %}.
+    2. prompt_template: ALL rules from request, using {% if %} for conditionals.
     """
 
     request: str = dspy.InputField(desc="What the skill should accomplish")

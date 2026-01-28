@@ -226,6 +226,10 @@ export function PlanBuilderSection({
 
       <p className="text-xs text-muted-foreground mb-2">{displayPlan.goal}</p>
 
+      {displayPlan.analysis && (
+        <p className="text-xs text-muted-foreground mb-2 italic">{displayPlan.analysis}</p>
+      )}
+
       {displayPlan.steps && displayPlan.steps.length > 0 && (
         <Collapsible defaultOpen>
           <CollapsibleTrigger className="text-xs text-blue-600 hover:text-blue-800 flex items-center">
