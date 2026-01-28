@@ -137,6 +137,7 @@ class CoordinatorStreamingHandler:
         user_id: Optional[str] = None,
         workspace_type: Optional[str] = None,
         workspace_id: Optional[str] = None,
+        runtime_skill_inputs: Optional[Dict[str, str]] = None,
     ) -> AsyncIterator[Any]:
         """
         Main entry point for coordinator-driven execution.
@@ -230,6 +231,7 @@ class CoordinatorStreamingHandler:
             org_model=org_model,
             stored_plan=stored_plan,
             thread_id=thread_id,
+            runtime_skill_inputs=runtime_skill_inputs,
         ):
             yield event
 
@@ -241,6 +243,7 @@ class CoordinatorStreamingHandler:
         org_model: Optional[str],
         stored_plan: Optional[Plan] = None,
         thread_id: Optional[str] = None,
+        runtime_skill_inputs: Optional[Dict[str, str]] = None,
     ) -> AsyncIterator[Any]:
         """
         LangGraph-based execution path.
@@ -260,6 +263,7 @@ class CoordinatorStreamingHandler:
             "org_model": org_model,
             "organization_id": context.tool_provider.organization_id if context.tool_provider else None,
             "stored_plan": stored_plan,
+            "runtime_skill_inputs": runtime_skill_inputs,
         }
 
         # Get or create session graph (uses cached instance for thread_id)

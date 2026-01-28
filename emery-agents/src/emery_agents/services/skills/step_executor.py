@@ -22,6 +22,8 @@ from ...reasoning.modules.extractor import OutputExtractorModule
 from ...types import SkillExecutionResult
 from ...utils.error_classifier import classify_error
 from ..agents.factory import AgentFactory, AgentConfig
+from ..execution.plan_step_executor import PlanStepExecutor
+from ...entities.models.plan import Plan
 from ..tools.loader import UnifiedToolLoader
 
 logger = logging.getLogger(__name__)
@@ -171,6 +173,20 @@ class TaskModelConfig:
 
 
 @dataclass
+class AgenticConfig:
+    """Agentic execution configuration with stored plan.
+
+    Used for agentic steps that execute via PlanStepExecutor.
+    Requires a stored plan - no fallback to DSPy ReAct.
+    """
+    instructions: str = ""
+    tools: List[str] = field(default_factory=list)
+    agent_type: str = ""
+    model: str = ""
+    plan: Optional[Any] = None  # StoredPlan proto
+
+
+@dataclass
 class InputDef:
     """Input definition for a step."""
     name: str
@@ -208,6 +224,7 @@ class Step:
     write_config: Optional[WriteConfig] = None
     tool_execution_config: Optional[ToolExecutionConfig] = None
     task_model_config: Optional[TaskModelConfig] = None
+    agentic_config: Optional[AgenticConfig] = None  # For agentic steps with stored plan
     # UI state
     is_disabled: bool = False
 
@@ -298,6 +315,18 @@ class Step:
                 parameters=dict(proto.task_model_config.parameters)
             )
 
+        # Parse agentic_config (for agentic steps with stored plans)
+        agentic_config = None
+        if proto.HasField('agentic_config'):
+            ac = proto.agentic_config
+            agentic_config = AgenticConfig(
+                instructions=ac.instructions or "",
+                tools=list(ac.tools) if ac.tools else [],
+                agent_type=ac.agent_type or "",
+                model=ac.model or "",
+                plan=ac.plan if ac.HasField('plan') and ac.plan.id else None,
+            )
+
         return cls(
             id=proto.id,
             name=proto.name,
@@ -318,6 +347,7 @@ class Step:
             write_config=write_config,
             tool_execution_config=tool_execution_config,
             task_model_config=task_model_config,
+            agentic_config=agentic_config,
             is_disabled=proto.is_disabled
         )
 
@@ -940,6 +970,11 @@ class StepExecutorService:
                 return await self._execute_operation_step(
                     step, step_inputs, api_key, organization_id
                 )
+            elif step.agentic_config:
+                return await self._execute_agentic_step(
+                    step, step_inputs, step_context, org_model,
+                    api_key, organization_id
+                )
             else:
                 return await self._execute_inline_step(
                     step, step_inputs, step_context, org_model
@@ -1512,6 +1547,82 @@ class StepExecutorService:
             return result.data
         else:
             return {"result": f"Binary result: {len(result.data)} bytes"}
+
+    async def _execute_agentic_step(
+        self,
+        step: Step,
+        step_inputs: Dict[str, Any],
+        step_context: Dict[str, Any],
+        org_model: Optional[str],
+        api_key: Optional[str],
+        organization_id: Optional[int],
+    ) -> Any:
+        """Execute an agentic step with stored plan.
+
+        Requires a stored plan - no fallback behavior.
+        Uses PlanStepExecutor for direct execution with template resolution.
+        """
+        agentic_config = step.agentic_config
+        if not agentic_config:
+            raise ValueError(f"Agentic step '{step.name}' missing agentic_config")
+
+        # Require stored plan - no fallback
+        if not agentic_config.plan or not agentic_config.plan.id:
+            raise ValueError(
+                f"Agentic step '{step.name}' requires a stored plan. "
+                f"No fallback execution available."
+            )
+
+        logger.info(f"📋 Step {step.name}: executing with stored plan")
+        # _execute_with_plan is sync (PlanStepExecutor.execute is sync)
+        return self._execute_with_plan(
+            plan_proto=agentic_config.plan,
+            skill_inputs=step_inputs,
+            org_model=agentic_config.model or org_model,
+            api_key=api_key,
+            organization_id=organization_id,
+        )
+
+    def _execute_with_plan(
+        self,
+        plan_proto: Any,
+        skill_inputs: Dict[str, Any],
+        org_model: Optional[str],
+        api_key: Optional[str],
+        organization_id: Optional[int],
+    ) -> str:
+        """Execute a stored plan using PlanStepExecutor.
+
+        Args:
+            plan_proto: StoredPlan proto message
+            skill_inputs: Runtime inputs for template resolution
+            org_model: Organization default model
+            api_key: API key for authenticated calls
+            organization_id: Organization ID for RLS context
+
+        Returns:
+            Combined results from all plan steps
+        """
+        # Convert proto to Plan object
+        plan = Plan.from_stored_proto(plan_proto)
+
+        executor = PlanStepExecutor(
+            api_key=api_key or "",
+            org_id=str(organization_id) if organization_id else "",
+            org_model=org_model,
+            skill_inputs=skill_inputs,
+        )
+
+        results = []
+        for plan_step in plan.steps:
+            # execute() is sync, not async
+            outcome = executor.execute(plan, plan_step)
+            results.append(outcome.summary)
+            if not outcome.success:
+                logger.warning(f"Plan step {plan_step.step_id} failed: {outcome.summary}")
+                break
+
+        return "\n".join(results)
 
     def _resolve_row_id_source(
         self,

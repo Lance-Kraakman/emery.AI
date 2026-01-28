@@ -37,9 +37,12 @@ class PlanExecuteState(TypedDict, total=False):
     organization_id: Optional[int]
 
     # Skill template generation (for GeneratePlan RPC)
-    skill_inputs: Optional[List[Dict[str, Any]]]
+    skill_inputs: Optional[List[Dict[str, Any]]]  # Input DEFINITIONS (schema)
     skill_outputs: Optional[List[Dict[str, Any]]]
     is_template_generation: bool
+
+    # Runtime skill inputs (for skill invocation execution)
+    runtime_skill_inputs: Optional[Dict[str, str]]  # Input VALUES at execution time
 
     # === Plan state (dataclasses — serializable) ===
     plan: Optional[Plan]
@@ -78,6 +81,8 @@ DEFAULT_STATE: Dict[str, Any] = {
     "skill_inputs": None,
     "skill_outputs": None,
     "is_template_generation": False,
+    # Runtime skill inputs
+    "runtime_skill_inputs": None,
     # Plan state
     "plan": None,
     "stored_plan": None,

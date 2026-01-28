@@ -9,7 +9,7 @@ import asyncio
 import json
 import logging
 from pathlib import Path
-from typing import AsyncIterator, Optional, List, Dict, Any, TYPE_CHECKING
+from typing import AsyncIterator, Optional, List, Dict, Any, Tuple, TYPE_CHECKING
 
 from ..reasoning.tools.execution import SkillTool
 from ..tools.tool_modes import filter_tools_for_mode, ToolMode
@@ -25,7 +25,7 @@ from ..entities.models.capability import Capability, CapabilityType
 from ..services.tools.provider import ToolProvider
 from ..utils.error_classifier import classify_error
 from ..utils.error_messages import ErrorSeverity
-from ..utils.mention_parser import parse_agent_mention
+from ..utils.mention_parser import parse_agent_mention, parse_skill_invocation
 from .mention_routing import handle_agent_mention_routing
 from .message_processor import (
     extract_user_api_key_from_tools,
@@ -103,6 +103,91 @@ def detect_stored_plan_from_skills(
             return stored_plan
 
     return None
+
+
+def detect_skill_plan_from_invocation(
+    task: str,
+    skills: Optional[List['agent_worker_pb2.SkillConfig']]
+) -> Tuple[Optional[Plan], Optional[Dict[str, str]], Optional[str]]:
+    """
+    Detect @skill:name invocation and extract the skill's stored plan.
+
+    When a user invokes a skill via @skill:name syntax, this function:
+    1. Parses the skill name and inputs from the task
+    2. Finds the matching skill config
+    3. Extracts the stored plan (if any) from the skill's agentic config
+    4. Returns the plan for AUTONOMOUS execution
+
+    Args:
+        task: The current task text from the user
+        skills: List of SkillConfig proto messages from agent config
+
+    Returns:
+        Tuple of (plan, skill_inputs, cleaned_task):
+        - plan: Hydrated Plan object if found, None otherwise
+        - skill_inputs: Dictionary of parsed inputs from invocation
+        - cleaned_task: Task text with @skill mention removed
+    """
+    if not skills:
+        return None, None, None
+
+    # Parse skill invocation from task
+    invocation = parse_skill_invocation(task)
+    if not invocation:
+        return None, None, None
+
+    logger.info(f"📋 Detected @skill:{invocation.skill_name} invocation with inputs: {invocation.inputs}")
+
+    # Find matching skill by name (case-insensitive, handle hyphens/underscores)
+    normalized_name = invocation.skill_name.lower().replace('-', '_')
+    matching_skill = None
+    for skill in skills:
+        skill_normalized = skill.name.lower().replace('-', '_').replace(' ', '_')
+        if skill_normalized == normalized_name:
+            matching_skill = skill
+            break
+
+    if not matching_skill:
+        logger.warning(f"⚠️ No skill found matching '{invocation.skill_name}'")
+        return None, None, None
+
+    logger.info(f"📋 Found matching skill: {matching_skill.name} (id={matching_skill.id})")
+
+    # Check for stored plan in skill's steps (DAG workflow with agentic nodes)
+    # This is where plans are stored for workflow-based skills
+    for step in matching_skill.steps:
+        if not step.HasField('agentic_config'):
+            continue
+
+        agentic_config = step.agentic_config
+        if not agentic_config.HasField('plan'):
+            continue
+
+        if not agentic_config.plan.id:
+            continue
+
+        # Found a stored plan - hydrate it
+        stored_plan = Plan.from_stored_proto(agentic_config.plan)
+        logger.info(
+            f"📋 Found stored plan '{stored_plan.id}' in skill '{matching_skill.name}' "
+            f"step '{step.name}' with {len(stored_plan.steps)} step(s) - enabling AUTONOMOUS mode"
+        )
+        return stored_plan, invocation.inputs, invocation.cleaned_task
+
+    # For agentic skills (execution_type='agentic'), check if we can create a plan
+    # from the skill's instructions + prompt template
+    if matching_skill.execution_type in ('agentic', '', None):
+        # Check if skill has instructions that could be used as a plan
+        if matching_skill.instructions:
+            logger.info(
+                f"📋 Skill '{matching_skill.name}' is agentic type with instructions, "
+                "but no stored plan - will let executor handle it"
+            )
+            # Return None for plan but pass the inputs so they can be used
+            return None, invocation.inputs, invocation.cleaned_task
+
+    logger.info(f"📋 No stored plan found for skill '{matching_skill.name}'")
+    return None, invocation.inputs, invocation.cleaned_task
 
 
 class AgentStreamingHandler:
@@ -442,10 +527,32 @@ class AgentStreamingHandler:
         if hasattr(agent, 'managed_agents') and agent.managed_agents:
             managed_agents = list(agent.managed_agents.values())
 
-        # Detect stored plan from agent config
+        # Detect stored plan - first check for @skill:name invocation
         stored_plan = None
+        skill_inputs: Optional[Dict[str, str]] = None
+
         if agent_config and agent_config.skills:
-            stored_plan = detect_stored_plan_from_skills(list(agent_config.skills))
+            # Check for @skill:name invocation in the task
+            invocation_plan, invocation_inputs, cleaned_task = detect_skill_plan_from_invocation(
+                current_task, list(agent_config.skills)
+            )
+            if invocation_plan:
+                stored_plan = invocation_plan
+                skill_inputs = invocation_inputs
+                # Use cleaned task (without @skill mention) for execution context
+                if cleaned_task:
+                    current_task = cleaned_task
+                logger.info(f"📋 Using stored plan from skill invocation, skill_inputs: {skill_inputs}")
+            elif invocation_inputs is not None:
+                # Skill invocation detected but no stored plan - pass inputs anyway
+                skill_inputs = invocation_inputs
+                if cleaned_task:
+                    current_task = cleaned_task
+                logger.info(f"📋 Skill invocation detected but no stored plan, passing inputs: {skill_inputs}")
+
+            # Fallback: check for step-level stored plans (DAG workflow)
+            if not stored_plan:
+                stored_plan = detect_stored_plan_from_skills(list(agent_config.skills))
 
         # Register user-defined skills to capability registry for discovery
         if agent_config and agent_config.skills:
@@ -480,6 +587,7 @@ class AgentStreamingHandler:
                 user_id=user_id,
                 workspace_type=workspace_type,
                 workspace_id=workspace_id,
+                runtime_skill_inputs=skill_inputs,
             ):
                 if isinstance(event, dict):
                     yield event  # type: ignore[misc]  # Coordinator returns compatible dicts

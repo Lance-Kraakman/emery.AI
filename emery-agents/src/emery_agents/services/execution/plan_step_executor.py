@@ -254,7 +254,18 @@ class PlanStepExecutor:
             StepOutcome with LLM summary and structured tool call results
         """
         # Handle direct execution (pure LLM tasks without tool use)
+        # Route to direct execution if:
+        # 1. target_agent is "direct_execution" (explicit marker)
+        # 2. prompt_template exists but no tool_call (pure LLM prompt, no tools needed)
         if current_step.target_agent == "direct_execution":
+            return self._execute_direct(plan, current_step, session_logger)
+
+        if current_step.prompt_template and not current_step.tool_call:
+            # Pure LLM task with prompt template - no tools needed
+            logger.info(
+                f"📝 Direct execution: step has prompt_template but no tool_call, "
+                f"executing as pure LLM task (skipping ReAct tools)"
+            )
             return self._execute_direct(plan, current_step, session_logger)
 
         # Get step index and context

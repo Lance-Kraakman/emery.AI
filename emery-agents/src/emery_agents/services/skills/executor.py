@@ -107,6 +107,174 @@ class SkillExecutorService:
                 return True
         return False
 
+    def _is_workflow_skill(self, skill_config: 'agent_worker_pb2.SkillConfig') -> bool:
+        """Check if skill is a workflow (DAG with explicit steps)."""
+        return skill_config.execution_type == 'workflow' and len(skill_config.steps) > 0
+
+    def _extract_plan_from_skill(
+        self,
+        skill_config: 'agent_worker_pb2.SkillConfig'
+    ) -> Optional[Any]:
+        """Extract stored plan from skill's agentic configuration.
+
+        Checks skill.steps[].agentic_config.plan for stored plans.
+
+        Returns:
+            StoredPlan proto if found, None otherwise
+        """
+        for step in skill_config.steps:
+            if step.HasField('agentic_config') and step.agentic_config.HasField('plan'):
+                if step.agentic_config.plan.id:
+                    return step.agentic_config.plan
+        return None
+
+    def _has_input_mappings(self, skill_config: 'agent_worker_pb2.SkillConfig') -> bool:
+        """Check if skill has input mappings configured."""
+        for inp in skill_config.inputs:
+            if inp.HasField('input_mapping'):
+                return True
+        return False
+
+    def _build_wrapper_dag(
+        self,
+        skill_config: 'agent_worker_pb2.SkillConfig',
+        runtime_inputs: Dict[str, Any],
+    ) -> List['agent_worker_pb2.SkillStep']:
+        """Build wrapper DAG from agentic skill config.
+
+        Generates:
+        - Read step (if skill has input mappings)
+        - Agentic step (always, with stored plan)
+        - Write step (if skill has output mappings)
+
+        Returns:
+            List of SkillStep protos for DAG execution
+        """
+        steps: List['agent_worker_pb2.SkillStep'] = []
+
+        # Step 1: Generate Read step from input mappings
+        read_step = self._build_read_step_from_inputs(skill_config)
+        if read_step:
+            steps.append(read_step)
+            logger.info(f"📖 Generated Read step for skill {skill_config.name}")
+
+        # Step 2: Build Agentic step with stored plan
+        stored_plan = self._extract_plan_from_skill(skill_config)
+
+        agentic_config = agent_worker_pb2.AgenticStepConfig(
+            instructions=skill_config.instructions,
+            agent_type=skill_config.agent_type or "",
+            model=skill_config.model or "",
+        )
+        # Copy tools
+        for tool in skill_config.tools:
+            agentic_config.tools.append(tool)
+
+        if stored_plan:
+            agentic_config.plan.CopyFrom(stored_plan)
+            logger.info(f"📋 Skill {skill_config.name}: using stored plan")
+
+        agentic_step = agent_worker_pb2.SkillStep(
+            id=f"agentic_{skill_config.id}",
+            name=skill_config.name,
+        )
+        agentic_step.agentic_config.CopyFrom(agentic_config)
+        steps.append(agentic_step)
+
+        # Step 3: Generate Write step from output mappings
+        write_step = self._build_write_step_from_outputs(skill_config)
+        if write_step:
+            steps.append(write_step)
+            logger.info(f"📝 Generated Write step for skill {skill_config.name}")
+
+        logger.info(f"📋 Built wrapper DAG: {len(steps)} steps for skill {skill_config.name}")
+        return steps
+
+    def _build_read_step_from_inputs(
+        self,
+        skill_config: 'agent_worker_pb2.SkillConfig',
+    ) -> Optional['agent_worker_pb2.SkillStep']:
+        """Generate Read step from skill input mappings.
+
+        Returns:
+            SkillStep with read_config, or None if no input mappings
+        """
+        # Check if any inputs have input_mapping configured
+        inputs_with_mapping = [
+            inp for inp in skill_config.inputs
+            if inp.HasField('input_mapping')
+        ]
+
+        if not inputs_with_mapping:
+            return None
+
+        # For now, use first input's mapping as source table
+        first_mapping = inputs_with_mapping[0].input_mapping.source
+
+        read_config = agent_worker_pb2.ReadConfig(
+            mode="single_row",
+            source_table_id=first_mapping.table_id,
+        )
+        if first_mapping.HasField('row_source'):
+            read_config.row_id_source.CopyFrom(first_mapping.row_source)
+
+        # Build field mappings: table field → variable name
+        for inp in inputs_with_mapping:
+            if inp.HasField('input_mapping') and inp.input_mapping.HasField('source'):
+                mapping = inp.input_mapping.source
+                field_mapping = agent_worker_pb2.ReadFieldMapping(
+                    source_field_id=mapping.field_id,
+                    target_variable=inp.name,
+                )
+                read_config.field_mappings.append(field_mapping)
+
+        read_step = agent_worker_pb2.SkillStep(
+            id=f"read_{skill_config.id}",
+            name=f"Read inputs for {skill_config.name}",
+        )
+        read_step.read_config.CopyFrom(read_config)
+        return read_step
+
+    def _build_write_step_from_outputs(
+        self,
+        skill_config: 'agent_worker_pb2.SkillConfig',
+    ) -> Optional['agent_worker_pb2.SkillStep']:
+        """Generate Write step from skill output mappings.
+
+        Returns:
+            SkillStep with write_config, or None if no output mappings
+        """
+        outputs_with_mapping = [
+            out for out in skill_config.outputs
+            if out.HasField('output_mapping') and len(out.output_mapping.table_mappings) > 0
+        ]
+
+        if not outputs_with_mapping:
+            return None
+
+        # Use first table mapping as target
+        first_table = outputs_with_mapping[0].output_mapping.table_mappings[0]
+
+        write_config = agent_worker_pb2.WriteConfig(
+            target_table_id=first_table.table_id,
+            row_action=first_table.row_action or "create",
+        )
+
+        # Build field mappings: output variable → table field
+        for field_mapping in first_table.field_mappings:
+            wfm = agent_worker_pb2.WriteFieldMapping(
+                skill_input_name=field_mapping.source_name,
+                target_field_id=field_mapping.field_id,
+            )
+            write_config.field_mappings.append(wfm)
+
+        write_step = agent_worker_pb2.SkillStep(
+            id=f"write_{skill_config.id}",
+            name=f"Write outputs for {skill_config.name}",
+        )
+        write_step.write_config.CopyFrom(write_config)
+        return write_step
+
     @overload
     def execute_skill(
         self,
@@ -168,38 +336,21 @@ class SkillExecutorService:
         logger.info(f"🎯 Executing skill: {skill_config.name} (capture_outputs={capture_outputs})")
 
         try:
-            if self._is_tool_skill(skill_config):
-                return self._execute_tool(
-                    skill_config, runtime_inputs,
-                    api_key=api_key, organization_id=organization_id
-                )
-            elif self._is_write_skill(skill_config):
-                return self._execute_write(
-                    skill_config, runtime_inputs,
-                    api_key=api_key, organization_id=organization_id
-                )
-            elif self._is_read_skill(skill_config):
-                return self._execute_read(
-                    skill_config, runtime_inputs,
-                    api_key=api_key, organization_id=organization_id
-                )
-            elif self._is_operation_skill(skill_config):
-                return self._execute_operation(
-                    skill_config, runtime_inputs,
-                    api_key=api_key, organization_id=organization_id
-                )
-            elif self._is_agent_skill(skill_config):
-                # Step-based DAG execution
+            # SIMPLIFIED ROUTING: Only 2 skill types now
+            # - workflow: Explicit DAG with steps
+            # - agentic: Single execution (builds wrapper DAG if needed)
+
+            if self._is_workflow_skill(skill_config) or self._is_agent_skill(skill_config):
+                # Workflow: Explicit DAG with steps
                 return self._execute_steps(
                     skill_config, runtime_inputs, org_model,
                     api_key=api_key, organization_id=organization_id
                 )
             else:
-                # Agentic execution (flat instructions, LLM orchestration)
-                return self._execute_agent(
+                # Agentic: Build wrapper DAG and execute via StepExecutorService
+                return self._execute_agentic(
                     skill_config, runtime_inputs, org_model,
-                    capture_outputs, attachments, return_message_parts,
-                    progress_callback=progress_callback
+                    capture_outputs, api_key, organization_id
                 )
         except Exception as e:
             error_msg = f"Skill execution error: {str(e)}"
@@ -207,6 +358,79 @@ class SkillExecutorService:
             if capture_outputs:
                 return SkillExecutionResult(result=error_msg, captured_outputs=None)
             return error_msg
+
+    def _execute_agentic(
+        self,
+        skill_config: 'agent_worker_pb2.SkillConfig',
+        runtime_inputs: Dict[str, Any],
+        org_model: Optional[str],
+        capture_outputs: bool,
+        api_key: Optional[str],
+        organization_id: Optional[int],
+    ) -> Union[str, SkillExecutionResult]:
+        """Execute agentic skill via unified StepExecutorService path.
+
+        Builds a wrapper DAG: [Read Node?] → [Agentic Node] → [Write Node?]
+        This ensures consistent execution regardless of how the skill is invoked.
+        """
+        # Build wrapper DAG steps
+        steps = self._build_wrapper_dag(skill_config, runtime_inputs)
+
+        if not steps:
+            raise ValueError(f"Failed to build wrapper DAG for skill {skill_config.name}")
+
+        # Check if agentic step has required plan
+        has_plan = self._extract_plan_from_skill(skill_config) is not None
+        if not has_plan:
+            # Check if there's agentic_config in the generated steps
+            for step in steps:
+                if step.HasField('agentic_config'):
+                    if not step.agentic_config.HasField('plan') or not step.agentic_config.plan.id:
+                        raise ValueError(
+                            f"Agentic skill '{skill_config.name}' requires a stored plan. "
+                            f"No fallback execution available."
+                        )
+
+        # Create step executor with callback for skill delegation
+        step_executor = StepExecutorService(
+            tool_loader=self.tool_loader,
+            agent_factory=self.agent_factory,
+            skill_executor_callback=self.create_executor_callback(
+                org_model=org_model,
+                return_message_parts=False,
+                api_key=api_key,
+                organization_id=organization_id
+            )
+        )
+
+        # Execute steps synchronously
+        result = execute_steps_sync(
+            step_executor=step_executor,
+            steps=steps,
+            available_skills={},
+            initial_inputs=runtime_inputs,
+            org_model=org_model,
+            api_key=api_key,
+            organization_id=organization_id
+        )
+
+        logger.info(f"✅ Agentic skill execution complete: {skill_config.name}")
+
+        # Map node outputs to skill outputs via source config
+        if skill_config.outputs and result.captured_outputs:
+            skill_outputs = map_node_outputs_to_skill_outputs(
+                all_node_outputs=result.captured_outputs,
+                skill_outputs=list(skill_config.outputs)
+            )
+            logger.info(f"📤 Mapped node outputs to skill outputs: {list(skill_outputs.keys())}")
+            return SkillExecutionResult(
+                result=result.result,
+                captured_outputs=skill_outputs
+            )
+
+        if capture_outputs:
+            return result
+        return result.result
 
     def _execute_agent(
         self,

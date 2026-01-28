@@ -36,6 +36,7 @@ async def execute_step_node(state: PlanExecuteState, runtime: RuntimeContext) ->
     plan = state.get("plan")
     step_outcomes = dict(state.get("step_outcomes", {}))
     ledger = state.get("ledger")
+    runtime_skill_inputs = state.get("runtime_skill_inputs")
 
     # Read non-serializable objects from runtime
     tools = runtime.tools
@@ -80,6 +81,7 @@ async def execute_step_node(state: PlanExecuteState, runtime: RuntimeContext) ->
         org_id=runtime.org_id,
         org_model=runtime.org_model,
         max_steps=10,
+        skill_inputs=runtime_skill_inputs,  # Pass runtime inputs for template resolution
         capability_registry=runtime.capability_registry,
         extra_tools=extra_tools or None,
     )
