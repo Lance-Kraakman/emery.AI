@@ -37,7 +37,6 @@ import { MarkdownBlock } from "./blocks/MarkdownBlock";
 
 import Root from "./root";
 import { UserConfig } from "./types";
-import { FIELD_BLOCK_TYPES } from "./constants";
 
 export const config: UserConfig = {
   root: Root,
@@ -69,10 +68,10 @@ export const config: UserConfig = {
       title: "Content",
       components: ["EditorBlock", "MarkdownBlock"],
     },
-    fields: {
-      title: "Fields",
-      components: [...FIELD_BLOCK_TYPES],
-    },
+    // "Fields" category removed from sidebar - field blocks are now added
+    // via the DataFieldsPanel which shows actual database fields from the
+    // selected DataBlock's view. Field blocks remain registered as components
+    // so they can be rendered and used within DataBlock slots.
     other: {
       title: "Other",
       // Hero, Card, Logos, Stats removed - now available as system templates
