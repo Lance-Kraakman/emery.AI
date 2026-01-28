@@ -150,9 +150,10 @@ class WorkspaceSync:
             logger.info(f"Downloading workspace from s3://{self.bucket}/{s3_key}")
             self.s3.download_file(self.bucket, s3_key, str(tar_path))
 
-            # Extract archive
+            # Extract archive — filter='data' normalizes permissions
+            # (prevents bwrap's restrictive 0o700 dirs from breaking ChromaDB writes)
             with tarfile.open(tar_path, "r:gz") as tar:
-                tar.extractall(local_path)
+                tar.extractall(local_path, filter='data')
 
             tar_path.unlink()
             logger.info(f"Workspace extracted to {local_path}")

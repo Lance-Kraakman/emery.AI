@@ -15,6 +15,17 @@ from typing import Any, List, Optional
 
 
 @dataclass
+class ConversationMessage:
+    """A single message from the conversation history.
+
+    Converted from protobuf HistoryMessage at the gRPC boundary.
+    """
+
+    role: str
+    content: str
+
+
+@dataclass
 class RuntimeContext:
     """Typed container for non-serializable runtime objects.
 
@@ -41,7 +52,7 @@ class RuntimeContext:
     org_id: str = ""
     org_model: Optional[str] = None
     capability_registry: Optional[Any] = None
-    conversation_history: Optional[List[Any]] = None
+    conversation_history: Optional[List[ConversationMessage]] = None
     user_id: Optional[str] = None
     workspace_type: Optional[str] = None
     workspace_id: Optional[str] = None

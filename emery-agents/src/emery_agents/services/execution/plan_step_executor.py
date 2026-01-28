@@ -28,7 +28,7 @@ import dspy
 from ...ace import StepResult
 from ...reasoning.config import get_dspy_lm
 from ...reasoning.modules.executor import ExecutorModule, SimpleExecutorModule
-from ...reasoning.utils import extract_dspy_result
+from ...reasoning.utils import extract_dspy_result, build_step_outcome, StepOutcome
 from ...reasoning.tools import (
     create_all_tools,
 )
@@ -80,9 +80,17 @@ def _build_step_prompt(
     else:
         parts.extend(["", "## Current Step", current_step.description])
 
+    # Step scope constraint — prevent LLM from executing beyond this step
+    parts.extend([
+        "",
+        "## Step Scope",
+        "Execute ONLY what this step describes. Do NOT perform work from remaining steps.",
+        "Each remaining step will be executed separately with its own context.",
+    ])
+
     # Completed steps
     if completed_steps:
-        parts.extend(["", "## Previously Completed Steps"])
+        parts.extend(["", "## Previously Completed Steps (already done — use their results)"])
         for i, step in enumerate(completed_steps, 1):
             result = step.result or 'completed'
             parts.append(f"- Step {i}: {step.description}")
@@ -175,7 +183,7 @@ class PlanStepExecutor:
         self,
         plan: Plan,
         current_step: PlanStep,
-    ) -> str:
+    ) -> StepOutcome:
         """
         Execute a plan step with full plan context.
 
@@ -186,7 +194,7 @@ class PlanStepExecutor:
             current_step: The step to execute
 
         Returns:
-            Result from step execution
+            StepOutcome with LLM summary and structured tool call results
         """
         # Session logging for flow tracking
         session_logger = get_session_logger()
@@ -211,12 +219,12 @@ class PlanStepExecutor:
                 "total_steps": len(plan.steps),
             })
 
-        result = self._execute_with_dspy(plan, current_step, session_logger)
+        outcome = self._execute_with_dspy(plan, current_step, session_logger)
 
         # Store result for use in subsequent step templates and ACE curation
         self._step_results[current_step.step_id] = StepResult(
             step_id=current_step.step_id,
-            result=result,
+            result=outcome.summary,
             description=current_step.description,
         )
 
@@ -227,23 +235,23 @@ class PlanStepExecutor:
                 step_id=current_step.step_id,
                 action="completed",
                 description=current_step.description,
-                result=result[:500] if result else None,
+                result=outcome.summary[:500] if outcome.summary else None,
             )
             session_logger.log_full_content(
                 content_type="result",
                 name=f"step_{current_step.step_id}_result",
-                content=result,
+                content=outcome.summary,
                 metadata={"step_id": current_step.step_id, "step_index": step_index},
             )
 
-        return result
+        return outcome
 
     def _execute_with_dspy(
         self,
         plan: Plan,
         current_step: PlanStep,
         session_logger: Any = None,
-    ) -> str:
+    ) -> StepOutcome:
         """
         Execute step using DSPy ReAct.
 
@@ -252,7 +260,7 @@ class PlanStepExecutor:
             current_step: The step to execute
 
         Returns:
-            Result from step execution
+            StepOutcome with LLM summary and structured tool call results
         """
         # Handle direct execution (pure LLM tasks without tool use)
         if current_step.target_agent == "direct_execution":
@@ -354,11 +362,15 @@ class PlanStepExecutor:
                 )
 
             result_str = extract_dspy_result(result)
+            outcome = build_step_outcome(result_str, executor.last_trajectory)
 
-            logger.info("PlanStepExecutor: Step completed")
+            logger.info(
+                f"PlanStepExecutor: Step completed "
+                f"(success={outcome.success}, tool_calls={len(outcome.tool_calls)})"
+            )
             logger.debug(f"PlanStepExecutor: Result preview: {result_str[:200]}...")
 
-            return result_str
+            return outcome
 
         except Exception as e:
             error_msg = f"Step execution error: {str(e)}"
@@ -370,7 +382,7 @@ class PlanStepExecutor:
         plan: Plan,
         current_step: PlanStep,
         session_logger: Any = None,
-    ) -> str:
+    ) -> StepOutcome:
         """
         Execute a direct LLM task without tool use.
 
@@ -382,7 +394,7 @@ class PlanStepExecutor:
             current_step: The step to execute
 
         Returns:
-            Result from LLM execution
+            StepOutcome (no tool calls, always success unless exception)
         """
         step_index = next(
             (i for i, s in enumerate(plan.steps) if s.step_id == current_step.step_id),
@@ -443,7 +455,7 @@ class PlanStepExecutor:
             logger.info("Direct execution completed")
             logger.debug(f"Direct execution result preview: {result_str[:200]}...")
 
-            return result_str
+            return StepOutcome(summary=result_str, success=True, tool_calls=[])
 
         except Exception as e:
             error_msg = f"Direct execution error: {str(e)}"
@@ -477,7 +489,7 @@ class PlanStepExecutor:
                     "result": result.result[:500] if result.result else None,  # Truncate for context
                 }
 
-        return {
+        context: dict[str, Any] = {
             "goal": plan.goal,
             "current_step": {
                 "step_id": current_step.step_id,
@@ -488,6 +500,12 @@ class PlanStepExecutor:
             "previous_results": previous_results,
             "org_id": self.org_id,
         }
+
+        # Include planner's analysis — high-level description of the approach
+        if plan.analysis:
+            context["plan_analysis"] = plan.analysis
+
+        return context
 
 
 class PlanStepExecutorFactory:

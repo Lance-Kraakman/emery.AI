@@ -6,22 +6,24 @@ Ported from tools/crud_tools.py (load_agent_crud).
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any
+
+import dspy
 
 from ..http_client import make_request
 from ..mutation_guard import check_mutation_allowed
 
 
-def create_agent_crud(api_key: str, org_id: str) -> Callable[..., str]:
+def create_agent_crud(api_key: str, org_id: str) -> dspy.Tool:
     """
-    Factory: Create agent_crud function with auth captured in closure.
+    Factory: Create agent_crud tool with auth captured in closure.
 
     Args:
         api_key: Bearer token for authentication
         org_id: Organization ID for RLS context
 
     Returns:
-        agent_crud function that DSPy ReAct can use
+        dspy.Tool wrapping the agent_crud function
     """
 
     def agent_crud(
@@ -109,4 +111,14 @@ def create_agent_crud(api_key: str, org_id: str) -> Callable[..., str]:
         else:
             return f"ERROR: Unknown method: {method}. Supported: create, read, update, delete, list"
 
-    return agent_crud
+    return dspy.Tool(
+        func=agent_crud,
+        name="agent_crud",
+        desc="Agent management: create, read, update, delete, list agents.",
+        arg_desc={
+            "method": "Operation: create, read, update, delete, list",
+            "agent_id": "Agent ID (required for read, update, delete)",
+            "data": "Agent data for create/update operations",
+            "filters": "Filter criteria for list operation",
+        },
+    )

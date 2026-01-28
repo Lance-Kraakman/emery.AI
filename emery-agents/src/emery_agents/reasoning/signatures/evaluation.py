@@ -32,13 +32,29 @@ class GoalEvaluation(BaseModel):
 class EvaluateGoal(dspy.Signature):  # type: ignore[misc]
     """Evaluate if the goal was achieved based on execution results.
 
-    Compare the original goal with what was actually accomplished.
-    Be honest about partial completions and blockers.
+    Each step_result is prefixed with its status:
+    - [COMPLETED] means the step finished successfully — trust this status.
+    - [FAILED] means the step encountered an error.
+    - [PENDING] means the step has not run yet.
+
+    The tool_evidence field contains RAW outputs from actual tool/API calls.
+    This is ground truth — use it to verify what actually happened.
+    If tool_evidence shows all calls returned valid data (SUCCESS),
+    the steps succeeded regardless of how the summary text reads.
+
+    If all required steps are [COMPLETED] and tool_evidence confirms SUCCESS,
+    the goal is achieved. Only mark blockers for [FAILED] steps or tool
+    calls that returned FAILED status.
     """
 
     original_goal: str = dspy.InputField(desc="The original user goal or request")
     plan_steps: list[str] = dspy.InputField(desc="Steps that were planned")
-    step_results: list[str] = dspy.InputField(desc="Results from each step execution")
+    step_results: list[str] = dspy.InputField(
+        desc="Results from each step, prefixed with [COMPLETED], [FAILED], or [PENDING]"
+    )
+    tool_evidence: str = dspy.InputField(
+        desc="Raw tool call outcomes per step showing actual API responses (SUCCESS/FAILED). This is ground truth."
+    )
 
     evaluation: GoalEvaluation = dspy.OutputField()
 

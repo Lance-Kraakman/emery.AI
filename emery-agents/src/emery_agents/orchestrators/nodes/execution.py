@@ -8,7 +8,9 @@ The graph always routes to the replan node after execution (success or failure).
 import logging
 from typing import Any, Dict, List
 
+from ...ace import StepResult
 from ...entities.models.plan import Plan, PlanStep, PlanStepStatus
+from ...reasoning.utils import StepOutcome
 from ...services.plan_service import PlanService
 from ...services.execution.plan_step_executor import PlanStepExecutor
 from ...services.execution.step_executor import StepExecutor
@@ -32,7 +34,7 @@ async def execute_step_node(state: PlanExecuteState, runtime: RuntimeContext) ->
     the graph routes to the replan node which decides what to do next.
     """
     plan = state.get("plan")
-    step_results = dict(state.get("step_results", {}))
+    step_outcomes = dict(state.get("step_outcomes", {}))
     ledger = state.get("ledger")
 
     # Read non-serializable objects from runtime
@@ -81,43 +83,77 @@ async def execute_step_node(state: PlanExecuteState, runtime: RuntimeContext) ->
         capability_registry=runtime.capability_registry,
         extra_tools=extra_tools or None,
     )
+
+    # Hydrate with previous step results so context flows between steps
+    for prev_step in plan.steps:
+        if prev_step.step_id in step_outcomes:
+            outcome_dict = step_outcomes[prev_step.step_id]
+            plan_step_executor._step_results[prev_step.step_id] = StepResult(
+                step_id=prev_step.step_id,
+                result=outcome_dict.get("summary", ""),
+                description=prev_step.description,
+            )
+
     step_executor = StepExecutor(plan_step_executor=plan_step_executor)
 
     try:
-        result = await step_executor.execute_step(
+        outcome: StepOutcome = await step_executor.execute_step(
             current_plan=plan,
             step=step,
             tools=tools,
             managed_agents=managed_agents,
         )
 
-        # Mark step as completed
-        plan = await plan_service.update_step_status(
-            plan, step.step_id, "completed", result=result
-        )
+        # Store structured outcome
+        step_outcomes[step.step_id] = outcome.to_dict()
 
-        # Update ledger
-        if ledger:
-            ledger.complete_step(step.step_id, result)
+        if outcome.success:
+            # Mark step as completed
+            plan = await plan_service.update_step_status(
+                plan, step.step_id, "completed", result=outcome.summary
+            )
+            if ledger:
+                ledger.complete_step(step.step_id, outcome.summary)
 
-        events.append(StepCompletedEvent(
-            plan_id=plan.id,
-            step_id=step.step_id,
-            result=result,
-        ))
+            events.append(StepCompletedEvent(
+                plan_id=plan.id,
+                step_id=step.step_id,
+                result=outcome.summary,
+            ))
 
-        # Store result
-        step_results[step.step_id] = result
+            logger.info(f"Step {step.step_id} completed (tool_calls={len(outcome.tool_calls)})")
 
-        logger.info(f"Step {step.step_id} completed")
+            return {
+                "plan": plan,
+                "step_outcomes": step_outcomes,
+                "ledger": ledger,
+                "error": None,
+                "events": events,
+            }
+        else:
+            # Tool calls failed — mark step as failed with evidence
+            error_msg = f"Tool calls failed:\n{outcome.format_evidence()}"
+            plan = await plan_service.update_step_status(
+                plan, step.step_id, "failed", error=error_msg
+            )
+            if ledger:
+                ledger.fail_step(step.step_id, error_msg)
 
-        return {
-            "plan": plan,
-            "step_results": step_results,
-            "ledger": ledger,
-            "error": None,
-            "events": events,
-        }
+            events.append(StepFailedEvent(
+                plan_id=plan.id,
+                step_id=step.step_id,
+                error=error_msg,
+            ))
+
+            logger.warning(f"Step {step.step_id} failed: tool calls unsuccessful")
+
+            return {
+                "plan": plan,
+                "step_outcomes": step_outcomes,
+                "ledger": ledger,
+                "error": error_msg,
+                "events": events,
+            }
 
     except Exception as e:
         error_msg = str(e)
@@ -140,7 +176,7 @@ async def execute_step_node(state: PlanExecuteState, runtime: RuntimeContext) ->
 
         return {
             "plan": plan,
-            "step_results": step_results,
+            "step_outcomes": step_outcomes,
             "ledger": ledger,
             "error": error_msg,
             "events": events,

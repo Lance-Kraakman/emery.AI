@@ -73,7 +73,7 @@ def get_embedding(text: str) -> tuple[float, ...]:
     else:
         embedding = list(result)
 
-    embedding_tuple = tuple(embedding)
+    embedding_tuple = tuple(float(x) for x in embedding)
     logger.debug(f"Generated embedding: {len(embedding_tuple)} dims for '{text[:50]}...'")
     return embedding_tuple
 

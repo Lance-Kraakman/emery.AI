@@ -6,22 +6,24 @@ Ported from tools/crud_tools.py (load_skill_crud).
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any
+
+import dspy
 
 from ..http_client import make_request
 from ..mutation_guard import check_mutation_allowed
 
 
-def create_skill_crud(api_key: str, org_id: str) -> Callable[..., str]:
+def create_skill_crud(api_key: str, org_id: str) -> dspy.Tool:
     """
-    Factory: Create skill_crud function with auth captured in closure.
+    Factory: Create skill_crud tool with auth captured in closure.
 
     Args:
         api_key: Bearer token for authentication
         org_id: Organization ID for RLS context
 
     Returns:
-        skill_crud function that DSPy ReAct can use
+        dspy.Tool wrapping the skill_crud function
     """
 
     def skill_crud(
@@ -113,4 +115,14 @@ def create_skill_crud(api_key: str, org_id: str) -> Callable[..., str]:
         else:
             return f"ERROR: Unknown method: {method}. Supported: read, update, list"
 
-    return skill_crud
+    return dspy.Tool(
+        func=skill_crud,
+        name="skill_crud",
+        desc="Skill management: read, update, list. Skills have name, description, instructions, inputs, outputs, tools, model.",
+        arg_desc={
+            "method": "Operation: read, update, list",
+            "skill_id": "Skill ID (required for read, update). Must be a number.",
+            "agent_id": "Agent ID to filter skills (optional for list)",
+            "data": "Skill data for update: {name, description, instructions, inputs, outputs, tools, model}",
+        },
+    )

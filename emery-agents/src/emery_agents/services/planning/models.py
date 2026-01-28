@@ -11,13 +11,18 @@ and outputs for plan generation. This enables:
 - Clear separation of concerns
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from emery_agents.entities.models.context_mapping import ResolvedContext
 from emery_agents.entities.models.plan import Plan, SkillInputDefinition, SkillOutputDefinition
 from emery_agents.services.protocols import Tool, ManagedAgent
 from emery_agents.services.tools import CapabilityRegistry
+
+if TYPE_CHECKING:
+    from emery_agents.orchestrators.runtime import ConversationMessage
 from emery_agents.services.context import SessionConfig, WorkspaceContext
 
 
@@ -51,7 +56,7 @@ class PlanGenerationRequest:
     # Context
     context_tables: Optional[ResolvedContext] = None
     goal: Optional[str] = None
-    conversation_history: Optional[List[Dict[str, Any]]] = None
+    conversation_history: Optional[List[ConversationMessage]] = None
 
     # Available resources
     tools: List[Tool] = field(default_factory=list)

@@ -36,6 +36,17 @@ class AgentAPI:
         self._api_key = api_key
         self._org_id = org_id
 
+    @staticmethod
+    def _unwrap_entity(result: str) -> Optional[Dict[str, Any]]:
+        """Unwrap entity from API envelope {"success": true, "data": {...}}."""
+        try:
+            parsed = json.loads(result)
+            if isinstance(parsed, dict) and "data" in parsed:
+                return parsed["data"]  # type: ignore[no-any-return]
+            return parsed  # type: ignore[no-any-return]
+        except (json.JSONDecodeError, TypeError):
+            return None
+
     def list(self, filters: Optional[Dict[str, Any]] = None) -> List[Agent]:
         """List all agents.
 
@@ -98,14 +109,19 @@ class AgentAPI:
         if result.startswith("ERROR"):
             return None
 
+        entity = self._unwrap_entity(result)
+        if entity is None:
+            logger.warning(f"Agent get: failed to parse response: {result[:200]}")
+            return None
+
         try:
-            agent = json.loads(result)
             return Agent(
-                id=agent["id"],
-                name=agent.get("name", ""),
-                description=agent.get("description", ""),
-                persona=agent.get("persona", ""),
-                database_id=agent.get("databaseId"),
+                id=entity["id"],
+                name=entity.get("name", ""),
+                description=entity.get("description", ""),
+                persona=entity.get("persona", ""),
+                database_id=entity.get("databaseId"),
             )
-        except (json.JSONDecodeError, KeyError):
+        except KeyError as e:
+            logger.warning(f"Agent get: missing field {e}: {result[:200]}")
             return None

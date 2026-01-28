@@ -37,6 +37,17 @@ class SkillAPI:
         self._api_key = api_key
         self._org_id = org_id
 
+    @staticmethod
+    def _unwrap_entity(result: str) -> Optional[Dict[str, Any]]:
+        """Unwrap entity from API envelope {"success": true, "data": {...}}."""
+        try:
+            parsed = json.loads(result)
+            if isinstance(parsed, dict) and "data" in parsed:
+                return parsed["data"]  # type: ignore[no-any-return]
+            return parsed  # type: ignore[no-any-return]
+        except (json.JSONDecodeError, TypeError):
+            return None
+
     def list(
         self,
         agent_id: Optional[int] = None,
@@ -109,14 +120,19 @@ class SkillAPI:
         if result.startswith("ERROR"):
             return None
 
+        entity = self._unwrap_entity(result)
+        if entity is None:
+            logger.warning(f"Skill get: failed to parse response: {result[:200]}")
+            return None
+
         try:
-            skill = json.loads(result)
             return Skill(
-                id=skill["id"],
-                name=skill.get("name", ""),
-                description=skill.get("description", ""),
-                agent_id=skill.get("agentId"),
-                is_system=skill.get("isSystem", False),
+                id=entity["id"],
+                name=entity.get("name", ""),
+                description=entity.get("description", ""),
+                agent_id=entity.get("agentId"),
+                is_system=entity.get("isSystem", False),
             )
-        except (json.JSONDecodeError, KeyError):
+        except KeyError as e:
+            logger.warning(f"Skill get: missing field {e}: {result[:200]}")
             return None

@@ -9,6 +9,9 @@ to prevent path traversal. Never accepts raw filesystem paths.
 
 PII is stripped from agent memories (shared) via PIIFilter.
 User memories are stored as-is (private).
+
+Embeddings use the HuggingFace Inference API (same model as the analysis
+embedding service) — no local PyTorch / sentence-transformers needed.
 """
 
 import logging
@@ -18,17 +21,27 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import chromadb
-from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
+from chromadb.api.types import Documents, EmbeddingFunction, Embeddings
 
+from ..analysis.embeddings import get_embedding
 from .pii_filter import PIIFilter
 
 logger = logging.getLogger(__name__)
 
-# Embedding model loaded once per process
-EMBEDDING_MODEL = "all-MiniLM-L6-v2"
-
 # Memory types for categorization
 MEMORY_TYPES = ("general", "preference", "fact", "procedure")
+
+
+class HFAPIEmbeddingFunction(EmbeddingFunction[Documents]):
+    """ChromaDB embedding function backed by HuggingFace Inference API.
+
+    Wraps the existing get_embedding() from services.analysis.embeddings
+    so ChromaDB can use the same HF API embedder used elsewhere in the codebase.
+    No local PyTorch or sentence-transformers required.
+    """
+
+    def __call__(self, input: Documents) -> Embeddings:
+        return [list(get_embedding(doc)) for doc in input]  # type: ignore[misc]
 
 
 class MemoryService:
@@ -70,18 +83,28 @@ class MemoryService:
             except Exception as e:
                 logger.warning(f"Failed to initialize PIIFilter, agent memories will not be PII-filtered: {e}")
 
-        # Ensure directory exists
+        # Ensure directory exists with write permissions
+        # (tar.gz roundtrip can leave restrictive permissions from bwrap)
         self._chroma_path.mkdir(parents=True, exist_ok=True)
+        self._chroma_path.chmod(0o755)
 
         # ChromaDB PersistentClient
         self._client = chromadb.PersistentClient(path=str(self._chroma_path))
-        self._embedding_fn = SentenceTransformerEmbeddingFunction(
-            model_name=EMBEDDING_MODEL,
-        )
-        self._collection = self._client.get_or_create_collection(
-            name="memories",
-            embedding_function=self._embedding_fn,  # type: ignore[arg-type]
-        )
+        self._embedding_fn = HFAPIEmbeddingFunction()
+        try:
+            self._collection = self._client.get_or_create_collection(
+                name="memories",
+                embedding_function=self._embedding_fn,  # type: ignore[arg-type]
+            )
+        except Exception:
+            # Collection was created with a different embedding function
+            # (e.g., sentence_transformer → HF API migration). Delete and recreate.
+            logger.warning("Embedding function conflict — recreating memories collection")
+            self._client.delete_collection("memories")
+            self._collection = self._client.get_or_create_collection(
+                name="memories",
+                embedding_function=self._embedding_fn,  # type: ignore[arg-type]
+            )
 
         logger.info(
             f"MemoryService initialized: type={workspace_type}, id={workspace_id}, "

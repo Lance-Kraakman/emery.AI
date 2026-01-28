@@ -7,7 +7,9 @@ Ported from tools/app_tools.py.
 from __future__ import annotations
 
 import uuid
-from typing import Any, Callable
+from typing import Any
+
+import dspy
 
 from ..http_client import make_request
 from ..mutation_guard import check_mutation_allowed
@@ -44,16 +46,16 @@ def _ensure_block_ids(template_data: dict[str, Any]) -> dict[str, Any]:
     return template_data
 
 
-def create_app_crud(api_key: str, org_id: str) -> Callable[..., str]:
+def create_app_crud(api_key: str, org_id: str) -> dspy.Tool:
     """
-    Factory: Create app_crud function with auth captured in closure.
+    Factory: Create app_crud tool with auth captured in closure.
 
     Args:
         api_key: Bearer token for authentication
         org_id: Organization ID for RLS context
 
     Returns:
-        app_crud function that DSPy ReAct can use
+        dspy.Tool wrapping the app_crud function
     """
 
     def app_crud(
@@ -134,19 +136,28 @@ def create_app_crud(api_key: str, org_id: str) -> Callable[..., str]:
         else:
             return f"ERROR: Unknown method: {method}. Valid: list, read, create, update, delete"
 
-    return app_crud
+    return dspy.Tool(
+        func=app_crud,
+        name="app_crud",
+        desc="Puck visual app management: list, read, create, update, delete apps.",
+        arg_desc={
+            "method": "Operation: list, read, create, update, delete",
+            "app_id": "App ID (required for read, update, delete)",
+            "data": "App data for create/update: {name, slug?, description?, themeConfig?}",
+        },
+    )
 
 
-def create_page_crud(api_key: str, org_id: str) -> Callable[..., str]:
+def create_page_crud(api_key: str, org_id: str) -> dspy.Tool:
     """
-    Factory: Create page_crud function with auth captured in closure.
+    Factory: Create page_crud tool with auth captured in closure.
 
     Args:
         api_key: Bearer token for authentication
         org_id: Organization ID for RLS context
 
     Returns:
-        page_crud function that DSPy ReAct can use
+        dspy.Tool wrapping the page_crud function
     """
 
     def page_crud(
@@ -289,4 +300,14 @@ def create_page_crud(api_key: str, org_id: str) -> Callable[..., str]:
                 f"Valid: list, read, create, update, delete, update_content, publish, unpublish"
             )
 
-    return page_crud
+    return dspy.Tool(
+        func=page_crud,
+        name="page_crud",
+        desc="Puck page management within apps: list, read, create, update, delete, update_content, publish, unpublish.",
+        arg_desc={
+            "method": "Operation: list, read, create, update, delete, update_content, publish, unpublish",
+            "app_id": "App ID (required for list, create)",
+            "page_id": "Page ID (required for read, update, delete, update_content, publish, unpublish)",
+            "data": "Page data: {name, slug?, templateData?, requiresAuth?, dialogs?}",
+        },
+    )

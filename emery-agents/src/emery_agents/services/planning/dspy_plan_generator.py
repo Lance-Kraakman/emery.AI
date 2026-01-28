@@ -37,6 +37,7 @@ from emery_agents.services.context import WorkspaceContext
 from .models import PlanGenerationRequest, PlanGenerationResult
 
 if TYPE_CHECKING:
+    from emery_agents.orchestrators.runtime import ConversationMessage
     from emery_agents.services.protocols import ModelProviderProtocol, Tool
 
 logger = logging.getLogger(__name__)
@@ -115,6 +116,12 @@ class DSPyPlanGenerator:
         # Get capability guidance (from capability registry if available)
         capability_guidance = self._get_capability_guidance(request)
 
+        # Format conversation history for the signature
+        conversation_history = self._format_conversation_history(request.conversation_history)
+
+        # Format skill inputs description for template generation
+        skill_inputs_desc = self._format_skill_inputs_description(request)
+
         # Call the DSPy planner with async-safe context
         try:
             with dspy.context(lm=lm):
@@ -123,6 +130,8 @@ class DSPyPlanGenerator:
                     workspace_context=workspace_context,
                     capability_guidance=capability_guidance,
                     proven_strategies=strategy_guidance,
+                    conversation_history=conversation_history,
+                    skill_inputs_description=skill_inputs_desc,
                 )
         except Exception as e:
             logger.error(f"DSPy planning failed: {e}")
@@ -150,6 +159,21 @@ class DSPyPlanGenerator:
 
         # Neither plan nor questions - shouldn't happen
         raise ValueError("DSPy planner returned neither plan nor questions")
+
+    def _format_conversation_history(
+        self,
+        history: Optional[list["ConversationMessage"]],
+    ) -> str:
+        """Format conversation history as a string for the DSPy signature."""
+        if not history:
+            return ""
+
+        parts = []
+        for msg in history[-10:]:  # Last 10 messages to keep context bounded
+            if msg.content:
+                parts.append(f"{msg.role}: {msg.content}")
+
+        return "\n".join(parts)
 
     def _format_workspace_context(
         self,
@@ -214,6 +238,28 @@ class DSPyPlanGenerator:
             for q in dspy_questions
         ]
 
+    def _format_skill_inputs_description(
+        self,
+        request: PlanGenerationRequest,
+    ) -> str:
+        """Format skill inputs/outputs as a description for the DSPy planner.
+
+        When generating templates for autonomous skills, this tells the planner
+        which {{ variable }} placeholders are available for prompt_template fields.
+        """
+        if not request.is_template_generation or not request.skill_inputs:
+            return ""
+
+        parts = ["Available skill inputs (use {{ name }} syntax in prompt_template for each step):"]
+        for inp in request.skill_inputs:
+            req = "required" if inp.required else "optional"
+            parts.append(f"  - {inp.name} ({inp.type}, {req})")
+        if request.skill_outputs:
+            parts.append("Expected outputs:")
+            for out in request.skill_outputs:
+                parts.append(f"  - {out.name} ({out.type})")
+        return "\n".join(parts)
+
     def _convert_plan(
         self,
         dspy_plan: PlanOutput,
@@ -226,7 +272,7 @@ class DSPyPlanGenerator:
             step = create_step(
                 description=dspy_step.description,
                 target_agent=dspy_step.target_agent,
-                prompt_template=None,  # DSPy doesn't use prompt templates
+                prompt_template=dspy_step.prompt_template,
                 required_context=dspy_step.required_context,
                 phase_name=dspy_step.phase_name,
                 phase_order=dspy_step.phase_order,

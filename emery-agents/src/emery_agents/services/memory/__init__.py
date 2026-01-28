@@ -1,7 +1,7 @@
 """
 Memory Service — Persistent semantic memory for agents and users.
 
-Uses ChromaDB for vector storage with sentence-transformers embeddings.
+Uses ChromaDB for vector storage with HuggingFace Inference API embeddings.
 PII is stripped from agent memories (shared) via Microsoft Presidio.
 """
 

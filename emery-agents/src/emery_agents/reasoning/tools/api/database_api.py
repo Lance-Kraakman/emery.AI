@@ -37,6 +37,21 @@ class DatabaseAPI:
         self._api_key = api_key
         self._org_id = org_id
 
+    @staticmethod
+    def _unwrap_entity(result: str) -> Optional[Dict[str, Any]]:
+        """Unwrap entity from API envelope {"success": true, "data": {...}}.
+
+        All Next.js API routes return responses wrapped in a standard envelope.
+        This method extracts the inner entity from the "data" key.
+        """
+        try:
+            parsed = json.loads(result)
+            if isinstance(parsed, dict) and "data" in parsed:
+                return parsed["data"]  # type: ignore[no-any-return]
+            return parsed  # type: ignore[no-any-return]
+        except (json.JSONDecodeError, TypeError):
+            return None
+
     def list(self, filters: Optional[Dict[str, Any]] = None) -> List[Database]:
         """List all databases.
 
@@ -103,16 +118,21 @@ class DatabaseAPI:
         if result.startswith("ERROR"):
             return None
 
+        entity = self._unwrap_entity(result)
+        if entity is None:
+            logger.warning(f"Database get: failed to parse response: {result[:200]}")
+            return None
+
         try:
-            db = json.loads(result)
             return Database(
-                id=db["id"],
-                name=db.get("name", ""),
-                description=db.get("description", ""),
-                table_count=db.get("tableCount", 0),
-                slug=db.get("slug", ""),
+                id=entity["id"],
+                name=entity.get("name", ""),
+                description=entity.get("description", ""),
+                table_count=entity.get("tableCount", 0),
+                slug=entity.get("slug", ""),
             )
-        except (json.JSONDecodeError, KeyError):
+        except KeyError as e:
+            logger.warning(f"Database get: missing field {e}: {result[:200]}")
             return None
 
     def create(self, name: str, description: str = "") -> Optional[Database]:
@@ -137,14 +157,19 @@ class DatabaseAPI:
             logger.debug(f"Database create failed: {result}")
             return None
 
+        entity = self._unwrap_entity(result)
+        if entity is None:
+            logger.warning(f"Database create: failed to parse response: {result[:200]}")
+            return None
+
         try:
-            db = json.loads(result)
             return Database(
-                id=db["id"],
-                name=db.get("name", name),
-                description=db.get("description", description),
+                id=entity["id"],
+                name=entity.get("name", name),
+                description=entity.get("description", description),
             )
-        except (json.JSONDecodeError, KeyError):
+        except KeyError as e:
+            logger.warning(f"Database create: missing field {e}: {result[:200]}")
             return None
 
     def update(
@@ -170,14 +195,19 @@ class DatabaseAPI:
         if result.startswith("ERROR"):
             return None
 
+        entity = self._unwrap_entity(result)
+        if entity is None:
+            logger.warning(f"Database update: failed to parse response: {result[:200]}")
+            return None
+
         try:
-            db = json.loads(result)
             return Database(
-                id=db["id"],
-                name=db.get("name", ""),
-                description=db.get("description", ""),
+                id=entity["id"],
+                name=entity.get("name", ""),
+                description=entity.get("description", ""),
             )
-        except (json.JSONDecodeError, KeyError):
+        except KeyError as e:
+            logger.warning(f"Database update: missing field {e}: {result[:200]}")
             return None
 
     def delete(self, database_id: int) -> bool:

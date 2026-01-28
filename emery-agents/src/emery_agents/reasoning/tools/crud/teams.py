@@ -6,22 +6,24 @@ Ported from tools/crud_tools.py (load_team_crud).
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any
+
+import dspy
 
 from ..http_client import make_request
 from ..mutation_guard import check_mutation_allowed
 
 
-def create_team_crud(api_key: str, org_id: str) -> Callable[..., str]:
+def create_team_crud(api_key: str, org_id: str) -> dspy.Tool:
     """
-    Factory: Create team_crud function with auth captured in closure.
+    Factory: Create team_crud tool with auth captured in closure.
 
     Args:
         api_key: Bearer token for authentication
         org_id: Organization ID for RLS context
 
     Returns:
-        team_crud function that DSPy ReAct can use
+        dspy.Tool wrapping the team_crud function
     """
 
     def team_crud(
@@ -109,4 +111,14 @@ def create_team_crud(api_key: str, org_id: str) -> Callable[..., str]:
         else:
             return f"ERROR: Unknown method: {method}. Supported: create, read, update, delete, list"
 
-    return team_crud
+    return dspy.Tool(
+        func=team_crud,
+        name="team_crud",
+        desc="Team management: create, read, update, delete, list teams.",
+        arg_desc={
+            "method": "Operation: create, read, update, delete, list",
+            "team_id": "Team ID (required for read, update, delete)",
+            "data": "Team data for create/update operations",
+            "filters": "Filter criteria for list operation",
+        },
+    )

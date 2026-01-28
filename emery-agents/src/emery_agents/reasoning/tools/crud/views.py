@@ -6,22 +6,24 @@ Ported from tools/view_tools.py.
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any
+
+import dspy
 
 from ..http_client import make_request
 from ..mutation_guard import check_mutation_allowed
 
 
-def create_view_crud(api_key: str, org_id: str) -> Callable[..., str]:
+def create_view_crud(api_key: str, org_id: str) -> dspy.Tool:
     """
-    Factory: Create view_crud function with auth captured in closure.
+    Factory: Create view_crud tool with auth captured in closure.
 
     Args:
         api_key: Bearer token for authentication
         org_id: Organization ID for RLS context
 
     Returns:
-        view_crud function that DSPy ReAct can use
+        dspy.Tool wrapping the view_crud function
     """
 
     def view_crud(
@@ -138,4 +140,14 @@ def create_view_crud(api_key: str, org_id: str) -> Callable[..., str]:
         else:
             return f"ERROR: Unknown method: {method}. Valid: list, read, create, update, delete, execute"
 
-    return view_crud
+    return dspy.Tool(
+        func=view_crud,
+        name="view_crud",
+        desc="Data view management: list, read, create, update, delete, execute. View types: grid, metric, chart, form.",
+        arg_desc={
+            "method": "Operation: list, read, create, update, delete, execute",
+            "view_id": "View ID (required for read, update, delete, execute)",
+            "table_id": "Table ID filter for list operation",
+            "data": "View data: {tableId, name, viewType, filters?, sorting?, fieldMappings?}",
+        },
+    )

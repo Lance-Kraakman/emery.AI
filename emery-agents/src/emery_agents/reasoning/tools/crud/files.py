@@ -6,22 +6,24 @@ Ported from tools/crud_tools.py (load_file_crud).
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any
+
+import dspy
 
 from ..http_client import make_request
 from ..mutation_guard import check_mutation_allowed
 
 
-def create_file_crud(api_key: str, org_id: str) -> Callable[..., str]:
+def create_file_crud(api_key: str, org_id: str) -> dspy.Tool:
     """
-    Factory: Create file_crud function with auth captured in closure.
+    Factory: Create file_crud tool with auth captured in closure.
 
     Args:
         api_key: Bearer token for authentication
         org_id: Organization ID for RLS context
 
     Returns:
-        file_crud function that DSPy ReAct can use
+        dspy.Tool wrapping the file_crud function
     """
 
     def file_crud(
@@ -111,4 +113,16 @@ def create_file_crud(api_key: str, org_id: str) -> Callable[..., str]:
         else:
             return f"ERROR: Unknown method: {method}. Supported: create, read, update, delete"
 
-    return file_crud
+    return dspy.Tool(
+        func=file_crud,
+        name="file_crud",
+        desc="File management: create, read, update, delete. Files are stored in table row fields.",
+        arg_desc={
+            "method": "Operation: create, read, update, delete",
+            "file_id": "File ID (required for read, update, delete)",
+            "table_id": "Table ID containing the file field (required for read/update/delete)",
+            "row_id": "Row ID containing the file (required for read/update/delete)",
+            "field_id": "Field ID of the file column (required for read/update/delete)",
+            "data": "File data for create/update operations",
+        },
+    )

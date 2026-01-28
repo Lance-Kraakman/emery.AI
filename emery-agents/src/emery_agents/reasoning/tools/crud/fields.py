@@ -7,7 +7,9 @@ Ported from tools/field_tools.py.
 from __future__ import annotations
 
 import urllib.parse
-from typing import Any, Callable
+from typing import Any
+
+import dspy
 
 from ..http_client import make_request
 from ..mutation_guard import check_mutation_allowed
@@ -30,16 +32,16 @@ VALID_FIELD_TYPES = {
 }
 
 
-def create_field_crud(api_key: str, org_id: str) -> Callable[..., str]:
+def create_field_crud(api_key: str, org_id: str) -> dspy.Tool:
     """
-    Factory: Create field_crud function with auth captured in closure.
+    Factory: Create field_crud tool with auth captured in closure.
 
     Args:
         api_key: Bearer token for authentication
         org_id: Organization ID for RLS context
 
     Returns:
-        field_crud function that DSPy ReAct can use
+        dspy.Tool wrapping the field_crud function
     """
 
     def field_crud(
@@ -168,4 +170,17 @@ def create_field_crud(api_key: str, org_id: str) -> Callable[..., str]:
         else:
             return f"ERROR: Unknown method: {method}. Supported: create_field, list_fields, delete_field"
 
-    return field_crud
+    return dspy.Tool(
+        func=field_crud,
+        name="field_crud",
+        desc="Column/field management: create_field, list_fields, delete_field. Supports types: text, number, boolean, date, email, phone, json, relation, file, document, embedding, single-select, multi-select.",
+        arg_desc={
+            "method": "Operation: create_field, list_fields, delete_field",
+            "table_id": "Table ID (required for all operations)",
+            "field_name": "Column name (required for create_field, delete_field)",
+            "field_type": "Field type: text, number, boolean, date, email, phone, json, relation, file, document, embedding, single-select, multi-select",
+            "field_required": "Whether field is required (default: false)",
+            "related_table_id": "Target table ID for relation fields",
+            "field_config": "Type-specific config: {options: [...]} for selects, {embeddingSize: 1536} for embeddings",
+        },
+    )

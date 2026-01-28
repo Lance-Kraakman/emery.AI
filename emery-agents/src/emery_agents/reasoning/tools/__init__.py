@@ -11,7 +11,9 @@ Usage:
 
 from __future__ import annotations
 
-from typing import Callable
+from typing import Any, Callable
+
+import dspy
 
 from .crud import (
     create_agent_crud,
@@ -174,7 +176,7 @@ __all__ = [
 ]
 
 
-def create_crud_tools(api_key: str, org_id: str) -> list[Callable[..., str]]:
+def create_crud_tools(api_key: str, org_id: str) -> list[dspy.Tool]:
     """
     Create all CRUD tool functions with auth captured.
 
@@ -183,7 +185,7 @@ def create_crud_tools(api_key: str, org_id: str) -> list[Callable[..., str]]:
         org_id: Organization ID for RLS context
 
     Returns:
-        List of callable tool functions for DSPy ReAct
+        List of dspy.Tool instances for DSPy ReAct
     """
     return [
         create_table_crud(api_key, org_id),
@@ -201,7 +203,7 @@ def create_crud_tools(api_key: str, org_id: str) -> list[Callable[..., str]]:
     ]
 
 
-def create_all_tools(api_key: str, org_id: str) -> list[Callable[..., str]]:
+def create_all_tools(api_key: str, org_id: str) -> list[dspy.Tool]:
     """
     Create all DSPy tool functions with auth captured.
 
@@ -212,9 +214,9 @@ def create_all_tools(api_key: str, org_id: str) -> list[Callable[..., str]]:
         org_id: Organization ID for RLS context
 
     Returns:
-        List of callable tool functions for DSPy ReAct
+        List of dspy.Tool instances for DSPy ReAct
     """
-    tools: list[Callable[..., str]] = []
+    tools: list[dspy.Tool] = []
 
     # Add CRUD tools
     tools.extend(create_crud_tools(api_key, org_id))

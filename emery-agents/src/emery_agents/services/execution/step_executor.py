@@ -1,7 +1,7 @@
 """
 Step Executor
 
-Executes individual plan steps using PlanStepExecutor with smolagents routing.
+Executes individual plan steps using PlanStepExecutor with DSPy ReAct routing.
 
 Extracted from ExecutionCoordinator for maintainability.
 """
@@ -11,6 +11,7 @@ import logging
 from typing import Any, List, Optional
 
 from ...entities.models.plan import Plan, PlanStep
+from ...reasoning.utils import StepOutcome
 from .plan_step_executor import PlanStepExecutor
 from ...utils.session_logger import SessionLogger
 
@@ -21,7 +22,7 @@ class StepExecutor:
     """
     Executes individual plan steps.
 
-    Uses PlanStepExecutor for smolagents-based routing, or falls back
+    Uses PlanStepExecutor for DSPy ReAct-based routing, or falls back
     to direct tool execution if no executor is configured.
     """
 
@@ -39,27 +40,32 @@ class StepExecutor:
         step: PlanStep,
         tools: List[Any],
         managed_agents: Optional[List[Any]] = None,
-    ) -> Optional[str]:
-        """Execute a single plan step using smolagents routing."""
+    ) -> StepOutcome:
+        """Execute a single plan step, returning structured outcome."""
         logger.info(f"Executing step {step.step_id}: {step.description[:100]}...")
 
         # Use PlanStepExecutor - pass Plan object, executor generates prompt from it
         # Wrap in asyncio.to_thread since execute() is synchronous (calls blocking LLM APIs)
         if self.plan_step_executor and current_plan:
-            result = await asyncio.to_thread(
+            outcome = await asyncio.to_thread(
                 self.plan_step_executor.execute,
                 plan=current_plan,
                 current_step=step,
             )
-            return result
+            return outcome
 
         # Fallback: If there's a tool_call specified, use it directly
         if step.tool_call:
-            return await self._execute_tool_directly(step, tools)
+            result_str = await self._execute_tool_directly(step, tools)
+            return StepOutcome(summary=result_str, success=True, tool_calls=[])
 
         # No executor and no tool_call - just mark as done
         logger.warning("No plan_step_executor configured, step not actually executed")
-        return f"Step completed (no executor): {step.description}"
+        return StepOutcome(
+            summary=f"Step completed (no executor): {step.description}",
+            success=True,
+            tool_calls=[],
+        )
 
     async def _execute_tool_directly(
         self,

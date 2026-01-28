@@ -6,22 +6,24 @@ Ported from tools/row_tools.py.
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any
+
+import dspy
 
 from ..http_client import make_request
 from ..mutation_guard import check_mutation_allowed
 
 
-def create_row_crud(api_key: str, org_id: str) -> Callable[..., str]:
+def create_row_crud(api_key: str, org_id: str) -> dspy.Tool:
     """
-    Factory: Create row_crud function with auth captured in closure.
+    Factory: Create row_crud tool with auth captured in closure.
 
     Args:
         api_key: Bearer token for authentication
         org_id: Organization ID for RLS context
 
     Returns:
-        row_crud function that DSPy ReAct can use
+        dspy.Tool wrapping the row_crud function
     """
 
     def row_crud(
@@ -122,4 +124,19 @@ def create_row_crud(api_key: str, org_id: str) -> Callable[..., str]:
         else:
             return f"ERROR: Unknown method: {method}. Supported: create_row, get_rows, update_row, delete_row"
 
-    return row_crud
+    return dspy.Tool(
+        func=row_crud,
+        name="row_crud",
+        desc="Row/record management: create_row, get_rows, update_row, delete_row.",
+        arg_desc={
+            "method": "Operation: create_row, get_rows, update_row, delete_row",
+            "table_id": "Table ID (required for all operations)",
+            "row_id": "Row ID (required for update_row, delete_row)",
+            "data": "Field values for create/update: {field_name: value, ...}",
+            "limit": "Max rows to return for get_rows (default: 100)",
+            "offset": "Pagination offset for get_rows (default: 0)",
+            "order_by": "Field to sort by for get_rows",
+            "order_direction": "Sort direction: ASC or DESC",
+            "filters": "Filter criteria: [{field, operator, value}]",
+        },
+    )

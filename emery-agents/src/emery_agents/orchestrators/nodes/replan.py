@@ -41,6 +41,7 @@ from ...services.execution.events import (
 )
 from ...reasoning.modules.evaluator import EvaluatorModule
 from ...reasoning.config import get_dspy_lm
+from ...reasoning.utils import StepOutcome
 from ..state import PlanExecuteState
 from ..runtime import RuntimeContext
 
@@ -59,6 +60,10 @@ async def replan_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[
     replan_count = state.get("replan_count", 0)
     max_replans = state.get("max_replans", 3)
     org_model = state.get("org_model")
+    raw_outcomes = state.get("step_outcomes", {})
+    outcomes: Dict[str, StepOutcome] = {
+        k: StepOutcome.from_dict(v) for k, v in raw_outcomes.items()
+    }
 
     events: List[Any] = []
 
@@ -74,7 +79,7 @@ async def replan_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[
         return {"error": None, "events": events}
 
     # Case 3: All steps done → evaluate goal and decide
-    evaluation = await _evaluate_progress(plan, org_model, events)
+    evaluation = await _evaluate_progress(plan, org_model, events, outcomes)
 
     if evaluation.goal_achieved:
         # Goal achieved — synthesize and finish
@@ -226,6 +231,7 @@ async def _evaluate_progress(
     plan: Plan,
     org_model: Optional[str],
     events: List[Any],
+    step_outcomes: Optional[Dict[str, StepOutcome]] = None,
 ) -> EvaluationResult:
     """Evaluate goal achievement using DSPy EvaluatorModule."""
     try:
@@ -236,12 +242,22 @@ async def _evaluate_progress(
 
         for step in plan.steps:
             plan_steps.append(step.description)
-            if step.result:
-                step_results.append(step.result)
+            if step.status == PlanStepStatus.COMPLETED.value:
+                step_results.append(f"[COMPLETED] {step.result or 'Done'}")
             elif step.status == PlanStepStatus.FAILED.value:
-                step_results.append(f"FAILED: {step.error or 'Unknown error'}")
+                step_results.append(f"[FAILED] {step.error or 'Unknown error'}")
+            elif step.status == PlanStepStatus.IN_PROGRESS.value:
+                step_results.append("[IN_PROGRESS]")
             else:
-                step_results.append("Pending")
+                step_results.append("[PENDING]")
+
+        # Collect structured outcomes for evaluator (preserves typed data)
+        outcomes_list: List[StepOutcome] = []
+        if step_outcomes:
+            for step in plan.steps:
+                outcome = step_outcomes.get(step.step_id)
+                if outcome:
+                    outcomes_list.append(outcome)
 
         lm = get_dspy_lm(org_model=org_model)
         evaluator = EvaluatorModule()
@@ -252,6 +268,7 @@ async def _evaluate_progress(
                 goal,
                 plan_steps,
                 step_results,
+                outcomes_list,
             )
 
         evaluation = EvaluationResult(
@@ -458,7 +475,13 @@ async def _do_replan(
         # Differ couldn't generate new steps — finish with what we have
         # instead of looping back to execute_step with nothing to execute
         logger.info("Replan produced no new steps, finishing")
-        evaluation = await _evaluate_progress(updated_plan, org_model, events)
+        raw = state.get("step_outcomes", {})
+        replan_outcomes: Dict[str, StepOutcome] = {
+            k: StepOutcome.from_dict(v) for k, v in raw.items()
+        }
+        evaluation = await _evaluate_progress(
+            updated_plan, org_model, events, replan_outcomes
+        )
         return await _finish(updated_plan, state, org_model, evaluation, events, runtime)
 
     return {

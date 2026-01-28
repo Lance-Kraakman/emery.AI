@@ -8,7 +8,7 @@ Wraps existing PlanService for plan creation.
 import logging
 from typing import Any, Dict, List, Optional
 
-from ...entities.models.plan import Plan, PlanStep, PlanStepStatus
+from ...entities.models.plan import Plan, PlanStep, PlanStepStatus, SkillInputDefinition, SkillOutputDefinition
 from ...entities.models.task_ledger import create_ledger_from_plan
 from ...services.plan_service import PlanService
 from ...services.context import (
@@ -168,6 +168,22 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
         api_key=api_key,
     )
 
+    # Read skill template generation fields (set by GeneratePlan RPC)
+    skill_inputs_raw = state.get("skill_inputs")
+    skill_outputs_raw = state.get("skill_outputs")
+    is_template_generation = state.get("is_template_generation", False)
+
+    skill_input_defs = (
+        [SkillInputDefinition(**s) for s in skill_inputs_raw]
+        if skill_inputs_raw
+        else None
+    )
+    skill_output_defs = (
+        [SkillOutputDefinition(**s) for s in skill_outputs_raw]
+        if skill_outputs_raw
+        else None
+    )
+
     # Create PlanService and generate plan
     plan_service = PlanService(model_provider=None)
 
@@ -183,6 +199,9 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
             capability_registry=capability_registry,
             config=config,
             workspace=workspace_context,
+            skill_inputs=skill_input_defs,
+            skill_outputs=skill_output_defs,
+            is_template_generation=is_template_generation,
         )
     except Exception as e:
         logger.error(f"Plan generation failed: {e}")

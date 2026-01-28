@@ -464,6 +464,15 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 "org_id": str(tool_provider.organization_id),
                 "org_model": request.model or None,
                 "organization_id": tool_provider.organization_id,
+                "skill_inputs": [
+                    {"name": i.name, "type": i.type, "required": i.required}
+                    for i in skill_inputs
+                ] if skill_inputs else None,
+                "skill_outputs": [
+                    {"name": o.name, "type": o.type}
+                    for o in skill_outputs
+                ] if skill_outputs else None,
+                "is_template_generation": bool(skill_inputs),
             }
 
             result = await generate_plan_node(cast(PlanExecuteState, plan_state), runtime)

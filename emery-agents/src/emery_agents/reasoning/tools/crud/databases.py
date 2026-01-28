@@ -8,22 +8,24 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
-from typing import Any, Callable
+from typing import Any
+
+import dspy
 
 from ..api import DatabaseAPI
 from ..mutation_guard import check_mutation_allowed
 
 
-def create_database_crud(api_key: str, org_id: str) -> Callable[..., str]:
+def create_database_crud(api_key: str, org_id: str) -> dspy.Tool:
     """
-    Factory: Create database_crud function with auth captured in closure.
+    Factory: Create database_crud tool with auth captured in closure.
 
     Args:
         api_key: Bearer token for authentication
         org_id: Organization ID for RLS context
 
     Returns:
-        database_crud function that DSPy ReAct can use
+        dspy.Tool wrapping the database_crud function
     """
     api = DatabaseAPI(api_key, org_id)
 
@@ -93,4 +95,14 @@ def create_database_crud(api_key: str, org_id: str) -> Callable[..., str]:
         else:
             return f"ERROR: Unknown method: {method}. Supported: list, read, create, update, delete"
 
-    return database_crud
+    return dspy.Tool(
+        func=database_crud,
+        name="database_crud",
+        desc="Database management: list, read, create, update, delete databases.",
+        arg_desc={
+            "method": "Operation: list, read, create, update, delete",
+            "database_id": "Database ID (required for read, update, delete)",
+            "data": "Database data for create/update: {name: str, description?: str}",
+            "filters": "Filter criteria for list operation",
+        },
+    )

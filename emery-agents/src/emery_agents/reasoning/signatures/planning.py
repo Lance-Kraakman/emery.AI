@@ -71,6 +71,11 @@ class PlanStepOutput(BaseModel):
         default=False,
         description="Re-evaluate plan after this step completes",
     )
+    prompt_template: Optional[str] = Field(
+        default=None,
+        description="Jinja2 prompt template with {{ variable }} placeholders for skill inputs. "
+                    "Only generate when skill_inputs_description is provided.",
+    )
 
 
 class PlanOutput(BaseModel):
@@ -110,6 +115,7 @@ class CreatePlan(dspy.Signature):  # type: ignore[misc]
 
     Check workspace_context for existing resources before asking questions.
     Use capability_guidance to understand which capability to delegate to.
+    Use conversation_history for context from previous messages in this session.
     """
 
     request: str = dspy.InputField(desc="User's goal or task")
@@ -121,6 +127,13 @@ class CreatePlan(dspy.Signature):  # type: ignore[misc]
         desc="Capability planning guidance - when to use each capability"
     )
     proven_strategies: str = dspy.InputField(desc="ACE patterns for similar goals")
+    conversation_history: str = dspy.InputField(
+        desc="Previous messages in this session for context continuity"
+    )
+    skill_inputs_description: str = dspy.InputField(
+        desc="Skill input/output variables available for {{ template }} placeholders in prompt_template. "
+             "Empty string if not generating templates for autonomous skills."
+    )
 
     result: PlanOrQuestionsOutput = dspy.OutputField()
 

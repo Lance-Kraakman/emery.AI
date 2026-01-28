@@ -6,6 +6,8 @@ Handles goal evaluation, recovery analysis, and answer synthesis.
 
 from __future__ import annotations
 
+from typing import Optional
+
 import dspy
 
 from emery_agents.reasoning.signatures.evaluation import (
@@ -17,6 +19,7 @@ from emery_agents.reasoning.signatures.evaluation import (
     StepEvaluation,
     SynthesizeAnswer,
 )
+from emery_agents.reasoning.utils import StepOutcome
 
 
 class EvaluatorModule(dspy.Module):  # type: ignore[misc]
@@ -32,11 +35,24 @@ class EvaluatorModule(dspy.Module):  # type: ignore[misc]
         self.recovery_analyzer = dspy.ChainOfThought(AnalyzeRecovery)
         self.synthesizer = dspy.ChainOfThought(SynthesizeAnswer)
 
+    @staticmethod
+    def _format_tool_evidence(outcomes: list[StepOutcome]) -> str:
+        """Format StepOutcome objects into tool evidence text for the DSPy signature."""
+        if not outcomes:
+            return "No tool evidence available."
+        parts = []
+        for outcome in outcomes:
+            evidence = outcome.format_evidence()
+            if evidence:
+                parts.append(evidence)
+        return "\n\n".join(parts) if parts else "No tool evidence available."
+
     def evaluate_goal(
         self,
         original_goal: str,
         plan_steps: list[str],
         step_results: list[str],
+        step_outcomes: Optional[list[StepOutcome]] = None,
     ) -> GoalEvaluation:
         """
         Evaluate whether the original goal was achieved.
@@ -45,14 +61,17 @@ class EvaluatorModule(dspy.Module):  # type: ignore[misc]
             original_goal: The user's original request
             plan_steps: List of planned step descriptions
             step_results: List of results from each step
+            step_outcomes: Structured step outcomes with raw tool call data
 
         Returns:
             GoalEvaluation with achievement status and details
         """
+        tool_evidence = self._format_tool_evidence(step_outcomes or [])
         result = self.goal_evaluator(
             original_goal=original_goal,
             plan_steps=plan_steps,
             step_results=step_results,
+            tool_evidence=tool_evidence,
         )
         return result.evaluation  # type: ignore[no-any-return]
 
@@ -133,6 +152,7 @@ class EvaluatorModule(dspy.Module):  # type: ignore[misc]
         original_goal: str,
         plan_steps: list[str],
         step_results: list[str],
+        step_outcomes: Optional[list[StepOutcome]] = None,
     ) -> GoalEvaluation:
         """
         Default forward pass evaluates goal achievement.
@@ -141,8 +161,9 @@ class EvaluatorModule(dspy.Module):  # type: ignore[misc]
             original_goal: The user's original request
             plan_steps: List of planned step descriptions
             step_results: List of results from each step
+            step_outcomes: Structured step outcomes with raw tool call data
 
         Returns:
             GoalEvaluation with achievement status
         """
-        return self.evaluate_goal(original_goal, plan_steps, step_results)
+        return self.evaluate_goal(original_goal, plan_steps, step_results, step_outcomes)

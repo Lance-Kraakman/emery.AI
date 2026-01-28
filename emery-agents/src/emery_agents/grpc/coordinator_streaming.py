@@ -28,6 +28,7 @@ from .coordinator_event_converter import convert_coordinator_event
 from .approval_handler import is_approval_response
 from .response_types import create_error_response
 from ..orchestrators import create_session_graph, RuntimeContext
+from ..orchestrators.runtime import ConversationMessage
 from ..orchestrators.state import DEFAULT_STATE
 from ..services.memory import MemoryService
 from ..services.planning import PlanFileRepository
@@ -42,6 +43,29 @@ logger = logging.getLogger(__name__)
 # Session-scoped graph cache keyed by thread_id.
 # Each session gets its own graph with RuntimeContext bound via closures.
 _session_cache: Dict[str, Any] = {}
+
+
+def _convert_history(
+    conversation_history: Optional[List[Any]],
+) -> Optional[List[ConversationMessage]]:
+    """Convert protobuf HistoryMessage objects to typed ConversationMessage dataclasses."""
+    if not conversation_history:
+        return None
+    messages: List[ConversationMessage] = []
+    for msg in conversation_history:
+        if isinstance(msg, ConversationMessage):
+            messages.append(msg)
+        else:
+            # Protobuf HistoryMessage: .role str, .content_parts[].text.text str
+            role = getattr(msg, "role", "unknown")
+            content_parts = getattr(msg, "content_parts", [])
+            text = " ".join(
+                getattr(getattr(part, "text", None), "text", "")
+                for part in content_parts
+                if getattr(part, "text", None)
+            )
+            messages.append(ConversationMessage(role=role, content=text))
+    return messages
 
 
 def _format_dict_questions(questions: List[dict[str, Any]]) -> List[dict[str, Any]]:
@@ -160,7 +184,7 @@ class CoordinatorStreamingHandler:
             org_id=str(context.tool_provider.organization_id),
             org_model=org_model,
             capability_registry=capability_registry,
-            conversation_history=conversation_history,
+            conversation_history=_convert_history(conversation_history),
             user_id=user_id,
             workspace_type=workspace_type,
             workspace_id=workspace_id,

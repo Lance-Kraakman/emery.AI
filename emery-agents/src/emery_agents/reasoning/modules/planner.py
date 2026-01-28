@@ -16,6 +16,7 @@ from emery_agents.reasoning.signatures.planning import (
     ClarifyingQuestionOutput,
     CreatePlan,
     PlanOrQuestionsOutput,
+    QuestionType,
 )
 
 if TYPE_CHECKING:
@@ -72,6 +73,8 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         workspace_context: str,
         capability_guidance: str,
         proven_strategies: str,
+        conversation_history: str = "",
+        skill_inputs_description: str = "",
     ) -> PlanOrQuestionsOutput:
         """
         Generate a plan or clarifying questions for a user request.
@@ -81,6 +84,9 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
             workspace_context: JSON string of existing workspace resources
             capability_guidance: Domain-specific instructions from capability registry
             proven_strategies: ACE patterns for similar goals
+            conversation_history: Formatted previous messages for context continuity
+            skill_inputs_description: Skill input/output variable definitions for
+                template generation. Empty string when not generating templates.
 
         Returns:
             PlanOrQuestionsOutput with either a plan or clarifying questions
@@ -94,7 +100,7 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
                 questions=[
                     ClarifyingQuestionOutput(
                         question="What would you like help with today?",
-                        question_type="text",
+                        question_type=QuestionType.TEXT,
                         options=None,
                         reason="Need to understand your goal before creating a plan",
                     )
@@ -129,6 +135,8 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
             available_tools=tool_names,
             capability_guidance=effective_guidance,
             proven_strategies=proven_strategies,
+            conversation_history=conversation_history,
+            skill_inputs_description=skill_inputs_description,
         )
 
         # Step 5: Validate output
@@ -242,6 +250,8 @@ class SimplePlannerModule(dspy.Module):  # type: ignore[misc]
         workspace_context: str,
         capability_guidance: str = "",
         proven_strategies: str = "",
+        conversation_history: str = "",
+        skill_inputs_description: str = "",
     ) -> PlanOrQuestionsOutput:
         """
         Generate a plan directly without pre-analysis.
@@ -251,6 +261,9 @@ class SimplePlannerModule(dspy.Module):  # type: ignore[misc]
             workspace_context: JSON string of existing workspace resources
             capability_guidance: Domain-specific instructions
             proven_strategies: ACE patterns for similar goals
+            conversation_history: Formatted previous messages for context continuity
+            skill_inputs_description: Skill input/output variable definitions for
+                template generation. Empty string when not generating templates.
 
         Returns:
             PlanOrQuestionsOutput with either a plan or clarifying questions
@@ -265,6 +278,8 @@ class SimplePlannerModule(dspy.Module):  # type: ignore[misc]
             available_tools=tool_names,
             capability_guidance=capability_guidance,
             proven_strategies=proven_strategies,
+            conversation_history=conversation_history,
+            skill_inputs_description=skill_inputs_description,
         )
 
         return result.result  # type: ignore[no-any-return]

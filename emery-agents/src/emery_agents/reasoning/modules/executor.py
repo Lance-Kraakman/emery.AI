@@ -38,6 +38,7 @@ class ExecutorModule(dspy.Module):  # type: ignore[misc]
         super().__init__()
         self.execution_tools = execution_tools or []
         self.max_iters = max_iters
+        self.last_trajectory: dict[str, Any] | None = None
 
         # Create ReAct module with tools
         self.react = dspy.ReAct(
@@ -61,7 +62,8 @@ class ExecutorModule(dspy.Module):  # type: ignore[misc]
             step_description=step_description,
             context=context,
         )
-        return result  # type: ignore[no-any-return]
+        self.last_trajectory = getattr(result, "trajectory", None)
+        return result.result  # type: ignore[no-any-return]
 
 
 class SimpleExecutorModule(dspy.Module):  # type: ignore[misc]

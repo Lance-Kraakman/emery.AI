@@ -8,22 +8,24 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
-from typing import Any, Callable
+from typing import Any
+
+import dspy
 
 from ..api import TableAPI
 from ..mutation_guard import check_mutation_allowed
 
 
-def create_table_crud(api_key: str, org_id: str) -> Callable[..., str]:
+def create_table_crud(api_key: str, org_id: str) -> dspy.Tool:
     """
-    Factory: Create table_crud function with auth captured in closure.
+    Factory: Create table_crud tool with auth captured in closure.
 
     Args:
         api_key: Bearer token for authentication
         org_id: Organization ID for RLS context
 
     Returns:
-        table_crud function that DSPy ReAct can use
+        dspy.Tool wrapping the table_crud function
     """
     api = TableAPI(api_key, org_id)
 
@@ -99,4 +101,14 @@ def create_table_crud(api_key: str, org_id: str) -> Callable[..., str]:
         else:
             return f"ERROR: Unknown method: {method}. Supported: create_table, read_table, update_table, delete_table, list_tables"
 
-    return table_crud
+    return dspy.Tool(
+        func=table_crud,
+        name="table_crud",
+        desc="Table management: create_table, read_table, update_table, delete_table, list_tables.",
+        arg_desc={
+            "method": "Operation: list_tables, read_table, create_table, update_table, delete_table",
+            "table_id": "Table ID (required for read_table, update_table, delete_table)",
+            "data": "For create_table: {name, databaseId, description}. For update_table: {name, description, metadata}",
+            "filters": "Filter criteria for list_tables (e.g., {databaseId: 5})",
+        },
+    )

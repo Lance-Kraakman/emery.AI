@@ -6,7 +6,9 @@ Ported from tools/crud_tools.py (load_document_crud).
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any
+
+import dspy
 
 from ..http_client import make_request
 from ..mutation_guard import check_mutation_allowed
@@ -53,16 +55,16 @@ def _build_list(items: list[str], ordered: bool = False) -> dict[str, Any]:
     }
 
 
-def create_document_crud(api_key: str, org_id: str) -> Callable[..., str]:
+def create_document_crud(api_key: str, org_id: str) -> dspy.Tool:
     """
-    Factory: Create document_crud function with auth captured in closure.
+    Factory: Create document_crud tool with auth captured in closure.
 
     Args:
         api_key: Bearer token for authentication
         org_id: Organization ID for RLS context
 
     Returns:
-        document_crud function that DSPy ReAct can use
+        dspy.Tool wrapping the document_crud function
     """
 
     def document_crud(
@@ -212,7 +214,27 @@ def create_document_crud(api_key: str, org_id: str) -> Callable[..., str]:
                 f"append_text, append_heading, append_list, update_text, update_heading"
             )
 
-    return document_crud
+    return dspy.Tool(
+        func=document_crud,
+        name="document_crud",
+        desc="Document management with TipTap content: create, read, list, append_text, append_heading, append_list, update_text, update_heading.",
+        arg_desc={
+            "method": "Operation: create, read, list, append_text, append_heading, append_list, update_text, update_heading",
+            "document_id": "Document ID (required for read/update/append)",
+            "table_id": "Table ID containing the document field",
+            "field_id": "Field ID of the document column",
+            "row_id": "Row ID (optional for create)",
+            "title": "Document title (required for create)",
+            "text": "Text content for append_text, append_heading, update_text, update_heading",
+            "level": "Heading level 1-6 for append_heading, update_heading",
+            "items": "List items (array of strings) for append_list",
+            "position": "Block index (0-based) for update_text, update_heading",
+            "bold": "Make text bold",
+            "italic": "Make text italic",
+            "ordered": "Use ordered list instead of bullets",
+            "data": "Full TipTap JSON for low-level update",
+        },
+    )
 
 
 def _modify_content(

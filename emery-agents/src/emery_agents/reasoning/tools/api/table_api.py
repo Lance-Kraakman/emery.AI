@@ -39,6 +39,17 @@ class TableAPI:
         self._api_key = api_key
         self._org_id = org_id
 
+    @staticmethod
+    def _unwrap_entity(result: str) -> Optional[Dict[str, Any]]:
+        """Unwrap entity from API envelope {"success": true, "data": {...}}."""
+        try:
+            parsed = json.loads(result)
+            if isinstance(parsed, dict) and "data" in parsed:
+                return parsed["data"]  # type: ignore[no-any-return]
+            return parsed  # type: ignore[no-any-return]
+        except (json.JSONDecodeError, TypeError):
+            return None
+
     def list(
         self,
         database_id: Optional[int] = None,
@@ -112,18 +123,23 @@ class TableAPI:
         if result.startswith("ERROR"):
             return None
 
+        entity = self._unwrap_entity(result)
+        if entity is None:
+            logger.warning(f"Table get: failed to parse response: {result[:200]}")
+            return None
+
         try:
-            t = json.loads(result)
             return Table(
-                id=t["id"],
-                name=t.get("name", ""),
-                database_id=t.get("databaseId"),
-                description=t.get("description", ""),
-                field_count=len(t.get("fields", [])),
-                fields=t.get("fields", []),
-                slug=t.get("slug", ""),
+                id=entity["id"],
+                name=entity.get("name", ""),
+                database_id=entity.get("databaseId"),
+                description=entity.get("description", ""),
+                field_count=len(entity.get("fields", [])),
+                fields=entity.get("fields", []),
+                slug=entity.get("slug", ""),
             )
-        except (json.JSONDecodeError, KeyError):
+        except KeyError as e:
+            logger.warning(f"Table get: missing field {e}: {result[:200]}")
             return None
 
     def create(
@@ -155,15 +171,20 @@ class TableAPI:
             logger.debug(f"Table create failed: {result}")
             return None
 
+        entity = self._unwrap_entity(result)
+        if entity is None:
+            logger.warning(f"Table create: failed to parse response: {result[:200]}")
+            return None
+
         try:
-            t = json.loads(result)
             return Table(
-                id=t["id"],
-                name=t.get("name", name),
-                database_id=t.get("databaseId", database_id),
-                description=t.get("description", description),
+                id=entity["id"],
+                name=entity.get("name", name),
+                database_id=entity.get("databaseId", database_id),
+                description=entity.get("description", description),
             )
-        except (json.JSONDecodeError, KeyError):
+        except KeyError as e:
+            logger.warning(f"Table create: missing field {e}: {result[:200]}")
             return None
 
     def update(self, table_id: int, data: Dict[str, Any]) -> Optional[Table]:
@@ -187,15 +208,20 @@ class TableAPI:
         if result.startswith("ERROR"):
             return None
 
+        entity = self._unwrap_entity(result)
+        if entity is None:
+            logger.warning(f"Table update: failed to parse response: {result[:200]}")
+            return None
+
         try:
-            t = json.loads(result)
             return Table(
-                id=t["id"],
-                name=t.get("name", ""),
-                database_id=t.get("databaseId"),
-                description=t.get("description", ""),
+                id=entity["id"],
+                name=entity.get("name", ""),
+                database_id=entity.get("databaseId"),
+                description=entity.get("description", ""),
             )
-        except (json.JSONDecodeError, KeyError):
+        except KeyError as e:
+            logger.warning(f"Table update: missing field {e}: {result[:200]}")
             return None
 
     def delete(self, table_id: int) -> bool:

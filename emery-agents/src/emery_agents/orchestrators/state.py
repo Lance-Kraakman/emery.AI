@@ -36,10 +36,15 @@ class PlanExecuteState(TypedDict, total=False):
     org_model: Optional[str]
     organization_id: Optional[int]
 
+    # Skill template generation (for GeneratePlan RPC)
+    skill_inputs: Optional[List[Dict[str, Any]]]
+    skill_outputs: Optional[List[Dict[str, Any]]]
+    is_template_generation: bool
+
     # === Plan state (dataclasses — serializable) ===
     plan: Optional[Plan]
     stored_plan: Optional[Plan]  # Pre-approved plan for autonomous mode
-    step_results: Dict[str, Any]
+    step_outcomes: Dict[str, Dict[str, Any]]  # step_id → StepOutcome.to_dict()
 
     # Task ledger for evaluation
     ledger: Optional[TaskLedger]
@@ -69,10 +74,14 @@ DEFAULT_STATE: Dict[str, Any] = {
     "org_id": "",
     "org_model": None,
     "organization_id": None,
+    # Skill template generation
+    "skill_inputs": None,
+    "skill_outputs": None,
+    "is_template_generation": False,
     # Plan state
     "plan": None,
     "stored_plan": None,
-    "step_results": {},
+    "step_outcomes": {},
     "ledger": None,
     # Execution tracking
     "replan_count": 0,

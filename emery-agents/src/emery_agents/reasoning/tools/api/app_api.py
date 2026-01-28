@@ -36,6 +36,17 @@ class AppAPI:
         self._api_key = api_key
         self._org_id = org_id
 
+    @staticmethod
+    def _unwrap_entity(result: str) -> Optional[Dict[str, Any]]:
+        """Unwrap entity from API envelope {"success": true, "data": {...}}."""
+        try:
+            parsed = json.loads(result)
+            if isinstance(parsed, dict) and "data" in parsed:
+                return parsed["data"]  # type: ignore[no-any-return]
+            return parsed  # type: ignore[no-any-return]
+        except (json.JSONDecodeError, TypeError):
+            return None
+
     def list(self, filters: Optional[Dict[str, Any]] = None) -> List[App]:
         """List all apps.
 
@@ -98,16 +109,21 @@ class AppAPI:
         if result.startswith("ERROR"):
             return None
 
+        entity = self._unwrap_entity(result)
+        if entity is None:
+            logger.warning(f"App get: failed to parse response: {result[:200]}")
+            return None
+
         try:
-            app = json.loads(result)
             return App(
-                id=app["id"],
-                name=app.get("name", ""),
-                description=app.get("description", ""),
-                slug=app.get("slug", ""),
-                pages=app.get("pages", []),
+                id=entity["id"],
+                name=entity.get("name", ""),
+                description=entity.get("description", ""),
+                slug=entity.get("slug", ""),
+                pages=entity.get("pages", []),
             )
-        except (json.JSONDecodeError, KeyError):
+        except KeyError as e:
+            logger.warning(f"App get: missing field {e}: {result[:200]}")
             return None
 
     def create(self, name: str, description: str = "") -> Optional[App]:
@@ -132,14 +148,19 @@ class AppAPI:
             logger.debug(f"App create failed: {result}")
             return None
 
+        entity = self._unwrap_entity(result)
+        if entity is None:
+            logger.warning(f"App create: failed to parse response: {result[:200]}")
+            return None
+
         try:
-            app = json.loads(result)
             return App(
-                id=app["id"],
-                name=app.get("name", name),
-                description=app.get("description", description),
+                id=entity["id"],
+                name=entity.get("name", name),
+                description=entity.get("description", description),
             )
-        except (json.JSONDecodeError, KeyError):
+        except KeyError as e:
+            logger.warning(f"App create: missing field {e}: {result[:200]}")
             return None
 
     def update(self, app_id: int, data: Dict[str, Any]) -> Optional[App]:
@@ -163,14 +184,19 @@ class AppAPI:
         if result.startswith("ERROR"):
             return None
 
+        entity = self._unwrap_entity(result)
+        if entity is None:
+            logger.warning(f"App update: failed to parse response: {result[:200]}")
+            return None
+
         try:
-            app = json.loads(result)
             return App(
-                id=app["id"],
-                name=app.get("name", ""),
-                description=app.get("description", ""),
+                id=entity["id"],
+                name=entity.get("name", ""),
+                description=entity.get("description", ""),
             )
-        except (json.JSONDecodeError, KeyError):
+        except KeyError as e:
+            logger.warning(f"App update: missing field {e}: {result[:200]}")
             return None
 
     def delete(self, app_id: int) -> bool:
