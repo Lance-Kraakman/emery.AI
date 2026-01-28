@@ -489,6 +489,7 @@ export function useChatGRPC(
       }
 
       let assistantMessage = ''
+      let accumulatedSteps: ExecutionStep[] = []
       const assistantId = generateId()
       let messageCreated = false // Track if we've added the message to UI yet
 
@@ -541,6 +542,7 @@ export function useChatGRPC(
                   eventData.content || '',
                   eventData.metadata
                 )
+                accumulatedSteps = addStepDeduped(accumulatedSteps, executionStep)
                 setStreamingSteps(prev => addStepDeduped(prev, executionStep))
 
               } else if (isContentEvent(eventData)) {
@@ -549,13 +551,16 @@ export function useChatGRPC(
 
                 // Create message on first content chunk (not before)
                 if (!messageCreated) {
-                  setMessages((prev) => [...prev, createTextMessage(assistantMessage, 'assistant', assistantId)])
+                  setMessages((prev) => [...prev, createTextMessage(
+                    assistantMessage, 'assistant', assistantId,
+                    accumulatedSteps.length > 0 ? { executionSteps: accumulatedSteps } : undefined
+                  )])
                   messageCreated = true
                 } else {
-                  // Update the assistant message in real-time
+                  // Update the assistant message in real-time, preserving metadata
                   setMessages((prev) => prev.map((msg) =>
                     msg.id === assistantId
-                      ? createTextMessage(assistantMessage, 'assistant', assistantId)
+                      ? createTextMessage(assistantMessage, 'assistant', assistantId, msg.experimental_metadata)
                       : msg
                   ))
                 }
@@ -783,9 +788,9 @@ export function useChatGRPC(
         setMessages((prev) => [...prev, createTextMessage(errorMsg, 'assistant')])
       }
     } finally {
+      setStreamingSteps([])
       setIsLoading(false)
       setCurrentStep(null)
-      // Note: streamingSteps are cleared in message_complete handler after metadata is persisted
       setCurrentMessageId(null)
       abortControllerRef.current = null
     }
