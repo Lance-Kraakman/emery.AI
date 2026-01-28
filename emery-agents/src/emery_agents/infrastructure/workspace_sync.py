@@ -51,6 +51,8 @@ class WorkspaceSync:
     DEFAULT_WORKSPACE_STRUCTURE = [
         ".agent",
         ".agent/plans",
+        ".agent/memory",
+        ".agent/memory/chroma",
         "workspace",
         "workspace/context",
         "workspace/scratch",

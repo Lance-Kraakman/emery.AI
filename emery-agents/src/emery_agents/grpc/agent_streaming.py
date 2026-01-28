@@ -161,6 +161,7 @@ class AgentStreamingHandler:
         workspace_path: Optional[Path] = None,
         workspace_id: Optional[str] = None,
         workspace_prefix: Optional[str] = None,
+        workspace_type: Optional[str] = None,
     ) -> AsyncIterator[StreamResponseDict]:
         """
         Stream AI response using ToolCallingAgent with stateful session support.
@@ -273,6 +274,9 @@ class AgentStreamingHandler:
                 file_attachments=file_attachments,
                 conversation_history=conversation_history,
                 workspace_path=workspace_path,
+                user_id=user_id,
+                workspace_type=workspace_type,
+                workspace_id=workspace_id,
             ):
                 yield event
 
@@ -374,6 +378,9 @@ class AgentStreamingHandler:
         file_attachments: Optional[List],
         conversation_history: Optional[List],
         workspace_path: Optional[Path] = None,
+        user_id: Optional[str] = None,
+        workspace_type: Optional[str] = None,
+        workspace_id: Optional[str] = None,
     ) -> AsyncIterator[StreamResponseDict]:
         """Execute agent with streaming and coordinator integration."""
         step_index = 0
@@ -470,6 +477,9 @@ class AgentStreamingHandler:
                 stored_plan=stored_plan,
                 conversation_history=conversation_history,
                 capability_registry=self.capability_registry,
+                user_id=user_id,
+                workspace_type=workspace_type,
+                workspace_id=workspace_id,
             ):
                 if isinstance(event, dict):
                     yield event  # type: ignore[misc]  # Coordinator returns compatible dicts

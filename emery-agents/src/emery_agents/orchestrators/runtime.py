@@ -29,6 +29,10 @@ class RuntimeContext:
         org_model: Optional model override
         capability_registry: Stateful service with HF embeddings (NOT serializable)
         conversation_history: Chat history for context
+        user_id: User ID for memory scoping
+        workspace_type: "agents" or "users" — determines PII filtering
+        workspace_id: Agent ID or user ID for workspace path resolution
+        memory_service: MemoryService instance for persistent memory (NOT serializable)
     """
     tools: List[Any] = field(default_factory=list)
     managed_agents: List[Any] = field(default_factory=list)
@@ -37,3 +41,7 @@ class RuntimeContext:
     org_model: Optional[str] = None
     capability_registry: Optional[Any] = None
     conversation_history: Optional[List[Any]] = None
+    user_id: Optional[str] = None
+    workspace_type: Optional[str] = None
+    workspace_id: Optional[str] = None
+    memory_service: Optional[Any] = None

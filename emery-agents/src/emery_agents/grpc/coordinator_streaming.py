@@ -7,6 +7,7 @@ Replaces the old ExecutionCoordinator-based two-phase execution.
 
 import json
 import logging
+from pathlib import Path
 from typing import AsyncIterator, Optional, List, Any, Dict, TYPE_CHECKING
 
 import dspy
@@ -21,12 +22,14 @@ from ..tools.tool_modes import ToolMode
 from ..services.agents.executor import AgentExecutor
 from ..reasoning.config import get_dspy_lm
 from ..reasoning.modules.executor import ExecutorModule
+from ..reasoning.utils import extract_dspy_result
 from ..reasoning.tools import create_all_tools, QuestionCollector, create_ask_question_tool
 from .coordinator_event_converter import convert_coordinator_event
 from .approval_handler import is_approval_response
 from .response_types import create_error_response
 from ..orchestrators import create_session_graph, RuntimeContext
 from ..orchestrators.state import DEFAULT_STATE
+from ..services.memory import MemoryService
 
 if TYPE_CHECKING:
     from ..entities.execution_context import ExecutionContext
@@ -106,6 +109,9 @@ class CoordinatorStreamingHandler:
         stored_plan: Optional[Plan] = None,
         conversation_history: Optional[List[Any]] = None,
         capability_registry: Optional[Any] = None,
+        user_id: Optional[str] = None,
+        workspace_type: Optional[str] = None,
+        workspace_id: Optional[str] = None,
     ) -> AsyncIterator[Any]:
         """
         Main entry point for coordinator-driven execution.
@@ -118,6 +124,23 @@ class CoordinatorStreamingHandler:
 
         # Build RuntimeContext with non-serializable objects
         assert context.tool_provider is not None, "tool_provider required"
+        # Initialize MemoryService from workspace IDs
+        memory_service = None
+        if workspace_type and workspace_id:
+            try:
+                memory_service = MemoryService(
+                    workspace_type=workspace_type,
+                    workspace_id=workspace_id,
+                    base_path=Path("/tmp/workspace"),
+                )
+                # Inject relevant memories into task context
+                memory_context = memory_service.get_context_summary(task)
+                if memory_context:
+                    task = f"{task}\n\n[Relevant memories]\n{memory_context}"
+                    logger.info(f"Injected memory context into task ({len(memory_context)} chars)")
+            except Exception as e:
+                logger.warning(f"Failed to initialize MemoryService: {e}")
+
         runtime = RuntimeContext(
             tools=tools,
             managed_agents=self._get_managed_agents_list(managed_agents),
@@ -126,6 +149,10 @@ class CoordinatorStreamingHandler:
             org_model=org_model,
             capability_registry=capability_registry,
             conversation_history=conversation_history,
+            user_id=user_id,
+            workspace_type=workspace_type,
+            workspace_id=workspace_id,
+            memory_service=memory_service,
         )
 
         # Check if there's a pending graph interrupt to resume
@@ -399,7 +426,7 @@ class CoordinatorStreamingHandler:
                     context=json.dumps(execution_context),
                 )
 
-            result_str = str(result)
+            result_str = extract_dspy_result(result)
 
             # Check for clarification questions
             if question_collector.has_questions():

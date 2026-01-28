@@ -17,6 +17,7 @@ from ...services.execution.events import (
     StepCompletedEvent,
     StepFailedEvent,
 )
+from ...services.memory import create_memory_crud
 from ..state import PlanExecuteState
 from ..runtime import RuntimeContext
 
@@ -66,6 +67,11 @@ async def execute_step_node(state: PlanExecuteState, runtime: RuntimeContext) ->
     plan_service = PlanService()
     plan = await plan_service.update_step_status(plan, step.step_id, "in_progress")
 
+    # Build extra tools (e.g., memory CRUD)
+    extra_tools = []
+    if runtime.memory_service:
+        extra_tools.append(create_memory_crud(runtime.memory_service))
+
     # Create fresh PlanStepExecutor per step from RuntimeContext
     plan_step_executor = PlanStepExecutor(
         api_key=runtime.api_key,
@@ -73,6 +79,7 @@ async def execute_step_node(state: PlanExecuteState, runtime: RuntimeContext) ->
         org_model=runtime.org_model,
         max_steps=10,
         capability_registry=runtime.capability_registry,
+        extra_tools=extra_tools or None,
     )
     step_executor = StepExecutor(plan_step_executor=plan_step_executor)
 

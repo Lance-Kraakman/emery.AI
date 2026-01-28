@@ -78,12 +78,12 @@ async def replan_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[
 
     if evaluation.goal_achieved:
         # Goal achieved — synthesize and finish
-        return await _finish(plan, state, org_model, evaluation, events)
+        return await _finish(plan, state, org_model, evaluation, events, runtime)
 
     if replan_count >= max_replans:
         # Max replans reached — finish with what we have
         logger.warning(f"Max replans ({max_replans}) reached, finishing")
-        return await _finish(plan, state, org_model, evaluation, events)
+        return await _finish(plan, state, org_model, evaluation, events, runtime)
 
     # Not done — replan to generate new steps
     return await _do_replan(state, runtime, error, replan_count, events)
@@ -299,6 +299,7 @@ async def _finish(
     org_model: Optional[str],
     evaluation: EvaluationResult,
     events: List[Any],
+    runtime: Optional[RuntimeContext] = None,
 ) -> Dict[str, Any]:
     """Synthesize final answer and finish execution."""
     success = evaluation.goal_achieved
@@ -322,6 +323,18 @@ async def _finish(
                 ))
         except Exception as e:
             logger.warning(f"Synthesis failed: {e}")
+
+    # Auto-store task summary to memory
+    if runtime and runtime.memory_service and final_response:
+        try:
+            task = state.get("task", "")
+            runtime.memory_service.add(
+                content=f"Task: {task[:200]}. Result: {final_response[:300]}",
+                memory_type="fact",
+                metadata={"auto_stored": True, "source": "task_completion"},
+            )
+        except Exception as e:
+            logger.warning(f"Failed to auto-store task memory: {e}")
 
     events.append(ExecutionCompletedEvent(plan_id=plan.id, success=success))
 
@@ -432,7 +445,7 @@ async def _do_replan(
         # instead of looping back to execute_step with nothing to execute
         logger.info("Replan produced no new steps, finishing")
         evaluation = await _evaluate_progress(updated_plan, org_model, events)
-        return await _finish(updated_plan, state, org_model, evaluation, events)
+        return await _finish(updated_plan, state, org_model, evaluation, events, runtime)
 
     return {
         "plan": updated_plan,

@@ -28,6 +28,7 @@ import dspy
 from ...ace import StepResult
 from ...reasoning.config import get_dspy_lm
 from ...reasoning.modules.executor import ExecutorModule, SimpleExecutorModule
+from ...reasoning.utils import extract_dspy_result
 from ...reasoning.tools import (
     create_all_tools,
 )
@@ -123,6 +124,7 @@ class PlanStepExecutor:
         max_steps: int = 10,
         skill_inputs: dict[str, Any] | None = None,
         capability_registry: CapabilityRegistry | None = None,
+        extra_tools: list[Any] | None = None,
     ):
         """
         Initialize PlanStepExecutor.
@@ -134,6 +136,7 @@ class PlanStepExecutor:
             max_steps: Max iterations for ReAct loop
             skill_inputs: Runtime inputs for skill execution (used with prompt templates)
             capability_registry: Registry of capabilities for dynamic discovery in templates
+            extra_tools: Additional tools to include (e.g., memory_crud)
         """
         self.api_key = api_key
         self.org_id = org_id
@@ -150,11 +153,13 @@ class PlanStepExecutor:
         # Failures trigger recovery/replanning, not user clarification.
         # ask_question is only for planning phase and direct (no-plan) execution.
         self._all_tools = list(self._crud_tools)
+        if extra_tools:
+            self._all_tools.extend(extra_tools)
 
         # Track results from previous steps for prompt template resolution and ACE curation
         self._step_results: dict[str, StepResult] = {}
 
-        logger.info(f"✨ Created PlanStepExecutor with {len(self._all_tools)} DSPy tools")
+        logger.info(f"Created PlanStepExecutor with {len(self._all_tools)} DSPy tools")
 
     @property
     def step_results(self) -> dict[str, StepResult]:
@@ -348,7 +353,7 @@ class PlanStepExecutor:
                     context=json.dumps(context),
                 )
 
-            result_str = str(result)
+            result_str = extract_dspy_result(result)
 
             logger.info("PlanStepExecutor: Step completed")
             logger.debug(f"PlanStepExecutor: Result preview: {result_str[:200]}...")
@@ -433,7 +438,7 @@ class PlanStepExecutor:
                     context=json.dumps(context),
                 )
 
-            result_str = str(result)
+            result_str = extract_dspy_result(result)
 
             logger.info("Direct execution completed")
             logger.debug(f"Direct execution result preview: {result_str[:200]}...")

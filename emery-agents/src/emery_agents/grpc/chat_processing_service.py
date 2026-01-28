@@ -259,6 +259,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 workspace_path=workspace_path,  # Workspace filesystem path
                 workspace_id=workspace_id,  # Workspace ID for S3 (user_id or agent_id)
                 workspace_prefix=workspace_prefix,  # S3 prefix ("workspaces/users" or "workspaces/agents")
+                workspace_type=workspace_type,  # "agents" or "users" — determines memory PII filtering
             ):
                 # Check for cancellation
                 if self.active_streams.get(message_id, False):
