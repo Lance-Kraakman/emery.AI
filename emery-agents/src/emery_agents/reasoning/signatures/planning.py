@@ -203,25 +203,24 @@ class CreateSkillTemplate(dspy.Signature):  # type: ignore[misc]
     You have full workspace context - use it to create templates that work
     with existing resources.
 
-    WHEN TO USE {{ }}:
-    - Referencing SKILL INPUTS: Use {{ input_name }}
-      Example: "Write a summary for {{ name }}, age {{ age }}"
-    - Dynamic parameters: {"record_data": {"name": "{{ name }}"}}
+    CRITICAL: VARIABLES MUST ALWAYS USE {{ }} SYNTAX:
+    - EVERY variable reference MUST be wrapped: {{ name }}, {{ age }}, {{ family }}
+    - In parameters: {"record_data": {"name": "{{ name }}"}}
+    - NEVER use bare variable names like: name, age, family
 
-    WHEN NOT TO USE {{ }}:
-    - Fixed/literal values: {"table_id": "abc123"}
-    - Static instructions: "Create a record in the customers table"
+    CONDITIONALS ({% if %}) ARE ALLOWED:
+    - Use {% if family %}...{% endif %} for optional inputs
+    - BUT variables inside MUST still use {{ }}: {% if family %}{{ name }} has {{ family }}{% endif %}
 
-    CONDITIONALS:
-    - {% if family %}...{% endif %} for optional inputs
-    - STILL use {{ family }} inside the conditional block!
+    GOOD EXAMPLES:
+      "Write a summary for {{ name }}, age {{ age }}."
+      "{% if family %}{{ name }} has family: {{ family }}.{% endif %}"
 
-    OUTPUTS:
-    - skill_outputs define what the skill should produce
-    - The prompt_template should guide LLM to produce clear, parseable output
-    - Output extraction happens automatically post-execution
+    BAD EXAMPLES (NEVER DO THIS):
+      "name is age years old" - WRONG: bare variable names
+      "{% if family %}name has family{% endif %}" - WRONG: bare names inside {% if %}
 
-    Every step MUST have prompt_template. Use {{ }} for input references.
+    Every step MUST have prompt_template. All variable refs MUST use {{ }}.
     """
 
     request: str = dspy.InputField(desc="What the skill should accomplish")

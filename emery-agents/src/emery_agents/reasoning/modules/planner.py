@@ -355,10 +355,18 @@ class SkillTemplatePlannerModule(PlannerModule):
         """Add template-specific guidance to capability guidance."""
         template_rules = """
 TEMPLATE MODE - You are creating a REUSABLE skill template:
-- Every step MUST have prompt_template with {{ variable }} syntax for INPUT references
-- Use literal values for fixed data (table IDs, static text)
-- Description CAN include {{ variables }} for UI clarity
-- Outputs are extracted post-execution - just produce clear, parseable output
+
+CRITICAL: ALL VARIABLES MUST USE {{ }} SYNTAX:
+- ALWAYS wrap variable names: {{ name }}, {{ age }}, {{ family }}
+- NEVER use bare variable names without {{ }}
+- {% if %} conditionals are allowed, but variables inside MUST still use {{ }}
+
+GOOD: "{{ name }} is {{ age }} years old."
+GOOD: "{% if family %}{{ name }} has family: {{ family }}.{% endif %}"
+BAD: "name is age years old" - WRONG: bare variable names
+BAD: "{% if family %}name has family{% endif %}" - WRONG: bare names inside {% if %}
+
+Every step MUST have prompt_template. Outputs are extracted post-execution.
 """
         return f"{template_rules}\n\n{base_guidance}"
 
@@ -369,8 +377,9 @@ TEMPLATE MODE - You are creating a REUSABLE skill template:
     ) -> None:
         """Validate template plan has required prompt_template.
 
-        NOTE: Light validation - we don't aggressively check {{ }} usage because
-        literal values are valid. The signature docstring guides the LLM.
+        Checks:
+        - prompt_template is present
+        - Warns if inputs provided but no {{ }} found
         """
         import logging
         logger = logging.getLogger(__name__)
@@ -378,7 +387,8 @@ TEMPLATE MODE - You are creating a REUSABLE skill template:
         for step in plan.steps:
             if not step.prompt_template:
                 raise ValueError(f"Step {step.step_id} missing required prompt_template")
-            # Light validation: warn if no {{ }} but inputs provided
+
+            # Warn if no {{ }} but inputs provided
             if skill_inputs and "{{" not in step.prompt_template:
                 logger.warning(
                     f"Step {step.step_id} has inputs but no {{{{ }}}} in prompt_template"
