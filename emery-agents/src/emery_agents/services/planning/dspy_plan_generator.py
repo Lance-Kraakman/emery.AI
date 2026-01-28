@@ -242,22 +242,44 @@ class DSPyPlanGenerator:
         self,
         request: PlanGenerationRequest,
     ) -> str:
-        """Format skill inputs/outputs as a description for the DSPy planner.
+        """Format skill inputs/outputs as guidance for the DSPy planner.
 
-        When generating templates for autonomous skills, this tells the planner
-        which {{ variable }} placeholders are available for prompt_template fields.
+        When generating templates for autonomous skills, this provides comprehensive
+        instructions so the LLM produces prompt_template fields with {{ variable }}
+        placeholders instead of generic descriptions.
         """
         if not request.is_template_generation or not request.skill_inputs:
             return ""
 
-        parts = ["Available skill inputs (use {{ name }} syntax in prompt_template for each step):"]
+        parts = [
+            "=== TEMPLATE GENERATION MODE ===",
+            "",
+            "You are creating a REUSABLE SKILL TEMPLATE, not executing a one-off task.",
+            "",
+            "CRITICAL RULES:",
+            "1. Every step MUST have a prompt_template field",
+            "2. The prompt_template is the FULL instruction the executor LLM receives at runtime",
+            "3. Use {{ variable_name }} Jinja2 syntax to reference skill inputs",
+            "4. Put ALL execution logic, conditions, and formatting rules INTO the prompt_template",
+            "5. The description field is just a short human-readable label for the UI",
+            "",
+            "Available skill input variables (use in prompt_template as {{ name }}):",
+        ]
         for inp in request.skill_inputs:
             req = "required" if inp.required else "optional"
-            parts.append(f"  - {inp.name} ({inp.type}, {req})")
+            parts.append(f"  - {{ {inp.name} }} ({inp.type}, {req})")
         if request.skill_outputs:
+            parts.append("")
             parts.append("Expected outputs:")
             for out in request.skill_outputs:
                 parts.append(f"  - {out.name} ({out.type})")
+        parts.extend([
+            "",
+            "EXAMPLE:",
+            '  description: "Generate individual summary"',
+            '  prompt_template: "Write a summary for {{ name }}, age {{ age }}. '
+            'Include family info: {{ family }}."',
+        ])
         return "\n".join(parts)
 
     def _convert_plan(

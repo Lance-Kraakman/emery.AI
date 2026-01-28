@@ -116,6 +116,12 @@ class CreatePlan(dspy.Signature):  # type: ignore[misc]
     Check workspace_context for existing resources before asking questions.
     Use capability_guidance to understand which capability to delegate to.
     Use conversation_history for context from previous messages in this session.
+
+    When skill_inputs_description is non-empty, you are in TEMPLATE GENERATION MODE:
+    - Each step MUST include a prompt_template with {{ variable }} Jinja2 placeholders
+    - The prompt_template contains the FULL execution instructions for the step
+    - Reference skill inputs using {{ variable_name }} syntax
+    - The description is a short UI label; prompt_template is the real instruction
     """
 
     request: str = dspy.InputField(desc="User's goal or task")
