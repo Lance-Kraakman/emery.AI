@@ -365,6 +365,37 @@ function substituteFilterVariable(
   return value;
 }
 
+/** Filter schema fields and row data to only include view-visible fields. */
+function filterByViewMappings(
+  fields: Array<{ id: number; name: string; type: string }>,
+  rows: Array<Record<string, unknown>>,
+  fieldMappings: ReadonlyArray<{ sourceFieldId: number; visible: boolean }>,
+): { fields: Array<{ id: number; name: string; type: string }>; rows: Array<Record<string, unknown>> } {
+  if (!fieldMappings.length) return { fields, rows };
+
+  const visibleFieldIds = new Set(
+    fieldMappings.filter(m => m.visible).map(m => m.sourceFieldId)
+  );
+
+  const filteredFields = fields.filter(f => visibleFieldIds.has(f.id));
+
+  const allowedKeys = new Set<string>(['id']);
+  for (const f of filteredFields) {
+    allowedKeys.add(String(f.id));
+    allowedKeys.add(f.name);
+  }
+
+  const filteredRows = rows.map(row => {
+    const filtered: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(row)) {
+      if (allowedKeys.has(key)) filtered[key] = value;
+    }
+    return filtered;
+  });
+
+  return { fields: filteredFields, rows: filteredRows };
+}
+
 /**
  * Execute a view for public pages without authentication
  *
@@ -524,9 +555,14 @@ export async function executePublicView(
       type: field.type,
     }));
 
+    // Filter to only view-visible fields before returning to client
+    const { fields: filteredFields, rows: filteredRows } = filterByViewMappings(
+      plainFields, plainRows, view.fieldMappings
+    );
+
     return {
-      rows: plainRows,
-      fields: plainFields,
+      rows: filteredRows,
+      fields: filteredFields,
       totalCount: result.data.totalCount,
       pageSize: result.data.pageSize,
       offset: result.data.offset,
