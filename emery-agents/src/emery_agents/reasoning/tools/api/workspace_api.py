@@ -49,11 +49,20 @@ class WorkspaceSkill:
 
 
 @dataclass
+class WorkspaceField:
+    """Field within a table."""
+    name: str
+    type: str
+    related_table_id: Optional[int] = None
+
+
+@dataclass
 class WorkspaceTable:
     """Table within a database."""
     id: int
     name: str
     field_count: int = 0
+    fields: List[WorkspaceField] = field(default_factory=list)
 
 
 @dataclass
@@ -183,7 +192,7 @@ class WorkspaceAPI:
         ]
 
     def _parse_databases(self, databases_data: List[Dict[str, Any]]) -> List[WorkspaceDatabase]:
-        """Parse databases with their tables."""
+        """Parse databases with their tables and fields."""
         databases = []
         for db in databases_data:
             tables = [
@@ -191,6 +200,14 @@ class WorkspaceAPI:
                     id=t.get("id", 0),
                     name=t.get("name", ""),
                     field_count=t.get("fieldCount", 0),
+                    fields=[
+                        WorkspaceField(
+                            name=f.get("name", ""),
+                            type=f.get("type", ""),
+                            related_table_id=f.get("relatedTableId"),
+                        )
+                        for f in t.get("fields", [])
+                    ],
                 )
                 for t in db.get("tables", [])
             ]

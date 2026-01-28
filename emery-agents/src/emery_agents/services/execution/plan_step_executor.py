@@ -48,7 +48,6 @@ def _build_step_prompt(
     total_steps: int,
     completed_steps: list[PlanStep],
     remaining_steps: list[PlanStep],
-    capabilities: list[Any],
     resolved_prompt: str | None = None,
 ) -> str:
     """Build execution prompt for a plan step."""
@@ -58,17 +57,15 @@ def _build_step_prompt(
         "## Plan Goal",
         goal,
         "",
-        "## Critical Rule: Ask Questions If Missing Information",
+        "## Before You Act",
         "",
-        "If you cannot complete this step because you lack specific details:",
-        "1. Call `ask_clarifying_question` with question, options, and context",
-        "2. **IMMEDIATELY STOP** - Do NOT call any other tools after",
+        "You have discovery tools (`workspace_overview`, `system_research`, `search_capabilities`, `search_external`) ",
+        "and CRUD tools for listing, reading, creating, updating, and deleting resources.",
         "",
-        "## Resource Discovery",
-        "",
-        "BEFORE asking for any ID, try to discover it first:",
-        "- Use `table_crud(method=\"list\")` to find tables",
-        "- Match by name before asking the user",
+        "1. Discover what exists — use `workspace_overview` or list operations to find resources and IDs",
+        "2. Understand schemas — discover field names and types before creating or populating data",
+        "3. Use discovered info directly — do not ask the user for things you can look up",
+        "4. Chain discoveries — find the table, then list its fields, then populate rows",
     ]
 
     if current_step.phase_name:
@@ -101,16 +98,6 @@ def _build_step_prompt(
         parts.extend(["", "## Remaining Steps After This"])
         for step in remaining_steps:
             parts.append(f"- {step.description}")
-
-    # Capabilities
-    agent_caps = [c for c in capabilities if hasattr(c, 'type') and c.type.value == 'agent']
-    if agent_caps:
-        parts.extend(["", "## Available Capabilities (Agents)"])
-        for cap in agent_caps:
-            actions = ', '.join(cap.actions) if cap.actions else ''
-            parts.append(f"- **{cap.name}**: {cap.description}")
-            if actions:
-                parts.append(f"  Actions: {actions}")
 
     parts.extend(["", "---", "", "Execute directly. Report concrete results."])
 
@@ -153,8 +140,12 @@ class PlanStepExecutor:
         self.skill_inputs = skill_inputs or {}
         self.capability_registry = capability_registry
 
-        # Create DSPy tools with auth captured
-        self._crud_tools = create_all_tools(api_key=api_key, org_id=org_id)
+        # Create DSPy tools with auth captured (includes CRUD + discovery tools)
+        self._crud_tools = create_all_tools(
+            api_key=api_key,
+            org_id=org_id,
+            capability_registry=capability_registry,
+        )
 
         # Step execution tools — NO ask_question tool.
         # Step execution should be deterministic: complete or fail.
@@ -293,7 +284,6 @@ class PlanStepExecutor:
                 f"📝 Autonomous mode: resolved prompt template for step {step_index + 1} "
                 f"({len(resolved_prompt)} chars)"
             )
-            capabilities = self.capability_registry.all() if self.capability_registry else []
             prompt = _build_step_prompt(
                 goal=plan.goal,
                 current_step=current_step,
@@ -301,7 +291,6 @@ class PlanStepExecutor:
                 total_steps=len(plan.steps),
                 completed_steps=completed_steps,
                 remaining_steps=remaining_steps,
-                capabilities=capabilities,
                 resolved_prompt=resolved_prompt,
             )
         else:
@@ -309,7 +298,6 @@ class PlanStepExecutor:
             logger.info(
                 f"📝 Interactive mode: using description for step {step_index + 1}"
             )
-            capabilities = self.capability_registry.all() if self.capability_registry else []
             prompt = _build_step_prompt(
                 goal=plan.goal,
                 current_step=current_step,
@@ -317,7 +305,6 @@ class PlanStepExecutor:
                 total_steps=len(plan.steps),
                 completed_steps=completed_steps,
                 remaining_steps=remaining_steps,
-                capabilities=capabilities,
             )
 
         logger.info(

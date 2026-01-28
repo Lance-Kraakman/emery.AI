@@ -66,7 +66,7 @@ def _build_workspace_context(
         f"{len(data.skills)} skills, {len(data.views)} views"
     )
 
-    # Build flat table list from nested databases
+    # Build flat table list from nested databases (now includes field schemas)
     all_tables = []
     for db in data.databases:
         for t in db.tables:
@@ -76,7 +76,7 @@ def _build_workspace_context(
                 database_id=str(db.id),
                 database_name=db.name,
                 field_count=t.field_count,
-                fields=[],
+                fields=[f"{f.name} ({f.type})" for f in t.fields],  # e.g. "gang_name (text)"
             ))
 
     return WorkspaceContext(

@@ -191,13 +191,16 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         """
         lines = [
             "THINK BEFORE ASKING:",
-            "1. Check workspace_context for existing resources FIRST",
-            "2. Use capability_guidance to understand which capability to use",
-            "3. Propose defaults based on domain patterns",
-            "4. Only ask when truly ambiguous (security, business rules, destructive ops)",
+            "1. Check workspace_context — it shows existing databases, tables (with field schemas), and apps",
+            "2. For existing resources: use what's there, don't ask the user what exists",
+            "3. For new resources: SUGGEST sensible defaults based on domain knowledge",
+            "   Example: user says 'Create gangs table' → suggest: name (text), description (text), founding_date (date), is_active (boolean)",
+            "   Present suggestions in the plan for user approval — they can modify before approving",
+            "4. Only ask when truly ambiguous: security decisions, business rules, destructive operations",
             "",
-            "Questions OK for: security decisions, business rules, destructive operations",
-            "Discovery/propose for: resource names, what exists, schemas, common patterns",
+            "NEVER ask about: what resources exist, table schemas, field names, resource IDs",
+            "SUGGEST (in plan) instead of ask: field names, data types, reasonable defaults",
+            "ASK only for: security, business rules, destructive ops, genuine user preference",
         ]
 
         if has_delegation:
@@ -205,7 +208,7 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
 
         if not has_workspace_context:
             lines.append(
-                "\nWorkspace context is empty - use Discovery phase to find resources."
+                "\nWorkspace context is empty - the executor can discover resources at runtime."
             )
 
         return "\n".join(lines)

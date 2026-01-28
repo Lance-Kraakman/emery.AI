@@ -11,9 +11,12 @@ Usage:
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 import dspy
+
+if TYPE_CHECKING:
+    from ...services.tools.capability_registry import CapabilityRegistry
 
 from .crud import (
     create_agent_crud,
@@ -101,6 +104,7 @@ from .analysis import (
     TaskClassifierTool,
     create_task_classifier_tool,
 )
+from .discovery import create_discovery_tools
 __all__ = [
     "create_all_tools",
     "create_crud_tools",
@@ -173,6 +177,8 @@ __all__ = [
     "ClassificationResult",
     "TaskClassifierTool",
     "create_task_classifier_tool",
+    # Discovery tools
+    "create_discovery_tools",
 ]
 
 
@@ -203,7 +209,11 @@ def create_crud_tools(api_key: str, org_id: str) -> list[dspy.Tool]:
     ]
 
 
-def create_all_tools(api_key: str, org_id: str) -> list[dspy.Tool]:
+def create_all_tools(
+    api_key: str,
+    org_id: str,
+    capability_registry: "CapabilityRegistry | None" = None,
+) -> list[dspy.Tool]:
     """
     Create all DSPy tool functions with auth captured.
 
@@ -212,6 +222,7 @@ def create_all_tools(api_key: str, org_id: str) -> list[dspy.Tool]:
     Args:
         api_key: Bearer token for authentication
         org_id: Organization ID for RLS context
+        capability_registry: Optional registry for capability search tool
 
     Returns:
         List of dspy.Tool instances for DSPy ReAct
@@ -221,10 +232,7 @@ def create_all_tools(api_key: str, org_id: str) -> list[dspy.Tool]:
     # Add CRUD tools
     tools.extend(create_crud_tools(api_key, org_id))
 
-    # TODO: Add discovery tools when ported
-    # tools.extend(create_discovery_tools(api_key, org_id))
-
-    # TODO: Add output tools when ported
-    # tools.extend(create_output_tools(api_key, org_id))
+    # Add discovery tools (system_research, workspace_overview, search_capabilities, search_pipedream_tools)
+    tools.extend(create_discovery_tools(api_key, org_id, capability_registry))
 
     return tools

@@ -191,36 +191,55 @@ class DSPyPlanGenerator:
         self,
         request: PlanGenerationRequest,
     ) -> str:
-        """Get capability planning guidance for the planner."""
+        """Get capability planning guidance for the planner using semantic search.
+
+        Instead of dumping ALL enabled capability guidance, performs semantic search
+        to find the most relevant capabilities for this task.
+        """
         from emery_agents.reasoning.capabilities import (
             format_planning_guidance,
-            get_all_planning_guidance,
+            get_planning_guidance,
         )
 
-        guidance_map = get_all_planning_guidance()
+        # Fallback: no registry means return all guidance (suboptimal)
+        if not request.capability_registry:
+            logger.warning("No capability_registry in request — using all guidance (search unavailable)")
+            return format_planning_guidance()
 
-        # Filter by enabled capabilities if registry available
-        if request.capability_registry:
-            org_id = request.config.org_id if request.config else None
-            try:
-                enabled = (
-                    request.capability_registry.get_enabled(org_id)
-                    if org_id
-                    else request.capability_registry.all()
+        org_id = request.config.org_id if request.config else None
+
+        try:
+            # Semantic search for relevant capabilities based on user's task
+            matched = request.capability_registry.search(
+                query=request.basic_instructions,
+                limit=3,  # Top 3 most relevant
+            )
+
+            # Filter to enabled only
+            if org_id:
+                enabled_ids = {
+                    cap.id for cap in request.capability_registry.get_enabled(org_id)
+                }
+                matched = [cap for cap in matched if cap.id in enabled_ids]
+
+            # Get guidance for matched capabilities
+            guidance_parts = []
+            for cap in matched:
+                g = get_planning_guidance(cap.id)
+                if g:
+                    guidance_parts.append(g)
+
+            if guidance_parts:
+                logger.info(
+                    f"📊 Matched {len(matched)} capabilities for guidance: "
+                    f"{[c.id for c in matched]}"
                 )
-                if enabled:
-                    enabled_ids = {cap.id for cap in enabled}
-                    # Only include guidance for enabled capabilities
-                    filtered_ids = [
-                        cap_id for cap_id in guidance_map.keys()
-                        if cap_id in enabled_ids
-                    ]
-                    if filtered_ids:
-                        return format_planning_guidance(filtered_ids)
-            except Exception as e:
-                logger.warning(f"Failed to filter capabilities by registry: {e}")
+                return "\n\n".join(guidance_parts)
 
-        # Return all guidance if no filtering possible
+        except Exception as e:
+            logger.warning(f"Capability search failed, using all guidance: {e}")
+
+        # Fallback: return all guidance
         return format_planning_guidance()
 
     def _convert_questions(

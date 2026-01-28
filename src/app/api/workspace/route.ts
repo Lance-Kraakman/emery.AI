@@ -47,10 +47,17 @@ interface WorkspaceSkillDTO {
   agentName?: string;
 }
 
+interface WorkspaceFieldDTO {
+  name: string;
+  type: string;
+  relatedTableId?: number;
+}
+
 interface WorkspaceTableDTO {
   id: number;
   name: string;
   fieldCount: number;
+  fields: WorkspaceFieldDTO[];
 }
 
 interface WorkspaceDatabaseDTO {
@@ -125,6 +132,11 @@ export async function GET(request: NextRequest): Promise<Response> {
         id: table.id.value,
         name: table.name,
         fieldCount: table.fields?.length || 0,
+        fields: (table.fields || []).map(f => ({
+          name: f.name,
+          type: f.type,
+          relatedTableId: f.relatedTableId?.value,
+        })),
       });
     }
 
