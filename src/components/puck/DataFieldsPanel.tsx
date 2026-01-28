@@ -83,7 +83,7 @@ export function DataFieldsPanel() {
   const displayFields = fields.filter((f) => !UNSUPPORTED_FIELD_TYPES.has(f.type));
 
   return (
-    <div className="mb-3 pb-3 border-b border-border">
+    <div className="px-4 pt-3 pb-3 border-b border-border">
       <div className="flex items-center gap-1.5 mb-2">
         <Database className="h-3.5 w-3.5 text-muted-foreground" />
         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
