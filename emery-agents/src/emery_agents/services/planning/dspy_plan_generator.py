@@ -24,12 +24,13 @@ import dspy
 
 from emery_agents.ace import StrategyAccumulationService
 from emery_agents.reasoning.config import get_dspy_lm
-from emery_agents.reasoning.modules.planner import PlannerModule
+from emery_agents.reasoning.modules.planner import PlannerModule, SkillTemplatePlannerModule
 from emery_agents.reasoning.signatures.planning import (
     ClarifyingQuestionOutput,
     PlanOutput,
     PlanOrQuestionsOutput,
     PlanStepOutput,
+    SkillTemplatePlanOutput,
 )
 from emery_agents.entities.models.plan import Plan, PlanStep, create_plan, create_step
 from emery_agents.services.context import WorkspaceContext
@@ -68,16 +69,21 @@ class DSPyPlanGenerator:
         self.discovery_tools = discovery_tools or []
         self._last_strategy_guidance: str = ""
 
-        # Initialize planner module (will be configured with model on each call)
+        # Initialize planner modules (will be configured with model on each call)
         self._planner: Optional[PlannerModule] = None
+        self._template_planner: Optional[SkillTemplatePlannerModule] = None
 
     def _get_planner(self) -> PlannerModule:
         """Get or create planner module."""
-        # Create planner if not exists
         if self._planner is None:
             self._planner = PlannerModule(discovery_tools=self.discovery_tools)
-
         return self._planner
+
+    def _get_template_planner(self) -> SkillTemplatePlannerModule:
+        """Get or create skill template planner module."""
+        if self._template_planner is None:
+            self._template_planner = SkillTemplatePlannerModule(discovery_tools=self.discovery_tools)
+        return self._template_planner
 
     async def generate(
         self,
@@ -85,8 +91,6 @@ class DSPyPlanGenerator:
         strategy_service: Optional[StrategyAccumulationService] = None,
     ) -> PlanGenerationResult:
         """Generate plan using DSPy PlannerModule. Returns plan or clarifying questions."""
-        logger.info("📋 Generating plan using DSPy PlannerModule")
-
         # ACE: Get strategy guidance from past successful executions
         strategy_guidance = ""
         if strategy_service:
@@ -107,22 +111,26 @@ class DSPyPlanGenerator:
         # Get DSPy LM without calling configure (safe for async)
         lm = get_dspy_lm(org_model=org_model)
 
-        # Get the planner module
+        # Route to appropriate module based on template generation mode
+        if request.is_template_generation and request.skill_inputs:
+            return await self._generate_template(request, lm, strategy_guidance)
+        else:
+            return await self._generate_plan(request, lm, strategy_guidance)
+
+    async def _generate_plan(
+        self,
+        request: PlanGenerationRequest,
+        lm: Any,
+        strategy_guidance: str,
+    ) -> PlanGenerationResult:
+        """Generate regular plan using PlannerModule."""
+        logger.info("📋 Generating plan using DSPy PlannerModule")
+
         planner = self._get_planner()
-
-        # Format workspace context for the signature
         workspace_context = self._format_workspace_context(request.workspace)
-
-        # Get capability guidance (from capability registry if available)
         capability_guidance = self._get_capability_guidance(request)
-
-        # Format conversation history for the signature
         conversation_history = self._format_conversation_history(request.conversation_history)
 
-        # Format skill inputs description for template generation
-        skill_inputs_desc = self._format_skill_inputs_description(request)
-
-        # Call the DSPy planner with async-safe context
         try:
             with dspy.context(lm=lm):
                 result: PlanOrQuestionsOutput = planner(
@@ -131,7 +139,6 @@ class DSPyPlanGenerator:
                     capability_guidance=capability_guidance,
                     proven_strategies=strategy_guidance,
                     conversation_history=conversation_history,
-                    skill_inputs_description=skill_inputs_desc,
                 )
         except Exception as e:
             logger.error(f"DSPy planning failed: {e}")
@@ -159,6 +166,48 @@ class DSPyPlanGenerator:
 
         # Neither plan nor questions - shouldn't happen
         raise ValueError("DSPy planner returned neither plan nor questions")
+
+    async def _generate_template(
+        self,
+        request: PlanGenerationRequest,
+        lm: Any,
+        strategy_guidance: str,
+    ) -> PlanGenerationResult:
+        """Generate skill template using SkillTemplatePlannerModule."""
+        logger.info("📋 Generating skill template using SkillTemplatePlannerModule")
+
+        template_planner = self._get_template_planner()
+        workspace_context = self._format_workspace_context(request.workspace)
+        capability_guidance = self._get_capability_guidance(request)
+        conversation_history = self._format_conversation_history(request.conversation_history)
+
+        # Convert skill inputs/outputs to dicts for the module
+        skill_inputs = [
+            {"name": i.name, "type": i.type, "required": i.required}
+            for i in request.skill_inputs
+        ]
+        skill_outputs = [
+            {"name": o.name, "type": o.type}
+            for o in (request.skill_outputs or [])
+        ]
+
+        try:
+            with dspy.context(lm=lm):
+                template_plan: SkillTemplatePlanOutput = template_planner(
+                    request=request.basic_instructions,
+                    workspace_context=workspace_context,
+                    capability_guidance=capability_guidance,
+                    proven_strategies=strategy_guidance,
+                    conversation_history=conversation_history,
+                    skill_inputs=skill_inputs,
+                    skill_outputs=skill_outputs,
+                )
+        except Exception as e:
+            logger.error(f"DSPy template planning failed: {e}")
+            raise
+
+        plan = self._convert_template_plan(template_plan, request.basic_instructions)
+        return PlanGenerationResult(plan=plan, strategy_guidance=strategy_guidance)
 
     def _format_conversation_history(
         self,
@@ -257,50 +306,6 @@ class DSPyPlanGenerator:
             for q in dspy_questions
         ]
 
-    def _format_skill_inputs_description(
-        self,
-        request: PlanGenerationRequest,
-    ) -> str:
-        """Format skill inputs/outputs as guidance for the DSPy planner.
-
-        When generating templates for autonomous skills, this provides comprehensive
-        instructions so the LLM produces prompt_template fields with {{ variable }}
-        placeholders instead of generic descriptions.
-        """
-        if not request.is_template_generation or not request.skill_inputs:
-            return ""
-
-        parts = [
-            "=== TEMPLATE GENERATION MODE ===",
-            "",
-            "You are creating a REUSABLE SKILL TEMPLATE, not executing a one-off task.",
-            "",
-            "CRITICAL RULES:",
-            "1. Every step MUST have a prompt_template field",
-            "2. The prompt_template is the FULL instruction the executor LLM receives at runtime",
-            "3. Use {{ variable_name }} Jinja2 syntax to reference skill inputs",
-            "4. Put ALL execution logic, conditions, and formatting rules INTO the prompt_template",
-            "5. The description field is just a short human-readable label for the UI",
-            "",
-            "Available skill input variables (use in prompt_template as {{ name }}):",
-        ]
-        for inp in request.skill_inputs:
-            req = "required" if inp.required else "optional"
-            parts.append(f"  - {{ {inp.name} }} ({inp.type}, {req})")
-        if request.skill_outputs:
-            parts.append("")
-            parts.append("Expected outputs:")
-            for out in request.skill_outputs:
-                parts.append(f"  - {out.name} ({out.type})")
-        parts.extend([
-            "",
-            "EXAMPLE:",
-            '  description: "Generate individual summary"',
-            '  prompt_template: "Write a summary for {{ name }}, age {{ age }}. '
-            'Include family info: {{ family }}."',
-        ])
-        return "\n".join(parts)
-
     def _convert_plan(
         self,
         dspy_plan: PlanOutput,
@@ -327,6 +332,35 @@ class DSPyPlanGenerator:
             steps=steps,
             context=dspy_plan.context,
             analysis=dspy_plan.analysis,
+        )
+
+    def _convert_template_plan(
+        self,
+        template_plan: SkillTemplatePlanOutput,
+        basic_instructions: str,
+    ) -> Plan:
+        """Convert SkillTemplatePlanOutput to Plan model."""
+        steps: list[PlanStep] = []
+        for s in template_plan.steps:
+            step = create_step(
+                description=s.description,
+                tool_call=s.tool_call,
+                parameters=s.parameters,
+                target_agent=s.target_agent,
+                prompt_template=s.prompt_template,
+                required_context=s.required_context,
+                phase_name=s.phase_name,
+                phase_order=s.phase_order,
+                replan_after=s.replan_after,
+            )
+            steps.append(step)
+
+        return create_plan(
+            goal=template_plan.goal,
+            basic_instructions=basic_instructions,
+            steps=steps,
+            context=template_plan.context,
+            analysis=template_plan.analysis,
         )
 
     @property

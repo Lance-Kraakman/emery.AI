@@ -15,8 +15,12 @@ from emery_agents.reasoning.signatures.planning import (
     AnalyzeTask,
     ClarifyingQuestionOutput,
     CreatePlan,
+    CreateSkillTemplate,
     PlanOrQuestionsOutput,
     QuestionType,
+    SkillInputSpec,
+    SkillOutputSpec,
+    SkillTemplatePlanOutput,
 )
 
 if TYPE_CHECKING:
@@ -74,7 +78,6 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         capability_guidance: str,
         proven_strategies: str,
         conversation_history: str = "",
-        skill_inputs_description: str = "",
     ) -> PlanOrQuestionsOutput:
         """
         Generate a plan or clarifying questions for a user request.
@@ -85,8 +88,6 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
             capability_guidance: Domain-specific instructions from capability registry
             proven_strategies: ACE patterns for similar goals
             conversation_history: Formatted previous messages for context continuity
-            skill_inputs_description: Skill input/output variable definitions for
-                template generation. Empty string when not generating templates.
 
         Returns:
             PlanOrQuestionsOutput with either a plan or clarifying questions
@@ -136,7 +137,6 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
             capability_guidance=effective_guidance,
             proven_strategies=proven_strategies,
             conversation_history=conversation_history,
-            skill_inputs_description=skill_inputs_description,
         )
 
         # Step 5: Validate output
@@ -254,7 +254,6 @@ class SimplePlannerModule(dspy.Module):  # type: ignore[misc]
         capability_guidance: str = "",
         proven_strategies: str = "",
         conversation_history: str = "",
-        skill_inputs_description: str = "",
     ) -> PlanOrQuestionsOutput:
         """
         Generate a plan directly without pre-analysis.
@@ -265,8 +264,6 @@ class SimplePlannerModule(dspy.Module):  # type: ignore[misc]
             capability_guidance: Domain-specific instructions
             proven_strategies: ACE patterns for similar goals
             conversation_history: Formatted previous messages for context continuity
-            skill_inputs_description: Skill input/output variable definitions for
-                template generation. Empty string when not generating templates.
 
         Returns:
             PlanOrQuestionsOutput with either a plan or clarifying questions
@@ -282,7 +279,107 @@ class SimplePlannerModule(dspy.Module):  # type: ignore[misc]
             capability_guidance=capability_guidance,
             proven_strategies=proven_strategies,
             conversation_history=conversation_history,
-            skill_inputs_description=skill_inputs_description,
         )
 
         return result.result  # type: ignore[no-any-return]
+
+
+class SkillTemplatePlannerModule(PlannerModule):
+    """DSPy module for creating skill templates with {{ variable }} placeholders.
+
+    Extends PlannerModule to inherit shared logic:
+    - _classify_intent(), _has_delegation_phrase()
+    - _build_think_before_asking_guidance()
+    - Discovery tools handling
+    """
+
+    def __init__(self, discovery_tools: list[Any] | None = None) -> None:
+        """Initialize the skill template planner module.
+
+        Args:
+            discovery_tools: List of tools available during planning phase
+        """
+        super().__init__(discovery_tools=discovery_tools)
+        # Use template-specific signature
+        self.template_planner = dspy.ChainOfThought(CreateSkillTemplate)
+
+    def forward(  # type: ignore[override]
+        self,
+        request: str,
+        workspace_context: str,
+        capability_guidance: str,
+        proven_strategies: str,
+        conversation_history: str,
+        skill_inputs: list[dict[str, Any]],
+        skill_outputs: list[dict[str, Any]],
+    ) -> SkillTemplatePlanOutput:
+        """Generate skill template plan.
+
+        Args:
+            request: What the skill should accomplish
+            workspace_context: JSON of existing resources
+            capability_guidance: When to use each capability
+            proven_strategies: ACE patterns
+            conversation_history: Previous messages
+            skill_inputs: List of {name, type, required}
+            skill_outputs: List of {name, type}
+
+        Returns:
+            SkillTemplatePlanOutput with steps containing prompt_template
+        """
+        tool_names = [getattr(t, "name", str(t)) for t in self.discovery_tools]
+
+        # Build template-specific guidance (adds template rules to base guidance)
+        template_guidance = self._build_template_guidance(capability_guidance)
+
+        # Convert to typed specs
+        input_specs = [SkillInputSpec(**inp) for inp in skill_inputs]
+        output_specs = [SkillOutputSpec(**out) for out in skill_outputs]
+
+        result = self.template_planner(
+            request=request,
+            workspace_context=workspace_context,
+            available_tools=tool_names,
+            capability_guidance=template_guidance,
+            proven_strategies=proven_strategies,
+            conversation_history=conversation_history,
+            skill_inputs=input_specs,
+            skill_outputs=output_specs,
+        )
+
+        plan = result.result
+        self._validate_template_syntax(plan, skill_inputs)
+        return plan  # type: ignore[no-any-return]
+
+    def _build_template_guidance(self, base_guidance: str) -> str:
+        """Add template-specific guidance to capability guidance."""
+        template_rules = """
+TEMPLATE MODE - You are creating a REUSABLE skill template:
+- Every step MUST have prompt_template with {{ variable }} syntax for INPUT references
+- Use literal values for fixed data (table IDs, static text)
+- Description CAN include {{ variables }} for UI clarity
+- Outputs are extracted post-execution - just produce clear, parseable output
+"""
+        return f"{template_rules}\n\n{base_guidance}"
+
+    def _validate_template_syntax(
+        self,
+        plan: SkillTemplatePlanOutput,
+        skill_inputs: list[dict[str, Any]],
+    ) -> None:
+        """Validate template plan has required prompt_template.
+
+        NOTE: Light validation - we don't aggressively check {{ }} usage because
+        literal values are valid. The signature docstring guides the LLM.
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+
+        for step in plan.steps:
+            if not step.prompt_template:
+                raise ValueError(f"Step {step.step_id} missing required prompt_template")
+            # Light validation: warn if no {{ }} but inputs provided
+            if skill_inputs and "{{" not in step.prompt_template:
+                logger.warning(
+                    f"Step {step.step_id} has inputs but no {{{{ }}}} in prompt_template"
+                )

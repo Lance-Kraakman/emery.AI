@@ -41,6 +41,21 @@ class QuestionType(str, Enum):
     CONFIRMATION = "confirmation"
 
 
+class SkillInputSpec(BaseModel):
+    """Input variable for skill templates."""
+
+    name: str = Field(description="Variable name - use as {{ name }} in templates")
+    type: str = Field(default="text", description="Data type")
+    required: bool = Field(default=True)
+
+
+class SkillOutputSpec(BaseModel):
+    """Output variable for skill templates."""
+
+    name: str = Field(description="Output variable name")
+    type: str = Field(default="text", description="Data type")
+
+
 class PlanStepOutput(BaseModel):
     """DSPy output schema for a single plan step."""
 
@@ -73,8 +88,44 @@ class PlanStepOutput(BaseModel):
     )
     prompt_template: Optional[str] = Field(
         default=None,
-        description="Jinja2 prompt template with {{ variable }} placeholders for skill inputs. "
-                    "Only generate when skill_inputs_description is provided.",
+        description="Jinja2 prompt template with {{ variable }} placeholders for skill inputs.",
+    )
+
+
+class SkillTemplateStepOutput(BaseModel):
+    """Step output for skill templates. Same as PlanStepOutput but prompt_template is REQUIRED."""
+
+    step_id: str = Field(description="Unique identifier for this step")
+    description: str = Field(
+        description="Human-readable description. CAN include {{ variables }} for clarity."
+    )
+    tool_call: Optional[str] = Field(
+        default=None, description="Tool to call for this step (e.g., 'table_crud')"
+    )
+    parameters: Optional[dict[str, Any]] = Field(
+        default=None, description="Parameters for the tool call (values can include {{ }} for inputs)"
+    )
+    target_agent: Optional[str] = Field(
+        default=None, description="Specialized agent to delegate to (e.g., 'schema_builder')"
+    )
+    required_context: list[str] = Field(
+        default_factory=list, description="Context keys required from previous steps"
+    )
+    phase_name: str = Field(
+        default="Execution",
+        description="Phase: Discovery|Analysis|Execution|Summary",
+    )
+    phase_order: int = Field(
+        default=1,
+        description="Order within the phase (1, 2, 3...)",
+    )
+    replan_after: bool = Field(
+        default=False,
+        description="Re-evaluate plan after this step completes",
+    )
+    # REQUIRED for templates (vs optional in PlanStepOutput)
+    prompt_template: str = Field(
+        description="REQUIRED: Jinja2 template with {{ variable }} placeholders for input references."
     )
 
 
@@ -86,6 +137,18 @@ class PlanOutput(BaseModel):
     context: str = Field(description="Summary of workspace context used for planning")
     analysis: str = Field(description="Analysis of the request and approach")
     steps: list[PlanStepOutput] = Field(description="Ordered list of steps to execute")
+
+
+class SkillTemplatePlanOutput(BaseModel):
+    """DSPy output schema for a skill template plan with {{ variable }} placeholders."""
+
+    plan_id: str = Field(description="Unique identifier for this plan")
+    goal: str = Field(description="The high-level goal this skill template achieves")
+    context: str = Field(description="Summary of workspace context used for planning")
+    analysis: str = Field(description="Analysis of the request and approach")
+    steps: list[SkillTemplateStepOutput] = Field(
+        description="Ordered list of steps with required prompt_template fields"
+    )
 
 
 class ClarifyingQuestionOutput(BaseModel):
@@ -116,12 +179,6 @@ class CreatePlan(dspy.Signature):  # type: ignore[misc]
     Check workspace_context for existing resources before asking questions.
     Use capability_guidance to understand which capability to delegate to.
     Use conversation_history for context from previous messages in this session.
-
-    When skill_inputs_description is non-empty, you are in TEMPLATE GENERATION MODE:
-    - Each step MUST include a prompt_template with {{ variable }} Jinja2 placeholders
-    - The prompt_template contains the FULL execution instructions for the step
-    - Reference skill inputs using {{ variable_name }} syntax
-    - The description is a short UI label; prompt_template is the real instruction
     """
 
     request: str = dspy.InputField(desc="User's goal or task")
@@ -136,12 +193,57 @@ class CreatePlan(dspy.Signature):  # type: ignore[misc]
     conversation_history: str = dspy.InputField(
         desc="Previous messages in this session for context continuity"
     )
-    skill_inputs_description: str = dspy.InputField(
-        desc="Skill input/output variables available for {{ template }} placeholders in prompt_template. "
-             "Empty string if not generating templates for autonomous skills."
-    )
 
     result: PlanOrQuestionsOutput = dspy.OutputField()
+
+
+class CreateSkillTemplate(dspy.Signature):  # type: ignore[misc]
+    """Create a reusable skill template with {{ variable }} placeholders.
+
+    You have full workspace context - use it to create templates that work
+    with existing resources.
+
+    WHEN TO USE {{ }}:
+    - Referencing SKILL INPUTS: Use {{ input_name }}
+      Example: "Write a summary for {{ name }}, age {{ age }}"
+    - Dynamic parameters: {"record_data": {"name": "{{ name }}"}}
+
+    WHEN NOT TO USE {{ }}:
+    - Fixed/literal values: {"table_id": "abc123"}
+    - Static instructions: "Create a record in the customers table"
+
+    CONDITIONALS:
+    - {% if family %}...{% endif %} for optional inputs
+    - STILL use {{ family }} inside the conditional block!
+
+    OUTPUTS:
+    - skill_outputs define what the skill should produce
+    - The prompt_template should guide LLM to produce clear, parseable output
+    - Output extraction happens automatically post-execution
+
+    Every step MUST have prompt_template. Use {{ }} for input references.
+    """
+
+    request: str = dspy.InputField(desc="What the skill should accomplish")
+    workspace_context: str = dspy.InputField(
+        desc="JSON of existing databases, tables, apps - check FIRST before asking"
+    )
+    available_tools: list[str] = dspy.InputField(desc="Discovery tools available")
+    capability_guidance: str = dspy.InputField(
+        desc="Capability planning guidance - when to use each capability"
+    )
+    proven_strategies: str = dspy.InputField(desc="ACE patterns for similar goals")
+    conversation_history: str = dspy.InputField(
+        desc="Previous messages in this session for context continuity"
+    )
+    skill_inputs: list[SkillInputSpec] = dspy.InputField(
+        desc="Input variables - use as {{ name }} in templates"
+    )
+    skill_outputs: list[SkillOutputSpec] = dspy.InputField(
+        desc="Expected outputs to be extracted post-execution"
+    )
+
+    result: SkillTemplatePlanOutput = dspy.OutputField()
 
 
 class AnalyzeTask(dspy.Signature):  # type: ignore[misc]
