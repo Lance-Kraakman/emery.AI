@@ -31,6 +31,11 @@ COPY ./pyproject.toml ./uv.lock ./README.md ./
 # This ensures package versions are properly resolved
 RUN uv pip install . --system
 
+# Pre-download models for memory features (avoids first-run delay)
+# spaCy model for Presidio PII detection
+RUN python -m spacy download en_core_web_sm
+# sentence-transformers embedding model for ChromaDB semantic search
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
 
 # Add metadata labels
 LABEL org.opencontainers.image.version="${VERSION}"
