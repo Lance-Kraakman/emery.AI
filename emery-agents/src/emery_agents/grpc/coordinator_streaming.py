@@ -30,6 +30,7 @@ from .response_types import create_error_response
 from ..orchestrators import create_session_graph, RuntimeContext
 from ..orchestrators.state import DEFAULT_STATE
 from ..services.memory import MemoryService
+from ..services.planning import PlanFileRepository
 
 if TYPE_CHECKING:
     from ..entities.execution_context import ExecutionContext
@@ -141,6 +142,17 @@ class CoordinatorStreamingHandler:
             except Exception as e:
                 logger.warning(f"Failed to initialize MemoryService: {e}")
 
+        # Initialize PlanFileRepository for filesystem-based plan persistence
+        plan_file_repo = None
+        if workspace_type and workspace_id:
+            try:
+                plan_file_repo = PlanFileRepository(
+                    base_path=Path("/tmp/workspace"),
+                    workspace_id=workspace_id,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to initialize PlanFileRepository: {e}")
+
         runtime = RuntimeContext(
             tools=tools,
             managed_agents=self._get_managed_agents_list(managed_agents),
@@ -153,6 +165,7 @@ class CoordinatorStreamingHandler:
             workspace_type=workspace_type,
             workspace_id=workspace_id,
             memory_service=memory_service,
+            plan_file_repository=plan_file_repo,
         )
 
         # Check if there's a pending graph interrupt to resume

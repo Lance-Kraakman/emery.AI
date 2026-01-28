@@ -311,6 +311,13 @@ async def _finish(
     else:
         plan = plan.fail()
 
+    # Save final plan state to filesystem
+    if runtime and runtime.plan_file_repository:
+        try:
+            runtime.plan_file_repository.save(plan)
+        except Exception as e:
+            logger.warning(f"Failed to save final plan to filesystem: {e}")
+
     # Synthesize final answer
     final_response = None
     if ledger:
@@ -439,6 +446,13 @@ async def _do_replan(
     ))
 
     logger.info(f"Replan complete ({replan_count}): {new_pending_count} pending steps")
+
+    # Save updated plan to filesystem
+    if runtime.plan_file_repository:
+        try:
+            runtime.plan_file_repository.save(updated_plan)
+        except Exception as e:
+            logger.warning(f"Failed to save replanned plan: {e}")
 
     if new_pending_count == 0:
         # Differ couldn't generate new steps — finish with what we have

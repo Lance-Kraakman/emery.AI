@@ -33,6 +33,7 @@ class RuntimeContext:
         workspace_type: "agents" or "users" — determines PII filtering
         workspace_id: Agent ID or user ID for workspace path resolution
         memory_service: MemoryService instance for persistent memory (NOT serializable)
+        plan_file_repository: PlanFileRepository for filesystem-based plan persistence
     """
     tools: List[Any] = field(default_factory=list)
     managed_agents: List[Any] = field(default_factory=list)
@@ -45,3 +46,4 @@ class RuntimeContext:
     workspace_type: Optional[str] = None
     workspace_id: Optional[str] = None
     memory_service: Optional[Any] = None
+    plan_file_repository: Optional[Any] = None

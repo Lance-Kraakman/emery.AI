@@ -146,10 +146,6 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
 
     events: List[Any] = []
 
-    # Emit planning started
-    task_summary = task[:200] if len(task) > 200 else task
-    events.append(PlanningStartedEvent(goal=task_summary))
-
     logger.info("Creating plan (planner handles clarification if needed)")
 
     # Filter tools to read-only for planning
@@ -212,6 +208,10 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
         events.append(ErrorEvent(error="Plan generation failed: no plan returned", recoverable=True))
         return {"error": "No plan returned", "events": events}
 
+    # Emit planning started only when a real plan was created (not for greetings/clarification)
+    task_summary = task[:200] if len(task) > 200 else task
+    events.append(PlanningStartedEvent(goal=task_summary))
+
     # Create task ledger from plan
     ledger = create_ledger_from_plan(
         task_id=plan.id,
@@ -222,6 +222,13 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
 
     logger.info(f"Plan {plan.id} created with {len(plan.steps)} steps, awaiting approval")
     events.append(PlanCreatedEvent(plan_id=plan.id, plan=plan))
+
+    # Save plan to filesystem
+    if runtime.plan_file_repository and plan:
+        try:
+            runtime.plan_file_repository.save(plan)
+        except Exception as e:
+            logger.warning(f"Failed to save plan to filesystem: {e}")
 
     return {
         "plan": plan,
