@@ -97,7 +97,8 @@ class SkillTemplateStepOutput(BaseModel):
 
     step_id: str = Field(description="Unique identifier for this step")
     description: str = Field(
-        description="Human-readable description. CAN include {{ variables }} for clarity."
+        description="Human-readable description. Use {{ variable }} for inputs. "
+                    "NO {% if %} control structures - only {{ }} placeholders allowed."
     )
     tool_call: Optional[str] = Field(
         default=None, description="Tool to call for this step (e.g., 'table_crud')"
