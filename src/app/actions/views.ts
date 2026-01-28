@@ -26,6 +26,7 @@ import { FieldMapping } from "@/ddd/domain/views/value-objects/field-mapping";
 import { ViewType } from "@/ddd/domain/views/value-objects/view-type";
 import { ViewConfig } from "@/ddd/domain/views/value-objects/view-config";
 import { ViewMapper, type ViewDTO } from "@/app/mappers/view-mapper";
+import { FieldMapper, type FieldDTO } from "@/app/mappers/field-mapper";
 import type { Result, CreateViewData, UpdateViewData } from "./types";
 import { getCacheService, CACHE_KEYS, CACHE_TAGS } from "@/lib/cache";
 
@@ -622,10 +623,10 @@ function substituteFilterVariable(
  * No mappings = view not configured yet, return everything.
  */
 function filterByViewMappings(
-  fields: Array<{ id: number; name: string; type: string }>,
+  fields: FieldDTO[],
   rows: Array<Record<string, unknown>>,
   fieldMappings: ReadonlyArray<{ sourceFieldId: number; visible: boolean }>,
-): { fields: Array<{ id: number; name: string; type: string }>; rows: Array<Record<string, unknown>> } {
+): { fields: FieldDTO[]; rows: Array<Record<string, unknown>> } {
   if (!fieldMappings.length) return { fields, rows };
 
   const visibleFieldIds = new Set(
@@ -672,7 +673,7 @@ export async function executeView(
   additionalFilters?: Array<{ field: string; operator: string; value: any }>
 ): Promise<{
   rows: Array<Record<string, any>>;
-  fields: Array<{ id: number; name: string; type: string }>;
+  fields: FieldDTO[];
   totalCount: number;
   pageSize: number;
   offset: number;
@@ -830,12 +831,8 @@ export async function executeView(
     // (useFieldValue looks up by fieldId, e.g., rowData["42"])
     const plainRows = result.data.rows.map((row) => row.toPlainObject(fields));
 
-    // Convert TableField VOs to plain objects
-    const plainFields = fields.map((field) => ({
-      id: field.id.value,
-      name: field.name,
-      type: field.type,
-    }));
+    // Convert TableField VOs to full FieldDTOs (preserves all metadata)
+    const plainFields = fields.map((field) => FieldMapper.toDTO(field));
 
     // Filter to only view-visible fields before returning to client
     const { fields: filteredFields, rows: filteredRows } = filterByViewMappings(

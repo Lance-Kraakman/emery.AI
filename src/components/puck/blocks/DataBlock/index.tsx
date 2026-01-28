@@ -30,7 +30,6 @@ import type { ComponentConfig } from "@measured/puck";
 import DataBlock, { type DataBlockProps } from "./DataBlock";
 import { executeView, getView } from "@/app/actions/views";
 import { executePublicView } from "@/app/actions/public-pages";
-import { getFields } from "@/app/actions/fields";
 import { isPuckResolveContext } from "../../types/puck-context";
 import { createViewManagementField } from "../../custom-fields";
 import { MultiFilterField, type RowFilterConfig } from "../../fields/MultiFilterField";
@@ -398,27 +397,6 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
         };
       }
 
-      // Get all table fields (for full FieldDTO data needed by edit mode)
-      // Pass viewId so RLS can check public access via fields_public_via_view policy
-      const allTableFields = await getFields(view.tableId, { viaViewId: props.viewId });
-
-      // Helper to filter fields to only those mapped in the view
-      const filterFieldsToView = (
-        tableFields: typeof allTableFields,
-        viewFields: Array<{ id: number; name: string; type: string }>
-      ) => {
-        const viewFieldIds = new Set(viewFields.map(f => f.id));
-        return tableFields.filter(f => viewFieldIds.has(f.id));
-      };
-
-      // Filter fields using view's fieldMappings (for fallback paths where
-      // we don't have result.fields). Only exposes fields the view configures.
-      const filterFieldsByViewMappings = (tableFields: typeof allTableFields) => {
-        if (!view.fieldMappings?.length) return tableFields;
-        const mappedFieldIds = new Set(view.fieldMappings.map(m => m.sourceFieldId));
-        return tableFields.filter(f => mappedFieldIds.has(f.id));
-      };
-
       // Helper to execute view (uses public or authenticated based on context)
       const doExecuteView = async (
         pagination: { pageSize: number; offset: number },
@@ -488,12 +466,14 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
         // Validate filter configuration - need at least one complete condition
         const hasValidCondition = filterConfig?.conditions?.some(c => c.field && c.value);
         if (!hasValidCondition) {
+          // Execute view without filters to get available fields for the editor
+          const fieldResult = await doExecuteView({ pageSize: 1, offset: 0 });
           return {
             props: {
               ...props,
               _viewName: view.name,
               _tableId: view.tableId,
-              _fields: filterFieldsByViewMappings(allTableFields),
+              _fields: fieldResult?.fields ?? [],
               _resolvedRow: undefined,
               _error: undefined, // No error, just not configured yet
             },
@@ -517,15 +497,12 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
               ...props,
               _viewName: view.name,
               _tableId: view.tableId,
-              _fields: allTableFields,
+              _fields: [],
               _resolvedRow: undefined,
               _error: 'Failed to execute view',
             },
           };
         }
-
-        // Filter fields to only those configured in the view
-        const viewFields = filterFieldsToView(allTableFields, result.fields);
 
         // Get the first (and only) row
         const targetRow = result.rows[0];
@@ -538,7 +515,7 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
               ...props,
               _viewName: view.name,
               _tableId: view.tableId,
-              _fields: viewFields,
+              _fields: result.fields,
               _resolvedRow: undefined,
               _error: undefined, // Don't show error in editor when variable isn't available
             },
@@ -550,7 +527,7 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
             ...props,
             _viewName: view.name,
             _tableId: view.tableId,
-            _fields: viewFields,
+            _fields: result.fields,
             _resolvedRow: targetRow,
             _error: undefined,
           },
@@ -575,7 +552,7 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
             ...props,
             _viewName: view.name,
             _tableId: view.tableId,
-            _fields: filterFieldsByViewMappings(allTableFields),
+            _fields: [],
             _rows: [],
             _totalCount: 0,
             _error: 'Failed to execute view',
@@ -583,15 +560,12 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
         };
       }
 
-      // Filter fields to only those configured in the view
-      const viewFields = filterFieldsToView(allTableFields, result.fields);
-
       return {
         props: {
           ...props,
           _viewName: view.name,
           _tableId: view.tableId,
-          _fields: viewFields,
+          _fields: result.fields,
           _rows: result.rows,
           _totalCount: result.totalCount,
           _error: undefined,
