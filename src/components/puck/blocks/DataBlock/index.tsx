@@ -411,6 +411,14 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
         return tableFields.filter(f => viewFieldIds.has(f.id));
       };
 
+      // Filter fields using view's fieldMappings (for fallback paths where
+      // we don't have result.fields). Only exposes fields the view configures.
+      const filterFieldsByViewMappings = (tableFields: typeof allTableFields) => {
+        if (!view.fieldMappings?.length) return tableFields;
+        const mappedFieldIds = new Set(view.fieldMappings.map(m => m.sourceFieldId));
+        return tableFields.filter(f => mappedFieldIds.has(f.id));
+      };
+
       // Helper to execute view (uses public or authenticated based on context)
       const doExecuteView = async (
         pagination: { pageSize: number; offset: number },
@@ -485,7 +493,7 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
               ...props,
               _viewName: view.name,
               _tableId: view.tableId,
-              _fields: allTableFields, // Use all fields when no filter (editor needs field options)
+              _fields: filterFieldsByViewMappings(allTableFields),
               _resolvedRow: undefined,
               _error: undefined, // No error, just not configured yet
             },
@@ -567,7 +575,7 @@ export const DataBlockConfig: ComponentConfig<DataBlockProps> = {
             ...props,
             _viewName: view.name,
             _tableId: view.tableId,
-            _fields: allTableFields,
+            _fields: filterFieldsByViewMappings(allTableFields),
             _rows: [],
             _totalCount: 0,
             _error: 'Failed to execute view',
