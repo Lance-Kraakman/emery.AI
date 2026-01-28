@@ -32,27 +32,27 @@ export default async function OrganizationPage() {
     executionType: skill.executionType,
     agentId: skill.agentId ?? null,
     // Extract minimal step data needed for edge generation
-    steps: skill.steps?.map((step) => ({
+    steps: Array.isArray(skill.steps) ? skill.steps.map((step) => ({
       id: step.id,
       skillId: step.skillId, // For skill_ref edges
       readConfig: step.readConfig ? { sourceTableId: step.readConfig.sourceTableId } : undefined,
       writeConfig: step.writeConfig ? { targetTableId: step.writeConfig.targetTableId } : undefined,
-    })),
+    })) : undefined,
     // Skill-level I/O mappings for edge generation (reads FROM / writes TO tables)
-    inputs: skill.inputs?.map((input) => ({
+    inputs: Array.isArray(skill.inputs) ? skill.inputs.map((input) => ({
       name: input.name,
       inputMapping: input.inputMapping ? {
         source: { tableId: input.inputMapping.source?.tableId }
       } : undefined,
-    })),
-    outputs: skill.outputs?.map((output) => ({
+    })) : [],
+    outputs: Array.isArray(skill.outputs) ? skill.outputs.map((output) => ({
       name: output.name,
       outputMapping: output.outputMapping ? {
         tableMappings: output.outputMapping.tableMappings?.map((tm) => ({
           targetTableId: tm.targetTableId
         }))
       } : undefined,
-    })),
+    })) : [],
   }));
 
   const canvasMetadata = canvasMetadataResult.success ? canvasMetadataResult.data : undefined;
