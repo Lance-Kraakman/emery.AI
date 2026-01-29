@@ -387,13 +387,13 @@ class AppStack(Stack):
             )
 
         # Create the ALB origin once for reuse
-        # AIDEV-NOTE: Extend read_timeout for long-running chat/agent streaming operations
-        # Default CloudFront timeout is 30s, max is 180s (3 minutes)
+        # AIDEV-NOTE: Default CloudFront origin timeout is 30s, max without quota increase is 60s
+        # To get 180s, you need to request a quota increase from AWS Support
         alb_origin = origins.LoadBalancerV2Origin(
             frontend_service.load_balancer,
             protocol_policy=cloudfront.OriginProtocolPolicy.HTTP_ONLY,
-            read_timeout=Duration.seconds(180),  # 3 minutes (CloudFront max)
-            keepalive_timeout=Duration.seconds(60),  # Keep connection alive between requests
+            read_timeout=Duration.seconds(60),  # 60s max without AWS quota increase
+            keepalive_timeout=Duration.seconds(60),
         )
 
         # Create CloudFront distribution for static URL routing
