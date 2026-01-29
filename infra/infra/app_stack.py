@@ -839,11 +839,12 @@ class AppStack(Stack):
                 "AWS_REGION",
                 aws_region
             )
-            # Add NextJS base URL for agent callbacks to API routes (use custom domain if available)
-            nextjs_base_url = f"https://{custom_domain}" if custom_domain else f"https://{cloudfront_distribution.distribution_domain_name}"
+            # Add NextJS base URL for agent callbacks to API routes
+            # Use internal ALB URL to bypass CloudFront/WAF (faster, avoids rate limits)
+            internal_nextjs_url = f"http://{frontend_service.load_balancer.load_balancer_dns_name}"
             agent_chat_service.task_definition.default_container.add_environment(
                 "NEXTJS_BASE_URL",
-                nextjs_base_url
+                internal_nextjs_url
             )
 
         # Add S3 and AWS configuration to table service
