@@ -112,13 +112,12 @@ class AgentExecutor:
         self.model_provider = model_provider or ModelProvider()
         self.tool_loader = tool_loader or UnifiedToolLoader()
         self.agent_factory = agent_factory or AgentFactory(self.model_provider)
-        # Inference client for direct operation execution (lazy initialization)
+        # Inference client kept for potential future use (lazy initialization)
         self._inference_client = inference_client
         # SkillExecutorService for shared skill execution logic
         self.skill_executor_service = SkillExecutorService(
             tool_loader=self.tool_loader,
             agent_factory=self.agent_factory,
-            inference_client=inference_client
         )
         # Agent cache now managed by AgentFactory
         logger.info("AgentExecutor initialized with shared utilities")

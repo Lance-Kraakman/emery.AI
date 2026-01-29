@@ -4,20 +4,17 @@ Dynamic Skill Tool - Fetches skill config via API at execution time.
 AIDEV-NOTE: Part of dynamic execution architecture (Jan 2026).
 Created when frontend sends skill_reference tool config.
 Fetches skill config via API, resolves credentials from skill.agentId.
+Executes skill in-process via execute_skill_by_id().
 """
 
 from __future__ import annotations
 
-import json
 import logging
-from typing import Any, Dict, Optional, TYPE_CHECKING
+from typing import Any, Dict, Optional
 
 import requests
 
 from ..http_client import get_base_url
-
-if TYPE_CHECKING:
-    from ....services.skills.executor import SkillExecutorService
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +38,6 @@ class DynamicSkillTool:
         skill_id: int,
         api_key: str,
         organization_id: int,
-        skill_executor_service: Optional["SkillExecutorService"] = None,
     ):
         """
         Initialize DynamicSkillTool.
@@ -50,12 +46,10 @@ class DynamicSkillTool:
             skill_id: ID of the skill to execute
             api_key: API key for authentication (user's or inherited)
             organization_id: Organization ID for RLS context
-            skill_executor_service: Optional executor for full skill execution
         """
         self.skill_id = skill_id
         self.api_key = api_key
         self.organization_id = organization_id
-        self.skill_executor_service = skill_executor_service
 
         # Fetch skill metadata for LLM tool registration
         self._skill_metadata = self._fetch_skill_metadata()
@@ -79,7 +73,7 @@ class DynamicSkillTool:
 
         1. Fetch full skill config via API (includes agentId)
         2. Resolve credentials from skill.agentId
-        3. Execute skill with resolved credentials
+        3. Execute skill in-process via SkillExecutorService
 
         Args:
             **kwargs: Skill input parameters
@@ -96,7 +90,6 @@ class DynamicSkillTool:
             inputs=kwargs,
             api_key=self.api_key,
             org_id=str(self.organization_id),
-            skill_executor_service=self.skill_executor_service,
         )
 
     def _fetch_skill_metadata(self) -> Dict[str, Any]:

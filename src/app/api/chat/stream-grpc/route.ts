@@ -29,7 +29,6 @@ import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 
 // Import existing chat services (DIContainer now auto-initializes)
 import { getChatApplicationService, getDynamicTableRepository, getAgentRepository, getToolConfigurationApplicationService, getUserRepository, getOrganizationRepository, getStorageQuotaApplicationService } from '@/ddd/application/di/container';
-// getSkillEnrichmentService, getTaskRepository, TaskId removed - skills/tasks handled dynamically in Python
 import { TokenUsageApplicationService } from '@/ddd/application/services/billing/token-usage-application-service';
 import { getTokenUsageRepository } from '@/ddd/application/di/getters';
 import type { CreateChatDTO, SendMessageDTO, UpdateMessageDTO, ExecutionStep, ExecutionStepMetadata } from '@/app/dtos/chat.dto';
