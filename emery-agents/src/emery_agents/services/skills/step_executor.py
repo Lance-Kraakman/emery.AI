@@ -18,6 +18,7 @@ from tenacity import (
 )
 
 from ...grpc.generated import agent_worker_pb2
+from ...entities.skill_config import SkillConfigDTO
 from ...reasoning.modules.extractor import OutputExtractorModule
 from ...types import SkillExecutionResult
 from ...utils.error_classifier import classify_error
@@ -183,7 +184,7 @@ class AgenticConfig:
     tools: List[str] = field(default_factory=list)
     agent_type: str = ""
     model: str = ""
-    plan: Optional[Any] = None  # StoredPlan proto
+    plan: Optional[Plan] = None
 
 
 @dataclass
@@ -319,12 +320,13 @@ class Step:
         agentic_config = None
         if proto.HasField('agentic_config'):
             ac = proto.agentic_config
+            plan = Plan.from_stored_proto(ac.plan) if ac.HasField('plan') and ac.plan.id else None
             agentic_config = AgenticConfig(
                 instructions=ac.instructions or "",
                 tools=list(ac.tools) if ac.tools else [],
                 agent_type=ac.agent_type or "",
                 model=ac.model or "",
-                plan=ac.plan if ac.HasField('plan') and ac.plan.id else None,
+                plan=plan,
             )
 
         return cls(
@@ -411,7 +413,7 @@ class StepExecutorService:
     async def execute_steps(
         self,
         steps: List['agent_worker_pb2.SkillStep'],
-        available_skills: Dict[int, 'agent_worker_pb2.SkillConfig'],
+        available_skills: Dict[int, SkillConfigDTO],
         initial_inputs: Dict[str, Any],
         org_model: Optional[str] = None,
         api_key: Optional[str] = None,
@@ -667,7 +669,7 @@ class StepExecutorService:
         step_counter: int,
         total_steps: int,
         step_context: Dict[str, Any],
-        available_skills: Dict[int, 'agent_worker_pb2.SkillConfig'],
+        available_skills: Dict[int, SkillConfigDTO],
         execution_stack: Set[int],
         org_model: Optional[str],
         api_key: Optional[str],
@@ -918,7 +920,7 @@ class StepExecutorService:
         self,
         step: Step,
         step_context: Dict[str, Any],
-        available_skills: Dict[int, 'agent_worker_pb2.SkillConfig'],
+        available_skills: Dict[int, SkillConfigDTO],
         execution_stack: Set[int],
         org_model: Optional[str],
         api_key: Optional[str],
@@ -1008,7 +1010,7 @@ class StepExecutorService:
         self,
         step: Step,
         step_context: Dict[str, Any],
-        available_skills: Dict[int, 'agent_worker_pb2.SkillConfig'],
+        available_skills: Dict[int, SkillConfigDTO],
         execution_stack: Set[int],
         org_model: Optional[str],
         api_key: Optional[str],
@@ -1180,7 +1182,7 @@ class StepExecutorService:
         self,
         step: Step,
         step_inputs: Dict[str, Any],
-        available_skills: Dict[int, 'agent_worker_pb2.SkillConfig'],
+        available_skills: Dict[int, SkillConfigDTO],
         org_model: Optional[str],
         api_key: Optional[str],
         organization_id: Optional[int],
@@ -1576,7 +1578,7 @@ class StepExecutorService:
         logger.info(f"📋 Step {step.name}: executing with stored plan")
         # _execute_with_plan is sync (PlanStepExecutor.execute is sync)
         return self._execute_with_plan(
-            plan_proto=agentic_config.plan,
+            plan=agentic_config.plan,
             skill_inputs=step_inputs,
             org_model=agentic_config.model or org_model,
             api_key=api_key,
@@ -1585,7 +1587,7 @@ class StepExecutorService:
 
     def _execute_with_plan(
         self,
-        plan_proto: Any,
+        plan: Plan,
         skill_inputs: Dict[str, Any],
         org_model: Optional[str],
         api_key: Optional[str],
@@ -1594,7 +1596,7 @@ class StepExecutorService:
         """Execute a stored plan using PlanStepExecutor.
 
         Args:
-            plan_proto: StoredPlan proto message
+            plan: Plan entity with typed steps
             skill_inputs: Runtime inputs for template resolution
             org_model: Organization default model
             api_key: API key for authenticated calls
@@ -1603,9 +1605,6 @@ class StepExecutorService:
         Returns:
             Combined results from all plan steps
         """
-        # Convert proto to Plan object
-        plan = Plan.from_stored_proto(plan_proto)
-
         executor = PlanStepExecutor(
             api_key=api_key or "",
             org_id=str(organization_id) if organization_id else "",
@@ -1795,7 +1794,7 @@ class StepExecutorService:
 def execute_steps_sync(
     step_executor: StepExecutorService,
     steps: List['agent_worker_pb2.SkillStep'],
-    available_skills: Dict[int, 'agent_worker_pb2.SkillConfig'],
+    available_skills: Dict[int, SkillConfigDTO],
     initial_inputs: Dict[str, Any],
     org_model: Optional[str] = None,
     api_key: Optional[str] = None,

@@ -9,7 +9,51 @@ Converts camelCase API response to snake_case dataclass.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .models.plan import Plan
+
+
+@dataclass
+class AgenticStepConfig:
+    """Typed config for agentic skill steps.
+
+    Replaces raw Dict[str, Any] with proper typed fields.
+    Plan is a fully typed Plan entity from entities/models/plan.py.
+    """
+    instructions: str = ""
+    model: str = ""
+    agent_type: str = ""
+    plan: Optional[Plan] = None
+
+    @classmethod
+    def from_api_response(cls, data: Dict[str, Any]) -> "AgenticStepConfig":
+        """Create from API response (camelCase agenticConfig object)."""
+        from .models.plan import Plan
+
+        plan_data = data.get("plan")
+        return cls(
+            instructions=data.get("instructions", ""),
+            model=data.get("model", ""),
+            agent_type=data.get("agentType", data.get("agent_type", "")),
+            plan=Plan.from_dict(plan_data) if plan_data else None,
+        )
+
+    @classmethod
+    def from_proto(cls, proto: Any) -> "AgenticStepConfig":
+        """Create from proto AgenticStepConfig."""
+        from .models.plan import Plan
+
+        plan = None
+        if proto.HasField('plan') and proto.plan.id:
+            plan = Plan.from_stored_proto(proto.plan)
+        return cls(
+            instructions=proto.instructions,
+            model=proto.model,
+            agent_type=proto.agent_type,
+            plan=plan,
+        )
 
 
 @dataclass
@@ -158,17 +202,22 @@ class SkillStepDTO:
     id: str
     name: str
     step_type: str = "agentic"
-    config: Dict[str, Any] = field(default_factory=dict)
+    agentic_config: Optional[AgenticStepConfig] = None
     dependencies: List[str] = field(default_factory=list)
 
     @classmethod
     def from_api_response(cls, data: Dict[str, Any]) -> "SkillStepDTO":
         """Create from API response (camelCase)."""
+        agentic_config = None
+        agentic_data = data.get("agenticConfig")
+        if agentic_data and isinstance(agentic_data, dict):
+            agentic_config = AgenticStepConfig.from_api_response(agentic_data)
+
         return cls(
             id=data.get("id", ""),
             name=data.get("name", ""),
             step_type=data.get("stepType", data.get("step_type", "agentic")),
-            config=data.get("config", {}),
+            agentic_config=agentic_config,
             dependencies=data.get("dependencies", []),
         )
 
@@ -178,36 +227,7 @@ class SkillStepDTO:
         step = cls(id=proto.id, name=proto.name)
         if proto.HasField('agentic_config'):
             step.step_type = "agentic"
-            step.config = {
-                "instructions": proto.agentic_config.instructions,
-                "model": proto.agentic_config.model,
-                "agent_type": proto.agentic_config.agent_type,
-            }
-            if proto.agentic_config.HasField('plan') and proto.agentic_config.plan.id:
-                plan = proto.agentic_config.plan
-                step.config["plan"] = {
-                    "id": plan.id,
-                    "goal": plan.goal,
-                    "basic_instructions": plan.basic_instructions,
-                    "context": plan.context,
-                    "analysis": plan.analysis,
-                    "version": plan.version,
-                    "generated_at": plan.generated_at,
-                    "approved_at": plan.approved_at,
-                    "steps": [
-                        {
-                            "step_id": ps.step_id,
-                            "description": ps.description,
-                            "tool_call": ps.tool_call,
-                            "parameters": dict(ps.parameters),
-                            "context_tables": list(ps.context_tables),
-                            "target_agent": ps.target_agent,
-                            "prompt_template": ps.prompt_template,
-                            "required_context": list(ps.required_context),
-                        }
-                        for ps in plan.steps
-                    ],
-                }
+            step.agentic_config = AgenticStepConfig.from_proto(proto.agentic_config)
         elif proto.HasField('read_config'):
             step.step_type = "read"
         elif proto.HasField('write_config'):

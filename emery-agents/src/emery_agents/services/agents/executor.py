@@ -12,7 +12,7 @@ import time
 import json
 import uuid
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, Dict
 
 import dspy
 import httpx
@@ -22,6 +22,7 @@ from emery_agents.infrastructure.clients.base import TaskResult
 from emery_agents.infrastructure.clients.huggingface_inference import HuggingFaceInferenceClient
 
 from ...entities.execution_context import ExecutionContext
+from ...entities.skill_config import SkillConfigDTO
 from ...types import ExecutionMode, AgentId, OrganizationId
 from ...grpc.generated.agent_worker_pb2 import SkillConfig, ToolConfig, TokenUsage as TokenUsageProto, ImageAttachment
 from ...entities.task import TaskRequest
@@ -214,7 +215,8 @@ class AgentExecutor:
         # Find skill in agent config
         if not request.skill_name:
             raise ValueError("Skill name is required for skill-based execution")
-        skill = self._find_skill_by_name(list(request.agent_config.skills), request.skill_name)
+        all_skill_dtos = [SkillConfigDTO.from_proto(s) for s in request.agent_config.skills] if request.agent_config.skills else []
+        skill = self._find_skill_by_name(all_skill_dtos, request.skill_name)
 
         if not skill:
             raise ValueError(f"Skill '{request.skill_name}' not found in agent configuration")
@@ -263,9 +265,8 @@ class AgentExecutor:
                 attachments.append(part.file)
 
         # Get all available skills for delegation (excluding the current skill)
-        # Protobuf repeated field - always present
-        all_skills = list(request.agent_config.skills) if request.agent_config.skills else []
-        available_skills = [s for s in all_skills if s.name != request.skill_name]
+        # Reuse all_skill_dtos from above (already converted proto → DTO at boundary)
+        available_skills = [s for s in all_skill_dtos if s.name != request.skill_name]
 
         # Extract skill inputs from trigger_data.skill_inputs (automation inputMappings)
         # These are typed runtime values resolved from variables like $trigger.scheduledTime
@@ -340,7 +341,7 @@ class AgentExecutor:
             resolved_context=request.resolved_context,  # Context table mappings
         )
 
-    def _find_skill_by_name(self, skills: List[SkillConfig], skill_name: str) -> Optional[SkillConfig]:
+    def _find_skill_by_name(self, skills: list[SkillConfigDTO], skill_name: str) -> Optional[SkillConfigDTO]:
         """Find specific skill by name in agent skills."""
         for skill in skills:
             if skill.name == skill_name:
@@ -681,7 +682,7 @@ class AgentExecutor:
         }
 
         # Build available skills map for delegation (skill_id -> config)
-        available_skills: Dict[int, SkillConfig] = {}
+        available_skills: Dict[int, SkillConfigDTO] = {}
         if context.available_skills:
             for s in context.available_skills:
                 available_skills[s.id] = s
@@ -699,9 +700,11 @@ class AgentExecutor:
         )
 
         # Execute steps and yield progress
+        # Use raw proto steps (preserved from boundary conversion) for StepExecutorService
+        # which expects proto SkillStep objects with full read/write/agentic configs
         step_results = []
         async for step_progress in step_executor.execute_steps(
-            steps=list(skill.steps),
+            steps=skill._proto_steps or list(skill.steps),
             available_skills=available_skills,
             initial_inputs=context.skill_inputs or {},
             org_model=context.org_model,
@@ -1219,11 +1222,9 @@ class AgentExecutor:
     # Utility Methods
     # =========================================================================
 
-    def _extract_api_key_from_tools(self, tools: List[ToolConfig]) -> Optional[str]:
+    def _extract_api_key_from_tools(self, tools: list) -> Optional[str]:
         """Extract user API key from tool configs (for output mappings)."""
         for tool in tools:
-            # ToolConfig is protobuf - config is a map<string, string> field
-            # Protobuf maps are always present (empty dict if not set)
             if tool.config:
                 config = dict(tool.config)
                 api_key = config.get('api_key')

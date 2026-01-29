@@ -20,8 +20,44 @@ from ...utils.step_utils import step_to_progress_dict, RawProgressDict
 from ..agents.factory import AgentFactory, AgentConfig
 from .step_executor import StepExecutorService, execute_steps_sync
 from ..tools.loader import UnifiedToolLoader
+from ...entities.models.plan import Plan
+
 
 logger = logging.getLogger(__name__)
+
+
+def _plan_to_stored_proto(plan: Plan) -> 'agent_worker_pb2.StoredPlan':
+    """Convert Plan entity to StoredPlan proto for DAG construction.
+
+    Service-layer helper — keeps Plan entity free of proto knowledge.
+    """
+    proto = agent_worker_pb2.StoredPlan(
+        id=plan.id,
+        goal=plan.goal,
+        basic_instructions=plan.basic_instructions,
+        context=plan.context or "",
+        analysis=plan.analysis or "",
+        version=plan.version,
+        generated_at=plan.generated_at.isoformat() if plan.generated_at else "",
+        approved_at=plan.approved_at.isoformat() if plan.approved_at else "",
+    )
+    for s in plan.steps:
+        ps = agent_worker_pb2.StoredPlanStep(
+            step_id=s.step_id,
+            description=s.description,
+            tool_call=s.tool_call or "",
+            target_agent=s.target_agent or "",
+            prompt_template=s.prompt_template or "",
+        )
+        if s.parameters:
+            for k, v in s.parameters.items():
+                ps.parameters[k] = json.dumps(v) if not isinstance(v, str) else v
+        for ct in s.context_tables:
+            ps.context_tables.append(ct)
+        for rc in s.required_context:
+            ps.required_context.append(rc)
+        proto.steps.append(ps)
+    return proto
 
 
 def map_node_outputs_to_skill_outputs(
@@ -73,52 +109,16 @@ class SkillExecutorService:
     def _extract_plan_from_skill(
         self,
         skill_config: SkillConfigDTO,
-    ) -> Optional['agent_worker_pb2.StoredPlan']:
+    ) -> Optional[Plan]:
         """Extract stored plan from skill's agentic step configuration.
 
-        Checks skill.steps[].config["plan"] for stored plans.
-        Reconstructs proto StoredPlan for use in wrapper DAG construction.
-
         Returns:
-            StoredPlan proto if found, None otherwise
+            Plan entity if found, None otherwise
         """
+
         for step in skill_config.steps:
-            plan_dict = step.config.get("plan")
-            if not plan_dict or not plan_dict.get("id"):
-                continue
-
-            # Reconstruct StoredPlan proto from dict
-            plan_steps = []
-            for ps in plan_dict.get("steps", []):
-                plan_step = agent_worker_pb2.StoredPlanStep(
-                    step_id=ps.get("step_id", ""),
-                    description=ps.get("description", ""),
-                    tool_call=ps.get("tool_call", ""),
-                    target_agent=ps.get("target_agent", ""),
-                    prompt_template=ps.get("prompt_template", ""),
-                )
-                for k, v in ps.get("parameters", {}).items():
-                    plan_step.parameters[k] = v
-                for ct in ps.get("context_tables", []):
-                    plan_step.context_tables.append(ct)
-                for rc in ps.get("required_context", []):
-                    plan_step.required_context.append(rc)
-                plan_steps.append(plan_step)
-
-            plan = agent_worker_pb2.StoredPlan(
-                id=plan_dict.get("id", ""),
-                goal=plan_dict.get("goal", ""),
-                basic_instructions=plan_dict.get("basic_instructions", ""),
-                context=plan_dict.get("context", ""),
-                analysis=plan_dict.get("analysis", ""),
-                version=plan_dict.get("version", 0),
-                generated_at=plan_dict.get("generated_at", ""),
-                approved_at=plan_dict.get("approved_at", ""),
-            )
-            for ps in plan_steps:
-                plan.steps.append(ps)
-            return plan
-
+            if step.agentic_config and step.agentic_config.plan:
+                return step.agentic_config.plan
         return None
 
     def _build_wrapper_dag(
@@ -161,7 +161,7 @@ class SkillExecutorService:
             agentic_config.tools.append(proto_tool)
 
         if stored_plan:
-            agentic_config.plan.CopyFrom(stored_plan)
+            agentic_config.plan.CopyFrom(_plan_to_stored_proto(stored_plan))
             logger.info(f"📋 Skill {skill_config.name}: using stored plan")
 
         agentic_step = agent_worker_pb2.SkillStep(
@@ -369,16 +369,12 @@ class SkillExecutorService:
         if not steps:
             raise ValueError(f"Failed to build wrapper DAG for skill {skill_config.name}")
 
-        # Check if agentic step has required plan
-        has_plan = self._extract_plan_from_skill(skill_config) is not None
-        if not has_plan:
-            for step in steps:
-                if step.HasField('agentic_config'):
-                    if not step.agentic_config.HasField('plan') or not step.agentic_config.plan.id:
-                        raise ValueError(
-                            f"Agentic skill '{skill_config.name}' requires a stored plan. "
-                            f"No fallback execution available."
-                        )
+        # Require stored plan for agentic skills
+        if not self._extract_plan_from_skill(skill_config):
+            raise ValueError(
+                f"Agentic skill '{skill_config.name}' requires a stored plan. "
+                f"No fallback execution available."
+            )
 
         # Create step executor with callback for skill delegation
         step_executor = StepExecutorService(
@@ -656,11 +652,11 @@ class SkillExecutorService:
             for dep in step.dependencies:
                 proto_step.dependencies.append(dep)
 
-            if step.step_type == "agentic" and step.config:
+            if step.step_type == "agentic" and step.agentic_config:
                 agentic_config = agent_worker_pb2.AgenticStepConfig(
-                    instructions=step.config.get("instructions", ""),
-                    model=step.config.get("model", ""),
-                    agent_type=step.config.get("agentType", step.config.get("agent_type", "")),
+                    instructions=step.agentic_config.instructions,
+                    model=step.agentic_config.model,
+                    agent_type=step.agentic_config.agent_type,
                 )
                 proto_step.agentic_config.CopyFrom(agentic_config)
 
@@ -743,20 +739,18 @@ class SkillExecutorService:
     ) -> Callable:
         """Create callback for SkillTool delegation.
 
-        Converts proto SkillConfig to DTO at boundary, then calls execute_skill.
+        Accepts SkillConfigDTO directly (callers pass DTOs, not protos).
 
         Returns:
             Callable that takes (skill_config, inputs, capture_outputs) and returns result
         """
         def callback(
-            skill_config: 'agent_worker_pb2.SkillConfig',
+            skill_config: SkillConfigDTO,
             runtime_inputs: Dict[str, Any],
             capture_outputs: bool = False
         ) -> Union[str, SkillExecutionResult]:
-            # Convert proto to DTO at boundary
-            dto = SkillConfigDTO.from_proto(skill_config)
             return self.execute_skill(
-                skill_config=dto,
+                skill_config=skill_config,
                 runtime_inputs=runtime_inputs,
                 org_model=org_model,
                 capture_outputs=capture_outputs,

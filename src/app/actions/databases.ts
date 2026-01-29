@@ -23,7 +23,7 @@ import { DatabaseMapper } from "@/app/mappers/database-mapper"
 const createDatabaseSchema = z.object({
   name: z.string().min(1, "Database name is required"),
   description: z.string().optional(),
-  metadata: z.record(z.any()).optional(),
+  metadata: z.record(z.any()).optional().nullable(),
   agentId: z.number().optional().nullable(), // null = org-scoped, number = agent-scoped
 })
 
@@ -104,7 +104,7 @@ export async function createDatabase(data: z.infer<typeof createDatabaseSchema>,
     const dto: CreateDatabaseDTO = {
       name: validatedData.name,
       description: validatedData.description,
-      metadata: validatedData.metadata,
+      metadata: validatedData.metadata ?? undefined,
       organizationId: currentOrg.id,
       ownerId: session.user.id,
       agentId: validatedData.agentId || null

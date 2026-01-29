@@ -55,7 +55,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         databaseId: data.databaseId.value,
         organizationId: data.organizationId.value,
         s3Path: s3Path.path,
-        metadata: data.metadata || null,
+        metadata: data.metadata?.toDatabaseJson() || null,
         ownerId: data.ownerId.value
       }).returning();
       
@@ -226,19 +226,45 @@ export class DynamicTableRepository implements IDynamicTableRepository {
         where: eq(tables.databaseId, databaseId.value)
       });
 
-      return tableRecords.map((record: TableRow) => DynamicTable.fromPersistence({
-        id: record.id,
-        databaseId: record.databaseId,
-        organizationId: record.organizationId,
-        name: record.name,
-        storageLocation: record.s3Path,
-        description: record.metadata?.description,
-        metadata: record.metadata ? TableMetadata.fromDatabase(record.metadata).data : undefined,
-        ownerId: record.ownerId,
-        createdAt: record.createdAt!,
-        updatedAt: record.updatedAt!,
-        fields: [] // Not loaded for bulk operations - use findById for full entity
-      }));
+      const tablesWithFields: DynamicTable[] = [];
+
+      for (const tableRecord of tableRecords) {
+        // Load fields for each table
+        const fieldRecords = await this.db.query.fields.findMany({
+          where: eq(fields.tableId, tableRecord.id),
+          orderBy: [fields.orderIndex]
+        });
+
+        const tableFields = fieldRecords.map((fieldRecord: FieldRow) => {
+          return TableField.fromPersistence({
+            id: fieldRecord.id,
+            tableId: fieldRecord.tableId,
+            name: fieldRecord.name,
+            type: fieldRecord.type as FieldType,
+            orderIndex: fieldRecord.orderIndex,
+            relatedTableId: fieldRecord.fieldConfig?.targetTableId || null,
+            required: fieldRecord.required,
+            metadata: fieldRecord.fieldConfig || undefined,
+            createdAt: fieldRecord.createdAt
+          });
+        });
+
+        tablesWithFields.push(DynamicTable.fromPersistence({
+          id: tableRecord.id,
+          databaseId: tableRecord.databaseId,
+          organizationId: tableRecord.organizationId,
+          name: tableRecord.name,
+          storageLocation: tableRecord.s3Path,
+          description: tableRecord.metadata?.description,
+          metadata: tableRecord.metadata ? TableMetadata.fromDatabase(tableRecord.metadata).data : undefined,
+          ownerId: tableRecord.ownerId,
+          createdAt: tableRecord.createdAt!,
+          updatedAt: tableRecord.updatedAt!,
+          fields: tableFields
+        }));
+      }
+
+      return tablesWithFields;
 
     } catch (error) {
       console.error('[TableService] Error finding tables by database:', error);
@@ -258,7 +284,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
       const [updatedRecord] = await this.db.update(tables)
         .set({
           name: data.name,
-          metadata: data.metadata || null,
+          metadata: data.metadata?.toDatabaseJson() || null,
           updatedAt: new Date()
         })
         .where(eq(tables.id, id.value))
