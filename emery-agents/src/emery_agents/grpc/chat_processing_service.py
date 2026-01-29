@@ -212,8 +212,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
         if agent_config:
             tools_count = len(agent_config.tools) if agent_config.tools else 0
-            skills_count = len(agent_config.skills) if agent_config.skills else 0
-            logger.info(f"🔧 AgentConfig provided: {tools_count} tools, {skills_count} skills")
+            logger.info(f"🔧 AgentConfig provided: {tools_count} tools")
         else:
             logger.info(f"⚠️ No AgentConfig provided, using empty tools")
 

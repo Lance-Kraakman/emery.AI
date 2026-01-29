@@ -299,7 +299,7 @@ def convert_coordinator_event(event: Any, step_index: int) -> Optional[Coordinat
         return {
             "type": "awaiting_input",
             "data": {
-                "input_type": "approval",
+                "input_type": "plan_approval",
                 "title": "Plan Ready for Approval",
                 "content": "\n".join(steps_preview) if steps_preview else "Plan created",
                 "options": [
