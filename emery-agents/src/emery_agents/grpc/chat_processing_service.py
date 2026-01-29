@@ -331,21 +331,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     )
 
                     if proto_response:
-                        # Add task_id to response if task-based execution
+                        # Add task_id to response for logging/tracking
                         if task_id:
                             proto_response.task_id = task_id
-                            # Add task progress for step-based events
-                            if response_dict.get("type") == "step_progress":
-                                proto_response.task_progress.CopyFrom(
-                                    agent_worker_pb2.ChatTaskProgress(
-                                        task_id=task_id,
-                                        step=response_dict.get("step_index", 0),
-                                        total_steps=response_dict.get("total_steps", 0),
-                                        step_name=response_dict.get("step_name", ""),
-                                        status="running",
-                                        output_json=response_dict.get("output_json", ""),
-                                    )
-                                )
                         yield proto_response
                     if content:
                         total_content += content
@@ -387,15 +375,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 ),
                 timestamp=int(time.time() * 1000)
             )
-            # Add task_id to completion response if task-based execution
+            # Add task_id to completion response for logging/tracking
             if task_id:
                 complete_response.task_id = task_id
-                complete_response.task_progress.CopyFrom(
-                    agent_worker_pb2.ChatTaskProgress(
-                        task_id=task_id,
-                        status="completed",
-                    )
-                )
             yield complete_response
 
             logger.info(f"✅ Message processing completed in {processing_time}ms")
@@ -416,15 +398,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 ),
                 timestamp=int(time.time() * 1000)
             )
-            # Add task_id to error response if task-based execution
+            # Add task_id to error response for logging/tracking
             if task_id:
                 error_response.task_id = task_id
-                error_response.task_progress.CopyFrom(
-                    agent_worker_pb2.ChatTaskProgress(
-                        task_id=task_id,
-                        status="failed",
-                    )
-                )
             yield error_response
 
         finally:

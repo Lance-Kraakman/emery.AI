@@ -22,7 +22,7 @@ import type {
   ProcessingError,
   StepProgress,
   MessagePart,
-  AwaitingInput
+  AwaitingInput,
 } from './generated/agent_worker';
 import { toProtoMessageParts } from './mappers/message-part-mapper';
 // mapSkillToProto removed - skills no longer passed via gRPC
@@ -56,6 +56,7 @@ export interface StreamingChatResponse {
   error?: ProcessingError;
   stepProgress?: StepProgress;
   awaitingInput?: AwaitingInput;  // HITL: Plan approval or question
+  taskId?: string;  // Task ID from response (for logging/tracking)
   timestamp: number;
 }
 
@@ -217,18 +218,21 @@ export class ChatProcessingClient {
           hasError: !!response.error,
           hasStepProgress: !!response.stepProgress,
           hasAwaitingInput: !!response.awaitingInput,
+          taskId: (response as any).taskId,
           timestamp: response.timestamp
         });
 
         // Convert gRPC response to standardized streaming response
         // AIDEV-NOTE: keepCase:false converts snake_case proto fields to camelCase at runtime
         let streamingResponse: StreamingChatResponse;
+        const taskId = (response as any).taskId;
 
         if (response.stepProgress) {
           // Real-time step execution progress
           streamingResponse = {
             type: 'step_progress',
             stepProgress: response.stepProgress,
+            taskId,
             timestamp: response.timestamp
           };
         } else if (response.awaitingInput) {
@@ -236,6 +240,7 @@ export class ChatProcessingClient {
           streamingResponse = {
             type: 'awaiting_input',
             awaitingInput: response.awaitingInput,
+            taskId,
             timestamp: response.timestamp
           };
         } else if (response.contentChunk) {
@@ -243,6 +248,7 @@ export class ChatProcessingClient {
             type: 'content',
             content: response.contentChunk.content,
             sequence: response.contentChunk.sequence,
+            taskId,
             timestamp: response.timestamp
           };
         } else if (response.complete) {
@@ -251,12 +257,14 @@ export class ChatProcessingClient {
           streamingResponse = {
             type: 'complete',
             complete: response.complete,
+            taskId,
             timestamp: response.timestamp
           };
         } else if (response.error) {
           streamingResponse = {
             type: 'error',
             error: response.error,
+            taskId,
             timestamp: response.timestamp
           };
         } else {
