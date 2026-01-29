@@ -285,6 +285,10 @@ class PlanStepExecutor:
         # Determine prompt and template based on execution mode
         if current_step.prompt_template:
             # Autonomous mode: resolve template variables and use autonomous executor
+            logger.info(
+                f"📝 Template resolution - skill_inputs: {self.skill_inputs}, "
+                f"template preview: {current_step.prompt_template[:100]}..."
+            )
             resolved_prompt = resolve_prompt_template(
                 template=current_step.prompt_template,
                 skill_inputs=self.skill_inputs,
@@ -406,13 +410,17 @@ class PlanStepExecutor:
 
         # Determine the task from prompt_template or description
         if current_step.prompt_template:
+            logger.info(
+                f"📝 Direct execution - skill_inputs: {self.skill_inputs}, "
+                f"template preview: {current_step.prompt_template[:100]}..."
+            )
             task = resolve_prompt_template(
                 template=current_step.prompt_template,
                 skill_inputs=self.skill_inputs,
                 discovered_context={},
                 previous_results=self._step_results,
             )
-            logger.info(f"📝 Direct execution (autonomous): resolved template ({len(task)} chars)")
+            logger.info(f"📝 Direct execution (autonomous): resolved template ({len(task)} chars), preview: {task[:100]}...")
         else:
             task = current_step.description
             logger.info("📝 Direct execution (interactive): using description")

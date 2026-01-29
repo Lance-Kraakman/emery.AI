@@ -1198,7 +1198,7 @@ export const skills = pgTable("skills", {
 
 export const tasks = pgTable("tasks", {
   id: uuid("id").primaryKey().defaultRandom(),
-  agentId: integer("agent_id").notNull().references(() => agents.id), // WHICH agent executes this
+  agentId: integer("agent_id").references(() => agents.id), // null = org-level task, set = agent executes this
   organizationId: integer("organization_id").notNull().references(() => organizations.id), // Organization for RLS
   name: text("name").notNull(),
   instructions: jsonb("instructions").notNull(), // Task instructions with tools: {task: string, images?: ImageAttachment[], tools?: ToolConfig[], metadata?: Record<string, any>}

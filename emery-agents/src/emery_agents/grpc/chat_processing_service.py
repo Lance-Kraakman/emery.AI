@@ -33,6 +33,9 @@ from .coordinator_streaming import CoordinatorStreamingHandler
 from .response_converter import convert_response_to_proto
 from .agents.agent_models import get_builder_descriptors
 from ..services.tools.capability_registry import CapabilityRegistry
+from ..services.tasks import TaskExecutor
+from ..services.tasks.task_executor import TaskData
+from ..services.agents.executor import AgentExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +105,13 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 capability_registry=self.capability_registry,
             )
 
+            # Shared TaskExecutor for task-based chat executions
+            self._agent_executor = AgentExecutor()
+            self._task_executor = TaskExecutor(
+                agent_executor=self._agent_executor,
+                api_service=None,  # No API service needed for chat tasks
+            )
+
             logger.info("✅ ChatProcessingService initialized successfully")
 
         except ImportError as e:
@@ -110,12 +120,29 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             self.model_provider = None
             self.agent_factory = None
 
+    def _resolve_agent_id(
+        self,
+        request: agent_worker_pb2.ProcessMessageRequest
+    ) -> Optional[int]:
+        """
+        Resolve agentId - now returns None since skills are loaded dynamically.
+
+        AIDEV-NOTE: Skills removed from gRPC - Python discovers and executes
+        skills dynamically via API using skill_crud tool. Agent context is
+        resolved when skills are invoked at runtime.
+
+        Returns:
+            None - agent context resolved at skill invocation time
+        """
+        # Skills removed from agent_config - resolved dynamically via API
+        return None
+
     def _get_workspace_id(
         self,
         request: agent_worker_pb2.ProcessMessageRequest
     ) -> Tuple[str, str, str]:
         """
-        Determine workspace type and ID from request.
+        Determine workspace type and ID from skill's agent ownership.
 
         Returns:
             Tuple of (workspace_type, workspace_id, s3_prefix)
@@ -123,12 +150,14 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             - workspace_id: agent_id or user_id
             - s3_prefix: full S3 prefix path
         """
-        # Check if chat is with an agent (domain_type == "agent")
-        if request.context and request.context.domain_type == "agent" and request.context.domain_id:
+        # Resolve agentId from skill being invoked
+        agent_id = self._resolve_agent_id(request)
+
+        if agent_id:
             workspace_type = "agents"
-            workspace_id = str(request.context.domain_id)
+            workspace_id = str(agent_id)
         else:
-            # General chat - use user's personal workspace
+            # Org-level - use user's personal workspace
             workspace_type = "users"
             workspace_id = request.user_id
 
@@ -157,6 +186,12 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         org_id = request.organization_id
         message_id = request.message_id if request.message_id else f"msg_{int(time.time() * 1000)}"
         session_id = request.session_id if request.session_id else f"{org_id}_{user_id}"
+
+        # Task-based execution tracking (when task_id is provided)
+        # AIDEV-NOTE: When task_id is set, this is a task-tracked execution (skill/agent invocation)
+        task_id = request.task_id if request.task_id else None
+        if task_id:
+            logger.info(f"📋 Task-tracked execution: task_id={task_id[:8]}...")
 
         # Register message stream for cancellation tracking
         self.active_streams[message_id] = False  # False = not cancelled
@@ -210,21 +245,15 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             current_plan_data: Dict[str, Any] | None = None
 
             tools_to_use = []
-            skills_to_use = []
 
             if agent_config:
                 tools_to_use = list(agent_config.tools) if agent_config.tools else []
-                skills_to_use = list(agent_config.skills) if agent_config.skills else []
+                # AIDEV-NOTE: Skills removed from gRPC - discovered dynamically via skill_crud tool
 
                 logger.info(f"📨 AgentConfig tools received: {len(tools_to_use)} tools")
                 if tools_to_use:
                     for i, tool in enumerate(tools_to_use):
                         logger.info(f"  Tool {i}: name={tool.name}, config_keys={list(tool.config.keys()) if tool.config else 'none'}")
-
-                logger.info(f"🎯 AgentConfig skills received: {len(skills_to_use)} skills")
-                if skills_to_use:
-                    for i, skill in enumerate(skills_to_use):
-                        logger.info(f"  Skill {i}: name={skill.name}, tools={len(skill.tools) if skill.tools else 0}")
             else:
                 logger.info("  No AgentConfig received from frontend")
 
@@ -235,18 +264,38 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             else:
                 logger.info("🔧 No organization model specified, will use system default")
 
-            # Extract user API key from request (for managed agents like skill_builder)
-            # Protobuf string field - empty string if not set
-            user_api_key = request.user_api_key or None
-            if user_api_key:
-                logger.info(f"🔑 User API key provided for managed agents")
+            # Resolve credentials based on skill's agent ownership
+            # agentId is resolved from skill.agent_id (set during enrichment in Next.js)
+            # - Org-level skill (no agent_id) → User's credentials
+            # - Agent skill (agent_id set) → Agent's stored credentials
+            agent_id = self._resolve_agent_id(request)
+
+            if task_id:
+                task_data = TaskData(
+                    task_id=task_id,
+                    organization_id=int(org_id),
+                    agent_id=agent_id,
+                )
+                credentials = await self._task_executor._resolve_credentials(task_data)
+                effective_api_key = credentials.api_key
+                logger.info(f"🔑 Using {credentials.source} credentials for task {task_id[:8]}...")
+            elif agent_id:
+                # No task tracking but skill is agent-owned - use agent credentials
+                credentials = await self._task_executor._load_agent_credentials(agent_id, int(org_id))
+                effective_api_key = credentials.api_key
+                logger.info(f"🔑 Using agent credentials (agent_id={agent_id})")
             else:
-                logger.warning("⚠️ No user API key provided - managed agents may fail auth")
+                # Org-level - use user's credentials from request
+                effective_api_key = request.user_api_key or None
+                if effective_api_key:
+                    logger.info(f"🔑 User API key provided for managed agents")
+                else:
+                    logger.warning("⚠️ No user API key provided - managed agents may fail auth")
 
             async for response_dict in self._agent_handler.stream_response(
                 conversation_messages,
                 tools_to_use,
-                domain_context=request.context,
+                domain_context=None,  # Domain context removed - agentId resolved from skill config
                 org_model=org_model,
                 has_images=has_image_content,
                 session_id=session_id,
@@ -254,7 +303,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 org_id=org_id,
                 conversation_history=request.conversation_history,
                 agent_config=agent_config,  # Pass agent_config for skill execution
-                user_api_key=user_api_key,  # User API key for managed agents
+                user_api_key=effective_api_key,  # Resolved credentials (user or agent)
                 file_attachments=file_attachments,  # File attachments for skill context injection
                 workspace_path=workspace_path,  # Workspace filesystem path
                 workspace_id=workspace_id,  # Workspace ID for S3 (user_id or agent_id)
@@ -282,6 +331,21 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     )
 
                     if proto_response:
+                        # Add task_id to response if task-based execution
+                        if task_id:
+                            proto_response.task_id = task_id
+                            # Add task progress for step-based events
+                            if response_dict.get("type") == "step_progress":
+                                proto_response.task_progress.CopyFrom(
+                                    agent_worker_pb2.ChatTaskProgress(
+                                        task_id=task_id,
+                                        step=response_dict.get("step_index", 0),
+                                        total_steps=response_dict.get("total_steps", 0),
+                                        step_name=response_dict.get("step_name", ""),
+                                        status="running",
+                                        output_json=response_dict.get("output_json", ""),
+                                    )
+                                )
                         yield proto_response
                     if content:
                         total_content += content
@@ -306,7 +370,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
             completion_metadata = {
                 'content_length': str(len(total_content)),
-                'domain_type': request.context.domain_type if request.context else 'none'
+                'agent_id': str(agent_id) if agent_id else 'none'
             }
 
             if current_plan_data:
@@ -323,6 +387,15 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 ),
                 timestamp=int(time.time() * 1000)
             )
+            # Add task_id to completion response if task-based execution
+            if task_id:
+                complete_response.task_id = task_id
+                complete_response.task_progress.CopyFrom(
+                    agent_worker_pb2.ChatTaskProgress(
+                        task_id=task_id,
+                        status="completed",
+                    )
+                )
             yield complete_response
 
             logger.info(f"✅ Message processing completed in {processing_time}ms")
@@ -343,6 +416,15 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 ),
                 timestamp=int(time.time() * 1000)
             )
+            # Add task_id to error response if task-based execution
+            if task_id:
+                error_response.task_id = task_id
+                error_response.task_progress.CopyFrom(
+                    agent_worker_pb2.ChatTaskProgress(
+                        task_id=task_id,
+                        status="failed",
+                    )
+                )
             yield error_response
 
         finally:

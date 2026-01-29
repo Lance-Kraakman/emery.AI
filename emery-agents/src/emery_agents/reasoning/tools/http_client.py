@@ -216,6 +216,11 @@ class HTTPClient:
 _client: HTTPClient | None = None
 
 
+def get_base_url() -> str:
+    """Get the base URL for API calls (without /api suffix)."""
+    return os.getenv("NEXTJS_BASE_URL", "http://localhost:3000")
+
+
 def get_http_client() -> HTTPClient:
     """Get or create the global HTTP client."""
     global _client

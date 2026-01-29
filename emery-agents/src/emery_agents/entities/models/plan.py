@@ -11,14 +11,13 @@ Two levels of instructions:
 
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
-from typing import List, Optional, Dict, Any, TYPE_CHECKING
+from typing import List, Optional, Dict, Any
 from enum import Enum
 import json
 
-if TYPE_CHECKING:
-    from ..grpc.generated.agent_worker_pb2 import StoredPlan as StoredPlanProto
-    from ..grpc.generated.agent_worker_pb2 import StoredPlanStep as StoredPlanStepProto
-    from ..grpc.generated.agent_worker_pb2 import StoredSubPlan as StoredSubPlanProto
+from emery_agents.grpc.generated.agent_worker_pb2 import StoredPlan as StoredPlanProto
+from emery_agents.grpc.generated.agent_worker_pb2 import StoredPlanStep as StoredPlanStepProto
+from emery_agents.grpc.generated.agent_worker_pb2 import StoredSubPlan as StoredSubPlanProto
 
 
 # --- Skill Definition Models (used in plan generation templates) ---

@@ -250,3 +250,20 @@ class AgentAPIService:
 
         logger.info(f"[AGENT-API] Total: {len(results)} agents with skills loaded")
         return results
+
+    async def fetch_agent_by_id(self, agent_id: int) -> Optional[AgentData]:
+        """
+        Fetch a single agent by ID.
+
+        Args:
+            agent_id: Agent ID to look up
+
+        Returns:
+            AgentData if found, None otherwise
+        """
+        agents = await self.fetch_agents(agent_id=str(agent_id))
+        return agents[0] if agents else None
+
+    # NOTE: Permission checks are handled by RLS at the server level.
+    # If a user doesn't have access to an agent, the fetch/credential
+    # loading will fail with 403. No explicit check_agent_access needed.

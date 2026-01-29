@@ -1,0 +1,1 @@
+ALTER TABLE "tasks" ALTER COLUMN "agent_id" DROP NOT NULL;

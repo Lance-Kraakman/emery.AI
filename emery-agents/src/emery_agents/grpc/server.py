@@ -12,6 +12,8 @@ from .generated import table_service_pb2, table_service_pb2_grpc
 from .mappers import ProtoMapper
 from ..services.agents.executor import AgentExecutor
 from ..services.tools.loader import UnifiedToolLoader
+from ..services.tasks import TaskExecutor
+from ..services.tasks.task_executor import TaskData
 from ..infrastructure.workspace_sync import WorkspaceSync
 import concurrent.futures
 
@@ -48,6 +50,12 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
         self.tool_loader = UnifiedToolLoader()
         self.proto_mapper = ProtoMapper()
 
+        # Shared task executor for both ExecuteTask and ProcessMessage paths
+        self.task_executor = TaskExecutor(
+            agent_executor=self.agent_executor,
+            api_service=None,  # No API service needed for background tasks
+        )
+
         # Initialize workspace sync for filesystem-based agent workspaces
         # Workspaces are stored in S3 as tar.gz archives
         s3_bucket = os.getenv("S3_BUCKET_NAME")
@@ -66,116 +74,82 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
         request: agent_worker_pb2.TaskRequest,
         context: grpc.aio.ServicerContext
     ) -> AsyncIterator[agent_worker_pb2.TaskProgress]:
-        """Execute agent task with streaming progress updates."""
+        """Execute agent task with streaming progress updates.
 
-        # Convert protobuf to domain entity
-        task_request = self.proto_mapper.task_request_from_proto(request)
+        AIDEV-NOTE: Refactored to use shared TaskExecutor for consistency with
+        ProcessMessage task-based execution. Workspace sync remains here as it's
+        specific to background task execution.
+        """
+        # Convert protobuf to TaskData for TaskExecutor
+        task_data = TaskExecutor.from_task_request(request, self.proto_mapper)
 
-        print(f"🚀 [TASK-{task_request.task_id[:8]}] Starting execution for agent: {task_request.agent_id}")
-        print(f"📋 [TASK-{task_request.task_id[:8]}] Name: {task_request.name}")
+        print(f"🚀 [TASK-{task_data.task_id[:8]}] Starting execution for agent: {task_data.agent_id}")
+        print(f"📋 [TASK-{task_data.task_id[:8]}] Name: {request.name}")
         sys.stdout.flush()
 
-        logger.info(f"Task: {task_request.name}")
+        logger.info(f"Task: {request.name}")
 
         # Download workspace from S3 if workspace sync is enabled
         workspace_path: Optional[Path] = None
-        workspace_id = str(task_request.agent_id)  # Convert to string for workspace sync
-        if self.workspace_sync:
+        workspace_id = str(task_data.agent_id) if task_data.agent_id else "org"
+        if self.workspace_sync and task_data.agent_id:
             try:
                 workspace_path = self.workspace_sync.download(workspace_id)
-                logger.info(f"📁 [TASK-{task_request.task_id[:8]}] Workspace downloaded to {workspace_path}")
+                logger.info(f"📁 [TASK-{task_data.task_id[:8]}] Workspace downloaded to {workspace_path}")
 
                 # Prepare task history directory
                 self.workspace_sync.prepare_task_history(
                     workspace_id=workspace_id,
-                    task_id=task_request.task_id,
+                    task_id=task_data.task_id,
                 )
             except Exception as e:
                 logger.error(f"Failed to download workspace: {e}")
                 # Continue without workspace - task can still execute
 
-        self.active_tasks[task_request.task_id] = {
-            'agent_id': task_request.agent_id,
+        # Set workspace path in task data
+        task_data.workspace_path = workspace_path
+
+        self.active_tasks[task_data.task_id] = {
+            'agent_id': task_data.agent_id,
             'start_time': time.time(),
             'workspace_path': workspace_path,
         }
 
         try:
-            # DEBUG: Log raw request fields FIRST
-            logger.info(f"🔍 [TASK-{task_request.task_id[:8]}] RAW REQUEST FIELDS:")
-            logger.info(f"🔍 [TASK-{task_request.task_id[:8]}] - agent_model field: {repr(getattr(task_request, 'agent_model', 'FIELD_NOT_FOUND'))}")
-            logger.info(f"🔍 [TASK-{task_request.task_id[:8]}] - organization_model field: {repr(getattr(task_request, 'organization_model', 'FIELD_NOT_FOUND'))}")
-            logger.info(f"🔍 [TASK-{task_request.task_id[:8]}] - agent_model type: {type(getattr(task_request, 'agent_model', None))}")
-            logger.info(f"🔍 [TASK-{task_request.task_id[:8]}] - organization_model type: {type(getattr(task_request, 'organization_model', None))}")
-            logger.info(f"🔍 [TASK-{task_request.task_id[:8]}] - agent_model bool: {bool(getattr(task_request, 'agent_model', None))}")
-            logger.info(f"🔍 [TASK-{task_request.task_id[:8]}] - organization_model bool: {bool(getattr(task_request, 'organization_model', None))}")
+            logger.info(f"🔧 [TASK-{task_data.task_id[:8]}] Model context: agent={task_data.agent_model or 'none'}, org={task_data.org_model or 'none'}")
 
-            # Extract model parameters from proto request for model selection hierarchy
-            # AIDEV-NOTE: Model hierarchy: agent_model (request) → agent_config.default_model → org_model → system default
-            agent_model = getattr(task_request, 'agent_model', None) or None  # Direct agent_model from request (preferred)
-            if not agent_model and hasattr(task_request, 'agent_config') and task_request.agent_config:
-                agent_model = getattr(task_request.agent_config, 'default_model', None)  # Fallback to agent config
-
-            if agent_model:
-                logger.info(f"🔧 [TASK-{task_request.task_id[:8]}] Agent model: {agent_model}")
-            else:
-                logger.info(f"⚠️  [TASK-{task_request.task_id[:8]}] NO agent_model found")
-
-            org_model = getattr(task_request, 'organization_model', None) or None
-            if org_model:
-                logger.info(f"🔧 [TASK-{task_request.task_id[:8]}] Organization model: {org_model}")
-            else:
-                logger.info(f"⚠️  [TASK-{task_request.task_id[:8]}] NO organization_model found")
-
-            # Convert TaskRequest to ExecutionContext (simplified - no DDD)
-            execution_context = self.agent_executor.determine_execution_context(task_request)
-
-            # Add model parameters to execution context
-            execution_context.agent_model = agent_model
-            execution_context.org_model = org_model
-
-            # Add workspace path for bash tool access
-            if workspace_path:
-                execution_context.workspace_path = workspace_path
-                logger.info(f"📁 [TASK-{task_request.task_id[:8]}] Workspace path set: {workspace_path}")
-
-            logger.info(f"🔧 [TASK-{request.task_id[:8]}] Model context set: agent={agent_model or 'none'}, org={org_model or 'none'}")
-
-            # Stream execution progress (simplified - direct executor)
-            async for progress_dict in self.agent_executor.execute_task(execution_context):
-                # Convert dict to TaskProgress entity (simplified - no DDD entities)
-                from ..types import TaskStatus
-                
+            # Stream execution progress via shared TaskExecutor
+            async for progress_dict in self.task_executor.execute(task_data):
                 # Map status string to protobuf enum
                 status_map = {
                     "in_progress": agent_worker_pb2.TASK_IN_PROGRESS,
                     "completed": agent_worker_pb2.TASK_COMPLETED,
                     "failed": agent_worker_pb2.TASK_FAILED
                 }
-                
-                # Create protobuf directly (simplified - no intermediate entity)
+
+                # Create protobuf directly
                 proto_progress = agent_worker_pb2.TaskProgress(
-                    task_id=request.task_id,
-                    status=status_map.get(progress_dict["status"], agent_worker_pb2.TASK_IN_PROGRESS),
+                    task_id=task_data.task_id,
+                    status=status_map.get(progress_dict.get("status", "in_progress"), agent_worker_pb2.TASK_IN_PROGRESS),
                     output_json=progress_dict.get("output", ""),
                     error_message=progress_dict.get("error_message", ""),
-                    timestamp_ms=progress_dict["timestamp_ms"],
-                    progress_percent=progress_dict["progress_percent"],
+                    timestamp_ms=progress_dict.get("timestamp_ms", int(time.time() * 1000)),
+                    progress_percent=progress_dict.get("progress_percent", 0.0),
                     token_usage=progress_dict.get("token_usage")
                 )
                 yield proto_progress
-                
+
         except Exception as e:
-            print(f"❌ [TASK-{request.task_id[:8]}] Failed: {str(e)}")
+            print(f"❌ [TASK-{task_data.task_id[:8]}] Failed: {str(e)}")
             import traceback
-            print(f"📍 [TASK-{request.task_id[:8]}] Traceback: {traceback.format_exc()}")
+            print(f"📍 [TASK-{task_data.task_id[:8]}] Traceback: {traceback.format_exc()}")
             sys.stdout.flush()
-            
-            logger.exception(f"Task {request.task_id[:8]} failed")
-            
+
+            logger.exception(f"Task {task_data.task_id[:8]} failed")
+
             # Send final error progress
             error_progress = agent_worker_pb2.TaskProgress(
-                task_id=request.task_id,
+                task_id=task_data.task_id,
                 status=agent_worker_pb2.TASK_FAILED,
                 output_json="",
                 error_message=str(e),
@@ -183,19 +157,19 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
                 progress_percent=0.0
             )
             yield error_progress
-            
+
         finally:
             # Upload workspace back to S3 and cleanup
-            if self.workspace_sync and workspace_path:
+            if self.workspace_sync and workspace_path and task_data.agent_id:
                 try:
                     self.workspace_sync.upload(workspace_id)
-                    logger.info(f"📤 [TASK-{task_request.task_id[:8]}] Workspace uploaded to S3")
+                    logger.info(f"📤 [TASK-{task_data.task_id[:8]}] Workspace uploaded to S3")
                     self.workspace_sync.cleanup(workspace_id)
                 except Exception as e:
                     logger.error(f"Failed to upload workspace: {e}")
 
-            if request.task_id in self.active_tasks:
-                del self.active_tasks[request.task_id]
+            if task_data.task_id in self.active_tasks:
+                del self.active_tasks[task_data.task_id]
 
     async def GetWorkerInfo(self, request: agent_worker_pb2.Empty, context: grpc.aio.ServicerContext) -> agent_worker_pb2.WorkerInfo:
         """Get worker health and capability information."""

@@ -243,6 +243,25 @@ export interface TaskProgress {
   tokenUsage: TokenUsage | undefined;
 }
 
+/**
+ * Task progress for chat-based task execution (ProcessMessage with task_id)
+ * AIDEV-NOTE: Lighter weight than TaskProgress, used for real-time chat updates
+ */
+export interface ChatTaskProgress {
+  /** Task being updated */
+  taskId: string;
+  /** Current step number */
+  step: number;
+  /** Total steps (if known) */
+  totalSteps: number;
+  /** Current step description */
+  stepName: string;
+  /** running, completed, failed */
+  status: string;
+  /** Step output (if any) */
+  outputJson: string;
+}
+
 /** Request to cancel a running task */
 export interface CancelTaskRequest {
   taskId: string;
@@ -306,7 +325,11 @@ export interface TokenUsage {
   costUsd: number;
 }
 
-/** Complete agent configuration */
+/**
+ * Complete agent configuration
+ * AIDEV-NOTE: Skills removed - Python resolves skills dynamically via API
+ * Skills are discovered and executed via skill_crud tool at runtime
+ */
 export interface AgentConfig {
   name: string;
   role: string;
@@ -314,8 +337,6 @@ export interface AgentConfig {
   persona: string;
   tools: ToolConfig[];
   servers: ServerConfig[];
-  skills: SkillConfig[];
-  /** Agent-specific default model (overrides organization default) */
   defaultModel: string;
 }
 
@@ -1021,10 +1042,6 @@ export interface ProcessMessageRequest {
   userId: string;
   /** Organization for multi-tenant routing */
   organizationId: number;
-  /** Context for RAG and domain-specific processing */
-  context:
-    | ChatContext
-    | undefined;
   /** Conversation history (only used if session not in memory - for restoration after restart/timeout) */
   conversationHistory: HistoryMessage[];
   /** Complete agent configuration (tools, skills, servers) */
@@ -1039,6 +1056,11 @@ export interface ProcessMessageRequest {
   sessionId: string;
   /** User API key for internal service calls (skill_builder, etc.) */
   userApiKey: string;
+  /**
+   * Task tracking (optional - if set, execution is task-based with DB record)
+   * AIDEV-NOTE: When present, skill/agent execution is tracked via Task infrastructure
+   */
+  taskId: string;
 }
 
 /** Streaming response from AI processing */
@@ -1065,6 +1087,10 @@ export interface ProcessMessageResponse {
     | undefined;
   /** Response timestamp */
   timestamp: number;
+  /** Task tracking (echoed back if task_id was provided in request) */
+  taskId: string;
+  /** Task execution progress (for skill/agent execution within chat) */
+  taskProgress: ChatTaskProgress | undefined;
 }
 
 /**
@@ -1229,14 +1255,6 @@ export interface CancelMessageResponse {
   success: boolean;
   /** Status message */
   message: string;
-}
-
-/** Chat context configuration for AI processing */
-export interface ChatContext {
-  /** Domain type (tables, agents, files, teams, workflows) */
-  domainType: string;
-  /** Domain entity identifier */
-  domainId: number;
 }
 
 /**
@@ -1732,6 +1750,146 @@ export const TaskProgress: MessageFns<TaskProgress> = {
     message.tokenUsage = (object.tokenUsage !== undefined && object.tokenUsage !== null)
       ? TokenUsage.fromPartial(object.tokenUsage)
       : undefined;
+    return message;
+  },
+};
+
+function createBaseChatTaskProgress(): ChatTaskProgress {
+  return { taskId: "", step: 0, totalSteps: 0, stepName: "", status: "", outputJson: "" };
+}
+
+export const ChatTaskProgress: MessageFns<ChatTaskProgress> = {
+  encode(message: ChatTaskProgress, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.taskId !== "") {
+      writer.uint32(10).string(message.taskId);
+    }
+    if (message.step !== 0) {
+      writer.uint32(16).int32(message.step);
+    }
+    if (message.totalSteps !== 0) {
+      writer.uint32(24).int32(message.totalSteps);
+    }
+    if (message.stepName !== "") {
+      writer.uint32(34).string(message.stepName);
+    }
+    if (message.status !== "") {
+      writer.uint32(42).string(message.status);
+    }
+    if (message.outputJson !== "") {
+      writer.uint32(50).string(message.outputJson);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ChatTaskProgress {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseChatTaskProgress();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.taskId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.step = reader.int32();
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.totalSteps = reader.int32();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.stepName = reader.string();
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.status = reader.string();
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.outputJson = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ChatTaskProgress {
+    return {
+      taskId: isSet(object.taskId) ? globalThis.String(object.taskId) : "",
+      step: isSet(object.step) ? globalThis.Number(object.step) : 0,
+      totalSteps: isSet(object.totalSteps) ? globalThis.Number(object.totalSteps) : 0,
+      stepName: isSet(object.stepName) ? globalThis.String(object.stepName) : "",
+      status: isSet(object.status) ? globalThis.String(object.status) : "",
+      outputJson: isSet(object.outputJson) ? globalThis.String(object.outputJson) : "",
+    };
+  },
+
+  toJSON(message: ChatTaskProgress): unknown {
+    const obj: any = {};
+    if (message.taskId !== "") {
+      obj.taskId = message.taskId;
+    }
+    if (message.step !== 0) {
+      obj.step = Math.round(message.step);
+    }
+    if (message.totalSteps !== 0) {
+      obj.totalSteps = Math.round(message.totalSteps);
+    }
+    if (message.stepName !== "") {
+      obj.stepName = message.stepName;
+    }
+    if (message.status !== "") {
+      obj.status = message.status;
+    }
+    if (message.outputJson !== "") {
+      obj.outputJson = message.outputJson;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ChatTaskProgress>, I>>(base?: I): ChatTaskProgress {
+    return ChatTaskProgress.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ChatTaskProgress>, I>>(object: I): ChatTaskProgress {
+    const message = createBaseChatTaskProgress();
+    message.taskId = object.taskId ?? "";
+    message.step = object.step ?? 0;
+    message.totalSteps = object.totalSteps ?? 0;
+    message.stepName = object.stepName ?? "";
+    message.status = object.status ?? "";
+    message.outputJson = object.outputJson ?? "";
     return message;
   },
 };
@@ -2348,7 +2506,7 @@ export const TokenUsage: MessageFns<TokenUsage> = {
 };
 
 function createBaseAgentConfig(): AgentConfig {
-  return { name: "", role: "", description: "", persona: "", tools: [], servers: [], skills: [], defaultModel: "" };
+  return { name: "", role: "", description: "", persona: "", tools: [], servers: [], defaultModel: "" };
 }
 
 export const AgentConfig: MessageFns<AgentConfig> = {
@@ -2370,9 +2528,6 @@ export const AgentConfig: MessageFns<AgentConfig> = {
     }
     for (const v of message.servers) {
       ServerConfig.encode(v!, writer.uint32(50).fork()).join();
-    }
-    for (const v of message.skills) {
-      SkillConfig.encode(v!, writer.uint32(58).fork()).join();
     }
     if (message.defaultModel !== "") {
       writer.uint32(66).string(message.defaultModel);
@@ -2435,14 +2590,6 @@ export const AgentConfig: MessageFns<AgentConfig> = {
           message.servers.push(ServerConfig.decode(reader, reader.uint32()));
           continue;
         }
-        case 7: {
-          if (tag !== 58) {
-            break;
-          }
-
-          message.skills.push(SkillConfig.decode(reader, reader.uint32()));
-          continue;
-        }
         case 8: {
           if (tag !== 66) {
             break;
@@ -2470,7 +2617,6 @@ export const AgentConfig: MessageFns<AgentConfig> = {
       servers: globalThis.Array.isArray(object?.servers)
         ? object.servers.map((e: any) => ServerConfig.fromJSON(e))
         : [],
-      skills: globalThis.Array.isArray(object?.skills) ? object.skills.map((e: any) => SkillConfig.fromJSON(e)) : [],
       defaultModel: isSet(object.defaultModel) ? globalThis.String(object.defaultModel) : "",
     };
   },
@@ -2495,9 +2641,6 @@ export const AgentConfig: MessageFns<AgentConfig> = {
     if (message.servers?.length) {
       obj.servers = message.servers.map((e) => ServerConfig.toJSON(e));
     }
-    if (message.skills?.length) {
-      obj.skills = message.skills.map((e) => SkillConfig.toJSON(e));
-    }
     if (message.defaultModel !== "") {
       obj.defaultModel = message.defaultModel;
     }
@@ -2515,7 +2658,6 @@ export const AgentConfig: MessageFns<AgentConfig> = {
     message.persona = object.persona ?? "";
     message.tools = object.tools?.map((e) => ToolConfig.fromPartial(e)) || [];
     message.servers = object.servers?.map((e) => ServerConfig.fromPartial(e)) || [];
-    message.skills = object.skills?.map((e) => SkillConfig.fromPartial(e)) || [];
     message.defaultModel = object.defaultModel ?? "";
     return message;
   },
@@ -8403,13 +8545,13 @@ function createBaseProcessMessageRequest(): ProcessMessageRequest {
     messageParts: [],
     userId: "",
     organizationId: 0,
-    context: undefined,
     conversationHistory: [],
     agentConfig: undefined,
     model: "",
     messageId: "",
     sessionId: "",
     userApiKey: "",
+    taskId: "",
   };
 }
 
@@ -8423,9 +8565,6 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
     }
     if (message.organizationId !== 0) {
       writer.uint32(24).int32(message.organizationId);
-    }
-    if (message.context !== undefined) {
-      ChatContext.encode(message.context, writer.uint32(34).fork()).join();
     }
     for (const v of message.conversationHistory) {
       HistoryMessage.encode(v!, writer.uint32(42).fork()).join();
@@ -8444,6 +8583,9 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
     }
     if (message.userApiKey !== "") {
       writer.uint32(82).string(message.userApiKey);
+    }
+    if (message.taskId !== "") {
+      writer.uint32(162).string(message.taskId);
     }
     return writer;
   },
@@ -8477,14 +8619,6 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
           }
 
           message.organizationId = reader.int32();
-          continue;
-        }
-        case 4: {
-          if (tag !== 34) {
-            break;
-          }
-
-          message.context = ChatContext.decode(reader, reader.uint32());
           continue;
         }
         case 5: {
@@ -8535,6 +8669,14 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
           message.userApiKey = reader.string();
           continue;
         }
+        case 20: {
+          if (tag !== 162) {
+            break;
+          }
+
+          message.taskId = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -8551,7 +8693,6 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
         : [],
       userId: isSet(object.userId) ? globalThis.String(object.userId) : "",
       organizationId: isSet(object.organizationId) ? globalThis.Number(object.organizationId) : 0,
-      context: isSet(object.context) ? ChatContext.fromJSON(object.context) : undefined,
       conversationHistory: globalThis.Array.isArray(object?.conversationHistory)
         ? object.conversationHistory.map((e: any) => HistoryMessage.fromJSON(e))
         : [],
@@ -8560,6 +8701,7 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
       messageId: isSet(object.messageId) ? globalThis.String(object.messageId) : "",
       sessionId: isSet(object.sessionId) ? globalThis.String(object.sessionId) : "",
       userApiKey: isSet(object.userApiKey) ? globalThis.String(object.userApiKey) : "",
+      taskId: isSet(object.taskId) ? globalThis.String(object.taskId) : "",
     };
   },
 
@@ -8573,9 +8715,6 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
     }
     if (message.organizationId !== 0) {
       obj.organizationId = Math.round(message.organizationId);
-    }
-    if (message.context !== undefined) {
-      obj.context = ChatContext.toJSON(message.context);
     }
     if (message.conversationHistory?.length) {
       obj.conversationHistory = message.conversationHistory.map((e) => HistoryMessage.toJSON(e));
@@ -8595,6 +8734,9 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
     if (message.userApiKey !== "") {
       obj.userApiKey = message.userApiKey;
     }
+    if (message.taskId !== "") {
+      obj.taskId = message.taskId;
+    }
     return obj;
   },
 
@@ -8606,9 +8748,6 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
     message.messageParts = object.messageParts?.map((e) => MessagePart.fromPartial(e)) || [];
     message.userId = object.userId ?? "";
     message.organizationId = object.organizationId ?? 0;
-    message.context = (object.context !== undefined && object.context !== null)
-      ? ChatContext.fromPartial(object.context)
-      : undefined;
     message.conversationHistory = object.conversationHistory?.map((e) => HistoryMessage.fromPartial(e)) || [];
     message.agentConfig = (object.agentConfig !== undefined && object.agentConfig !== null)
       ? AgentConfig.fromPartial(object.agentConfig)
@@ -8617,6 +8756,7 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
     message.messageId = object.messageId ?? "";
     message.sessionId = object.sessionId ?? "";
     message.userApiKey = object.userApiKey ?? "";
+    message.taskId = object.taskId ?? "";
     return message;
   },
 };
@@ -8629,6 +8769,8 @@ function createBaseProcessMessageResponse(): ProcessMessageResponse {
     stepProgress: undefined,
     awaitingInput: undefined,
     timestamp: 0,
+    taskId: "",
+    taskProgress: undefined,
   };
 }
 
@@ -8651,6 +8793,12 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
     }
     if (message.timestamp !== 0) {
       writer.uint32(48).int64(message.timestamp);
+    }
+    if (message.taskId !== "") {
+      writer.uint32(82).string(message.taskId);
+    }
+    if (message.taskProgress !== undefined) {
+      ChatTaskProgress.encode(message.taskProgress, writer.uint32(90).fork()).join();
     }
     return writer;
   },
@@ -8710,6 +8858,22 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
           message.timestamp = longToNumber(reader.int64());
           continue;
         }
+        case 10: {
+          if (tag !== 82) {
+            break;
+          }
+
+          message.taskId = reader.string();
+          continue;
+        }
+        case 11: {
+          if (tag !== 90) {
+            break;
+          }
+
+          message.taskProgress = ChatTaskProgress.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -8727,6 +8891,8 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
       stepProgress: isSet(object.stepProgress) ? StepProgress.fromJSON(object.stepProgress) : undefined,
       awaitingInput: isSet(object.awaitingInput) ? AwaitingInput.fromJSON(object.awaitingInput) : undefined,
       timestamp: isSet(object.timestamp) ? globalThis.Number(object.timestamp) : 0,
+      taskId: isSet(object.taskId) ? globalThis.String(object.taskId) : "",
+      taskProgress: isSet(object.taskProgress) ? ChatTaskProgress.fromJSON(object.taskProgress) : undefined,
     };
   },
 
@@ -8749,6 +8915,12 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
     }
     if (message.timestamp !== 0) {
       obj.timestamp = Math.round(message.timestamp);
+    }
+    if (message.taskId !== "") {
+      obj.taskId = message.taskId;
+    }
+    if (message.taskProgress !== undefined) {
+      obj.taskProgress = ChatTaskProgress.toJSON(message.taskProgress);
     }
     return obj;
   },
@@ -8774,6 +8946,10 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
       ? AwaitingInput.fromPartial(object.awaitingInput)
       : undefined;
     message.timestamp = object.timestamp ?? 0;
+    message.taskId = object.taskId ?? "";
+    message.taskProgress = (object.taskProgress !== undefined && object.taskProgress !== null)
+      ? ChatTaskProgress.fromPartial(object.taskProgress)
+      : undefined;
     return message;
   },
 };
@@ -10372,82 +10548,6 @@ export const CancelMessageResponse: MessageFns<CancelMessageResponse> = {
     const message = createBaseCancelMessageResponse();
     message.success = object.success ?? false;
     message.message = object.message ?? "";
-    return message;
-  },
-};
-
-function createBaseChatContext(): ChatContext {
-  return { domainType: "", domainId: 0 };
-}
-
-export const ChatContext: MessageFns<ChatContext> = {
-  encode(message: ChatContext, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.domainType !== "") {
-      writer.uint32(10).string(message.domainType);
-    }
-    if (message.domainId !== 0) {
-      writer.uint32(16).int32(message.domainId);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ChatContext {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseChatContext();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-        case 1: {
-          if (tag !== 10) {
-            break;
-          }
-
-          message.domainType = reader.string();
-          continue;
-        }
-        case 2: {
-          if (tag !== 16) {
-            break;
-          }
-
-          message.domainId = reader.int32();
-          continue;
-        }
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(object: any): ChatContext {
-    return {
-      domainType: isSet(object.domainType) ? globalThis.String(object.domainType) : "",
-      domainId: isSet(object.domainId) ? globalThis.Number(object.domainId) : 0,
-    };
-  },
-
-  toJSON(message: ChatContext): unknown {
-    const obj: any = {};
-    if (message.domainType !== "") {
-      obj.domainType = message.domainType;
-    }
-    if (message.domainId !== 0) {
-      obj.domainId = Math.round(message.domainId);
-    }
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<ChatContext>, I>>(base?: I): ChatContext {
-    return ChatContext.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<ChatContext>, I>>(object: I): ChatContext {
-    const message = createBaseChatContext();
-    message.domainType = object.domainType ?? "";
-    message.domainId = object.domainId ?? 0;
     return message;
   },
 };

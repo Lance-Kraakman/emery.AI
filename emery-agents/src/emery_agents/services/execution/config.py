@@ -6,12 +6,11 @@ Configuration classes for ExecutionCoordinator.
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, TYPE_CHECKING
+from typing import Optional
 
-if TYPE_CHECKING:
-    from ..plan_service import PlanService
-    from ..plan_step_executor import PlanStepExecutor
-    from ..protocols import ModelProviderProtocol
+from ..plan_service import PlanService
+from .plan_step_executor import PlanStepExecutor
+from ..protocols import ModelProviderProtocol
 
 
 class CoordinatorMode(Enum):
@@ -24,9 +23,9 @@ class CoordinatorMode(Enum):
 class ExecutionCoordinatorConfig:
     """Configuration for ExecutionCoordinator."""
 
-    plan_service: "PlanService"
-    model_provider: Optional["ModelProviderProtocol"] = None
-    plan_step_executor: Optional["PlanStepExecutor"] = None
+    plan_service: PlanService
+    model_provider: Optional[ModelProviderProtocol] = None
+    plan_step_executor: Optional[PlanStepExecutor] = None
     evaluate_after_steps: int = 1
     max_replans: int = 3
     org_model: Optional[str] = None

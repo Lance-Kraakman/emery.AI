@@ -14,16 +14,16 @@ and outputs for plan generation. This enables:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from emery_agents.entities.models.context_mapping import ResolvedContext
 from emery_agents.entities.models.plan import Plan, SkillInputDefinition, SkillOutputDefinition
 from emery_agents.services.protocols import Tool, ManagedAgent
 from emery_agents.services.tools import CapabilityRegistry
+from emery_agents.services.context import SessionConfig, WorkspaceContext
 
 if TYPE_CHECKING:
     from emery_agents.orchestrators.runtime import ConversationMessage
-from emery_agents.services.context import SessionConfig, WorkspaceContext
 
 
 @dataclass(frozen=True)

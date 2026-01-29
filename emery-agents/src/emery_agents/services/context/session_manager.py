@@ -9,15 +9,13 @@ import asyncio
 import logging
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, Optional, Any, List, TYPE_CHECKING
+from typing import Dict, Optional, Any, List
 from dataclasses import dataclass, field
 
 from ..execution.state_machine import CoordinatorStateMachine, Phase
-
-if TYPE_CHECKING:
-    from ...grpc.agents.agent_models import ChatAgent
-    from ...entities.models.plan import Plan
-    from ...infrastructure.workspace_sync import WorkspaceSync
+from ...grpc.agents.agent_models import ChatAgent
+from ...entities.models.plan import Plan
+from ...infrastructure.workspace_sync import WorkspaceSync
 
 logger = logging.getLogger(__name__)
 

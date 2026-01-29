@@ -10,7 +10,7 @@ import type { Task as TaskEntity, TaskInstructions, TriggerContext } from '@/ddd
 // DTO representing a task as returned by server actions to the frontend
 export interface TaskDTO {
   id: string;
-  agentId: number;                    // Converted from AgentId value object
+  agentId: number | null;             // null = org-level task, set = agent executes this
   organizationId: number;             // Converted from OrganizationId value object
   name: string;
   instructions: TaskInstructions;
@@ -32,7 +32,7 @@ export interface TaskDTO {
 export function taskToDTO(task: TaskEntity): TaskDTO {
   return {
     id: task.id.value,
-    agentId: task.agentId.value,
+    agentId: task.agentId?.value ?? null, // Handle nullable agentId
     organizationId: task.organizationId.value,
     name: task.name,
     instructions: task.instructions,

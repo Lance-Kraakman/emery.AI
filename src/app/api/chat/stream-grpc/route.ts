@@ -29,7 +29,7 @@ import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 
 // Import existing chat services (DIContainer now auto-initializes)
 import { getChatApplicationService, getDynamicTableRepository, getAgentRepository, getToolConfigurationApplicationService, getUserRepository, getOrganizationRepository, getStorageQuotaApplicationService } from '@/ddd/application/di/container';
-import { getSkillEnrichmentService } from '@/ddd/application/di/getters';
+// getSkillEnrichmentService, getTaskRepository, TaskId removed - skills/tasks handled dynamically in Python
 import { TokenUsageApplicationService } from '@/ddd/application/services/billing/token-usage-application-service';
 import { getTokenUsageRepository } from '@/ddd/application/di/getters';
 import type { CreateChatDTO, SendMessageDTO, UpdateMessageDTO, ExecutionStep, ExecutionStepMetadata } from '@/app/dtos/chat.dto';
@@ -454,16 +454,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 5. Determine processing options from contextMetadata or request params
-    // Use normalized chatSession for consistent access across new/existing chats
-    let resolvedDomainType = chatSession?.contextMetadata?.contextType || domainType;
-    let resolvedDomainId = chatSession?.contextMetadata?.domainSchema?.id || domainId;
-
-    // Convert 'organization' contextType to null for processing
-    if (resolvedDomainType === 'organization') {
-      resolvedDomainType = null;
-      resolvedDomainId = null;
-    }
+    // 5. Domain context removed from execution
+    // agentId is now resolved from skill.agent_id in Python backend
+    // domainType/domainId kept only for chat session metadata (UI filtering)
 
     // 5.5 Get AI model: request model takes priority over chat/organization defaults
     console.log('[CHAT-GRPC-API] Fetching AI model configuration');
@@ -483,19 +476,14 @@ export async function POST(req: NextRequest) {
       resolved: defaultModel || 'will use system default'
     });
 
-    // 5.1 Separate skill references from regular tools BEFORE enrichment
-    // This prevents skill_reference type from being overwritten during enrichment
-    const skillReferenceTools = tools.filter((t: any) => t.config?.type === 'skill_reference');
-    const regularTools = tools.filter((t: any) => t.config?.type !== 'skill_reference');
+    // AIDEV-NOTE: Skills removed from gRPC - Python discovers and executes skills dynamically via API
+    // The skill_crud tool allows LLM to list and execute skills at runtime
+    const regularTools = tools;
 
-    console.log('[CHAT-GRPC-API] Separated tools:', {
+    console.log('[CHAT-GRPC-API] Tools:', {
       totalTools: tools.length,
-      skillReferences: skillReferenceTools.length,
-      regularTools: regularTools.length
+      toolNames: tools.map((t: any) => t.name)
     });
-
-    console.log('[CHAT-GRPC-API] [DEBUG] Skill reference tools:', JSON.stringify(skillReferenceTools, null, 2));
-    console.log('[CHAT-GRPC-API] [DEBUG] Regular tools:', JSON.stringify(regularTools.map(t => ({ name: t.name, configType: t.config?.type })), null, 2));
 
     // 5.1 Always fetch user API key for managed agents (skill_builder, etc.)
     // This is needed even when there are no tools configured
@@ -566,54 +554,19 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Combine enriched regular tools with unchanged skill references
-    const enrichedTools = [...enrichedRegularTools, ...skillReferenceTools];
-
-    // 5.2 Enrich skill references with full skill definitions using SkillEnrichmentService
-    let enrichedSkills: any[] = [];
-    // Use the already-separated skillReferenceTools (preserves type: 'skill_reference')
-    const skillTools = skillReferenceTools;
-
-    if (skillTools.length > 0) {
-      try {
-        const skillIds = skillTools.map(s => parseInt(s.config.skill_id, 10));
-        console.log('[CHAT-GRPC-API] Loading skills by ID:', skillIds);
-
-        // Use centralized SkillEnrichmentService for consistent skill loading
-        const skillEnrichmentService = getSkillEnrichmentService();
-        enrichedSkills = await skillEnrichmentService.enrichSkills(skillIds);
-
-        console.log('[CHAT-GRPC-API] Enriched skills:', enrichedSkills.length);
-        for (const skill of enrichedSkills) {
-          console.log('[CHAT-GRPC-API] Loaded skill by ID:', {
-            skillId: skill.id,
-            name: skill.name,
-            executionType: skill.executionType,
-            hasInstructions: !!skill.instructions,
-            toolCount: skill.tools?.length || 0,
-            contentCount: skill.content?.length || 0
-          });
-        }
-      } catch (error) {
-        console.error('[CHAT-GRPC-API] Error loading skills:', error);
-        // Continue without skills if enrichment fails
-      }
-    }
-
-    // Filter out skills from tools array (they go in separate skills array)
-    const nonSkillTools = enrichedTools.filter((t: any) => t.config?.type !== 'skill_reference');
+    // AIDEV-NOTE: Skills removed - Python discovers and executes skills dynamically via API
+    // Task creation for skill execution now happens in Python when skills are invoked
 
     const processingOptions: ChatProcessingOptions = {
-      domainType: resolvedDomainType,
-      domainId: resolvedDomainId,
-      tools: nonSkillTools, // DDD-enriched tools with user API key authentication (excluding skills)
-      skills: enrichedSkills, // Fully resolved skill definitions
+      tools: enrichedRegularTools, // DDD-enriched tools with user API key authentication
       defaultModel: defaultModel, // Organization's default AI model
-      userApiKey: userApiKey || undefined // User API key for managed agents (skill_builder, etc.)
+      userApiKey: userApiKey || undefined, // User API key for managed agents and skill_crud
     };
 
-    console.log('[CHAT-GRPC-API] [DEBUG] Processing options - nonSkillTools:', JSON.stringify(nonSkillTools.map(t => ({ name: t.name, configType: t.config?.type, configKeys: Object.keys(t.config || {}) })), null, 2));
-    console.log('[CHAT-GRPC-API] [DEBUG] Processing options - enrichedSkills:', JSON.stringify(enrichedSkills.map(s => ({ id: s.id, name: s.name })), null, 2));
+    console.log('[CHAT-GRPC-API] Processing options:', {
+      toolCount: enrichedRegularTools.length,
+      defaultModel: defaultModel || 'system default'
+    });
 
     // 6. Set up streaming response
     let fullAssistantResponse = '';
@@ -804,6 +757,8 @@ export async function POST(req: NextRequest) {
         }
 
         const grpcClient = getChatProcessingClient(organizationId.toString());
+
+        // AIDEV-NOTE: Task tracking removed - Python creates tasks when executing skills dynamically
 
         // Process message with gRPC service (now accepts MessagePart[])
         grpcClient.processMessage(

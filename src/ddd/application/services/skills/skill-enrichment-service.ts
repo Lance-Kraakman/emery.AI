@@ -42,6 +42,7 @@ export interface EnrichedSkill {
   toolExecutionConfig?: ToolExecutionConfig;
   writeConfig?: WriteConfig;
   steps?: SkillStep[];
+  agentId: number | null; // Agent that owns this skill (null for org-level skills)
 }
 
 export class SkillEnrichmentService {
@@ -93,7 +94,8 @@ export class SkillEnrichmentService {
       taskModelConfig: skill.taskModelConfig,
       toolExecutionConfig: skill.toolExecutionConfig,
       writeConfig: skill.writeConfig,
-      steps: skill.steps || []
+      steps: skill.steps || [],
+      agentId: skill.agentId?.value ?? null, // Pass agent ownership for credential resolution
     };
   }
 }

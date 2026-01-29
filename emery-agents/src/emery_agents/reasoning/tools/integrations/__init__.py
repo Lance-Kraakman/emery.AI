@@ -7,6 +7,7 @@ These tools enable agents to integrate with external services.
 from __future__ import annotations
 
 from .pipedream import PipedreamTool, PIPEDREAM_TOOLS, get_pipedream_tool_info, list_pipedream_tools_by_app
+from .dynamic_skill import DynamicSkillTool
 from .base import (
     create_file_reader_tool,
     create_calculator_tool,
@@ -40,6 +41,8 @@ __all__ = [
     "PIPEDREAM_TOOLS",
     "get_pipedream_tool_info",
     "list_pipedream_tools_by_app",
+    # Dynamic Skill
+    "DynamicSkillTool",
     # Base tools
     "create_file_reader_tool",
     "create_calculator_tool",

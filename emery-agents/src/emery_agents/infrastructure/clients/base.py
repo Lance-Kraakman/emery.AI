@@ -7,11 +7,10 @@ Implementations handle specific providers (HuggingFace, Replicate, etc.).
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from emery_agents.entities.task import SkillOutputValue
+from typing import Any, Dict, List, Optional, Union
 from enum import Enum
+
+from emery_agents.entities.task import SkillOutputValue
 
 
 class TaskResultType(str, Enum):

@@ -11,7 +11,8 @@ import os
 import time
 import json
 import uuid
-from typing import TYPE_CHECKING, Any
+from collections.abc import AsyncIterator
+from typing import Any
 
 import dspy
 import httpx
@@ -19,9 +20,6 @@ from PIL import Image
 
 from emery_agents.infrastructure.clients.base import TaskResult
 from emery_agents.infrastructure.clients.huggingface_inference import HuggingFaceInferenceClient
-
-if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
 
 from ...entities.execution_context import ExecutionContext
 from ...types import ExecutionMode, AgentId, OrganizationId

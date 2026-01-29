@@ -8,13 +8,11 @@ ChainOfThought with GeneratePlanDiff signature.
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import dspy
 
-if TYPE_CHECKING:
-    from ..protocols import ModelProviderProtocol
-
+from ..protocols import ModelProviderProtocol
 from emery_agents.entities.models.plan import Plan, PlanStep, PlanStatus, PlanStepStatus, create_step
 from emery_agents.reasoning.signatures.planning import GeneratePlanDiff, PlanDiffResult
 

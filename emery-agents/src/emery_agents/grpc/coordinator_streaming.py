@@ -8,7 +8,7 @@ Replaces the old ExecutionCoordinator-based two-phase execution.
 import json
 import logging
 from pathlib import Path
-from typing import AsyncIterator, Optional, List, Any, Dict, TYPE_CHECKING
+from typing import AsyncIterator, Optional, List, Any, Dict
 
 import dspy
 from langgraph.types import Command
@@ -18,8 +18,11 @@ from ..services.execution.events import (
     FinalSynthesisEvent,
 )
 from ..entities.models.plan import Plan
+from ..entities.execution_context import ExecutionContext
 from ..tools.tool_modes import ToolMode
 from ..services.agents.executor import AgentExecutor
+from ..services.models.provider import ModelProvider
+from ..services.plan_service import PlanService
 from ..reasoning.config import get_dspy_lm
 from ..reasoning.modules.executor import ExecutorModule
 from ..reasoning.modules.classifier import TaskClassifierModule
@@ -34,11 +37,6 @@ from ..orchestrators.runtime import ConversationMessage
 from ..orchestrators.state import DEFAULT_STATE
 from ..services.memory import MemoryService
 from ..services.planning import PlanFileRepository
-
-if TYPE_CHECKING:
-    from ..entities.execution_context import ExecutionContext
-    from ..services.models.provider import ModelProvider
-    from ..services.plan_service import PlanService
 
 logger = logging.getLogger(__name__)
 

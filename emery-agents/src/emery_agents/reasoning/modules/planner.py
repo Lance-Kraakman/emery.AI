@@ -7,7 +7,7 @@ It replaces the Jinja2-based planning templates.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import Any
 
 import dspy
 
@@ -22,9 +22,6 @@ from emery_agents.reasoning.signatures.planning import (
     SkillOutputSpec,
     SkillTemplatePlanOutput,
 )
-
-if TYPE_CHECKING:
-    from typing import Any
 
 
 class PlannerModule(dspy.Module):  # type: ignore[misc]
@@ -356,22 +353,23 @@ class SkillTemplatePlannerModule(PlannerModule):
         template_rules = """
 TEMPLATE MODE - Creating a REUSABLE skill template.
 
-CRITICAL - PRESERVE EVERY RULE:
-- Count the rules in the user's request
-- The prompt_template MUST contain ALL of them
-- Do NOT summarize rules - copy the conditional logic
-- "if X then Y" -> {% if X %}Y{% endif %}
-- "use Z format" -> include Z format instruction
-- "when A do B" -> {% if A %}B{% endif %}
+FORBIDDEN - Never generate these patterns in goal, analysis, or description:
+- "Create a skill that..." or "This skill..."
+- "takes input X and returns/outputs Y" or "assigns X to Y"
+- "returns the value of X as Y"
+- "No external tools or databases are required"
+- Any text that just describes the input-to-output mapping
 
-VARIABLE SYNTAX - {{ }} EVERYWHERE:
-- In text: "{{ name }} is {{ age }}"
-- Inside {% if %}: {% if family %}{{ name }} has {{ family }}{% endif %}
-- WRONG: {% if family %}name has family{% endif %}
+Focus goal/analysis/description on the TASK PURPOSE, not on explaining I/O mechanics.
 
-TWO FIELDS:
-1. description: Summarize task + mention rules. {{ variable }} OK. NO {% if %}.
-2. prompt_template: ALL rules using {% if %} for conditionals. {{ }} for variables.
+PRESERVE USER'S RULES:
+- Copy conditional logic from request: "if X then Y" -> {% if X %}Y{% endif %}
+- Do NOT summarize - preserve verbatim
+
+VARIABLE SYNTAX:
+- Use {{ name }} in text and inside {% if %} blocks
+- description: Brief summary, {{ }} OK, NO {% if %}
+- prompt_template: Full logic with {% if %} for conditionals
 """
         return f"{template_rules}\n\n{base_guidance}"
 

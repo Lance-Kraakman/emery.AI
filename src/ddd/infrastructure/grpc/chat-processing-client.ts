@@ -17,7 +17,6 @@ import type {
   ProcessMessageRequest,
   ProcessMessageResponse,
   HistoryMessage,
-  ChatContext,
   ContentChunk,
   ProcessingComplete,
   ProcessingError,
@@ -26,7 +25,7 @@ import type {
   AwaitingInput
 } from './generated/agent_worker';
 import { toProtoMessageParts } from './mappers/message-part-mapper';
-import { mapSkillToProto } from './proto-mappers';
+// mapSkillToProto removed - skills no longer passed via gRPC
 
 // Load protobuf definition
 const PROTO_PATH = path.join(process.cwd(), 'proto', 'agent_worker.proto');
@@ -42,12 +41,11 @@ const protoDescriptor = grpc.loadPackageDefinition(packageDefinition) as any;
 const ChatProcessingService = protoDescriptor.emery.agents.ChatProcessingService;
 
 export interface ChatProcessingOptions {
-  domainType?: string;
-  domainId?: number;
+  // Skills removed - Python discovers and executes skills dynamically via API
   tools?: ToolConfig[];          // Available tools for the chat
-  skills?: any[];                // Fully resolved skill definitions with instructions, tools, inputs, outputs, content
   defaultModel?: string | null;  // Organization's default AI model
   userApiKey?: string;           // User API key for managed agents (skill_builder, etc.)
+  taskId?: string;               // Task tracking ID (if set, execution is task-tracked with DB record)
 }
 
 export interface StreamingChatResponse {
@@ -166,23 +164,9 @@ export class ChatProcessingClient {
       };
     });
 
-    // Create skill reference tools for LLM to call
-    const skillReferenceTools = (options.skills || []).map(skill => ({
-      name: `skill-${skill.name}`,
-      version: '',
-      config: {
-        type: 'skill_reference',
-        skill_id: skill.id.toString()  // Use ID for lookup
-      }
-    }));
-
-    // Combine system tools and skill reference tools
-    const allTools = [...systemTools, ...skillReferenceTools];
-
-    // Build full SkillConfig definitions using proto mapper
-    // AIDEV-NOTE: mapSkillToProto properly converts outputMapping.source fields to proto format
-    // (skill_output/skill_input/table_ref oneof fields) which Python expects
-    const skillConfigs = (options.skills || []).map(skill => mapSkillToProto(skill));
+    // AIDEV-NOTE: Skills removed from gRPC - Python discovers skills dynamically via API
+    // The skill_crud tool allows LLM to list and execute skills at runtime
+    const allTools = systemTools;
 
     const agentConfig = {
       name: '', // Chat agents don't have a specific name
@@ -191,15 +175,13 @@ export class ChatProcessingClient {
       persona: '',
       tools: allTools,
       servers: [],
-      skills: skillConfigs,
-      defaultModel: options.defaultModel || ''
+      defaultModel: options.defaultModel || '',
     };
 
-    console.log(`[CHAT-GRPC-CLIENT] Built AgentConfig with ${allTools.length} tools (${systemTools.length} system + ${skillReferenceTools.length} skill refs) and ${skillConfigs.length} skills`);
+    console.log(`[CHAT-GRPC-CLIENT] Built AgentConfig with ${allTools.length} tools`);
 
-    // Build request
+    // Build request (context field removed - agentId resolved from skill.agent_id in Python)
     const request: ProcessMessageRequest = {
-      context: undefined, // Will set below if needed
       messageParts: protoMessageParts,
       userId: userId,
       organizationId: organizationId,
@@ -208,17 +190,11 @@ export class ChatProcessingClient {
       model: options.defaultModel || '', // Pass organization's default model or empty string for system default
       messageId: actualMessageId, // Add message ID for cancellation tracking
       sessionId: actualSessionId, // Session ID for stateful agent persistence
-      userApiKey: options.userApiKey || '' // User API key for managed agents (skill_builder, etc.)
+      userApiKey: options.userApiKey || '', // User API key for managed agents (skill_builder, etc.)
+      taskId: options.taskId || '' // Task tracking (empty = not task-tracked)
     };
 
-    // Add context if provided
-    if (options.domainType) {
-      const context: ChatContext = {
-        domainType: options.domainType || '',
-        domainId: options.domainId || 0
-      };
-      request.context = context;
-    }
+    // Context removed - agentId is resolved from skill.agent_id in Python
 
     return new Promise((resolve, reject) => {
       console.log(`[CHAT-GRPC-CLIENT] Starting gRPC stream for message processing`);

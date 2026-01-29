@@ -10,12 +10,11 @@ Files (PDFs, audio, documents) are processed to extract text content.
 """
 import logging
 import asyncio
-from typing import List, Dict, Any, TYPE_CHECKING
+from typing import List, Dict, Any
 from io import BytesIO
 from concurrent.futures import ThreadPoolExecutor
 
-if TYPE_CHECKING:
-    from emery_agents.services.execution.events import ClarifyingQuestion
+from emery_agents.services.execution.events import ClarifyingQuestion
 
 import requests
 from PIL import Image
