@@ -614,11 +614,13 @@ export async function POST(req: NextRequest) {
         const taskRepository = getTaskRepository();
         const firstSkill = enrichedSkills[0];
 
-        // Determine agentId: if chatting with agent (domainType === 'agent'), use that agent
-        // Otherwise, org-level task (agentId = null)
+        // Determine agentId for task:
+        // 1. If chatting with agent (domainType === 'agent'), use that agent's ID
+        // 2. Otherwise, if skill belongs to an agent, use the skill's agentId
+        // 3. Otherwise, org-level task (agentId = null)
         const taskAgentId = resolvedDomainType === 'agent' && resolvedDomainId
           ? resolvedDomainId
-          : null;
+          : firstSkill.agentId ?? null;
 
         const taskData = {
           agentId: taskAgentId,
@@ -639,9 +641,18 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Determine effective domain context for credential resolution:
+    // If skill belongs to an agent, use agent context even if not explicitly chatting with agent
+    const effectiveDomainType = resolvedDomainType === 'agent'
+      ? 'agent'
+      : (enrichedSkills.length > 0 && enrichedSkills[0].agentId ? 'agent' : resolvedDomainType);
+    const effectiveDomainId = resolvedDomainType === 'agent'
+      ? resolvedDomainId
+      : (enrichedSkills.length > 0 && enrichedSkills[0].agentId ? enrichedSkills[0].agentId : resolvedDomainId);
+
     const processingOptions: ChatProcessingOptions = {
-      domainType: resolvedDomainType,
-      domainId: resolvedDomainId,
+      domainType: effectiveDomainType,
+      domainId: effectiveDomainId,
       tools: nonSkillTools, // DDD-enriched tools with user API key authentication (excluding skills)
       skills: enrichedSkills, // Fully resolved skill definitions
       defaultModel: defaultModel, // Organization's default AI model

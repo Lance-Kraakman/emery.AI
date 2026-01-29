@@ -96,8 +96,9 @@ async def handle_autonomous_entry(state: PlanExecuteState) -> Dict[str, Any]:
     stored_plan = state.get("stored_plan")
     assert stored_plan is not None, "Autonomous entry requires a stored_plan"
 
+    # Only emit PlanApprovedEvent - skip PlanCreatedEvent since plan is pre-approved
+    # PlanCreatedEvent would trigger awaiting_input UI which causes approval loop
     events = [
-        PlanCreatedEvent(plan_id=stored_plan.id, plan=stored_plan),
         PlanApprovedEvent(plan_id=stored_plan.id),
     ]
 
