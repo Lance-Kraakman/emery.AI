@@ -97,9 +97,10 @@ class SkillTemplateStepOutput(BaseModel):
 
     step_id: str = Field(description="Unique identifier for this step")
     description: str = Field(
-        description="Human-readable description summarizing the task AND key rules/conditions. "
-                    "Example: 'Generate report for {{ topic }}. Uses bullet points, comma formatting.' "
-                    "Can use {{ variable }}. NO {% if %} control structures."
+        description="Human-readable summary of the task AND key rules. "
+                    "MUST use {{ input_name }} for each defined skill input. "
+                    "Example: 'Generate report for {{ topic }} using {{ format }} style.' "
+                    "NO {% if %} - only {{ }} placeholders."
     )
     tool_call: Optional[str] = Field(
         default=None, description="Tool to call for this step (e.g., 'table_crud')"

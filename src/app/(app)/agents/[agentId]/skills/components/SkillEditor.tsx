@@ -128,9 +128,12 @@ export function SkillEditor({
       // Pass previous plan and feedback for regeneration (same API as agentic page)
       const previousPlan = feedback && data.plan ? data.plan : undefined;
       const result = await generateSkillPlan(skillId, data.instructions, previousPlan, feedback);
-      if (result.success && result.data) {
+      if (result.success && 'data' in result) {
         handleUpdateNode(nodeId, { plan: result.data });
         toast.success(`Plan ${feedback ? 'regenerated' : 'generated'} with ${result.data.steps?.length || 0} steps`);
+      } else if ('questions' in result) {
+        // Clarifying questions - SkillEditor doesn't support interactive questions yet
+        toast.info('Planner needs more information. Use the full skill editor for interactive planning.');
       } else {
         toast.error(result.error || 'Failed to generate plan');
       }

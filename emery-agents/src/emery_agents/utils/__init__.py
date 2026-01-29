@@ -53,6 +53,10 @@ from .mention_parser import (
     parse_agent_mention,
     has_agent_mention,
     extract_all_agent_mentions,
+    parse_skill_mention,
+    parse_skill_invocation,
+    has_skill_mention,
+    SkillInvocation,
 )
 from .session_logger import (
     SessionLogger,
@@ -64,6 +68,10 @@ __all__ = [
     "parse_agent_mention",
     "has_agent_mention",
     "extract_all_agent_mentions",
+    "parse_skill_mention",
+    "parse_skill_invocation",
+    "has_skill_mention",
+    "SkillInvocation",
     "SessionLogger",
     "get_session_logger",
 ]

@@ -22,6 +22,8 @@ from ..tools.tool_modes import ToolMode
 from ..services.agents.executor import AgentExecutor
 from ..reasoning.config import get_dspy_lm
 from ..reasoning.modules.executor import ExecutorModule
+from ..reasoning.modules.classifier import TaskClassifierModule
+from ..reasoning.signatures.planning import TaskExecutionMode
 from ..reasoning.utils import extract_dspy_result
 from ..reasoning.tools import create_all_tools, QuestionCollector, create_ask_question_tool
 from .coordinator_event_converter import convert_coordinator_event
@@ -121,6 +123,91 @@ class CoordinatorStreamingHandler:
     ):
         self.plan_service = plan_service
         self.model_provider = model_provider
+        self._classifier: Optional[TaskClassifierModule] = None
+
+    def _get_classifier(self) -> TaskClassifierModule:
+        """Lazy-initialize task classifier."""
+        if self._classifier is None:
+            self._classifier = TaskClassifierModule()
+        return self._classifier
+
+    async def _classify_task(
+        self,
+        task: str,
+        org_model: Optional[str],
+        context: str = "",
+    ) -> TaskExecutionMode:
+        """
+        Classify a task to determine execution mode.
+
+        Args:
+            task: The user's task
+            org_model: Model to use for classification
+            context: Optional context about system state
+
+        Returns:
+            TaskExecutionMode.DIRECT or TaskExecutionMode.PLAN_AND_APPROVE
+        """
+        classifier = self._get_classifier()
+
+        with dspy.context(lm=get_dspy_lm(org_model)):
+            result = classifier.classify(task=task, context=context)
+
+        return result.mode
+
+    async def _handle_direct_response(
+        self,
+        task: str,
+        context: 'ExecutionContext',
+        org_model: Optional[str],
+    ) -> AsyncIterator[Any]:
+        """
+        Handle simple tasks with direct LLM response (no planning).
+
+        Yields streaming events for a simple completion without tools/planning.
+        """
+        logger.info(f"📝 Direct mode: handling task without planning")
+
+        try:
+            # Use simple LLM completion
+            lm = get_dspy_lm(org_model)
+
+            with dspy.context(lm=lm):
+                # Simple predict (no tools, no planning)
+                predictor = dspy.Predict("task -> response")
+                result = predictor(task=task)
+                response = result.response
+
+            # Stream the response
+            yield {
+                "type": "step_started",
+                "data": {
+                    "step_index": 0,
+                    "description": "Responding directly",
+                }
+            }
+
+            yield {
+                "type": "message",
+                "data": {"content": response}
+            }
+
+            yield {
+                "type": "step_completed",
+                "data": {
+                    "step_index": 0,
+                    "result": response,
+                }
+            }
+
+            yield {
+                "type": "done",
+                "data": {"final_answer": response}
+            }
+
+        except Exception as e:
+            logger.error(f"Direct response failed: {e}")
+            yield create_error_response(f"Failed to generate response: {e}")
 
     async def stream_response(
         self,
@@ -222,6 +309,27 @@ class CoordinatorStreamingHandler:
             ):
                 yield event
             return
+
+        # === CLASSIFY TASK (if no stored plan) ===
+        if not stored_plan:
+            try:
+                execution_mode = await self._classify_task(
+                    task=task,
+                    org_model=org_model,
+                )
+
+                if execution_mode == TaskExecutionMode.DIRECT:
+                    # Simple task - respond directly without planning
+                    async for event in self._handle_direct_response(
+                        task=task,
+                        context=context,
+                        org_model=org_model,
+                    ):
+                        yield event
+                    return
+            except Exception as e:
+                logger.warning(f"Task classification failed, defaulting to plan mode: {e}")
+                # Fall through to graph execution on classification failure
 
         # === NEW REQUEST or AUTONOMOUS ===
         async for event in self.stream_with_graph(

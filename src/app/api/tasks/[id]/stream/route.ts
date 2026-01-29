@@ -15,19 +15,11 @@ export async function GET(
   
   try {
     const session = await auth();
-    
-    // AIDEV-NOTE: Development bypass for testing - remove in production
-    let userId = session?.user?.id;
-    if (!session?.user && process.env.NODE_ENV === 'development') {
-      const testUserId = request.headers.get('x-test-user-id');
-      if (testUserId === '550e8400-e29b-41d4-a716-446655440000') {
-        userId = testUserId;
-      } else {
-        return new Response('Unauthorized', { status: 401 });
-      }
-    } else if (!session?.user) {
+
+    if (!session?.user?.id) {
       return new Response('Unauthorized', { status: 401 });
     }
+    const userId = session.user.id;
 
     const taskId = params.id;
 
@@ -173,9 +165,7 @@ export async function GET(
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
         'Connection': 'keep-alive',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET',
-        'Access-Control-Allow-Headers': 'Cache-Control',
+        // SECURITY: No CORS headers - same-origin only (authenticated endpoint)
       },
     });
 
