@@ -28,10 +28,10 @@ from ..services.models.provider import ModelProvider
 from ..services.tools.loader import UnifiedToolLoader
 from ..services.skills.executor import SkillExecutorService
 from ..services.plan_service import PlanService
-from ..infrastructure.clients import HuggingFaceInferenceClient
+# HuggingFaceInferenceClient removed - skills now executed dynamically via API
 from ..utils.error_classifier import classify_error
 from ..utils.error_messages import ErrorSeverity
-from ..utils.mention_parser import parse_agent_mention, parse_skill_invocation
+from ..utils.mention_parser import parse_agent_mention  # parse_skill_invocation removed - skills loaded via API
 from .mention_routing import handle_agent_mention_routing
 from .message_processor import (
     extract_user_api_key_from_tools,
@@ -56,89 +56,8 @@ from ..services.tools.capability_registry import CapabilityRegistry
 logger = logging.getLogger(__name__)
 
 
-def detect_skill_plan_from_invocation(
-    task: str,
-    skills: Optional[List['agent_worker_pb2.SkillConfig']]
-) -> Tuple[Optional[Plan], Optional[Dict[str, str]], Optional[str]]:
-    """
-    Detect @skill:name invocation and extract the skill's stored plan.
-
-    When a user invokes a skill via @skill:name syntax, this function:
-    1. Parses the skill name and inputs from the task
-    2. Finds the matching skill config
-    3. Extracts the stored plan (if any) from the skill's agentic config
-    4. Returns the plan for AUTONOMOUS execution
-
-    Args:
-        task: The current task text from the user
-        skills: List of SkillConfig proto messages from agent config
-
-    Returns:
-        Tuple of (plan, skill_inputs, cleaned_task):
-        - plan: Hydrated Plan object if found, None otherwise
-        - skill_inputs: Dictionary of parsed inputs from invocation
-        - cleaned_task: Task text with @skill mention removed
-    """
-    if not skills:
-        return None, None, None
-
-    # Parse skill invocation from task
-    invocation = parse_skill_invocation(task)
-    if not invocation:
-        return None, None, None
-
-    logger.info(f"📋 Detected @skill:{invocation.skill_name} invocation with inputs: {invocation.inputs}")
-
-    # Find matching skill by name (case-insensitive, handle hyphens/underscores)
-    normalized_name = invocation.skill_name.lower().replace('-', '_')
-    matching_skill = None
-    for skill in skills:
-        skill_normalized = skill.name.lower().replace('-', '_').replace(' ', '_')
-        if skill_normalized == normalized_name:
-            matching_skill = skill
-            break
-
-    if not matching_skill:
-        logger.warning(f"⚠️ No skill found matching '{invocation.skill_name}'")
-        return None, None, None
-
-    logger.info(f"📋 Found matching skill: {matching_skill.name} (id={matching_skill.id})")
-
-    # Check for stored plan in skill's steps (DAG workflow with agentic nodes)
-    # This is where plans are stored for workflow-based skills
-    for step in matching_skill.steps:
-        if not step.HasField('agentic_config'):
-            continue
-
-        agentic_config = step.agentic_config
-        if not agentic_config.HasField('plan'):
-            continue
-
-        if not agentic_config.plan.id:
-            continue
-
-        # Found a stored plan - hydrate it
-        stored_plan = Plan.from_stored_proto(agentic_config.plan)
-        logger.info(
-            f"📋 Found stored plan '{stored_plan.id}' in skill '{matching_skill.name}' "
-            f"step '{step.name}' with {len(stored_plan.steps)} step(s) - enabling AUTONOMOUS mode"
-        )
-        return stored_plan, invocation.inputs, invocation.cleaned_task
-
-    # For agentic skills (execution_type='agentic'), check if we can create a plan
-    # from the skill's instructions + prompt template
-    if matching_skill.execution_type in ('agentic', '', None):
-        # Check if skill has instructions that could be used as a plan
-        if matching_skill.instructions:
-            logger.info(
-                f"📋 Skill '{matching_skill.name}' is agentic type with instructions, "
-                "but no stored plan - will let executor handle it"
-            )
-            # Return None for plan but pass the inputs so they can be used
-            return None, invocation.inputs, invocation.cleaned_task
-
-    logger.info(f"📋 No stored plan found for skill '{matching_skill.name}'")
-    return None, invocation.inputs, invocation.cleaned_task
+# AIDEV-NOTE: detect_skill_plan_from_invocation removed - skills now loaded dynamically via API
+# @skill:name invocations are handled by skill_crud tool which fetches skill config at runtime
 
 
 class AgentStreamingHandler:
@@ -173,9 +92,6 @@ class AgentStreamingHandler:
         self.coordinator_handler = coordinator_handler
         # Capability registry for agent/skill discovery (replaces managed_agents_factory.capability_registry)
         self.capability_registry = capability_registry or CapabilityRegistry()
-
-        # Lazy-initialized inference client for operation skills
-        self._inference_client: Optional['HuggingFaceInferenceClient'] = None
 
         # Token usage from last execution (for ProcessMessage to capture)
         self.last_token_usage = None
@@ -478,48 +394,11 @@ class AgentStreamingHandler:
         if hasattr(agent, 'managed_agents') and agent.managed_agents:
             managed_agents = list(agent.managed_agents.values())
 
-        # Detect stored plan - first check for @skill:name invocation
+        # AIDEV-NOTE: Skills removed from gRPC - discovered and executed dynamically via skill_crud tool
+        # @skill:name invocations and stored plans are now handled by the skill_crud execute method
+        # which fetches skill config via API at runtime
         stored_plan = None
         skill_inputs: Optional[Dict[str, str]] = None
-
-        if agent_config and agent_config.skills:
-            # Check for @skill:name invocation in the task
-            invocation_plan, invocation_inputs, cleaned_task = detect_skill_plan_from_invocation(
-                current_task, list(agent_config.skills)
-            )
-            if invocation_plan:
-                stored_plan = invocation_plan
-                skill_inputs = invocation_inputs
-                # Use cleaned task (without @skill mention) for execution context
-                if cleaned_task:
-                    current_task = cleaned_task
-                logger.info(f"📋 Using stored plan from skill invocation, skill_inputs: {skill_inputs}")
-            elif invocation_inputs is not None:
-                # Skill invocation detected but no stored plan - pass inputs anyway
-                skill_inputs = invocation_inputs
-                if cleaned_task:
-                    current_task = cleaned_task
-                logger.info(f"📋 Skill invocation detected but no stored plan, passing inputs: {skill_inputs}")
-
-            # NOTE: Removed fallback to detect_stored_plan_from_skills() - stored plans
-            # should ONLY execute when explicitly invoked via @skill:name, not on every message
-
-        # Register user-defined skills to capability registry for discovery
-        if agent_config and agent_config.skills:
-            for skill in agent_config.skills:
-                skill_id = f"skill:{skill.id}"
-                # Only register if not already present
-                if not self.capability_registry.get(skill_id):
-                    self.capability_registry.register(Capability(
-                        id=skill_id,
-                        name=skill.name,
-                        type=CapabilityType.TOOL,
-                        domain="user",
-                        description=skill.description or f"User skill: {skill.name}",
-                        actions=["execute"],
-                        entities=["skill"],
-                    ))
-            logger.info(f"📝 Registered {len(list(agent_config.skills))} user skills to capability registry")
 
         # Coordinator handles all execution paths
         should_fall_through = skip_coordinator
@@ -755,41 +634,16 @@ class AgentStreamingHandler:
             logger.error("❌ Tool registry not available - tools cannot be loaded")
             return []
 
-        skill_executor = None
-        if agent_config and agent_config.skills:
-            skill_executor = self.skill_executor_service.create_executor_callback(
-                org_model=org_model,
-                return_message_parts=True,
-                api_key=api_key,
-                organization_id=org_id
-            )
-
-        inference_client = None
-        if agent_config and agent_config.skills:
-            has_operation_skills = any(
-                s.execution_type == 'operation'
-                for s in agent_config.skills
-            )
-            if has_operation_skills:
-                inference_client = self._get_or_create_inference_client()
-                logger.info(f"🔧 Created inference client for operation skills")
+        # AIDEV-NOTE: Skills removed from gRPC - executed dynamically via skill_crud tool
 
         return self.tool_loader.load_tools_from_configs(
             tool_configs=tools,
             api_key=api_key,
             api_key_mode="user",
-            agent_config=agent_config,
-            skill_executor=skill_executor,
             organization_id=org_id,
-            inference_client=inference_client
         )
 
-    def _get_or_create_inference_client(self) -> 'HuggingFaceInferenceClient':
-        """Get or create the HuggingFace inference client for operation skills."""
-        if self._inference_client is None:
-            from ..infrastructure.clients import HuggingFaceInferenceClient
-            self._inference_client = HuggingFaceInferenceClient()
-        return self._inference_client
+    # _get_or_create_inference_client removed - skills now executed dynamically via API
 
     async def _stream_text_chunks(self, text: str, chunk_size: int = 5) -> AsyncIterator[str]:
         """Stream text by word chunks to simulate streaming."""

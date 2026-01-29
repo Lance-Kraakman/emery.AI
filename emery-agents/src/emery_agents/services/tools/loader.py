@@ -15,7 +15,8 @@ import os
 from typing import Any, Dict, List, Optional, Callable
 from pathlib import Path
 
-from ...grpc.generated.agent_worker_pb2 import ToolConfig, AgentConfig, SkillConfig
+from ...grpc.generated.agent_worker_pb2 import ToolConfig, AgentConfig
+# SkillConfig removed - skills now loaded dynamically via API
 from ...reasoning.tools import (
     create_table_crud,
     create_field_crud,
@@ -30,8 +31,9 @@ from ...reasoning.tools import (
     create_app_crud,
     create_page_crud,
 )
-from ...reasoning.tools.execution import SkillTool
+# SkillTool removed - skills now executed dynamically via DynamicSkillTool
 from ...reasoning.tools.integrations import (
+    DynamicSkillTool,
     PipedreamTool,
     create_file_reader_tool,
     create_calculator_tool,
@@ -45,7 +47,7 @@ from ...reasoning.tools.integrations import (
     load_analysis_api_tool,
     load_process_api_tool,
 )
-from emery_agents.infrastructure.clients import HuggingFaceInferenceClient
+# HuggingFaceInferenceClient removed - skills now executed dynamically via API
 
 
 class UnifiedToolLoader:
@@ -128,25 +130,7 @@ class UnifiedToolLoader:
         """Get tool configuration by ID."""
         return self.tool_lookup.get(tool_id)
 
-    def _find_skill_by_id(self, skills: List[SkillConfig], skill_id: int) -> Optional[SkillConfig]:
-        """
-        Find a skill in the skills list by ID.
-
-        Args:
-            skills: List of SkillConfig proto objects
-            skill_id: ID of the skill to find
-
-        Returns:
-            SkillConfig if found, None otherwise
-        """
-        if not skills:
-            return None
-
-        for skill in skills:
-            if skill.id == skill_id:
-                return skill
-
-        return None
+    # _find_skill_by_id removed - skills now loaded dynamically via API
 
     def _get_crud_factory(self, tool_name: str) -> Optional[Callable[[str, str], Callable[..., str]]]:
         """
@@ -185,10 +169,7 @@ class UnifiedToolLoader:
         tool_config: ToolConfig,
         api_key: str = "",
         api_key_mode: str = "agent",
-        agent_config: Optional[AgentConfig] = None,
-        skill_executor: Optional[Callable[[SkillConfig, Dict[str, Any]], str]] = None,
         organization_id: Optional[int] = None,
-        inference_client: Optional["HuggingFaceInferenceClient"] = None,
         workspace_path: Optional[Path] = None
     ) -> Any:
         """
@@ -198,39 +179,28 @@ class UnifiedToolLoader:
             tool_config: Tool configuration from proto
             api_key: API key for tool authentication
             api_key_mode: API key mode ("agent" or "user")
-            agent_config: Optional AgentConfig containing skills list
-            skill_executor: Optional callback for executing skills
             organization_id: Optional org ID for RLS context
-            inference_client: Optional client for operation skills (direct HF API calls)
             workspace_path: Optional workspace path for sandboxed file operations
 
         Returns:
-            Tool instance (either regular tool or SkillTool)
+            Tool instance
         """
-        # Check if this is a skill_reference tool
-        if 'type' in tool_config.config and tool_config.config['type'] == 'skill_reference':
-            if not agent_config or not skill_executor:
-                raise ValueError(f"Skill reference tool '{tool_config.name}' requires agent_config and skill_executor")
+        # Handle skill_reference tools dynamically
+        # AIDEV-NOTE: skill_reference tools come from frontend @skill UI selection
+        # They contain skill_id - we create DynamicSkillTool which fetches via API
+        if tool_config.config.get('type') == 'skill_reference':
+            skill_id_str = tool_config.config.get('skill_id')
+            if not skill_id_str:
+                raise ValueError(f"skill_reference tool '{tool_config.name}' missing skill_id in config")
 
-            # Extract skill ID from config
-            if 'skill_id' not in tool_config.config:
-                raise ValueError(f"Skill reference tool '{tool_config.name}' missing skill_id in config")
+            skill_id = int(skill_id_str)
+            org_id = organization_id if organization_id else 0
 
-            skill_id = int(tool_config.config['skill_id'])
-
-            # Find the skill in agent_config.skills by ID
-            skill_config = self._find_skill_by_id(list(agent_config.skills), skill_id)
-            if not skill_config:
-                raise ValueError(f"Skill with ID {skill_id} not found in agent_config.skills")
-
-            # Create and return SkillTool with auth for output mappings
-            # Pass inference_client for operation skills (direct HF API calls)
-            return SkillTool(
-                skill_config,
-                skill_executor,
-                inference_client=inference_client,
+            print(f"[TOOL-LOADER] Creating DynamicSkillTool for skill_id={skill_id}")
+            return DynamicSkillTool(
+                skill_id=skill_id,
                 api_key=api_key,
-                organization_id=organization_id
+                organization_id=org_id,
             )
 
         # AIDEV-NOTE: Handle CRUD tools from database - they don't need unified_metadata
@@ -458,10 +428,7 @@ class UnifiedToolLoader:
         tool_configs: List[ToolConfig],
         api_key: Optional[str] = None,
         api_key_mode: str = "agent",
-        agent_config: Optional[AgentConfig] = None,
-        skill_executor: Optional[Callable[[SkillConfig, Dict[str, Any]], str]] = None,
         organization_id: Optional[int] = None,
-        inference_client: Optional["HuggingFaceInferenceClient"] = None,
         workspace_path: Optional[Path] = None
     ) -> List[Any]:
         """
@@ -470,14 +437,14 @@ class UnifiedToolLoader:
         Consolidates functionality from chat_processing_service._convert_tools_to_smolagents().
         Handles errors gracefully, returning successfully loaded tools.
 
+        AIDEV-NOTE: skill_executor, inference_client, agent_config removed (Jan 2026)
+        Skills are now executed dynamically via skill_crud tool which loads configs via API.
+
         Args:
             tool_configs: List of ToolConfig protobuf objects
             api_key: Optional API key for tool authentication
             api_key_mode: API key mode ("agent" or "user")
-            agent_config: Optional AgentConfig containing skills list
-            skill_executor: Optional callback for executing skills
             organization_id: Optional org ID for RLS context
-            inference_client: Optional client for operation skills (direct HF API calls)
             workspace_path: Optional workspace path for sandboxed file operations
 
         Returns:
@@ -505,10 +472,7 @@ class UnifiedToolLoader:
                     tool_config,
                     api_key=tool_api_key or "",
                     api_key_mode=api_key_mode,
-                    agent_config=agent_config,
-                    skill_executor=skill_executor,
                     organization_id=organization_id,
-                    inference_client=inference_client,
                     workspace_path=workspace_path
                 )
                 smolagents_tools.append(tool_instance)

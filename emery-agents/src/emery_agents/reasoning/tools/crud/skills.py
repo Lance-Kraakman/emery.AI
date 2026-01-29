@@ -2,6 +2,7 @@
 Skill CRUD operations as DSPy-compatible functions.
 
 Ported from tools/crud_tools.py (load_skill_crud).
+Includes dynamic execution via execute method.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ import dspy
 
 from ..http_client import make_request
 from ..mutation_guard import check_mutation_allowed
+from ..execution.dynamic_execution import execute_skill_by_id
 
 
 def create_skill_crud(api_key: str, org_id: str) -> dspy.Tool:
@@ -32,16 +34,16 @@ def create_skill_crud(api_key: str, org_id: str) -> dspy.Tool:
         agent_id: str | int | None = None,
         data: dict[str, Any] | None = None,
     ) -> str:
-        """Skill management: read, update, list.
+        """Skill management: read, update, list, execute.
 
         Skills have: name, description, instructions, inputs, outputs, tools, model.
         In instructions, reference inputs using {input_name} syntax.
 
         Args:
-            method: Operation - read, update, list
-            skill_id: Skill ID (required for read/update)
+            method: Operation - read, update, list, execute
+            skill_id: Skill ID (required for read/update/execute)
             agent_id: Agent ID to filter skills (optional for list)
-            data: Skill data for update (name, description, instructions, inputs, outputs, tools, model)
+            data: Skill data for update, or inputs for execute
 
         Returns:
             JSON string with result or error message
@@ -112,17 +114,35 @@ def create_skill_crud(api_key: str, org_id: str) -> dspy.Tool:
                 org_id=org_id,
             )
 
+        elif method == "execute":
+            if not skill_id_str:
+                return "ERROR: skill_id is required for execute operation"
+            if not skill_id_str.isdigit():
+                return (
+                    f"ERROR: skill_id must be a NUMBER, not '{skill_id_str}'. "
+                    f"First call skill_crud(method='list') to find skill IDs."
+                )
+
+            # Execute skill with dynamic credential resolution
+            inputs = data or {}
+            return execute_skill_by_id(
+                skill_id=int(skill_id_str),
+                inputs=inputs,
+                api_key=api_key,
+                org_id=org_id,
+            )
+
         else:
-            return f"ERROR: Unknown method: {method}. Supported: read, update, list"
+            return f"ERROR: Unknown method: {method}. Supported: read, update, list, execute"
 
     return dspy.Tool(
         func=skill_crud,
         name="skill_crud",
-        desc="Skill management: read, update, list. Skills have name, description, instructions, inputs, outputs, tools, model.",
+        desc="Skill management: read, update, list, execute. Skills have name, description, instructions, inputs, outputs, tools, model.",
         arg_desc={
-            "method": "Operation: read, update, list",
-            "skill_id": "Skill ID (required for read, update). Must be a number.",
+            "method": "Operation: read, update, list, execute",
+            "skill_id": "Skill ID (required for read, update, execute). Must be a number.",
             "agent_id": "Agent ID to filter skills (optional for list)",
-            "data": "Skill data for update: {name, description, instructions, inputs, outputs, tools, model}",
+            "data": "Skill data for update, or skill inputs for execute",
         },
     )

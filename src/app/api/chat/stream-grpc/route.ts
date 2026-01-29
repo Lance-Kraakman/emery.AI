@@ -29,8 +29,7 @@ import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 
 // Import existing chat services (DIContainer now auto-initializes)
 import { getChatApplicationService, getDynamicTableRepository, getAgentRepository, getToolConfigurationApplicationService, getUserRepository, getOrganizationRepository, getStorageQuotaApplicationService } from '@/ddd/application/di/container';
-import { getSkillEnrichmentService, getTaskRepository } from '@/ddd/application/di/getters';
-import { TaskId } from '@/ddd/domain/shared/value-objects';
+// getSkillEnrichmentService, getTaskRepository, TaskId removed - skills/tasks handled dynamically in Python
 import { TokenUsageApplicationService } from '@/ddd/application/services/billing/token-usage-application-service';
 import { getTokenUsageRepository } from '@/ddd/application/di/getters';
 import type { CreateChatDTO, SendMessageDTO, UpdateMessageDTO, ExecutionStep, ExecutionStepMetadata } from '@/app/dtos/chat.dto';
@@ -455,16 +454,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 5. Determine processing options from contextMetadata or request params
-    // Use normalized chatSession for consistent access across new/existing chats
-    let resolvedDomainType = chatSession?.contextMetadata?.contextType || domainType;
-    let resolvedDomainId = chatSession?.contextMetadata?.domainSchema?.id || domainId;
-
-    // Convert 'organization' contextType to null for processing
-    if (resolvedDomainType === 'organization') {
-      resolvedDomainType = null;
-      resolvedDomainId = null;
-    }
+    // 5. Domain context removed from execution
+    // agentId is now resolved from skill.agent_id in Python backend
+    // domainType/domainId kept only for chat session metadata (UI filtering)
 
     // 5.5 Get AI model: request model takes priority over chat/organization defaults
     console.log('[CHAT-GRPC-API] Fetching AI model configuration');
@@ -484,19 +476,14 @@ export async function POST(req: NextRequest) {
       resolved: defaultModel || 'will use system default'
     });
 
-    // 5.1 Separate skill references from regular tools BEFORE enrichment
-    // This prevents skill_reference type from being overwritten during enrichment
-    const skillReferenceTools = tools.filter((t: any) => t.config?.type === 'skill_reference');
-    const regularTools = tools.filter((t: any) => t.config?.type !== 'skill_reference');
+    // AIDEV-NOTE: Skills removed from gRPC - Python discovers and executes skills dynamically via API
+    // The skill_crud tool allows LLM to list and execute skills at runtime
+    const regularTools = tools;
 
-    console.log('[CHAT-GRPC-API] Separated tools:', {
+    console.log('[CHAT-GRPC-API] Tools:', {
       totalTools: tools.length,
-      skillReferences: skillReferenceTools.length,
-      regularTools: regularTools.length
+      toolNames: tools.map((t: any) => t.name)
     });
-
-    console.log('[CHAT-GRPC-API] [DEBUG] Skill reference tools:', JSON.stringify(skillReferenceTools, null, 2));
-    console.log('[CHAT-GRPC-API] [DEBUG] Regular tools:', JSON.stringify(regularTools.map(t => ({ name: t.name, configType: t.config?.type })), null, 2));
 
     // 5.1 Always fetch user API key for managed agents (skill_builder, etc.)
     // This is needed even when there are no tools configured
@@ -567,101 +554,19 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Combine enriched regular tools with unchanged skill references
-    const enrichedTools = [...enrichedRegularTools, ...skillReferenceTools];
-
-    // 5.2 Enrich skill references with full skill definitions using SkillEnrichmentService
-    let enrichedSkills: any[] = [];
-    // Use the already-separated skillReferenceTools (preserves type: 'skill_reference')
-    const skillTools = skillReferenceTools;
-
-    if (skillTools.length > 0) {
-      try {
-        const skillIds = skillTools.map(s => parseInt(s.config.skill_id, 10));
-        console.log('[CHAT-GRPC-API] Loading skills by ID:', skillIds);
-
-        // Use centralized SkillEnrichmentService for consistent skill loading
-        const skillEnrichmentService = getSkillEnrichmentService();
-        enrichedSkills = await skillEnrichmentService.enrichSkills(skillIds);
-
-        console.log('[CHAT-GRPC-API] Enriched skills:', enrichedSkills.length);
-        for (const skill of enrichedSkills) {
-          console.log('[CHAT-GRPC-API] Loaded skill by ID:', {
-            skillId: skill.id,
-            name: skill.name,
-            executionType: skill.executionType,
-            hasInstructions: !!skill.instructions,
-            toolCount: skill.tools?.length || 0,
-            contentCount: skill.content?.length || 0
-          });
-        }
-      } catch (error) {
-        console.error('[CHAT-GRPC-API] Error loading skills:', error);
-        // Continue without skills if enrichment fails
-      }
-    }
-
-    // Filter out skills from tools array (they go in separate skills array)
-    const nonSkillTools = enrichedTools.filter((t: any) => t.config?.type !== 'skill_reference');
-
-    // 5.4 Create task for skill invocation tracking
-    // AIDEV-NOTE: When skills are invoked via chat, create a task record for tracking
-    // Org-level tasks (agentId = null) for direct skill invocation
-    // Agent tasks (agentId set) when chatting with an agent that invokes skills
-    let chatTaskId: string | undefined;
-    if (enrichedSkills.length > 0) {
-      try {
-        const taskRepository = getTaskRepository();
-        const firstSkill = enrichedSkills[0];
-
-        // Determine agentId for task:
-        // 1. If chatting with agent (domainType === 'agent'), use that agent's ID
-        // 2. Otherwise, if skill belongs to an agent, use the skill's agentId
-        // 3. Otherwise, org-level task (agentId = null)
-        const taskAgentId = resolvedDomainType === 'agent' && resolvedDomainId
-          ? resolvedDomainId
-          : firstSkill.agentId ?? null;
-
-        const taskData = {
-          agentId: taskAgentId,
-          organizationId: organizationId,
-          name: `Execute ${firstSkill.name}`,
-          skillId: firstSkill.id,
-          instructions: { task: latestMessage },
-          status: 'pending',
-          createdBy: userId,
-        };
-
-        const createdTask = await taskRepository.create(taskData);
-        chatTaskId = createdTask.id.value;
-        console.log(`[CHAT-GRPC-API] Created task for skill execution: ${chatTaskId?.substring(0, 8)}...`);
-      } catch (taskError) {
-        console.error('[CHAT-GRPC-API] Failed to create task for skill execution:', taskError);
-        // Continue without task tracking if creation fails
-      }
-    }
-
-    // Determine effective domain context for credential resolution:
-    // If skill belongs to an agent, use agent context even if not explicitly chatting with agent
-    const effectiveDomainType = resolvedDomainType === 'agent'
-      ? 'agent'
-      : (enrichedSkills.length > 0 && enrichedSkills[0].agentId ? 'agent' : resolvedDomainType);
-    const effectiveDomainId = resolvedDomainType === 'agent'
-      ? resolvedDomainId
-      : (enrichedSkills.length > 0 && enrichedSkills[0].agentId ? enrichedSkills[0].agentId : resolvedDomainId);
+    // AIDEV-NOTE: Skills removed - Python discovers and executes skills dynamically via API
+    // Task creation for skill execution now happens in Python when skills are invoked
 
     const processingOptions: ChatProcessingOptions = {
-      domainType: effectiveDomainType,
-      domainId: effectiveDomainId,
-      tools: nonSkillTools, // DDD-enriched tools with user API key authentication (excluding skills)
-      skills: enrichedSkills, // Fully resolved skill definitions
+      tools: enrichedRegularTools, // DDD-enriched tools with user API key authentication
       defaultModel: defaultModel, // Organization's default AI model
-      userApiKey: userApiKey || undefined, // User API key for managed agents (skill_builder, etc.)
-      taskId: chatTaskId, // Task ID for execution tracking
+      userApiKey: userApiKey || undefined, // User API key for managed agents and skill_crud
     };
 
-    console.log('[CHAT-GRPC-API] [DEBUG] Processing options - nonSkillTools:', JSON.stringify(nonSkillTools.map(t => ({ name: t.name, configType: t.config?.type, configKeys: Object.keys(t.config || {}) })), null, 2));
-    console.log('[CHAT-GRPC-API] [DEBUG] Processing options - enrichedSkills:', JSON.stringify(enrichedSkills.map(s => ({ id: s.id, name: s.name })), null, 2));
+    console.log('[CHAT-GRPC-API] Processing options:', {
+      toolCount: enrichedRegularTools.length,
+      defaultModel: defaultModel || 'system default'
+    });
 
     // 6. Set up streaming response
     let fullAssistantResponse = '';
@@ -853,20 +758,7 @@ export async function POST(req: NextRequest) {
 
         const grpcClient = getChatProcessingClient(organizationId.toString());
 
-        // Update task status to in_progress before gRPC call (if task tracking is active)
-        if (chatTaskId) {
-          try {
-            const taskRepository = getTaskRepository();
-            await taskRepository.update(TaskId.fromString(chatTaskId), {
-              status: 'in_progress',
-              startedAt: new Date(),
-            });
-            console.log(`[CHAT-GRPC-API] Updated task ${chatTaskId.substring(0, 8)}... to in_progress`);
-          } catch (taskUpdateError) {
-            console.error('[CHAT-GRPC-API] Failed to update task to in_progress:', taskUpdateError);
-            // Continue even if task update fails
-          }
-        }
+        // AIDEV-NOTE: Task tracking removed - Python creates tasks when executing skills dynamically
 
         // Process message with gRPC service (now accepts MessagePart[])
         grpcClient.processMessage(
@@ -1002,20 +894,6 @@ export async function POST(req: NextRequest) {
                   }).catch((error) => {
                     console.error('[CHAT-GRPC-API] Failed to record token usage:', error);
                     // Don't fail the request if token recording fails
-                  });
-                }
-
-                // Update task status to completed (if task tracking is active)
-                if (chatTaskId) {
-                  const taskRepository = getTaskRepository();
-                  taskRepository.update(TaskId.fromString(chatTaskId), {
-                    status: 'completed',
-                    completedAt: new Date(),
-                  }).then(() => {
-                    console.log(`[CHAT-GRPC-API] Updated task ${chatTaskId?.substring(0, 8)}... to completed`);
-                  }).catch((taskUpdateError) => {
-                    console.error('[CHAT-GRPC-API] Failed to update task status:', taskUpdateError);
-                    // Don't fail the request if task update fails
                   });
                 }
 
@@ -1165,20 +1043,6 @@ export async function POST(req: NextRequest) {
                   chatApplicationService.updateMessage(errorUpdateDTO)
                     .then(() => console.log(`[CHAT-GRPC-API] Updated message with error status: ${assistantMessageId}`))
                     .catch((updateError) => console.error('[CHAT-GRPC-API] Failed to update message with error status:', updateError));
-                }
-
-                // Update task status to failed (if task tracking is active)
-                if (chatTaskId) {
-                  const taskRepository = getTaskRepository();
-                  taskRepository.update(TaskId.fromString(chatTaskId), {
-                    status: 'failed',
-                    error: response.error.errorMessage,
-                    completedAt: new Date(),
-                  }).then(() => {
-                    console.log(`[CHAT-GRPC-API] Updated task ${chatTaskId?.substring(0, 8)}... to failed`);
-                  }).catch((taskUpdateError) => {
-                    console.error('[CHAT-GRPC-API] Failed to update task status:', taskUpdateError);
-                  });
                 }
 
                 // Send error as SSE event with user-friendly message + hint

@@ -17,6 +17,7 @@ from .skills import create_skill_crud
 from .teams import create_team_crud
 from .views import create_view_crud
 from .apps import create_app_crud, create_page_crud
+from .tools import create_tool_crud
 
 __all__ = [
     "create_table_crud",
@@ -31,4 +32,5 @@ __all__ = [
     "create_view_crud",
     "create_app_crud",
     "create_page_crud",
+    "create_tool_crud",
 ]

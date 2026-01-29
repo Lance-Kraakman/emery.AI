@@ -79,7 +79,7 @@ export function mapAgentToProto(agent: Agent): AgentConfigProto {
     defaultModel: agent.defaultModel || '', // Agent-specific model override for task execution
     tools: [], // Tools are now defined per-task (in skills and schedule configurations)
     servers: [], // Servers removed from agent-level configuration
-    skills: [] // Skills queried separately from skills table
+    // skills removed - now loaded dynamically via API
   };
 }
 
@@ -220,17 +220,16 @@ export function createTaskRequest(params: {
     skillInputs: skillInputValues
   };
 
-  // Build the agent config, adding skill if provided
+  // Build the agent config (skills removed - loaded dynamically via API)
   const agentConfig = mapAgentToProto(params.agent);
 
-  // If skill is provided, add it to the agent config's skills array
+  // AIDEV-NOTE: Skills no longer added to AgentConfig - Python loads skills dynamically via API
+  // Skill ID is passed via instructionConfig or skillName for routing
   if (params.skill) {
-    agentConfig.skills = [mapSkillToProto(params.skill)];
-    console.log(`[PROTO-MAPPER] Added skill to agent config:`, {
+    console.log(`[PROTO-MAPPER] Skill will be loaded dynamically:`, {
       skillId: params.skill.id,
       skillName: params.skill.name,
-      executionType: params.skill.executionType,
-      hasTaskModelConfig: !!params.skill.taskModelConfig
+      executionType: params.skill.executionType
     });
   }
 

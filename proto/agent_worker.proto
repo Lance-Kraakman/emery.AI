@@ -120,6 +120,8 @@ message TokenUsage {
   double cost_usd = 5;               // Estimated cost in USD
 }
 // Complete agent configuration
+// AIDEV-NOTE: Skills removed - Python resolves skills dynamically via API
+// Skills are discovered and executed via skill_crud tool at runtime
 message AgentConfig {
   string name = 1;
   string role = 2;
@@ -127,8 +129,8 @@ message AgentConfig {
   string persona = 4;
   repeated ToolConfig tools = 5;
   repeated ServerConfig servers = 6;
-  repeated SkillConfig skills = 7;
-  string default_model = 8;              // Agent-specific default model (overrides organization default)
+  reserved 7;  // Was: repeated SkillConfig skills - removed for dynamic execution
+  string default_model = 8;
 }
 
 // AIDEV-NOTE: Simplified single-instruction skill model (removed multi-step workflow)
@@ -579,8 +581,8 @@ message ProcessMessageRequest {
   string user_id = 2;                // User identifier for context
   int32 organization_id = 3;         // Organization for multi-tenant routing
 
-  // Context for RAG and domain-specific processing
-  ChatContext context = 4;
+  // Field 4 removed: ChatContext context (domain context no longer used)
+  reserved 4;
 
   // Conversation history (only used if session not in memory - for restoration after restart/timeout)
   repeated HistoryMessage conversation_history = 5;
@@ -735,10 +737,7 @@ message CancelMessageResponse {
 }
 
 // Chat context configuration for AI processing
-message ChatContext {
-  string domain_type = 1;            // Domain type (tables, agents, files, teams, workflows)
-  int32 domain_id = 2;               // Domain entity identifier
-}
+// ChatContext message removed - agentId is now resolved from skill.agent_id
 
 // =============================================================================
 // Context Mapping Types (for agent/skill/step context tables)
