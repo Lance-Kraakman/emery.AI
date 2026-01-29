@@ -10,9 +10,11 @@ import {
   ChevronDown,
   FileText,
   Pencil,
+  HelpCircle,
 } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
   Collapsible,
@@ -22,8 +24,9 @@ import {
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { UnifiedChatInput } from '@/components/shared/UnifiedChatInput';
-import { generateSkillPlan } from '@/app/actions/skills';
+import { generateSkillPlan, type GeneratePlanResult } from '@/app/actions/skills';
 import type { StoredPlan, StoredPlanStep } from '@/ddd/domain/skills/entities/skill';
+import type { AwaitingInput } from '@/ddd/infrastructure/grpc/generated/agent_worker';
 import type { ChatVariable } from '../hooks/useChatVariables';
 import { PlanStepCard } from './PlanStepCard';
 import type { KnownVariable } from './TemplateRenderer';
@@ -79,6 +82,12 @@ export function PlanBuilderSection({
   const [isGenerating, setIsGenerating] = useState(false);
   const [pendingPlan, setPendingPlan] = useState<StoredPlan | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  // Feedback input for regeneration
+  const [regenerateFeedback, setRegenerateFeedback] = useState('');
+  const [showFeedbackInput, setShowFeedbackInput] = useState(false);
+  // Clarifying questions from backend
+  const [pendingQuestions, setPendingQuestions] = useState<AwaitingInput | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
 
   // Determine current state
   const getState = (): PlanState => {
@@ -91,19 +100,41 @@ export function PlanBuilderSection({
   const state = getState();
 
   // Handle generating a plan
-  const handleGeneratePlan = useCallback(async () => {
+  const handleGeneratePlan = useCallback(async (
+    feedback?: string,
+    answers?: { questionId: string; answer: string }[]
+  ) => {
     if (!skillId || !instructions?.trim()) {
       toast.error('Save the skill and add instructions first');
       return;
     }
 
     setIsGenerating(true);
+    setShowFeedbackInput(false);
+    setRegenerateFeedback('');
+
     try {
-      const result = await generateSkillPlan(skillId, instructions);
-      if (result.success && result.data) {
+      const result: GeneratePlanResult = await generateSkillPlan(
+        skillId,
+        instructions,
+        pendingPlan || plan || undefined,  // previousPlan for regeneration
+        feedback,
+        sessionId || undefined,
+        answers
+      );
+
+      if ('questions' in result && result.questions) {
+        // Backend needs clarification
+        setPendingQuestions(result.questions);
+        setSessionId(result.sessionId || null);
+        toast.info('Please answer the clarifying questions');
+      } else if (result.success && 'data' in result) {
+        // Plan generated successfully
         setPendingPlan(result.data);
+        setPendingQuestions(null);
+        setSessionId(null);
         toast.success(`Plan generated with ${result.data.steps?.length || 0} steps`);
-      } else {
+      } else if (!result.success) {
         toast.error(result.error || 'Failed to generate plan');
       }
     } catch (error) {
@@ -112,7 +143,7 @@ export function PlanBuilderSection({
     } finally {
       setIsGenerating(false);
     }
-  }, [skillId, instructions]);
+  }, [skillId, instructions, pendingPlan, plan, sessionId]);
 
   // Handle approving the pending plan (saves it)
   const handleApprovePlan = useCallback(() => {
@@ -124,10 +155,9 @@ export function PlanBuilderSection({
     }
   }, [pendingPlan, onPlanChange]);
 
-  // Handle regenerating (discard pending and regenerate)
-  const handleRegenerate = useCallback(async () => {
-    setPendingPlan(null);
-    await handleGeneratePlan();
+  // Handle regenerating with optional feedback
+  const handleRegenerate = useCallback(async (feedback?: string) => {
+    await handleGeneratePlan(feedback);
   }, [handleGeneratePlan]);
 
   // Handle editing saved plan (go back to instructions)
@@ -209,16 +239,47 @@ export function PlanBuilderSection({
                 <CheckCircle2 className="h-3 w-3 mr-1" />
                 Approve Plan
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7"
-                onClick={handleRegenerate}
-                disabled={isReadOnly}
-              >
-                <RefreshCw className="h-3 w-3 mr-1" />
-                Regenerate
-              </Button>
+              {showFeedbackInput ? (
+                <div className="flex items-center gap-1">
+                  <Input
+                    value={regenerateFeedback}
+                    onChange={(e) => setRegenerateFeedback(e.target.value)}
+                    placeholder="What should change?"
+                    className="h-7 text-xs w-40"
+                    onKeyDown={(e) => e.key === 'Enter' && handleRegenerate(regenerateFeedback)}
+                    autoFocus
+                  />
+                  <Button
+                    size="sm"
+                    className="h-7 px-2"
+                    onClick={() => handleRegenerate(regenerateFeedback)}
+                  >
+                    Go
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 w-7 p-0"
+                    onClick={() => {
+                      setShowFeedbackInput(false);
+                      setRegenerateFeedback('');
+                    }}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7"
+                  onClick={() => setShowFeedbackInput(true)}
+                  disabled={isReadOnly}
+                >
+                  <RefreshCw className="h-3 w-3 mr-1" />
+                  Regenerate
+                </Button>
+              )}
             </>
           )}
         </div>
@@ -290,7 +351,7 @@ export function PlanBuilderSection({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={handleGeneratePlan}
+                  onClick={() => handleGeneratePlan()}
                   disabled={!instructions?.trim() || !skillId || isReadOnly}
                 >
                   <Wand2 className="h-3 w-3 mr-1.5" />
@@ -332,6 +393,59 @@ export function PlanBuilderSection({
 
       {/* Pending plan display (ready state) */}
       {state === 'ready' && pendingPlan && renderPlanDisplay(pendingPlan, false)}
+
+      {/* Clarifying questions from backend */}
+      {pendingQuestions && (
+        <div className="border rounded-lg p-4 mt-3 bg-amber-50/30 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800">
+          <div className="flex items-center gap-2 mb-2">
+            <HelpCircle className="h-4 w-4 text-amber-500" />
+            <span className="text-sm font-medium">{pendingQuestions.title || 'Clarifying Questions'}</span>
+          </div>
+          <p className="text-xs text-muted-foreground whitespace-pre-wrap mb-3">
+            {pendingQuestions.content}
+          </p>
+          {pendingQuestions.options && pendingQuestions.options.length > 0 && (
+            <div className="space-y-2">
+              {pendingQuestions.options.map((option) => (
+                <Button
+                  key={option.id}
+                  variant="outline"
+                  size="sm"
+                  className="mr-2 text-xs"
+                  onClick={() => handleGeneratePlan(undefined, [{ questionId: option.id, answer: option.label }])}
+                  disabled={isGenerating}
+                >
+                  {option.label}
+                </Button>
+              ))}
+            </div>
+          )}
+          <div className="mt-3 flex items-center gap-2">
+            <Input
+              placeholder="Or type your answer..."
+              className="h-8 text-xs flex-1"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const input = e.currentTarget;
+                  handleGeneratePlan(undefined, [{ questionId: 'text_response', answer: input.value }]);
+                }
+              }}
+              disabled={isGenerating}
+            />
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8"
+              onClick={() => {
+                setPendingQuestions(null);
+                setSessionId(null);
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

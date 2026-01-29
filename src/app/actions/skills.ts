@@ -16,9 +16,9 @@ import type { InputDefinition, OutputDefinition, ToolConfigDTO } from '@/app/map
 import type { SkillDTO } from '@/app/mappers/skill-mapper';
 import { s3SkillAttachmentService } from '@/ddd/infrastructure/multimodal/s3-skill-attachment-service';
 import type { AttachmentMetadata, AttachmentType } from '@/ddd/domain/multimodal/value-objects/attachment-metadata';
-import type { MessagePart } from '@/ddd/infrastructure/grpc/generated/agent_worker';
+import type { MessagePart, AwaitingInput } from '@/ddd/infrastructure/grpc/generated/agent_worker';
 import type { SkillExecutionType, ToolExecutionConfig, WriteConfig, ReadConfig, SkillStep, CanvasMetadata, StoredPlan } from '@/ddd/domain/skills/entities/skill';
-import { getChatProcessingClient } from '@/ddd/infrastructure/grpc/chat-processing-client';
+import { getChatProcessingClient, type ClarificationAnswer } from '@/ddd/infrastructure/grpc/chat-processing-client';
 
 /**
  * Server Actions for Skill Management
@@ -1299,6 +1299,14 @@ export async function transferSkillToAgent(
 }
 
 /**
+ * Result type for generateSkillPlan - can return plan, questions, or error
+ */
+export type GeneratePlanResult =
+  | { success: true; data: StoredPlan }
+  | { success: true; questions: AwaitingInput; sessionId: string }
+  | { success: false; error: string };
+
+/**
  * Generate an autonomous execution plan for skill instructions.
  *
  * Uses gRPC streaming to call the Python planning service which creates a structured
@@ -1312,14 +1320,18 @@ export async function transferSkillToAgent(
  * @param instructions - The instructions to generate a plan for
  * @param previousPlan - Optional previous plan for regeneration with feedback
  * @param userFeedback - Optional user feedback for plan regeneration
- * @returns StoredPlan that can be saved to the skill
+ * @param sessionId - Optional session ID for resuming after clarification questions
+ * @param answers - Optional answers to clarification questions
+ * @returns StoredPlan, clarification questions, or error
  */
 export async function generateSkillPlan(
   skillId: number,
   instructions: string,
   previousPlan?: StoredPlan,
-  userFeedback?: string
-): Promise<Result<StoredPlan>> {
+  userFeedback?: string,
+  sessionId?: string,
+  answers?: ClarificationAnswer[]
+): Promise<GeneratePlanResult> {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id || !session?.user?.currentOrganizationId) {
@@ -1372,8 +1384,9 @@ export async function generateSkillPlan(
     // AIDEV-NOTE: Using object wrapper to capture results from callback
     const result: {
       plan: { planJson: string; planId: string; planningTimeMs: number } | null;
+      questions: AwaitingInput | null;
       error: string | null;
-    } = { plan: null, error: null };
+    } = { plan: null, questions: null, error: null };
 
     await grpcClient.streamGeneratePlan(
       {
@@ -1398,11 +1411,17 @@ export async function generateSkillPlan(
         // Pass previous plan and feedback for regeneration
         previousPlanJson: previousPlan ? JSON.stringify(previousPlan) : undefined,
         userFeedback: userFeedback,
+        // Pass session ID and answers for resuming after questions
+        sessionId: sessionId,
+        answers: answers,
       },
       (response) => {
         // Handle streaming events
         if (response.type === 'plan_complete' && response.planComplete) {
           result.plan = response.planComplete;
+        } else if (response.type === 'awaiting_input' && response.awaitingInput) {
+          // Backend is asking clarifying questions
+          result.questions = response.awaitingInput;
         } else if (response.type === 'error' && response.error) {
           result.error = response.error.errorMessage;
         }
@@ -1416,6 +1435,16 @@ export async function generateSkillPlan(
     if (result.error) {
       console.error('[generateSkillPlan] gRPC error:', result.error);
       return { success: false, error: result.error };
+    }
+
+    // If backend returned clarifying questions, return them to UI
+    if (result.questions) {
+      console.log(`[generateSkillPlan] Returning clarifying questions (sessionId: ${result.questions.sessionId})`);
+      return {
+        success: true,
+        questions: result.questions,
+        sessionId: result.questions.sessionId || '',
+      };
     }
 
     if (!result.plan) {

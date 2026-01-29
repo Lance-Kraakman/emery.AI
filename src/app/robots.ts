@@ -47,6 +47,46 @@ export default function robots(): MetadataRoute.Robots {
         userAgent: 'cohere-ai',
         disallow: '/',
       },
+      // Meta/Facebook AI
+      {
+        userAgent: 'Meta-ExternalAgent',
+        disallow: '/',
+      },
+      // Perplexity AI
+      {
+        userAgent: 'PerplexityBot',
+        disallow: '/',
+      },
+      // You.com AI
+      {
+        userAgent: 'YouBot',
+        disallow: '/',
+      },
+      // SEO spam/scraper bots
+      {
+        userAgent: 'AhrefsBot',
+        disallow: '/',
+      },
+      {
+        userAgent: 'SemrushBot',
+        disallow: '/',
+      },
+      {
+        userAgent: 'MJ12bot',
+        disallow: '/',
+      },
+      {
+        userAgent: 'DotBot',
+        disallow: '/',
+      },
+      {
+        userAgent: 'PetalBot',
+        disallow: '/',
+      },
+      {
+        userAgent: 'Scrapy',
+        disallow: '/',
+      },
     ],
   }
 }
