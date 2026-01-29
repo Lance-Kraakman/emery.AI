@@ -16,6 +16,7 @@ from langgraph.types import Command
 from ..services.execution.events import (
     ExecutionCompletedEvent,
     FinalSynthesisEvent,
+    PlanCreatedEvent,
 )
 from ..entities.models.plan import Plan
 from ..entities.execution_context import ExecutionContext
@@ -87,6 +88,21 @@ def _format_dict_questions(questions: List[dict[str, Any]]) -> List[dict[str, An
     return questions_data
 
 
+def _format_plan_for_message(plan: 'Plan') -> str:
+    """Format plan as markdown for the message body."""
+    lines = [f"## Plan: {plan.goal}\n"]
+    if plan.context:
+        lines.append(f"**Current State:** {plan.context}\n")
+    if plan.analysis:
+        lines.append(f"**Analysis:** {plan.analysis}\n")
+    lines.append("**Steps:**")
+    for i, step in enumerate(plan.steps, 1):
+        lines.append(f"{i}. {step.description}")
+        if step.tool_call:
+            lines.append(f"   - Tool: `{step.tool_call}`")
+    return "\n".join(lines)
+
+
 def _get_or_create_session_graph(
     thread_id: str,
     runtime: Optional[RuntimeContext] = None,
@@ -153,60 +169,6 @@ class CoordinatorStreamingHandler:
 
         return result.mode
 
-    async def _handle_direct_response(
-        self,
-        task: str,
-        context: 'ExecutionContext',
-        org_model: Optional[str],
-    ) -> AsyncIterator[Any]:
-        """
-        Handle simple tasks with direct LLM response (no planning).
-
-        Yields streaming events for a simple completion without tools/planning.
-        """
-        logger.info(f"📝 Direct mode: handling task without planning")
-
-        try:
-            # Use simple LLM completion
-            lm = get_dspy_lm(org_model)
-
-            with dspy.context(lm=lm):
-                # Simple predict (no tools, no planning)
-                predictor = dspy.Predict("task -> response")
-                result = predictor(task=task)
-                response = result.response
-
-            # Stream the response
-            yield {
-                "type": "step_started",
-                "data": {
-                    "step_index": 0,
-                    "description": "Responding directly",
-                }
-            }
-
-            yield {
-                "type": "message",
-                "data": {"content": response}
-            }
-
-            yield {
-                "type": "step_completed",
-                "data": {
-                    "step_index": 0,
-                    "result": response,
-                }
-            }
-
-            yield {
-                "type": "done",
-                "data": {"final_answer": response}
-            }
-
-        except Exception as e:
-            logger.error(f"Direct response failed: {e}")
-            yield create_error_response(f"Failed to generate response: {e}")
-
     async def stream_response(
         self,
         context: 'ExecutionContext',
@@ -232,6 +194,7 @@ class CoordinatorStreamingHandler:
         handles state management internally.
         """
         thread_id = session_id or "default"
+        raw_task = task  # Preserve original before memory injection
 
         # Build RuntimeContext with non-serializable objects
         assert context.tool_provider is not None, "tool_provider required"
@@ -292,10 +255,12 @@ class CoordinatorStreamingHandler:
 
         if has_pending_interrupt:
             # === RESUME: Graph is paused at interrupt, resume with user's response ===
-            if is_approval_response(task):
+            # Use raw_task (before memory injection) so "approve" isn't corrupted
+            # by appended memory context like "[Relevant memories]\n..."
+            if is_approval_response(raw_task):
                 response = "approve"
             else:
-                response = task
+                response = raw_task
 
             async for event in self._resume_graph(
                 graph=graph,
@@ -317,10 +282,10 @@ class CoordinatorStreamingHandler:
                 )
 
                 if execution_mode == TaskExecutionMode.DIRECT:
-                    # Simple task - respond directly without planning
-                    async for event in self._handle_direct_response(
-                        task=task,
+                    # Direct execution with tools (skill_crud, etc.)
+                    async for event in self._handle_direct_execution(
                         context=context,
+                        task=task,
                         org_model=org_model,
                     ):
                         yield event
@@ -441,7 +406,7 @@ class CoordinatorStreamingHandler:
         awaiting_ui_sent = False  # Track whether we sent an awaiting_input UI event
 
         try:
-            async for event_chunk in graph.astream(input_data, config=config):
+            async for event_chunk in graph.astream(input_data, config=config, stream_mode="updates"):
                 for node_name, state_update in event_chunk.items():
                     if node_name == "__end__":
                         continue
@@ -464,6 +429,9 @@ class CoordinatorStreamingHandler:
                     for event in node_events:
                         converted = convert_coordinator_event(event, step_index)
                         if converted:
+                            # For plan events, yield plan content as message body
+                            if isinstance(event, PlanCreatedEvent) and event.plan:
+                                yield {"type": "content_chunk", "content": _format_plan_for_message(event.plan)}
                             yield converted
                             step_index += 1
 

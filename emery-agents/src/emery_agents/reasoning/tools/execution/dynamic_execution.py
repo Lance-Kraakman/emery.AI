@@ -90,7 +90,7 @@ def execute_skill_by_id(
     # 4. Create executor and execute in-process
     try:
         from ....services.tools.loader import UnifiedToolLoader
-        from ....infrastructure.model_provider import ModelProvider
+        from ....services.models.provider import ModelProvider
         from ....services.agents.factory import AgentFactory
         from ....services.skills.executor import SkillExecutorService
 
