@@ -8,18 +8,16 @@ supporting dedicated endpoints, Inference API, and Google Gemini models.
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 
 import dspy
 
 from emery_agents.services.models import (
     ModelTier,
+    ModelMetadata,
     get_default_model_for_tier,
     get_model_metadata,
 )
-
-if TYPE_CHECKING:
-    from emery_agents.services.models import ModelMetadata
 
 
 class DSPyModelProvider:

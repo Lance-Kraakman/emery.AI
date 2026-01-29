@@ -9,7 +9,7 @@ import asyncio
 import json
 import logging
 from pathlib import Path
-from typing import AsyncIterator, Optional, List, Dict, Any, Tuple, TYPE_CHECKING
+from typing import AsyncIterator, Optional, List, Dict, Any, Tuple
 
 from ..reasoning.tools.execution import SkillTool
 from ..tools.tool_modes import filter_tools_for_mode, ToolMode
@@ -23,6 +23,12 @@ from ..types import ExecutionMode
 from ..entities.models.plan import Plan, create_plan
 from ..entities.models.capability import Capability, CapabilityType
 from ..services.tools.provider import ToolProvider
+from ..services.context.session_manager import SessionManager
+from ..services.models.provider import ModelProvider
+from ..services.tools.loader import UnifiedToolLoader
+from ..services.skills.executor import SkillExecutorService
+from ..services.plan_service import PlanService
+from ..infrastructure.clients import HuggingFaceInferenceClient
 from ..utils.error_classifier import classify_error
 from ..utils.error_messages import ErrorSeverity
 from ..utils.mention_parser import parse_agent_mention, parse_skill_invocation
@@ -40,16 +46,8 @@ from .response_types import (
     AwaitingInputResponseDict,
     StreamResponseDict,
 )
-
-if TYPE_CHECKING:
-    from ..services.context.session_manager import SessionManager
-    from ..services.models.provider import ModelProvider
-    from ..services.tools.loader import UnifiedToolLoader
-    from ..services.skills.executor import SkillExecutorService
-    from ..services.plan_service import PlanService
-    from ..infrastructure.clients import HuggingFaceInferenceClient
-    from .generated import agent_worker_pb2
-    from .coordinator_streaming import CoordinatorStreamingHandler
+from .generated import agent_worker_pb2
+from .coordinator_streaming import CoordinatorStreamingHandler
 
 from .mappers.message_types import ChatMessage
 from .agents.agent_models import ChatAgent, AgentDescriptor, get_builder_descriptors

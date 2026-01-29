@@ -6,7 +6,7 @@ This module handles database schema creation.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import dspy
 
@@ -15,9 +15,6 @@ from emery_agents.reasoning.signatures.agents import (
     ExistingTable,
     TableSchema,
 )
-
-if TYPE_CHECKING:
-    pass
 
 
 class SchemaBuilderModule(dspy.Module):  # type: ignore[misc]

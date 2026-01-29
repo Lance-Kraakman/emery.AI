@@ -10,8 +10,6 @@ structure plan steps for it.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from . import (
     agent_builder,
     app_builder,
@@ -22,9 +20,6 @@ from . import (
     table_builder,
     view_builder,
 )
-
-if TYPE_CHECKING:
-    pass
 
 
 # Mapping from capability ID to planning guidance

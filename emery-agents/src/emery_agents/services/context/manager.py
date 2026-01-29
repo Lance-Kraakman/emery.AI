@@ -14,18 +14,17 @@ to prevent context leakage between async requests.
 
 import contextvars
 from contextlib import contextmanager
-from typing import Optional, TYPE_CHECKING
+from typing import Optional
 
-if TYPE_CHECKING:
-    from ...entities.execution_context import ExecutionContext
+from ...entities.execution_context import ExecutionContext
 
 
 # Async-safe context variable for ExecutionContext
-_context_var: contextvars.ContextVar[Optional["ExecutionContext"]] = \
+_context_var: contextvars.ContextVar[Optional[ExecutionContext]] = \
     contextvars.ContextVar('execution_context', default=None)
 
 
-def set_current_context(context: Optional["ExecutionContext"]) -> None:
+def set_current_context(context: Optional[ExecutionContext]) -> None:
     """Store execution context for skill access in current async context."""
     _context_var.set(context)
 

@@ -6,14 +6,11 @@ Provides helpers for Human-In-The-Loop workflows with DSPy modules.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from ..reasoning.modules import InterruptRequested, TrackedStep, StepType
 from ..services.context import get_current_context
 from ..tools.tool_modes import ToolMode
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 

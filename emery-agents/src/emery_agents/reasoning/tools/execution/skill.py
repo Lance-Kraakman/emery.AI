@@ -14,12 +14,11 @@ import os
 import re
 import threading
 from io import BytesIO
-from typing import TYPE_CHECKING, Any, Callable
+from typing import Any, Callable, TYPE_CHECKING
 
 from jinja2 import Template
 
 from ....entities.output_mapping import OutputMappingConfig
-from ....entities.task import SkillOutputValue
 from ....grpc.generated.agent_worker_pb2 import SkillConfig
 from ....services.data.file_processor import download_file
 from ....services.data.image_processor import ImageProcessor
@@ -28,6 +27,7 @@ from ....types import SkillExecutionResult
 from ....utils import run_async_in_thread
 
 if TYPE_CHECKING:
+    from ....entities.task import SkillOutputValue
     from ....infrastructure.clients import HuggingFaceInferenceClient
 
 logger = logging.getLogger(__name__)

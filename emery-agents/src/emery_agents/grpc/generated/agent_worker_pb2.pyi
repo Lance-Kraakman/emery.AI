@@ -96,6 +96,22 @@ class TaskProgress(_message.Message):
     token_usage: TokenUsage
     def __init__(self, task_id: _Optional[str] = ..., status: _Optional[_Union[TaskStatus, str]] = ..., output_json: _Optional[str] = ..., error_message: _Optional[str] = ..., timestamp_ms: _Optional[int] = ..., progress_percent: _Optional[float] = ..., token_usage: _Optional[_Union[TokenUsage, _Mapping]] = ...) -> None: ...
 
+class ChatTaskProgress(_message.Message):
+    __slots__ = ("task_id", "step", "total_steps", "step_name", "status", "output_json")
+    TASK_ID_FIELD_NUMBER: _ClassVar[int]
+    STEP_FIELD_NUMBER: _ClassVar[int]
+    TOTAL_STEPS_FIELD_NUMBER: _ClassVar[int]
+    STEP_NAME_FIELD_NUMBER: _ClassVar[int]
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    OUTPUT_JSON_FIELD_NUMBER: _ClassVar[int]
+    task_id: str
+    step: int
+    total_steps: int
+    step_name: str
+    status: str
+    output_json: str
+    def __init__(self, task_id: _Optional[str] = ..., step: _Optional[int] = ..., total_steps: _Optional[int] = ..., step_name: _Optional[str] = ..., status: _Optional[str] = ..., output_json: _Optional[str] = ...) -> None: ...
+
 class CancelTaskRequest(_message.Message):
     __slots__ = ("task_id", "reason")
     TASK_ID_FIELD_NUMBER: _ClassVar[int]
@@ -797,7 +813,7 @@ class ClarificationAnswer(_message.Message):
     def __init__(self, question_id: _Optional[str] = ..., answer: _Optional[str] = ...) -> None: ...
 
 class ProcessMessageRequest(_message.Message):
-    __slots__ = ("message_parts", "user_id", "organization_id", "context", "conversation_history", "agent_config", "model", "message_id", "session_id", "user_api_key")
+    __slots__ = ("message_parts", "user_id", "organization_id", "context", "conversation_history", "agent_config", "model", "message_id", "session_id", "user_api_key", "task_id")
     MESSAGE_PARTS_FIELD_NUMBER: _ClassVar[int]
     USER_ID_FIELD_NUMBER: _ClassVar[int]
     ORGANIZATION_ID_FIELD_NUMBER: _ClassVar[int]
@@ -808,6 +824,7 @@ class ProcessMessageRequest(_message.Message):
     MESSAGE_ID_FIELD_NUMBER: _ClassVar[int]
     SESSION_ID_FIELD_NUMBER: _ClassVar[int]
     USER_API_KEY_FIELD_NUMBER: _ClassVar[int]
+    TASK_ID_FIELD_NUMBER: _ClassVar[int]
     message_parts: _containers.RepeatedCompositeFieldContainer[MessagePart]
     user_id: str
     organization_id: int
@@ -818,23 +835,28 @@ class ProcessMessageRequest(_message.Message):
     message_id: str
     session_id: str
     user_api_key: str
-    def __init__(self, message_parts: _Optional[_Iterable[_Union[MessagePart, _Mapping]]] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[int] = ..., context: _Optional[_Union[ChatContext, _Mapping]] = ..., conversation_history: _Optional[_Iterable[_Union[HistoryMessage, _Mapping]]] = ..., agent_config: _Optional[_Union[AgentConfig, _Mapping]] = ..., model: _Optional[str] = ..., message_id: _Optional[str] = ..., session_id: _Optional[str] = ..., user_api_key: _Optional[str] = ...) -> None: ...
+    task_id: str
+    def __init__(self, message_parts: _Optional[_Iterable[_Union[MessagePart, _Mapping]]] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[int] = ..., context: _Optional[_Union[ChatContext, _Mapping]] = ..., conversation_history: _Optional[_Iterable[_Union[HistoryMessage, _Mapping]]] = ..., agent_config: _Optional[_Union[AgentConfig, _Mapping]] = ..., model: _Optional[str] = ..., message_id: _Optional[str] = ..., session_id: _Optional[str] = ..., user_api_key: _Optional[str] = ..., task_id: _Optional[str] = ...) -> None: ...
 
 class ProcessMessageResponse(_message.Message):
-    __slots__ = ("content_chunk", "complete", "error", "step_progress", "awaiting_input", "timestamp")
+    __slots__ = ("content_chunk", "complete", "error", "step_progress", "awaiting_input", "timestamp", "task_id", "task_progress")
     CONTENT_CHUNK_FIELD_NUMBER: _ClassVar[int]
     COMPLETE_FIELD_NUMBER: _ClassVar[int]
     ERROR_FIELD_NUMBER: _ClassVar[int]
     STEP_PROGRESS_FIELD_NUMBER: _ClassVar[int]
     AWAITING_INPUT_FIELD_NUMBER: _ClassVar[int]
     TIMESTAMP_FIELD_NUMBER: _ClassVar[int]
+    TASK_ID_FIELD_NUMBER: _ClassVar[int]
+    TASK_PROGRESS_FIELD_NUMBER: _ClassVar[int]
     content_chunk: ContentChunk
     complete: ProcessingComplete
     error: ProcessingError
     step_progress: StepProgress
     awaiting_input: AwaitingInput
     timestamp: int
-    def __init__(self, content_chunk: _Optional[_Union[ContentChunk, _Mapping]] = ..., complete: _Optional[_Union[ProcessingComplete, _Mapping]] = ..., error: _Optional[_Union[ProcessingError, _Mapping]] = ..., step_progress: _Optional[_Union[StepProgress, _Mapping]] = ..., awaiting_input: _Optional[_Union[AwaitingInput, _Mapping]] = ..., timestamp: _Optional[int] = ...) -> None: ...
+    task_id: str
+    task_progress: ChatTaskProgress
+    def __init__(self, content_chunk: _Optional[_Union[ContentChunk, _Mapping]] = ..., complete: _Optional[_Union[ProcessingComplete, _Mapping]] = ..., error: _Optional[_Union[ProcessingError, _Mapping]] = ..., step_progress: _Optional[_Union[StepProgress, _Mapping]] = ..., awaiting_input: _Optional[_Union[AwaitingInput, _Mapping]] = ..., timestamp: _Optional[int] = ..., task_id: _Optional[str] = ..., task_progress: _Optional[_Union[ChatTaskProgress, _Mapping]] = ...) -> None: ...
 
 class AwaitingInput(_message.Message):
     __slots__ = ("input_type", "title", "content", "options", "plan_json", "session_id")

@@ -16,6 +16,7 @@ Submodules:
 - execution/: Execution state and handlers
 - planning/: Plan generation and management
 - sandbox/: Safe code execution
+- tasks/: Task execution (unified for gRPC and chat)
 """
 
 # Models (LLM/Model management)
@@ -32,6 +33,12 @@ from .data import ResultStorageService, ResultStorageServiceFactory, StoredResul
 
 # Agents (agent-related services)
 from .agents import AgentExecutor, AgentAPIService, AgentData, SkillData
+
+# Tasks (unified task execution)
+from .tasks import TaskExecutor
+
+# Credentials (shared credential types)
+from .credentials import ResolvedCredentials, CredentialSource
 
 # Root-level services
 from .plan_service import PlanService, PlanServiceFactory
@@ -93,4 +100,9 @@ __all__ = [
     "create_session_graph",
     "create_session_plan_only_graph",
     "RuntimeContext",
+    # Tasks
+    "TaskExecutor",
+    # Credentials
+    "ResolvedCredentials",
+    "CredentialSource",
 ]

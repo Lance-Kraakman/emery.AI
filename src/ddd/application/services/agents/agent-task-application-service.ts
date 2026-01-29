@@ -103,7 +103,7 @@ export class AgentTaskApplicationService {
       // Save task using create method
       const taskData = {
         id: task.id.value,
-        agentId: task.agentId.value,
+        agentId: task.agentId?.value ?? null, // Handle nullable agentId
         organizationId: task.organizationId.value,
         name: task.name,
         instructions: task.instructions,
@@ -159,19 +159,28 @@ export class AgentTaskApplicationService {
         };
       }
 
-      // 2. Load and validate agent
+      // 2. Load and validate agent (if agent-level task)
+      // AIDEV-NOTE: Org-level tasks (agentId is null) require different execution path
+      if (!task.agentId) {
+        // TODO: Implement org-level task execution via TaskExecutor
+        return {
+          success: false,
+          error: `Org-level task execution not yet implemented via this path. Use ProcessMessage with task_id.`
+        };
+      }
+
       const agent = await this.agentRepository.findById(task.agentId);
       if (!agent) {
         return {
           success: false,
-          error: `Agent ${task.agentId} not found`
+          error: `Agent ${task.agentId.value} not found`
         };
       }
 
       if (!isActiveAgent(agent)) {
         return {
           success: false,
-          error: `Agent ${task.agentId} is not active`
+          error: `Agent ${task.agentId.value} is not active`
         };
       }
 
@@ -214,8 +223,9 @@ export class AgentTaskApplicationService {
       }
 
       // 8. Execute via execution repository
+      // AIDEV-NOTE: task.agentId is guaranteed non-null here (we return early if null above)
       const executionRequest: AgentExecutionRequest = {
-        agentId: task.agentId.value,
+        agentId: task.agentId!.value,
         instructions: expandedInstructions,
         tools: task.instructions.tools,
         executionId: task.id.value,

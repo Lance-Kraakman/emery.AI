@@ -13,13 +13,11 @@ AIDEV-NOTE: Uses READ-ONLY tools - safe for planning phase without HITL approval
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from collections.abc import Callable
+from typing import Any
 
 from ..reasoning.modules import ExecutorModule
 from ..reasoning.tools.analysis import create_system_research_tool
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 

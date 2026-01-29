@@ -7,7 +7,7 @@ It replaces the Jinja2-based planning templates.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import Any
 
 import dspy
 
@@ -22,9 +22,6 @@ from emery_agents.reasoning.signatures.planning import (
     SkillOutputSpec,
     SkillTemplatePlanOutput,
 )
-
-if TYPE_CHECKING:
-    from typing import Any
 
 
 class PlannerModule(dspy.Module):  # type: ignore[misc]

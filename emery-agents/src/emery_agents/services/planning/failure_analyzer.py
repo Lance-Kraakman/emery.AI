@@ -6,13 +6,11 @@ ChainOfThought with AnalyzeRecovery signature.
 """
 
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 
 import dspy
 
-if TYPE_CHECKING:
-    from ..protocols import ModelProviderProtocol
-
+from ..protocols import ModelProviderProtocol
 from emery_agents.entities.models.plan import PlanStep, RecoveryResult
 from emery_agents.entities.models.task_ledger import TaskLedger
 from emery_agents.reasoning.signatures.evaluation import AnalyzeRecovery, RecoveryAction

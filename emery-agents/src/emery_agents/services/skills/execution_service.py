@@ -20,17 +20,16 @@ import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, AsyncIterator, Callable, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, AsyncIterator, Callable, Dict, List, Optional
 
 from ...grpc.generated import agent_worker_pb2
 from ...types import SkillExecutionResult
 from ..agents.api import AgentAPIService
+from ..credentials import ResolvedCredentials
 from .executor import SkillExecutorService
 from ..tools.loader import UnifiedToolLoader
 from ..agents.factory import AgentFactory
-
-if TYPE_CHECKING:
-    from ..tools.provider import ToolProvider
+from ..tools.provider import ToolProvider
 
 # Type alias for progress callbacks
 ProgressCallback = Callable[[Dict[str, Any]], None]
@@ -41,19 +40,6 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # Data Classes
 # =============================================================================
-
-
-@dataclass
-class ResolvedCredentials:
-    """Credentials resolved for skill execution."""
-
-    api_key: str
-    organization_id: int
-    source: str  # "user", "agent", "context"
-
-    def __post_init__(self) -> None:
-        if not self.api_key:
-            logger.warning("ResolvedCredentials created with empty api_key")
 
 
 @dataclass

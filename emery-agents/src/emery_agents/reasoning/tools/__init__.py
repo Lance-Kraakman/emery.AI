@@ -11,12 +11,11 @@ Usage:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Callable
+from typing import Any, Callable
 
 import dspy
 
-if TYPE_CHECKING:
-    from ...services.tools.capability_registry import CapabilityRegistry
+from ...services.tools.capability_registry import CapabilityRegistry
 
 from .crud import (
     create_agent_crud,

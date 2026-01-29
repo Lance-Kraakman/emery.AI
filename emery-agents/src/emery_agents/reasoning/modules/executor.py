@@ -7,12 +7,9 @@ It replaces smolagents ToolCallingAgent.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import dspy
-
-if TYPE_CHECKING:
-    pass
 
 
 class ExecutorModule(dspy.Module):  # type: ignore[misc]

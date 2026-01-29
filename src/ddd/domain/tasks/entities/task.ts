@@ -94,7 +94,7 @@ export interface TaskInstructions {
 
 export interface TaskConfig {
   id?: TaskId; // Will be generated if not provided
-  agentId: AgentId;
+  agentId?: AgentId | null; // null = org-level task, set = agent executes this
   organizationId: OrganizationId;
   name: string;
   instructions: TaskInstructions;
@@ -111,7 +111,7 @@ export interface TaskConfig {
 }
 
 export interface CreateTaskData {
-  agentId: AgentId;
+  agentId?: AgentId | null; // null = org-level task
   name: string;
   instructions: TaskInstructions; // Task configuration
   skillId?: number; // Optional - execute this skill instead of raw instructions
@@ -122,7 +122,7 @@ export interface CreateTaskData {
 export class Task {
   private constructor(
     public readonly id: TaskId,
-    public readonly agentId: AgentId,
+    public readonly agentId: AgentId | null, // null = org-level task
     public readonly organizationId: OrganizationId,
     public readonly name: string,
     public readonly instructions: TaskInstructions,
@@ -147,13 +147,12 @@ export class Task {
       throw new Error('Task creation failed: organizationId is required');
     }
 
-    if (!config.agentId) {
-      throw new Error('Task creation failed: agentId is required');
-    }
+    // AIDEV-NOTE: agentId is now optional - null = org-level task
+    // No validation needed - null is a valid value
 
     return new Task(
       config.id || TaskId.generate(),
-      config.agentId,
+      config.agentId || null, // null for org-level tasks
       config.organizationId,
       config.name,
       config.instructions,
@@ -172,7 +171,7 @@ export class Task {
 
   static fromPersistence(data: {
     id: string;
-    agentId: number;
+    agentId: number | null; // null = org-level task
     organizationId: number;
     name: string;
     instructions: any; // JSONB from database
@@ -189,7 +188,7 @@ export class Task {
   }): Task {
     return new Task(
       TaskId.fromString(data.id),
-      AgentId.fromNumber(data.agentId),
+      data.agentId !== null ? AgentId.fromNumber(data.agentId) : null, // Handle nullable agentId
       OrganizationId.fromNumber(data.organizationId),
       data.name,
       data.instructions as TaskInstructions,
@@ -208,7 +207,7 @@ export class Task {
 
   toPersistence(): {
     id: string;
-    agentId: number;
+    agentId: number | null; // null = org-level task
     organizationId: number;
     name: string;
     instructions: any;
@@ -225,7 +224,7 @@ export class Task {
   } {
     return {
       id: this.id.value,
-      agentId: this.agentId.value,
+      agentId: this.agentId?.value ?? null, // Handle nullable agentId
       organizationId: this.organizationId.value,
       name: this.name,
       instructions: this.instructions,

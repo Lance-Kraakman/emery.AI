@@ -12,7 +12,7 @@ import type { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-
 // Data transfer objects for repository operations
 export interface CreateTaskData {
   id?: string;
-  agentId: number;
+  agentId: number | null; // null = org-level task
   organizationId: number;
   name: string;
   skillId?: number | null; // Optional skill to execute

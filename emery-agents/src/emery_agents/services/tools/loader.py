@@ -12,7 +12,7 @@ AIDEV-NOTE: DSPy Migration (Jan 2026)
 
 import json
 import os
-from typing import Any, Dict, List, Optional, Callable, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, Callable
 from pathlib import Path
 
 from ...grpc.generated.agent_worker_pb2 import ToolConfig, AgentConfig, SkillConfig
@@ -45,9 +45,7 @@ from ...reasoning.tools.integrations import (
     load_analysis_api_tool,
     load_process_api_tool,
 )
-
-if TYPE_CHECKING:
-    from ..infrastructure.clients import HuggingFaceInferenceClient
+from emery_agents.infrastructure.clients import HuggingFaceInferenceClient
 
 
 class UnifiedToolLoader:

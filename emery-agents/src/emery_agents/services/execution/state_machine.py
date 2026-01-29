@@ -26,10 +26,9 @@ Usage:
 import logging
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Any, Callable, Dict, Optional, Set, TYPE_CHECKING
+from typing import Any, Callable, Dict, Optional, Set
 
-if TYPE_CHECKING:
-    from ..entities.models.plan import Plan
+from emery_agents.entities.models.plan import Plan
 
 logger = logging.getLogger(__name__)
 

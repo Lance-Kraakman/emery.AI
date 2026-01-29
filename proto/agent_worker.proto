@@ -46,6 +46,17 @@ message TaskProgress {
   TokenUsage token_usage = 9;      // Token usage for this task (set when completed)
 }
 
+// Task progress for chat-based task execution (ProcessMessage with task_id)
+// AIDEV-NOTE: Lighter weight than TaskProgress, used for real-time chat updates
+message ChatTaskProgress {
+  string task_id = 1;              // Task being updated
+  int32 step = 2;                  // Current step number
+  int32 total_steps = 3;           // Total steps (if known)
+  string step_name = 4;            // Current step description
+  string status = 5;               // running, completed, failed
+  string output_json = 6;          // Step output (if any)
+}
+
 // Task execution status enum
 enum TaskStatus {
   TASK_PENDING = 0;
@@ -584,6 +595,10 @@ message ProcessMessageRequest {
   string session_id = 9;             // Required: session identifier (chat_id from database)
 
   string user_api_key = 10;          // User API key for internal service calls (skill_builder, etc.)
+
+  // Task tracking (optional - if set, execution is task-based with DB record)
+  // AIDEV-NOTE: When present, skill/agent execution is tracked via Task infrastructure
+  string task_id = 20;
 }
 
 // Streaming response from AI processing
@@ -599,6 +614,12 @@ message ProcessMessageResponse {
   }
 
   int64 timestamp = 6;               // Response timestamp
+
+  // Task tracking (echoed back if task_id was provided in request)
+  string task_id = 10;               // Task correlation ID
+
+  // Task execution progress (for skill/agent execution within chat)
+  ChatTaskProgress task_progress = 11;
 }
 
 // HITL: Agent awaiting user input (plan approval or question)

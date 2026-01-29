@@ -15,16 +15,13 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING
 
 import dspy
 
 from .analysis.research import SystemResearchTool
 from .api.workspace_api import WorkspaceAPI
 from .integrations.pipedream import get_pipedream_tool_info, list_pipedream_tools_by_app
-
-if TYPE_CHECKING:
-    from ...services.tools.capability_registry import CapabilityRegistry
+from ...services.tools.capability_registry import CapabilityRegistry
 
 logger = logging.getLogger(__name__)
 

@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any, Optional
+from typing import Any, Optional, TYPE_CHECKING
 
 import dspy
 
@@ -34,12 +34,12 @@ from emery_agents.reasoning.signatures.planning import (
 )
 from emery_agents.entities.models.plan import Plan, PlanStep, create_plan, create_step
 from emery_agents.services.context import WorkspaceContext
-
-from .models import PlanGenerationRequest, PlanGenerationResult
+from emery_agents.services.protocols import ModelProviderProtocol, Tool
 
 if TYPE_CHECKING:
     from emery_agents.orchestrators.runtime import ConversationMessage
-    from emery_agents.services.protocols import ModelProviderProtocol, Tool
+
+from .models import PlanGenerationRequest, PlanGenerationResult
 
 logger = logging.getLogger(__name__)
 

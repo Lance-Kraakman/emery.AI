@@ -17,31 +17,44 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, AsyncIterator, Dict, Optional, TYPE_CHECKING
+from typing import AsyncIterator, Dict, List, Literal, Optional, TypedDict
 
 from ..agents.api import AgentAPIService
-
-if TYPE_CHECKING:
-    from ..agents.executor import AgentExecutor
-    from ...entities.execution_context import ExecutionContext
-    from ...grpc.generated import agent_worker_pb2
+from ..agents.executor import AgentExecutor
+from ..credentials import ResolvedCredentials, CredentialSource
+from ..tools.provider import ToolProvider
+from ...entities.execution_context import ExecutionContext
+from ...entities.task import TaskRequest
+from ...grpc.generated import agent_worker_pb2
+from ...grpc.mappers import ProtoMapper
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class ResolvedCredentials:
-    """Credentials resolved for task execution."""
+# =============================================================================
+# Type Definitions
+# =============================================================================
 
-    api_key: str
-    organization_id: int
-    source: str  # "user", "agent"
 
-    def __post_init__(self) -> None:
-        if not self.api_key:
-            logger.warning("ResolvedCredentials created with empty api_key")
+class TaskProgressDict(TypedDict, total=False):
+    """Progress event yielded during task execution."""
+    status: str  # "in_progress", "completed", "failed"
+    output: str  # JSON-encoded output data
+    error_message: str
+    timestamp_ms: int
+    progress_percent: float
+    task_id: str  # Added by TaskExecutor
+    token_usage: Optional[Dict[str, int]]
+
+
+class TaskInstructionsDict(TypedDict, total=False):
+    """Task instructions structure."""
+    task: str
+    images: Optional[List[Dict[str, str]]]
+    tools: Optional[List[Dict[str, object]]]
+    metadata: Optional[Dict[str, object]]
 
 
 @dataclass
@@ -62,12 +75,12 @@ class TaskData:
     skill_id: Optional[int] = None
 
     # Execution details
-    instructions: Dict[str, Any] = None
-    skill_inputs: Dict[str, Any] = None
+    instructions: TaskInstructionsDict = field(default_factory=lambda: TaskInstructionsDict(task=""))
+    skill_inputs: Dict[str, object] = field(default_factory=dict)
 
     # Metadata
     created_by: Optional[str] = None
-    trigger_type: str = "manual"
+    trigger_type: Literal["manual", "automation", "chat", "api", "webhook"] = "manual"
 
     # Model selection
     agent_model: Optional[str] = None
@@ -76,11 +89,9 @@ class TaskData:
     # Workspace
     workspace_path: Optional[Path] = None
 
-    def __post_init__(self) -> None:
-        if self.instructions is None:
-            self.instructions = {}
-        if self.skill_inputs is None:
-            self.skill_inputs = {}
+    # Original TaskRequest (for full context building via AgentExecutor)
+    # Used for background tasks where we need full proto context
+    _task_request: Optional[TaskRequest] = None
 
 
 class TaskExecutor:
@@ -89,14 +100,23 @@ class TaskExecutor:
 
     Handles:
     - Credential resolution (org-level vs agent-level)
-    - Execution context building
+    - Execution context building (delegates to AgentExecutor for full proto support)
     - Streaming progress with task_id
+
+    Two execution modes:
+    - execute(): For background tasks with full TaskRequest proto
+    - execute_with_context(): For chat tasks with pre-built ExecutionContext
 
     Usage:
         executor = TaskExecutor(agent_executor, api_service)
 
-        async for progress in executor.execute(task_id, task_data):
-            yield progress  # Forward to gRPC response
+        # Background task (ExecuteTask gRPC)
+        async for progress in executor.execute(task_data):
+            yield progress
+
+        # Chat task (ProcessMessage with task_id)
+        async for progress in executor.execute_with_context(task_id, context):
+            yield progress
     """
 
     def __init__(
@@ -117,12 +137,15 @@ class TaskExecutor:
     async def execute(
         self,
         task_data: TaskData,
-    ) -> AsyncIterator[Dict[str, Any]]:
+    ) -> AsyncIterator[TaskProgressDict]:
         """
         Execute a task and stream progress.
 
+        For background tasks (ExecuteTask gRPC) - uses stored TaskRequest for
+        full context building via AgentExecutor.determine_execution_context.
+
         Args:
-            task_data: Task configuration and metadata
+            task_data: Task configuration and metadata (with _task_request if from proto)
 
         Yields:
             Progress events with task_id included
@@ -143,10 +166,36 @@ class TaskExecutor:
                 f"[TASK-{task_id[:8]}] Credentials resolved from: {credentials.source}"
             )
 
-            # 2. Build execution context
-            context = self._build_execution_context(task_data, credentials)
+            # 2. Create ToolProvider with resolved credentials
+            # This ensures all tools use the correct auth based on task assignment
+            tool_provider = ToolProvider(
+                api_key=credentials.api_key,
+                organization_id=credentials.organization_id,
+            )
+            logger.info(
+                f"[TASK-{task_id[:8]}] Created ToolProvider with {credentials.source} credentials"
+            )
 
-            # 3. Execute via AgentExecutor (reuse existing logic)
+            # 3. Build execution context
+            # If we have the original TaskRequest, use AgentExecutor.determine_execution_context
+            # which properly handles skills, tools, attachments, etc.
+            if task_data._task_request is not None:
+                context = self.agent_executor.determine_execution_context(task_data._task_request)
+                # Add model parameters from task_data
+                context.agent_model = task_data.agent_model
+                context.org_model = task_data.org_model
+            else:
+                # Fallback to simplified context (for chat tasks)
+                context = self._build_execution_context(task_data, credentials)
+
+            # 4. Inject ToolProvider into context for credential isolation
+            context.tool_provider = tool_provider
+
+            # 5. Add workspace path for bash tool access
+            if task_data.workspace_path:
+                context.workspace_path = task_data.workspace_path
+
+            # 6. Execute via AgentExecutor (reuse existing logic)
             async for progress in self.agent_executor.execute_task(context):
                 # Add task_id to all progress events
                 progress["task_id"] = task_id
@@ -161,6 +210,48 @@ class TaskExecutor:
             logger.error(f"[TASK-{task_id[:8]}] Failed after {elapsed:.2f}s: {e}")
 
             # Yield error progress
+            yield {
+                "task_id": task_id,
+                "status": "failed",
+                "error_message": str(e),
+                "timestamp_ms": int(time.time() * 1000),
+                "progress_percent": 0.0,
+            }
+
+    async def execute_with_context(
+        self,
+        task_id: str,
+        context: "ExecutionContext",
+    ) -> AsyncIterator[TaskProgressDict]:
+        """
+        Execute with a pre-built ExecutionContext.
+
+        For chat tasks (ProcessMessage with task_id) where the context
+        is built by ChatProcessingService.
+
+        Args:
+            task_id: Task ID for tracking
+            context: Pre-built execution context
+
+        Yields:
+            Progress events with task_id included
+        """
+        start_time = time.time()
+
+        logger.info(f"[TASK-{task_id[:8]}] Starting chat-based execution")
+
+        try:
+            async for progress in self.agent_executor.execute_task(context):
+                progress["task_id"] = task_id
+                yield progress
+
+            elapsed = time.time() - start_time
+            logger.info(f"[TASK-{task_id[:8]}] Completed in {elapsed:.2f}s")
+
+        except Exception as e:
+            elapsed = time.time() - start_time
+            logger.error(f"[TASK-{task_id[:8]}] Failed after {elapsed:.2f}s: {e}")
+
             yield {
                 "task_id": task_id,
                 "status": "failed",
@@ -259,15 +350,17 @@ class TaskExecutor:
                 )
 
             # Extract api_key from agent's tool configs
-            api_key = self._extract_api_key_from_agent(agent_data.raw)
-            if not api_key:
+            extracted_api_key = self._extract_api_key_from_agent(agent_data.raw)
+            if not extracted_api_key:
                 logger.warning(
                     f"Agent {agent_id} has no stored api_key, using service credentials"
                 )
-                api_key = self.api_service.api_key
+                final_api_key = self.api_service.api_key
+            else:
+                final_api_key = extracted_api_key
 
             return ResolvedCredentials(
-                api_key=api_key,
+                api_key=final_api_key,
                 organization_id=organization_id,
                 source="agent",
             )
@@ -281,13 +374,18 @@ class TaskExecutor:
                 source="agent",
             )
 
-    def _extract_api_key_from_agent(self, agent_data: Dict[str, Any]) -> Optional[str]:
+    def _extract_api_key_from_agent(self, agent_data: Dict[str, object]) -> Optional[str]:
         """Extract api_key from agent's tool configurations."""
         tools = agent_data.get("tools", [])
+        if not isinstance(tools, list):
+            return None
         for tool in tools:
+            if not isinstance(tool, dict):
+                continue
             config = tool.get("config", {})
-            if "api_key" in config:
-                return config["api_key"]
+            if isinstance(config, dict) and "api_key" in config:
+                api_key = config["api_key"]
+                return str(api_key) if api_key else None
         return None
 
     def _build_execution_context(
@@ -330,24 +428,48 @@ class TaskExecutor:
     @staticmethod
     def from_task_request(
         request: "agent_worker_pb2.TaskRequest",
-        proto_mapper: Any,
+        proto_mapper: "ProtoMapper",
     ) -> TaskData:
         """
         Build TaskData from TaskRequest proto.
 
         Used by ExecuteTask gRPC handler.
+
+        AIDEV-NOTE: The original task_request is stored for use by
+        AgentExecutor.determine_execution_context which handles full
+        skill parsing, tools, attachments, etc.
         """
-        task_request = proto_mapper.task_request_from_proto(request)
+        task_request: TaskRequest = proto_mapper.task_request_from_proto(request)
+
+        # Extract task instruction from instruction_config
+        task_text = ""
+        if task_request.instruction_config:
+            task_text = task_request.instruction_config.task or ""
+
+        # Build typed instructions dict
+        instructions: TaskInstructionsDict = {"task": task_text}
+
+        # Extract skill inputs from trigger_data
+        skill_inputs: Dict[str, object] = {}
+        if task_request.trigger_data and task_request.trigger_data.skill_inputs:
+            for input_val in task_request.trigger_data.skill_inputs:
+                skill_inputs[input_val.name] = input_val.value
+
+        # Convert organization_id to int (may be str from proto)
+        org_id = task_request.organization_id
+        org_id_int = int(org_id) if org_id else 0
 
         return TaskData(
             task_id=task_request.task_id,
-            organization_id=task_request.organization_id or 0,
+            organization_id=org_id_int,
             agent_id=task_request.agent_id,
             skill_id=None,  # Will be resolved from skill_name
-            instructions={"task": task_request.instructions},
-            skill_inputs=dict(task_request.skill_inputs) if task_request.skill_inputs else {},
+            instructions=instructions,
+            skill_inputs=skill_inputs,
             created_by=None,  # Not available in TaskRequest
             trigger_type="automation",
             agent_model=task_request.agent_model,
             org_model=task_request.organization_model,
+            # Store original request for full context building
+            _task_request=task_request,
         )
