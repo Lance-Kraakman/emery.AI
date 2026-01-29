@@ -30,28 +30,24 @@ export default defineConfig({
       enabled: false
     },
     // Environment variables for persistent server
+    // SECURITY: Credentials loaded from environment, not hardcoded
     env: {
-      // AIDEV-NOTE: Set DATABASE_URL so application services use test database
-      DATABASE_URL: 'postgresql://postgres:integration_test_password@localhost:5436/emery_integration_test',
-      TEST_DATABASE_URL: 'postgresql://postgres:integration_test_password@localhost:5436/emery_integration_test',
-      TEST_APP_URL: 'http://localhost:3002',
-      TEST_GRPC_URL: 'localhost:50053',
-      WORKER_ADDRESS: 'localhost:50053',
-      GRPC_TOOLS_ADDRESS: 'localhost:50054',
+      DATABASE_URL: process.env.TEST_DATABASE_URL || '',
+      TEST_DATABASE_URL: process.env.TEST_DATABASE_URL || '',
+      TEST_APP_URL: process.env.TEST_APP_URL || 'http://localhost:3002',
+      TEST_GRPC_URL: process.env.TEST_GRPC_URL || 'localhost:50053',
+      WORKER_ADDRESS: process.env.WORKER_ADDRESS || 'localhost:50053',
+      GRPC_TOOLS_ADDRESS: process.env.GRPC_TOOLS_ADDRESS || 'localhost:50054',
       NODE_ENV: 'test',
-      // AI/ML API Keys - loaded from environment
       HF_TOKEN: process.env.HF_TOKEN || '',
       OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
-      // AI/ML API Keys for real functionality (not mocked)
-      // S3 Configuration (MinIO for integration tests - matches .env.local.test)
-      AWS_ACCESS_KEY_ID: 'minioadmin',
-      AWS_SECRET_ACCESS_KEY: 'minioadmin',
-      AWS_REGION: 'us-east-1',
-      S3_BUCKET_NAME: 'emery-files',
-      AWS_ENDPOINT_URL: 'http://localhost:9005',
-      S3_ENDPOINT_URL: 'http://localhost:9005',  // AIDEV-NOTE: Both AWS_ENDPOINT_URL and S3_ENDPOINT_URL needed for different clients
+      AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID || '',
+      AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY || '',
+      AWS_REGION: process.env.AWS_REGION || 'us-east-1',
+      S3_BUCKET_NAME: process.env.S3_BUCKET_NAME || 'emery-files',
+      AWS_ENDPOINT_URL: process.env.AWS_ENDPOINT_URL || '',
+      S3_ENDPOINT_URL: process.env.S3_ENDPOINT_URL || '',
       S3_FORCE_PATH_STYLE: 'true',
-      // Skip container management in setup files
       PERSISTENT_TEST_SERVER: 'true'
     }
   },

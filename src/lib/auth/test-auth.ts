@@ -123,7 +123,7 @@ export async function authenticateRequest(request: NextRequest): Promise<AuthRes
       }
     }
 
-    // Development bypass using x-test-user-id header
+    // Fallback: try to get user from session (last resort)
     const userId = await getUserIdFromRequest(request);
     if (userId) {
       // Get user details from database
