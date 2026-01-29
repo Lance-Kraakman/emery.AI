@@ -38,6 +38,8 @@ async def execute_step_node(state: PlanExecuteState, runtime: RuntimeContext) ->
     ledger = state.get("ledger")
     runtime_skill_inputs = state.get("runtime_skill_inputs")
 
+    logger.info(f"📝 execute_step_node - runtime_skill_inputs from state: {runtime_skill_inputs}")
+
     # Read non-serializable objects from runtime
     tools = runtime.tools
     managed_agents = runtime.managed_agents
