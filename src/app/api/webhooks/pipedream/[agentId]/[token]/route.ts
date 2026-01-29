@@ -67,7 +67,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    console.log('[PipedreamWebhook] Payload received:', JSON.stringify(payload).slice(0, 500));
+    // SECURITY: Log payload size only, not content (may contain PII)
+    console.log('[PipedreamWebhook] Payload received, size:', rawBody.length, 'bytes');
 
     // Find matching PIPEDREAM_EVENT automation
     let matchingAutomation: typeof agent.automations[number] | null = null;
@@ -141,7 +142,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           }
         }
 
-        console.log('[PipedreamWebhook] Resolved inputs:', resolvedInputs);
+        // SECURITY: Log input field names only, not values (may contain PII)
+        console.log('[PipedreamWebhook] Resolved inputs for fields:', Object.keys(resolvedInputs));
 
         // Create task
         const createResult = await agentTaskService.createTask({
