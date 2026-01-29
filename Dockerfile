@@ -32,6 +32,7 @@ ENV GITHUB_CLIENT_SECRET="build-dummy-client-secret"
 ENV RESEND_API_KEY="build-dummy-resend-key"
 ENV STRIPE_SECRET_KEY="sk_test_build_dummy_key"
 ENV NODE_ENV=production
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 RUN pnpm run build
 
 # AIDEV-NOTE: Skip bundled scheduler, use tsx directly to avoid bundling issues
