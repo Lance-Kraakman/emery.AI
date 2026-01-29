@@ -2,20 +2,13 @@
  * Page Publish API - Publish or unpublish a page
  *
  * AIDEV-NOTE: This endpoint controls page visibility for the AppBuilder agent.
- *
- * Supports TOON format for LLM-optimized responses:
- * - ?format=llm → minimal TOON format
  */
-
-// Force dynamic rendering to prevent build-time database connections
-export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
 import { getAppApplicationService, getPuckPageApplicationService } from '@/ddd/application/di/getters';
 import { PageId } from '@/ddd/domain/puck/value-objects/page-id';
 import { PuckPageMapper } from '@/app/mappers/puck-page-mapper';
-import { operationToToon } from '@/lib/toon-format';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -28,7 +21,6 @@ interface RouteParams {
  *
  * Query parameters:
  * - action: 'publish' or 'unpublish' (required)
- * - format: 'llm' for TOON format response
  */
 export async function POST(request: NextRequest, { params }: RouteParams): Promise<NextResponse> {
   try {
@@ -47,7 +39,6 @@ export async function POST(request: NextRequest, { params }: RouteParams): Promi
 
     const { searchParams } = new URL(request.url);
     const action = searchParams.get('action');
-    const format = searchParams.get('format');
 
     if (action !== 'publish' && action !== 'unpublish') {
       return NextResponse.json(
@@ -80,20 +71,6 @@ export async function POST(request: NextRequest, { params }: RouteParams): Promi
     }
 
     const dto = PuckPageMapper.toDTO(result.data);
-
-    // Return TOON format if requested
-    if (format === 'llm') {
-      const toon = operationToToon({
-        action: action === 'publish' ? 'published' : 'unpublished',
-        entity: 'page',
-        id: dto.id,
-        data: { name: dto.name, isPublic: dto.isPublic },
-      });
-      return new NextResponse(toon, {
-        status: 200,
-        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-      });
-    }
 
     return NextResponse.json({
       success: true,

@@ -170,6 +170,23 @@ class OutputToolProtocol(Protocol):
     def get_captured_values(self) -> Optional[Dict[str, Any]]: ...
 
 
+@runtime_checkable
+class ToolProtocol(Protocol):
+    """Minimal tool interface - works for both smolagents and DSPy tools.
+
+    This protocol allows code to work with any tool implementation that has:
+    - name: Tool identifier for logging and lookup
+    - description: Shown to LLM for tool selection
+    - __call__: Callable execution
+
+    Both smolagents.Tool and DSPyToolWrapper implement this interface.
+    """
+    name: str
+    description: str
+
+    def __call__(self, **kwargs: Any) -> str: ...
+
+
 def is_string_list(value: Any) -> TypeGuard[List[str]]:
     """Type guard for List[str]."""
     return isinstance(value, list) and all(isinstance(item, str) for item in value)

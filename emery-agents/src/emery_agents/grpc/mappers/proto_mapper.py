@@ -12,7 +12,7 @@ from ..generated import agent_worker_pb2
 from ...entities.task import TaskRequest, TriggerData, SkillInputValue
 from ...entities.agent import AgentConfig
 from ...types import TaskStatus, WorkerStatus, InstructionConfig
-from ...models.context_mapping import ResolvedContext
+from ...entities.models.context_mapping import ResolvedContext
 
 
 # Type definitions for structured return values

@@ -1,5 +1,3 @@
-export const dynamic = 'force-dynamic';
-
 /**
  * Single File Operations API Endpoint
  *

@@ -3,15 +3,9 @@
  *
  * AIDEV-NOTE: This endpoint executes a view query and returns rows.
  * Used by Puck components (DataBlock, TableBlock) and agent tools.
- *
- * Supports TOON format for LLM-optimized responses:
- * - ?format=llm -> minimal TOON format
  */
 
-// Force dynamic rendering to prevent build-time database connections
-export const dynamic = 'force-dynamic';
-
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { withAuthenticatedRoute } from '@/lib/api/base';
 import { getViewApplicationService } from '@/ddd/application/di/getters';
 import { ViewId } from '@/ddd/domain/views/value-objects/view-id';
@@ -22,57 +16,21 @@ interface RouteParams {
 }
 
 /**
- * Format rows as TOON for LLM consumption
- */
-function rowsToToon(
-  rows: Array<Record<string, unknown>>,
-  totalCount: number,
-  pageSize: number,
-  offset: number
-): string {
-  if (rows.length === 0) {
-    return `rows[0/${totalCount}]: No rows found`;
-  }
-
-  // Get field names from first row
-  const fields = Object.keys(rows[0]).filter(k => k !== 'id');
-  const header = `rows[${rows.length}/${totalCount}]{id,${fields.join(',')}}:`;
-
-  const rowLines = rows.map(row => {
-    const id = row.id ?? '';
-    const values = fields.map(f => {
-      const val = row[f];
-      if (val === null || val === undefined) return '';
-      if (typeof val === 'object') return JSON.stringify(val);
-      return String(val);
-    });
-    return `${id},${values.join(',')}`;
-  }).join('\n');
-
-  return `${header}\n${rowLines}\npagination: offset=${offset}, pageSize=${pageSize}`;
-}
-
-/**
  * POST /api/views/[id]/execute - Execute view query
  *
  * Body (all optional):
  * - pagination?: { pageSize: number, offset: number }
  * - additionalFilters?: Array<{fieldId, operator, value}>
- *
- * Query parameters:
- * - format: 'llm' for TOON format
  */
 export async function POST(request: NextRequest, { params }: RouteParams): Promise<Response> {
   const { id } = await params;
   const viewId = parseInt(id, 10);
-  const { searchParams } = new URL(request.url);
-  const format = searchParams.get('format');
 
   if (isNaN(viewId)) {
     return Response.json({ success: false, error: 'Invalid view ID' }, { status: 400 });
   }
 
-  const response = await withAuthenticatedRoute(request, async (user) => {
+  return withAuthenticatedRoute(request, async (user) => {
     // Parse body (may be empty)
     let body: Record<string, unknown> = {};
     try {
@@ -135,17 +93,4 @@ export async function POST(request: NextRequest, { params }: RouteParams): Promi
       data: { rows: plainRows, totalCount, pageSize, offset }
     };
   });
-
-  // Transform to TOON if requested
-  if (format === 'llm') {
-    const body = await response.clone().json();
-    if (body.success) {
-      return new NextResponse(
-        rowsToToon(body.data.rows, body.data.totalCount, body.data.pageSize, body.data.offset),
-        { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8' } }
-      );
-    }
-  }
-
-  return response;
 }

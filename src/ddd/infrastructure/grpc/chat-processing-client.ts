@@ -222,7 +222,17 @@ export class ChatProcessingClient {
 
     return new Promise((resolve, reject) => {
       console.log(`[CHAT-GRPC-CLIENT] Starting gRPC stream for message processing`);
-      const call = this.client.ProcessMessage(request);
+
+      // Set a generous deadline for long-running AI tasks (10 minutes)
+      // This is a safety net - keepalive pings handle connection health
+      const deadlineMs = 10 * 60 * 1000; // 10 minutes
+      const deadline = new Date(Date.now() + deadlineMs);
+
+      const call = this.client.ProcessMessage(request, { deadline });
+
+      // Track stream completion to prevent late-arriving errors from being sent to user
+      // This must be declared before the 'data' handler so it can be set on complete
+      let streamCompleted = false;
 
       call.on('data', (response: ProcessMessageResponse) => {
         console.log(`[CHAT-GRPC-CLIENT] Received streaming response:`, {
@@ -260,6 +270,8 @@ export class ChatProcessingClient {
             timestamp: response.timestamp
           };
         } else if (response.complete) {
+          // Mark stream as completed to prevent late-arriving gRPC errors from being sent
+          streamCompleted = true;
           streamingResponse = {
             type: 'complete',
             complete: response.complete,
@@ -279,9 +291,6 @@ export class ChatProcessingClient {
         // Pass to callback handler
         onStreamingResponse(streamingResponse);
       });
-
-      // Track stream completion to handle race condition where error arrives after end
-      let streamCompleted = false;
 
       call.on('end', () => {
         streamCompleted = true;

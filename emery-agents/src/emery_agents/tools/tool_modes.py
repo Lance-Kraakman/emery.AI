@@ -144,6 +144,13 @@ def filter_tools_for_mode(
     """
     Filter tools based on execution mode.
 
+    Planning mode includes CRUD tools because:
+    1. BaseCrudTool._check_mutation_allowed() blocks mutations at runtime
+    2. CRUD tools have useful read methods (list, read, get) for discovery
+    3. Workspace context building needs CRUD tools to list databases/tables
+
+    Only MUTATION_ONLY_TOOLS are excluded (tools with no read methods).
+
     Args:
         tools: List of tool objects
         mode: ToolMode.PLANNING (read-only) or ToolMode.EXECUTION (all)
@@ -156,7 +163,8 @@ def filter_tools_for_mode(
     if mode == ToolMode.EXECUTION:
         return tools
 
-    # Planning mode: filter to read-only tools
+    # Planning mode: include all tools EXCEPT mutation-only tools
+    # CRUD tools are allowed because they have runtime protection via _check_mutation_allowed()
     def extract_name(tool: Any) -> str:
         if get_tool_name:
             return get_tool_name(tool)
@@ -167,24 +175,14 @@ def filter_tools_for_mode(
     filtered = []
     for tool in tools:
         tool_name = extract_name(tool)
-        # For planning, we're conservative - only include known read-only tools
-        # and exclude CRUD tools since they can mutate
-        if tool_name.lower() in READ_ONLY_TOOLS and tool_name.lower() not in {
-            # Exclude CRUD tools from planning since they have mutation methods
-            "database_crud", "table_crud", "field_crud", "row_crud",
-            "document_crud", "skill_crud", "file_crud", "agent_crud", "team_crud"
-        }:
+        tool_name_lower = tool_name.lower()
+
+        # Only exclude tools that ONLY mutate (no read methods)
+        if tool_name_lower in MUTATION_ONLY_TOOLS:
+            logger.debug(f"Planning mode: excluding mutation-only tool {tool_name}")
+        else:
             filtered.append(tool)
             logger.debug(f"Planning mode: including tool {tool_name}")
-        elif tool_name.lower() in {"web_search", "web_fetch", "calculator",
-                                   "file_reader", "document_reader", "template_reader",
-                                   "table_query", "emery_database", "table_schema", "table_data",
-                                   "system_research"}:
-            # Explicitly safe read-only tools
-            filtered.append(tool)
-            logger.debug(f"Planning mode: including safe tool {tool_name}")
-        else:
-            logger.debug(f"Planning mode: excluding tool {tool_name}")
 
     return filtered
 
@@ -196,19 +194,21 @@ def get_planning_tool_restrictions() -> str:
     Returns:
         String describing what tools are available in planning mode
     """
-    return """In PLANNING mode, you have access to READ-ONLY tools only:
+    return """In PLANNING mode, you have access to most tools with READ-ONLY operations:
+- CRUD tools (database_crud, table_crud, etc.) - READ methods only (list, read, get)
 - Web search and fetch
 - File and document readers
 - Table queries and schema inspection
 - Calculator
 - System research (agents, skills, tasks, apps, audit)
 
+MUTATIONS ARE BLOCKED at runtime. If you try to create/update/delete, you'll get an error.
+
 You DO NOT have access to:
-- CRUD operations (create, update, delete)
-- Tool executor
+- Tool executor (executes arbitrary tools)
 - Skill execution
 - File writing
-- Any mutation operations
+- Document generator
 
 Focus on gathering information and creating a detailed plan."""
 

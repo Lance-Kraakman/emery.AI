@@ -9,8 +9,9 @@ import uuid
 from datetime import datetime
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
+
+from emery_agents.entities.models.context_mapping import ResolvedContext
 from ..types import AgentId, OrganizationId, TaskId, OwnerId, InstructionConfig
-from ..models.context_mapping import ResolvedContext
 
 
 @dataclass
@@ -19,6 +20,22 @@ class SkillInputValue:
     name: str
     type: str  # 'text', 'number', 'boolean', 'json', etc.
     value: Any  # The actual value (type depends on the type field)
+
+
+@dataclass
+class SkillOutputValue:
+    """A single skill output value at runtime."""
+    name: str
+    value: Any
+    value_type: Optional[str] = None
+
+
+@dataclass
+class RowMappingContext:
+    """Context for row mapping operations."""
+    source_row_id: Optional[str] = None
+    item_index: Optional[int] = None
+    current_item: Any = None
 
 
 @dataclass

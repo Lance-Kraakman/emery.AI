@@ -44,3 +44,19 @@ export const MULTI_SELECT_MIN_WIDTH = 180;
 export const COLUMN_GROW = 0;
 export const COLUMN_SHRINK = 1;
 export const FIXED_COLUMN_SHRINK = 0;  // For ID and add button columns
+
+/**
+ * Header UI space constants for dynamic min-width calculation
+ */
+export const HEADER_BUTTONS_WIDTH = 48; // Sort button (24px) + dropdown (16px) + gaps (8px)
+export const HEADER_PADDING = 16; // Left/right padding in header
+export const CHAR_WIDTH_ESTIMATE = 7.5; // Average character width in px (for typical font)
+
+/**
+ * Calculate minimum column width that ensures header title + buttons fit
+ * Returns the minimum width needed to display the column name without truncation
+ */
+export function calculateHeaderMinWidth(columnName: string): number {
+  const titleWidth = columnName.length * CHAR_WIDTH_ESTIMATE;
+  return Math.ceil(titleWidth + HEADER_BUTTONS_WIDTH + HEADER_PADDING);
+}

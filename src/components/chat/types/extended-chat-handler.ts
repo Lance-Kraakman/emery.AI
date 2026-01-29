@@ -1,7 +1,7 @@
 import type { ChatHandler, Message } from '@llamaindex/chat-ui'
 import type { ToolDTO } from '@/app/mappers/tool-mapper'
 import type { ExecutionStep } from '@/ddd/domain/chat/value-objects/execution-step'
-import type { PlanStepData, InputOption } from '@/lib/chat/types/sse-events'
+import type { PlanStepData, InputOption, PermissionRequestEvent } from '@/lib/chat/types/sse-events'
 
 /**
  * ChatMessage with ID and metadata support for execution steps
@@ -59,8 +59,11 @@ export interface ActivePlanExecution {
 export interface BatchedQuestion {
   questionId: string
   question: string
-  options?: string[]  // For multiple choice
+  questionType?: 'text' | 'single_select' | 'multi_select'  // Default: 'text' or 'single_select' if options
+  options?: string[]  // For multiple choice (single_select or multi_select)
   context?: string    // Why the agent needs this info
+  required?: boolean  // Whether answer is required (default: true)
+  allowOther?: boolean  // Show "Or type your own..." option (default: true)
 }
 
 /**
@@ -81,18 +84,17 @@ export interface QuestionSection {
 /**
  * Awaiting input state for HITL (plan approval or questions)
  *
- * AIDEV-NOTE: Unified HITL state supporting:
- * - plan_approval: Shows plan + Approve/Reject/Modify buttons
- * - question: Shows question + option buttons for user choice
- * - batched_questions: Shows questions from multiple sub-agents grouped together
+ * AIDEV-NOTE: Simplified HITL state with just 2 types:
+ * - plan_approval: Shows approve/reject buttons (plan content in chat message above)
+ * - questions: Shows all clarifying questions with structured UI
  */
 export interface AwaitingInputState {
-  inputType: 'plan_approval' | 'question' | 'batched_questions'
+  inputType: 'plan_approval' | 'questions'
   title: string
   content: string
   options: InputOption[]
   planJson?: string
-  // For batched_questions input type
+  // For questions input type - structured question data
   questionSections?: QuestionSection[]
 }
 
@@ -153,4 +155,8 @@ export interface ExtendedChatHandler extends ChatHandler {
   // Unified HITL awaiting input (plan approval or questions)
   awaitingInput: AwaitingInputState | null
   respondToInput?: (response: string) => Promise<void>
+
+  // Permission request (RBAC errors)
+  permissionRequest: PermissionRequestEvent | null
+  clearPermissionRequest?: () => void
 }

@@ -1,139 +1,124 @@
 """
-Agent Executor - Dynamic agent for user-defined Agents.
+Agent Executor - Dynamic DSPy module for user-defined Agents.
 
-AIDEV-NOTE: Creates a dynamic ToolCallingAgent at runtime that wraps a user-defined
+AIDEV-NOTE: Creates a dynamic ExecutorModule at runtime that wraps a user-defined
 Agent entity. This enables:
 - Chat mode: Conversational interaction using persona, skills, and data access
 - HITL input gathering: When skill inputs are missing, prompts user conversationally
 
 The AgentExecutor loads:
-1. Agent's persona → system instructions
-2. Agent's skills → SkillInvokerTools
-3. Agent's databaseId → scoped row_crud tool
+1. Agent's skills → SkillInvokerTools (as callables)
+2. Agent's databaseId → scoped data access tools
 
-Uses ToolCallingAgent (not CodeAgent) since it orchestrates via tool calls,
-no code generation needed.
+Uses ExecutorModule (dspy.ReAct) for tool orchestration.
 """
 
+from __future__ import annotations
+
 import logging
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
-from smolagents import ToolCallingAgent, Tool
-from smolagents.monitoring import LogLevel
+import dspy
 
-from ..prompts import build_agent_instructions, render_capabilities
-from ..tools.skill_invoker_tool import create_skill_invoker_tools
+from ..reasoning.modules import ExecutorModule
+from ..reasoning.tools.execution import create_skill_invoker_tools
+from ..utils.persona_sanitizer import sanitize_persona, sanitize_description
+from ..services.skills.validator import create_validator_from_skills
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
 
 def create_agent_executor(
-    agent_config: Dict[str, Any],
-    skills: List[Dict[str, Any]],
-    model: Any,
-    api_key: Optional[str] = None,
-    organization_id: Optional[int] = None,
-    additional_tools: Optional[List[Tool]] = None,
-    skill_executor_callback: Optional[Any] = None,
+    agent_config: dict[str, Any],
+    skills: list[dict[str, Any]],
+    api_key: str | None = None,
+    organization_id: int | None = None,
+    additional_tools: list[Callable[..., Any]] | None = None,
+    skill_executor_callback: Callable[..., Any] | None = None,
     max_steps: int = 15,
-) -> ToolCallingAgent:
+) -> ExecutorModule:
     """
     Create a dynamic AgentExecutor for a user-defined agent.
 
-    Builds a ToolCallingAgent at runtime with:
-    - Persona-based system instructions
+    Builds an ExecutorModule (dspy.ReAct) at runtime with:
     - SkillInvokerTools for each agent skill
     - Optional data access tools (row_crud scoped to agent's database)
 
     Args:
         agent_config: Agent entity data (id, name, persona, databaseId, etc.)
         skills: List of skill definitions for this agent
-        model: The LLM model to use
         api_key: API key for tool/skill execution
         organization_id: Organization ID for RLS context
         additional_tools: Extra tools to include (e.g., scoped row_crud)
         skill_executor_callback: Callback to execute skills
-        max_steps: Maximum execution steps
+        max_steps: Maximum ReAct iterations
 
     Returns:
-        Configured ToolCallingAgent for agent execution
+        Configured ExecutorModule for agent execution
     """
     agent_id = agent_config.get("id")
     agent_name = agent_config.get("name", "Agent")
-    agent_persona = agent_config.get("persona", "")
-    agent_description = agent_config.get("description", "")
-    agent_database_id = agent_config.get("databaseId")
 
-    logger.info(f"🤖 Creating AgentExecutor for agent: {agent_name} (id={agent_id})")
+    # SECURITY: Sanitize user-provided content
+    agent_description = sanitize_description(agent_config.get("description", ""))
 
-    # 1. Create SkillInvokerTools for each skill
+    logger.info(f"[AGENT-EXECUTOR] Creating ExecutorModule for agent: {agent_name} (id={agent_id})")
+
+    # SECURITY: Create skill permission validator to enforce skill whitelist
+    skill_validator = create_validator_from_skills(skills, agent_id=agent_id)
+    logger.info(f"[AGENT-EXECUTOR] Created skill validator with {len(skill_validator.allowed_skill_ids)} allowed skills")
+
+    # 1. Create SkillInvokerTools for each skill (with permission validation)
     skill_tools = create_skill_invoker_tools(
         skills=skills,
         api_key=api_key,
         organization_id=organization_id,
         skill_executor_callback=skill_executor_callback,
+        permission_validator=skill_validator,
     )
-    logger.info(f"   Created {len(skill_tools)} skill tools")
+    logger.info(f"[AGENT-EXECUTOR] Created {len(skill_tools)} skill tools")
 
     # 2. Combine with additional tools
-    all_tools = list(skill_tools)
+    all_tools: list[Callable[..., Any]] = list(skill_tools)
     if additional_tools:
         all_tools.extend(additional_tools)
         logger.info(f"   Added {len(additional_tools)} additional tools")
 
-    # 3. Build instructions from agent persona + template
-    # Pass agent context variables directly to the template builder
-    instructions = build_agent_instructions(
-        tools=all_tools,
-        agent_type="agent_executor",
-        context_type="interactive",
-        # Template variables (passed via **kwargs to Jinja2)
-        agent_name=agent_name,
-        agent_persona=agent_persona,
-        agent_description=agent_description,
-        skills=skills,
-        database_id=agent_database_id,
+    # 3. Create the ExecutorModule (dspy.ReAct)
+    executor = ExecutorModule(
+        execution_tools=all_tools,
+        max_iters=max_steps,
     )
 
-    # 4. Create the ToolCallingAgent
-    agent = ToolCallingAgent(
-        tools=all_tools,
-        model=model,
-        max_steps=max_steps,
-        instructions=instructions,
-        verbosity_level=LogLevel.OFF,
-    )
-
-    # 5. Set attributes for ManagedAgent protocol
-    agent.name = f"agent_{agent_name.lower().replace(' ', '_')}"
-    agent.description = (
+    # 4. Store metadata for identification
+    executor._agent_id = agent_id  # type: ignore[attr-defined]
+    executor._agent_name = f"agent_{agent_name.lower().replace(' ', '_')}"  # type: ignore[attr-defined]
+    executor._agent_description = (  # type: ignore[attr-defined]
         f"User-defined agent: {agent_name}. "
         f"{agent_description or 'Executes skills and interacts with data.'}"
     )
-    agent.capabilities = render_capabilities("agent_executor")
 
-    # Store agent metadata for routing/identification
-    agent._agent_id = agent_id
-    agent._agent_config = agent_config
+    logger.info(f"✨ Created ExecutorModule: {executor._agent_name}")  # type: ignore[attr-defined]
+    tool_names = [getattr(t, "name", getattr(t, "__name__", str(t))) for t in all_tools]
+    logger.info(f"   Tools: {tool_names}")
+    logger.info(f"   Max iters: {max_steps}")
 
-    logger.info(f"✨ Created AgentExecutor: {agent.name}")
-    logger.info(f"   Tools: {[t.name for t in all_tools]}")
-    logger.info(f"   Max steps: {max_steps}")
-
-    return agent
+    return executor
 
 
 def create_agent_executor_from_api(
     agent_id: int,
-    model: Any,
-    api_key: Optional[str] = None,
-    organization_id: Optional[int] = None,
-    skill_executor_callback: Optional[Any] = None,
+    api_key: str | None = None,
+    organization_id: int | None = None,
+    skill_executor_callback: Callable[..., Any] | None = None,
     max_steps: int = 15,
-    fetch_agent_callback: Optional[Any] = None,
-    fetch_skills_callback: Optional[Any] = None,
-    create_row_crud_callback: Optional[Any] = None,
-) -> ToolCallingAgent:
+    fetch_agent_callback: Callable[..., Any] | None = None,
+    fetch_skills_callback: Callable[..., Any] | None = None,
+    create_row_crud_callback: Callable[..., Any] | None = None,
+) -> ExecutorModule:
     """
     Create an AgentExecutor by loading agent from API.
 
@@ -141,21 +126,20 @@ def create_agent_executor_from_api(
     1. Fetches agent config from API
     2. Fetches agent's skills from API
     3. Creates scoped row_crud if agent has databaseId
-    4. Builds the dynamic agent
+    4. Builds the dynamic ExecutorModule
 
     Args:
         agent_id: Database ID of the agent
-        model: The LLM model to use
         api_key: API key for authentication
         organization_id: Organization ID for RLS context
         skill_executor_callback: Callback to execute skills
-        max_steps: Maximum execution steps
+        max_steps: Maximum ReAct iterations
         fetch_agent_callback: Callback to fetch agent from API
         fetch_skills_callback: Callback to fetch skills from API
         create_row_crud_callback: Callback to create scoped row_crud tool
 
     Returns:
-        Configured ToolCallingAgent
+        Configured ExecutorModule
     """
     if fetch_agent_callback is None or fetch_skills_callback is None:
         raise ValueError("fetch_agent_callback and fetch_skills_callback are required")
@@ -171,14 +155,14 @@ def create_agent_executor_from_api(
     skills = fetch_skills_callback(agent_id)
 
     # 3. Create additional tools (e.g., scoped row_crud for data access)
-    additional_tools = []
+    additional_tools: list[Callable[..., Any]] = []
     database_id = agent_config.get("databaseId")
     if database_id and create_row_crud_callback:
         logger.info(f"   Creating row_crud scoped to database {database_id}")
         row_crud = create_row_crud_callback(
             api_key=api_key,
             organization_id=organization_id,
-            database_id=database_id
+            database_id=database_id,
         )
         additional_tools.append(row_crud)
 
@@ -186,7 +170,6 @@ def create_agent_executor_from_api(
     return create_agent_executor(
         agent_config=agent_config,
         skills=skills,
-        model=model,
         api_key=api_key,
         organization_id=organization_id,
         additional_tools=additional_tools,

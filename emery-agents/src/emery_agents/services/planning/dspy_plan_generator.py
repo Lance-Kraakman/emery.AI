@@ -1,0 +1,369 @@
+"""
+DSPy Plan Generator
+
+Generates plans using DSPy modules instead of smolagents.
+
+AIDEV-NOTE: This is the DSPy-based replacement for plan_generator.py.
+It uses declarative signatures and automatic prompt optimization
+instead of Jinja2 templates and manual prompt engineering.
+
+Benefits:
+- Typed I/O contracts (no manual TOON parsing)
+- Automatic prompt optimization with BootstrapFewShot/MIPROv2
+- ChainOfThought reasoning built-in
+- Cleaner separation between logic and prompts
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from typing import TYPE_CHECKING, Any, Optional
+
+import dspy
+
+from emery_agents.ace import StrategyAccumulationService
+from emery_agents.reasoning.config import get_dspy_lm
+from emery_agents.reasoning.modules.planner import PlannerModule, SkillTemplatePlannerModule
+from emery_agents.reasoning.signatures.planning import (
+    ClarifyingQuestionOutput,
+    PlanOutput,
+    PlanOrQuestionsOutput,
+    PlanStepOutput,
+    SkillTemplatePlanOutput,
+)
+from emery_agents.entities.models.plan import Plan, PlanStep, create_plan, create_step
+from emery_agents.services.context import WorkspaceContext
+
+from .models import PlanGenerationRequest, PlanGenerationResult
+
+if TYPE_CHECKING:
+    from emery_agents.orchestrators.runtime import ConversationMessage
+    from emery_agents.services.protocols import ModelProviderProtocol, Tool
+
+logger = logging.getLogger(__name__)
+
+
+class DSPyPlanGenerator:
+    """
+    Generates plans using DSPy modules.
+
+    Replaces the smolagents-based PlanGenerator with DSPy:
+    - PlannerModule with ChainOfThought for plan generation
+    - Typed Pydantic outputs instead of dict/TOON parsing
+    - ACE strategy patterns as input field
+
+    The generator:
+    1. Configures DSPy with the appropriate model
+    2. Formats workspace context for the signature
+    3. Calls PlannerModule
+    4. Converts DSPy output to PlanGenerationResult
+    """
+
+    def __init__(
+        self,
+        model_provider: Optional["ModelProviderProtocol"] = None,
+        discovery_tools: Optional[list["Tool"]] = None,
+    ) -> None:
+        self.model_provider = model_provider
+        self.discovery_tools = discovery_tools or []
+        self._last_strategy_guidance: str = ""
+
+        # Initialize planner modules (will be configured with model on each call)
+        self._planner: Optional[PlannerModule] = None
+        self._template_planner: Optional[SkillTemplatePlannerModule] = None
+
+    def _get_planner(self) -> PlannerModule:
+        """Get or create planner module."""
+        if self._planner is None:
+            self._planner = PlannerModule(discovery_tools=self.discovery_tools)
+        return self._planner
+
+    def _get_template_planner(self) -> SkillTemplatePlannerModule:
+        """Get or create skill template planner module."""
+        if self._template_planner is None:
+            self._template_planner = SkillTemplatePlannerModule(discovery_tools=self.discovery_tools)
+        return self._template_planner
+
+    async def generate(
+        self,
+        request: PlanGenerationRequest,
+        strategy_service: Optional[StrategyAccumulationService] = None,
+    ) -> PlanGenerationResult:
+        """Generate plan using DSPy PlannerModule. Returns plan or clarifying questions."""
+        # ACE: Get strategy guidance from past successful executions
+        strategy_guidance = ""
+        if strategy_service:
+            strategies = strategy_service.get_relevant_strategies(
+                goal=request.basic_instructions,
+                max_results=3,
+                min_confidence=0.3,
+            )
+            if strategies:
+                strategy_guidance = strategy_service.format_for_planner(strategies)
+                logger.info(f"📊 Found {len(strategies)} relevant strategies for planning")
+
+        self._last_strategy_guidance = strategy_guidance
+
+        # Get model from config
+        org_model = request.config.org_model if request.config else None
+
+        # Get DSPy LM without calling configure (safe for async)
+        lm = get_dspy_lm(org_model=org_model)
+
+        # Route to appropriate module based on template generation mode
+        if request.is_template_generation and request.skill_inputs:
+            return await self._generate_template(request, lm, strategy_guidance)
+        else:
+            return await self._generate_plan(request, lm, strategy_guidance)
+
+    async def _generate_plan(
+        self,
+        request: PlanGenerationRequest,
+        lm: Any,
+        strategy_guidance: str,
+    ) -> PlanGenerationResult:
+        """Generate regular plan using PlannerModule."""
+        logger.info("📋 Generating plan using DSPy PlannerModule")
+
+        planner = self._get_planner()
+        workspace_context = self._format_workspace_context(request.workspace)
+        capability_guidance = self._get_capability_guidance(request)
+        conversation_history = self._format_conversation_history(request.conversation_history)
+
+        try:
+            with dspy.context(lm=lm):
+                result: PlanOrQuestionsOutput = planner(
+                    request=request.basic_instructions,
+                    workspace_context=workspace_context,
+                    capability_guidance=capability_guidance,
+                    proven_strategies=strategy_guidance,
+                    conversation_history=conversation_history,
+                )
+        except Exception as e:
+            logger.error(f"DSPy planning failed: {e}")
+            raise
+
+        # Handle clarifying questions
+        if result.questions:
+            logger.info(f"❓ DSPy planner returned {len(result.questions)} clarifying question(s)")
+            return PlanGenerationResult(
+                plan=None,
+                strategy_guidance=strategy_guidance,
+                clarifying_questions=self._convert_questions(result.questions),
+            )
+
+        # Handle plan output
+        if result.plan:
+            plan = self._convert_plan(
+                dspy_plan=result.plan,
+                basic_instructions=request.basic_instructions,
+            )
+            return PlanGenerationResult(
+                plan=plan,
+                strategy_guidance=strategy_guidance,
+            )
+
+        # Neither plan nor questions - shouldn't happen
+        raise ValueError("DSPy planner returned neither plan nor questions")
+
+    async def _generate_template(
+        self,
+        request: PlanGenerationRequest,
+        lm: Any,
+        strategy_guidance: str,
+    ) -> PlanGenerationResult:
+        """Generate skill template using SkillTemplatePlannerModule."""
+        logger.info("📋 Generating skill template using SkillTemplatePlannerModule")
+
+        template_planner = self._get_template_planner()
+        workspace_context = self._format_workspace_context(request.workspace)
+        capability_guidance = self._get_capability_guidance(request)
+        conversation_history = self._format_conversation_history(request.conversation_history)
+
+        # Convert skill inputs/outputs to dicts for the module
+        skill_inputs = [
+            {"name": i.name, "type": i.type, "required": i.required}
+            for i in request.skill_inputs
+        ]
+        skill_outputs = [
+            {"name": o.name, "type": o.type}
+            for o in (request.skill_outputs or [])
+        ]
+
+        try:
+            with dspy.context(lm=lm):
+                template_plan: SkillTemplatePlanOutput = template_planner(
+                    request=request.basic_instructions,
+                    workspace_context=workspace_context,
+                    capability_guidance=capability_guidance,
+                    proven_strategies=strategy_guidance,
+                    conversation_history=conversation_history,
+                    skill_inputs=skill_inputs,
+                    skill_outputs=skill_outputs,
+                )
+        except Exception as e:
+            logger.error(f"DSPy template planning failed: {e}")
+            raise
+
+        plan = self._convert_template_plan(template_plan, request.basic_instructions)
+        return PlanGenerationResult(plan=plan, strategy_guidance=strategy_guidance)
+
+    def _format_conversation_history(
+        self,
+        history: Optional[list["ConversationMessage"]],
+    ) -> str:
+        """Format conversation history as a string for the DSPy signature."""
+        if not history:
+            return ""
+
+        parts = []
+        for msg in history[-10:]:  # Last 10 messages to keep context bounded
+            if msg.content:
+                parts.append(f"{msg.role}: {msg.content}")
+
+        return "\n".join(parts)
+
+    def _format_workspace_context(
+        self,
+        workspace: Optional[WorkspaceContext],
+    ) -> str:
+        """Format workspace context as JSON string for DSPy signature."""
+        if not workspace:
+            return "{}"
+
+        # Use the workspace's template context method
+        context = workspace.to_template_context()
+        return json.dumps(context, indent=2, default=str)
+
+    def _get_capability_guidance(
+        self,
+        request: PlanGenerationRequest,
+    ) -> str:
+        """Get capability planning guidance for the planner using semantic search.
+
+        Instead of dumping ALL enabled capability guidance, performs semantic search
+        to find the most relevant capabilities for this task.
+        """
+        from emery_agents.reasoning.capabilities import (
+            format_planning_guidance,
+            get_planning_guidance,
+        )
+
+        # Fallback: no registry means return all guidance (suboptimal)
+        if not request.capability_registry:
+            logger.warning("No capability_registry in request — using all guidance (search unavailable)")
+            return format_planning_guidance()
+
+        org_id = request.config.org_id if request.config else None
+
+        try:
+            # Semantic search for relevant capabilities based on user's task
+            matched = request.capability_registry.search(
+                query=request.basic_instructions,
+                limit=3,  # Top 3 most relevant
+            )
+
+            # Filter to enabled only
+            if org_id:
+                enabled_ids = {
+                    cap.id for cap in request.capability_registry.get_enabled(org_id)
+                }
+                matched = [cap for cap in matched if cap.id in enabled_ids]
+
+            # Get guidance for matched capabilities
+            guidance_parts = []
+            for cap in matched:
+                g = get_planning_guidance(cap.id)
+                if g:
+                    guidance_parts.append(g)
+
+            if guidance_parts:
+                logger.info(
+                    f"📊 Matched {len(matched)} capabilities for guidance: "
+                    f"{[c.id for c in matched]}"
+                )
+                return "\n\n".join(guidance_parts)
+
+        except Exception as e:
+            logger.warning(f"Capability search failed, using all guidance: {e}")
+
+        # Fallback: return all guidance
+        return format_planning_guidance()
+
+    def _convert_questions(
+        self,
+        dspy_questions: list[ClarifyingQuestionOutput],
+    ) -> list[dict[str, Any]]:
+        """Convert DSPy ClarifyingQuestionOutput to dict format for compatibility."""
+        return [
+            {
+                "question": q.question,
+                "question_type": q.question_type,
+                "options": q.options,
+                "reason": q.reason,
+            }
+            for q in dspy_questions
+        ]
+
+    def _convert_plan(
+        self,
+        dspy_plan: PlanOutput,
+        basic_instructions: str,
+    ) -> Plan:
+        """Convert DSPy Plan to the existing Plan model."""
+        # Convert steps
+        steps: list[PlanStep] = []
+        for dspy_step in dspy_plan.steps:
+            step = create_step(
+                description=dspy_step.description,
+                target_agent=dspy_step.target_agent,
+                prompt_template=dspy_step.prompt_template,
+                required_context=dspy_step.required_context,
+                phase_name=dspy_step.phase_name,
+                phase_order=dspy_step.phase_order,
+                replan_after=dspy_step.replan_after,
+            )
+            steps.append(step)
+
+        return create_plan(
+            goal=dspy_plan.goal,
+            basic_instructions=basic_instructions,
+            steps=steps,
+            context=dspy_plan.context,
+            analysis=dspy_plan.analysis,
+        )
+
+    def _convert_template_plan(
+        self,
+        template_plan: SkillTemplatePlanOutput,
+        basic_instructions: str,
+    ) -> Plan:
+        """Convert SkillTemplatePlanOutput to Plan model."""
+        steps: list[PlanStep] = []
+        for s in template_plan.steps:
+            step = create_step(
+                description=s.description,
+                tool_call=s.tool_call,
+                parameters=s.parameters,
+                target_agent=s.target_agent,
+                prompt_template=s.prompt_template,
+                required_context=s.required_context,
+                phase_name=s.phase_name,
+                phase_order=s.phase_order,
+                replan_after=s.replan_after,
+            )
+            steps.append(step)
+
+        return create_plan(
+            goal=template_plan.goal,
+            basic_instructions=basic_instructions,
+            steps=steps,
+            context=template_plan.context,
+            analysis=template_plan.analysis,
+        )
+
+    @property
+    def last_strategy_guidance(self) -> str:
+        """Get the strategy guidance used in the last plan generation."""
+        return self._last_strategy_guidance

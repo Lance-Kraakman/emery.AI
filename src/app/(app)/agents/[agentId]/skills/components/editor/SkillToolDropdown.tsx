@@ -46,15 +46,16 @@ export function SkillToolDropdown({ onSelectTool, disabled }: SkillToolDropdownP
   // App filter management
   const appFilter = useAppFilter();
 
-  // Tool search with infinite scroll - fixed to only show app tools
+  // Tool search with infinite scroll - show only external tools (not reference tools)
   const search = useToolSearch({
     query: debouncedQuery,
     selectedCategories: [], // No reference categories
     selectedApps,
     connectedOnly,
     requiresConnection,
-    showReferenceTools: false, // FIXED: no reference tools
-    toolCategories: ['apps'], // FIXED: only Pipedream/app tools
+    showReferenceTools: false, // No reference tools (agents, tables, etc.)
+    // Note: Don't filter by toolCategories - Pipedream tools have categories like
+    // 'communication', 'development', etc. showReferenceTools: false is sufficient.
     isOpen: true,
     isClient,
   });
@@ -110,7 +111,7 @@ export function SkillToolDropdown({ onSelectTool, disabled }: SkillToolDropdownP
   if (!isClient) return null;
 
   return (
-    <div className="border rounded-lg flex flex-col overflow-hidden min-h-[350px]">
+    <div className="border rounded-lg flex flex-col overflow-hidden min-h-[300px] max-h-[400px]">
       {/* Search input */}
       <div className="p-2 border-b border-border">
         <div className="relative">
@@ -168,7 +169,7 @@ export function SkillToolDropdown({ onSelectTool, disabled }: SkillToolDropdownP
       )}
 
       {/* Tool List with infinite scroll */}
-      <div className="flex-1 min-h-0">
+      <div className="flex-1 min-h-0 overflow-y-auto">
         <ToolList
           tools={search.allTools}
           hasMore={search.hasMore}

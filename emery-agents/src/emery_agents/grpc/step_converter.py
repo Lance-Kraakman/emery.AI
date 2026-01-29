@@ -1,133 +1,147 @@
 """
 Step Converter Utilities
 
-Extracted from chat_processing_service.py for single responsibility.
-Handles conversion of smolagents step objects to frontend event dicts.
+Handles conversion of step objects to frontend event dicts.
+Uses DSPy TrackedStep types.
 """
+
+from __future__ import annotations
 
 import json
 import logging
-from typing import Dict
+from typing import Any, Dict
 
-from smolagents.memory import ActionStep, PlanningStep
-
+from ..reasoning.modules.step_tracker import TrackedStep, StepType as DSPyStepType
 from .response_types import StepType, StepMetadata, StepProgressDict
 
 logger = logging.getLogger(__name__)
 
+# Truncation limits for step content
+MAX_METADATA_LENGTH = 500
+MAX_MESSAGE_PREVIEW_LENGTH = 100
 
-def extract_planning_step(step: PlanningStep, index: int) -> StepProgressDict:
-    """
-    Extract typed data from PlanningStep.
 
-    PlanningStep has 'plan' attribute containing the planning text.
-    No hasattr checks needed - smolagents guarantees this structure.
+def extract_tracked_step(step: TrackedStep, index: int) -> StepProgressDict:
     """
+    Extract typed data from DSPy TrackedStep.
+
+    Converts DSPy step types to frontend event format.
+    """
+    # Map DSPy step types to frontend types
+    step_type_map: dict[DSPyStepType, StepType] = {
+        DSPyStepType.PLANNING: "PLANNING",
+        DSPyStepType.ACTION: "ACTION",
+        DSPyStepType.TOOL_CALL: "ACTION",
+        DSPyStepType.TOOL_RESULT: "ACTION",
+        DSPyStepType.THINKING: "REASONING",
+        DSPyStepType.FINAL: "FINAL",
+        DSPyStepType.ERROR: "ERROR",
+    }
+
+    step_type = step_type_map.get(step.step_type, "ACTION")
+
+    # Build step name
+    if step.step_type == DSPyStepType.PLANNING:
+        step_name = "Planning"
+    elif step.step_type == DSPyStepType.FINAL:
+        step_name = "Final Answer"
+    elif step.tool_calls:
+        tool_name = step.tool_calls[0].tool_name
+        step_name = f"Tool: {tool_name}"
+    else:
+        step_name = f"Step: {step.step_type.value}"
+
+    # Build metadata
+    metadata_dict: dict[str, str] = {}
+    if step.tool_calls:
+        tc = step.tool_calls[0]
+        metadata_dict["tool"] = tc.tool_name
+        metadata_dict["arguments"] = str(tc.arguments)[:MAX_METADATA_LENGTH]
+        if tc.result:
+            metadata_dict["observations"] = str(tc.result)[:MAX_METADATA_LENGTH]
+    if step.reasoning:
+        metadata_dict["reasoning"] = step.reasoning[:MAX_METADATA_LENGTH]
+
+    return StepProgressDict(
+        type="step_progress",
+        step_type=step_type,
+        step_name=step_name,
+        content=step.content[:MAX_METADATA_LENGTH] if step.content else "",
+        metadata=metadata_dict,
+        step_index=index,
+    )
+
+
+def extract_planning_step(step: Any, index: int) -> StepProgressDict:
+    """
+    Extract typed data from TrackedStep for planning steps.
+    """
+    # Handle DSPy TrackedStep
+    if isinstance(step, TrackedStep):
+        return extract_tracked_step(step, index)
+
+    # Handle generic step with plan attribute
     return StepProgressDict(
         type="step_progress",
         step_type="PLANNING",
         step_name="Planning",
-        content=step.plan,
+        content=getattr(step, 'plan', str(step)) if hasattr(step, "plan") else str(step),
         metadata=StepMetadata(),
-        step_index=index
+        step_index=index,
     )
 
 
-def extract_action_step(step: ActionStep, index: int) -> StepProgressDict:
+def extract_action_step(step: Any, index: int) -> StepProgressDict:
     """
-    Extract typed data from ActionStep.
-
-    ActionStep has 'tool_calls' (list of ToolCall objects), 'code_action' (for CodeAgent),
-    and 'observations'. When tool_calls is empty/None, checks for code_action (CodeAgent),
-    then falls back to model_output for raw LLM response.
-
-    AIDEV-NOTE: CodeAgent populates step.code_action with Python code, not tool_calls.
-    We now handle this as a CODE_EXECUTION step type for proper UI display.
+    Extract typed data from TrackedStep for action steps.
     """
-    # Extract tool info from tool_calls
-    tool_name = "unknown"
-    tool_args = "{}"
+    # Handle DSPy TrackedStep
+    if isinstance(step, TrackedStep):
+        return extract_tracked_step(step, index)
+
+    # Handle generic step
     step_type: StepType = "ACTION"
-    step_name = "Tool: unknown"
+    step_name = "Action"
     content = ""
-
-    if step.tool_calls and len(step.tool_calls) > 0:
-        # Has valid tool calls (ToolCallingAgent)
-        tool_call = step.tool_calls[0]
-        tool_name = tool_call.name
-        tool_args = str(tool_call.arguments)
-        step_name = f"Tool: {tool_name}"
-
-        # Format observations (truncate if too long)
-        if step.observations:
-            obs = str(step.observations)
-            MAX_LENGTH = 500
-            content = obs[:MAX_LENGTH] + "..." if len(obs) > MAX_LENGTH else obs
-
-    elif step.code_action:
-        # CodeAgent: has Python code execution instead of tool_calls
-        # AIDEV-NOTE: code_action contains the Python code that was executed
-        step_type = "CODE_EXECUTION"
-        step_name = "Code Execution"
-        tool_name = "python_interpreter"
-
-        # Format the code (truncate if too long)
-        code = str(step.code_action)
-        MAX_CODE_LENGTH = 1000
-        content = code[:MAX_CODE_LENGTH] + "..." if len(code) > MAX_CODE_LENGTH else code
-        tool_args = code[:500]  # Store truncated code in args
-
-        # Append observations/output if available
-        if step.observations:
-            obs = str(step.observations)
-            MAX_OUTPUT_LENGTH = 500
-            output_truncated = obs[:MAX_OUTPUT_LENGTH] + "..." if len(obs) > MAX_OUTPUT_LENGTH else obs
-            content += f"\n\n--- Output ---\n{output_truncated}"
-
-        logger.info(f"CodeAgent step: code_action detected, {len(code)} chars")
-
-    else:
-        # No tool calls or code - check for raw model output
-        logger.debug(f"ActionStep without tool_calls/code_action: model_output={'exists' if step.model_output else 'None'}")
-
-        if step.model_output:
-            # Use model's raw output as reasoning step
-            step_type = "REASONING"
-            step_name = "Model Reasoning (No Tool Call)"
-            raw_output = str(step.model_output)
-            MAX_LENGTH = 500
-            content = raw_output[:MAX_LENGTH] + "..." if len(raw_output) > MAX_LENGTH else raw_output
-        else:
-            # Fallback: use observations if available
-            step_name = "Agent Step"
-            if step.observations:
-                obs = str(step.observations)
-                MAX_LENGTH = 500
-                content = obs[:MAX_LENGTH] + "..." if len(obs) > MAX_LENGTH else obs
-
-    # Build metadata dict with only non-None string values (protobuf requires map<string, string>)
     metadata_dict: Dict[str, str] = {}
-    if tool_name != "unknown":
+
+    # Try to extract tool information
+    if hasattr(step, 'tool_calls') and step.tool_calls:
+        tool_call = step.tool_calls[0]
+        tool_name = getattr(tool_call, 'name', getattr(tool_call, 'tool_name', 'unknown'))
+        tool_args = str(getattr(tool_call, 'arguments', {}))
+        step_name = f"Tool: {tool_name}"
         metadata_dict["tool"] = tool_name
-    if tool_args != "{}":
-        metadata_dict["arguments"] = tool_args
-    if content:
+        metadata_dict["arguments"] = tool_args[:MAX_METADATA_LENGTH]
+
+    # Try to extract observations
+    if hasattr(step, 'observations') and step.observations:
+        obs = str(step.observations)
+        MAX_LENGTH = 500
+        content = obs[:MAX_LENGTH] + "..." if len(obs) > MAX_LENGTH else obs
         metadata_dict["observations"] = content
 
+    # Try to extract content
+    if hasattr(step, 'content') and step.content:
+        content = step.content[:MAX_METADATA_LENGTH]
+
     # Add skill metadata for managed agents and skill-related tools
-    # This enables UI to show skill execution progress
-    MANAGED_AGENTS = {"skill_builder", "document_builder", "table_builder", "schema_builder"}
-    SKILL_TOOLS = {"tool_executor"}
+    if metadata_dict.get("tool"):
+        tool_name = metadata_dict["tool"]
+        is_managed_agent = (
+            tool_name.endswith("_builder") or
+            tool_name.endswith("_agent") or
+            tool_name == "tool_executor" or
+            tool_name == "system_designer" or
+            tool_name.startswith("skill-")
+        )
 
-    if tool_name in MANAGED_AGENTS or tool_name in SKILL_TOOLS or tool_name.startswith("skill-"):
-        metadata_dict["skill_name"] = tool_name
-        # Determine status based on observations (completed if we have output)
-        metadata_dict["skill_status"] = "completed" if content else "executing"
-
-        # Build descriptive message from tool arguments and observations
-        skill_message = build_skill_message(tool_name, tool_args, content)
-        if skill_message:
-            metadata_dict["skill_message"] = skill_message
+        if is_managed_agent:
+            metadata_dict["skill_name"] = tool_name
+            metadata_dict["skill_status"] = "completed" if content else "executing"
+            skill_message = build_skill_message(tool_name, metadata_dict.get("arguments", "{}"), content)
+            if skill_message:
+                metadata_dict["skill_message"] = skill_message
 
     return StepProgressDict(
         type="step_progress",
@@ -160,30 +174,17 @@ def build_skill_message(tool_name: str, tool_args: str, observations: str) -> st
         task = args.get("task", "")
         tool = args.get("tool", "")
         if task:
-            messages.append(f"Running: {task[:100]}{'...' if len(task) > 100 else ''}")
+            messages.append(f"Running: {task[:MAX_MESSAGE_PREVIEW_LENGTH]}{'...' if len(task) > MAX_MESSAGE_PREVIEW_LENGTH else ''}")
         if tool:
             messages.append(f"Using tool: {tool}")
 
-    elif tool_name == "schema_builder":
-        # Schema builder working on database schema
+    elif tool_name.endswith("_builder") or tool_name.endswith("_agent") or tool_name == "system_designer":
+        # Generic handler for all managed agents (*_builder, *_agent, system_designer)
         task = args.get("task", args.get("request", ""))
         if task:
-            messages.append(f"Schema task: {task[:100]}{'...' if len(task) > 100 else ''}")
-
-    elif tool_name == "table_builder":
-        task = args.get("task", "")
-        if task:
-            messages.append(f"Table task: {task[:100]}{'...' if len(task) > 100 else ''}")
-
-    elif tool_name == "skill_builder":
-        task = args.get("task", "")
-        if task:
-            messages.append(f"Building skill: {task[:100]}{'...' if len(task) > 100 else ''}")
-
-    elif tool_name == "document_builder":
-        task = args.get("task", "")
-        if task:
-            messages.append(f"Document task: {task[:100]}{'...' if len(task) > 100 else ''}")
+            # Format agent name for display: schema_builder -> Schema
+            display_name = tool_name.replace("_builder", "").replace("_agent", "").replace("_", " ").title()
+            messages.append(f"{display_name}: {task[:MAX_MESSAGE_PREVIEW_LENGTH]}{'...' if len(task) > MAX_MESSAGE_PREVIEW_LENGTH else ''}")
 
     elif tool_name.startswith("skill-"):
         # Generic skill call
@@ -202,7 +203,7 @@ def build_skill_message(tool_name: str, tool_args: str, observations: str) -> st
                     messages.append(f"Done: {line.strip()[:80]}")
                     break
         elif "error" in obs_lower or "failed" in obs_lower:
-            messages.append(f"Failed: {observations[:100]}{'...' if len(observations) > 100 else ''}")
+            messages.append(f"Failed: {observations[:MAX_MESSAGE_PREVIEW_LENGTH]}{'...' if len(observations) > MAX_MESSAGE_PREVIEW_LENGTH else ''}")
 
     return "\n".join(messages) if messages else ""
 

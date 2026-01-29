@@ -17,6 +17,18 @@ import { DatabaseId, OrganizationId, UserId, AgentId } from '@/ddd/domain/shared
 import type { CreateDatabaseDTO, UpdateDatabaseDTO, DatabaseFiltersDTO, DatabaseDTO } from '@/app/dtos/database.dto';
 import { DatabaseMapper } from '@/app/mappers/database-mapper';
 
+export interface DatabaseDeletionPreview {
+  databaseId: number;
+  databaseName: string;
+  tables: Array<{ id: number; name: string }>;
+  tableCount: number;
+}
+
+export interface CascadeDeleteResult {
+  deletedTables: number;
+  deletedDatabase: boolean;
+}
+
 export class DatabaseApplicationService {
   constructor(
     private readonly tableRepository: IDynamicTableRepository,
@@ -206,6 +218,103 @@ export class DatabaseApplicationService {
       return {
         success: false,
         error: error instanceof Error ? error.message : "Failed to delete database"
+      };
+    }
+  }
+
+  /**
+   * Get preview of what will be deleted when cascade deleting a database
+   */
+  async getDeletionPreview(databaseId: DatabaseId): Promise<Result<DatabaseDeletionPreview>> {
+    try {
+      const database = await this.databaseRepository.findById(databaseId);
+      if (!database) {
+        return {
+          success: false,
+          error: `Database with ID ${databaseId} not found`
+        };
+      }
+
+      const tables = await this.tableRepository.findByDatabase(databaseId);
+
+      return {
+        success: true,
+        data: {
+          databaseId: database.id.value,
+          databaseName: database.name,
+          tables: tables.map(t => ({ id: t.id.value, name: t.name })),
+          tableCount: tables.length,
+        }
+      };
+    } catch (error) {
+      logger.error('Error getting deletion preview', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to get deletion preview"
+      };
+    }
+  }
+
+  /**
+   * Delete a database with cascade - deletes all tables first, then the database
+   * Use this when user has confirmed cascade deletion with typed confirmation
+   */
+  async deleteDatabaseWithCascade(
+    databaseId: DatabaseId,
+    organizationId: OrganizationId
+  ): Promise<Result<CascadeDeleteResult>> {
+    try {
+      // Verify database exists and belongs to organization
+      const database = await this.databaseRepository.findById(databaseId);
+      if (!database) {
+        return {
+          success: false,
+          error: `Database with ID ${databaseId} not found`
+        };
+      }
+
+      if (database.organizationId.value !== organizationId.value) {
+        return {
+          success: false,
+          error: "Access denied: Database does not belong to your organization"
+        };
+      }
+
+      // Get all tables in the database
+      const tables = await this.tableRepository.findByDatabase(databaseId);
+      let deletedTables = 0;
+
+      // Delete all tables first
+      for (const table of tables) {
+        try {
+          await this.tableRepository.delete(table.id);
+          deletedTables++;
+          logger.debug(`Deleted table ${table.name} (ID: ${table.id.value}) from database ${database.name}`);
+        } catch (tableError) {
+          logger.error(`Failed to delete table ${table.id.value}`, tableError);
+          return {
+            success: false,
+            error: `Failed to delete table "${table.name}": ${tableError instanceof Error ? tableError.message : 'Unknown error'}`
+          };
+        }
+      }
+
+      // Now delete the database
+      await this.databaseRepository.delete(databaseId);
+      logger.summary(`Cascade deleted database ${database.name} with ${deletedTables} tables`);
+
+      return {
+        success: true,
+        data: {
+          deletedTables,
+          deletedDatabase: true,
+        }
+      };
+    } catch (error) {
+      logger.error('Error cascade deleting database', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to cascade delete database"
       };
     }
   }

@@ -97,26 +97,44 @@ class WAFStack(Stack):
                 path_pattern=None,  # No path filter = all requests
                 prefix=prefix
             ),
-            # Priority 5: AWS Managed - Common Rule Set (OWASP protections)
+            # Priority 5: AWS Managed - Amazon IP Reputation List
+            # Blocks known malicious IPs from AWS threat intelligence
+            self._managed_rule(
+                name="AWSManagedRulesAmazonIpReputationList",
+                priority=5,
+                vendor_name="AWS",
+                rule_group_name="AWSManagedRulesAmazonIpReputationList",
+                prefix=prefix
+            ),
+            # Priority 6: AWS Managed - Anonymous IP List
+            # Blocks VPNs/proxies commonly used by attackers
+            self._managed_rule(
+                name="AWSManagedRulesAnonymousIpList",
+                priority=6,
+                vendor_name="AWS",
+                rule_group_name="AWSManagedRulesAnonymousIpList",
+                prefix=prefix
+            ),
+            # Priority 7: AWS Managed - Common Rule Set (OWASP protections)
             self._managed_rule(
                 name="AWSManagedRulesCommonRuleSet",
-                priority=5,
+                priority=7,
                 vendor_name="AWS",
                 rule_group_name="AWSManagedRulesCommonRuleSet",
                 prefix=prefix
             ),
-            # Priority 6: AWS Managed - Known Bad Inputs (Log4j, etc.)
+            # Priority 8: AWS Managed - Known Bad Inputs (Log4j, etc.)
             self._managed_rule(
                 name="AWSManagedRulesKnownBadInputsRuleSet",
-                priority=6,
+                priority=8,
                 vendor_name="AWS",
                 rule_group_name="AWSManagedRulesKnownBadInputsRuleSet",
                 prefix=prefix
             ),
-            # Priority 7: AWS Managed - SQL Injection protection
+            # Priority 9: AWS Managed - SQL Injection protection
             self._managed_rule(
                 name="AWSManagedRulesSQLiRuleSet",
-                priority=7,
+                priority=9,
                 vendor_name="AWS",
                 rule_group_name="AWSManagedRulesSQLiRuleSet",
                 prefix=prefix

@@ -844,6 +844,10 @@ export const agents = pgTable("agents", {
   planGeneratedAt: timestamp("plan_generated_at"),
   planApprovedAt: timestamp("plan_approved_at"),
 
+  // Workspace filesystem - S3 path to agent's workspace tar archive
+  // Contains persistent files, context, memory, and execution history
+  workspacePath: text("workspace_path"), // S3 path: workspaces/agents/{id}.tar.gz
+
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   // RBAC-based policy for viewing agents (resource-aware)
@@ -1204,6 +1208,11 @@ export const tasks = pgTable("tasks", {
   result: jsonb("result"), // Final output data
   error: text("error"),
   logs: jsonb("logs").$type<string[]>().default([]), // Execution logs from gRPC TaskProgress
+
+  // Workspace filesystem - S3 path to task outputs in agent's workspace
+  // Results: /workspace/history/{task_id}/result.json
+  // Logs: /workspace/history/{task_id}/session.jsonl
+  storagePath: text("storage_path"), // S3 path to task outputs in workspace
 
   // Execution tracking
   startedAt: timestamp("started_at"),
@@ -2367,4 +2376,236 @@ export const entityTemplates = pgTable("entity_templates", {
       )
     `,
   }),
+]);
+
+// ============================================================================
+// SECURITY ANALYSIS TABLES
+// ============================================================================
+
+/**
+ * Security Reports - Stores security analysis reports for organizations
+ * Based on OWASP LLM Top 10 (2025), Agentic AI Top 10 (2026), and Web Top 10 (2025)
+ */
+export const securityReports = pgTable("security_reports", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  createdBy: uuid("created_by").notNull().references(() => users.id),
+
+  // Status
+  status: text("status").notNull().default('generating'), // 'generating' | 'completed' | 'failed'
+
+  // Report data as JSONB (matches existing patterns like agents.plan)
+  reportData: jsonb("report_data").notNull().$type<{
+    reportType: 'full' | 'agent' | 'skill' | 'incremental';
+    version: number;
+    overallScore: number;
+    riskGrade: 'A' | 'B' | 'C' | 'D' | 'F';
+    findingCounts: { critical: number; high: number; medium: number; low: number; info: number };
+    owaspViolations: { llm2025: string[]; agentic2026: string[]; web2025: string[] };
+    agentProfiles: Array<{ agentId: number; agentName: string; riskScore: number; findingCount: number }>;
+    authorizedAccess: {
+      approvedPlans: Array<{ skillId: number; skillName: string; approvedAt: string; approvedBy: string }>;
+      delegations: Array<{ agentId: number; agentName: string; services: string[]; ownerId: string }>;
+      apiTokens: Array<{ agentId: number; agentName: string; hasApiKey: boolean; hasWebhook: boolean }>;
+    };
+    strengths: Array<{ category: string; title: string; description: string; resourceType: string; resourceId?: string }>;
+    topRecommendations: string[];
+  }>(),
+
+  // Timestamps
+  generatedAt: timestamp("generated_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+}, (table) => [
+  index("security_reports_org_idx").on(table.organizationId),
+  index("security_reports_status_idx").on(table.status),
+  index("security_reports_generated_idx").on(table.generatedAt),
+
+  // RLS: Tenant isolation
+  pgPolicy("security_reports_tenant_isolation", {
+    as: "permissive",
+    for: "all",
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
+  }),
+]);
+
+/**
+ * Security Findings - Individual security issues found during analysis
+ * Linked to security reports, can be updated (acknowledged, resolved, etc.)
+ */
+export const securityFindings = pgTable("security_findings", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  reportId: integer("report_id").notNull().references(() => securityReports.id, { onDelete: 'cascade' }),
+
+  // Indexed columns for filtering
+  riskLevel: text("risk_level").notNull(), // 'critical' | 'high' | 'medium' | 'low' | 'info'
+  status: text("status").notNull().default('open'), // 'open' | 'acknowledged' | 'mitigated' | 'false_positive'
+
+  // Finding data as JSONB
+  findingData: jsonb("finding_data").notNull().$type<{
+    ruleId: string;
+    title: string;
+    description: string;
+    owaspRefs: Array<{ category: 'LLM_2025' | 'AGENTIC_2026' | 'WEB_2025'; code: string; name: string }>;
+    resource: { type: 'agent' | 'skill' | 'automation' | 'delegation'; id: string; name: string; path?: string };
+    evidence: { affectedComponents: string[]; attackVector?: string; rawData?: Record<string, unknown> };
+    remediation: { recommendation: string; steps?: string[]; priority: number };
+    statusHistory?: Array<{ status: string; changedBy: string; changedAt: string; reason?: string }>;
+  }>(),
+
+  // Timestamps
+  detectedAt: timestamp("detected_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("security_findings_org_idx").on(table.organizationId),
+  index("security_findings_report_idx").on(table.reportId),
+  index("security_findings_risk_level_idx").on(table.riskLevel),
+  index("security_findings_status_idx").on(table.status),
+
+  // RLS: Tenant isolation
+  pgPolicy("security_findings_tenant_isolation", {
+    as: "permissive",
+    for: "all",
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
+  }),
+]);
+
+// ============================================================================
+// PUBLISHED AGENTS TABLES
+// ============================================================================
+
+/**
+ * Integration configuration type for published agents
+ */
+export type PublishedAgentIntegrations = {
+  chatgptPlugin?: { enabled: boolean; oauthClientId: number };
+  mcpServer?: { enabled: boolean; apiKeyId: number };
+  openaiAssistants?: { enabled: boolean };
+};
+
+/**
+ * Published Agents - Agents exposed externally as callable services
+ * Enables external consumers (ChatGPT, Claude, B2B partners) to invoke agents via REST API
+ */
+export const publishedAgents = pgTable("published_agents", {
+  id: serial("id").primaryKey(),
+  agentId: integer("agent_id").notNull().references(() => agents.id, { onDelete: 'cascade' }).unique(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+
+  // Publication identity
+  slug: text("slug").notNull(), // URL-safe: /api/v1/published/:slug
+  displayName: text("display_name").notNull(),
+  description: text("description"),
+
+  // Status workflow: draft → pending_review → approved → published → suspended
+  status: text("status").notNull().default('draft'),
+  publishedAt: timestamp("published_at"),
+  publishedBy: uuid("published_by").references(() => users.id),
+
+  // Security integration
+  latestSecurityReportId: integer("latest_security_report_id").references(() => securityReports.id),
+  securityApprovedAt: timestamp("security_approved_at"),
+  securityApprovedBy: uuid("security_approved_by").references(() => users.id),
+  minSecurityGrade: text("min_security_grade").notNull().default('B'), // A, B, or C required
+
+  // Access modes
+  allowTaskMode: boolean("allow_task_mode").notNull().default(true),
+  allowSkillMode: boolean("allow_skill_mode").notNull().default(true),
+
+  // Billing (start with owner_pays, add caller_pays later)
+  billingMode: text("billing_mode").notNull().default('owner_pays'),
+
+  // Rate limiting
+  rateLimitPerMinute: integer("rate_limit_per_minute").notNull().default(60),
+  rateLimitPerDay: integer("rate_limit_per_day").notNull().default(1000),
+
+  // Integrations config (ChatGPT, MCP, OpenAI Assistants)
+  integrations: jsonb("integrations").$type<PublishedAgentIntegrations>().default({}),
+
+  // Timestamps
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  unique("published_agents_org_slug").on(table.organizationId, table.slug),
+  index("published_agents_status_idx").on(table.status),
+  index("published_agents_agent_idx").on(table.agentId),
+
+  // RLS: Tenant isolation
+  pgPolicy("published_agents_tenant_isolation", {
+    as: "permissive",
+    for: "all",
+    to: "public",
+    using: sql`organization_id = current_setting('app.current_organization_id')::integer`,
+  }),
+]);
+
+/**
+ * Published Agent API Keys - Simple API key authentication for external access
+ */
+export const publishedAgentApiKeys = pgTable("published_agent_api_keys", {
+  id: serial("id").primaryKey(),
+  publishedAgentId: integer("published_agent_id").notNull().references(() => publishedAgents.id, { onDelete: 'cascade' }),
+
+  name: text("name").notNull(), // "Production Key", "Test Key"
+  keyHash: text("key_hash").notNull().unique(), // SHA-256 hash
+  keyPrefix: text("key_prefix").notNull(), // First 8 chars for identification (e.g., "pk_live_")
+
+  scopes: jsonb("scopes").$type<string[]>().notNull().default(['task:execute', 'skill:execute']),
+
+  lastUsedAt: timestamp("last_used_at"),
+  usageCount: integer("usage_count").notNull().default(0),
+  expiresAt: timestamp("expires_at"),
+  isRevoked: boolean("is_revoked").notNull().default(false),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("published_agent_api_keys_published_agent_idx").on(table.publishedAgentId),
+  index("published_agent_api_keys_key_hash_idx").on(table.keyHash),
+]);
+
+/**
+ * Published Agent OAuth Clients - OAuth 2.0 clients for ChatGPT and other integrations
+ */
+export const publishedAgentOauthClients = pgTable("published_agent_oauth_clients", {
+  id: serial("id").primaryKey(),
+  publishedAgentId: integer("published_agent_id").notNull().references(() => publishedAgents.id, { onDelete: 'cascade' }),
+
+  clientId: text("client_id").notNull().unique(),
+  clientSecretHash: text("client_secret_hash").notNull(),
+
+  name: text("name").notNull(),
+  redirectUris: jsonb("redirect_uris").$type<string[]>().notNull().default([]),
+  allowedScopes: jsonb("allowed_scopes").$type<string[]>().notNull().default(['task:execute', 'skill:execute']),
+
+  isActive: boolean("is_active").notNull().default(true),
+  lastUsedAt: timestamp("last_used_at"),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("published_agent_oauth_clients_published_agent_idx").on(table.publishedAgentId),
+  index("published_agent_oauth_clients_client_id_idx").on(table.clientId),
+]);
+
+/**
+ * Published Agent Usage Logs - Track external API usage for analytics and billing
+ */
+export const publishedAgentUsageLogs = pgTable("published_agent_usage_logs", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  publishedAgentId: integer("published_agent_id").notNull().references(() => publishedAgents.id, { onDelete: 'cascade' }),
+  apiKeyId: integer("api_key_id").references(() => publishedAgentApiKeys.id),
+
+  requestType: text("request_type").notNull(), // 'task' | 'skill'
+  skillName: text("skill_name"),
+  statusCode: integer("status_code").notNull(),
+  responseTimeMs: integer("response_time_ms").notNull(),
+
+  clientIp: text("client_ip"),
+  userAgent: text("user_agent"),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("published_agent_usage_logs_published_agent_idx").on(table.publishedAgentId),
+  index("published_agent_usage_logs_created_at_idx").on(table.createdAt),
 ]);

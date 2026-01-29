@@ -15,6 +15,11 @@
  * AIDEV-NOTE: Clean separation - database stays in Next.js, AI processing in gRPC
  */
 
+// AIDEV-NOTE: Extend serverless function timeout for long-running AI tasks
+// Vercel Pro allows up to 300s (5 min), Hobby plan allows 60s
+// This prevents premature timeout for complex multi-step agent executions
+export const maxDuration = 300; // 5 minutes
+
 import { NextRequest } from 'next/server';
 import { auth } from '@/lib/auth';
 
@@ -27,7 +32,7 @@ import { getChatApplicationService, getDynamicTableRepository, getAgentRepositor
 import { getSkillEnrichmentService } from '@/ddd/application/di/getters';
 import { TokenUsageApplicationService } from '@/ddd/application/services/billing/token-usage-application-service';
 import { getTokenUsageRepository } from '@/ddd/application/di/getters';
-import type { CreateChatDTO, SendMessageDTO, ExecutionStep, ExecutionStepMetadata } from '@/app/dtos/chat.dto';
+import type { CreateChatDTO, SendMessageDTO, UpdateMessageDTO, ExecutionStep, ExecutionStepMetadata } from '@/app/dtos/chat.dto';
 import type { EnrichToolsWithUserApiKeyCommand } from '@/ddd/application/services/tools/tool-configuration-application-service';
 
 // Import user API key utilities
@@ -36,6 +41,7 @@ import { assignApiKeyToUser } from '@/lib/auth/user-api-keys';
 // Import shared chat utilities
 import { getMessageContent } from '@/lib/chat/message-helpers';
 import { processStepProgress, processContentChunk, processCompletion, encodeSSEEvent } from '@/lib/chat/event-processors';
+import { formatPlanToMarkdown, formatQuestionsForChat } from '@/lib/chat/format-utils';
 import { generateChatTitleFromMessage } from '@/lib/utils/chat-title';
 
 // Import gRPC client
@@ -45,6 +51,43 @@ import type { MessagePart } from '@llamaindex/chat-ui';
 import { s3ChatAttachmentService } from '@/ddd/infrastructure/multimodal/s3-chat-attachment-service';
 import type { AnyAttachmentMetadata } from '@/ddd/domain/multimodal/value-objects/attachment-metadata';
 import { messageWithAttachmentsToProtoParts } from '@/ddd/infrastructure/grpc/mappers/message-part-mapper';
+
+/**
+ * Debounce utility for incremental message saves during streaming
+ * AIDEV-NOTE: Schedules updates with a delay, flushes on demand for final save
+ */
+function createDebouncedUpdater(delayMs: number) {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  let pendingUpdate: (() => Promise<void>) | null = null;
+
+  return {
+    schedule(updateFn: () => Promise<void>) {
+      pendingUpdate = updateFn;
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = setTimeout(async () => {
+        if (pendingUpdate) {
+          try {
+            await pendingUpdate();
+          } catch (error) {
+            console.error('[CHAT-GRPC-API] Debounced update failed:', error);
+          }
+          pendingUpdate = null;
+        }
+      }, delayMs);
+    },
+    async flush() {
+      if (timeoutId) clearTimeout(timeoutId);
+      if (pendingUpdate) {
+        try {
+          await pendingUpdate();
+        } catch (error) {
+          console.error('[CHAT-GRPC-API] Flush update failed:', error);
+        }
+        pendingUpdate = null;
+      }
+    }
+  };
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -577,6 +620,10 @@ export async function POST(req: NextRequest) {
     let collectedSteps: ExecutionStep[] = [];
     let messagePlan: any = null; // Plan from completion metadata (for persistence)
     let messageAwaitingInput: any = null; // HITL awaiting input state (for UI)
+    let assistantMessageId: string | null = null; // Track message ID for incremental updates
+
+    // Create debounced updater for incremental saves (2.5 second delay)
+    const debouncedUpdater = createDebouncedUpdater(2500);
 
     const responseStream = new TransformStream({
       start() {
@@ -589,48 +636,75 @@ export async function POST(req: NextRequest) {
       },
 
       async flush() {
-        console.log('[CHAT-GRPC-API] Response stream complete, saving assistant message');
+        console.log('[CHAT-GRPC-API] Response stream complete, finalizing assistant message');
 
-        // Save the complete assistant response (awaited to ensure persistence)
-        if (currentChatId && fullAssistantResponse.trim()) {
-          const saveAssistantMessage = async () => {
-            try {
-              // Build metadata with optional plan and awaitingInput
-              const messageMetadata: any = {
-                processingTime: Date.now() - startTime,
-                modelUsed: 'qwen-coder', // This will come from gRPC response
-                executionSteps: collectedSteps // Persist execution steps
-              };
+        // Flush any pending incremental update first
+        await debouncedUpdater.flush();
 
-              // Add plan if present (from completion metadata)
-              if (messagePlan) {
-                messageMetadata.plan = messagePlan;
-                console.log(`[CHAT-GRPC-API] Including plan in message metadata: ${messagePlan.id}`);
-              }
+        // Update the placeholder message with final content and complete status
+        if (assistantMessageId && currentChatId) {
+          try {
+            // Build metadata with optional plan and awaitingInput
+            const messageMetadata: any = {
+              processingTime: Date.now() - startTime,
+              modelUsed: 'qwen-coder', // This will come from gRPC response
+              executionSteps: collectedSteps, // Persist execution steps
+              streamingStatus: 'complete' // Mark as complete
+            };
 
-              // Add awaitingInput if present (for HITL resumption)
-              if (messageAwaitingInput) {
-                messageMetadata.awaitingInput = messageAwaitingInput;
-                console.log(`[CHAT-GRPC-API] Including awaitingInput in message metadata: ${messageAwaitingInput.type}`);
-              }
-
-              const assistantMessageDTO: SendMessageDTO = {
-                chatId: currentChatId,
-                userId: userId,
-                organizationId: organizationId,
-                content: fullAssistantResponse.trim(),
-                role: 'assistant',
-                metadata: messageMetadata
-              };
-
-              await chatApplicationService.sendMessage(assistantMessageDTO);
-              console.log(`[CHAT-GRPC-API] Saved assistant response to chat ${currentChatId} with ${collectedSteps.length} execution steps`);
-            } catch (error) {
-              console.error('[CHAT-GRPC-API] Failed to save assistant response:', error);
+            // Add plan if present (from completion metadata)
+            if (messagePlan) {
+              messageMetadata.plan = messagePlan;
+              console.log(`[CHAT-GRPC-API] Including plan in message metadata: ${messagePlan.id}`);
             }
-          };
 
-          await saveAssistantMessage();
+            // Add awaitingInput if present (for HITL resumption)
+            if (messageAwaitingInput) {
+              messageMetadata.awaitingInput = messageAwaitingInput;
+              console.log(`[CHAT-GRPC-API] Including awaitingInput in message metadata: ${messageAwaitingInput.type}`);
+            }
+
+            const updateDTO: UpdateMessageDTO = {
+              messageId: assistantMessageId,
+              chatId: currentChatId,
+              organizationId: organizationId,
+              content: fullAssistantResponse.trim() || '[Empty response]',
+              metadata: messageMetadata
+            };
+
+            await chatApplicationService.updateMessage(updateDTO);
+            console.log(`[CHAT-GRPC-API] Finalized assistant message ${assistantMessageId} with ${collectedSteps.length} execution steps`);
+          } catch (error) {
+            console.error('[CHAT-GRPC-API] Failed to finalize assistant message:', error);
+          }
+        } else if (currentChatId && fullAssistantResponse.trim() && !assistantMessageId) {
+          // Fallback: Create new message if placeholder wasn't created (shouldn't happen normally)
+          console.warn('[CHAT-GRPC-API] No placeholder message ID, creating new message as fallback');
+          try {
+            const messageMetadata: any = {
+              processingTime: Date.now() - startTime,
+              modelUsed: 'qwen-coder',
+              executionSteps: collectedSteps,
+              streamingStatus: 'complete'
+            };
+
+            if (messagePlan) messageMetadata.plan = messagePlan;
+            if (messageAwaitingInput) messageMetadata.awaitingInput = messageAwaitingInput;
+
+            const assistantMessageDTO: SendMessageDTO = {
+              chatId: currentChatId,
+              userId: userId,
+              organizationId: organizationId,
+              content: fullAssistantResponse.trim(),
+              role: 'assistant',
+              metadata: messageMetadata
+            };
+
+            await chatApplicationService.sendMessage(assistantMessageDTO);
+            console.log(`[CHAT-GRPC-API] Saved assistant response (fallback) to chat ${currentChatId}`);
+          } catch (error) {
+            console.error('[CHAT-GRPC-API] Fallback save failed:', error);
+          }
         }
       }
     });
@@ -690,7 +764,7 @@ export async function POST(req: NextRequest) {
 
     // Create readable stream for frontend
     const readableStream = new ReadableStream({
-      start(controller) {
+      async start(controller) {
         // AIDEV-NOTE: Send chat_created event immediately to notify frontend of chatId
         // This ensures frontend tracks the same chat session from the first message
         if (currentChatId) {
@@ -700,6 +774,33 @@ export async function POST(req: NextRequest) {
             chatId: currentChatId
           };
           controller.enqueue(encodeSSEEvent(chatCreatedEvent));
+
+          // AIDEV-NOTE: Create placeholder assistant message at stream START (optimistic save)
+          // This ensures message exists in DB even if user reloads mid-stream
+          try {
+            const placeholderDTO: SendMessageDTO = {
+              chatId: currentChatId,
+              userId: userId,
+              organizationId: organizationId,
+              content: '', // Empty content initially
+              role: 'assistant',
+              metadata: {
+                streamingStatus: 'streaming',
+                processingTime: 0,
+                modelUsed: 'unknown' // Will be updated on completion
+              }
+            };
+
+            const placeholderResult = await chatApplicationService.sendMessage(placeholderDTO);
+            if (placeholderResult.success && placeholderResult.data) {
+              assistantMessageId = placeholderResult.data.id;
+              console.log(`[CHAT-GRPC-API] Created placeholder assistant message: ${assistantMessageId}`);
+            } else {
+              console.warn('[CHAT-GRPC-API] Failed to create placeholder message:', placeholderResult.error);
+            }
+          } catch (error) {
+            console.error('[CHAT-GRPC-API] Error creating placeholder message:', error);
+          }
         }
 
         const grpcClient = getChatProcessingClient(organizationId.toString());
@@ -751,6 +852,25 @@ export async function POST(req: NextRequest) {
                   console.error('[CHAT-GRPC-API] Problematic metadata:', step.metadata);
                 }
 
+                // Schedule debounced incremental save for steps too
+                // This ensures steps are saved even during long thinking phases
+                if (assistantMessageId && currentChatId) {
+                  debouncedUpdater.schedule(async () => {
+                    const updateDTO: UpdateMessageDTO = {
+                      messageId: assistantMessageId!,
+                      chatId: currentChatId!,
+                      organizationId: organizationId,
+                      content: fullAssistantResponse,
+                      metadata: {
+                        streamingStatus: 'streaming',
+                        executionSteps: collectedSteps
+                      }
+                    };
+                    await chatApplicationService.updateMessage(updateDTO);
+                    console.log(`[CHAT-GRPC-API] Incremental save (steps): ${collectedSteps.length} steps`);
+                  });
+                }
+
               } else if (response.type === 'content' && response.content) {
                 // Process content chunk and update response
                 const { event: contentEvent, updatedResponse } = processContentChunk(
@@ -761,6 +881,24 @@ export async function POST(req: NextRequest) {
 
                 // Send content event to frontend
                 controller.enqueue(encodeSSEEvent(contentEvent));
+
+                // Schedule debounced incremental save (every ~2.5 seconds)
+                if (assistantMessageId && currentChatId) {
+                  debouncedUpdater.schedule(async () => {
+                    const updateDTO: UpdateMessageDTO = {
+                      messageId: assistantMessageId!,
+                      chatId: currentChatId!,
+                      organizationId: organizationId,
+                      content: fullAssistantResponse,
+                      metadata: {
+                        streamingStatus: 'streaming',
+                        executionSteps: collectedSteps
+                      }
+                    };
+                    await chatApplicationService.updateMessage(updateDTO);
+                    console.log(`[CHAT-GRPC-API] Incremental save: ${fullAssistantResponse.length} chars`);
+                  });
+                }
 
               } else if (response.type === 'complete' && response.complete) {
                 // AI processing completed
@@ -821,12 +959,44 @@ export async function POST(req: NextRequest) {
                 controller.close();
                 
               } else if (response.type === 'awaiting_input' && response.awaitingInput) {
-                // HITL: Agent needs user input (plan approval or question)
+                // HITL: Agent needs user input (plan approval, question, or permission)
                 console.log(`[CHAT-GRPC-API] Agent awaiting input:`, {
                   inputType: response.awaitingInput.inputType,
                   title: response.awaitingInput.title,
                   optionsCount: response.awaitingInput.options?.length || 0
                 });
+
+                // Special handling for permission_request - emit dedicated event type
+                // AIDEV-NOTE: Permission requests are sent as awaiting_input from Python
+                // but converted to permission_request SSE events for the frontend
+                if (response.awaitingInput.inputType === 'permission_request') {
+                  try {
+                    const permissionData = JSON.parse(response.awaitingInput.planJson || '{}');
+                    const permissionEvent = {
+                      type: 'permission_request',
+                      permission: permissionData.permission || 'unknown',
+                      resource: permissionData.resource || undefined,
+                      resourceId: permissionData.resourceId || undefined,
+                      action: permissionData.action || 'access',
+                      context: permissionData.context || response.awaitingInput.content,
+                    };
+                    controller.enqueue(encodeSSEEvent(permissionEvent));
+                    console.log(`[CHAT-GRPC-API] Sent permission_request event (permission=${permissionData.permission})`);
+                  } catch (parseError) {
+                    console.error('[CHAT-GRPC-API] Failed to parse permission data:', parseError);
+                    // Fallback to generic awaiting_input
+                    const fallbackEvent = {
+                      type: 'awaiting_input',
+                      inputType: response.awaitingInput.inputType,
+                      title: response.awaitingInput.title,
+                      content: response.awaitingInput.content,
+                      options: response.awaitingInput.options || [],
+                      planJson: response.awaitingInput.planJson || null
+                    };
+                    controller.enqueue(encodeSSEEvent(fallbackEvent));
+                  }
+                  return; // Don't fall through to generic awaiting_input handling
+                }
 
                 // Store awaiting input state for message persistence
                 // AIDEV-NOTE: This allows UI to show approval/question UI on page reload
@@ -848,17 +1018,49 @@ export async function POST(req: NextRequest) {
                 }
 
                 // Send awaiting_input event to frontend
+                // Normalize inputType to just 'plan_approval' or 'questions'
+                const isPlanApproval = response.awaitingInput.inputType === 'plan_approval';
+                const normalizedInputType = isPlanApproval ? 'plan_approval' : 'questions';
+
+                // For questions type, parse JSON content and convert to questionSections
+                let questionSections: Array<{agentName: string; stepId: string; questions: any[]}> | undefined;
+                let displayContent = response.awaitingInput.content;
+
+                if (!isPlanApproval && response.awaitingInput.content) {
+                  try {
+                    // Content contains JSON array of questions
+                    const questions = JSON.parse(response.awaitingInput.content);
+                    if (Array.isArray(questions) && questions.length > 0) {
+                      questionSections = [{
+                        agentName: 'assistant',
+                        stepId: 'clarification',
+                        questions: questions
+                      }];
+                      // Format questions as markdown for chat history display
+                      displayContent = formatQuestionsForChat(questionSections);
+                    }
+                  } catch {
+                    // Not JSON, keep as-is (legacy format)
+                  }
+                }
+
+                // For plan_approval, generate markdown content from planJson if available
+                const planDisplayContent = isPlanApproval && response.awaitingInput.planJson
+                  ? formatPlanToMarkdown(response.awaitingInput.planJson)
+                  : '';
+
                 const awaitingInputEvent = {
                   type: 'awaiting_input',
-                  inputType: response.awaitingInput.inputType,
+                  inputType: normalizedInputType,
                   title: response.awaitingInput.title,
-                  content: response.awaitingInput.content,
+                  content: isPlanApproval ? planDisplayContent : displayContent,
                   options: response.awaitingInput.options || [],
-                  planJson: response.awaitingInput.planJson || null
+                  planJson: response.awaitingInput.planJson || null,
+                  questionSections: questionSections
                 };
 
                 controller.enqueue(encodeSSEEvent(awaitingInputEvent));
-                console.log(`[CHAT-GRPC-API] Sent awaiting_input event (type=${response.awaitingInput.inputType})`);
+                console.log(`[CHAT-GRPC-API] Sent awaiting_input event (type=${normalizedInputType}, questions=${questionSections?.length || 0})`);
 
               } else if (response.type === 'error' && response.error) {
                 // AI processing error with user-friendly message
@@ -869,6 +1071,24 @@ export async function POST(req: NextRequest) {
                   sessionReset: response.error.sessionReset,
                   timestamp: new Date().toISOString()
                 });
+
+                // Update message with error status if we have a placeholder (fire-and-forget)
+                if (assistantMessageId && currentChatId) {
+                  const errorUpdateDTO: UpdateMessageDTO = {
+                    messageId: assistantMessageId,
+                    chatId: currentChatId,
+                    organizationId: organizationId,
+                    content: fullAssistantResponse || '[Error occurred during generation]',
+                    metadata: {
+                      streamingStatus: 'error',
+                      error: response.error.errorMessage,
+                      executionSteps: collectedSteps
+                    }
+                  };
+                  chatApplicationService.updateMessage(errorUpdateDTO)
+                    .then(() => console.log(`[CHAT-GRPC-API] Updated message with error status: ${assistantMessageId}`))
+                    .catch((updateError) => console.error('[CHAT-GRPC-API] Failed to update message with error status:', updateError));
+                }
 
                 // Send error as SSE event with user-friendly message + hint
                 const errorEvent = {

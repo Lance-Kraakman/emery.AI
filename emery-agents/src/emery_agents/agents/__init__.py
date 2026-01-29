@@ -1,62 +1,42 @@
 """
-Managed Agents Module
+Agents Module - DSPy-based agents.
 
-Contains specialized managed agents that can be used as sub-agents
-within the main chat agent via smolagents' managed_agents pattern.
+This module provides DSPy modules for agent execution.
+All agents now use DSPy's ChainOfThought, ReAct, and other strategies.
 
-AIDEV-NOTE: Agents use native smolagents features:
-- planning_interval: Generate plans at regular intervals
-- step_callbacks: Interrupt for human-in-the-loop approval
-- reset=False: Preserve memory between messages
+AIDEV-NOTE: Migration complete. All agents are now DSPy modules.
+- ExecutorModule replaces ToolCallingAgent
+- PlannerModule replaces planning agents
+- EvaluatorModule replaces evaluator agents
+- InterruptibleModule wraps any module for HITL support
 """
 
-from .skill_builder_agent import (
-    create_skill_builder_agent,
-    create_planning_callback,
-)
-from .document_builder_agent import (
-    create_document_builder_agent,
-)
-from .evaluator_agent import (
-    EvaluationTool,
-    create_evaluator_agent,
-    create_evaluator_factory,
-)
-from .interrupt_classifier import (
-    InterruptClassification,
-    InterruptClassificationTool,
-    create_interrupt_classifier,
-    create_interrupt_classifier_factory,
-    build_classification_prompt,
-)
-from .research_agent import create_research_agent
 from .research_emery_agent import create_research_emery_agent
-from .app_builder_agent import create_app_builder_agent
-from .page_builder_agent import create_page_builder_agent
-from .agent_builder_agent import create_agent_builder_agent
-from .agent_executor_agent import create_agent_executor
-from .stateful_managed_agent import StatefulManagedAgent
-from .interrupt_aware_agent import InterruptAwareToolCallingAgent, InterruptAwareCodeAgent
+from .agent_executor_agent import (
+    create_agent_executor,
+    create_agent_executor_from_api,
+)
+from .interrupt_aware_agent import (
+    InterruptibleModule,
+    InterruptRequested,
+    create_interruptible_executor,
+    wrap_interruptible,
+)
+from ._hitl_mixin import HITLState, handle_hitl_resume, is_approval_response
 
 __all__ = [
-    "create_skill_builder_agent",
-    "create_planning_callback",
-    "create_document_builder_agent",
-    "EvaluationTool",
-    "create_evaluator_agent",
-    "create_evaluator_factory",
-    "InterruptClassification",
-    "InterruptClassificationTool",
-    "create_interrupt_classifier",
-    "create_interrupt_classifier_factory",
-    "build_classification_prompt",
-    "create_research_agent",
+    # Research
     "create_research_emery_agent",
-    "create_app_builder_agent",
-    "create_page_builder_agent",
-    "create_agent_builder_agent",
+    # Agent execution
     "create_agent_executor",
-    "StatefulManagedAgent",
-    "InterruptAwareToolCallingAgent",
-    "InterruptAwareCodeAgent",
+    "create_agent_executor_from_api",
+    # Interrupt-aware (DSPy wrappers)
+    "InterruptibleModule",
+    "InterruptRequested",
+    "create_interruptible_executor",
+    "wrap_interruptible",
+    # HITL utilities
+    "HITLState",
+    "handle_hitl_resume",
+    "is_approval_response",
 ]

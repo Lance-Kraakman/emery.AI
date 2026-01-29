@@ -41,6 +41,7 @@ export interface PlanStepData {
   toolName?: string
   toolArgs?: Record<string, any>
   status?: 'pending' | 'in_progress' | 'completed' | 'failed'
+  connectionRequired?: string  // App slug requiring OAuth connection (e.g., "slack", "gmail")
 }
 
 /**
@@ -82,20 +83,59 @@ export interface InputOption {
 }
 
 /**
+ * Question section with agent context
+ */
+export interface QuestionSection {
+  agentName: string
+  stepId: string
+  questions: Array<{
+    questionId: string
+    question: string
+    questionType?: 'text' | 'single_select' | 'multi_select'  // Default: 'text' or 'single_select' if options
+    options?: string[]
+    context?: string
+    required?: boolean
+    allowOther?: boolean  // Show "Or type your own..." option (default: true)
+  }>
+}
+
+/**
  * Awaiting input event - unified HITL mechanism
- * Emitted when agent needs user input (plan approval or question)
+ * Emitted when agent needs user input (plan approval or questions)
  *
- * AIDEV-NOTE: This is the unified HITL event type that supports:
- * - plan_approval: Agent has a plan and needs user to approve before execution
- * - question: Agent is uncertain and needs user to choose from options
+ * AIDEV-NOTE: Simplified to 2 types:
+ * - plan_approval: Shows approve/reject buttons (plan content in chat message)
+ * - questions: Shows clarifying questions with structured UI
  */
 export interface AwaitingInputEvent {
   type: 'awaiting_input'
-  inputType: 'plan_approval' | 'question'
+  inputType: 'plan_approval' | 'questions'
   title: string
   content: string
   options: InputOption[]
-  planJson?: string  // Full plan JSON for plan_approval type
+  planJson?: string
+  questionSections?: QuestionSection[]  // Ready-to-use question sections from API
+}
+
+/**
+ * Permission request event
+ * Emitted when agent encounters a permission error and needs user to grant access
+ *
+ * AIDEV-NOTE: This event is emitted by the Python agent layer when a tool
+ * receives a 403 permission error from the API. The UI shows an inline
+ * permission request allowing the user to grant or deny access.
+ */
+export interface PermissionRequestEvent {
+  type: 'permission_request'
+  permission: string        // Full permission string (e.g., "database:view")
+  resource?: string         // Resource type (e.g., "database")
+  resourceId?: number       // Specific resource ID if applicable
+  action: string            // Action being attempted (e.g., "view")
+  context?: string          // Description of what agent was trying to do
+  metadata?: {
+    requires_user_action: boolean
+    can_continue_without: boolean
+  }
 }
 
 /**
@@ -108,6 +148,7 @@ export type SSEChatEvent =
   | PlanApprovalRequestEvent
   | PlanStatusUpdateEvent
   | AwaitingInputEvent
+  | PermissionRequestEvent
 
 /**
  * Type guards for event discrimination
@@ -134,4 +175,8 @@ export function isPlanStatusUpdateEvent(event: any): event is PlanStatusUpdateEv
 
 export function isAwaitingInputEvent(event: any): event is AwaitingInputEvent {
   return event?.type === 'awaiting_input'
+}
+
+export function isPermissionRequestEvent(event: any): event is PermissionRequestEvent {
+  return event?.type === 'permission_request'
 }

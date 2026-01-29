@@ -61,6 +61,12 @@ import type { StorageRecalculationApplicationService } from '@/ddd/application/s
 import type { AuditApplicationService } from '@/ddd/application/services/audit/audit-application-service';
 import type { IContextMappingRepository } from '@/ddd/domain/context/repositories/context-mapping-repository';
 import type { ContextMappingApplicationService } from '@/ddd/application/services/context/context-mapping-application-service';
+import type {
+  ISecurityReportRepository,
+  ISecurityFindingRepository,
+} from '@/ddd/domain/security/interfaces/security-repository';
+import type { RuleEngineService } from '@/ddd/application/services/security/rule-engine.service';
+import type { SecurityAnalyzerService } from '@/ddd/application/services/security/security-analyzer.service';
 
 import { DIContainer } from './container';
 
@@ -139,6 +145,12 @@ type ServiceMap = {
   // Context Services
   ContextMappingRepository: IContextMappingRepository;
   ContextMappingApplicationService: ContextMappingApplicationService;
+
+  // Security Services
+  SecurityReportRepository: ISecurityReportRepository;
+  SecurityFindingRepository: ISecurityFindingRepository;
+  RuleEngineService: RuleEngineService;
+  SecurityAnalyzerService: SecurityAnalyzerService;
 };
 
 /**
@@ -161,6 +173,8 @@ const createGetter = <K extends keyof ServiceMap>(key: K) => (): ServiceMap[K] =
     'InvoiceRepository': 'IInvoiceRepository',
     'IToolRegistryService': 'IToolRegistryService',
     'ContextMappingRepository': 'IContextMappingRepository',
+    'SecurityReportRepository': 'ISecurityReportRepository',
+    'SecurityFindingRepository': 'ISecurityFindingRepository',
   };
 
   if (specialMappings[key as string]) {
@@ -292,3 +306,11 @@ export const getContextMappingRepository = createGetter('ContextMappingRepositor
 
 // Context application service getters
 export const getContextMappingApplicationService = createGetter('ContextMappingApplicationService');
+
+// Security domain repository getters
+export const getSecurityReportRepository = createGetter('SecurityReportRepository');
+export const getSecurityFindingRepository = createGetter('SecurityFindingRepository');
+
+// Security application service getters
+export const getRuleEngineService = createGetter('RuleEngineService');
+export const getSecurityAnalyzerService = createGetter('SecurityAnalyzerService');

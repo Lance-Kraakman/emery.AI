@@ -57,6 +57,12 @@ import type { AppApplicationService } from '@/ddd/application/services/puck/app-
 import type { PuckPageApplicationService } from '@/ddd/application/services/puck/puck-page-application-service';
 import type { IContextMappingRepository } from '@/ddd/domain/context/repositories/context-mapping-repository';
 import type { ContextMappingApplicationService } from '@/ddd/application/services/context/context-mapping-application-service';
+import type {
+  ISecurityReportRepository,
+  ISecurityFindingRepository,
+} from '@/ddd/domain/security/interfaces/security-repository';
+import type { RuleEngineService } from '@/ddd/application/services/security/rule-engine.service';
+import type { SecurityAnalyzerService } from '@/ddd/application/services/security/security-analyzer.service';
 
 /**
  * Registry of all available repository interfaces and services in the DI container.
@@ -164,4 +170,12 @@ export interface RepositoryRegistry {
 
   // Context application services
   ContextMappingApplicationService: ContextMappingApplicationService;
+
+  // Security domain repositories
+  ISecurityReportRepository: ISecurityReportRepository;
+  ISecurityFindingRepository: ISecurityFindingRepository;
+
+  // Security application services
+  RuleEngineService: RuleEngineService;
+  SecurityAnalyzerService: SecurityAnalyzerService;
 }

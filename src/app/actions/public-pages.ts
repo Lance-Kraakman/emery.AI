@@ -16,6 +16,7 @@ import { ViewId } from "@/ddd/domain/views/value-objects/view-id"
 import { FilterConfig } from "@/ddd/domain/views/value-objects/filter-config"
 import { PaginationConfig } from "@/ddd/domain/views/value-objects/pagination-config"
 import type { PuckResolveContext } from "@/components/puck/types/puck-context"
+import { FieldMapper, type FieldDTO } from "@/app/mappers/field-mapper"
 
 /**
  * Get a public app by organization slug and app slug
@@ -365,6 +366,37 @@ function substituteFilterVariable(
   return value;
 }
 
+/** Filter schema fields and row data to only include view-visible fields. */
+function filterByViewMappings(
+  fields: FieldDTO[],
+  rows: Array<Record<string, unknown>>,
+  fieldMappings: ReadonlyArray<{ sourceFieldId: number; visible: boolean }>,
+): { fields: FieldDTO[]; rows: Array<Record<string, unknown>> } {
+  if (!fieldMappings.length) return { fields, rows };
+
+  const visibleFieldIds = new Set(
+    fieldMappings.filter(m => m.visible).map(m => m.sourceFieldId)
+  );
+
+  const filteredFields = fields.filter(f => visibleFieldIds.has(f.id));
+
+  const allowedKeys = new Set<string>(['id']);
+  for (const f of filteredFields) {
+    allowedKeys.add(String(f.id));
+    allowedKeys.add(f.name);
+  }
+
+  const filteredRows = rows.map(row => {
+    const filtered: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(row)) {
+      if (allowedKeys.has(key)) filtered[key] = value;
+    }
+    return filtered;
+  });
+
+  return { fields: filteredFields, rows: filteredRows };
+}
+
 /**
  * Execute a view for public pages without authentication
  *
@@ -385,7 +417,7 @@ export async function executePublicView(
   additionalFilters?: Array<{ field: string; operator: string; value: unknown }>
 ): Promise<{
   rows: Array<Record<string, unknown>>;
-  fields: Array<{ id: number; name: string; type: string }>;
+  fields: FieldDTO[];
   totalCount: number;
   pageSize: number;
   offset: number;
@@ -517,16 +549,17 @@ export async function executePublicView(
     // (useFieldValue looks up by fieldId, e.g., rowData["42"])
     const plainRows = result.data.rows.map((row) => row.toPlainObject(fields));
 
-    // Convert TableField VOs to plain objects
-    const plainFields = fields.map((field) => ({
-      id: field.id.value,
-      name: field.name,
-      type: field.type,
-    }));
+    // Convert TableField VOs to full FieldDTOs (preserves all metadata)
+    const plainFields = fields.map((field) => FieldMapper.toDTO(field));
+
+    // Filter to only view-visible fields before returning to client
+    const { fields: filteredFields, rows: filteredRows } = filterByViewMappings(
+      plainFields, plainRows, view.fieldMappings
+    );
 
     return {
-      rows: plainRows,
-      fields: plainFields,
+      rows: filteredRows,
+      fields: filteredFields,
       totalCount: result.data.totalCount,
       pageSize: result.data.pageSize,
       offset: result.data.offset,

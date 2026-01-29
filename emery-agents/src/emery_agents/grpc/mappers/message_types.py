@@ -1,17 +1,55 @@
 """
-Message content type definitions for smolagents ChatMessage format.
+Message content type definitions for chat messages.
 
-AIDEV-NOTE: Smolagents does not export TypedDict definitions for content parts.
-These types document the implicit structure used by smolagents internally.
-Based on smolagents/models.py and smolagents/agents.py usage patterns.
+DSPy Migration: These types replace smolagents ChatMessage format.
+Used for conversation handling and message processing.
 
 References:
-- smolagents ChatMessage.content: str | list[dict[str, Any]]
+- ChatMessage.content: list[dict[str, Any]] (content parts)
 - Content parts follow pattern: {"type": "text|image|image_url", ...}
 - Images use PIL.Image.Image objects internally
 """
-from typing import TypedDict, Literal
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any, List, TypedDict, Literal, Optional
 from PIL import Image
+
+
+class MessageRole(str, Enum):
+    """Role of a message in a conversation."""
+    USER = "user"
+    ASSISTANT = "assistant"
+    SYSTEM = "system"
+    TOOL = "tool"
+
+
+@dataclass
+class ChatMessage:
+    """
+    Chat message for conversations.
+
+    Replaces smolagents ChatMessage. Used for message handling
+    in the chat processing flow.
+    """
+    role: MessageRole
+    content: "MessageContentList"
+    name: Optional[str] = None
+    tool_call_id: Optional[str] = None
+
+    @classmethod
+    def user(cls, content: "MessageContentList") -> "ChatMessage":
+        """Create a user message."""
+        return cls(role=MessageRole.USER, content=content)
+
+    @classmethod
+    def assistant(cls, content: "MessageContentList") -> "ChatMessage":
+        """Create an assistant message."""
+        return cls(role=MessageRole.ASSISTANT, content=content)
+
+    @classmethod
+    def system(cls, content: "MessageContentList") -> "ChatMessage":
+        """Create a system message."""
+        return cls(role=MessageRole.SYSTEM, content=content)
 
 
 class TextContentPart(TypedDict):

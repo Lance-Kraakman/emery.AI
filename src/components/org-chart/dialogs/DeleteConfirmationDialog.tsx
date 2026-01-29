@@ -7,7 +7,7 @@
  * Lists all data that will be permanently deleted.
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,7 +18,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { AlertTriangle, Bot, Sparkles, Database, Clock, Loader2 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { AlertTriangle, Bot, Sparkles, Database, Clock, Loader2, Table2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { OrgChartNode, OrgChartNodeType, AgentContainerNodeData, SkillNodeData, DatabaseNodeData } from '../types';
 
@@ -34,7 +35,11 @@ interface DeleteImpactItem {
     automations: number;
     tables?: number;
   };
+  /** List of child entity names for detailed preview */
+  childDetails?: Array<{ type: 'skill' | 'database' | 'table' | 'automation'; name: string }>;
 }
+
+const CONFIRMATION_PHRASE = 'I-understand-delete-all';
 
 interface DeleteConfirmationDialogProps {
   /** Whether the dialog is open */
@@ -72,6 +77,16 @@ export function DeleteConfirmationDialog({
   isDeleting = false,
   itemsToDelete,
 }: DeleteConfirmationDialogProps) {
+  // State for typed confirmation
+  const [confirmationInput, setConfirmationInput] = useState('');
+
+  // Reset confirmation input when dialog opens/closes
+  useEffect(() => {
+    if (!isOpen) {
+      setConfirmationInput('');
+    }
+  }, [isOpen]);
+
   // Count total items
   const itemCount = itemsToDelete.length;
   const isSingleItem = itemCount === 1;
@@ -101,6 +116,9 @@ export function DeleteConfirmationDialog({
     totalChildItems.databases > 0 ||
     totalChildItems.automations > 0 ||
     totalChildItems.tables > 0;
+
+  // Check if confirmation input matches required phrase
+  const isConfirmationValid = !hasChildItems || confirmationInput === CONFIRMATION_PHRASE;
 
   return (
     <AlertDialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -135,9 +153,12 @@ export function DeleteConfirmationDialog({
                           <div className="flex items-center gap-1">
                             <Database className="h-3 w-3" />
                             {item.children.databases} database{item.children.databases !== 1 ? 's' : ''}
-                            {item.children.tables !== undefined && item.children.tables > 0 && (
-                              <span>({item.children.tables} table{item.children.tables !== 1 ? 's' : ''})</span>
-                            )}
+                          </div>
+                        )}
+                        {item.children.tables !== undefined && item.children.tables > 0 && (
+                          <div className="flex items-center gap-1">
+                            <Table2 className="h-3 w-3" />
+                            {item.children.tables} table{item.children.tables !== 1 ? 's' : ''}
                           </div>
                         )}
                         {item.children.automations > 0 && (
@@ -166,6 +187,9 @@ export function DeleteConfirmationDialog({
                     {totalChildItems.databases > 0 && (
                       <span>{totalChildItems.databases} database{totalChildItems.databases !== 1 ? 's' : ''}</span>
                     )}
+                    {totalChildItems.tables > 0 && (
+                      <span>{totalChildItems.tables} table{totalChildItems.tables !== 1 ? 's' : ''}</span>
+                    )}
                     {totalChildItems.automations > 0 && (
                       <span>{totalChildItems.automations} automation{totalChildItems.automations !== 1 ? 's' : ''}</span>
                     )}
@@ -174,6 +198,22 @@ export function DeleteConfirmationDialog({
               )}
 
               <p className="text-destructive font-medium">This action cannot be undone.</p>
+
+              {/* Typed confirmation for cascade delete */}
+              {hasChildItems && (
+                <div className="pt-3 border-t space-y-2">
+                  <p className="text-sm text-muted-foreground">
+                    Type <code className="px-1.5 py-0.5 bg-muted rounded text-xs font-mono">{CONFIRMATION_PHRASE}</code> to confirm:
+                  </p>
+                  <Input
+                    value={confirmationInput}
+                    onChange={(e) => setConfirmationInput(e.target.value)}
+                    placeholder={CONFIRMATION_PHRASE}
+                    className="font-mono text-sm"
+                    disabled={isDeleting}
+                  />
+                </div>
+              )}
             </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
@@ -184,8 +224,8 @@ export function DeleteConfirmationDialog({
               e.preventDefault();
               onConfirm();
             }}
-            disabled={isDeleting}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            disabled={isDeleting || !isConfirmationValid}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50"
           >
             {isDeleting ? (
               <>
@@ -251,12 +291,17 @@ export function buildDeleteImpactItems(
       };
     }
 
-    // Add table count for database nodes
+    // Add table count for database nodes as children (triggers cascade delete confirmation)
     if (node.type === 'database') {
       const data = node.data as DatabaseNodeData;
       const db = databases.find((d) => d.id === data.databaseId);
-      if (db?.tableCount) {
-        item.details = `${db.tableCount} table${db.tableCount !== 1 ? 's' : ''}`;
+      if (db?.tableCount && db.tableCount > 0) {
+        item.children = {
+          skills: 0,
+          databases: 0,
+          automations: 0,
+          tables: db.tableCount,
+        };
       }
     }
 

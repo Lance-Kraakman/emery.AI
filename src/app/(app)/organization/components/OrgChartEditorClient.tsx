@@ -23,7 +23,7 @@ import {
 import { useOrgChartSession } from '@/components/org-chart/hooks';
 import { createAgent, deleteAgent } from '@/app/actions/agents';
 import { createSkill, deleteSkill } from '@/app/actions/skills';
-import { createDatabase, deleteDatabase } from '@/app/actions/databases';
+import { createDatabase, deleteDatabase, cascadeDeleteDatabase } from '@/app/actions/databases';
 import { getContextMappings, type ContextMappingDTO } from '@/app/actions/context-mappings';
 import { TriggerConfigModal } from '@/app/(app)/agents/components/modals/TriggerConfigModal';
 import { CreateTableDialog } from '@/app/(app)/data/components/CreateTableDialog';
@@ -423,7 +423,7 @@ export function OrgChartEditorClient({
         // Delete in order: agents first (will cascade delete skills), then skills, then databases
         const agents = items.filter((i) => i.type === 'agent');
         const skills = items.filter((i) => i.type === 'skill');
-        const databases = items.filter((i) => i.type === 'database');
+        const databaseItems = items.filter((i) => i.type === 'database');
 
         let hasError = false;
 
@@ -450,9 +450,16 @@ export function OrgChartEditorClient({
           }
         }
 
-        // Delete databases
-        for (const item of databases) {
-          const result = await deleteDatabase(item.entityId);
+        // Delete databases (use cascade delete if database has tables)
+        for (const item of databaseItems) {
+          // Find the database to check if it has tables
+          const db = databases.find((d) => d.id === item.entityId);
+          const hasTables = (db?.tableCount ?? 0) > 0;
+
+          const result = hasTables
+            ? await cascadeDeleteDatabase(item.entityId)
+            : await deleteDatabase(item.entityId);
+
           if (!result.success) {
             console.error(`Failed to delete database ${item.entityId}:`, result.error);
             hasError = true;
@@ -479,7 +486,7 @@ export function OrgChartEditorClient({
         return false;
       }
     },
-    []
+    [databases, setSelectedNodeId]
   );
 
   // Render config panel based on selected node type

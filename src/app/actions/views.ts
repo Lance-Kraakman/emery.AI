@@ -26,6 +26,7 @@ import { FieldMapping } from "@/ddd/domain/views/value-objects/field-mapping";
 import { ViewType } from "@/ddd/domain/views/value-objects/view-type";
 import { ViewConfig } from "@/ddd/domain/views/value-objects/view-config";
 import { ViewMapper, type ViewDTO } from "@/app/mappers/view-mapper";
+import { FieldMapper, type FieldDTO } from "@/app/mappers/field-mapper";
 import type { Result, CreateViewData, UpdateViewData } from "./types";
 import { getCacheService, CACHE_KEYS, CACHE_TAGS } from "@/lib/cache";
 
@@ -617,6 +618,42 @@ function substituteFilterVariable(
 }
 
 /**
+ * Filter schema fields and row data to only include view-visible fields.
+ * When a view has fieldMappings configured, only fields marked visible are returned.
+ * No mappings = view not configured yet, return everything.
+ */
+function filterByViewMappings(
+  fields: FieldDTO[],
+  rows: Array<Record<string, unknown>>,
+  fieldMappings: ReadonlyArray<{ sourceFieldId: number; visible: boolean }>,
+): { fields: FieldDTO[]; rows: Array<Record<string, unknown>> } {
+  if (!fieldMappings.length) return { fields, rows };
+
+  const visibleFieldIds = new Set(
+    fieldMappings.filter(m => m.visible).map(m => m.sourceFieldId)
+  );
+
+  const filteredFields = fields.filter(f => visibleFieldIds.has(f.id));
+
+  // Build allowed keys: "id" (row primary key) + numeric field IDs + field names
+  const allowedKeys = new Set<string>(['id']);
+  for (const f of filteredFields) {
+    allowedKeys.add(String(f.id));
+    allowedKeys.add(f.name);
+  }
+
+  const filteredRows = rows.map(row => {
+    const filtered: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(row)) {
+      if (allowedKeys.has(key)) filtered[key] = value;
+    }
+    return filtered;
+  });
+
+  return { fields: filteredFields, rows: filteredRows };
+}
+
+/**
  * Execute a view and return rows as DTOs
  *
  * AIDEV-NOTE: Supports public views via auth-first pattern.
@@ -636,7 +673,7 @@ export async function executeView(
   additionalFilters?: Array<{ field: string; operator: string; value: any }>
 ): Promise<{
   rows: Array<Record<string, any>>;
-  fields: Array<{ id: number; name: string; type: string }>;
+  fields: FieldDTO[];
   totalCount: number;
   pageSize: number;
   offset: number;
@@ -794,16 +831,17 @@ export async function executeView(
     // (useFieldValue looks up by fieldId, e.g., rowData["42"])
     const plainRows = result.data.rows.map((row) => row.toPlainObject(fields));
 
-    // Convert TableField VOs to plain objects
-    const plainFields = fields.map((field) => ({
-      id: field.id.value,
-      name: field.name,
-      type: field.type,
-    }));
+    // Convert TableField VOs to full FieldDTOs (preserves all metadata)
+    const plainFields = fields.map((field) => FieldMapper.toDTO(field));
+
+    // Filter to only view-visible fields before returning to client
+    const { fields: filteredFields, rows: filteredRows } = filterByViewMappings(
+      plainFields, plainRows, view.fieldMappings
+    );
 
     return {
-      rows: plainRows,
-      fields: plainFields,
+      rows: filteredRows,
+      fields: filteredFields,
       totalCount: result.data.totalCount,
       pageSize: result.data.pageSize,
       offset: result.data.offset,

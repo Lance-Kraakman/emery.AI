@@ -5,6 +5,11 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Trash2, Bot, Sparkles, GitBranch } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { ShareButton } from '@/components/permissions/ShareButton';
 import { ShareDialog } from '@/components/permissions/ShareDialog';
 import { ModelSelector } from '@/components/ai/ModelSelector';
@@ -100,24 +105,34 @@ export function EditSkillView({ agent, skill }: EditSkillViewProps) {
 
         {/* Mode Toggle - non-destructive switching */}
         <div className="flex items-center gap-0.5 p-0.5 bg-muted rounded-lg h-8">
-          <Button
-            variant={formData.executionType !== 'agent' ? 'default' : 'ghost'}
-            size="sm"
-            onClick={() => setFormData({ ...formData, executionType: 'agentic' })}
-            className="h-7 px-2.5 gap-1.5"
-          >
-            <Sparkles className="h-3.5 w-3.5" />
-            Agentic
-          </Button>
-          <Button
-            variant={formData.executionType === 'agent' ? 'default' : 'ghost'}
-            size="sm"
-            onClick={() => setFormData({ ...formData, executionType: 'agent' })}
-            className="h-7 px-2.5 gap-1.5"
-          >
-            <GitBranch className="h-3.5 w-3.5" />
-            Workflow
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={formData.executionType !== 'agent' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setFormData({ ...formData, executionType: 'agentic' })}
+                className="h-7 px-1.5 lg:px-2.5 gap-1.5"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                <span className="hidden lg:inline">Agentic</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="lg:hidden">Agentic</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={formData.executionType === 'agent' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setFormData({ ...formData, executionType: 'agent' })}
+                className="h-7 px-1.5 lg:px-2.5 gap-1.5"
+              >
+                <GitBranch className="h-3.5 w-3.5" />
+                <span className="hidden lg:inline">Workflow</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="lg:hidden">Workflow</TooltipContent>
+          </Tooltip>
         </div>
 
         <Button

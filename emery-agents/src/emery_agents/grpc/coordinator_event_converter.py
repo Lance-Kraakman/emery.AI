@@ -11,7 +11,7 @@ from typing import Any, Optional, Union
 
 logger = logging.getLogger(__name__)
 
-from ..services.execution_coordinator import (
+from ..services.execution.events import (
     StepStartedEvent,
     StepCompletedEvent,
     StepFailedEvent,
@@ -20,24 +20,31 @@ from ..services.execution_coordinator import (
     GoalAchievedEvent,
     ExecutionBlockedEvent,
     ExecutionCompletedEvent,
+    FinalSynthesisEvent,
     RecoveryAnalysisEvent,
     AutoFixStartedEvent,
     AutoFixCompletedEvent,
     RecoveryPlanProposedEvent,
-    # Cascade planning events
-    SubPlanCreatedEvent,
-    QuestionsCollectedEvent,
-    CascadingPlanCompleteEvent,
-    # Unified message handling events (Step 1 additions)
     PlanRejectedEvent,
     PlanFeedbackEvent,
     ErrorEvent,
+    PlanningStartedEvent,
+    PlanCreatedEvent,
+    PlanApprovedEvent,
+    PlanUpdatedEvent,
+    AwaitingClarificationEvent,
+    PlanCancelledEvent,
+    InterruptQueuedEvent,
+    InterruptReceivedEvent,
+    InterruptProcessingEvent,
+    ContextInjectedEvent,
 )
 from .response_types import (
     StepProgressDict,
     ErrorResponseDict,
     AwaitingInputResponseDict,
 )
+from .mappers import format_clarifying_questions
 
 # Union type for coordinator event responses
 CoordinatorResponseDict = Union[StepProgressDict, ErrorResponseDict, AwaitingInputResponseDict]
@@ -146,6 +153,20 @@ def convert_coordinator_event(event: Any, step_index: int) -> Optional[Coordinat
             "step_index": 999
         }
 
+    elif isinstance(event, FinalSynthesisEvent):
+        # ACE: Synthesized final answer from all step results
+        return {
+            "type": "step_progress",
+            "step_type": "FINAL",
+            "step_name": "Final Answer",
+            "content": event.synthesis,
+            "metadata": {
+                "type": "final_synthesis",
+                "plan_id": event.plan_id,
+            },
+            "step_index": 998  # Just before ExecutionCompletedEvent
+        }
+
     # Recovery events (confidence-based error handling)
     elif isinstance(event, RecoveryAnalysisEvent):
         confidence_pct = f"{event.confidence:.0%}"
@@ -207,61 +228,6 @@ def convert_coordinator_event(event: Any, step_index: int) -> Optional[Coordinat
             }
         }
 
-    # Cascade planning events
-    elif isinstance(event, SubPlanCreatedEvent):
-        return {
-            "type": "step_progress",
-            "step_type": "PLANNING",
-            "step_name": f"Sub-plan: {event.agent_name}",
-            "content": f"Created detailed plan for: {event.sub_plan_goal} ({event.sub_plan_step_count} steps)",
-            "metadata": {
-                "type": "sub_plan_created",
-                "plan_id": event.plan_id,
-                "step_id": event.step_id,
-                "agent_name": event.agent_name,
-            },
-            "step_index": step_index
-        }
-
-    elif isinstance(event, QuestionsCollectedEvent):
-        # Convert batched questions to awaiting_input for user response
-        # Format questions grouped by agent for clear presentation
-        questions_by_agent = event.questions.group_by_agent()
-
-        # Build content showing questions grouped by agent
-        content_parts = ["The following agents need clarification before proceeding:\n"]
-        for agent_name, agent_questions in questions_by_agent.items():
-            content_parts.append(f"\n**{agent_name}:**")
-            for q in agent_questions:
-                content_parts.append(f"- {q.question}")
-                if q.context:
-                    content_parts.append(f"  _(Context: {q.context})_")
-
-        return {
-            "type": "awaiting_input",
-            "data": {
-                "input_type": "batched_questions",
-                "title": "Questions",
-                "content": "\n".join(content_parts),
-                "options": [],  # Free-form JSON response expected with question_id → answer mapping
-                "plan_json": json.dumps(event.questions.to_dict())  # Contains structured questions for form rendering
-            }
-        }
-
-    elif isinstance(event, CascadingPlanCompleteEvent):
-        return {
-            "type": "step_progress",
-            "step_type": "PLANNING",
-            "step_name": "Cascade Planning Complete",
-            "content": f"All {event.total_sub_plans} sub-agent plans are ready",
-            "metadata": {
-                "type": "cascade_complete",
-                "plan_id": event.plan_id,
-                "total_sub_plans": str(event.total_sub_plans),
-            },
-            "step_index": step_index
-        }
-
     # Unified message handling events (handle_message() additions)
     elif isinstance(event, PlanRejectedEvent):
         return {
@@ -304,6 +270,157 @@ def convert_coordinator_event(event: Any, step_index: int) -> Optional[Coordinat
                 "auto_retry": False,
                 "session_reset": not event.recoverable
             }
+        }
+
+    # Planning events
+    elif isinstance(event, PlanningStartedEvent):
+        return {
+            "type": "step_progress",
+            "step_type": "PLANNING",
+            "step_name": "Creating Plan",
+            "content": f"Goal: {event.goal}",
+            "metadata": {"type": "planning_started"},
+            "step_index": step_index
+        }
+
+    # ============================================================
+    # Plan lifecycle events
+    # ============================================================
+
+    elif isinstance(event, PlanCreatedEvent):
+        # Format plan steps for display
+        steps_preview = []
+        if event.plan and event.plan.steps:
+            for i, step in enumerate(event.plan.steps[:5], 1):
+                steps_preview.append(f"{i}. {step.description}")
+            if len(event.plan.steps) > 5:
+                steps_preview.append(f"... and {len(event.plan.steps) - 5} more steps")
+
+        return {
+            "type": "awaiting_input",
+            "data": {
+                "input_type": "approval",
+                "title": "Plan Ready for Approval",
+                "content": "\n".join(steps_preview) if steps_preview else "Plan created",
+                "options": [
+                    {"id": "approve", "label": "Approve", "description": "Execute this plan"},
+                    {"id": "reject", "label": "Reject", "description": "Cancel and start over"},
+                ],
+                "plan_json": event.plan.to_json() if hasattr(event.plan, 'to_json') else "",
+                "plan_id": event.plan_id,
+            }
+        }
+
+    elif isinstance(event, PlanApprovedEvent):
+        return {
+            "type": "step_progress",
+            "step_type": "PLANNING",
+            "step_name": "Plan Approved",
+            "content": "Starting execution...",
+            "metadata": {
+                "type": "plan_approved",
+                "plan_id": event.plan_id,
+            },
+            "step_index": step_index
+        }
+
+    elif isinstance(event, PlanUpdatedEvent):
+        return {
+            "type": "step_progress",
+            "step_type": "REASONING",
+            "step_name": f"Plan Updated (v{event.replan_number})",
+            "content": event.reason,
+            "metadata": {
+                "type": "plan_updated",
+                "plan_id": event.plan_id,
+                "version": str(event.replan_number),
+            },
+            "step_index": step_index
+        }
+
+    elif isinstance(event, PlanCancelledEvent):
+        return {
+            "type": "step_progress",
+            "step_type": "FINAL",
+            "step_name": "Plan Cancelled",
+            "content": event.reason,
+            "metadata": {
+                "type": "plan_cancelled",
+                "plan_id": event.plan_id,
+            },
+            "step_index": 999
+        }
+
+    # ============================================================
+    # Clarification events
+    # ============================================================
+
+    elif isinstance(event, AwaitingClarificationEvent):
+        return {
+            "type": "awaiting_input",
+            "data": {
+                "input_type": "questions",
+                "title": "Clarification Needed",
+                "content": event.reasoning,
+                "questions": format_clarifying_questions(event.questions),
+                "options": [],  # Questions have their own options
+                "plan_json": "",
+            }
+        }
+
+    # ============================================================
+    # Interrupt handling events
+    # ============================================================
+
+    elif isinstance(event, InterruptQueuedEvent):
+        return {
+            "type": "step_progress",
+            "step_type": "INFO",
+            "step_name": "Message Queued",
+            "content": f"Your message will be processed after {event.phase} completes",
+            "metadata": {
+                "type": "interrupt_queued",
+                "phase": event.phase,
+            },
+            "step_index": step_index
+        }
+
+    elif isinstance(event, InterruptReceivedEvent):
+        return {
+            "type": "step_progress",
+            "step_type": "INFO",
+            "step_name": "Interrupt Received",
+            "content": f"Processing your message...",
+            "metadata": {
+                "type": "interrupt_received",
+                "message_preview": event.message[:50] if event.message else "",
+            },
+            "step_index": step_index
+        }
+
+    elif isinstance(event, InterruptProcessingEvent):
+        return {
+            "type": "step_progress",
+            "step_type": "REASONING",
+            "step_name": f"Processing: {event.classification}",
+            "content": event.message[:100] if event.message else "Processing interrupt...",
+            "metadata": {
+                "type": "interrupt_processing",
+                "classification": event.classification,
+            },
+            "step_index": step_index
+        }
+
+    elif isinstance(event, ContextInjectedEvent):
+        return {
+            "type": "step_progress",
+            "step_type": "INFO",
+            "step_name": "Context Added",
+            "content": event.message[:100] if event.message else "Context injected",
+            "metadata": {
+                "type": "context_injected",
+            },
+            "step_index": step_index
         }
 
     return None  # Unknown event type

@@ -1,12 +1,13 @@
 #!/usr/bin/env tsx
 /**
  * Fetch Pipedream Tool Metadata Script
- * 
+ *
  * Fetches available Pipedream apps and their actions, then saves
  * the metadata to a JSON file for use by the Python agent workers.
- * 
- * Run with: pnpm tsx scripts/fetch-pipedream-tools.ts
+ *
+ * Run with: pnpm tsx src/scripts/fetch-pipedream-tools-with-env.ts
  */
+
 import { pipedreamClient } from '@/ddd/infrastructure/external/pipedream/client';
 import fs from 'fs';
 import path from 'path';

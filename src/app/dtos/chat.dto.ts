@@ -42,6 +42,17 @@ export interface SendMessageDTO {
 }
 
 /**
+ * DTO for updating an existing chat message (for streaming updates)
+ */
+export interface UpdateMessageDTO {
+  messageId: string;
+  chatId: string;
+  organizationId: number;
+  content?: string;
+  metadata?: ChatMessageMetadata;
+}
+
+/**
  * DTO for querying chat history
  */
 export interface GetChatHistoryDTO {

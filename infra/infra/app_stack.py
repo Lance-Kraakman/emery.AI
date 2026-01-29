@@ -387,9 +387,13 @@ class AppStack(Stack):
             )
 
         # Create the ALB origin once for reuse
+        # AIDEV-NOTE: Extend read_timeout for long-running chat/agent streaming operations
+        # Default CloudFront timeout is 30s which causes premature disconnects
         alb_origin = origins.LoadBalancerV2Origin(
             frontend_service.load_balancer,
-            protocol_policy=cloudfront.OriginProtocolPolicy.HTTP_ONLY
+            protocol_policy=cloudfront.OriginProtocolPolicy.HTTP_ONLY,
+            read_timeout=Duration.seconds(300),  # 5 minutes to match ALB idle timeout
+            keepalive_timeout=Duration.seconds(60),  # Keep connection alive between requests
         )
 
         # Create CloudFront distribution for static URL routing
@@ -835,11 +839,12 @@ class AppStack(Stack):
                 "AWS_REGION",
                 aws_region
             )
-            # Add NextJS base URL for agent callbacks to API routes (use custom domain if available)
-            nextjs_base_url = f"https://{custom_domain}" if custom_domain else f"https://{cloudfront_distribution.distribution_domain_name}"
+            # Add NextJS base URL for agent callbacks to API routes
+            # Use internal ALB URL to bypass CloudFront/WAF (faster, avoids rate limits)
+            internal_nextjs_url = f"http://{frontend_service.load_balancer.load_balancer_dns_name}"
             agent_chat_service.task_definition.default_container.add_environment(
                 "NEXTJS_BASE_URL",
-                nextjs_base_url
+                internal_nextjs_url
             )
 
         # Add S3 and AWS configuration to table service

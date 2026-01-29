@@ -2,21 +2,13 @@
  * Page API - Get, Update, Delete a single page
  *
  * AIDEV-NOTE: This endpoint provides CRUD access to a single page for the AppBuilder agent.
- *
- * Supports TOON format for LLM-optimized responses:
- * - ?format=llm → minimal TOON format
- * - ?format=llm&meta=1 → TOON with metadata
  */
-
-// Force dynamic rendering to prevent build-time database connections
-export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
 import { getAppApplicationService, getPuckPageApplicationService } from '@/ddd/application/di/getters';
 import { PageId } from '@/ddd/domain/puck/value-objects/page-id';
 import { PuckPageMapper } from '@/app/mappers/puck-page-mapper';
-import { pageToToon, operationToToon } from '@/lib/toon-format';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -26,10 +18,6 @@ interface RouteParams {
  * GET /api/pages/[id]
  *
  * Get a single page by ID.
- *
- * Query parameters:
- * - format: 'llm' for TOON format
- * - meta: '1' to include metadata in TOON format
  */
 export async function GET(request: NextRequest, { params }: RouteParams): Promise<NextResponse> {
   try {
@@ -45,10 +33,6 @@ export async function GET(request: NextRequest, { params }: RouteParams): Promis
     if (isNaN(pageId)) {
       return NextResponse.json({ error: 'Invalid page ID' }, { status: 400 });
     }
-
-    const { searchParams } = new URL(request.url);
-    const format = searchParams.get('format');
-    const includeMeta = searchParams.get('meta') === '1';
 
     const pageService = getPuckPageApplicationService();
     const page = await pageService.getPage(PageId.fromNumber(pageId));
@@ -66,15 +50,6 @@ export async function GET(request: NextRequest, { params }: RouteParams): Promis
     }
 
     const dto = PuckPageMapper.toDTO(page);
-
-    // Return TOON format if requested
-    if (format === 'llm') {
-      const toon = pageToToon(dto, { includeMeta });
-      return new NextResponse(toon, {
-        status: 200,
-        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-      });
-    }
 
     return NextResponse.json({
       success: true,
@@ -100,9 +75,6 @@ export async function GET(request: NextRequest, { params }: RouteParams): Promis
  * - description?: string
  * - requiresAuth?: boolean
  * - allowedRoles?: string[]
- *
- * Query parameters:
- * - format: 'llm' for TOON format response
  */
 export async function PUT(request: NextRequest, { params }: RouteParams): Promise<NextResponse> {
   try {
@@ -118,9 +90,6 @@ export async function PUT(request: NextRequest, { params }: RouteParams): Promis
     if (isNaN(pageId)) {
       return NextResponse.json({ error: 'Invalid page ID' }, { status: 400 });
     }
-
-    const { searchParams } = new URL(request.url);
-    const format = searchParams.get('format');
 
     const body = await request.json();
 
@@ -154,20 +123,6 @@ export async function PUT(request: NextRequest, { params }: RouteParams): Promis
 
     const dto = PuckPageMapper.toDTO(result.data);
 
-    // Return TOON format if requested
-    if (format === 'llm') {
-      const toon = operationToToon({
-        action: 'updated',
-        entity: 'page',
-        id: dto.id,
-        data: { name: dto.name, slug: dto.slug },
-      });
-      return new NextResponse(toon, {
-        status: 200,
-        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-      });
-    }
-
     return NextResponse.json({
       success: true,
       data: dto,
@@ -185,9 +140,6 @@ export async function PUT(request: NextRequest, { params }: RouteParams): Promis
  * DELETE /api/pages/[id]
  *
  * Delete a page.
- *
- * Query parameters:
- * - format: 'llm' for TOON format response
  */
 export async function DELETE(request: NextRequest, { params }: RouteParams): Promise<NextResponse> {
   try {
@@ -203,9 +155,6 @@ export async function DELETE(request: NextRequest, { params }: RouteParams): Pro
     if (isNaN(pageId)) {
       return NextResponse.json({ error: 'Invalid page ID' }, { status: 400 });
     }
-
-    const { searchParams } = new URL(request.url);
-    const format = searchParams.get('format');
 
     const pageService = getPuckPageApplicationService();
     const existingPage = await pageService.getPage(PageId.fromNumber(pageId));
@@ -226,19 +175,6 @@ export async function DELETE(request: NextRequest, { params }: RouteParams): Pro
 
     if (!result.success) {
       return NextResponse.json({ error: result.error || 'Failed to delete page' }, { status: 400 });
-    }
-
-    // Return TOON format if requested
-    if (format === 'llm') {
-      const toon = operationToToon({
-        action: 'deleted',
-        entity: 'page',
-        id: pageId,
-      });
-      return new NextResponse(toon, {
-        status: 200,
-        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-      });
     }
 
     return NextResponse.json({

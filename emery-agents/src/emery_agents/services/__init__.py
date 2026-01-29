@@ -3,18 +3,41 @@ Services Layer
 
 Business logic services without DDD interfaces or dependency injection.
 Direct imports and concrete implementations only.
+
+Submodules:
+- context/: Context and configuration management
+- models/: LLM/Model management
+- analysis/: Analysis utilities (gap analyzer, token usage, embeddings)
+- http/: HTTP and external communication
+- tools/: Tool loading and capabilities
+- data/: Data processing and storage
+- skills/: Skill execution
+- agents/: Agent-related services
+- execution/: Execution state and handlers
+- planning/: Plan generation and management
+- sandbox/: Safe code execution
 """
 
-from .model_provider import SmolagentsModelProvider, TokenUsage, CustomInferenceModel
-from .tool_loader import UnifiedToolLoader
-from .agent_executor import AgentExecutor
-from .context_resolver import ContextResolver
-from .context_sync_service import ContextSyncService, ContextSyncServiceFactory
+# Models (LLM/Model management)
+from .models import ModelProvider, TokenUsage
+
+# Context (context and configuration)
+from .context import ContextResolver, ContextSyncService, ContextSyncServiceFactory
+
+# Tools (tool loading and capabilities)
+from .tools import UnifiedToolLoader, CapabilityRegistry
+
+# Data (data processing and storage)
+from .data import ResultStorageService, ResultStorageServiceFactory, StoredResult
+
+# Agents (agent-related services)
+from .agents import AgentExecutor, AgentAPIService, AgentData, SkillData
+
+# Root-level services
 from .plan_service import PlanService, PlanServiceFactory
-from .execution_coordinator import (
-    ExecutionCoordinator,
-    ExecutionCoordinatorFactory,
-    ExecutionPhase,
+
+# Events (from execution events module — canonical source)
+from .execution.events import (
     PlanCreatedEvent,
     PlanApprovedEvent,
     StepStartedEvent,
@@ -27,19 +50,18 @@ from .execution_coordinator import (
     GoalAchievedEvent,
     ExecutionBlockedEvent,
 )
-from .result_storage import (
-    ResultStorageService,
-    ResultStorageServiceFactory,
-    StoredResult,
-)
-from .agent_api_service import AgentAPIService, AgentData, SkillData
 
-from ..models.task_ledger import TaskLedger, create_ledger_from_plan
+# NOTE: ExecutionCoordinator has been replaced by LangGraph orchestrators.
+# All callers now use create_session_graph() or generate_plan_node() directly.
+
+from ..entities.models.task_ledger import TaskLedger, create_ledger_from_plan
+
+# Orchestrators (LangGraph-based — primary orchestration path)
+from ..orchestrators import create_session_graph, create_session_plan_only_graph, RuntimeContext
 
 __all__ = [
-    "SmolagentsModelProvider",
+    "ModelProvider",
     "TokenUsage",
-    "CustomInferenceModel",
     "UnifiedToolLoader",
     "AgentExecutor",
     "ContextResolver",
@@ -47,9 +69,6 @@ __all__ = [
     "ContextSyncServiceFactory",
     "PlanService",
     "PlanServiceFactory",
-    "ExecutionCoordinator",
-    "ExecutionCoordinatorFactory",
-    "ExecutionPhase",
     "PlanCreatedEvent",
     "PlanApprovedEvent",
     "StepStartedEvent",
@@ -69,4 +88,9 @@ __all__ = [
     "AgentAPIService",
     "AgentData",
     "SkillData",
+    "CapabilityRegistry",
+    # Orchestrators
+    "create_session_graph",
+    "create_session_plan_only_graph",
+    "RuntimeContext",
 ]

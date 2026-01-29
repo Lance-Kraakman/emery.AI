@@ -113,6 +113,11 @@ services:
       PYTHONPATH: /usr/src/app/src
       WORKER_ADDRESS: agent-chat-integration:50051        # Chat service (internal network)
       USE_PIPEDREAM_TOOLS: true
+      AWS_ENDPOINT_URL: http://minio-integration:9000
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_REGION: us-east-1
+      S3_BUCKET_NAME: emery-files
       NEXTJS_BASE_URL: http://app-integration:3000
       EMERY_DEBUG_PROMPTS: "1"
     depends_on:

@@ -1,7 +1,9 @@
 import { NextRequest } from 'next/server';
-
-// AIDEV-NOTE: Force dynamic rendering to prevent build-time database connections
-export const dynamic = 'force-dynamic';
+import { getUserIdFromRequest } from '@/lib/auth';
+import { db } from '@/ddd/infrastructure/db/client';
+import { agents } from '@/ddd/infrastructure/db/schema';
+import { eq } from 'drizzle-orm';
+import { getAgentTaskApplicationService } from '@/ddd/application/di/container';
 
 /**
  * Get worker health status for an agent's organization
@@ -12,13 +14,6 @@ export async function GET(
 ): Promise<Response> {
   const params = await context.params;
   try {
-    // Dynamic imports to prevent build-time database connections
-    const { getUserIdFromRequest } = await import('@/lib/auth');
-    const { db } = await import('@/ddd/infrastructure/db/client');
-    const { agents } = await import('@/ddd/infrastructure/db/schema');
-    const { eq } = await import('drizzle-orm');
-    const { getAgentTaskApplicationService } = await import('@/ddd/application/di/container');
-    
     const userId = await getUserIdFromRequest(request);
     if (!userId) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });

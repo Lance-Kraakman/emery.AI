@@ -10,11 +10,9 @@ from typing import List, Optional
 
 from PIL import Image
 
-from smolagents.models import ChatMessage
-
+from .mappers.message_types import ChatMessage, MessageContentList
 from .generated import agent_worker_pb2
-from .mappers.message_types import MessageContentList
-from ..services.image_processor import ImageProcessor
+from ..services.data.image_processor import ImageProcessor
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +80,7 @@ def extract_text_from_message(message: ChatMessage) -> str:
     Returns:
         Combined text string (empty string if no text content)
 
-    AIDEV-NOTE: Used to extract text for agent.run() task parameter.
+    Used to extract text for task execution parameter.
     Content is always MessageContentList (list of content parts).
     """
     if not message or not message.content:
@@ -106,7 +104,7 @@ def build_task_with_conversation_context(
     """
     Build task prompt with full conversation history.
 
-    Since we create a NEW agent per request, agent.memory doesn't persist
+    Since we create a NEW agent per request, agent memory doesn't persist
     between requests. Instead, we include the full conversation history
     in the task prompt itself.
 
@@ -117,8 +115,8 @@ def build_task_with_conversation_context(
     Returns:
         Formatted task string with conversation history
 
-    AIDEV-NOTE: This is the key to context persistence - we manually format
-    conversation history into the task prompt instead of relying on agent.memory
+    This is the key to context persistence - we manually format
+    conversation history into the task prompt instead of relying on agent memory
     which doesn't persist across agent instances.
     """
     if not conversation_messages:

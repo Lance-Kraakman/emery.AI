@@ -428,6 +428,27 @@
       "when": 1768700000000,
       "tag": "0060_remove_system_skills",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1768806026897,
+      "tag": "0061_lying_vermin",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1768822484041,
+      "tag": "0062_chemical_bloodstorm",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1769143373030,
+      "tag": "0063_brief_mach_iv",
+      "breakpoints": true
     }
   ]
 }

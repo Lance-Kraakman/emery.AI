@@ -22,7 +22,9 @@ import {
   isMessageCompleteEvent,
   isPlanApprovalRequestEvent,
   isPlanStatusUpdateEvent,
-  isAwaitingInputEvent
+  isAwaitingInputEvent,
+  isPermissionRequestEvent,
+  type PermissionRequestEvent
 } from '@/lib/chat/types/sse-events'
 import type { PendingPlanApproval, ActivePlanExecution, PlanExecutionStatus, AwaitingInputState } from './types/extended-chat-handler'
 
@@ -160,6 +162,9 @@ export function useChatGRPC(
   // Unified HITL awaiting input state (plan approval or questions)
   const [awaitingInput, setAwaitingInput] = useState<AwaitingInputState | null>(null)
 
+  // Permission request state (when agent encounters RBAC errors)
+  const [permissionRequest, setPermissionRequest] = useState<PermissionRequestEvent | null>(null)
+
   // Generate domain-specific storage key for this chat session
   const chatStorageKey = `emery-chat-${contextOptions?.domainType || chatContext?.domainType || 'general'}-${contextOptions?.domainId || chatContext?.domainId || 'default'}`
 
@@ -208,13 +213,43 @@ export function useChatGRPC(
         setCurrentChatId(chatId)
 
         // Convert DTOs to ChatMessage format
-        const chatMessages: ChatMessage[] = result.data.messages.map(msg =>
-          createTextMessage(msg.content, msg.role as 'user' | 'assistant', msg.id, msg.metadata)
-        )
+        // Handle incomplete messages (streamingStatus === 'streaming') from interrupted streams
+        const chatMessages: ChatMessage[] = result.data.messages.map(msg => {
+          const isIncomplete = msg.metadata?.streamingStatus === 'streaming'
+
+          // For incomplete messages, append indicator to content
+          let displayContent = msg.content
+          if (isIncomplete) {
+            const trimmed = msg.content?.trim() || ''
+            if (!trimmed) {
+              displayContent = '_Message was interrupted during generation_'
+            } else {
+              displayContent = `${trimmed}\n\n---\n_Message was interrupted. Some content may be missing._`
+            }
+          }
+
+          // Mark incomplete messages in metadata for potential UI styling
+          const displayMetadata = isIncomplete
+            ? { ...msg.metadata, isIncomplete: true }
+            : msg.metadata
+
+          return createTextMessage(
+            displayContent,
+            msg.role as 'user' | 'assistant',
+            msg.id,
+            displayMetadata
+          )
+        })
 
         console.log('[DEBUG] loadChatSession - messages from server:', {
           count: result.data.messages.length,
-          messages: result.data.messages.map(m => ({ id: m.id, role: m.role, contentLength: m.content?.length }))
+          incompleteCount: result.data.messages.filter(m => m.metadata?.streamingStatus === 'streaming').length,
+          messages: result.data.messages.map(m => ({
+            id: m.id,
+            role: m.role,
+            contentLength: m.content?.length,
+            streamingStatus: m.metadata?.streamingStatus
+          }))
         })
         setMessages(chatMessages)
         setSelectedModel(result.data.session.model || undefined)
@@ -454,6 +489,7 @@ export function useChatGRPC(
       }
 
       let assistantMessage = ''
+      let accumulatedSteps: ExecutionStep[] = []
       const assistantId = generateId()
       let messageCreated = false // Track if we've added the message to UI yet
 
@@ -506,6 +542,7 @@ export function useChatGRPC(
                   eventData.content || '',
                   eventData.metadata
                 )
+                accumulatedSteps = addStepDeduped(accumulatedSteps, executionStep)
                 setStreamingSteps(prev => addStepDeduped(prev, executionStep))
 
               } else if (isContentEvent(eventData)) {
@@ -514,13 +551,16 @@ export function useChatGRPC(
 
                 // Create message on first content chunk (not before)
                 if (!messageCreated) {
-                  setMessages((prev) => [...prev, createTextMessage(assistantMessage, 'assistant', assistantId)])
+                  setMessages((prev) => [...prev, createTextMessage(
+                    assistantMessage, 'assistant', assistantId,
+                    accumulatedSteps.length > 0 ? { executionSteps: accumulatedSteps } : undefined
+                  )])
                   messageCreated = true
                 } else {
-                  // Update the assistant message in real-time
+                  // Update the assistant message in real-time, preserving metadata
                   setMessages((prev) => prev.map((msg) =>
                     msg.id === assistantId
-                      ? createTextMessage(assistantMessage, 'assistant', assistantId)
+                      ? createTextMessage(assistantMessage, 'assistant', assistantId, msg.experimental_metadata)
                       : msg
                   ))
                 }
@@ -648,24 +688,29 @@ export function useChatGRPC(
                 });
 
               } else if (isAwaitingInputEvent(eventData)) {
-                // Unified HITL: Agent needs user input (plan approval or question)
+                // Unified HITL: Agent needs user input (plan approval or questions)
                 logger.debug('Awaiting input', {
                   inputType: eventData.inputType,
                   title: eventData.title,
-                  optionsCount: eventData.options?.length || 0
+                  optionsCount: eventData.options?.length || 0,
+                  hasQuestions: !!eventData.questionSections?.length
                 });
 
                 // Set awaiting input state for UI to render approval/question card
+                // API route normalizes inputType to 'plan_approval' | 'questions'
+                // and converts questions to questionSections format
                 setAwaitingInput({
-                  inputType: eventData.inputType,
+                  inputType: eventData.inputType as 'plan_approval' | 'questions',
                   title: eventData.title,
                   content: eventData.content,
                   options: eventData.options || [],
-                  planJson: eventData.planJson
+                  planJson: eventData.planJson,
+                  questionSections: eventData.questionSections
                 });
 
-                // Display ALL awaiting input content (questions, plans, etc.) in the message
-                // This ensures clarifying questions and plan approvals appear in chat history
+                // Display content in chat history (if any)
+                // Note: For plan_approval, content is empty (plan shown in message already)
+                // For questions, content may be empty if using questionSections UI
                 if (eventData.content) {
                   const inputMessage = `\n\n**${eventData.title}**\n\n${eventData.content}`;
                   assistantMessage += inputMessage;
@@ -685,6 +730,37 @@ export function useChatGRPC(
                 logger.summary('Awaiting input set', {
                   inputType: eventData.inputType,
                   title: eventData.title
+                });
+
+              } else if (isPermissionRequestEvent(eventData)) {
+                // Permission request: Agent encountered RBAC error, needs user to grant access
+                logger.debug('Permission request', {
+                  permission: eventData.permission,
+                  resource: eventData.resource,
+                  resourceId: eventData.resourceId
+                });
+
+                // Set permission request state for UI to render access request card
+                setPermissionRequest(eventData);
+
+                // Display permission request in chat message
+                const permissionMessage = `\n\n**Permission Required**\n\n${eventData.context || `Agent needs '${eventData.permission}' permission to continue.`}`;
+                assistantMessage += permissionMessage;
+
+                if (!messageCreated) {
+                  setMessages((prev) => [...prev, createTextMessage(assistantMessage, 'assistant', assistantId)]);
+                  messageCreated = true;
+                } else {
+                  setMessages((prev) => prev.map((msg) =>
+                    msg.id === assistantId
+                      ? createTextMessage(assistantMessage, 'assistant', assistantId)
+                      : msg
+                  ));
+                }
+
+                logger.summary('Permission request set', {
+                  permission: eventData.permission,
+                  resource: eventData.resource
                 });
               }
             } catch (e) {
@@ -712,9 +788,9 @@ export function useChatGRPC(
         setMessages((prev) => [...prev, createTextMessage(errorMsg, 'assistant')])
       }
     } finally {
+      setStreamingSteps([])
       setIsLoading(false)
       setCurrentStep(null)
-      // Note: streamingSteps are cleared in message_complete handler after metadata is persisted
       setCurrentMessageId(null)
       abortControllerRef.current = null
     }
@@ -1009,6 +1085,9 @@ export function useChatGRPC(
     // Unified HITL awaiting input
     awaitingInput,
     respondToInput,
+    // Permission request (RBAC errors)
+    permissionRequest,
+    clearPermissionRequest: () => setPermissionRequest(null),
   }
 }
 

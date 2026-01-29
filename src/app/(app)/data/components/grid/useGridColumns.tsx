@@ -51,7 +51,8 @@ import {
   MULTI_SELECT_MIN_WIDTH,
   COLUMN_GROW,
   COLUMN_SHRINK,
-  FIXED_COLUMN_SHRINK
+  FIXED_COLUMN_SHRINK,
+  calculateHeaderMinWidth
 } from './grid-constants'
 
 interface UseGridColumnsParams {
@@ -357,6 +358,11 @@ export function useGridColumns({
         hasOnDeleteField: typeof onDeleteField === 'function'
       })
 
+      // AIDEV-NOTE: Calculate dynamic min-width based on header title + buttons
+      // This ensures column headers always show the full title without truncation
+      const headerMinWidth = calculateHeaderMinWidth(field.name)
+      const finalMinWidth = Math.max(minWidth, headerMinWidth)
+
       return {
         ...keyColumn(field.name, columnConfig),
         title: (
@@ -372,7 +378,7 @@ export function useGridColumns({
         basis,
         grow: COLUMN_GROW,
         shrink: COLUMN_SHRINK,
-        minWidth
+        minWidth: finalMinWidth
       }
     })
 

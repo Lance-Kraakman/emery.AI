@@ -81,6 +81,8 @@ export interface ChatMessageMetadata {
   plan?: MessagePlan;
   // HITL state when awaiting user input (approval or question)
   awaitingInput?: AwaitingInput;
+  // Streaming status for optimistic saves (undefined = complete for backward compat)
+  streamingStatus?: 'streaming' | 'complete' | 'error';
 }
 
 export interface ChatMessage {

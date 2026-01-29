@@ -306,6 +306,65 @@ class SessionLogger:
         }
         self._append(entry)
 
+    def log_full_content(
+        self,
+        content_type: str,
+        name: str,
+        content: str,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> None:
+        """
+        Log full content to a separate file for inspection.
+
+        Creates files with timestamps to handle repeated calls:
+        /tmp/emery_prompts/session_{id}/001_20240115_143052_context_domain_schema_input.txt
+
+        Args:
+            content_type: Type of content ("context", "prompt", "response", "result", "analysis")
+            name: Descriptive name (e.g., "domain_schema_input", "step_executor")
+            content: The full content to log
+            metadata: Optional metadata to include at the top of the file
+        """
+        if not self.enabled:
+            return
+
+        # Create session subdirectory
+        session_dir = f"{self.log_dir}/session_{self.session_id}"
+        os.makedirs(session_dir, exist_ok=True)
+
+        # Increment counter for ordering (stored as instance attribute)
+        if not hasattr(self, "_content_counter"):
+            self._content_counter = 0
+        self._content_counter += 1
+
+        # Generate timestamp for uniqueness (same prompt can be called twice)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        # Write full content to separate file
+        filename = f"{self._content_counter:03d}_{timestamp}_{content_type}_{name}.txt"
+        filepath = f"{session_dir}/{filename}"
+
+        try:
+            with open(filepath, "w") as f:
+                if metadata:
+                    f.write(f"=== METADATA ===\n{json.dumps(metadata, indent=2)}\n\n")
+                f.write(f"=== {content_type.upper()} ===\n")
+                f.write(content)
+        except Exception as e:
+            logger.warning(f"Failed to write full content log: {e}")
+            return
+
+        # Also log reference in main log
+        self._append({
+            "timestamp": datetime.now().isoformat(),
+            "type": "full_content",
+            "content_type": content_type,
+            "name": name,
+            "file": filepath,
+            "length": len(content),
+            "metadata": metadata or {}
+        })
+
     def _append(self, entry: Dict[str, Any]) -> None:
         """Append entry to log file (only if enabled)."""
         if not self.enabled:

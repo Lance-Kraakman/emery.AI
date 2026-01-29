@@ -26,6 +26,7 @@ import { registerDelegationServices, type DelegationServices } from './modules/d
 import { registerPuckServices, type PuckServices } from './modules/puck-registration';
 import { registerAuditServices, type AuditServices } from './modules/audit-registration';
 import { registerContextServices, type ContextServices } from './modules/context-registration';
+import { registerSecurityServices, type SecurityServices } from './modules/security-registration';
 
 export class DIContainer {
   private static instance: DIContainer;
@@ -188,6 +189,15 @@ export class DIContainer {
     const contextServices = registerContextServices({ db });
     this.registerServices('context', contextServices);
 
+    // Phase 12: Register security services
+    // Depends on: agent repository, skill repository
+    const securityServices = registerSecurityServices({
+      db,
+      agentRepository: agentServices.agentRepository,
+      skillRepository: skillServices.skillRepository
+    });
+    this.registerServices('security', securityServices);
+
     this.isInitialized = true;
     console.log('✅ DIContainer initialized with all domain services');
   }
@@ -197,7 +207,7 @@ export class DIContainer {
    */
   private registerServices(
     domain: string,
-    services: CoreServices | BillingServices | AgentServices | SkillServices | DatabaseServices | ViewServices | ChatServices | ToolsServices | ConnectionServices | DelegationServices | PuckServices | AuditServices | ContextServices
+    services: CoreServices | BillingServices | AgentServices | SkillServices | DatabaseServices | ViewServices | ChatServices | ToolsServices | ConnectionServices | DelegationServices | PuckServices | AuditServices | ContextServices | SecurityServices
   ): void {
     // Map service names to container keys
     const serviceKeyMappings: Record<string, string> = {
@@ -283,7 +293,13 @@ export class DIContainer {
 
       // Context domain
       'contextMappingRepository': 'IContextMappingRepository',
-      'contextMappingApplicationService': 'ContextMappingApplicationService'
+      'contextMappingApplicationService': 'ContextMappingApplicationService',
+
+      // Security domain
+      'securityReportRepository': 'ISecurityReportRepository',
+      'securityFindingRepository': 'ISecurityFindingRepository',
+      'ruleEngineService': 'RuleEngineService',
+      'securityAnalyzerService': 'SecurityAnalyzerService'
     };
 
     // Register all services from the module
@@ -432,5 +448,11 @@ export {
 
   // Context services
   getContextMappingRepository,
-  getContextMappingApplicationService
+  getContextMappingApplicationService,
+
+  // Security services
+  getSecurityReportRepository,
+  getSecurityFindingRepository,
+  getRuleEngineService,
+  getSecurityAnalyzerService
 } from './getters';

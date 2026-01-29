@@ -16,6 +16,7 @@ import {
   CreditCard,
   ScrollText,
   LayoutTemplate,
+  Globe,
 } from "lucide-react"
 
 import {
@@ -51,21 +52,12 @@ import { createPage, updatePage, deletePage, duplicatePage } from "@/app/actions
 import { createDefaultAgent, updateAgent, deleteAgent, duplicateAgent } from "@/app/actions/agents"
 import { createDefaultTeam, updateTeam, deleteTeam, duplicateTeam } from "@/app/actions/teams"
 import { createDefaultOrganizationSkill, updateSkill, deleteSkill, duplicateSkill } from "@/app/actions/skills"
-import { createDatabase, updateDatabase, deleteDatabase, duplicateDatabase } from "@/app/actions/databases"
+import { createDatabase, updateDatabase, deleteDatabase, cascadeDeleteDatabase, duplicateDatabase } from "@/app/actions/databases"
 import { createTable, updateTable, deleteTable, duplicateTable } from "@/app/actions/tables"
 import { applyBuiltinSkillTemplate, applyBuiltinDatabaseTemplate, applyBuiltinAgentTemplate, applyBuiltinTableTemplate } from "@/app/actions/templates"
 import { toast } from "sonner"
 import type { AppSidebarProps, AppData, PageData, AgentData, TeamData, SkillData, DatabaseData, TableData } from "./app-sidebar-types"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+import { CascadeDeleteDialog, type ChildCounts, type ChildItem } from "@/components/dialogs/CascadeDeleteDialog"
 import { TemplatePickerDialog } from "./templates/TemplatePickerDialog"
 import type { TemplateEntityType } from "@/ddd/domain/templates/types"
 import { useRouter } from "next/navigation"
@@ -162,6 +154,8 @@ export function AppSidebar({
     type: 'app' | 'page' | 'agent' | 'team' | 'skill' | 'database' | 'table'
     id: number
     name: string
+    childCounts?: ChildCounts
+    childItems?: ChildItem[]
   } | null>(null)
   const [isDeleting, setIsDeleting] = React.useState(false)
 
@@ -188,7 +182,14 @@ export function AppSidebar({
   }
 
   const handleDeleteApp = (app: AppData) => {
-    setDeletingItem({ type: 'app', id: app.id, name: app.name })
+    const pageCount = app.pages?.length ?? 0
+    setDeletingItem({
+      type: 'app',
+      id: app.id,
+      name: app.name,
+      childCounts: pageCount > 0 ? { pages: pageCount } : undefined,
+      childItems: pageCount > 0 ? app.pages!.map(p => ({ type: 'page' as const, name: p.name, id: p.id })) : undefined
+    })
   }
 
   // Action handlers for Pages
@@ -224,7 +225,24 @@ export function AppSidebar({
   }
 
   const handleDeleteAgent = (agent: AgentData) => {
-    setDeletingItem({ type: 'agent', id: agent.id, name: agent.name })
+    // Count skills assigned to this agent
+    const agentSkills = skills.filter(s => s.agentId === agent.id)
+    // Count databases assigned to this agent
+    const agentDatabases = databases.filter(d => {
+      // Note: DatabaseData doesn't have agentId in sidebar types, so we can't count them here
+      // This would need to be enhanced in the data passed to sidebar
+      return false
+    })
+    const skillCount = agentSkills.length
+    const hasChildren = skillCount > 0
+
+    setDeletingItem({
+      type: 'agent',
+      id: agent.id,
+      name: agent.name,
+      childCounts: hasChildren ? { skills: skillCount } : undefined,
+      childItems: hasChildren ? agentSkills.map(s => ({ type: 'skill' as const, name: s.name, id: s.id })) : undefined
+    })
   }
 
   // Action handlers for Teams
@@ -278,7 +296,14 @@ export function AppSidebar({
   }
 
   const handleDeleteDatabase = (database: DatabaseData) => {
-    setDeletingItem({ type: 'database', id: database.id, name: database.name })
+    const tableCount = database.tables?.length ?? 0
+    setDeletingItem({
+      type: 'database',
+      id: database.id,
+      name: database.name,
+      childCounts: tableCount > 0 ? { tables: tableCount } : undefined,
+      childItems: tableCount > 0 ? database.tables.map(t => ({ type: 'table' as const, name: t.name, id: t.id })) : undefined
+    })
   }
 
   // Action handlers for Tables
@@ -407,7 +432,12 @@ export function AppSidebar({
         result = await deleteSkill(deletingItem.id)
         break
       case 'database':
-        result = await deleteDatabase(deletingItem.id)
+        // Use cascade delete if database has tables
+        if (deletingItem.childCounts?.tables && deletingItem.childCounts.tables > 0) {
+          result = await cascadeDeleteDatabase(deletingItem.id)
+        } else {
+          result = await deleteDatabase(deletingItem.id)
+        }
         break
       case 'table':
         result = await deleteTable(deletingItem.id)
@@ -673,6 +703,18 @@ export function AppSidebar({
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={pathname === "/organization/settings/published-agents"}
+                      className="h-6"
+                    >
+                      <Link href="/organization/settings/published-agents">
+                        <Globe className="h-4 w-4" />
+                        <span className="group-data-[collapsible=icon]:hidden">Published Agents</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
                     <SidebarMenuButton asChild isActive={pathname === "/settings/billing"} className="h-6">
                       <Link href="/settings/billing">
                         <CreditCard className="h-4 w-4" />
@@ -761,30 +803,18 @@ export function AppSidebar({
       <SidebarRail />
 
       {/* Delete Confirmation Dialog */}
-      <AlertDialog open={!!deletingItem} onOpenChange={() => setDeletingItem(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete {deletingItem?.type === 'app' && 'the app'}
-              {deletingItem?.type === 'page' && 'the page'}
-              {deletingItem?.type === 'agent' && 'the agent'}
-              {deletingItem?.type === 'team' && 'the team'}
-              {deletingItem?.type === 'skill' && 'the skill'}
-              {deletingItem?.type === 'database' && 'the database'}
-              {deletingItem?.type === 'table' && 'the table'} "{deletingItem?.name}"
-              {(deletingItem?.type === 'app' || deletingItem?.type === 'database') && ' and all its contents'}.
-              This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete} disabled={isDeleting}>
-              {isDeleting ? 'Deleting...' : 'Delete'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {deletingItem && (
+        <CascadeDeleteDialog
+          isOpen={!!deletingItem}
+          onClose={() => setDeletingItem(null)}
+          onConfirm={confirmDelete}
+          isDeleting={isDeleting}
+          entityType={deletingItem.type}
+          entityName={deletingItem.name}
+          childCounts={deletingItem.childCounts}
+          childItems={deletingItem.childItems}
+        />
+      )}
 
       {/* Share Dialog */}
       {sharingItem && (

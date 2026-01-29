@@ -24,6 +24,7 @@ import { PageDialogsPanel } from "@/app/(app)/apps/components/PageDialogsPanel";
 import type { AppDTO } from "@/app/mappers/puck-app-mapper";
 import type { OrganizationDTO } from "@/app/mappers/organization-mapper";
 import type { EditingContextItem, EditingTarget } from "@/components/puck/types/editing-context";
+import { DataFieldsPanel } from "@/components/puck/DataFieldsPanel";
 
 export interface PuckEditorLayoutProps {
   pageId: number;
@@ -362,6 +363,7 @@ function PuckEditorLayoutInner({
                   </div>
                 </>
               )}
+              <DataFieldsPanel />
               <Puck.Fields />
             </TabsContent>
 
