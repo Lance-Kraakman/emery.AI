@@ -37,16 +37,12 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { orgChartNodeTypes } from '@/components/org-chart/nodes';
 import { orgChartEdgeTypes } from '@/components/org-chart/edges';
-import { orgChartNodeSizes } from '@/components/org-chart/theme';
+
 import { useOrgChart, useOrgChartExport } from '@/components/org-chart/hooks';
 import {
-  getNodeDimensions,
-  arrangeNodesInRow,
-  arrangeAgentsInRows,
-  arrangeChildrenInGrid,
-  calculateAgentDimensions,
   getNextGridSlotPosition,
   normalizeEdgeConnection,
+  arrangeOrgChartTopDown,
 } from '@/components/org-chart/utils';
 import { DeleteConfirmationDialog, buildDeleteImpactItems, AgentAssignmentDialog, ExportTemplateDialog, type AssignmentConfig } from '@/components/org-chart/dialogs';
 import { ImportTemplateDialog } from '@/components/templates/ImportTemplateDialog';
@@ -843,77 +839,10 @@ export function OrgChartCanvas({
     [setSelectedNodeId, onSelect]
   );
 
-  // Auto-arrange: horizontal org-chart style layout
+  // Auto-arrange: top-down tiered org chart layout
   const handleAutoArrange = useCallback(() => {
-    const GAP = 40;
-    const PADDING = 50;
-    const MAX_ROW_WIDTH = 1600;
-    let currentY = PADDING;
-    let newNodes = [...nodes];
-
-    // 1. Arrange org-level skills in a horizontal row
-    const orgSkillIds = new Set(
-      newNodes.filter((n) => n.type === 'skill' && !n.parentId).map((n) => n.id)
-    );
-    if (orgSkillIds.size > 0) {
-      const result = arrangeNodesInRow(
-        newNodes,
-        orgSkillIds,
-        PADDING,
-        currentY,
-        GAP,
-        orgChartNodeSizes.nodeWidth
-      );
-      newNodes = result.updatedNodes;
-      currentY += Math.max(result.rowHeight, orgChartNodeSizes.nodeHeight) + GAP;
-    }
-
-    // 2. Arrange org-level databases in a horizontal row
-    const orgDatabaseIds = new Set(
-      newNodes.filter((n) => n.type === 'database' && !n.parentId).map((n) => n.id)
-    );
-    if (orgDatabaseIds.size > 0) {
-      const result = arrangeNodesInRow(
-        newNodes,
-        orgDatabaseIds,
-        PADDING,
-        currentY,
-        GAP,
-        orgChartNodeSizes.nodeWidth
-      );
-      newNodes = result.updatedNodes;
-      currentY += Math.max(result.rowHeight, orgChartNodeSizes.nodeHeight) + GAP;
-    }
-
-    // 3. Size agents based on their children and arrange in horizontal rows
-    const agentIds = newNodes.filter((n) => n.type === 'agent').map((n) => n.id);
-
-    // First, resize agents to fit their children (sectioned layout)
-    newNodes = newNodes.map((node) => {
-      if (node.type !== 'agent') return node;
-      const data = node.data as AgentContainerNodeData;
-      const { width, height } = calculateAgentDimensions(
-        data.skillCount ?? 0,
-        data.databaseCount ?? 0
-      );
-      return {
-        ...node,
-        style: { ...node.style, width, height },
-      };
-    });
-
-    // Arrange agents in horizontal rows
-    newNodes = arrangeAgentsInRows(newNodes, agentIds, PADDING, currentY, GAP, MAX_ROW_WIDTH);
-
-    // 4. Arrange children inside each agent in a 2-column grid
-    for (const agentId of agentIds) {
-      newNodes = arrangeChildrenInGrid(newNodes, agentId);
-    }
-
-    // 5. Keep sticky notes in their relative positions (don't rearrange)
-
-    setNodes(newNodes);
-  }, [nodes, setNodes]);
+    setNodes((currentNodes) => arrangeOrgChartTopDown(currentNodes, allEdges));
+  }, [allEdges, setNodes]);
 
   // Handle node double-click (open editor)
   const handleNodeDoubleClick = useCallback(

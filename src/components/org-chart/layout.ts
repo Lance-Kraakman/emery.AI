@@ -5,7 +5,7 @@
  */
 
 import type { XYPosition } from '@xyflow/react';
-import type { OrgChartNode } from './types';
+import type { OrgChartNode, OrgChartEdge, OrgChartEdgeData, AgentContainerNodeData } from './types';
 import { orgChartNodeSizes } from './theme';
 
 // =============================================================================
@@ -303,4 +303,215 @@ export function arrangeChildrenInGrid(
     }
     return node;
   });
+}
+
+// =============================================================================
+// Top-Down Org Chart Layout
+// =============================================================================
+
+/**
+ * Compute which agent each org-level database is most connected to.
+ * Returns a map of databaseNodeId → agentNodeId.
+ */
+function computeDatabaseAffinity(
+  nodes: OrgChartNode[],
+  edges: OrgChartEdge[]
+): Map<string, string> {
+  // Build skill → parent agent lookup
+  const skillToAgent = new Map<string, string>();
+  for (const node of nodes) {
+    if (node.type === 'skill' && node.parentId) {
+      skillToAgent.set(node.id, node.parentId);
+    }
+  }
+
+  // Count edges from each agent to each database
+  // affinityCounts: dbNodeId → Map<agentNodeId, count>
+  const affinityCounts = new Map<string, Map<string, number>>();
+
+  for (const edge of edges) {
+    const edgeType = (edge.data as OrgChartEdgeData | undefined)?.edgeType;
+    if (edgeType !== 'skill_table' && edgeType !== 'data_source') continue;
+
+    // Determine which agent this edge originates from
+    let agentId: string | undefined;
+    if (skillToAgent.has(edge.source)) {
+      agentId = skillToAgent.get(edge.source);
+    } else {
+      // Source might be an agent directly (data_source edges)
+      const sourceNode = nodes.find((n) => n.id === edge.source);
+      if (sourceNode?.type === 'agent') {
+        agentId = sourceNode.id;
+      }
+    }
+    if (!agentId) continue;
+
+    // Target should be a database
+    const targetNode = nodes.find((n) => n.id === edge.target);
+    if (!targetNode || targetNode.type !== 'database' || targetNode.parentId) continue;
+
+    if (!affinityCounts.has(edge.target)) {
+      affinityCounts.set(edge.target, new Map());
+    }
+    const counts = affinityCounts.get(edge.target)!;
+    counts.set(agentId, (counts.get(agentId) ?? 0) + 1);
+  }
+
+  // Pick the agent with the highest count for each database
+  const result = new Map<string, string>();
+  for (const [dbId, counts] of affinityCounts) {
+    let bestAgent = '';
+    let bestCount = 0;
+    for (const [agentId, count] of counts) {
+      if (count > bestCount) {
+        bestAgent = agentId;
+        bestCount = count;
+      }
+    }
+    if (bestAgent) {
+      result.set(dbId, bestAgent);
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Arrange the org chart in a top-down tiered layout:
+ *   Tier 1 (top): Org-level skills
+ *   Tier 2 (middle): Agent containers side-by-side
+ *   Tier 3 (bottom): Databases aligned under their most-connected agent
+ */
+export function arrangeOrgChartTopDown(
+  nodes: OrgChartNode[],
+  edges: OrgChartEdge[]
+): OrgChartNode[] {
+  const PADDING = 50;
+  const GAP = 40;
+  const TIER_GAP = 60;
+  const MAX_ROW_WIDTH = 1600;
+
+  let result = [...nodes];
+  let cursorY = PADDING;
+
+  // --- Classify nodes ---
+  const orgSkillIds = new Set(
+    result.filter((n) => n.type === 'skill' && !n.parentId).map((n) => n.id)
+  );
+  const agentIds = result.filter((n) => n.type === 'agent').map((n) => n.id);
+  const orgDatabaseIds = new Set(
+    result.filter((n) => n.type === 'database' && !n.parentId).map((n) => n.id)
+  );
+
+  // --- Compute affinity ---
+  const dbAffinity = computeDatabaseAffinity(result, edges);
+
+  // --- Resize agents to fit children ---
+  result = result.map((node) => {
+    if (node.type !== 'agent') return node;
+    const data = node.data as AgentContainerNodeData;
+    const { width, height } = calculateAgentDimensions(
+      data.skillCount ?? 0,
+      data.databaseCount ?? 0
+    );
+    return { ...node, style: { ...node.style, width, height } };
+  });
+
+  // --- Tier 1: Org-level skills ---
+  if (orgSkillIds.size > 0) {
+    const rowResult = arrangeNodesInRow(
+      result, orgSkillIds, PADDING, cursorY, GAP, orgChartNodeSizes.nodeWidth
+    );
+    result = rowResult.updatedNodes;
+    cursorY += Math.max(rowResult.rowHeight, orgChartNodeSizes.nodeHeight) + GAP;
+  }
+
+  // --- Tier 2: Agents side-by-side ---
+  result = arrangeAgentsInRows(result, agentIds, PADDING, cursorY, GAP, MAX_ROW_WIDTH);
+
+  // Track each agent's positioned layout for database alignment
+  const agentLayout = new Map<string, { x: number; y: number; width: number; height: number }>();
+  let agentTierBottom = cursorY;
+  for (const node of result) {
+    if (node.type !== 'agent') continue;
+    const dims = getNodeDimensions(node);
+    agentLayout.set(node.id, {
+      x: node.position.x,
+      y: node.position.y,
+      width: dims.width,
+      height: dims.height,
+    });
+    agentTierBottom = Math.max(agentTierBottom, node.position.y + dims.height);
+  }
+
+  // Arrange children inside each agent
+  for (const agentId of agentIds) {
+    result = arrangeChildrenInGrid(result, agentId);
+  }
+
+  // --- Tier 3: Databases aligned under affiliated agents ---
+  const dbTierY = agentTierBottom + TIER_GAP;
+
+  // Group databases by affiliated agent
+  const agentDatabases = new Map<string, string[]>(); // agentNodeId → [dbNodeId]
+  const unaffiliated: string[] = [];
+
+  for (const dbId of orgDatabaseIds) {
+    const agentId = dbAffinity.get(dbId);
+    if (agentId && agentLayout.has(agentId)) {
+      if (!agentDatabases.has(agentId)) {
+        agentDatabases.set(agentId, []);
+      }
+      agentDatabases.get(agentId)!.push(dbId);
+    } else {
+      unaffiliated.push(dbId);
+    }
+  }
+
+  // Position map for all databases
+  const dbPositions = new Map<string, XYPosition>();
+
+  // Place affiliated databases under their agent
+  // Sort agents left-to-right by X position
+  const sortedAgents = [...agentLayout.entries()]
+    .sort((a, b) => a[1].x - b[1].x);
+
+  for (const [agentId, layout] of sortedAgents) {
+    const dbIds = agentDatabases.get(agentId);
+    if (!dbIds || dbIds.length === 0) continue;
+
+    let dbCursorY = dbTierY;
+    for (const dbId of dbIds) {
+      dbPositions.set(dbId, { x: layout.x, y: dbCursorY });
+      const dbNode = result.find((n) => n.id === dbId);
+      const dbHeight = dbNode ? getNodeDimensions(dbNode).height : orgChartNodeSizes.nodeHeight;
+      dbCursorY += dbHeight + GAP;
+    }
+  }
+
+  // Place unaffiliated databases after the rightmost agent column
+  if (unaffiliated.length > 0) {
+    const rightmostX = sortedAgents.length > 0
+      ? sortedAgents[sortedAgents.length - 1][1].x + sortedAgents[sortedAgents.length - 1][1].width + GAP
+      : PADDING;
+
+    let dbCursorY = dbTierY;
+    for (const dbId of unaffiliated) {
+      dbPositions.set(dbId, { x: rightmostX, y: dbCursorY });
+      const dbNode = result.find((n) => n.id === dbId);
+      const dbHeight = dbNode ? getNodeDimensions(dbNode).height : orgChartNodeSizes.nodeHeight;
+      dbCursorY += dbHeight + GAP;
+    }
+  }
+
+  // Apply database positions
+  result = result.map((node) => {
+    const pos = dbPositions.get(node.id);
+    if (pos) {
+      return { ...node, position: pos };
+    }
+    return node;
+  });
+
+  return result;
 }
