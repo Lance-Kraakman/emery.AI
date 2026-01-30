@@ -11,24 +11,16 @@ import hashlib
 import json
 import logging
 import os
-import re
 import threading
-from io import BytesIO
 from typing import Any, Callable, TYPE_CHECKING
 
-from jinja2 import Template
-
-from ....entities.output_mapping import OutputMappingConfig
-from ....grpc.generated.agent_worker_pb2 import SkillConfig
-from ....services.data.file_processor import download_file
-from ....services.data.image_processor import ImageProcessor
+from ....entities.skill_config import SkillConfigDTO
 from ....services.data.output_mapping import MappingContext, OutputMappingService
 from ....types import SkillExecutionResult
 from ....utils import run_async_in_thread
 
 if TYPE_CHECKING:
     from ....entities.task import SkillOutputValue
-    from ....infrastructure.clients import HuggingFaceInferenceClient
 
 logger = logging.getLogger(__name__)
 
@@ -52,15 +44,13 @@ class SkillTool:
 
     def __init__(
         self,
-        skill_config: SkillConfig,
-        skill_executor: Callable[[SkillConfig, dict[str, Any]], str],
-        inference_client: HuggingFaceInferenceClient | None = None,
+        skill_config: SkillConfigDTO,
+        skill_executor: Callable,
         api_key: str | None = None,
         organization_id: int | None = None,
     ):
         self.skill_config = skill_config
         self.skill_executor = skill_executor
-        self.inference_client = inference_client
         self.api_key = api_key
         self.organization_id = organization_id
 
@@ -76,30 +66,20 @@ class SkillTool:
         # Convert skill inputs to tool input schema
         self.inputs = self._build_inputs_schema()
 
-        # Detect execution type
-        self._is_operation = self._check_is_operation()
-        execution_mode = "operation" if self._is_operation else "agent"
         logger.info(
-            f"Created SkillTool: {self.name} ({execution_mode}) with {len(self.inputs)} inputs"
+            f"Created SkillTool: {self.name} with {len(self.inputs)} inputs"
         )
 
     def __call__(self, **kwargs: Any) -> str:
         """Make the tool callable for DSPy ReAct."""
         return self.forward(**kwargs)
 
-    def _check_is_operation(self) -> bool:
-        """Check if this skill uses operation execution (direct model invocation)."""
-        return self.skill_config.execution_type == "operation"
-
     def _has_output_mappings(self) -> bool:
         """Check if skill has any outputs with output mappings configured."""
         if not self.skill_config.outputs:
             return False
         for output in self.skill_config.outputs:
-            if (
-                output.HasField("output_mapping")
-                and len(output.output_mapping.table_mappings) > 0
-            ):
+            if output.output_mapping is not None:
                 return True
         return False
 
@@ -139,7 +119,7 @@ class SkillTool:
         return f"{self.skill_config.name}:{inputs_hash}"
 
     def _build_inputs_schema(self) -> dict[str, dict[str, str]]:
-        """Convert SkillConfig.inputs to tool input schema."""
+        """Convert skill config inputs to tool input schema."""
         inputs_schema: dict[str, dict[str, str]] = {}
         file_input_types = {"image", "audio", "file", "document", "video", "pdf"}
 
@@ -203,51 +183,43 @@ class SkillTool:
             logger.info(f"Returning cached result for {self.name}")
             return cache[call_key]
 
-        execution_mode = "operation" if self._is_operation else "agent"
         logger.info(
-            f"Executing skill: {self.name} ({execution_mode}, depth: {current_depth + 1}) "
+            f"Executing skill: {self.name} (depth: {current_depth + 1}) "
             f"with inputs: {list(kwargs.keys())}"
         )
 
         call_stack.add(skill_name)
 
         try:
-            if self._is_operation:
-                enriched_kwargs = self._inject_context_inputs(kwargs)
-                enriched_kwargs = run_async_in_thread(
-                    self._resolve_input_mappings(enriched_kwargs)
+            enriched_kwargs = run_async_in_thread(self._resolve_input_mappings(kwargs))
+
+            from ....services.agents.executor import AgentExecutor
+
+            parent_ctx = AgentExecutor.get_current_context()
+            progress_callback = parent_ctx.progress_callback if parent_ctx else None
+
+            if self._has_output_mappings():
+                executor_result = self.skill_executor(
+                    self.skill_config,
+                    enriched_kwargs,
+                    capture_outputs=True,
+                    progress_callback=progress_callback,
                 )
-                result = self._execute_operation(enriched_kwargs)
-            else:
-                enriched_kwargs = run_async_in_thread(self._resolve_input_mappings(kwargs))
 
-                from ....services.agents.executor import AgentExecutor
-
-                parent_ctx = AgentExecutor.get_current_context()
-                progress_callback = parent_ctx.progress_callback if parent_ctx else None
-
-                if self._has_output_mappings():
-                    executor_result = self.skill_executor(
-                        self.skill_config,
-                        enriched_kwargs,
-                        capture_outputs=True,
-                        progress_callback=progress_callback,
-                    )
-
-                    if isinstance(executor_result, SkillExecutionResult):
-                        result = executor_result.result
-                        captured_outputs = executor_result.captured_outputs
-                        if captured_outputs:
-                            run_async_in_thread(
-                                self._apply_agent_output_mappings(captured_outputs)
-                            )
-                            result = self._build_result_with_outputs(result, captured_outputs)
-                    else:
-                        result = executor_result
+                if isinstance(executor_result, SkillExecutionResult):
+                    result = executor_result.result
+                    captured_outputs = executor_result.captured_outputs
+                    if captured_outputs:
+                        run_async_in_thread(
+                            self._apply_agent_output_mappings(captured_outputs)
+                        )
+                        result = self._build_result_with_outputs(result, captured_outputs)
                 else:
-                    result = self.skill_executor(
-                        self.skill_config, enriched_kwargs, progress_callback=progress_callback
-                    )
+                    result = executor_result
+            else:
+                result = self.skill_executor(
+                    self.skill_config, enriched_kwargs, progress_callback=progress_callback
+                )
 
             logger.info(f"Skill {self.name} completed successfully")
             cache[call_key] = result
@@ -260,322 +232,6 @@ class SkillTool:
 
         finally:
             call_stack.discard(skill_name)
-
-    def _apply_template_substitution(self, runtime_inputs: dict[str, Any]) -> dict[str, Any]:
-        """Apply Jinja2 template substitution for operation execution."""
-        template_str = self.skill_config.instructions
-        inputs_list = list(self.skill_config.inputs)
-
-        if not template_str or not template_str.strip():
-            return runtime_inputs
-
-        if "{{" in template_str and "}}" in template_str:
-            try:
-                template = Template(template_str)
-                rendered = template.render(**runtime_inputs)
-
-                for skill_input in inputs_list:
-                    if skill_input.type == "text":
-                        result = dict(runtime_inputs)
-                        result[skill_input.name] = rendered
-                        logger.info(f"Jinja2 template: {skill_input.name} = '{rendered[:100]}...'")
-                        return result
-
-                logger.warning("Template has placeholders but no text input found")
-                return runtime_inputs
-
-            except Exception as e:
-                logger.error(f"Jinja2 template error: {e}")
-                return runtime_inputs
-
-        else:
-            for skill_input in inputs_list:
-                if skill_input.type == "text":
-                    primary_name = skill_input.name
-                    if primary_name not in runtime_inputs or not runtime_inputs[primary_name]:
-                        result = dict(runtime_inputs)
-                        result[primary_name] = template_str
-                        logger.info(f"Using static template as default for {primary_name}")
-                        return result
-                    break
-
-            return runtime_inputs
-
-    def _inject_context_inputs(self, kwargs: dict[str, Any]) -> dict[str, Any]:
-        """Inject images/audio from parent execution context into skill inputs."""
-        from ....services.agents.executor import AgentExecutor
-
-        parent_context = AgentExecutor.get_current_context()
-        if not parent_context:
-            return kwargs
-
-        result = dict(kwargs)
-        inputs_list = list(self.skill_config.inputs)
-
-        for skill_input in inputs_list:
-            input_name = skill_input.name
-            input_type = skill_input.type
-
-            if input_name in result and isinstance(result[input_name], bytes):
-                continue
-
-            provided_value = result.get(input_name)
-            has_explicit_filename = (
-                provided_value and isinstance(provided_value, str) and provided_value.strip()
-            )
-
-            if input_type == "image":
-                image_bytes = None
-
-                if has_explicit_filename and parent_context.session_attachments:
-                    image_bytes = self._find_file_by_name(
-                        provided_value, parent_context.session_attachments, mime_prefix="image/"
-                    )
-                    if image_bytes:
-                        logger.info(f"Injected image by name '{provided_value}' into '{input_name}'")
-
-                if not image_bytes and parent_context.images:
-                    image_bytes = self._download_and_convert_image(parent_context.images)
-                    if image_bytes:
-                        logger.info(
-                            f"Injected image from current message into '{input_name}' "
-                            f"({len(image_bytes)} bytes)"
-                        )
-
-                if image_bytes:
-                    result[input_name] = image_bytes
-
-            elif input_type == "audio":
-                audio_bytes = None
-
-                if has_explicit_filename and parent_context.session_attachments:
-                    audio_bytes = self._find_file_by_name(
-                        provided_value, parent_context.session_attachments, mime_prefix="audio/"
-                    )
-                    if audio_bytes:
-                        logger.info(f"Injected audio by name '{provided_value}' into '{input_name}'")
-
-                if not audio_bytes and parent_context.attachments:
-                    audio_bytes = self._download_audio(parent_context.attachments)
-                    if audio_bytes:
-                        logger.info(
-                            f"Injected audio from current message into '{input_name}' "
-                            f"({len(audio_bytes)} bytes)"
-                        )
-
-                if audio_bytes:
-                    result[input_name] = audio_bytes
-
-            elif input_type in ("file", "document", "pdf"):
-                file_bytes = None
-
-                if has_explicit_filename and parent_context.session_attachments:
-                    file_bytes = self._find_file_by_name(
-                        provided_value, parent_context.session_attachments, mime_prefix=None
-                    )
-                    if file_bytes:
-                        logger.info(f"Injected file by name '{provided_value}' into '{input_name}'")
-
-                if not file_bytes and parent_context.attachments:
-                    for att in parent_context.attachments:
-                        try:
-                            file_bytes = run_async_in_thread(download_file(att.url))
-                            if file_bytes:
-                                logger.info(f"Injected file from current message into '{input_name}'")
-                                break
-                        except Exception as e:
-                            logger.error(f"Failed to download file: {e}")
-
-                if file_bytes:
-                    result[input_name] = file_bytes
-
-        return result
-
-    def _download_and_convert_image(self, image_attachments: Any) -> bytes | None:
-        """Download images from context and convert to bytes for HF API."""
-        try:
-            pil_images = run_async_in_thread(
-                ImageProcessor.download_images_from_attachments(image_attachments)
-            )
-
-            if pil_images:
-                buffer = BytesIO()
-                pil_images[0].save(buffer, format="PNG")
-                return buffer.getvalue()
-
-        except Exception as e:
-            logger.error(f"Failed to download/convert image: {e}")
-
-        return None
-
-    def _download_audio(self, attachments: Any) -> bytes | None:
-        """Download audio from context attachments."""
-        for attachment in attachments:
-            mime_type = getattr(attachment, "mime_type", "") or ""
-            if mime_type.startswith("audio/"):
-                try:
-                    audio_bytes = run_async_in_thread(download_file(attachment.url))
-                    return audio_bytes
-                except Exception as e:
-                    logger.error(f"Failed to download audio: {e}")
-
-        return None
-
-    def _find_file_by_name(
-        self, filename: str, attachments: list[Any], mime_prefix: str | None = None
-    ) -> bytes | None:
-        """Find and download a file by filename from attachments."""
-        if not attachments or not filename:
-            return None
-
-        index_match = re.match(r"^(.+?)\s*\((\d+)\)$", filename.strip())
-        if index_match:
-            base_filename = index_match.group(1).strip()
-            target_index = int(index_match.group(2))
-        else:
-            base_filename = filename.strip()
-            target_index = 1
-
-        occurrence = 0
-        for attachment in attachments:
-            att_filename = getattr(attachment, "filename", "") or ""
-            att_mime = getattr(attachment, "mime_type", "") or ""
-
-            if att_filename.strip() == base_filename:
-                occurrence += 1
-
-                if occurrence == target_index:
-                    if mime_prefix and not att_mime.startswith(mime_prefix):
-                        logger.warning(
-                            f"File '{filename}' found but MIME type '{att_mime}' "
-                            f"doesn't match expected '{mime_prefix}*'"
-                        )
-                        continue
-
-                    try:
-                        logger.info(f"Found file by name: '{filename}' (occurrence {occurrence})")
-                        file_bytes = run_async_in_thread(download_file(attachment.url))
-                        return file_bytes
-                    except Exception as e:
-                        logger.error(f"Failed to download file '{filename}': {e}")
-                        return None
-
-        if occurrence > 0:
-            logger.warning(
-                f"File '{base_filename}' found {occurrence} time(s), "
-                f"but requested index {target_index}"
-            )
-        else:
-            logger.warning(f"File '{filename}' not found in {len(attachments)} attachments")
-
-        return None
-
-    def _execute_operation(self, runtime_inputs: dict[str, Any]) -> str:
-        """Execute skill directly without LLM orchestration (operation mode)."""
-        if not self.inference_client:
-            raise ValueError(
-                f"Operation skill '{self.skill_config.name}' requires inference_client."
-            )
-
-        task_config = self.skill_config.task_model_config
-        if not task_config:
-            raise ValueError(
-                f"Operation skill '{self.skill_config.name}' missing task_model_config"
-            )
-
-        model_id = task_config.model_id
-        task_type = task_config.task_type
-        parameters = dict(task_config.parameters) if task_config.parameters else {}
-
-        logger.info(f"Direct operation execution: {model_id} ({task_type})")
-
-        if not self.inference_client.supports_task_type(task_type):
-            raise ValueError(
-                f"Task type '{task_type}' not supported. "
-                f"Supported: {self.inference_client.supported_task_types}"
-            )
-
-        final_inputs = self._apply_template_substitution(runtime_inputs)
-
-        result = run_async_in_thread(
-            self.inference_client.execute_task(
-                model_id=model_id,
-                task_type=task_type,
-                inputs=final_inputs,
-                parameters=parameters,
-            )
-        )
-
-        run_async_in_thread(self._apply_output_mappings(result))
-
-        if result.is_text:
-            return str(result.data)
-        elif result.is_structured:
-            return json.dumps(result.data)
-        elif result.is_binary:
-            return f"Generated {result.type.value}: {len(result.data)} bytes ({result.metadata})"
-        else:
-            return str(result.data)
-
-    async def _apply_output_mappings(self, result: Any) -> None:
-        """Apply output mappings to save operation mode skill results to tables."""
-        if not self.api_key or not self.organization_id:
-            logger.debug("No API auth available, skipping output mappings")
-            return
-
-        outputs_with_mappings = [
-            output
-            for output in self.skill_config.outputs
-            if output.HasField("output_mapping") and output.output_mapping.table_mappings
-        ]
-
-        if not outputs_with_mappings:
-            logger.debug("No output mappings configured")
-            return
-
-        logger.info("Applying output mappings for operation mode skill")
-
-        ctx = MappingContext(api_key=self.api_key, organization_id=str(self.organization_id))
-
-        if result.is_text:
-            result_value = str(result.data)
-        elif result.is_binary:
-            file_url = await OutputMappingService.upload_binary_to_s3(
-                ctx=ctx,
-                binary_data=result.data,
-                mime_type=result.metadata.get("mime_type", "application/octet-stream"),
-                filename_prefix="output",
-            )
-            result_value = file_url if file_url else None
-        elif result.is_structured:
-            result_value = result.data
-        else:
-            result_value = result.data
-
-        if result_value is None:
-            logger.warning("No result value to map")
-            return
-
-        skill_outputs: list[SkillOutputValue] = []
-        if isinstance(result_value, dict):
-            for name, value in result_value.items():
-                skill_outputs.append(SkillOutputValue(name=name, value=value))
-        else:
-            skill_outputs.append(SkillOutputValue(name="result", value=result_value))
-
-        first_output = outputs_with_mappings[0]
-
-        try:
-            config = OutputMappingConfig.from_proto(first_output.output_mapping)
-
-            results = await OutputMappingService.apply_multi_table_mapping(
-                ctx=ctx, config=config, skill_outputs=skill_outputs
-            )
-
-            logger.info(f"Operation mode output mapping complete: {len(results)} tables updated")
-
-        except Exception as e:
-            logger.error(f"Failed to apply operation output mappings: {e}")
 
     def _build_result_with_outputs(
         self, original_result: str, captured: dict[str, Any]
@@ -626,7 +282,7 @@ class SkillTool:
         outputs_with_mappings = [
             output
             for output in self.skill_config.outputs
-            if output.HasField("output_mapping") and output.output_mapping.table_mappings
+            if output.output_mapping is not None
         ]
 
         if not outputs_with_mappings:
@@ -653,7 +309,7 @@ class SkillTool:
         )
 
         try:
-            config = OutputMappingConfig.from_proto(first_output.output_mapping)
+            config = first_output.output_mapping
 
             results = await OutputMappingService.apply_multi_table_mapping(
                 ctx=ctx, config=config, skill_outputs=valid_outputs
@@ -672,22 +328,23 @@ class SkillTool:
         resolved = dict(kwargs)
 
         for input_def in self.skill_config.inputs:
-            if not input_def.HasField("input_mapping"):
+            if input_def.input_mapping is None:
                 continue
 
             if input_def.name in resolved and resolved[input_def.name] is not None:
                 continue
 
             mapping = input_def.input_mapping
-            source = mapping.source
+            source = mapping["source"]
 
-            row_id = self._resolve_row_id(source.row_source, resolved)
+            row_source = source.get("row_source", {})
+            row_id = self._resolve_row_id(row_source, resolved)
             if row_id is None:
                 logger.debug(f"Could not resolve row_id for input '{input_def.name}'")
                 continue
 
             value = await self._read_table_field(
-                table_id=source.table_id, field_id=source.field_id, row_id=row_id
+                table_id=source["table_id"], field_id=source["field_id"], row_id=row_id
             )
 
             if value is not None:
@@ -696,11 +353,11 @@ class SkillTool:
 
         return resolved
 
-    def _resolve_row_id(self, row_source: Any, context: dict[str, Any]) -> str | None:
-        """Resolve row ID from RowIdSource configuration."""
+    def _resolve_row_id(self, row_source: dict[str, Any], context: dict[str, Any]) -> str | None:
+        """Resolve row ID from row source configuration."""
         from ....services.agents.executor import AgentExecutor
 
-        if row_source.use_source_row:
+        if row_source.get("use_source_row", False):
             if "__row_id__" in context:
                 return str(context["__row_id__"])
 
@@ -714,15 +371,15 @@ class SkillTool:
 
             logger.warning("use_source_row specified but no row ID available in context")
             return None
-        elif row_source.static_id:
-            return row_source.static_id
-        elif row_source.skill_input:
-            value = context.get(row_source.skill_input)
+        elif row_source.get("static_id"):
+            return row_source["static_id"]
+        elif row_source.get("skill_input"):
+            value = context.get(row_source["skill_input"])
             return str(value) if value is not None else None
-        elif row_source.skill_output:
-            value = context.get(row_source.skill_output)
+        elif row_source.get("skill_output"):
+            value = context.get(row_source["skill_output"])
             return str(value) if value is not None else None
-        elif row_source.HasField("table_ref"):
+        elif row_source.get("table_ref"):
             logger.debug("table_ref row source not yet implemented for input mappings")
             return None
 

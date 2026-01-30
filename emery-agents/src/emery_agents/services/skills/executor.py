@@ -64,8 +64,7 @@ def map_node_outputs_to_skill_outputs(
 class SkillExecutorService:
     """Executes skills via agentic (LLM orchestration) or workflow (DAG steps).
 
-    Accepts SkillConfigDTO only. Proto callers convert at boundary via
-    SkillConfigDTO.from_proto() in create_executor_callback().
+    Accepts SkillConfigDTO only (created from API response).
     """
 
     def __init__(

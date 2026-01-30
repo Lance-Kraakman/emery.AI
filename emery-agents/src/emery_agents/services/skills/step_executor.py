@@ -20,7 +20,7 @@ from tenacity import (
 from ...entities.skill_config import (
     SkillConfigDTO, SkillStepDTO,
     ErrorConfig, RetryConfig, StepOutput, LoopConfig,
-    ReadConfig, WriteConfig, ToolExecutionConfig, TaskModelConfig,
+    ReadConfig, WriteConfig, ToolExecutionConfig,
     AgenticStepConfig, InputDef, OutputDef,
     RowIdSource, QueryFilter,
 )
@@ -131,7 +131,6 @@ class Step:
     read_config: Optional[ReadConfig] = None
     write_config: Optional[WriteConfig] = None
     tool_execution_config: Optional[ToolExecutionConfig] = None
-    task_model_config: Optional[TaskModelConfig] = None
     agentic_config: Optional[AgenticStepConfig] = None  # For agentic steps with stored plan
     # UI state
     is_disabled: bool = False
@@ -162,7 +161,6 @@ class Step:
             read_config=dto.read_config,
             write_config=dto.write_config,
             tool_execution_config=dto.tool_execution_config,
-            task_model_config=dto.task_model_config,
             agentic_config=dto.agentic_config,
             is_disabled=dto.is_disabled,
         )
@@ -238,7 +236,7 @@ class StepExecutorService:
 
         Args:
             steps: List of SkillStepDTO objects
-            available_skills: Map of skill_id to SkillConfig for delegation
+            available_skills: Map of skill_id to SkillConfigDTO for delegation
             initial_inputs: Initial inputs to seed the step_context
             org_model: Organization default model
             api_key: API key for authenticated calls
@@ -758,10 +756,6 @@ class StepExecutorService:
                 )
             elif step.tool_execution_config:
                 return await self._execute_tool_step(
-                    step, step_inputs, api_key, organization_id
-                )
-            elif step.task_model_config:
-                return await self._execute_operation_step(
                     step, step_inputs, api_key, organization_id
                 )
             elif step.agentic_config:
@@ -1296,51 +1290,6 @@ class StepExecutorService:
             return flattened
 
         return result_dict
-
-    async def _execute_operation_step(
-        self,
-        step: Step,
-        step_inputs: Dict[str, Any],
-        api_key: Optional[str],
-        organization_id: Optional[int]
-    ) -> Any:
-        """Execute a direct inference step (no LLM orchestration)."""
-        from ..infrastructure.clients import HuggingFaceInferenceClient, TaskResult
-        from ..utils import run_async_in_thread
-
-        task_config = step.task_model_config
-        if not task_config or not task_config.model_id:
-            raise ValueError(f"Operation step '{step.name}' missing model_id")
-
-        model_id = task_config.model_id
-        task_type = task_config.task_type
-        parameters = task_config.parameters
-
-        logger.info(f"🚀 Step {step.name}: direct inference -> {model_id} ({task_type})")
-
-        client = HuggingFaceInferenceClient()
-
-        if not client.supports_task_type(task_type):
-            raise ValueError(f"Task type '{task_type}' not supported")
-
-        # Execute inference (sync wrapper for async client)
-        result: TaskResult = run_async_in_thread(
-            client.execute_task(
-                model_id=model_id,
-                task_type=task_type,
-                inputs=step_inputs,
-                parameters=parameters
-            )
-        )
-
-        logger.info(f"✅ Step {step.name}: inference complete")
-
-        if result.is_text:
-            return {"result": str(result.data)}
-        elif result.is_structured:
-            return result.data
-        else:
-            return {"result": f"Binary result: {len(result.data)} bytes"}
 
     async def _execute_agentic_step(
         self,

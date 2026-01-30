@@ -10,21 +10,17 @@ import logging
 import os
 import time
 import json
-import uuid
 from collections.abc import AsyncIterator
 from typing import Any, Dict
 
 import dspy
-import httpx
 from PIL import Image
 
-from emery_agents.infrastructure.clients.base import TaskResult
-from emery_agents.infrastructure.clients.huggingface_inference import HuggingFaceInferenceClient
 
 from ...entities.execution_context import ExecutionContext
 from ...entities.skill_config import SkillConfigDTO
 from ...types import ExecutionMode, AgentId, OrganizationId
-from ...grpc.generated.agent_worker_pb2 import SkillConfig, ToolConfig, TokenUsage as TokenUsageProto, ImageAttachment
+from ...grpc.generated.agent_worker_pb2 import ToolConfig, TokenUsage as TokenUsageProto, ImageAttachment
 from ...entities.task import TaskRequest
 from ..models import ModelProvider
 from ..data import ImageProcessor
@@ -33,7 +29,6 @@ from ..analysis import TokenUsageExtractor
 from ...reasoning.tools.execution.skill import SkillTool
 from ...reasoning.tools.execution.bash import create_bash_tool
 from ...reasoning.modules.extractor import OutputExtractorModule
-# from ...infrastructure.clients import HuggingFaceInferenceClient, TaskResult
 from ..skills.executor import SkillExecutorService
 from ..skills.step_executor import StepExecutorService
 from ..tools.loader import UnifiedToolLoader
@@ -41,10 +36,6 @@ from ..context import (
     get_current_context as _get_context,
     set_current_context as _set_context,
     execution_scope as _execution_scope,
-)
-from ...entities.output_mapping import (
-    OutputMappingConfig, FieldMapping, OutputMappingMode, RowAction,
-    extract_field_value, get_extension_for_mime
 )
 from ...entities.task import SkillOutputValue
 from ..data import OutputMappingService, MappingContext
@@ -107,14 +98,11 @@ class AgentExecutor:
         model_provider: Optional[ModelProvider] = None,
         tool_loader: Optional[UnifiedToolLoader] = None,
         agent_factory: Optional[AgentFactory] = None,
-        inference_client: Optional[HuggingFaceInferenceClient] = None
     ):
         """Initialize with optional dependencies (creates defaults if not provided)."""
         self.model_provider = model_provider or ModelProvider()
         self.tool_loader = tool_loader or UnifiedToolLoader()
         self.agent_factory = agent_factory or AgentFactory(self.model_provider)
-        # Inference client kept for potential future use (lazy initialization)
-        self._inference_client = inference_client
         # SkillExecutorService for shared skill execution logic
         self.skill_executor_service = SkillExecutorService(
             tool_loader=self.tool_loader,
@@ -131,23 +119,7 @@ class AgentExecutor:
         """Download images using consolidated ImageProcessor."""
         return await ImageProcessor.download_images_from_attachments(image_attachments)
 
-    def _get_inference_client(self) -> HuggingFaceInferenceClient:
-        """Get or create the inference client (lazy initialization)."""
-        if self._inference_client is None:
-            self._inference_client = HuggingFaceInferenceClient()
-        return self._inference_client
-
-    def _is_operation_skill(self, skill: SkillConfig) -> bool:
-        """
-        Check if skill uses operation execution (bypasses LLM orchestration).
-
-        Operation skills call inference APIs directly for single-task models:
-        - text-to-image, speech-to-text, feature-extraction, etc.
-        """
-        # SkillConfig is a protobuf - execution_type field is always present (empty string if not set)
-        return skill.execution_type == 'operation'
-
-    def _is_agent_skill(self, skill: SkillConfig) -> bool:
+    def _is_agent_skill(self, skill: SkillConfigDTO) -> bool:
         """
         Check if skill uses step-based agent execution (DAG workflow).
 
@@ -156,7 +128,7 @@ class AgentExecutor:
         """
         return skill.execution_type == 'agent' and len(skill.steps) > 0
 
-    def _is_agentic_skill(self, skill: SkillConfig) -> bool:
+    def _is_agentic_skill(self, skill: SkillConfigDTO) -> bool:
         """
         Check if skill uses agentic execution (flat instructions, LLM orchestration).
 
@@ -164,38 +136,6 @@ class AgentExecutor:
         """
         # 'agentic' is explicit, but also treat empty/missing as agentic for backwards compat
         return skill.execution_type in ('agentic', '', None) or not skill.execution_type
-
-    def _extract_runtime_inputs(self, context: ExecutionContext) -> Dict[str, Any]:
-        """Extract runtime inputs from execution context for inference client."""
-        inputs = {}
-
-        # Include skill inputs from automation inputMappings (resolved from trigger_data.payload)
-        # These are the primary source of runtime values for skill execution
-        if context.skill_inputs:
-            inputs.update(context.skill_inputs)
-            logger.debug(f"Runtime inputs from skill_inputs: {list(context.skill_inputs.keys())}")
-
-        # Extract from the task text (skill instructions with injected inputs)
-        # Only set prompt/text if not already provided via skill_inputs
-        if context.task:
-            if 'prompt' not in inputs:
-                inputs['prompt'] = context.task
-            if 'text' not in inputs:
-                inputs['text'] = context.task
-
-        # Extract image inputs from context
-        if context.images:
-            # For image-based tasks, include first image
-            # TODO: Handle multiple images if needed
-            inputs['images'] = context.images
-
-        # Extract audio inputs from attachments
-        # FileAttachment is a protobuf - mime_type field is always present
-        for attachment in context.attachments:
-            if attachment.mime_type and attachment.mime_type.startswith('audio/'):
-                inputs['audio'] = attachment
-
-        return inputs
 
     # =========================================================================
     # Routing Logic (from CapabilityRoutingService)
@@ -215,7 +155,8 @@ class AgentExecutor:
         # Find skill in agent config
         if not request.skill_name:
             raise ValueError("Skill name is required for skill-based execution")
-        all_skill_dtos = [SkillConfigDTO.from_proto(s) for s in request.agent_config.skills] if request.agent_config.skills else []
+        # Skills resolved via API — agent_config.skills is no longer populated via proto
+        all_skill_dtos: list[SkillConfigDTO] = []
         skill = self._find_skill_by_name(all_skill_dtos, request.skill_name)
 
         if not skill:
@@ -229,7 +170,6 @@ class AgentExecutor:
 
         # Extract model overrides
         # Priority: skill model > request agent model > config default model
-        # SkillConfig is protobuf - string fields are empty string if not set
         skill_model = skill.model or None
 
         # Read from request-level fields FIRST (set by frontend), then fallback to config
@@ -436,13 +376,6 @@ class AgentExecutor:
 
                 skill = context.skill
 
-                # Route: operation skills bypass LLM orchestration
-                if self._is_operation_skill(skill):
-                    logger.info(f"🎯 Operation skill '{skill.name}' - using direct execution")
-                    async for progress in self._execute_direct_skill(context, start_time):
-                        yield progress
-                    return
-
                 # Route: step-based agent execution (DAG workflow)
                 if self._is_agent_skill(skill):
                     logger.info(f"🔗 Agent skill '{skill.name}' - using step-based execution")
@@ -543,120 +476,6 @@ class AgentExecutor:
         finally:
             # Always clean up thread-local context
             self.set_current_context(None)
-
-    async def _execute_direct_skill(
-        self,
-        context: ExecutionContext,
-        start_time: float
-    ) -> AsyncIterator[Dict[str, Any]]:
-        """Execute skill directly without LLM orchestration (operation skills)."""
-        skill = context.skill
-        task_config = skill.task_model_config
-
-        if not task_config:
-            raise ValueError(f"Operation skill '{skill.name}' missing task_model_config")
-
-        model_id = task_config.model_id
-        task_type = task_config.task_type
-
-        # Convert protobuf map to dict for parameters
-        parameters = dict(task_config.parameters) if task_config.parameters else {}
-
-        logger.info(f"🚀 Direct skill execution: {skill.name}")
-        logger.info(f"   Model: {model_id}, Task: {task_type}")
-
-        yield {
-            "status": "in_progress",
-            "output": json.dumps({
-                "skill": skill.name,
-                "model": model_id,
-                "task_type": task_type,
-                "message": "Starting direct model execution"
-            }),
-            "error_message": "",
-            "timestamp_ms": int(time.time() * 1000),
-            "progress_percent": 20.0
-        }
-
-        # Get inference client
-        client = self._get_inference_client()
-
-        # Verify task type is supported
-        if not client.supports_task_type(task_type):
-            raise ValueError(
-                f"Task type '{task_type}' not supported. "
-                f"Supported: {client.supported_task_types}"
-            )
-
-        # Extract runtime inputs from context
-        runtime_inputs = self._extract_runtime_inputs(context)
-
-        yield {
-            "status": "in_progress",
-            "output": json.dumps({
-                "message": f"Executing {task_type}...",
-                "inputs_count": len(runtime_inputs)
-            }),
-            "error_message": "",
-            "timestamp_ms": int(time.time() * 1000),
-            "progress_percent": 50.0
-        }
-
-        # Execute the task
-        result: TaskResult = await client.execute_task(
-            model_id=model_id,
-            task_type=task_type,
-            inputs=runtime_inputs,
-            parameters=parameters
-        )
-
-        # Apply output mappings if configured
-        await self._apply_output_mappings_for_skill(
-            skill=skill,
-            result=result,
-            api_key=context.tool_provider.api_key if context.tool_provider else None,
-            organization_id=context.organization_id
-        )
-
-        # Build output based on result type
-        output_data = self._build_task_result_output(result, skill.name)
-
-        # Final completion
-        duration_ms = int((time.time() - start_time) * 1000)
-        yield {
-            "status": "completed",
-            "output": json.dumps(output_data),
-            "error_message": "",
-            "timestamp_ms": int(time.time() * 1000),
-            "progress_percent": 100.0,
-            "duration_ms": duration_ms,
-            # Include binary data for image/audio results
-            "binary_data": result.data if result.is_binary else None,
-            "result_type": result.type.value,
-            "metadata": result.metadata
-        }
-
-    def _build_task_result_output(self, result: TaskResult, skill_name: str) -> Dict[str, Any]:
-        """Build output dict from TaskResult for progress response."""
-        output: Dict[str, Any] = {
-            "skill": skill_name,
-            "result_type": result.type.value,
-            "message": "Task completed successfully"
-        }
-
-        if result.is_text:
-            output["result"] = str(result.data)
-        elif result.is_structured:
-            output["result"] = result.data  # Already list or dict
-        elif result.is_binary:
-            # For binary data (image/audio), include metadata only
-            # Actual binary data is passed separately in the progress dict
-            data_bytes = result.data if isinstance(result.data, bytes) else b""
-            output["result"] = f"Binary data: {len(data_bytes)} bytes"
-            if result.metadata:
-                output.update(result.metadata)
-
-        return output
 
     async def _execute_step_skill(
         self,
@@ -1097,16 +916,16 @@ class AgentExecutor:
 
         return self.agent_factory.create_agent(agent_config)
 
-    def _has_output_mappings(self, skill: SkillConfig) -> bool:
+    def _has_output_mappings(self, skill: SkillConfigDTO) -> bool:
         """Check if skill has any outputs with output mappings configured."""
         if not skill.outputs:
             return False
         for output in skill.outputs:
-            if output.HasField('output_mapping') and len(output.output_mapping.table_mappings) > 0:
+            if output.output_mapping is not None:
                 return True
         return False
 
-    def _get_task_instructions(self, skill: SkillConfig) -> str:
+    def _get_task_instructions(self, skill: SkillConfigDTO) -> str:
         """Get task instructions from skill config.
 
         Note: Output capture instructions removed - extraction happens after execution.
@@ -1115,7 +934,7 @@ class AgentExecutor:
 
     async def _create_skill_agent(
         self,
-        skill: SkillConfig,
+        skill: SkillConfigDTO,
         context: ExecutionContext,
     ) -> dspy.Module:
         """Create DSPy executor module from skill configuration."""
@@ -1155,7 +974,6 @@ class AgentExecutor:
         # No output tool needed - agent focuses on the task
 
         # Extract skill model if present
-        # SkillConfig is protobuf - string fields are empty string if not set
         skill_model = skill.model or None
         use_code_execution = skill.agent_type == "code_agent"
 
@@ -1176,21 +994,13 @@ class AgentExecutor:
 
     def _create_skill_tools(
         self,
-        skills: List[SkillConfig],
+        skills: List[SkillConfigDTO],
         org_model: Optional[str] = None,
         api_key: Optional[str] = None,
         organization_id: Optional[int] = None
     ) -> List[SkillTool]:
         """Create SkillTool instances for skill delegation."""
         skill_tools = []
-
-        # Check if any skills need inference client
-        # SkillConfig is a protobuf - execution_type field is always present
-        has_operation_skills = any(
-            s.execution_type == 'operation'
-            for s in skills
-        )
-        inference_client = self._get_inference_client() if has_operation_skills else None
 
         # Create shared executor callback for all skill tools
         skill_executor_callback = self.skill_executor_service.create_executor_callback(
@@ -1205,7 +1015,6 @@ class AgentExecutor:
                 skill_tool = SkillTool(
                     skill_config=skill_config,
                     skill_executor=skill_executor_callback,
-                    inference_client=inference_client,
                     api_key=api_key,
                     organization_id=organization_id
                 )
@@ -1273,124 +1082,39 @@ class AgentExecutor:
         self.agent_factory.clear_cache()
 
     # =========================================================================
-    # Output Mapping Methods (for direct skill execution)
+    # Output Mapping Methods
     # =========================================================================
-
-    async def _apply_output_mappings_for_skill(
-        self,
-        skill: SkillConfig,
-        result: TaskResult,
-        api_key: Optional[str],
-        organization_id: Optional[str],
-        source_row_id: Optional[str] = None
-    ) -> None:
-        """Apply output mappings to save skill results to tables."""
-        # Check if we have auth for API calls
-        if not api_key or not organization_id:
-            logger.warning("📊 Output mapping skipped: missing api_key or organization_id")
-            return
-
-        # Get outputs with table_mappings configured
-        outputs_with_mappings = [
-            output for output in skill.outputs
-            if output.HasField('output_mapping') and len(output.output_mapping.table_mappings) > 0
-        ]
-
-        if not outputs_with_mappings:
-            logger.debug("No output mappings configured")
-            return
-
-        logger.info(f"📊 Applying {len(outputs_with_mappings)} output mappings")
-
-        # Create mapping context
-        ctx = MappingContext(api_key=api_key, organization_id=organization_id)
-
-        # Convert TaskResult to SkillOutputValue list using centralized method
-        skill_outputs = result.to_skill_outputs()
-
-        # Use first output's mapping config (UI stores all table mappings on outputs[0])
-        first_output = outputs_with_mappings[0]
-
-        try:
-            config = OutputMappingConfig.from_proto(first_output.output_mapping)
-            results = await OutputMappingService.apply_multi_table_mapping(
-                ctx=ctx,
-                config=config,
-                skill_outputs=skill_outputs
-            )
-            logger.info(f"✅ Task output mapping complete: {len(results)} tables updated")
-        except Exception as e:
-            logger.error(f"❌ Failed to apply task output mapping: {e}")
-            # Re-raise to propagate failure - callers should know mapping failed
-            raise
-
-    async def _upload_binary_to_s3(
-        self,
-        client: httpx.AsyncClient,
-        result: TaskResult,
-        output_name: str,
-        api_key: str,
-        organization_id: str,
-        api_base_url: str
-    ) -> Dict[str, Any]:
-        """Upload binary result to S3 via the files upload API."""
-        mime_type = result.metadata.get('mime_type', 'application/octet-stream')
-        ext = get_extension_for_mime(mime_type)
-        filename = f"{output_name}_{uuid.uuid4().hex[:8]}.{ext}"
-
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "X-Organization-ID": str(organization_id)
-        }
-
-        url = f"{api_base_url}/files/upload"
-        files = {'file': (filename, result.data, mime_type)}
-
-        logger.info(f"📤 Uploading {len(result.data)} bytes to S3 as {filename}")
-
-        response = await client.post(url, headers=headers, files=files)
-        if response.status_code >= 400:
-            logger.error(f"Failed to upload file: {response.status_code} - {response.text[:200]}")
-            return {"error": f"Upload failed: {response.status_code}", "filename": filename, "size": len(result.data)}
-
-        try:
-            file_data = response.json()
-            logger.info(f"✅ Uploaded file: {file_data.get('id', 'unknown')}")
-            return file_data
-        except Exception as e:
-            logger.error(f"Failed to parse upload response: {e}")
-            return {"error": str(e), "filename": filename}
 
     async def _apply_agent_output_mappings(
         self,
-        skill: SkillConfig,
+        skill: SkillConfigDTO,
         captured_values: Dict[str, Any],
         api_key: Optional[str],
         organization_id: Optional[str]
     ) -> None:
         """Apply output mappings for agent mode skills using captured values."""
         if not api_key or not organization_id:
-            logger.warning("📊 Agent output mapping skipped: missing api_key or organization_id")
+            logger.warning("Agent output mapping skipped: missing api_key or organization_id")
             return
 
         if not captured_values:
-            logger.debug("📊 Agent output mapping skipped: no values captured")
+            logger.debug("Agent output mapping skipped: no values captured")
             return
 
         # Create mapping context
         ctx = MappingContext(api_key=api_key, organization_id=organization_id)
 
-        # Get outputs with table_mappings configured
+        # Get outputs with output mappings configured
         outputs_with_mappings = [
             output for output in skill.outputs
-            if output.HasField('output_mapping') and len(output.output_mapping.table_mappings) > 0
+            if output.output_mapping is not None
         ]
 
         if not outputs_with_mappings:
             logger.debug("No output mappings configured")
             return
 
-        logger.info(f"📊 Applying {len(outputs_with_mappings)} agent output mappings")
+        logger.info(f"Applying {len(outputs_with_mappings)} agent output mappings")
 
         # Convert captured values to SkillOutputValue list
         skill_outputs: List[SkillOutputValue] = []
@@ -1406,14 +1130,13 @@ class AgentExecutor:
         first_output = outputs_with_mappings[0]
 
         try:
-            config = OutputMappingConfig.from_proto(first_output.output_mapping)
+            config = first_output.output_mapping
             results = await OutputMappingService.apply_multi_table_mapping(
                 ctx=ctx,
                 config=config,
                 skill_outputs=skill_outputs
             )
-            logger.info(f"✅ Agent output mapping complete: {len(results)} tables updated")
+            logger.info(f"Agent output mapping complete: {len(results)} tables updated")
         except Exception as e:
-            logger.error(f"❌ Failed to apply agent output mapping: {e}")
-            # Re-raise to propagate failure - callers should know mapping failed
+            logger.error(f"Failed to apply agent output mapping: {e}")
             raise
