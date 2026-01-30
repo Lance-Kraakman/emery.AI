@@ -11,6 +11,7 @@ import type {
   StepOutput,
   WorkflowNodeType,
   CanvasMetadata,
+  ConditionStepConfig,
 } from '@/ddd/domain/skills/entities/skill';
 import type {
   WorkflowNode,
@@ -424,6 +425,54 @@ function groupEdgesByType(edges: WorkflowEdge[]): StepOutput[] {
 }
 
 /**
+ * Build stepOutputs for condition nodes, syncing condition expressions
+ * from the node's conditions array to the stepOutput.condition field.
+ *
+ * Condition edges use sourceHandle `cond_0`, `cond_1`, etc. which maps
+ * positionally to the node's conditions array. This function ensures
+ * each condition edge gets a separate stepOutput with the correct expression.
+ */
+function buildConditionStepOutputs(
+  edges: WorkflowEdge[],
+  conditions: ConditionStepConfig[]
+): StepOutput[] {
+  const outputMap = new Map<string, StepOutput>();
+
+  edges.forEach((edge) => {
+    const edgeType = (edge.type || 'success') as StepOutput['type'];
+
+    if (edgeType === 'condition' && edge.sourceHandle?.startsWith('cond_')) {
+      // Map cond_N handle → conditions[N] expression
+      const index = parseInt(edge.sourceHandle.replace('cond_', ''), 10);
+      const condConfig = conditions[index];
+      const key = `cond_${index}`;
+
+      if (!outputMap.has(key)) {
+        outputMap.set(key, {
+          type: 'condition',
+          condition: condConfig?.expression || '',
+          label: condConfig?.label,
+          nextSteps: [],
+        });
+      }
+      outputMap.get(key)!.nextSteps.push(edge.target);
+    } else {
+      // default / success / error — same grouping as before
+      const key = edgeType;
+      if (!outputMap.has(key)) {
+        outputMap.set(key, {
+          type: edgeType,
+          nextSteps: [],
+        });
+      }
+      outputMap.get(key)!.nextSteps.push(edge.target);
+    }
+  });
+
+  return Array.from(outputMap.values());
+}
+
+/**
  * Result of converting React Flow back to domain data
  */
 export interface FlowToStepsResult {
@@ -453,8 +502,11 @@ export function flowToSteps(
   const steps = workflowNodes.map((node) => {
     const data = node.data as WorkflowNodeData;
     const outgoingEdges = edges.filter((e) => e.source === node.id);
-    // AIDEV-NOTE: stepOutputs.nextSteps now uses IDs (not names) for stability
-    const stepOutputs = groupEdgesByType(outgoingEdges);
+
+    // For condition nodes, sync expressions from node data to stepOutputs
+    const stepOutputs = node.type === 'condition'
+      ? buildConditionStepOutputs(outgoingEdges, (data as ConditionNodeData).conditions || [])
+      : groupEdgesByType(outgoingEdges);
 
     return {
       id: node.id,           // Stable ID

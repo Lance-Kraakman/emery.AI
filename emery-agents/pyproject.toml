@@ -37,6 +37,7 @@ dependencies = [
     "numpy>=1.24.0",
     "huggingface-hub>=0.34.3",
     "tenacity>=8.2.0",
+    "simpleeval>=1.0",  # Safe expression evaluation for workflow conditions
     "ddgs>=6.0.0",  # Required for DuckDuckGoSearchTool in research agent
     "markdownify>=0.12.0",  # Required for VisitWebpageTool HTML→markdown conversion
     "boto3>=1.34.0",  # AWS SDK for S3 workspace sync

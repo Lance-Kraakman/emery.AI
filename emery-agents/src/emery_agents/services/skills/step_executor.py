@@ -31,14 +31,22 @@ from ..agents.factory import AgentFactory, AgentConfig
 from ..execution.plan_step_executor import PlanStepExecutor
 from ...entities.models.plan import Plan
 from ..tools.loader import UnifiedToolLoader
+from simpleeval import simple_eval
 
 logger = logging.getLogger(__name__)
 
 
-# Simple condition pattern: "value operator value"
-_CONDITION_PATTERN = re.compile(
-    r'^(.+?)\s*(>=|<=|==|!=|>|<)\s*(.+)$'
-)
+# Regex to convert {{var}} template references to bare variable names
+_TEMPLATE_VAR = re.compile(r'\{\{(\w+)\}\}')
+# Regex to convert ! to 'not' (negative lookahead avoids replacing !=)
+_NEGATE = re.compile(r'!(?!=)')
+# Built-in names for common literals (simpleeval uses Python syntax)
+_BUILTIN_NAMES: Dict[str, Any] = {
+    'true': True, 'false': False,
+    'null': None, 'none': None,
+    'True': True, 'False': False,
+    'None': None,
+}
 
 
 def _flatten_json(obj: Any, prefix: str = '', max_depth: int = 5) -> Dict[str, Any]:
@@ -678,9 +686,15 @@ class StepExecutorService:
         execution_status: Literal["success", "error"],
         context: Dict[str, Any]
     ) -> List[str]:
-        """Determine next steps based on step outputs and execution status."""
+        """Determine next steps based on step outputs and execution status.
+
+        Condition outputs use short-circuit evaluation (if/elif/else semantics):
+        the first matching condition routes, remaining conditions are skipped.
+        The 'default' output acts as the else branch.
+        """
         next_steps: List[str] = []
         default_steps: List[str] = []
+        condition_matched = False
 
         for output in step.step_outputs:
             if output.type == "success" and execution_status == "success":
@@ -692,9 +706,13 @@ class StepExecutorService:
                 logger.debug(f"📍 Error output: routing to {output.next_steps}")
 
             elif output.type == "condition" and output.condition:
-                if self._evaluate_condition(output.condition, context):
-                    next_steps.extend(output.next_steps)
-                    logger.debug(f"📍 Condition '{output.condition}' matched: routing to {output.next_steps}")
+                if not condition_matched:
+                    if self._evaluate_condition(output.condition, context):
+                        next_steps.extend(output.next_steps)
+                        condition_matched = True
+                        logger.debug(f"📍 Condition '{output.condition}' matched: routing to {output.next_steps}")
+                    else:
+                        logger.debug(f"📍 Condition '{output.condition}' not matched, checking next")
 
             elif output.type == "default":
                 default_steps.extend(output.next_steps)
@@ -1472,62 +1490,31 @@ class StepExecutorService:
         return result
 
     def _evaluate_condition(self, condition: str, context: Dict[str, Any]) -> bool:
-        """Safely evaluate simple conditions like '{{count}} > 0'."""
-        expr = self._inject_context(condition, context)
+        """Evaluate condition expressions safely using simpleeval.
 
-        match = _CONDITION_PATTERN.match(expr.strip())
-        if not match:
-            logger.debug(f"Condition '{expr}' - treating as truthy check")
-            return bool(expr.strip())
+        Supports comparisons (==, !=, >, <, >=, <=), boolean operators
+        (&&/and, ||/or, !/not), parenthesized grouping, and {{var}} references.
 
-        left_str, op, right_str = match.groups()
-        left = self._parse_value(left_str.strip())
-        right = self._parse_value(right_str.strip())
+        Examples:
+            '{{count}} > 0'
+            '{{a}} > 5 && {{b}} < 10'
+            '{{status}} == "active" || {{status}} == "pending"'
+            '!({{done}} == true)'
+            '({{a}} > 5 || {{b}} < 3) && {{c}} == "yes"'
+        """
+        # Convert {{var}} → var (resolved via names dict)
+        expr = _TEMPLATE_VAR.sub(r'\1', condition)
+        # Convert JS-style operators to Python: && → and, || → or, ! → not
+        expr = expr.replace('&&', ' and ').replace('||', ' or ')
+        expr = _NEGATE.sub(' not ', expr)
 
+        names = {**_BUILTIN_NAMES, **context}
         try:
-            if op == '>':
-                return left > right
-            elif op == '<':
-                return left < right
-            elif op == '>=':
-                return left >= right
-            elif op == '<=':
-                return left <= right
-            elif op == '==':
-                return left == right
-            elif op == '!=':
-                return left != right
+            result = simple_eval(expr.strip(), names=names)
+            return bool(result)
         except Exception as e:
-            logger.warning(f"Condition comparison failed '{condition}': {e}")
+            logger.warning(f"Condition evaluation failed '{condition}': {e}")
             return False
-
-        return False
-
-    def _parse_value(self, value_str: str) -> Any:
-        """Parse a string value into appropriate Python type."""
-        try:
-            return int(value_str)
-        except ValueError:
-            pass
-
-        try:
-            return float(value_str)
-        except ValueError:
-            pass
-
-        lower = value_str.lower()
-        if lower == 'true':
-            return True
-        if lower == 'false':
-            return False
-        if lower in ('none', 'null'):
-            return None
-
-        if (value_str.startswith('"') and value_str.endswith('"')) or \
-           (value_str.startswith("'") and value_str.endswith("'")):
-            return value_str[1:-1]
-
-        return value_str
 
 
 # =============================================================================
