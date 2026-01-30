@@ -38,7 +38,8 @@ import {
 } from '@dnd-kit/sortable'
 import { createField, deleteField, reorderFields } from "@/app/actions/fields"
 import { getTables } from "@/app/actions/tables"
-import type { FieldType } from "@/ddd/domain/tables/value-objects/table-field"
+import type { FieldType, SelectOption } from "@/ddd/domain/tables/value-objects/table-field"
+import { SelectOptionsManager } from "@/components/tables/fields/SelectOptionsManager"
 import type { TableDTO } from "@/app/mappers/table-mapper"
 import type { FieldDTO } from "@/app/mappers/field-mapper"
 
@@ -149,6 +150,9 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
   const [newFieldRelatedTableId, setNewFieldRelatedTableId] = useState<number | undefined>()
   const [newFieldAllowMultiple, setNewFieldAllowMultiple] = useState<boolean>(false)
   const [embeddingSize, setEmbeddingSize] = useState<number | undefined>()
+  const [selectOptions, setSelectOptions] = useState<SelectOption[]>([])
+  const [defaultSelectOption, setDefaultSelectOption] = useState<number | undefined>()
+  const [maxSelections, setMaxSelections] = useState<number | undefined>()
   const [loading, setLoading] = useState(false)
   const [availableTables, setAvailableTables] = useState<TableDTO[]>([])
 
@@ -238,6 +242,10 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
         metadata = { embeddingSize: embeddingSize.toString() }
       } else if (newFieldType === 'relation') {
         metadata = { multiple: newFieldAllowMultiple }
+      } else if (newFieldType === 'single-select') {
+        metadata = { options: selectOptions, defaultOption: defaultSelectOption }
+      } else if (newFieldType === 'multi-select') {
+        metadata = { options: selectOptions, maxSelections }
       }
 
       const result = await createField({
@@ -256,6 +264,9 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
         setNewFieldRelatedTableId(undefined)
         setNewFieldAllowMultiple(false)
         setEmbeddingSize(undefined)
+        setSelectOptions([])
+        setDefaultSelectOption(undefined)
+        setMaxSelections(undefined)
         setIsAddingField(false)
         onFieldsUpdated()
       } else {
@@ -321,6 +332,9 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
     setNewFieldRequired(false)
     setNewFieldRelatedTableId(undefined)
     setNewFieldAllowMultiple(false)
+    setSelectOptions([])
+    setDefaultSelectOption(undefined)
+    setMaxSelections(undefined)
     onClose()
   }
 
@@ -514,6 +528,43 @@ export function FieldManagerDialog({ isOpen, onClose, tableId, fields, onFieldsU
                     <Label htmlFor="allowMultiple" className="text-sm font-normal cursor-pointer">
                       Allow multiple relations
                     </Label>
+                  </div>
+                </div>
+              )}
+
+              {newFieldType === 'single-select' && (
+                <div className="space-y-3 border rounded-lg p-3 bg-muted/30">
+                  <Label>Options</Label>
+                  <SelectOptionsManager
+                    options={selectOptions}
+                    onChange={setSelectOptions}
+                    defaultOption={defaultSelectOption}
+                    onDefaultChange={setDefaultSelectOption}
+                    showDefaultSelector={true}
+                  />
+                </div>
+              )}
+
+              {newFieldType === 'multi-select' && (
+                <div className="space-y-3 border rounded-lg p-3 bg-muted/30">
+                  <Label>Options</Label>
+                  <SelectOptionsManager
+                    options={selectOptions}
+                    onChange={setSelectOptions}
+                  />
+                  <div className="space-y-2 pt-2 border-t">
+                    <Label htmlFor="maxSelections">Maximum Selections (optional)</Label>
+                    <Input
+                      id="maxSelections"
+                      type="number"
+                      min="1"
+                      placeholder="Unlimited"
+                      value={maxSelections || ""}
+                      onChange={(e) => setMaxSelections(e.target.value ? parseInt(e.target.value) : undefined)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Leave empty for unlimited selections
+                    </p>
                   </div>
                 </div>
               )}

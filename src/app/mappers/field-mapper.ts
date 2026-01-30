@@ -1,4 +1,5 @@
 import type { TableField, FieldType, FieldMetadata } from '@/ddd/domain/tables/value-objects/table-field';
+import { normalizeSelectMetadata } from '@/lib/utils/normalize-select-metadata';
 
 export interface FieldDTO {
   id: number;
@@ -13,6 +14,7 @@ export interface FieldDTO {
 
 export class FieldMapper {
   static toDTO(field: TableField): FieldDTO {
+    const rawMetadata = field.metadata || {};
     return {
       id: field.id.value,
       name: field.name,
@@ -20,7 +22,7 @@ export class FieldMapper {
       orderIndex: field.orderIndex,
       relatedTableId: field.relatedTableId?.value || null,
       required: field.required,
-      metadata: field.metadata || null,
+      metadata: normalizeSelectMetadata(field.type, rawMetadata) || null,
       createdAt: field.createdAt
     };
   }

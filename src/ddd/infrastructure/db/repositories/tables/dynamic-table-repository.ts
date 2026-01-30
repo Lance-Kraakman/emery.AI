@@ -449,6 +449,8 @@ export class DynamicTableRepository implements IDynamicTableRepository {
 
         await this.db.update(fields)
           .set({
+            name: field.name,
+            slug: field.name.toLowerCase().replace(/\s+/g, '_'),
             type: field.type,
             orderIndex: field.orderIndex,
             required: field.required,
