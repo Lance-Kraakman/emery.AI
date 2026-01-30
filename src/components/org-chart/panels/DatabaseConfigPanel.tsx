@@ -190,7 +190,7 @@ export function DatabaseConfigPanel({
             No tables yet
           </div>
         ) : (
-          <div className="space-y-1 bg-muted/30 rounded-lg py-1 max-h-[180px] overflow-y-auto">
+          <div className="space-y-1 bg-muted/30 rounded-lg py-1">
             {tables.map((table) => (
               <button
                 key={table.id}
