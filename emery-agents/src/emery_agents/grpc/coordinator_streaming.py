@@ -279,11 +279,12 @@ class CoordinatorStreamingHandler:
                 )
 
                 if execution_mode == TaskExecutionMode.DIRECT:
-                    # Direct execution with tools (skill_crud, etc.)
+                    # Direct execution with tools (skill_crud + loaded skill tools)
                     async for event in self._handle_direct_execution(
                         context=context,
                         task=task,
                         org_model=org_model,
+                        external_tools=tools,
                     ):
                         yield event
                     return
@@ -347,6 +348,7 @@ class CoordinatorStreamingHandler:
             config=config,
             context=context,
             thread_id=effective_thread_id,
+            tools=runtime.tools,
         ):
             yield event
 
@@ -381,6 +383,7 @@ class CoordinatorStreamingHandler:
             config=config,
             context=context,
             thread_id=thread_id,
+            tools=tools,
         ):
             yield event
 
@@ -391,6 +394,7 @@ class CoordinatorStreamingHandler:
         config: Dict[str, Any],
         context: 'ExecutionContext',
         thread_id: str,
+        tools: Optional[List[Any]] = None,
     ) -> AsyncIterator[Any]:
         """
         Stream events from graph execution (shared by initial invocation and resume).
@@ -487,6 +491,7 @@ class CoordinatorStreamingHandler:
                 context=context,
                 task="",  # Task already processed by graph
                 org_model=None,
+                external_tools=tools,
             ):
                 yield event
 
@@ -497,6 +502,7 @@ class CoordinatorStreamingHandler:
         context: 'ExecutionContext',
         task: str,
         org_model: Optional[str],
+        external_tools: Optional[List[Any]] = None,
     ) -> AsyncIterator[Any]:
         """
         Handle direct execution without a plan using DSPy.
@@ -512,6 +518,10 @@ class CoordinatorStreamingHandler:
             api_key=context.tool_provider.api_key,
             org_id=str(context.tool_provider.organization_id),
         )
+
+        # Include loaded tools (skill tools, etc.) from agent config
+        if external_tools:
+            tools.extend(external_tools)
 
         # Add ask_question tool for clarification
         question_collector = QuestionCollector()
