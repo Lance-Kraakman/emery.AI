@@ -165,7 +165,10 @@ class PlanOutput(BaseModel):
     )
     steps: list[PlanStepOutput] = Field(
         description="Ordered steps grouped by phase (Discovery → Analysis → Execution → Summary). "
-                    "Each step delegates to one capability via target_agent."
+                    "Each step delegates to ONE capability via target_agent. "
+                    "IMPORTANT: Create separate steps for each distinct action — "
+                    "do NOT combine multiple capabilities into one step. "
+                    "Simple tasks: 1-2 steps. Medium tasks: 3-4 steps. Complex tasks: 5+ steps."
     )
 
 
@@ -225,6 +228,9 @@ class CreatePlan(dspy.Signature):  # type: ignore[misc]
     5. STRUCTURE PLAN: Organize steps into phases (Discovery → Analysis → Execution → Summary).
        Set replan_after=true on steps whose output may change the remaining plan.
        Use required_context to chain step outputs.
+       STEP COUNT: One step per distinct action/capability. Never combine creating a table
+       and building an app into the same step. Use task_analysis complexity as a guide:
+       simple = 1-2 steps, medium = 3-4 steps, complex = 5+ steps.
 
     WHEN TO ASK QUESTIONS vs PLAN:
     - PLAN with sensible defaults: field names, data types, layout choices, standard configs.
@@ -257,6 +263,12 @@ class CreatePlan(dspy.Signature):  # type: ignore[misc]
              "Use for continuity but do NOT treat as the current request. "
              "The user's actual request is in the 'request' field. "
              "Empty string if no relevant memories."
+    )
+    task_analysis: str = dspy.InputField(
+        desc="Pre-analysis of the task: intent, domain, entities, and complexity. "
+             "Use complexity to determine step count: "
+             "simple = 1-2 steps, medium = 3-4 steps, complex = 5+ steps. "
+             "Each distinct capability or resource should be its own step."
     )
 
     result: PlanOrQuestionsOutput = dspy.OutputField()

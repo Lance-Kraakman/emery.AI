@@ -94,6 +94,14 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
             context=workspace_context,
         )
 
+        # Format analysis for the planner (guides step count and capability selection)
+        task_analysis = (
+            f"Intent: {analysis.intent}\n"
+            f"Domain: {analysis.domain}\n"
+            f"Entities: {', '.join(analysis.entities)}\n"
+            f"Complexity: {analysis.complexity}"
+        )
+
         # Build effective guidance with Think Before Asking
         has_workspace = bool(workspace_context and workspace_context != "{}")
         think_first = self._build_think_before_asking_guidance(
@@ -109,6 +117,7 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
             proven_strategies=proven_strategies,
             conversation_history=conversation_history,
             memory_context=memory_context,
+            task_analysis=task_analysis,
         )
 
         plan_result = result.result
