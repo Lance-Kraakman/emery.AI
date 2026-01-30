@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { LucideIcon, Plus, ChevronRight, ChevronDown, FileText, LayoutTemplate } from "lucide-react"
+import { LucideIcon, Plus, ChevronRight, FileText, LayoutTemplate } from "lucide-react"
 import {
   Collapsible,
   CollapsibleContent,
@@ -26,6 +26,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 import { SidebarItemActions } from "./sidebar-item-actions"
 import { InlineRename } from "./inline-rename"
 
@@ -125,10 +126,13 @@ export function NestedSidebarSection<TParent, TChild>({
     setRenamingChildKey(null)
   }
   return (
-    <Collapsible defaultOpen={defaultOpen}>
+    <Collapsible defaultOpen={defaultOpen} className="group/section">
       <SidebarGroup className="py-0">
         <SidebarGroupLabel asChild className="text-[11px] text-sidebar-foreground/60">
           <CollapsibleTrigger>
+            <span className="shrink-0 flex items-center">
+              <ChevronRight className="h-3 w-3 transition-transform duration-200 group-data-[state=open]/section:rotate-90" />
+            </span>
             <Icon className="h-4 w-4" />
             <span className="group-data-[collapsible=icon]:hidden">{label}</span>
           </CollapsibleTrigger>
@@ -159,24 +163,21 @@ export function NestedSidebarSection<TParent, TChild>({
                         </div>
                       ) : (
                         <div className="flex items-center w-full">
-                          <CollapsibleTrigger className="flex-1">
-                            <SidebarMenuButton asChild isActive={isParentActive(parent, pathname)} className="h-6">
-                              <div className="flex items-center justify-between w-full">
-                                <Link href={getParentHref(parent)} className="flex-1">
-                                  <span className="group-data-[collapsible=icon]:hidden">
-                                    {getParentName(parent)}
-                                  </span>
-                                </Link>
-                                <div className="flex items-center gap-1">
-                                  {isOpen ? (
-                                    <ChevronDown className="h-4 w-4 group-data-[collapsible=icon]:hidden" />
-                                  ) : (
-                                    <ChevronRight className="h-4 w-4 group-data-[collapsible=icon]:hidden" />
-                                  )}
-                                </div>
-                              </div>
-                            </SidebarMenuButton>
+                          <CollapsibleTrigger className="shrink-0 p-0.5 rounded-sm hover:bg-sidebar-accent group-data-[collapsible=icon]:hidden">
+                            <ChevronRight
+                              className={cn(
+                                "h-3 w-3 transition-transform duration-200",
+                                isOpen && "rotate-90"
+                              )}
+                            />
                           </CollapsibleTrigger>
+                          <SidebarMenuButton asChild isActive={isParentActive(parent, pathname)} className="h-6 flex-1">
+                            <Link href={getParentHref(parent)}>
+                              <span className="group-data-[collapsible=icon]:hidden">
+                                {getParentName(parent)}
+                              </span>
+                            </Link>
+                          </SidebarMenuButton>
                           {hasParentActions && (
                             <SidebarItemActions
                               onRename={onRenameParent ? () => setRenamingParentId(parentId) : undefined}

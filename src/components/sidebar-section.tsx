@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { LucideIcon, Plus, LayoutTemplate } from "lucide-react"
+import { LucideIcon, Plus, LayoutTemplate, ChevronRight } from "lucide-react"
 import {
   Collapsible,
   CollapsibleContent,
@@ -79,10 +79,13 @@ export function SidebarSection<T>({
   }
 
   return (
-    <Collapsible defaultOpen={defaultOpen}>
+    <Collapsible defaultOpen={defaultOpen} className="group/section">
       <SidebarGroup className="py-0">
         <SidebarGroupLabel asChild className="text-[11px] text-sidebar-foreground/60">
           <CollapsibleTrigger>
+            <span className="shrink-0 flex items-center">
+              <ChevronRight className="h-3 w-3 transition-transform duration-200 group-data-[state=open]/section:rotate-90" />
+            </span>
             <Icon className="h-4 w-4" />
             <span className="group-data-[collapsible=icon]:hidden">{label}</span>
           </CollapsibleTrigger>
