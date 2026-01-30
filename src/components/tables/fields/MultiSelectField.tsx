@@ -70,9 +70,16 @@ export function MultiSelectField({
   const [newOptionLabel, setNewOptionLabel] = useState('');
   const [isCreating, setIsCreating] = useState(false);
 
+  // Normalize options: assign id/color if missing (agent-created fields may omit them)
+  const safeOptions = options.map((opt, i) => ({
+    ...opt,
+    id: typeof opt.id === 'number' ? opt.id : i + 1,
+    color: opt.color ?? '#3B82F6',
+  }));
+
   // Ensure value is always an array
   const selectedIds = Array.isArray(value) ? value : [];
-  const selectedOptions = options.filter(opt => selectedIds.includes(opt.id));
+  const selectedOptions = safeOptions.filter(opt => selectedIds.includes(opt.id));
 
   // Check if max selections reached
   const isMaxReached = maxSelections !== undefined && selectedIds.length >= maxSelections;
@@ -283,7 +290,7 @@ export function MultiSelectField({
             )}
 
             {/* Options list */}
-            {options.map((option) => {
+            {safeOptions.map((option) => {
               const isSelected = selectedIds.includes(option.id);
               const isDisabled = !isSelected && isMaxReached;
 
@@ -312,7 +319,7 @@ export function MultiSelectField({
               );
             })}
 
-            {options.length === 0 && (
+            {safeOptions.length === 0 && (
               <div className="text-center text-xs text-muted-foreground py-4">
                 No options configured
               </div>

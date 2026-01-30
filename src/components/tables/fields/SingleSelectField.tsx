@@ -65,8 +65,15 @@ export function SingleSelectField({
   const [newOptionLabel, setNewOptionLabel] = useState('');
   const [isCreating, setIsCreating] = useState(false);
 
+  // Normalize options: assign id/color if missing (agent-created fields may omit them)
+  const safeOptions = options.map((opt, i) => ({
+    ...opt,
+    id: typeof opt.id === 'number' ? opt.id : i + 1,
+    color: opt.color ?? '#3B82F6',
+  }));
+
   // Find the selected option
-  const selectedOption = options.find(opt => opt.id === value);
+  const selectedOption = safeOptions.find(opt => opt.id === value);
 
   // Handler to create and select new option
   const handleCreateOption = async () => {
@@ -164,7 +171,7 @@ export function SingleSelectField({
         </SelectItem>
 
         {/* All available options */}
-        {options.map((option) => (
+        {safeOptions.map((option) => (
           <SelectItem key={option.id} value={option.id.toString()}>
             <div className="flex items-center gap-2">
               <div

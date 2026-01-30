@@ -116,12 +116,14 @@ class WAFStack(Stack):
                 prefix=prefix
             ),
             # Priority 7: AWS Managed - Common Rule Set (OWASP protections)
+            # Exclude SizeRestrictions_BODY to allow large POST bodies (templates, file uploads up to 5MB)
             self._managed_rule(
                 name="AWSManagedRulesCommonRuleSet",
                 priority=7,
                 vendor_name="AWS",
                 rule_group_name="AWSManagedRulesCommonRuleSet",
-                prefix=prefix
+                prefix=prefix,
+                excluded_rules=["SizeRestrictions_BODY"]
             ),
             # Priority 8: AWS Managed - Known Bad Inputs (Log4j, etc.)
             self._managed_rule(
@@ -207,7 +209,8 @@ class WAFStack(Stack):
         priority: int,
         vendor_name: str,
         rule_group_name: str,
-        prefix: str
+        prefix: str,
+        excluded_rules: list[str] | None = None
     ) -> wafv2.CfnWebACL.RuleProperty:
         """
         Create a managed rule group reference.
@@ -218,7 +221,15 @@ class WAFStack(Stack):
             vendor_name: Vendor name (e.g., "AWS")
             rule_group_name: Name of the managed rule group
             prefix: Environment prefix for metrics
+            excluded_rules: List of rule names to exclude from the managed group
         """
+        rule_exclusions = []
+        if excluded_rules:
+            rule_exclusions = [
+                wafv2.CfnWebACL.ExcludedRuleProperty(name=rule_name)
+                for rule_name in excluded_rules
+            ]
+
         return wafv2.CfnWebACL.RuleProperty(
             name=name,
             priority=priority,
@@ -227,7 +238,8 @@ class WAFStack(Stack):
             statement=wafv2.CfnWebACL.StatementProperty(
                 managed_rule_group_statement=wafv2.CfnWebACL.ManagedRuleGroupStatementProperty(
                     vendor_name=vendor_name,
-                    name=rule_group_name
+                    name=rule_group_name,
+                    excluded_rules=rule_exclusions if rule_exclusions else None
                 )
             ),
             visibility_config=wafv2.CfnWebACL.VisibilityConfigProperty(

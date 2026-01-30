@@ -10,6 +10,7 @@ import { TableId } from '@/ddd/domain/shared/value-objects';
 
 // AIDEV-NOTE: Field types support text, number, boolean, date, file, relation (no email/url)
 import type { CreateFieldCommand } from '@/ddd/application/services/tables/table-application-service';
+import { normalizeSelectMetadata } from '@/lib/utils/normalize-select-metadata';
 
 /**
  * POST /api/fields - Create a new field
@@ -25,7 +26,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { tableId, name, type, required = false, relatedTableId } = await request.json();
+    const { tableId, name, type, required = false, relatedTableId, metadata } = await request.json();
 
     if (!tableId || !name || !type) {
       return NextResponse.json(
@@ -44,7 +45,7 @@ export async function POST(request: NextRequest) {
       type: type as FieldType,
       required,
       relatedTableId: relatedTableId ? TableId.fromNumber(parseInt(relatedTableId)) : undefined,
-      metadata: {}
+      metadata: normalizeSelectMetadata(type, metadata || {})
     };
 
     const result = await tableApplicationService.createField(command);

@@ -15,6 +15,7 @@ import type { CreateFieldCommand } from "@/ddd/application/services/tables/table
 import { TableId } from "@/ddd/domain/shared/value-objects";
 import { FieldMapper, type FieldDTO } from "@/app/mappers/field-mapper";
 import { createDebugLogger } from "@/lib/utils/debug-logger";
+import { normalizeSelectMetadata } from "@/lib/utils/normalize-select-metadata";
 
 const logger = createDebugLogger('Fields');
 
@@ -39,7 +40,7 @@ export async function createField(data: CreateFieldData, revalidateUrl?: string)
       type: type as FieldType,
       required,
       relatedTableId: relatedTableId ? TableId.fromNumber(relatedTableId) : undefined,
-      metadata: metadata || {}
+      metadata: normalizeSelectMetadata(type, metadata || {})
     };
 
     // Log select field creation with options
@@ -305,13 +306,19 @@ export async function updateField(data: {
       });
     }
 
+    // Normalize select options if metadata contains options and field is a select type
+    const isSelectType = updates.type === 'single-select' || updates.type === 'multi-select';
+    const normalizedMetadata = isSelectType && updates.metadata?.options
+      ? normalizeSelectMetadata(updates.type!, updates.metadata)
+      : updates.metadata;
+
     const result = await tableApplicationService.updateField({
       tableId: TableId.fromNumber(tableId),
       fieldName,
       name: updates.name,
       type: updates.type,
       required: updates.required,
-      metadata: updates.metadata || (updates.relatedTableId ? { relatedTableId: updates.relatedTableId } : undefined)
+      metadata: normalizedMetadata || (updates.relatedTableId ? { relatedTableId: updates.relatedTableId } : undefined)
     });
 
     if (!result.success) {
