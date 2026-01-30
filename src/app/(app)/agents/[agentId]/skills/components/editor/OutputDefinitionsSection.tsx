@@ -14,27 +14,7 @@ import type { FieldDTO } from '@/app/mappers/field-mapper';
 import type { FieldType } from '@/ddd/domain/tables/value-objects/table-field';
 import { getTables } from '@/app/actions/tables';
 import { getFields } from '@/app/actions/fields';
-
-// Map table field types to skill output types
-// Returns null for read-only/system fields that shouldn't be mapped
-const fieldTypeToOutputType: Record<FieldType, OutputDefinition['type'] | null> = {
-  'text': 'text',
-  'number': 'number',
-  'boolean': 'boolean',
-  'date': 'date',
-  'single-select': 'single-select',
-  'multi-select': 'multi-select',
-  'file': 'file',
-  'document': 'document',
-  'email': 'email',
-  'phone': 'phone',
-  'json': 'json',
-  'relation': 'text',  // Relations output display value as text
-  'embedding': null,
-  'autonumber': null,
-  'last-updated': null,
-  'created-at': null,
-};
+import { fieldTypeToOutputType } from '@/components/skill-config/field-type-maps';
 
 interface OutputDefinitionsSectionProps {
   outputs: OutputDefinition[];

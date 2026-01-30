@@ -27,8 +27,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -46,50 +44,14 @@ import {
   detachContextTable,
 } from '@/app/actions/context-mappings';
 import { getFields } from '@/app/actions/fields';
+import { FieldPickerPopover } from '@/components/skill-config/FieldPickerPopover';
+import { ManualInputItem } from '@/components/skill-config/ManualInputItem';
+import { ManualOutputItem } from '@/components/skill-config/ManualOutputItem';
+import { fieldTypeToInputType, fieldTypeToOutputType } from '@/components/skill-config/field-type-maps';
 import type { InputDefinition, OutputDefinition, TableMapping, FieldMapping } from '@/app/mappers/skill-mapper';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
 import type { FieldType } from '@/ddd/domain/tables/value-objects/table-field';
 import type { DataSourceMapping } from '../types';
-
-// Map table field types to skill input types
-const fieldTypeToInputType: Record<FieldType, InputDefinition['type'] | null> = {
-  'text': 'text',
-  'number': 'text',
-  'boolean': 'text',
-  'date': 'text',
-  'single-select': 'text',
-  'multi-select': 'text',
-  'file': 'file',
-  'document': 'document',
-  'email': 'text',
-  'phone': 'text',
-  'json': 'text',
-  'relation': 'text',
-  'embedding': null,
-  'autonumber': null,
-  'last-updated': null,
-  'created-at': null,
-};
-
-// Map table field types to skill output types
-const fieldTypeToOutputType: Record<FieldType, OutputDefinition['type'] | null> = {
-  'text': 'text',
-  'number': 'number',
-  'boolean': 'boolean',
-  'date': 'date',
-  'single-select': 'single-select',
-  'multi-select': 'multi-select',
-  'file': 'file',
-  'document': 'document',
-  'email': 'email',
-  'phone': 'phone',
-  'json': 'json',
-  'relation': 'text',
-  'embedding': null,
-  'autonumber': null,
-  'last-updated': null,
-  'created-at': null,
-};
 
 /** Edge passed from selection */
 interface SelectedEdge {
@@ -142,119 +104,6 @@ function getExecutionTypeBadgeColor(executionType?: string): string {
     operation: 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300',
   };
   return colors[executionType || 'agentic'] || colors.agentic;
-}
-
-/**
- * FieldPickerPopover - Reusable field picker for tables
- */
-function FieldPickerPopover({
-  tableId,
-  buttonLabel,
-  buttonIcon,
-  onSelectFields,
-}: {
-  tableId: number;
-  buttonLabel: string;
-  buttonIcon?: React.ReactNode;
-  onSelectFields: (fields: FieldDTO[]) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [fields, setFields] = useState<FieldDTO[]>([]);
-  const [selectedFieldIds, setSelectedFieldIds] = useState<Set<number>>(new Set());
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (open && fields.length === 0 && !loading) {
-      setLoading(true);
-      getFields(tableId)
-        .then((fetched) => {
-          if (Array.isArray(fetched)) {
-            const readable = fetched.filter(
-              (f) => f.name !== 'id' && fieldTypeToInputType[f.type as FieldType] !== null
-            );
-            setFields(readable);
-          }
-        })
-        .finally(() => setLoading(false));
-    }
-  }, [open, fields.length, loading, tableId]);
-
-  const handleToggle = (id: number) => {
-    setSelectedFieldIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const handleSelectAll = () => {
-    if (selectedFieldIds.size === fields.length) {
-      setSelectedFieldIds(new Set());
-    } else {
-      setSelectedFieldIds(new Set(fields.map((f) => f.id)));
-    }
-  };
-
-  const handleAdd = () => {
-    const selected = fields.filter((f) => selectedFieldIds.has(f.id));
-    onSelectFields(selected);
-    setOpen(false);
-    setSelectedFieldIds(new Set());
-  };
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button variant="ghost" size="sm" className="h-6 text-[11px] text-muted-foreground hover:text-foreground">
-          {buttonIcon}
-          {buttonLabel}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-64 p-3" align="start">
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label className="text-xs font-medium">Select Fields</Label>
-            {fields.length > 0 && (
-              <button
-                type="button"
-                className="text-[10px] text-muted-foreground hover:text-foreground"
-                onClick={handleSelectAll}
-              >
-                {selectedFieldIds.size === fields.length ? 'Deselect all' : 'Select all'}
-              </button>
-            )}
-          </div>
-          {loading ? (
-            <div className="text-xs text-muted-foreground py-2">Loading...</div>
-          ) : fields.length === 0 ? (
-            <div className="text-xs text-muted-foreground py-2">No fields available</div>
-          ) : (
-            <div className="max-h-40 overflow-y-auto space-y-0.5 border rounded-md p-1.5">
-              {fields.map((field) => (
-                <label
-                  key={field.id}
-                  className="flex items-center gap-2 py-1 px-1.5 hover:bg-muted/50 rounded cursor-pointer"
-                >
-                  <Checkbox
-                    checked={selectedFieldIds.has(field.id)}
-                    onCheckedChange={() => handleToggle(field.id)}
-                  />
-                  <span className="text-[11px] flex-1 truncate">{field.name}</span>
-                  <span className="text-[9px] text-muted-foreground">{field.type}</span>
-                </label>
-              ))}
-            </div>
-          )}
-          {selectedFieldIds.size > 0 && (
-            <Button type="button" size="sm" className="w-full h-7 text-xs" onClick={handleAdd}>
-              Add {selectedFieldIds.size} field{selectedFieldIds.size !== 1 ? 's' : ''}
-            </Button>
-          )}
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
 }
 
 /**
@@ -373,61 +222,6 @@ function TableOutputGroup({
         buttonLabel="+ Define output fields"
         onSelectFields={onAddFields}
       />
-    </div>
-  );
-}
-
-/**
- * ManualInputItem - Simple input chip with remove
- */
-function ManualInputItem({
-  input,
-  onRemove,
-}: {
-  input: InputDefinition;
-  onRemove: () => void;
-}) {
-  return (
-    <div className="inline-flex items-center gap-1 px-2 py-1 rounded border bg-muted/30 text-[11px] group">
-      <code className="font-mono">{input.name}</code>
-      {input.type && input.type !== 'text' && (
-        <span className="text-[9px] bg-muted px-1 rounded">{input.type}</span>
-      )}
-      {input.required && <span className="text-[9px] text-orange-600">req</span>}
-      <button
-        type="button"
-        className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive ml-1"
-        onClick={onRemove}
-      >
-        <X className="h-3 w-3" />
-      </button>
-    </div>
-  );
-}
-
-/**
- * ManualOutputItem - Simple output chip with remove
- */
-function ManualOutputItem({
-  output,
-  onRemove,
-}: {
-  output: OutputDefinition;
-  onRemove: () => void;
-}) {
-  return (
-    <div className="inline-flex items-center gap-1 px-2 py-1 rounded border bg-muted/30 text-[11px] group">
-      <code className="font-mono">{output.name}</code>
-      {output.type && output.type !== 'text' && (
-        <span className="text-[9px] bg-muted px-1 rounded">{output.type}</span>
-      )}
-      <button
-        type="button"
-        className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive ml-1"
-        onClick={onRemove}
-      >
-        <X className="h-3 w-3" />
-      </button>
     </div>
   );
 }

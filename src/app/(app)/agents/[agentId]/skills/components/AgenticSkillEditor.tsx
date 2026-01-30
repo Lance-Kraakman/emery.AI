@@ -1,11 +1,9 @@
 'use client';
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { Table2, MoreVertical, Loader2, ChevronDown, Settings2 } from 'lucide-react';
+import { ChevronDown, Settings2 } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import {
   Select,
   SelectContent,
@@ -14,20 +12,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { DataSourcePicker } from '@/components/data-sources';
 import { uploadSkillAttachment } from '@/app/actions/skills';
 import {
   getContextMappings,
@@ -37,10 +27,9 @@ import {
   type ContextMappingDTO,
 } from '@/app/actions/context-mappings';
 import type { ContextMappingAccessMode, ContextMappingSyncMode } from '@/ddd/domain/context/entities/context-mapping';
-import { InputDefinitionsSection } from './editor/InputDefinitionsSection';
-import { OutputDefinitionsSection } from './editor/OutputDefinitionsSection';
-import { InputMappingSection } from './editor/InputMappingSection';
-import { OutputMappingSection } from './editor/OutputMappingSection';
+import { DataSourceCards } from '@/components/skill-config/DataSourceCards';
+import { TableGroupedInputPanel } from '@/components/skill-config/TableGroupedInputPanel';
+import { TableGroupedOutputPanel } from '@/components/skill-config/TableGroupedOutputPanel';
 import { PlanBuilderSection } from './editor/PlanBuilderSection';
 import { useChatVariables } from './hooks';
 import type { SkillFormData } from './SkillEditor';
@@ -56,8 +45,14 @@ interface AgenticSkillEditorProps {
 }
 
 /**
- * Agentic mode skill editor - Single column layout
+ * Agentic mode skill editor - Table-grouped layout
  * Config (always expanded) → Plan (Instructions + Plan Generation)
+ *
+ * Layout:
+ *   Description
+ *   Data Sources (horizontal cards) + Agent Type
+ *   Inputs + Input Mapping (left) | Outputs + Output Mapping (right)
+ *   Plan Builder
  */
 export function AgenticSkillEditor({
   value,
@@ -220,7 +215,7 @@ export function AgenticSkillEditor({
           )} />
         </CollapsibleTrigger>
         <CollapsibleContent className="space-y-4">
-          {/* Description - compact, 1-2 lines */}
+          {/* Description - compact */}
           <div className="space-y-1">
             <Label className="text-xs">Description</Label>
             <Textarea
@@ -233,146 +228,28 @@ export function AgenticSkillEditor({
             />
           </div>
 
-          {/* Inputs and Outputs - side by side */}
-          <div className="grid grid-cols-2 gap-4">
-            {/* Inputs */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs">Inputs</Label>
-                <span className="text-[10px] text-muted-foreground">
-                  {value.inputs.length}
-                </span>
-              </div>
-              <InputDefinitionsSection
-                inputs={value.inputs}
-                onInputsChange={(inputs) => handleChange({ inputs })}
-                isReadOnly={isReadOnly}
-              />
-            </div>
-
-            {/* Outputs */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs">Outputs</Label>
-                <span className="text-[10px] text-muted-foreground">
-                  {value.outputs.length}
-                </span>
-              </div>
-              <OutputDefinitionsSection
-                outputs={value.outputs}
-                onOutputsChange={(outputs) => handleChange({ outputs })}
-                isReadOnly={isReadOnly}
-              />
-            </div>
-          </div>
-
-          {/* Input Mapping - read from tables */}
-          {value.inputs.length > 0 && (
-            <InputMappingSection
-              inputs={value.inputs}
-              onInputsChange={(inputs) => handleChange({ inputs })}
-              isReadOnly={isReadOnly}
-            />
-          )}
-
-          {/* Output Mapping - write to tables */}
-          {value.outputs.length > 0 && (
-            <OutputMappingSection
-              outputs={value.outputs}
-              onOutputsChange={(outputs) => handleChange({ outputs })}
-              skillOutputs={value.outputs}
-              skillInputs={value.inputs}
-              isReadOnly={isReadOnly}
-            />
-          )}
-
-          {/* Data Sources and Agent Type - side by side */}
-          <div className="grid grid-cols-2 gap-4">
-            {/* Data Sources */}
-            <div className="space-y-1">
+          {/* Data Sources (horizontal cards) + Agent Type */}
+          <div className="flex items-start gap-4">
+            <div className="flex-1 space-y-1">
               <div className="flex items-center justify-between">
                 <Label className="text-xs">Data Sources</Label>
                 <span className="text-[10px] text-muted-foreground">
                   {dataSources.length}
                 </span>
               </div>
-
-              {isLoadingDataSources ? (
-                <div className="flex items-center py-1.5 text-xs text-muted-foreground">
-                  <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
-                  Loading...
-                </div>
-              ) : dataSources.length === 0 ? (
-                <div className="text-xs text-muted-foreground py-1">
-                  No data sources
-                </div>
-              ) : (
-                <div className="space-y-1">
-                  {dataSources.map((ds) => (
-                    <div
-                      key={ds.id}
-                      className="flex items-center justify-between p-1.5 rounded border bg-emerald-50/30 dark:bg-emerald-900/10"
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <Table2 className="h-3 w-3 text-emerald-500" />
-                        <span className="text-xs font-medium truncate max-w-[100px]">{ds.tableName}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Badge
-                          variant="outline"
-                          className="text-[10px] px-1 py-0 h-4 bg-emerald-100/50 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700"
-                        >
-                          {ds.accessMode}
-                        </Badge>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-5 w-5" disabled={isReadOnly}>
-                              <MoreVertical className="h-3 w-3" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-36">
-                            <DropdownMenuItem
-                              onClick={() => handleUpdateDataSource(ds.id, { accessMode: 'read' })}
-                              disabled={ds.accessMode === 'read'}
-                            >
-                              Read only
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => handleUpdateDataSource(ds.id, { accessMode: 'write' })}
-                              disabled={ds.accessMode === 'write'}
-                            >
-                              Write only
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => handleUpdateDataSource(ds.id, { accessMode: 'readwrite' })}
-                              disabled={ds.accessMode === 'readwrite'}
-                            >
-                              Read & Write
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() => handleRemoveDataSource(ds.id)}
-                              className="text-destructive"
-                            >
-                              Remove
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <DataSourcePicker
-                onTableSelect={handleAddDataSource}
+              <DataSourceCards
+                dataSources={dataSources}
+                isLoading={isLoadingDataSources}
+                isReadOnly={isReadOnly}
+                skillId={skillId}
+                onAddDataSource={handleAddDataSource}
+                onUpdateDataSource={handleUpdateDataSource}
+                onRemoveDataSource={handleRemoveDataSource}
                 excludeTableIds={dataSources.map((ds) => ds.tableId)}
-                disabled={isLoadingDataSources || isReadOnly || !skillId}
               />
             </div>
 
-            {/* Agent Type */}
-            <div className="space-y-1">
+            <div className="w-48 shrink-0 space-y-1">
               <Label className="text-xs">Agent Type</Label>
               <Select
                 value={value.agentType || 'tool_calling'}
@@ -412,6 +289,21 @@ export function AgenticSkillEditor({
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Inputs + Input Mapping (left) | Outputs + Output Mapping (right) */}
+          <div className="grid grid-cols-2 gap-4">
+            <TableGroupedInputPanel
+              inputs={value.inputs}
+              onInputsChange={(inputs) => handleChange({ inputs })}
+              isReadOnly={isReadOnly}
+            />
+            <TableGroupedOutputPanel
+              outputs={value.outputs}
+              inputs={value.inputs}
+              onOutputsChange={(outputs) => handleChange({ outputs })}
+              isReadOnly={isReadOnly}
+            />
           </div>
         </CollapsibleContent>
       </Collapsible>
