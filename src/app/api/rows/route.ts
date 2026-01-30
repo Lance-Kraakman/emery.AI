@@ -47,8 +47,10 @@ export async function GET(request: NextRequest): Promise<Response> {
     const offset = parseOptionalIntParam(searchParams.get("offset"), 0);
     const orderBy = searchParams.get("orderBy") || undefined;
     const orderDirection = (searchParams.get("orderDirection") as 'ASC' | 'DESC') || undefined;
+    const filtersParam = searchParams.get("filters");
+    const filters = filtersParam ? JSON.parse(filtersParam) : undefined;
 
-    const result = await getRowsDSG(tableId, limit, offset, orderBy, orderDirection);
+    const result = await getRowsDSG(tableId, limit, offset, orderBy, orderDirection, filters);
 
     return {
       success: true,

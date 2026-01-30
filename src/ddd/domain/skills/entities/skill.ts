@@ -421,7 +421,8 @@ export interface TableMapping {
   order: number;                        // Execution order (1, 2, 3...)
   targetTableId: number;                // Which table to write to
   rowAction: 'create' | 'update' | 'upsert';  // Create, update, or upsert row
-  rowIdSource?: RowIdSource;            // For update/upsert mode - typed source for row ID
+  rowIdSource?: RowIdSource;            // For update mode - typed source for row ID
+  matchFieldId?: number;                // For upsert mode - target field to match on
   mappings: FieldMapping[];             // Field mappings for this table
   displayFieldId?: number;              // Field to use for relation display value
   mode?: 'single_row' | 'multi_row';    // Per-table mode (overrides config default)

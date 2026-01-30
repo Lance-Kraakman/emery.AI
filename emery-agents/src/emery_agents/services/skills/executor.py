@@ -229,6 +229,7 @@ class SkillExecutorService:
             target_table_id=first_table["table_id"],
             row_action=first_table.get("row_action", "create"),
             field_mappings=field_mappings,
+            match_field_id=first_table.get("match_field_id"),
         )
 
         return SkillStepDTO(

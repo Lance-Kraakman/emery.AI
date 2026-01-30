@@ -7,6 +7,10 @@ import re
 import time
 from dataclasses import dataclass, asdict, field
 from typing import Any, AsyncIterator, Callable, Dict, List, Literal, Optional, Set
+from ...utils import run_async_in_thread
+from ..grpc.generated.agent_worker_pb2 import ToolConfig
+from ..grpc.generated.agent_worker_pb2 import ToolConfig as ProtoToolConfig
+
 
 from tenacity import (
     AsyncRetrying,
@@ -1047,7 +1051,6 @@ class StepExecutorService:
         step_tools = []
         if step.tools:
             try:
-                from ..grpc.generated.agent_worker_pb2 import ToolConfig
                 tool_configs = [ToolConfig(name=name) for name in step.tools]
                 step_tools = self.tool_loader.load_tools_from_configs(
                     tool_configs=tool_configs,
@@ -1182,8 +1185,8 @@ class StepExecutorService:
         organization_id: Optional[int]
     ) -> Dict[str, Any]:
         """Execute a direct table write step (no LLM)."""
-        import os
-        import httpx
+        import asyncio
+        from ...reasoning.tools.api import RowAPI
 
         write_config = step.write_config
         if not write_config or not write_config.target_table_id:
@@ -1202,85 +1205,28 @@ class StepExecutorService:
             if skill_input in step_inputs:
                 field_values[field_id] = step_inputs[skill_input]
 
-        nextjs_base = os.getenv("NEXTJS_BASE_URL", "http://localhost:3000")
-        base_url = f"{nextjs_base}/api"
+        row_api = RowAPI(api_key=api_key or "", org_id=str(organization_id or 0))
 
-        headers = {"Content-Type": "application/json"}
-        if api_key:
-            headers["Authorization"] = f"Bearer {api_key}"
-        if organization_id:
-            headers["X-Organization-ID"] = str(organization_id)
+        if row_action == "create":
+            result = await asyncio.to_thread(row_api.create_row, table_id, field_values)
+        elif row_action == "update":
+            if not write_config.update_match:
+                raise ValueError("Write step update mode requires update_match")
+            match_input = write_config.update_match.skill_input_name
+            if match_input not in step_inputs:
+                raise ValueError(f"Update match input '{match_input}' not in step inputs")
+            result = await asyncio.to_thread(
+                row_api.update_row, table_id, step_inputs[match_input], field_values
+            )
+        elif row_action == "upsert":
+            result = await asyncio.to_thread(
+                row_api.upsert_row, table_id, field_values, write_config.match_field_id
+            )
+        else:
+            raise ValueError(f"Unknown row_action: {row_action}")
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            if row_action == "create":
-                response = await client.post(
-                    f"{base_url}/rows",
-                    headers=headers,
-                    json={"tableId": table_id, "data": field_values}
-                )
-            elif row_action == "update":
-                if not write_config.update_match:
-                    raise ValueError("Write step update mode requires update_match")
-                match_input = write_config.update_match.skill_input_name
-                if match_input not in step_inputs:
-                    raise ValueError(f"Update match input '{match_input}' not in step inputs")
-                match_value = step_inputs[match_input]
-                response = await client.put(
-                    f"{base_url}/rows",
-                    headers=headers,
-                    json={
-                        "tableId": table_id,
-                        "rowId": match_value,
-                        "data": field_values
-                    }
-                )
-            elif row_action == "upsert":
-                if not write_config.update_match:
-                    # No match config — just create
-                    response = await client.post(
-                        f"{base_url}/rows",
-                        headers=headers,
-                        json={"tableId": table_id, "data": field_values}
-                    )
-                else:
-                    match_input = write_config.update_match.skill_input_name
-                    match_value = step_inputs.get(match_input)
-                    if match_value:
-                        # Has row ID — try update first
-                        response = await client.put(
-                            f"{base_url}/rows",
-                            headers=headers,
-                            json={
-                                "tableId": table_id,
-                                "rowId": match_value,
-                                "data": field_values
-                            }
-                        )
-                        # If update failed (row not found), fall back to create
-                        if response.status_code >= 400:
-                            logger.info(f"📝 Upsert: update failed for row {match_value}, creating new row")
-                            response = await client.post(
-                                f"{base_url}/rows",
-                                headers=headers,
-                                json={"tableId": table_id, "data": field_values}
-                            )
-                    else:
-                        # No row ID — create new row
-                        logger.info(f"📝 Upsert: no row ID provided, creating new row")
-                        response = await client.post(
-                            f"{base_url}/rows",
-                            headers=headers,
-                            json={"tableId": table_id, "data": field_values}
-                        )
-            else:
-                raise ValueError(f"Unknown row_action: {row_action}")
-
-            if response.status_code >= 400:
-                raise ValueError(f"Table write failed: {response.text[:500]}")
-
-            result = response.json()
-            logger.info(f"✅ Step {step.name}: write complete")
-            return result
+        logger.info(f"✅ Step {step.name}: write complete")
+        return result
 
     async def _execute_tool_step(
         self,
@@ -1312,7 +1258,6 @@ class StepExecutorService:
                 tool_inputs[mapping.tool_param] = mapping.static_value
 
         # Load the specific Pipedream tool
-        from ..grpc.generated.agent_worker_pb2 import ToolConfig as ProtoToolConfig
         proto_tool_config = ProtoToolConfig(name=tool_id, tool_type="pipedream", config={})
 
         tools = self.tool_loader.load_tools_from_configs(
@@ -1567,7 +1512,6 @@ def execute_steps_sync(
     organization_id: Optional[int] = None
 ) -> SkillExecutionResult:
     """Synchronous wrapper for step execution."""
-    from ..utils import run_async_in_thread
 
     async def collect_results():
         results = []

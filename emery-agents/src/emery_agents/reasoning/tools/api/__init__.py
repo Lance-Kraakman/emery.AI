@@ -6,6 +6,7 @@ Dataclasses provide type safety, API classes provide the operations.
 
 from .database_api import DatabaseAPI, Database
 from .table_api import TableAPI, Table
+from .row_api import RowAPI
 from .app_api import AppAPI, App
 from .agent_api import AgentAPI, Agent
 from .skill_api import SkillAPI, Skill
@@ -16,6 +17,7 @@ __all__ = [
     "Database",
     "TableAPI",
     "Table",
+    "RowAPI",
     "AppAPI",
     "App",
     "AgentAPI",

@@ -43,6 +43,7 @@ export interface ExecutionSkill {
     rowAction: 'create' | 'update' | 'upsert';
     fieldMappings: Array<{ skillInputName: string; targetFieldId: number }>;
     updateMatch?: { skillInputName: string; targetFieldId: number };
+    matchFieldId?: number;
   };
   // Optional config for 'read' execution type
   readConfig?: {
@@ -102,6 +103,7 @@ export interface ExecutionSkill {
       rowAction: 'create' | 'update' | 'upsert';
       fieldMappings: Array<{ skillInputName: string; targetFieldId: number }>;
       updateMatch?: { skillInputName: string; targetFieldId: number };
+      matchFieldId?: number;
     };
     readConfig?: {
       mode: 'single_row' | 'query';

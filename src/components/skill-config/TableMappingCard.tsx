@@ -174,8 +174,8 @@ export function TableMappingCard({
         </Select>
       </div>
 
-      {/* Row ID source selector for update/upsert mode */}
-      {(tableMapping.rowAction === 'update' || tableMapping.rowAction === 'upsert') && (
+      {/* Row ID source selector for update mode */}
+      {tableMapping.rowAction === 'update' && (
         <div className="flex items-center gap-2">
           <Label className="text-[10px] text-muted-foreground">Row ID from:</Label>
           <Select
@@ -223,6 +223,31 @@ export function TableMappingCard({
                   ))}
                 </SelectGroup>
               )}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {/* Match field selector for upsert mode */}
+      {tableMapping.rowAction === 'upsert' && (
+        <div className="flex items-center gap-2">
+          <Label className="text-[10px] text-muted-foreground">Match on:</Label>
+          <Select
+            value={tableMapping.matchFieldId?.toString()}
+            onValueChange={(v) =>
+              onUpdate({ ...tableMapping, matchFieldId: parseInt(v) })
+            }
+            disabled={isReadOnly}
+          >
+            <SelectTrigger className="h-7 w-[160px] text-[11px]">
+              <SelectValue placeholder="Select field..." />
+            </SelectTrigger>
+            <SelectContent>
+              {targetFields.map((field) => (
+                <SelectItem key={field.id} value={field.id.toString()}>
+                  {field.name}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
