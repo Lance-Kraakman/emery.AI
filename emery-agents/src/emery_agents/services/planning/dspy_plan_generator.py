@@ -139,6 +139,7 @@ class DSPyPlanGenerator:
                     capability_guidance=capability_guidance,
                     proven_strategies=strategy_guidance,
                     conversation_history=conversation_history,
+                    memory_context=request.memory_context,
                 )
         except Exception as e:
             logger.error(f"DSPy planning failed: {e}")
@@ -228,12 +229,23 @@ class DSPyPlanGenerator:
         self,
         workspace: Optional[WorkspaceContext],
     ) -> str:
-        """Format workspace context as JSON string for DSPy signature."""
-        if not workspace:
-            return "{}"
+        """Format workspace context as JSON string for DSPy signature.
 
-        # Use the workspace's template context method
+        Includes a _summary header so the planner can quickly understand
+        workspace size without parsing all resources.
+        """
+        if not workspace:
+            return json.dumps({"_summary": "Empty workspace - no existing resources"})
+
         context = workspace.to_template_context()
+
+        # Add summary header for quick planner orientation
+        summary = workspace.resource_summary()
+        context["_summary"] = (
+            f"Workspace contains: {summary}. "
+            "Resources shown below are filtered by relevance to the task."
+        )
+
         return json.dumps(context, indent=2, default=str)
 
     def _get_capability_guidance(
@@ -242,26 +254,28 @@ class DSPyPlanGenerator:
     ) -> str:
         """Get capability planning guidance for the planner using semantic search.
 
-        Instead of dumping ALL enabled capability guidance, performs semantic search
-        to find the most relevant capabilities for this task.
+        Uses multi-factor matching: semantic search (top 5) filtered to enabled,
+        with the routing header always included. Falls back to all guidance if
+        no registry is available.
         """
         from emery_agents.reasoning.capabilities import (
+            CAPABILITY_ROUTING_HEADER,
             format_planning_guidance,
             get_planning_guidance,
         )
 
-        # Fallback: no registry means return all guidance (suboptimal)
+        # Fallback: no registry means return all guidance (includes routing header)
         if not request.capability_registry:
-            logger.warning("No capability_registry in request — using all guidance (search unavailable)")
+            logger.warning("No capability_registry in request — using all guidance")
             return format_planning_guidance()
 
         org_id = request.config.org_id if request.config else None
 
         try:
-            # Semantic search for relevant capabilities based on user's task
+            # Semantic search: top 5 candidates for broader coverage
             matched = request.capability_registry.search(
                 query=request.basic_instructions,
-                limit=3,  # Top 3 most relevant
+                limit=5,
             )
 
             # Filter to enabled only
@@ -280,15 +294,16 @@ class DSPyPlanGenerator:
 
             if guidance_parts:
                 logger.info(
-                    f"📊 Matched {len(matched)} capabilities for guidance: "
+                    f"Matched {len(matched)} capabilities for guidance: "
                     f"{[c.id for c in matched]}"
                 )
-                return "\n\n".join(guidance_parts)
+                # Always include routing header + matched guidance
+                return CAPABILITY_ROUTING_HEADER + "\n\n" + "\n\n".join(guidance_parts)
 
         except Exception as e:
             logger.warning(f"Capability search failed, using all guidance: {e}")
 
-        # Fallback: return all guidance
+        # Fallback: return all guidance (includes routing header)
         return format_planning_guidance()
 
     def _convert_questions(

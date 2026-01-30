@@ -134,9 +134,12 @@ def create_workspace_overview_tool(api_key: str, org_id: str) -> dspy.Tool:
         func=workspace_overview,
         name="workspace_overview",
         desc=(
-            "Get complete workspace overview in one call: all databases (with tables and fields), "
-            "apps (with pages), agents, skills, views. "
-            "Use this first to understand what exists before creating or modifying resources."
+            "WHEN TO USE: Call this first when you need to know what EXISTING resources "
+            "the workspace contains before creating or modifying anything.\n"
+            "WHAT IT RETURNS: Complete snapshot — all databases (with tables and field schemas), "
+            "apps (with pages), agents, skills, and views in a single JSON response.\n"
+            "NOTE: This returns existing USER DATA resources, not platform capabilities. "
+            "For capabilities (what the platform can do), use search_capabilities instead."
         ),
         arg_desc={},
     )
@@ -167,11 +170,16 @@ def create_capability_search_tool(registry: "CapabilityRegistry") -> dspy.Tool:
         func=search_capabilities,
         name="search_capabilities",
         desc=(
-            "Semantic search for platform capabilities, agents, and integrations. "
-            "Use to discover what the platform can do (e.g., 'send email', 'create tables', 'generate reports')."
+            "WHEN TO USE: Search for PLATFORM CAPABILITIES — what the system can do, "
+            "not what the user has already built. Use when you need to find the right "
+            "agent/capability to delegate a task to.\n"
+            "WHAT IT RETURNS: Ranked list of capabilities with id, name, description, "
+            "actions, and entities. The id maps to target_agent in plan steps.\n"
+            "NOTE: For existing user resources (tables, apps), use workspace_overview instead."
         ),
         arg_desc={
-            "query": "Natural language query (e.g., 'create tables', 'send emails', 'manage files')",
+            "query": "Natural language description of what you need to do "
+                     "(e.g., 'create database tables', 'build a dashboard app', 'generate PDF reports')",
             "limit": "Max results to return (default: 5)",
         },
     )

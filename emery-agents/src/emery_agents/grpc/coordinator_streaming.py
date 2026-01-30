@@ -194,12 +194,12 @@ class CoordinatorStreamingHandler:
         handles state management internally.
         """
         thread_id = session_id or "default"
-        raw_task = task  # Preserve original before memory injection
 
         # Build RuntimeContext with non-serializable objects
         assert context.tool_provider is not None, "tool_provider required"
         # Initialize MemoryService from workspace IDs
         memory_service = None
+        memory_context_str = ""
         if workspace_type and workspace_id:
             try:
                 memory_service = MemoryService(
@@ -207,11 +207,10 @@ class CoordinatorStreamingHandler:
                     workspace_id=workspace_id,
                     base_path=Path("/tmp/workspace"),
                 )
-                # Inject relevant memories into task context
-                memory_context = memory_service.get_context_summary(task)
-                if memory_context:
-                    task = f"{task}\n\n[Relevant memories]\n{memory_context}"
-                    logger.info(f"Injected memory context into task ({len(memory_context)} chars)")
+                # Fetch relevant memories (passed separately to planner, not mixed into task)
+                memory_context_str = memory_service.get_context_summary(task)
+                if memory_context_str:
+                    logger.info(f"Found relevant memory context ({len(memory_context_str)} chars)")
             except Exception as e:
                 logger.warning(f"Failed to initialize MemoryService: {e}")
 
@@ -255,12 +254,10 @@ class CoordinatorStreamingHandler:
 
         if has_pending_interrupt:
             # === RESUME: Graph is paused at interrupt, resume with user's response ===
-            # Use raw_task (before memory injection) so "approve" isn't corrupted
-            # by appended memory context like "[Relevant memories]\n..."
-            if is_approval_response(raw_task):
+            if is_approval_response(task):
                 response = "approve"
             else:
-                response = raw_task
+                response = task
 
             async for event in self._resume_graph(
                 graph=graph,
@@ -303,6 +300,7 @@ class CoordinatorStreamingHandler:
             stored_plan=stored_plan,
             thread_id=thread_id,
             runtime_skill_inputs=runtime_skill_inputs,
+            memory_context=memory_context_str,
         ):
             yield event
 
@@ -315,6 +313,7 @@ class CoordinatorStreamingHandler:
         stored_plan: Optional[Plan] = None,
         thread_id: Optional[str] = None,
         runtime_skill_inputs: Optional[Dict[str, str]] = None,
+        memory_context: str = "",
     ) -> AsyncIterator[Any]:
         """
         LangGraph-based execution path.
@@ -329,6 +328,7 @@ class CoordinatorStreamingHandler:
         initial_state = {
             **DEFAULT_STATE,
             "task": task,
+            "memory_context": memory_context or None,
             "api_key": runtime.api_key,
             "org_id": runtime.org_id,
             "org_model": org_model,

@@ -61,7 +61,6 @@ class PlanGenerationRequest:
     # Available resources
     tools: List[Tool] = field(default_factory=list)
     managed_agents: List[ManagedAgent] = field(default_factory=list)
-    research_tools: Optional[List[Tool]] = None
 
     # Template generation mode (for reusable skills with {{ variable }} placeholders)
     skill_inputs: List[SkillInputDefinition] = field(default_factory=list)
@@ -80,6 +79,10 @@ class PlanGenerationRequest:
 
     # Pre-resolved workspace state (agents, tables - eliminates discovery calls)
     workspace: Optional[WorkspaceContext] = None
+
+    # Memory context (relevant memories, passed separately from task)
+    memory_context: str = ""
+
 
 
 @dataclass

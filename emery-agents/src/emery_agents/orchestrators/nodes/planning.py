@@ -28,9 +28,9 @@ from ...services.execution.events import (
     AwaitingClarificationEvent,
     ErrorEvent,
 )
-from ...services.tools import get_research_tools, detect_research_intent
 from ...tools.tool_modes import ToolMode, filter_tools_for_mode
 from ...reasoning.tools.api import WorkspaceAPI
+from ...reasoning.tools.discovery import create_discovery_tools
 from ..state import PlanExecuteState
 from ..runtime import RuntimeContext
 
@@ -122,6 +122,112 @@ def _build_workspace_context(
     )
 
 
+# Minimum cosine similarity to consider a resource relevant.
+_RELEVANCE_THRESHOLD = 0.3
+
+
+def _score_resource(
+    task_embedding: tuple[float, ...],
+    name: str,
+    description: str = "",
+) -> float:
+    """Score a resource's relevance to the task using semantic similarity.
+
+    Uses the same embedding infrastructure as CapabilityRegistry.search().
+    Embeddings are LRU-cached (1000 entries) so repeated resource names are free.
+    """
+    from ...services.analysis.embeddings import get_embedding, cosine_similarity
+
+    resource_text = f"{name} {description}".strip()
+    if not resource_text:
+        return 0.0
+    resource_embedding = get_embedding(resource_text)
+    return cosine_similarity(task_embedding, resource_embedding)
+
+
+def _top_n_relevant(
+    items: list,  # type: ignore[type-arg]
+    n: int,
+    score_fn: Any,
+    threshold: float = _RELEVANCE_THRESHOLD,
+) -> list:  # type: ignore[type-arg]
+    """Return top N items above the similarity threshold, sorted by score.
+
+    If no items score above the threshold, returns all items unchanged
+    (fallback: the task doesn't clearly relate to any resource).
+    """
+    scored = [(item, score_fn(item)) for item in items]
+    relevant = [(item, s) for item, s in scored if s >= threshold]
+    if not relevant:
+        return items  # Nothing matched — return all as fallback
+    relevant.sort(key=lambda x: x[1], reverse=True)
+    return [item for item, _ in relevant[:n]]
+
+
+def _filter_relevant_context(
+    workspace: WorkspaceContext,
+    task: str,
+) -> WorkspaceContext:
+    """
+    Filter workspace context to resources relevant to the task.
+
+    Uses semantic embeddings (same as CapabilityRegistry.search()) to score
+    each resource by similarity to the task. Returns a filtered WorkspaceContext:
+    - ALL databases (always included — typically 1-3, negligible cost)
+    - Top-N most relevant tables, apps, agents, skills, views
+
+    Embeddings are LRU-cached, so after the first call resource embeddings are free.
+    If no resource scores above the threshold, returns full context unchanged.
+    """
+    from ...services.analysis.embeddings import get_embedding
+
+    if not task.strip():
+        return workspace
+
+    try:
+        task_embedding = get_embedding(task)
+    except Exception:
+        logger.warning("Embedding service unavailable, returning full workspace context")
+        return workspace
+
+    # Caps per resource type
+    TABLE_CAP = 15
+    APP_CAP = 10
+    AGENT_CAP = 10
+    SKILL_CAP = 10
+    VIEW_CAP = 10
+
+    filtered_tables = _top_n_relevant(
+        workspace.existing_tables, TABLE_CAP,
+        lambda t: _score_resource(task_embedding, t.name, " ".join(t.fields)),
+    )
+    filtered_apps = _top_n_relevant(
+        workspace.existing_apps, APP_CAP,
+        lambda a: _score_resource(task_embedding, a.name, a.description),
+    )
+    filtered_agents = _top_n_relevant(
+        workspace.existing_agents, AGENT_CAP,
+        lambda a: _score_resource(task_embedding, a.name, a.description),
+    )
+    filtered_skills = _top_n_relevant(
+        workspace.existing_skills, SKILL_CAP,
+        lambda s: _score_resource(task_embedding, s.name, s.description),
+    )
+    filtered_views = _top_n_relevant(
+        workspace.existing_views, VIEW_CAP,
+        lambda v: _score_resource(task_embedding, v.name),
+    )
+
+    return WorkspaceContext(
+        existing_databases=workspace.existing_databases,  # Always include all
+        existing_tables=filtered_tables,
+        existing_apps=filtered_apps,
+        existing_agents=filtered_agents,
+        existing_skills=filtered_skills,
+        existing_views=filtered_views,
+    )
+
+
 async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[str, Any]:
     """
     Generate a plan using PlanService.
@@ -143,6 +249,7 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
     api_key = state.get("api_key")
     org_id = state.get("org_id")
     org_model = state.get("org_model")
+    memory_context = state.get("memory_context") or ""
 
     events: List[Any] = []
 
@@ -151,15 +258,17 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
     # Filter tools to read-only for planning
     planning_tools = filter_tools_for_mode(tools, ToolMode.PLANNING)
 
-    # Detect research intent
-    research_tools = None
-    if detect_research_intent(task):
-        research_tools = get_research_tools()
-        if research_tools:
-            logger.info(f"Research intent detected, adding {len(research_tools)} research tools")
+    # Create discovery tools for ReAct planner (system_research, search_capabilities, search_external)
+    # Exclude workspace_overview — redundant with the static workspace_context below
+    if api_key and org_id:
+        discovery_tools = create_discovery_tools(api_key, org_id, capability_registry)
+        discovery_tools = [t for t in discovery_tools if t.name != "workspace_overview"]
+    else:
+        discovery_tools = []
 
-    # Build workspace context
-    workspace_context = _build_workspace_context(api_key, org_id)
+    # Build workspace context, then filter to task-relevant resources
+    full_workspace = _build_workspace_context(api_key, org_id)
+    workspace_context = _filter_relevant_context(full_workspace, task)
 
     # Build session config
     config = SessionConfig(
@@ -184,8 +293,8 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
         else None
     )
 
-    # Create PlanService and generate plan
-    plan_service = PlanService(model_provider=None)
+    # Create PlanService with discovery tools for ReAct planner
+    plan_service = PlanService(model_provider=None, discovery_tools=discovery_tools)
 
     try:
         result = await plan_service.generate_plan(
@@ -193,7 +302,6 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
             goal=task,
             tools=planning_tools,
             managed_agents=managed_agents,
-            research_tools=research_tools,
             conversation_history=conversation_history,
             strategy_service=None,
             capability_registry=capability_registry,
@@ -202,6 +310,7 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
             skill_inputs=skill_input_defs,
             skill_outputs=skill_output_defs,
             is_template_generation=is_template_generation,
+            memory_context=memory_context,
         )
     except Exception as e:
         logger.error(f"Plan generation failed: {e}")

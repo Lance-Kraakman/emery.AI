@@ -218,6 +218,23 @@ class WorkspaceContext:
             "has_views": self.has_views,
         }
 
+    def resource_summary(self) -> str:
+        """Human-readable summary of resource counts."""
+        parts: List[str] = []
+        if self.existing_databases:
+            parts.append(f"{len(self.existing_databases)} database(s)")
+        if self.existing_tables:
+            parts.append(f"{len(self.existing_tables)} table(s)")
+        if self.existing_apps:
+            parts.append(f"{len(self.existing_apps)} app(s)")
+        if self.existing_agents:
+            parts.append(f"{len(self.existing_agents)} agent(s)")
+        if self.existing_skills:
+            parts.append(f"{len(self.existing_skills)} skill(s)")
+        if self.existing_views:
+            parts.append(f"{len(self.existing_views)} view(s)")
+        return ", ".join(parts) if parts else "empty workspace"
+
     def get_database_by_name(self, name: str) -> Optional[DatabaseInfo]:
         """Look up database by name."""
         for db in self.existing_databases:

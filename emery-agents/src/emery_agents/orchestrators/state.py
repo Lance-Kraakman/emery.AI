@@ -29,6 +29,7 @@ class PlanExecuteState(TypedDict, total=False):
 
     # === Input (set once at graph invocation) ===
     task: str
+    memory_context: Optional[str]  # Relevant memories (passed separately to planner)
 
     # Session config (auth, identity) — all primitives, safe to checkpoint
     api_key: str
@@ -73,6 +74,7 @@ class PlanExecuteState(TypedDict, total=False):
 DEFAULT_STATE: Dict[str, Any] = {
     # Input
     "task": "",
+    "memory_context": None,
     "api_key": "",
     "org_id": "",
     "org_model": None,

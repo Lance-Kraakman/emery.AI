@@ -12,11 +12,7 @@ Tool loading and capability management.
 from .loader import UnifiedToolLoader
 from .provider import ToolProvider
 from .capability_registry import CapabilityRegistry
-from .research import (
-    duckduckgo_search,
-    get_research_tools,
-    detect_research_intent,
-)
+from .research import duckduckgo_search
 
 
 __all__ = [
@@ -24,6 +20,4 @@ __all__ = [
     "ToolProvider",
     "CapabilityRegistry",
     "duckduckgo_search",
-    "get_research_tools",
-    "detect_research_intent",
 ]

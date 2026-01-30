@@ -59,19 +59,30 @@ class SkillOutputSpec(BaseModel):
 class PlanStepOutput(BaseModel):
     """DSPy output schema for a single plan step."""
 
-    step_id: str = Field(description="Unique identifier for this step")
-    description: str = Field(description="Human-readable description of what this step does")
+    step_id: str = Field(description="Unique identifier (e.g., 'step_1_create_table')")
+    description: str = Field(
+        description="What this step does and why, written as an instruction to the executor. "
+                    "Include specific resource names and field details when known."
+    )
     tool_call: Optional[str] = Field(
-        default=None, description="Tool to call for this step (e.g., 'table_crud')"
+        default=None,
+        description="Discovery tool to invoke (e.g., 'workspace_overview', 'search_capabilities'). "
+                    "Only for discovery steps — execution steps use target_agent instead.",
     )
     parameters: Optional[dict[str, Any]] = Field(
-        default=None, description="Parameters for the tool call (values can be strings, lists, or dicts)"
+        default=None,
+        description="Parameters for the tool_call. Values can be strings, lists, or nested dicts. "
+                    "Use {{ variable }} placeholders for skill template inputs.",
     )
     target_agent: Optional[str] = Field(
-        default=None, description="Specialized agent to delegate to (e.g., 'schema_builder')"
+        default=None,
+        description="Capability to delegate execution to (e.g., 'schema_builder', 'app_builder', "
+                    "'skill_builder', 'workflow_builder'). Matched from capability_guidance.",
     )
     required_context: list[str] = Field(
-        default_factory=list, description="Context keys required from previous steps"
+        default_factory=list,
+        description="Step IDs whose outputs this step depends on "
+                    "(e.g., ['step_1_create_table'] if this step needs the table ID from step 1).",
     )
     # Phase fields for execution control
     phase_name: str = Field(
@@ -139,11 +150,23 @@ class SkillTemplateStepOutput(BaseModel):
 class PlanOutput(BaseModel):
     """DSPy output schema for a complete execution plan."""
 
-    plan_id: str = Field(description="Unique identifier for this plan")
-    goal: str = Field(description="The high-level goal this plan achieves")
-    context: str = Field(description="Summary of workspace context used for planning")
-    analysis: str = Field(description="Analysis of the request and approach")
-    steps: list[PlanStepOutput] = Field(description="Ordered list of steps to execute")
+    plan_id: str = Field(description="Unique identifier (e.g., 'plan_crm_setup')")
+    goal: str = Field(
+        description="One-sentence goal starting with a verb "
+                    "(e.g., 'Create a CRM system with contacts table and dashboard app')"
+    )
+    context: str = Field(
+        description="What existing resources were found and how they inform this plan "
+                    "(e.g., 'Found existing contacts table — will add fields rather than recreate')"
+    )
+    analysis: str = Field(
+        description="Brief reasoning for the chosen approach: why these steps, "
+                    "which capabilities, and any trade-offs considered"
+    )
+    steps: list[PlanStepOutput] = Field(
+        description="Ordered steps grouped by phase (Discovery → Analysis → Execution → Summary). "
+                    "Each step delegates to one capability via target_agent."
+    )
 
 
 class SkillTemplatePlanOutput(BaseModel):
@@ -183,22 +206,57 @@ class PlanOrQuestionsOutput(BaseModel):
 class CreatePlan(dspy.Signature):  # type: ignore[misc]
     """Create an execution plan or ask clarifying questions if truly ambiguous.
 
-    Check workspace_context for existing resources before asking questions.
-    Use capability_guidance to understand which capability to delegate to.
-    Use conversation_history for context from previous messages in this session.
+    PLANNING PROCESS (follow in order):
+
+    1. PARSE REQUEST: Identify the user's goal, target resources, and constraints.
+       Check conversation_history for prior context (e.g., follow-up requests).
+
+    2. CHECK WORKSPACE: Search workspace_context for existing resources the task
+       references. Use existing table schemas, app names, agent configs — never ask
+       about things already visible in the context.
+
+    3. MATCH CAPABILITIES: Use capability_guidance to pick the right capability for
+       each step. Each step should delegate to exactly one capability via target_agent
+       (e.g., 'schema_builder' for table/field ops, 'app_builder' for UI).
+
+    4. APPLY STRATEGIES: Check proven_strategies for patterns from past successful
+       executions of similar goals. Reuse proven step sequences when applicable.
+
+    5. STRUCTURE PLAN: Organize steps into phases (Discovery → Analysis → Execution → Summary).
+       Set replan_after=true on steps whose output may change the remaining plan.
+       Use required_context to chain step outputs.
+
+    WHEN TO ASK QUESTIONS vs PLAN:
+    - PLAN with sensible defaults: field names, data types, layout choices, standard configs.
+    - ASK only for: destructive operations, ambiguous business rules, security decisions,
+      genuinely unclear user intent.
+    - The user can modify the plan before approving — prefer over-planning to over-asking.
     """
 
-    request: str = dspy.InputField(desc="User's goal or task")
+    request: str = dspy.InputField(
+        desc="The user's goal in natural language. May reference existing resources by name."
+    )
     workspace_context: str = dspy.InputField(
-        desc="JSON of existing databases, tables, apps - check FIRST before asking"
+        desc="JSON of existing workspace resources (databases, tables with field schemas, "
+             "apps, agents, skills, views). Check this BEFORE asking about existing resources."
     )
-    available_tools: list[str] = dspy.InputField(desc="Discovery tools available")
     capability_guidance: str = dspy.InputField(
-        desc="Capability planning guidance - when to use each capability"
+        desc="Instructions for when to use each capability (schema_builder, app_builder, etc.). "
+             "Maps intent verbs to the correct target_agent for each plan step."
     )
-    proven_strategies: str = dspy.InputField(desc="ACE patterns for similar goals")
+    proven_strategies: str = dspy.InputField(
+        desc="ACE (Agentic Context Engineering) patterns from past successful executions. "
+             "Reuse proven step sequences for similar goals. Empty string if no relevant history."
+    )
     conversation_history: str = dspy.InputField(
-        desc="Previous messages in this session for context continuity"
+        desc="Formatted previous messages in this chat session. Use for follow-up context "
+             "(e.g., 'now add a status field' refers to the table from the previous message)."
+    )
+    memory_context: str = dspy.InputField(
+        desc="Background context from previous interactions (memories). "
+             "Use for continuity but do NOT treat as the current request. "
+             "The user's actual request is in the 'request' field. "
+             "Empty string if no relevant memories."
     )
 
     result: PlanOrQuestionsOutput = dspy.OutputField()
@@ -256,42 +314,112 @@ class CreateSkillTemplate(dspy.Signature):  # type: ignore[misc]
 
 
 class AnalyzeTask(dspy.Signature):  # type: ignore[misc]
-    """Analyze user request to understand intent and extract entities.
+    """Analyze a user request to understand intent, domain, and complexity before planning.
 
-    This is the first step before planning - understanding what the user wants.
+    ANALYSIS PROCESS:
+    1. INTENT: What action does the user want? (create, modify, delete, query, research)
+    2. DOMAIN: Where does this action happen?
+       - emery: workspace resources (tables, apps, agents, skills)
+       - web: external websites, APIs, scraping
+       - automation: workflows, scheduling, integrations
+       - research: information gathering, comparisons, best practices
+    3. ENTITIES: Extract concrete nouns — table names, field names, app names, domains.
+       Use context to resolve references (e.g., "the table" → actual table name from context).
+    4. COMPLEXITY:
+       - simple: single resource, single action (e.g., "add a field")
+       - medium: 2-4 steps or resources (e.g., "create a table with 5 fields")
+       - complex: 5+ steps, cross-resource, or business logic (e.g., "build a CRM system")
     """
 
-    request: str = dspy.InputField(desc="The user's request or goal")
-    context: str = dspy.InputField(desc="Workspace context")
+    request: str = dspy.InputField(
+        desc="The user's request in natural language. May be brief or detailed."
+    )
+    context: str = dspy.InputField(
+        desc="Workspace context JSON — existing resources that the request may reference. "
+             "Use to resolve ambiguous references like 'the table' or 'my app'."
+    )
 
-    intent: str = dspy.OutputField(desc="What the user wants to achieve")
-    domain: TaskDomain = dspy.OutputField(desc="Domain: emery|web|automation|research")
-    entities: list[str] = dspy.OutputField(desc="Key entities mentioned in the request")
-    complexity: TaskComplexity = dspy.OutputField(desc="Complexity level: simple|medium|complex")
+    intent: str = dspy.OutputField(
+        desc="One-sentence summary of the user's goal. Start with a verb "
+             "(e.g., 'Create a contacts table with name, email, and phone fields')."
+    )
+    domain: TaskDomain = dspy.OutputField(
+        desc="Primary domain: 'emery' (workspace resources), 'web' (external), "
+             "'automation' (workflows), or 'research' (information gathering)."
+    )
+    entities: list[str] = dspy.OutputField(
+        desc="Concrete nouns from the request: resource names, field names, capability names. "
+             "Resolve references using context (e.g., 'it' → 'contacts table')."
+    )
+    complexity: TaskComplexity = dspy.OutputField(
+        desc="Task complexity: 'simple' (1 action, 1 resource), 'medium' (2-4 steps), "
+             "'complex' (5+ steps or cross-resource dependencies)."
+    )
 
 
 class TaskClassificationResult(BaseModel):
     """Result of classifying a task for execution routing."""
 
-    mode: TaskExecutionMode = Field(description="Execution mode: 'DIRECT' (simple) or 'PLAN_AND_APPROVE' (complex)")
-    needs_clarification: bool = Field(description="Whether clarification questions are needed")
-    clarification_questions: list[str] = Field(
-        default_factory=list, description="Questions to ask if clarification needed"
+    mode: TaskExecutionMode = Field(
+        description="Execution mode: 'DIRECT' (single clear action) or 'PLAN_AND_APPROVE' (multi-step or complex)"
     )
-    reasoning: str = Field(description="Explanation of the classification decision")
+    complexity: TaskComplexity = Field(
+        default=TaskComplexity.SIMPLE,
+        description="Task complexity: 'simple' (1 step), 'medium' (2-4 steps), 'complex' (5+ steps or cross-capability)",
+    )
+    estimated_steps: int = Field(
+        default=1,
+        description="Estimated number of execution steps (1-20)",
+    )
+    primary_capability: Optional[str] = Field(
+        default=None,
+        description="Primary capability needed (e.g., 'schema_builder', 'app_builder', 'skill_builder'). None if unclear.",
+    )
+    needs_clarification: bool = Field(description="Whether the task is too vague to proceed without user input")
+    clarification_questions: list[str] = Field(
+        default_factory=list, description="Questions to ask ONLY if needs_clarification is true"
+    )
+    reasoning: str = Field(description="Brief explanation: what factors led to this classification")
 
 
 class ClassifyTask(dspy.Signature):  # type: ignore[misc]
-    """Classify a task to determine execution mode and clarification needs.
+    """Classify a task to determine execution mode, complexity, and clarification needs.
 
-    DIRECT mode: Simple, clear command with all details provided.
-    PLAN_AND_APPROVE mode: Complex task, multiple steps, or needs clarification.
+    CLASSIFICATION RULES:
 
-    Be conservative - only use DIRECT for truly simple, unambiguous tasks.
+    DIRECT mode (execute immediately, no plan needed):
+    - Single, well-defined action with clear parameters.
+    - Examples: "Add a 'phone' field to the contacts table", "Delete the old_data table".
+    - All required information is present in the task or context.
+    - No ambiguous business logic or multi-step dependencies.
+
+    PLAN_AND_APPROVE mode (create plan, get user approval, then execute):
+    - Multiple steps or resources involved.
+    - Complex business logic or data modeling decisions.
+    - Examples: "Build a CRM system", "Set up an inventory management workflow".
+    - Cross-capability tasks (needs schema_builder AND app_builder).
+
+    SCORING FACTORS:
+    - Resource count: 1 resource = likely DIRECT, 2+ = likely PLAN_AND_APPROVE.
+    - Verb complexity: "add"/"delete" = simple; "build"/"set up"/"create system" = complex.
+    - Ambiguity: clear parameters = DIRECT, vague requirements = PLAN_AND_APPROVE.
+    - Risk: read-only/additive = lower risk, destructive/schema changes = higher risk.
+
+    CLARIFICATION:
+    - Only flag needs_clarification when the task is too vague to even classify.
+    - Missing details that have sensible defaults do NOT need clarification.
+    - Prefer PLAN_AND_APPROVE with sensible defaults over asking questions.
     """
 
-    task: str = dspy.InputField(desc="The user's task or request")
-    context: str = dspy.InputField(desc="Available context about the system state")
+    task: str = dspy.InputField(desc="The user's task or request in natural language")
+    context: str = dspy.InputField(
+        desc=(
+            "System state: existing resources (databases, tables, apps, agents), "
+            "available capabilities, and conversation history. "
+            "Use to assess whether the task references existing resources "
+            "and how complex the execution would be."
+        )
+    )
 
     classification: TaskClassificationResult = dspy.OutputField()
 
@@ -362,15 +490,31 @@ class PlanDiffResult(BaseModel):
 
 
 class GeneratePlanDiff(dspy.Signature):  # type: ignore[misc]
-    """Generate minimal diff to address a replan reason.
+    """Generate a minimal diff to fix or adjust the remaining plan after a replan trigger.
 
-    Preserve existing steps when possible. Only include changes that are necessary.
+    PRINCIPLES:
+    - Preserve completed work: never re-do steps that already succeeded.
+    - Minimal changes: skip or modify existing steps rather than replacing the entire plan.
+    - Append new steps only when the failure reveals missing work.
+    - If the failure is transient (e.g., timeout), retry the same step rather than restructuring.
+    - If clarification is needed from the user, set needs_clarification=true and provide questions.
     """
 
-    goal: str = dspy.InputField(desc="The plan's overall goal")
-    reason: str = dspy.InputField(desc="Why replanning was triggered")
-    failed_step_info: str = dspy.InputField(desc="Info about the failed step (if any)")
-    completed_context: str = dspy.InputField(desc="Summary of completed step results")
-    pending_steps_json: str = dspy.InputField(desc="JSON of pending steps")
+    goal: str = dspy.InputField(desc="The plan's overall goal (same as original plan)")
+    reason: str = dspy.InputField(
+        desc="Why replanning was triggered: step failure, goal not fully achieved, "
+             "or replan_after flag on a completed step."
+    )
+    failed_step_info: str = dspy.InputField(
+        desc="Details about the failed step: step_id, description, error message, "
+             "and tool evidence. Empty string if replan was triggered by replan_after flag."
+    )
+    completed_context: str = dspy.InputField(
+        desc="Summary of all completed step results so far. "
+             "Use to understand what has already been accomplished."
+    )
+    pending_steps_json: str = dspy.InputField(
+        desc="JSON array of remaining pending steps. These can be skipped, modified, or kept as-is."
+    )
 
     diff: PlanDiffResult = dspy.OutputField()

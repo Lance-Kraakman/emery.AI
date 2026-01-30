@@ -290,6 +290,10 @@ class MemoryService:
             logger.warning(f"Failed to delete memory {memory_id}: {e}")
             return False
 
+    # Max L2 distance for a memory to be considered relevant.
+    # L2 = 1.0 corresponds to ~50% cosine similarity with normalized embeddings.
+    _RELEVANCE_DISTANCE_THRESHOLD = 1.0
+
     def get_context_summary(
         self,
         task: str,
@@ -298,7 +302,8 @@ class MemoryService:
         """Get relevant memories formatted for prompt injection.
 
         Searches for memories relevant to the given task and formats them
-        as a context string suitable for prepending to the planner prompt.
+        as a context string. Memories with L2 distance above the threshold
+        are filtered out to avoid injecting irrelevant context.
 
         Args:
             task: The current task/goal to find relevant memories for.
@@ -311,6 +316,15 @@ class MemoryService:
             return ""
 
         memories = self.search(query=task, n_results=n_results)
+        if not memories:
+            return ""
+
+        # Filter by relevance — skip memories that aren't meaningfully similar
+        memories = [
+            m for m in memories
+            if m.get("distance") is not None
+            and m["distance"] <= self._RELEVANCE_DISTANCE_THRESHOLD
+        ]
         if not memories:
             return ""
 
