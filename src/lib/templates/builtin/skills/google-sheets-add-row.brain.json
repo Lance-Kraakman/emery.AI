@@ -1,0 +1,38 @@
+{
+  "$format": "brain-template",
+  "$version": 1,
+  "metadata": {
+    "name": "Google Sheets: Add Row",
+    "description": "Add a single row of data to a Google Sheets spreadsheet.",
+    "category": "Integrations",
+    "tags": ["google-sheets", "spreadsheet", "row", "add"],
+    "version": "1.0.0",
+    "author": "BrainTable"
+  },
+  "template": {
+    "type": "skill",
+    "data": {
+      "name": "Google Sheets: Add Row",
+      "description": "Add a single row of data to a Google Sheets spreadsheet.",
+      "inputs": [
+        { "name": "spreadsheet_id", "required": true, "type": "text" },
+        { "name": "worksheet_id", "required": true, "type": "text" },
+        { "name": "has_headers", "required": true, "type": "boolean" }
+      ],
+      "outputs": [
+        { "name": "result", "type": "text" }
+      ],
+      "instructions": "",
+      "tools": [],
+      "executionType": "tool",
+      "toolExecutionConfig": {
+        "toolId": "google_sheets-add-single-row",
+        "inputMappings": [
+          { "toolParam": "sheetId", "skillInputName": "spreadsheet_id" },
+          { "toolParam": "worksheetId", "skillInputName": "worksheet_id" },
+          { "toolParam": "hasHeaders", "skillInputName": "has_headers" }
+        ]
+      }
+    }
+  }
+}

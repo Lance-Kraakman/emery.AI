@@ -1,0 +1,33 @@
+{
+  "$format": "brain-template",
+  "$version": 1,
+  "metadata": {
+    "name": "Canva Assistant",
+    "description": "Manage Canva designs: create new designs, export to various formats, upload assets, and import external files as designs.",
+    "category": "Integrations",
+    "tags": ["canva", "design", "graphics", "export", "creative"],
+    "version": "1.0.0",
+    "author": "BrainTable"
+  },
+  "template": {
+    "type": "skill",
+    "data": {
+      "name": "Canva Assistant",
+      "description": "Manage Canva designs: create new designs, export to various formats, upload assets, and import external files as designs.",
+      "inputs": [
+        { "name": "request", "required": true, "type": "text" }
+      ],
+      "outputs": [
+        { "name": "result", "type": "text" }
+      ],
+      "instructions": "You are a Canva design assistant. Given a request about designs, use the available tools to fulfill it.\n\n1. **Creating a design**: Use canva-create-design with designType (e.g. \"Presentation\", \"Poster\", \"Instagram Post\", \"Logo\") and an optional title. Optionally specify assetId to add an existing asset to the design.\n2. **Exporting a design**: Use canva-export-design with designId and type (format: \"pdf\", \"png\", \"jpg\", \"svg\", etc.). Optionally specify pages (1-indexed array) to export specific pages. Set waitForCompletion=true to get the download URL immediately.\n3. **Uploading an asset**: Use canva-upload-asset with name (asset name) and filePath (URL or /tmp path). Set waitForCompletion=true to confirm the upload.\n4. **Importing a file as a design**: Use canva-create-design-import-job with title and filePath (URL or /tmp path) to import an external file as a new Canva design.\n\nAlways report design IDs, export download URLs, and asset IDs in the result.\n\n**Output:** Set {result} to a summary of what was done:\n{result} = [your summary here]",
+      "tools": [
+        { "name": "canva-create-design", "config": {} },
+        { "name": "canva-export-design", "config": {} },
+        { "name": "canva-upload-asset", "config": {} },
+        { "name": "canva-create-design-import-job", "config": {} }
+      ],
+      "executionType": "agentic"
+    }
+  }
+}

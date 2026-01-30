@@ -1,0 +1,36 @@
+{
+  "$format": "brain-template",
+  "$version": 1,
+  "metadata": {
+    "name": "Outlook: Reply to Email",
+    "description": "Reply to an email in Microsoft Outlook by providing the message ID and reply text.",
+    "category": "Integrations",
+    "tags": ["outlook", "microsoft", "email", "reply"],
+    "version": "1.0.0",
+    "author": "BrainTable"
+  },
+  "template": {
+    "type": "skill",
+    "data": {
+      "name": "Outlook: Reply to Email",
+      "description": "Reply to an email in Microsoft Outlook by providing the message ID and reply text.",
+      "inputs": [
+        { "name": "message_id", "required": true, "type": "text" },
+        { "name": "reply_body", "required": true, "type": "text" }
+      ],
+      "outputs": [
+        { "name": "result", "type": "text" }
+      ],
+      "instructions": "",
+      "tools": [],
+      "executionType": "tool",
+      "toolExecutionConfig": {
+        "toolId": "microsoft_outlook-reply-to-email",
+        "inputMappings": [
+          { "toolParam": "messageId", "skillInputName": "message_id" },
+          { "toolParam": "comment", "skillInputName": "reply_body" }
+        ]
+      }
+    }
+  }
+}

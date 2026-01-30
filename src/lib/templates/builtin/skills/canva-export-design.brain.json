@@ -1,0 +1,36 @@
+{
+  "$format": "brain-template",
+  "$version": 1,
+  "metadata": {
+    "name": "Canva: Export Design",
+    "description": "Export a Canva design to a file format (pdf, png, jpg, svg, etc.).",
+    "category": "Integrations",
+    "tags": ["canva", "design", "export", "download"],
+    "version": "1.0.0",
+    "author": "BrainTable"
+  },
+  "template": {
+    "type": "skill",
+    "data": {
+      "name": "Canva: Export Design",
+      "description": "Export a Canva design to a file format (pdf, png, jpg, svg, etc.).",
+      "inputs": [
+        { "name": "design_id", "required": true, "type": "text" },
+        { "name": "format", "required": true, "type": "text" }
+      ],
+      "outputs": [
+        { "name": "result", "type": "text" }
+      ],
+      "instructions": "",
+      "tools": [],
+      "executionType": "tool",
+      "toolExecutionConfig": {
+        "toolId": "canva-export-design",
+        "inputMappings": [
+          { "toolParam": "designId", "skillInputName": "design_id" },
+          { "toolParam": "type", "skillInputName": "format" }
+        ]
+      }
+    }
+  }
+}

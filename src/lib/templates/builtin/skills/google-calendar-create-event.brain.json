@@ -1,0 +1,42 @@
+{
+  "$format": "brain-template",
+  "$version": 1,
+  "metadata": {
+    "name": "Google Calendar: Create Event",
+    "description": "Create a new event in Google Calendar with title, start/end dates, and optional description and attendees.",
+    "category": "Integrations",
+    "tags": ["google-calendar", "event", "create", "scheduling"],
+    "version": "1.0.0",
+    "author": "BrainTable"
+  },
+  "template": {
+    "type": "skill",
+    "data": {
+      "name": "Google Calendar: Create Event",
+      "description": "Create a new event in Google Calendar with title, start/end dates, and optional description and attendees.",
+      "inputs": [
+        { "name": "title", "required": true, "type": "text" },
+        { "name": "start_date", "required": true, "type": "text" },
+        { "name": "end_date", "required": true, "type": "text" },
+        { "name": "description", "required": false, "type": "text" },
+        { "name": "attendees", "required": false, "type": "text" }
+      ],
+      "outputs": [
+        { "name": "result", "type": "text" }
+      ],
+      "instructions": "",
+      "tools": [],
+      "executionType": "tool",
+      "toolExecutionConfig": {
+        "toolId": "google_calendar-create-event",
+        "inputMappings": [
+          { "toolParam": "summary", "skillInputName": "title" },
+          { "toolParam": "eventStartDate", "skillInputName": "start_date" },
+          { "toolParam": "eventEndDate", "skillInputName": "end_date" },
+          { "toolParam": "description", "skillInputName": "description" },
+          { "toolParam": "attendees", "skillInputName": "attendees" }
+        ]
+      }
+    }
+  }
+}

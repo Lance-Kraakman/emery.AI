@@ -9,6 +9,41 @@ import tableOperations from './skills/table-operations.brain.json';
 import documentOperations from './skills/document-operations.brain.json';
 import dataLookup from './skills/data-lookup.brain.json';
 
+// Import builtin integration skill templates - Gmail
+import gmailAssistant from './skills/gmail-assistant.brain.json';
+import gmailSendEmail from './skills/gmail-send-email.brain.json';
+import gmailFindEmail from './skills/gmail-find-email.brain.json';
+import gmailCreateDraft from './skills/gmail-create-draft.brain.json';
+// Outlook
+import outlookAssistant from './skills/outlook-assistant.brain.json';
+import outlookSendEmail from './skills/outlook-send-email.brain.json';
+import outlookFindEmail from './skills/outlook-find-email.brain.json';
+import outlookReplyToEmail from './skills/outlook-reply-to-email.brain.json';
+// Canva
+import canvaAssistant from './skills/canva-assistant.brain.json';
+import canvaCreateDesign from './skills/canva-create-design.brain.json';
+import canvaExportDesign from './skills/canva-export-design.brain.json';
+// LinkedIn
+import linkedinAssistant from './skills/linkedin-assistant.brain.json';
+import linkedinCreatePostUser from './skills/linkedin-create-post-user.brain.json';
+import linkedinCreatePostOrg from './skills/linkedin-create-post-org.brain.json';
+import linkedinGetProfile from './skills/linkedin-get-profile.brain.json';
+// Google Sheets
+import googleSheetsAssistant from './skills/google-sheets-assistant.brain.json';
+import googleSheetsAddRow from './skills/google-sheets-add-row.brain.json';
+import googleSheetsFindRow from './skills/google-sheets-find-row.brain.json';
+import googleSheetsGetValues from './skills/google-sheets-get-values.brain.json';
+// Google Calendar
+import googleCalendarAssistant from './skills/google-calendar-assistant.brain.json';
+import googleCalendarCreateEvent from './skills/google-calendar-create-event.brain.json';
+import googleCalendarListEvents from './skills/google-calendar-list-events.brain.json';
+import googleCalendarQuickAdd from './skills/google-calendar-quick-add.brain.json';
+// Slack
+import slackAssistant from './skills/slack-assistant.brain.json';
+import slackSendMessage from './skills/slack-send-message.brain.json';
+import slackCreateChannel from './skills/slack-create-channel.brain.json';
+import slackFindUser from './skills/slack-find-user.brain.json';
+
 // Import builtin database templates
 import crm from './databases/crm.brain.json';
 import projectManagement from './databases/project-management.brain.json';
@@ -32,6 +67,41 @@ export const BUILTIN_TEMPLATES: Record<string, BrainTemplate> = {
   'skill/table-operations': tableOperations as unknown as BrainTemplate,
   'skill/document-operations': documentOperations as unknown as BrainTemplate,
   'skill/data-lookup': dataLookup as unknown as BrainTemplate,
+
+  // Integration skill templates - Gmail
+  'skill/gmail-assistant': gmailAssistant as unknown as BrainTemplate,
+  'skill/gmail-send-email': gmailSendEmail as unknown as BrainTemplate,
+  'skill/gmail-find-email': gmailFindEmail as unknown as BrainTemplate,
+  'skill/gmail-create-draft': gmailCreateDraft as unknown as BrainTemplate,
+  // Outlook
+  'skill/outlook-assistant': outlookAssistant as unknown as BrainTemplate,
+  'skill/outlook-send-email': outlookSendEmail as unknown as BrainTemplate,
+  'skill/outlook-find-email': outlookFindEmail as unknown as BrainTemplate,
+  'skill/outlook-reply-to-email': outlookReplyToEmail as unknown as BrainTemplate,
+  // Canva
+  'skill/canva-assistant': canvaAssistant as unknown as BrainTemplate,
+  'skill/canva-create-design': canvaCreateDesign as unknown as BrainTemplate,
+  'skill/canva-export-design': canvaExportDesign as unknown as BrainTemplate,
+  // LinkedIn
+  'skill/linkedin-assistant': linkedinAssistant as unknown as BrainTemplate,
+  'skill/linkedin-create-post-user': linkedinCreatePostUser as unknown as BrainTemplate,
+  'skill/linkedin-create-post-org': linkedinCreatePostOrg as unknown as BrainTemplate,
+  'skill/linkedin-get-profile': linkedinGetProfile as unknown as BrainTemplate,
+  // Google Sheets
+  'skill/google-sheets-assistant': googleSheetsAssistant as unknown as BrainTemplate,
+  'skill/google-sheets-add-row': googleSheetsAddRow as unknown as BrainTemplate,
+  'skill/google-sheets-find-row': googleSheetsFindRow as unknown as BrainTemplate,
+  'skill/google-sheets-get-values': googleSheetsGetValues as unknown as BrainTemplate,
+  // Google Calendar
+  'skill/google-calendar-assistant': googleCalendarAssistant as unknown as BrainTemplate,
+  'skill/google-calendar-create-event': googleCalendarCreateEvent as unknown as BrainTemplate,
+  'skill/google-calendar-list-events': googleCalendarListEvents as unknown as BrainTemplate,
+  'skill/google-calendar-quick-add': googleCalendarQuickAdd as unknown as BrainTemplate,
+  // Slack
+  'skill/slack-assistant': slackAssistant as unknown as BrainTemplate,
+  'skill/slack-send-message': slackSendMessage as unknown as BrainTemplate,
+  'skill/slack-create-channel': slackCreateChannel as unknown as BrainTemplate,
+  'skill/slack-find-user': slackFindUser as unknown as BrainTemplate,
 
   // Database templates
   'database/crm': crm as unknown as BrainTemplate,

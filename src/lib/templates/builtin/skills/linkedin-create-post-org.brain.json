@@ -1,0 +1,37 @@
+{
+  "$format": "brain-template",
+  "$version": 1,
+  "metadata": {
+    "name": "LinkedIn: Create Organization Post",
+    "description": "Create a text post on LinkedIn on behalf of an organization.",
+    "category": "Integrations",
+    "tags": ["linkedin", "post", "organization", "social"],
+    "version": "1.0.0",
+    "author": "BrainTable"
+  },
+  "template": {
+    "type": "skill",
+    "data": {
+      "name": "LinkedIn: Create Organization Post",
+      "description": "Create a text post on LinkedIn on behalf of an organization.",
+      "inputs": [
+        { "name": "organization_id", "required": true, "type": "text" },
+        { "name": "content", "required": true, "type": "text" }
+      ],
+      "outputs": [
+        { "name": "result", "type": "text" }
+      ],
+      "instructions": "",
+      "tools": [],
+      "executionType": "tool",
+      "toolExecutionConfig": {
+        "toolId": "linkedin-create-text-post-organization",
+        "inputMappings": [
+          { "toolParam": "organizationId", "skillInputName": "organization_id" },
+          { "toolParam": "text", "skillInputName": "content" },
+          { "toolParam": "visibility", "staticValue": "PUBLIC" }
+        ]
+      }
+    }
+  }
+}

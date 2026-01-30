@@ -1,0 +1,34 @@
+{
+  "$format": "brain-template",
+  "$version": 1,
+  "metadata": {
+    "name": "Outlook Assistant",
+    "description": "Manage Microsoft Outlook: send emails, search inbox, reply to threads, find contacts, and organize messages into folders.",
+    "category": "Integrations",
+    "tags": ["outlook", "microsoft", "email", "office365", "contacts"],
+    "version": "1.0.0",
+    "author": "BrainTable"
+  },
+  "template": {
+    "type": "skill",
+    "data": {
+      "name": "Outlook Assistant",
+      "description": "Manage Microsoft Outlook: send emails, search inbox, reply to threads, find contacts, and organize messages into folders.",
+      "inputs": [
+        { "name": "request", "required": true, "type": "text" }
+      ],
+      "outputs": [
+        { "name": "result", "type": "text" }
+      ],
+      "instructions": "You are a Microsoft Outlook assistant. Given a request about email or contacts, use the available tools to fulfill it.\n\n1. **Sending email**: Use microsoft_outlook-send-email with recipients (string array of emails), subject, and content. Optionally include ccRecipients/bccRecipients. Set contentType to \"html\" for HTML content.\n2. **Searching email**: Use microsoft_outlook-find-email with search (free text) or filter (OData expression like contains(subject, 'keyword')). Use orderBy for sorting (e.g. \"receivedDateTime desc\").\n3. **Replying to email**: Use microsoft_outlook-reply-to-email with messageId and comment (reply body text). Optionally override recipients.\n4. **Finding contacts**: Use microsoft_outlook-find-contacts with searchString (name, email, or display name - case sensitive).\n5. **Moving email to folder**: Use microsoft_outlook-move-email-to-folder with messageId and folderId.\n\nWhen searching or finding contacts, report the number of results found.\nAlways confirm the action taken and include relevant details.\n\n**Output:** Set {result} to a summary of what was done:\n{result} = [your summary here]",
+      "tools": [
+        { "name": "microsoft_outlook-send-email", "config": {} },
+        { "name": "microsoft_outlook-find-email", "config": {} },
+        { "name": "microsoft_outlook-reply-to-email", "config": {} },
+        { "name": "microsoft_outlook-find-contacts", "config": {} },
+        { "name": "microsoft_outlook-move-email-to-folder", "config": {} }
+      ],
+      "executionType": "agentic"
+    }
+  }
+}

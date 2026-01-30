@@ -1,0 +1,36 @@
+{
+  "$format": "brain-template",
+  "$version": 1,
+  "metadata": {
+    "name": "Slack: Create Channel",
+    "description": "Create a new public or private Slack channel.",
+    "category": "Integrations",
+    "tags": ["slack", "channel", "create"],
+    "version": "1.0.0",
+    "author": "BrainTable"
+  },
+  "template": {
+    "type": "skill",
+    "data": {
+      "name": "Slack: Create Channel",
+      "description": "Create a new public or private Slack channel.",
+      "inputs": [
+        { "name": "name", "required": true, "type": "text" },
+        { "name": "is_private", "required": false, "type": "boolean" }
+      ],
+      "outputs": [
+        { "name": "result", "type": "text" }
+      ],
+      "instructions": "",
+      "tools": [],
+      "executionType": "tool",
+      "toolExecutionConfig": {
+        "toolId": "slack_bot-create-channel",
+        "inputMappings": [
+          { "toolParam": "channelName", "skillInputName": "name" },
+          { "toolParam": "isPrivate", "skillInputName": "is_private" }
+        ]
+      }
+    }
+  }
+}

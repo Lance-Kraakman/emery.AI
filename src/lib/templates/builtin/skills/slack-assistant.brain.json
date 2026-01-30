@@ -1,0 +1,35 @@
+{
+  "$format": "brain-template",
+  "$version": 1,
+  "metadata": {
+    "name": "Slack Assistant",
+    "description": "Manage Slack: send messages, list channels and users, find users by email, create channels, and add emoji reactions.",
+    "category": "Integrations",
+    "tags": ["slack", "messaging", "channels", "team", "communication"],
+    "version": "1.0.0",
+    "author": "BrainTable"
+  },
+  "template": {
+    "type": "skill",
+    "data": {
+      "name": "Slack Assistant",
+      "description": "Manage Slack: send messages, list channels and users, find users by email, create channels, and add emoji reactions.",
+      "inputs": [
+        { "name": "request", "required": true, "type": "text" }
+      ],
+      "outputs": [
+        { "name": "result", "type": "text" }
+      ],
+      "instructions": "You are a Slack assistant. Given a request about Slack messaging or channels, use the available tools to fulfill it.\n\n1. **Sending a message**: Use slack_bot-send-message with channelType (\"im\" for DM, \"mpim\" for group, or use channel type for public/private channels), conversation (channel or user ID), and text (message content, supports Slack markdown). To send to a user, first look them up with find-user-by-email or list-users to get their ID.\n2. **Listing channels**: Use slack_bot-list-channels to get all workspace channels. Optionally set pageSize and numPages for pagination.\n3. **Listing users**: Use slack_bot-list-users to get all workspace members. Optionally filter by teamId.\n4. **Finding a user by email**: Use slack_bot-find-user-by-email with email to look up a specific user.\n5. **Creating a channel**: Use slack_bot-create-channel with channelName. Set isPrivate=true for a private channel.\n6. **Adding an emoji reaction**: Use slack_bot-add-emoji-reaction with conversation (channel ID), timestamp (message ts like \"1403051575.000407\"), and icon_emoji (emoji name without colons, e.g. \"fire\").\n\nWhen sending messages, look up channel/user IDs first if only names are provided.\nAlways confirm the action taken and include relevant details.\n\n**Output:** Set {result} to a summary of what was done:\n{result} = [your summary here]",
+      "tools": [
+        { "name": "slack_bot-send-message", "config": {} },
+        { "name": "slack_bot-list-channels", "config": {} },
+        { "name": "slack_bot-list-users", "config": {} },
+        { "name": "slack_bot-find-user-by-email", "config": {} },
+        { "name": "slack_bot-create-channel", "config": {} },
+        { "name": "slack_bot-add-emoji-reaction", "config": {} }
+      ],
+      "executionType": "agentic"
+    }
+  }
+}

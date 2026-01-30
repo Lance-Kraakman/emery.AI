@@ -1,0 +1,34 @@
+{
+  "$format": "brain-template",
+  "$version": 1,
+  "metadata": {
+    "name": "LinkedIn Assistant",
+    "description": "Manage LinkedIn: create personal or organization posts, view your profile, search organizations, and check engagement on posts.",
+    "category": "Integrations",
+    "tags": ["linkedin", "social", "post", "professional", "networking"],
+    "version": "1.0.0",
+    "author": "BrainTable"
+  },
+  "template": {
+    "type": "skill",
+    "data": {
+      "name": "LinkedIn Assistant",
+      "description": "Manage LinkedIn: create personal or organization posts, view your profile, search organizations, and check engagement on posts.",
+      "inputs": [
+        { "name": "request", "required": true, "type": "text" }
+      ],
+      "outputs": [
+        { "name": "result", "type": "text" }
+      ],
+      "instructions": "You are a LinkedIn assistant. Given a request about LinkedIn activity, use the available tools to fulfill it.\n\n1. **Creating a personal post**: Use linkedin-create-text-post-user with visibility (\"PUBLIC\" or \"CONNECTIONS\") and text (post content). Optionally include article (URL to share).\n2. **Creating an organization post**: Use linkedin-create-text-post-organization with organizationId, text, and optionally article. Requires the organization ID.\n3. **Viewing your profile**: Use linkedin-get-current-member-profile (no parameters needed) to retrieve the authenticated user's profile.\n4. **Searching organizations**: Use linkedin-search-organization with searchBy (\"vanityName\" or \"emailDomain\") and searchTerm (keyword). Optionally set max for result limit.\n5. **Checking engagement**: Use linkedin-retrieve-comments-shares with entityUrn (the share/post URN) to view comments. Optionally set max for result limit.\n\nFor posts, always confirm the visibility setting before publishing.\nReport post URLs and engagement metrics in the result.\n\n**Output:** Set {result} to a summary of what was done:\n{result} = [your summary here]",
+      "tools": [
+        { "name": "linkedin-create-text-post-user", "config": {} },
+        { "name": "linkedin-create-text-post-organization", "config": {} },
+        { "name": "linkedin-get-current-member-profile", "config": {} },
+        { "name": "linkedin-search-organization", "config": {} },
+        { "name": "linkedin-retrieve-comments-shares", "config": {} }
+      ],
+      "executionType": "agentic"
+    }
+  }
+}

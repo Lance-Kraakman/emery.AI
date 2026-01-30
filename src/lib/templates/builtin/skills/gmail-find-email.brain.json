@@ -1,0 +1,35 @@
+{
+  "$format": "brain-template",
+  "$version": 1,
+  "metadata": {
+    "name": "Gmail: Find Email",
+    "description": "Search Gmail using Gmail search syntax (from:, to:, subject:, has:attachment, is:unread, etc.).",
+    "category": "Integrations",
+    "tags": ["gmail", "email", "search", "find", "google"],
+    "version": "1.0.0",
+    "author": "BrainTable"
+  },
+  "template": {
+    "type": "skill",
+    "data": {
+      "name": "Gmail: Find Email",
+      "description": "Search Gmail using Gmail search syntax (from:, to:, subject:, has:attachment, is:unread, etc.).",
+      "inputs": [
+        { "name": "search_query", "required": true, "type": "text" }
+      ],
+      "outputs": [
+        { "name": "result", "type": "text" }
+      ],
+      "instructions": "",
+      "tools": [],
+      "executionType": "tool",
+      "toolExecutionConfig": {
+        "toolId": "gmail-find-email",
+        "inputMappings": [
+          { "toolParam": "q", "skillInputName": "search_query" },
+          { "toolParam": "withTextPayload", "staticValue": true }
+        ]
+      }
+    }
+  }
+}

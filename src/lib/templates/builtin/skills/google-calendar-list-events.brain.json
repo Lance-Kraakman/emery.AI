@@ -1,0 +1,38 @@
+{
+  "$format": "brain-template",
+  "$version": 1,
+  "metadata": {
+    "name": "Google Calendar: List Events",
+    "description": "List events from Google Calendar, optionally filtered by date range and max results.",
+    "category": "Integrations",
+    "tags": ["google-calendar", "events", "list", "upcoming"],
+    "version": "1.0.0",
+    "author": "BrainTable"
+  },
+  "template": {
+    "type": "skill",
+    "data": {
+      "name": "Google Calendar: List Events",
+      "description": "List events from Google Calendar, optionally filtered by date range and max results.",
+      "inputs": [
+        { "name": "start_date", "required": false, "type": "text" },
+        { "name": "end_date", "required": false, "type": "text" },
+        { "name": "max_results", "required": false, "type": "number" }
+      ],
+      "outputs": [
+        { "name": "result", "type": "text" }
+      ],
+      "instructions": "",
+      "tools": [],
+      "executionType": "tool",
+      "toolExecutionConfig": {
+        "toolId": "google_calendar-list-events",
+        "inputMappings": [
+          { "toolParam": "timeMin", "skillInputName": "start_date" },
+          { "toolParam": "timeMax", "skillInputName": "end_date" },
+          { "toolParam": "maxResults", "skillInputName": "max_results" }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "$format": "brain-template",
+  "$version": 1,
+  "metadata": {
+    "name": "Google Sheets: Get Values",
+    "description": "Get values from a range of cells in a Google Sheets spreadsheet using A1 notation (e.g. A1:E5).",
+    "category": "Integrations",
+    "tags": ["google-sheets", "spreadsheet", "read", "range"],
+    "version": "1.0.0",
+    "author": "BrainTable"
+  },
+  "template": {
+    "type": "skill",
+    "data": {
+      "name": "Google Sheets: Get Values",
+      "description": "Get values from a range of cells in a Google Sheets spreadsheet using A1 notation (e.g. A1:E5).",
+      "inputs": [
+        { "name": "spreadsheet_id", "required": true, "type": "text" },
+        { "name": "worksheet_id", "required": true, "type": "text" },
+        { "name": "range", "required": false, "type": "text" }
+      ],
+      "outputs": [
+        { "name": "result", "type": "text" }
+      ],
+      "instructions": "",
+      "tools": [],
+      "executionType": "tool",
+      "toolExecutionConfig": {
+        "toolId": "google_sheets-get-values-in-range",
+        "inputMappings": [
+          { "toolParam": "sheetId", "skillInputName": "spreadsheet_id" },
+          { "toolParam": "worksheetId", "skillInputName": "worksheet_id" },
+          { "toolParam": "range", "skillInputName": "range" }
+        ]
+      }
+    }
+  }
+}

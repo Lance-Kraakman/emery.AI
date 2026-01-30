@@ -1,0 +1,34 @@
+{
+  "$format": "brain-template",
+  "$version": 1,
+  "metadata": {
+    "name": "Google Calendar Assistant",
+    "description": "Manage Google Calendar: create events, list upcoming events, update or delete events, and check availability with free/busy queries.",
+    "category": "Integrations",
+    "tags": ["google-calendar", "calendar", "events", "scheduling", "google"],
+    "version": "1.0.0",
+    "author": "BrainTable"
+  },
+  "template": {
+    "type": "skill",
+    "data": {
+      "name": "Google Calendar Assistant",
+      "description": "Manage Google Calendar: create events, list upcoming events, update or delete events, and check availability with free/busy queries.",
+      "inputs": [
+        { "name": "request", "required": true, "type": "text" }
+      ],
+      "outputs": [
+        { "name": "result", "type": "text" }
+      ],
+      "instructions": "You are a Google Calendar assistant. Given a request about calendar events or scheduling, use the available tools to fulfill it.\n\n1. **Creating an event**: Use google_calendar-create-event with summary (title), eventStartDate and eventEndDate (RFC3339 format like \"2025-01-15T10:00:00-05:00\" or all-day \"2025-01-15\"). Optionally include description, location, attendees (email array), and createMeetRoom=true for Google Meet.\n2. **Listing events**: Use google_calendar-list-events. Optionally filter with timeMin/timeMax (RFC3339), q (free text search), and maxResults. Set singleEvents=true and orderBy=\"startTime\" to get chronological results.\n3. **Updating an event**: Use google_calendar-update-event with eventId (required). Then set whichever fields need to change: summary, eventStartDate, eventEndDate, description, location, attendees.\n4. **Deleting an event**: Use google_calendar-delete-event with eventId.\n5. **Checking availability**: Use google_calendar-query-free-busy-calendars with calendarId, timeMin, and timeMax (all required, RFC3339 format) to see busy/free slots.\n\nWhen creating or updating events, use RFC3339 format for dates. Parse natural language dates carefully.\nReport event links and details in the result.\n\n**Output:** Set {result} to a summary of what was done:\n{result} = [your summary here]",
+      "tools": [
+        { "name": "google_calendar-create-event", "config": {} },
+        { "name": "google_calendar-list-events", "config": {} },
+        { "name": "google_calendar-update-event", "config": {} },
+        { "name": "google_calendar-delete-event", "config": {} },
+        { "name": "google_calendar-query-free-busy-calendars", "config": {} }
+      ],
+      "executionType": "agentic"
+    }
+  }
+}

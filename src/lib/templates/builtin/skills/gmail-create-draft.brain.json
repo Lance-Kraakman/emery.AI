@@ -1,0 +1,38 @@
+{
+  "$format": "brain-template",
+  "$version": 1,
+  "metadata": {
+    "name": "Gmail: Create Draft",
+    "description": "Create a draft email in Gmail without sending it.",
+    "category": "Integrations",
+    "tags": ["gmail", "email", "draft", "google"],
+    "version": "1.0.0",
+    "author": "BrainTable"
+  },
+  "template": {
+    "type": "skill",
+    "data": {
+      "name": "Gmail: Create Draft",
+      "description": "Create a draft email in Gmail without sending it.",
+      "inputs": [
+        { "name": "to", "required": true, "type": "text" },
+        { "name": "subject", "required": true, "type": "text" },
+        { "name": "body", "required": true, "type": "text" }
+      ],
+      "outputs": [
+        { "name": "result", "type": "text" }
+      ],
+      "instructions": "",
+      "tools": [],
+      "executionType": "tool",
+      "toolExecutionConfig": {
+        "toolId": "gmail-create-draft",
+        "inputMappings": [
+          { "toolParam": "to", "skillInputName": "to" },
+          { "toolParam": "subject", "skillInputName": "subject" },
+          { "toolParam": "body", "skillInputName": "body" }
+        ]
+      }
+    }
+  }
+}
