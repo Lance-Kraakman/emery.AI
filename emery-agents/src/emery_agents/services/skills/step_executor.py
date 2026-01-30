@@ -17,7 +17,6 @@ from tenacity import (
     RetryError
 )
 
-from ...grpc.generated import agent_worker_pb2
 from ...entities.skill_config import (
     SkillConfigDTO, SkillStepDTO,
     ErrorConfig, RetryConfig, StepOutput, LoopConfig,
@@ -138,45 +137,6 @@ class Step:
     is_disabled: bool = False
 
     @classmethod
-    def from_proto(cls, proto: 'agent_worker_pb2.SkillStep') -> 'Step':
-        """Convert proto SkillStep to internal Step.
-
-        Delegates sub-object parsing to entity-layer from_proto() methods.
-        """
-        error_config = ErrorConfig.from_proto(proto.error_config) if proto.error_config and proto.error_config.continue_on_error else None
-        retry_config = RetryConfig.from_proto(proto.retry_config) if proto.retry_config and proto.retry_config.max_attempts > 0 else None
-        loop_config = LoopConfig.from_proto(proto.loop_config) if proto.loop_config and proto.loop_config.type else None
-        read_config = ReadConfig.from_proto(proto.read_config) if proto.HasField('read_config') and proto.read_config.source_table_id else None
-        write_config = WriteConfig.from_proto(proto.write_config) if proto.HasField('write_config') and proto.write_config.target_table_id else None
-        tool_execution_config = ToolExecutionConfig.from_proto(proto.tool_execution_config) if proto.HasField('tool_execution_config') and proto.tool_execution_config.tool_id else None
-        task_model_config = TaskModelConfig.from_proto(proto.task_model_config) if proto.HasField('task_model_config') and proto.task_model_config.model_id else None
-        agentic_config = AgenticStepConfig.from_proto(proto.agentic_config) if proto.HasField('agentic_config') else None
-
-        return cls(
-            id=proto.id,
-            name=proto.name,
-            instruction=proto.instruction or "",
-            skill_id=proto.skill_id,
-            tools=list(proto.tools),
-            inputs=dict(proto.inputs),
-            outputs=dict(proto.outputs),
-            condition=proto.condition or "",
-            input_defs=[InputDef.from_proto(d) for d in proto.input_defs],
-            output_defs=[OutputDef.from_proto(d) for d in proto.output_defs],
-            error_config=error_config,
-            retry_config=retry_config,
-            step_outputs=[StepOutput.from_proto(o) for o in proto.step_outputs],
-            parallel_group=proto.parallel_group or "",
-            loop_config=loop_config,
-            read_config=read_config,
-            write_config=write_config,
-            tool_execution_config=tool_execution_config,
-            task_model_config=task_model_config,
-            agentic_config=agentic_config,
-            is_disabled=proto.is_disabled,
-        )
-
-    @classmethod
     def from_dto(cls, dto: 'SkillStepDTO') -> 'Step':
         """Convert SkillStepDTO to internal Step.
 
@@ -290,11 +250,7 @@ class StepExecutorService:
         """
         # Convert DTO steps to internal Step objects
         internal_steps = [Step.from_dto(s) for s in steps]
-        # AIDEV-NOTE: Changed from name-based to ID-based routing for stability.
-        # Names can be renamed by users; IDs are immutable UUIDs.
         step_by_id: Dict[str, Step] = {s.id: s for s in internal_steps}
-        # Keep name→id map for backward compatibility (old data may have names in next_steps)
-        name_to_id: Dict[str, str] = {s.name: s.id for s in internal_steps}
 
         # Initialize execution state (uses IDs for tracking)
         step_context: Dict[str, Any] = dict(initial_inputs)
@@ -331,7 +287,6 @@ class StepExecutorService:
                     internal_steps=internal_steps,
                     pending_steps=pending_steps,
                     executed_steps=executed_steps,
-                    name_to_id=name_to_id
                 ):
                     yield progress
                 step_counter += len(batch)
@@ -355,7 +310,7 @@ class StepExecutorService:
                     )
                     self._queue_next_steps(
                         step, internal_steps, pending_steps, executed_steps,
-                        "success", step_context, name_to_id
+                        "success", step_context
                     )
                     continue
 
@@ -382,7 +337,7 @@ class StepExecutorService:
                         )
                         self._queue_next_steps(
                             step, internal_steps, pending_steps, executed_steps,
-                            "success", step_context, name_to_id
+                            "success", step_context
                         )
                         continue
 
@@ -470,7 +425,7 @@ class StepExecutorService:
                 # Queue next steps based on outputs
                 self._queue_next_steps(
                     step, internal_steps, pending_steps, executed_steps,
-                    execution_status, step_context, name_to_id
+                    execution_status, step_context
                 )
 
         logger.info(f"🏁 DAG execution complete: {step_counter} steps executed")
@@ -531,7 +486,6 @@ class StepExecutorService:
         internal_steps: List[Step],
         pending_steps: List[str],  # List of step IDs
         executed_steps: Set[str],  # Set of step IDs
-        name_to_id: Optional[Dict[str, str]] = None  # For backward compatibility
     ) -> AsyncIterator[StepProgress]:
         """Execute a batch of steps in parallel using asyncio.gather."""
         # Mark all as executed (by ID)
@@ -554,7 +508,7 @@ class StepExecutorService:
                 )
                 self._queue_next_steps(
                     step, internal_steps, pending_steps, executed_steps,
-                    "success", step_context, name_to_id
+                    "success", step_context
                 )
                 skipped_count += 1
             else:
@@ -635,7 +589,7 @@ class StepExecutorService:
 
                 self._queue_next_steps(
                     step, internal_steps, pending_steps, executed_steps,
-                    "success", step_context, name_to_id
+                    "success", step_context
                 )
             else:
                 # Error
@@ -670,7 +624,7 @@ class StepExecutorService:
                     )
                     self._queue_next_steps(
                         step, internal_steps, pending_steps, executed_steps,
-                        "error", step_context, name_to_id
+                        "error", step_context
                     )
                 else:
                     yield StepProgress(
@@ -692,21 +646,13 @@ class StepExecutorService:
         executed_steps: Set[str],  # Set of step IDs
         execution_status: Literal["success", "error"],
         context: Dict[str, Any],
-        name_to_id: Optional[Dict[str, str]] = None  # For backward compatibility
     ) -> None:
-        """Determine and queue next steps based on outputs or sequential order.
-
-        AIDEV-NOTE: Changed from name-based to ID-based routing.
-        next_steps from step_outputs now contain IDs, not names.
-        name_to_id map is used for backward compatibility with old data.
-        """
-        # next_step_ids could be IDs (new format) or names (old format)
-        next_step_ids_or_names: List[str] = []
+        """Determine and queue next steps based on outputs or sequential order."""
+        next_step_ids: List[str] = []
         id_set = {s.id for s in all_steps}
 
         if current_step.step_outputs:
-            # Use output-based routing
-            next_step_ids_or_names = self._get_next_steps_from_outputs(
+            next_step_ids = self._get_next_steps_from_outputs(
                 current_step, execution_status, context
             )
         else:
@@ -716,23 +662,15 @@ class StepExecutorService:
                     i for i, s in enumerate(all_steps) if s.id == current_step.id
                 )
                 if current_idx + 1 < len(all_steps):
-                    next_step_ids_or_names = [all_steps[current_idx + 1].id]
+                    next_step_ids = [all_steps[current_idx + 1].id]
             except StopIteration:
-                # Current step ID not found in all_steps - may indicate plan/step mismatch
                 logger.debug(
                     f"Step {current_step.id} not found in all_steps "
                     f"(available: {[s.id for s in all_steps]})"
                 )
 
-        # Add to pending (avoid duplicates and already executed)
-        # Handle both new format (IDs) and old format (names) for backward compatibility
-        for id_or_name in next_step_ids_or_names:
-            # Convert name to ID if needed (backward compatibility)
-            step_id = id_or_name if id_or_name in id_set else (
-                name_to_id.get(id_or_name) if name_to_id else None
-            )
-
-            if step_id and step_id not in executed_steps and step_id not in pending_steps:
+        for step_id in next_step_ids:
+            if step_id in id_set and step_id not in executed_steps and step_id not in pending_steps:
                 pending_steps.append(step_id)
                 logger.debug(f"📍 Queued next step: {step_id}")
 
