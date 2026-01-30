@@ -29,11 +29,7 @@ import type { FieldDTO } from '@/app/mappers/field-mapper';
 import { getTables } from '@/app/actions/tables';
 import { getFields } from '@/app/actions/fields';
 import { getRowsDSG } from '@/app/actions/rows';
-import {
-  getOutputFieldsForTask,
-  taskSupportsFieldMapping,
-  type OutputFieldDef
-} from '@/lib/constants/task-output-schemas';
+import type { OutputFieldDef } from '@/lib/constants/task-output-schemas';
 
 /**
  * Map skill output type to OutputFieldDef type for output mapping.
@@ -662,10 +658,8 @@ function SortableTableMappingCard({ id, ...props }: SortableTableMappingCardProp
 interface OutputMappingSectionProps {
   outputs: OutputDefinition[];
   onOutputsChange: (outputs: OutputDefinition[]) => void;
-  taskType?: string;
   skillOutputs?: OutputDefinition[];
   skillInputs?: InputDefinition[];
-  executionType?: 'agent' | 'operation';
   isReadOnly?: boolean;
 }
 
@@ -680,10 +674,8 @@ interface OutputMappingSectionProps {
 export function OutputMappingSection({
   outputs,
   onOutputsChange,
-  taskType,
   skillOutputs,
   skillInputs = [],
-  executionType = 'operation',
   isReadOnly
 }: OutputMappingSectionProps) {
   const [tables, setTables] = useState<TableDTO[]>([]);
@@ -694,28 +686,20 @@ export function OutputMappingSection({
   const output = outputs[0];
   const outputMapping = output?.outputMapping;
 
-  // Get available source fields based on execution type
+  // Get available source fields from skill output definitions
   const sourceFields = useMemo((): OutputFieldDef[] => {
-    if (executionType === 'operation' && taskType) {
-      return getOutputFieldsForTask(taskType);
-    } else if (executionType === 'agent' && skillOutputs && skillOutputs.length > 0) {
-      return skillOutputs.map((skillOutput) => ({
-        field: skillOutput.name,
-        type: mapSkillOutputTypeToFieldType(skillOutput.type),
-        description: `Agent output: ${skillOutput.name}`
-      }));
-    }
-    return [];
-  }, [executionType, taskType, skillOutputs]);
+    if (!skillOutputs || skillOutputs.length === 0) return [];
+    return skillOutputs.map((skillOutput) => ({
+      field: skillOutput.name,
+      type: mapSkillOutputTypeToFieldType(skillOutput.type),
+      description: `Skill output: ${skillOutput.name}`
+    }));
+  }, [skillOutputs]);
 
-  // Check if mapping is supported
+  // Check if mapping is supported (requires skill outputs)
   const supportsMapping = useMemo(() => {
-    if (executionType === 'operation') {
-      return taskType ? taskSupportsFieldMapping(taskType) : false;
-    } else {
-      return skillOutputs && skillOutputs.length > 0;
-    }
-  }, [executionType, taskType, skillOutputs]);
+    return skillOutputs && skillOutputs.length > 0;
+  }, [skillOutputs]);
 
   // DnD sensors for table mapping reordering
   const sensors = useSensors(
@@ -823,8 +807,8 @@ export function OutputMappingSection({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(outputMapping?.tableMappings?.map(tm => ({ id: tm.targetTableId, mappings: tm.mappings.map(m => m.targetFieldId) })))]);
 
-  // Show info message if no outputs defined (agent mode only)
-  if (executionType === 'agent' && (!skillOutputs || skillOutputs.length === 0)) {
+  // Show info message if no outputs defined
+  if (!skillOutputs || skillOutputs.length === 0) {
     return (
       <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
         <Database className="h-3.5 w-3.5" />

@@ -129,7 +129,6 @@ export function RootSkillConfig({
         <OutputMappingSection
           outputs={value.outputs}
           onOutputsChange={(outputs) => handleChange({ outputs })}
-          executionType="agent"
           skillOutputs={value.outputs}
           skillInputs={value.inputs}
           isReadOnly={isReadOnly}

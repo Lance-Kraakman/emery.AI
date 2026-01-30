@@ -543,6 +543,11 @@ class SkillExecutorService:
     ) -> SkillExecutionResult:
         """Execute skill via step-based DAG workflow.
 
+        Three-phase execution:
+        1. Pre-DAG: fetch input mapping data (same as agentic wrapper DAG)
+        2. DAG: execute canvas steps with enriched inputs
+        3. Post-DAG: write output mapping data (same as agentic wrapper DAG)
+
         Args:
             skill_config: Skill configuration with steps[]
             runtime_inputs: Runtime inputs from caller
@@ -567,14 +572,35 @@ class SkillExecutorService:
             )
         )
 
-        available_skills: Dict[int, Any] = {}
+        enriched_inputs = dict(runtime_inputs)
 
-        # Execute steps synchronously (DTO steps passed directly)
+        # Phase 1: Pre-DAG — fetch input mapping data
+        read_step = self._build_read_step_from_inputs(skill_config)
+        if read_step:
+            logger.info(f"📖 Pre-DAG: reading input mappings for {skill_config.name}")
+            read_result = execute_steps_sync(
+                step_executor=step_executor,
+                steps=[read_step],
+                available_skills={},
+                initial_inputs=enriched_inputs,
+                org_model=org_model,
+                api_key=api_key,
+                organization_id=organization_id
+            )
+            # Merge read outputs into inputs for the DAG
+            if read_result.captured_outputs:
+                for node_outputs in read_result.captured_outputs.values():
+                    if isinstance(node_outputs, dict):
+                        enriched_inputs.update(node_outputs)
+                logger.info(f"📖 Pre-DAG: merged read outputs into inputs")
+
+        # Phase 2: Execute canvas DAG
+        available_skills: Dict[int, Any] = {}
         result = execute_steps_sync(
             step_executor=step_executor,
             steps=list(skill_config.steps),
             available_skills=available_skills,
-            initial_inputs=runtime_inputs,
+            initial_inputs=enriched_inputs,
             org_model=org_model,
             api_key=api_key,
             organization_id=organization_id
@@ -583,12 +609,29 @@ class SkillExecutorService:
         logger.info(f"✅ Step-based execution complete: {skill_config.name}")
 
         # Map node outputs to skill outputs via source config
+        skill_outputs = None
         if skill_config.outputs and result.captured_outputs:
             skill_outputs = map_node_outputs_to_skill_outputs(
                 all_node_outputs=result.captured_outputs,
                 skill_outputs=list(skill_config.outputs)
             )
             logger.info(f"📤 Mapped node outputs to skill outputs: {list(skill_outputs.keys())}")
+
+        # Phase 3: Post-DAG — write output mapping data
+        write_step = self._build_write_step_from_outputs(skill_config)
+        if write_step and skill_outputs:
+            logger.info(f"📝 Post-DAG: writing output mappings for {skill_config.name}")
+            execute_steps_sync(
+                step_executor=step_executor,
+                steps=[write_step],
+                available_skills={},
+                initial_inputs=skill_outputs,
+                org_model=org_model,
+                api_key=api_key,
+                organization_id=organization_id
+            )
+
+        if skill_outputs:
             return SkillExecutionResult(
                 result=result.result,
                 captured_outputs=skill_outputs

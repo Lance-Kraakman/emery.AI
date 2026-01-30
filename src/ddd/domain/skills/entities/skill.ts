@@ -605,21 +605,6 @@ export class SkillEntity {
       throw new Error('Steps are required for agent (step-based) execution');
     }
 
-    // Task model config is required for operation execution
-    if (executionType === 'operation' && !props.taskModelConfig) {
-      throw new Error('Task model configuration is required for operation execution');
-    }
-
-    // Tool execution config is required for tool execution
-    if (executionType === 'tool' && !props.toolExecutionConfig) {
-      throw new Error('Tool execution configuration is required for tool execution');
-    }
-
-    // Write config is required for write execution
-    if (executionType === 'write' && !props.writeConfig) {
-      throw new Error('Write configuration is required for write execution');
-    }
-
     // Validate input names
     const inputs = props.inputs || [];
     for (const input of inputs) {
@@ -745,13 +730,6 @@ export class SkillEntity {
    */
   static isAgentScoped(skill: Skill): boolean {
     return skill.agentId !== null;
-  }
-
-  /**
-   * Check if skill uses operation execution (bypasses LLM orchestration)
-   */
-  static isOperation(skill: Skill): boolean {
-    return skill.executionType === 'operation';
   }
 
   /**

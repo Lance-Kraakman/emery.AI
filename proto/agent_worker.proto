@@ -146,11 +146,11 @@ message SkillConfig {
   string model = 8;                    // Optional: model override for this skill
   repeated MessagePart content = 9;    // Skill-level attachments (images, files, text)
   string agent_type = 10;              // Optional: "tool_calling" (default) or "code_agent"
-  string execution_type = 11;          // 'agentic', 'agent' (step-based DAG), 'operation', 'tool', 'write', or 'read'
-  TaskModelConfig task_model_config = 12; // Config for operation execution (when execution_type='operation')
-  ToolExecutionConfig tool_execution_config = 13; // Config for tool execution (when execution_type='tool')
-  WriteConfig write_config = 14;       // Config for write execution (when execution_type='write')
-  ReadConfig read_config = 15;         // Config for read execution (when execution_type='read')
+  string execution_type = 11;          // 'agentic' or 'agent' (step-based DAG workflow)
+  TaskModelConfig task_model_config = 12; // DEPRECATED: was for operation execution
+  ToolExecutionConfig tool_execution_config = 13; // DEPRECATED: was for tool execution
+  WriteConfig write_config = 14;       // DEPRECATED at skill-level; still used in SkillStep
+  ReadConfig read_config = 15;         // DEPRECATED at skill-level; still used in SkillStep
   repeated SkillStep steps = 20;       // Steps for step-based execution (when execution_type='agent')
 }
 
@@ -327,8 +327,8 @@ message TaskModelConfig {
   map<string, string> parameters = 3;  // Model-specific parameters (steps, guidance_scale, etc.)
 }
 
-// Configuration for direct tool execution (when execution_type='tool')
-// Calls a Pipedream tool directly without LLM orchestration
+// DEPRECATED at skill-level. Was for direct tool execution (execution_type='tool').
+// Still used within SkillStep for tool nodes in workflow skills.
 message ToolExecutionConfig {
   string tool_id = 1;                  // Pipedream tool ID (e.g., 'gmail-send-email', 'slack-send-message')
   repeated ToolInputMapping input_mappings = 2; // Map skill inputs to tool parameters
@@ -342,8 +342,7 @@ message ToolInputMapping {
   string static_value = 3;             // Static value (used if skill_input_name not set)
 }
 
-// Configuration for direct table write (when execution_type='write')
-// Writes data directly to a table without LLM orchestration
+// Table write configuration. DEPRECATED at skill-level; used within SkillStep for write nodes.
 message WriteConfig {
   int32 target_table_id = 1;           // Table to write to
   string row_action = 2;               // 'create' or 'update'
@@ -363,8 +362,7 @@ message UpdateMatchConfig {
   int32 target_field_id = 2;           // Field to match against
 }
 
-// Configuration for direct table read (when execution_type='read')
-// Reads data from a table without LLM orchestration
+// Table read configuration. DEPRECATED at skill-level; used within SkillStep for read nodes.
 message ReadConfig {
   string mode = 1;                     // 'single_row' or 'query'
   int32 source_table_id = 2;           // Table to read from
