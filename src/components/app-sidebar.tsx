@@ -489,6 +489,8 @@ export function AppSidebar({
           </SidebarMenu>
         </SidebarGroup>
 
+        <hr className="mx-3 border-sidebar-border" />
+
         {/* Apps */}
         <NestedSidebarSection<AppData, PageData>
           icon={FileText}
@@ -650,6 +652,8 @@ export function AppSidebar({
           onDeleteChild={handleDeleteTable}
         />
 
+        <hr className="mx-3 border-sidebar-border" />
+
         {/* Settings */}
         <Collapsible defaultOpen={pathname?.startsWith("/connections") || pathname?.startsWith("/organization/settings") || pathname?.startsWith("/settings") || pathname?.startsWith("/templates")}>
           <SidebarGroup>
@@ -663,7 +667,7 @@ export function AppSidebar({
               <SidebarGroupContent>
                 <SidebarMenu className="gap-0.5">
                   <SidebarMenuItem>
-                    <SidebarMenuButton asChild isActive={pathname === "/templates"} className="h-6">
+                    <SidebarMenuButton asChild isActive={pathname === "/templates"} size="sm">
                       <Link href="/templates">
                         <LayoutTemplate className="h-4 w-4" />
                         <span className="group-data-[collapsible=icon]:hidden">Templates</span>
@@ -671,7 +675,7 @@ export function AppSidebar({
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>
-                    <SidebarMenuButton asChild isActive={pathname === "/connections"} className="h-6">
+                    <SidebarMenuButton asChild isActive={pathname === "/connections"} size="sm">
                       <Link href="/connections">
                         <Plug className="h-4 w-4" />
                         <span className="group-data-[collapsible=icon]:hidden">Connections</span>
@@ -682,7 +686,7 @@ export function AppSidebar({
                     <SidebarMenuButton
                       asChild
                       isActive={pathname === "/organization/settings/permissions"}
-                      className="h-6"
+                      size="sm"
                     >
                       <Link href="/organization/settings/permissions">
                         <Users className="h-4 w-4" />
@@ -694,7 +698,7 @@ export function AppSidebar({
                     <SidebarMenuButton
                       asChild
                       isActive={pathname === "/organization/settings/audit-log"}
-                      className="h-6"
+                      size="sm"
                     >
                       <Link href="/organization/settings/audit-log">
                         <ScrollText className="h-4 w-4" />
@@ -706,7 +710,7 @@ export function AppSidebar({
                     <SidebarMenuButton
                       asChild
                       isActive={pathname === "/organization/settings/published-agents"}
-                      className="h-6"
+                      size="sm"
                     >
                       <Link href="/organization/settings/published-agents">
                         <Globe className="h-4 w-4" />
@@ -715,7 +719,7 @@ export function AppSidebar({
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>
-                    <SidebarMenuButton asChild isActive={pathname === "/settings/billing"} className="h-6">
+                    <SidebarMenuButton asChild isActive={pathname === "/settings/billing"} size="sm">
                       <Link href="/settings/billing">
                         <CreditCard className="h-4 w-4" />
                         <span className="group-data-[collapsible=icon]:hidden">Billing</span>
@@ -723,7 +727,7 @@ export function AppSidebar({
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>
-                    <SidebarMenuButton asChild isActive={pathname === "/settings/system"} className="h-6">
+                    <SidebarMenuButton asChild isActive={pathname === "/settings/system"} size="sm">
                       <Link href="/settings/system">
                         <SlidersHorizontal className="h-4 w-4" />
                         <span className="group-data-[collapsible=icon]:hidden">System</span>
@@ -790,7 +794,7 @@ export function AppSidebar({
               <Button
                 variant="ghost"
                 size="sm"
-                className="w-full justify-start gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                className="w-full justify-start gap-2 text-destructive hover:text-destructive/80 hover:bg-destructive/10"
                 onClick={() => signOut({ callbackUrl: "/auth/signin" })}
               >
                 <LogOut className="h-4 w-4" />

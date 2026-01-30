@@ -213,7 +213,7 @@ export function RolesTab() {
               variant="outline"
               size="sm"
               onClick={() => handleDeleteRole(role)}
-              className="text-red-600 hover:text-red-700"
+              className="text-destructive hover:text-destructive/80"
             >
               <Trash2 className="w-4 h-4" />
             </Button>
@@ -337,7 +337,7 @@ export function RolesTab() {
             <AlertDialogAction
               onClick={confirmDeleteRole}
               disabled={deleteLoading || (deletingRole?.userCount !== undefined && deletingRole.userCount > 0)}
-              className="bg-red-600 hover:bg-red-700"
+              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
             >
               {deleteLoading ? (
                 <Loader2 className="w-4 h-4 animate-spin mr-2" />

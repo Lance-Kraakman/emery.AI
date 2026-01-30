@@ -50,28 +50,28 @@ import {
 import { cn } from '@/lib/utils';
 
 const gradeColors: Record<string, string> = {
-  A: 'bg-green-500 text-white',
-  B: 'bg-green-400 text-white',
-  C: 'bg-yellow-500 text-black',
-  D: 'bg-orange-500 text-white',
-  F: 'bg-red-500 text-white',
+  A: 'bg-success text-success-foreground',
+  B: 'bg-success/80 text-success-foreground',
+  C: 'bg-warning text-warning-foreground',
+  D: 'bg-warning/80 text-warning-foreground',
+  F: 'bg-destructive text-destructive-foreground',
 };
 
 const riskLevelOrder: RiskLevel[] = ['critical', 'high', 'medium', 'low', 'info'];
 
 const riskBadgeStyles: Record<RiskLevel, string> = {
-  critical: 'bg-red-600 text-white hover:bg-red-700',
-  high: 'bg-orange-500 text-white hover:bg-orange-600',
-  medium: 'bg-yellow-500 text-black hover:bg-yellow-600',
-  low: 'bg-blue-500 text-white hover:bg-blue-600',
-  info: 'bg-slate-400 text-white hover:bg-slate-500',
+  critical: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
+  high: 'bg-warning text-warning-foreground hover:bg-warning/90',
+  medium: 'bg-warning/80 text-warning-foreground hover:bg-warning/70',
+  low: 'bg-primary text-primary-foreground hover:bg-primary/90',
+  info: 'bg-muted text-muted-foreground hover:bg-muted/80',
 };
 
 const statusBadgeStyles: Record<FindingStatus, string> = {
-  open: 'bg-red-100 text-red-700 border-red-200',
-  acknowledged: 'bg-amber-100 text-amber-700 border-amber-200',
-  mitigated: 'bg-green-100 text-green-700 border-green-200',
-  false_positive: 'bg-slate-100 text-slate-600 border-slate-200',
+  open: 'bg-destructive/10 text-destructive border-destructive/20',
+  acknowledged: 'bg-warning/10 text-warning border-warning/20',
+  mitigated: 'bg-success/10 text-success border-success/20',
+  false_positive: 'bg-muted text-muted-foreground border-border',
 };
 
 const statusLabels: Record<FindingStatus, string> = {

@@ -15,26 +15,6 @@
   ::file-selector-button {
     border-color: var(--color-gray-200, currentColor);
   }
-  :root {
-    --sidebar-background: 0 0% 0% / 0;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
-  }
-  .dark {
-    --sidebar-background: 0 0% 0% / 0;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
-  }
 }
 
 @layer base {
@@ -55,6 +35,10 @@
     --accent-foreground: 210 20% 15%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
+    --success: 160 60% 40%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
     --border: 210 20% 85%;
     --input: 210 20% 85%;
     --ring: 170 40% 40%;
@@ -97,6 +81,10 @@
     --accent-foreground: 210 20% 10%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
+    --success: 160 60% 55%;
+    --success-foreground: 160 60% 10%;
+    --warning: 38 80% 55%;
+    --warning-foreground: 38 80% 10%;
     --border: 210 20% 25%;
     --input: 210 20% 25%;
     --ring: 170 50% 70%;
@@ -542,57 +530,6 @@
   background-color: hsl(var(--primary));
   color: hsl(var(--primary-foreground));
   border-color: hsl(var(--primary));
-}
-
-/* Global Component Border Radius Overrides */
-.card,
-[data-ui="card"],
-.bg-card,
-.border {
-  border-radius: var(--radius-md) !important;
-}
-
-button,
-.btn,
-[role="button"],
-[data-ui="button"] {
-  border-radius: var(--radius-sm) !important;
-}
-
-input,
-textarea,
-select,
-.input,
-[data-ui="input"] {
-  border-radius: var(--radius-sm) !important;
-}
-
-[role="menu"],
-[role="listbox"],
-[data-ui="dropdown"],
-[data-ui="popover"],
-.dropdown-content,
-.popover-content {
-  border-radius: var(--radius-md) !important;
-}
-
-[role="dialog"],
-.modal,
-.dialog,
-[data-ui="dialog"] {
-  border-radius: var(--radius-lg) !important;
-}
-
-/* Radix UI components */
-[data-radix-popper-content-wrapper],
-[data-radix-dropdown-menu-content],
-[data-radix-popover-content],
-[data-radix-select-content] {
-  border-radius: var(--radius-md) !important;
-}
-
-[data-radix-dialog-content] {
-  border-radius: var(--radius-lg) !important;
 }
 
 /* Compact markdown styling for chat messages - overrides prose and custom-markdown defaults */

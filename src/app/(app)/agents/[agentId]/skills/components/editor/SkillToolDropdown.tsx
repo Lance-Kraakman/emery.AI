@@ -138,7 +138,7 @@ export function SkillToolDropdown({ onSelectTool, disabled }: SkillToolDropdownP
         {hasActiveFilters && (
           <button
             onClick={clearAllFilters}
-            className="text-[10px] text-red-500 hover:text-red-400"
+            className="text-[10px] text-destructive hover:text-destructive/80"
           >
             Clear all
           </button>

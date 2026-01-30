@@ -293,7 +293,7 @@ export function PlanBuilderSection({
 
       {displayPlan.steps && displayPlan.steps.length > 0 && (
         <Collapsible defaultOpen>
-          <CollapsibleTrigger className="text-xs text-blue-600 hover:text-blue-800 flex items-center">
+          <CollapsibleTrigger className="text-xs text-primary hover:text-primary/80 flex items-center">
             Steps <ChevronDown className="h-3 w-3 ml-1" />
           </CollapsibleTrigger>
           <CollapsibleContent>

@@ -318,7 +318,7 @@ export function CommandPalette({
           onChange={(e) => setSearch(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Search commands..."
-          className="w-full px-2 py-1.5 text-sm bg-transparent border rounded outline-none focus:ring-1 focus:ring-primary"
+          className="w-full px-2 py-1.5 text-sm bg-transparent border rounded outline-none focus-visible:ring-1 focus-visible:ring-ring"
         />
       </div>
 

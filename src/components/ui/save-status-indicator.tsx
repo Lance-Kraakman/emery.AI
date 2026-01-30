@@ -27,20 +27,20 @@ export function SaveStatusIndicator({ status, className }: SaveStatusIndicatorPr
       )}
       {status === 'saved' && (
         <>
-          <Check className="h-3 w-3 text-emerald-500" />
+          <Check className="h-3 w-3 text-success" />
           <span className="text-muted-foreground">Saved</span>
         </>
       )}
       {status === 'unsaved' && (
         <>
-          <Circle className="h-2 w-2 fill-amber-500 text-amber-500" />
+          <Circle className="h-2 w-2 fill-warning text-warning" />
           <span className="text-muted-foreground">Unsaved</span>
         </>
       )}
       {status === 'error' && (
         <>
-          <Circle className="h-2 w-2 fill-red-500 text-red-500" />
-          <span className="text-red-500">Save failed</span>
+          <Circle className="h-2 w-2 fill-destructive text-destructive" />
+          <span className="text-destructive">Save failed</span>
         </>
       )}
     </div>

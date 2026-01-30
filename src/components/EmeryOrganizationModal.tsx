@@ -214,7 +214,7 @@ export function EmeryOrganizationModal({ isCollapsed }: { isCollapsed?: boolean 
                   required
                   value={orgName}
                   onChange={(e) => setOrgName(e.target.value)}
-                  className="w-full p-2 border border-input bg-background rounded-md focus:ring-2 focus:ring-ring focus:border-ring"
+                  className="w-full p-2 border border-input bg-background rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-ring"
                   placeholder="e.g., Acme Corporation"
                 />
               </div>
@@ -230,7 +230,7 @@ export function EmeryOrganizationModal({ isCollapsed }: { isCollapsed?: boolean 
                   required
                   value={orgSlug}
                   onChange={(e) => handleSlugChange(e.target.value)}
-                  className="w-full p-2 border border-input bg-background rounded-md focus:ring-2 focus:ring-ring focus:border-ring font-mono text-sm"
+                  className="w-full p-2 border border-input bg-background rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-ring font-mono text-sm"
                   placeholder="e.g., acme-corp"
                 />
                 <p className="text-xs text-muted-foreground mt-1">
@@ -249,7 +249,7 @@ export function EmeryOrganizationModal({ isCollapsed }: { isCollapsed?: boolean 
                   id="organizationMission"
                   name="organizationMission"
                   rows={3}
-                  className="w-full p-2 border border-input bg-background rounded-md focus:ring-2 focus:ring-ring focus:border-ring"
+                  className="w-full p-2 border border-input bg-background rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-ring"
                   placeholder="Organization mission or description"
                 />
               </div>
