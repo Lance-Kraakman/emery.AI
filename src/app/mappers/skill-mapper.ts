@@ -63,7 +63,7 @@ export interface FieldMapping {
 export interface TableMapping {
   order: number;                               // Execution order (1, 2, 3...)
   targetTableId: number;                       // Which table to write to
-  rowAction: 'create' | 'update';              // Create or update row
+  rowAction: 'create' | 'update' | 'upsert';   // Create, update, or upsert row
   rowIdSource?: RowIdSource;                   // For update mode - typed source for row ID
   mappings: FieldMapping[];                    // Field mappings for this table
   displayFieldId?: number;                     // Field to use for relation display value

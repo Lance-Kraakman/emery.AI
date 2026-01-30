@@ -267,9 +267,9 @@ export interface UpdateMatchConfig {
  */
 export interface WriteConfig {
   targetTableId: number;
-  rowAction: 'create' | 'update';
+  rowAction: 'create' | 'update' | 'upsert';
   fieldMappings: WriteFieldMapping[];
-  updateMatch?: UpdateMatchConfig;   // For update: which field to match
+  updateMatch?: UpdateMatchConfig;   // For update/upsert: which field to match
 }
 
 // =============================================================================
@@ -420,8 +420,8 @@ export interface FieldMapping {
 export interface TableMapping {
   order: number;                        // Execution order (1, 2, 3...)
   targetTableId: number;                // Which table to write to
-  rowAction: 'create' | 'update';       // Create or update row
-  rowIdSource?: RowIdSource;            // For update mode - typed source for row ID
+  rowAction: 'create' | 'update' | 'upsert';  // Create, update, or upsert row
+  rowIdSource?: RowIdSource;            // For update/upsert mode - typed source for row ID
   mappings: FieldMapping[];             // Field mappings for this table
   displayFieldId?: number;              // Field to use for relation display value
   mode?: 'single_row' | 'multi_row';    // Per-table mode (overrides config default)

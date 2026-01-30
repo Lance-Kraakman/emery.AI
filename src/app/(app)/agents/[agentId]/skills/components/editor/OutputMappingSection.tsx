@@ -499,7 +499,7 @@ function TableMappingCard({
 
             <Select
               value={tableMapping.rowAction}
-              onValueChange={(value) => onUpdate({ ...tableMapping, rowAction: value as 'create' | 'update' })}
+              onValueChange={(value) => onUpdate({ ...tableMapping, rowAction: value as 'create' | 'update' | 'upsert' })}
               disabled={isReadOnly}
             >
               <SelectTrigger className="h-7 w-[90px] text-[11px]">
@@ -508,6 +508,7 @@ function TableMappingCard({
               <SelectContent>
                 <SelectItem value="create">Create</SelectItem>
                 <SelectItem value="update">Update</SelectItem>
+                <SelectItem value="upsert">Upsert</SelectItem>
               </SelectContent>
             </Select>
 
@@ -527,8 +528,8 @@ function TableMappingCard({
             </Select>
           </div>
 
-          {/* Row ID source selector for update mode */}
-          {tableMapping.rowAction === 'update' && (
+          {/* Row ID source selector for update/upsert mode */}
+          {(tableMapping.rowAction === 'update' || tableMapping.rowAction === 'upsert') && (
             <div className="flex items-center gap-2">
               <Label className="text-[10px] text-muted-foreground">Row ID from:</Label>
               <Select

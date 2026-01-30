@@ -1222,7 +1222,6 @@ class StepExecutorService:
                 if not write_config.update_match:
                     raise ValueError("Write step update mode requires update_match")
                 match_input = write_config.update_match.skill_input_name
-                match_field_id = str(write_config.update_match.target_field_id)
                 if match_input not in step_inputs:
                     raise ValueError(f"Update match input '{match_input}' not in step inputs")
                 match_value = step_inputs[match_input]
@@ -1231,11 +1230,48 @@ class StepExecutorService:
                     headers=headers,
                     json={
                         "tableId": table_id,
-                        "matchField": match_field_id,
-                        "matchValue": match_value,
+                        "rowId": match_value,
                         "data": field_values
                     }
                 )
+            elif row_action == "upsert":
+                if not write_config.update_match:
+                    # No match config — just create
+                    response = await client.post(
+                        f"{base_url}/rows",
+                        headers=headers,
+                        json={"tableId": table_id, "data": field_values}
+                    )
+                else:
+                    match_input = write_config.update_match.skill_input_name
+                    match_value = step_inputs.get(match_input)
+                    if match_value:
+                        # Has row ID — try update first
+                        response = await client.put(
+                            f"{base_url}/rows",
+                            headers=headers,
+                            json={
+                                "tableId": table_id,
+                                "rowId": match_value,
+                                "data": field_values
+                            }
+                        )
+                        # If update failed (row not found), fall back to create
+                        if response.status_code >= 400:
+                            logger.info(f"📝 Upsert: update failed for row {match_value}, creating new row")
+                            response = await client.post(
+                                f"{base_url}/rows",
+                                headers=headers,
+                                json={"tableId": table_id, "data": field_values}
+                            )
+                    else:
+                        # No row ID — create new row
+                        logger.info(f"📝 Upsert: no row ID provided, creating new row")
+                        response = await client.post(
+                            f"{base_url}/rows",
+                            headers=headers,
+                            json={"tableId": table_id, "data": field_values}
+                        )
             else:
                 raise ValueError(f"Unknown row_action: {row_action}")
 

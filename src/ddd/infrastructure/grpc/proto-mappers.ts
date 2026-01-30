@@ -385,7 +385,7 @@ type RowIdSourceDTO =
 interface TableMappingDTO {
   order: number;
   targetTableId: number;
-  rowAction: 'create' | 'update';
+  rowAction: 'create' | 'update' | 'upsert';
   rowIdSource?: RowIdSourceDTO;
   mappings: Array<{
     source: FieldSourceDTO;
