@@ -86,6 +86,31 @@
   width: 100% !important;
 }
 
+/* Extend column separator lines to the bottom of the grid area.
+   The last row's final cell in each column gets an ::after pseudo-element
+   that draws a continuous border-right line down to fill the empty space. */
+.dsg-row:last-child .dsg-cell {
+  position: relative;
+}
+
+.dsg-row:last-child .dsg-cell::after {
+  content: '';
+  position: absolute;
+  right: -1px;
+  top: 100%;
+  width: 1px;
+  height: 200vh;
+  background-color: hsl(var(--border));
+  pointer-events: none;
+}
+
+/* Gutter column has a 2px border, so its extension should match */
+.dsg-row:last-child .dsg-cell-gutter::after,
+.dsg-row:last-child .dsg-gutter::after {
+  width: 2px;
+  right: -2px;
+}
+
 /* DSG Cell styling - optimized for performance */
 .dsg-cell {
   border-right: 1px solid hsl(var(--border));
