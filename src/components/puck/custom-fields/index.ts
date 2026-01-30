@@ -66,3 +66,6 @@ export {
   createRoleSelectorField,
   type RoleSelectorFieldValue,
 } from "./role-selector-field";
+
+// Form Configuration (for configuring form fields, pages, ordering in sidebar)
+export { createFormConfigField } from "./form-config-field";

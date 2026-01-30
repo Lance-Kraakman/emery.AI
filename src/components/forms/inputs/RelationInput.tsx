@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
+import type { InputThemeClasses } from '../input-mapper';
 
 interface RelationInputProps {
   field: FieldDTO;
@@ -28,6 +29,7 @@ interface RelationInputProps {
   label?: string;
   required?: boolean;
   disabled?: boolean;
+  themeClasses?: InputThemeClasses;
 }
 
 export function RelationInput({
@@ -37,6 +39,7 @@ export function RelationInput({
   label,
   required,
   disabled,
+  themeClasses,
 }: RelationInputProps) {
   const inputLabel = label || field.name;
   const isRequired = required ?? field.required ?? false;
@@ -79,10 +82,10 @@ export function RelationInput({
   }
 
   return (
-    <div className="space-y-2">
-      <Label htmlFor={`field-${field.id}`}>
+    <div className={themeClasses?.fieldGroup || "space-y-2"}>
+      <Label htmlFor={`field-${field.id}`} className={themeClasses?.label || undefined}>
         {inputLabel}
-        {isRequired && <span className="text-destructive ml-1">*</span>}
+        {isRequired && <span className={themeClasses?.error || "text-destructive ml-1"}>*</span>}
       </Label>
 
       <div className="space-y-2">
@@ -92,6 +95,7 @@ export function RelationInput({
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           disabled={disabled}
+          className={themeClasses?.input || undefined}
         />
 
         <Select
@@ -99,7 +103,7 @@ export function RelationInput({
           onValueChange={(val) => onChange(val ? parseInt(val) : null)}
           disabled={disabled || loading}
         >
-          <SelectTrigger id={`field-${field.id}`}>
+          <SelectTrigger id={`field-${field.id}`} className={themeClasses?.select || undefined}>
             <SelectValue placeholder={`Select ${inputLabel.toLowerCase()}`} />
           </SelectTrigger>
           <SelectContent>

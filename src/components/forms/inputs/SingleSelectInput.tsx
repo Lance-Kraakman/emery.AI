@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/select';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
 import type { SelectOption } from '@/ddd/domain/tables/value-objects/table-field';
+import type { InputThemeClasses } from '../input-mapper';
 
 interface SingleSelectInputProps {
   field: FieldDTO;
@@ -30,6 +31,7 @@ interface SingleSelectInputProps {
   placeholder?: string;
   required?: boolean;
   disabled?: boolean;
+  themeClasses?: InputThemeClasses;
 }
 
 export function SingleSelectInput({
@@ -42,6 +44,7 @@ export function SingleSelectInput({
   placeholder,
   required,
   disabled,
+  themeClasses,
 }: SingleSelectInputProps) {
   const inputLabel = label || field.name;
   const isRequired = required ?? field.required ?? false;
@@ -72,21 +75,21 @@ export function SingleSelectInput({
   };
 
   return (
-    <div className="space-y-2">
+    <div className={themeClasses?.fieldGroup || "space-y-2"}>
       {/* Hidden input for form submission */}
       {name && (
         <input type="hidden" name={name} value={currentValue?.toString() ?? ''} />
       )}
-      <Label htmlFor={`field-${field.id}`}>
+      <Label htmlFor={`field-${field.id}`} className={themeClasses?.label || undefined}>
         {inputLabel}
-        {isRequired && <span className="text-destructive ml-1">*</span>}
+        {isRequired && <span className={themeClasses?.error || "text-destructive ml-1"}>*</span>}
       </Label>
       <Select
         value={currentValue?.toString() || ''}
         onValueChange={handleChange}
         disabled={disabled}
       >
-        <SelectTrigger id={`field-${field.id}`}>
+        <SelectTrigger id={`field-${field.id}`} className={themeClasses?.select || undefined}>
           <SelectValue placeholder={placeholder || `Select ${inputLabel.toLowerCase()}`} />
         </SelectTrigger>
         <SelectContent>

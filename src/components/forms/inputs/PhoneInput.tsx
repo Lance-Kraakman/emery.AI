@@ -11,6 +11,7 @@ import React from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
+import type { InputThemeClasses } from '../input-mapper';
 
 interface PhoneInputProps {
   field: FieldDTO;
@@ -20,6 +21,7 @@ interface PhoneInputProps {
   placeholder?: string;
   required?: boolean;
   disabled?: boolean;
+  themeClasses?: InputThemeClasses;
 }
 
 export function PhoneInput({
@@ -30,6 +32,7 @@ export function PhoneInput({
   placeholder,
   required,
   disabled,
+  themeClasses,
 }: PhoneInputProps) {
   const inputLabel = label || field.name;
   const isRequired = required ?? field.required ?? false;
@@ -39,10 +42,10 @@ export function PhoneInput({
     (field.metadata as any)?.defaultCountryCode || '+1';
 
   return (
-    <div className="space-y-2">
-      <Label htmlFor={`field-${field.id}`}>
+    <div className={themeClasses?.fieldGroup || "space-y-2"}>
+      <Label htmlFor={`field-${field.id}`} className={themeClasses?.label || undefined}>
         {inputLabel}
-        {isRequired && <span className="text-destructive ml-1">*</span>}
+        {isRequired && <span className={themeClasses?.error || "text-destructive ml-1"}>*</span>}
       </Label>
       <div className="flex gap-2">
         <div className="w-20 shrink-0">
@@ -61,7 +64,7 @@ export function PhoneInput({
           placeholder={placeholder || '(555) 123-4567'}
           required={isRequired}
           disabled={disabled}
-          className="flex-1"
+          className={themeClasses?.input || "flex-1"}
         />
       </div>
       <p className="text-xs text-muted-foreground">

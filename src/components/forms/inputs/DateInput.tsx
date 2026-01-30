@@ -11,6 +11,7 @@ import React from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
+import type { InputThemeClasses } from '../input-mapper';
 
 interface DateInputProps {
   field: FieldDTO;
@@ -21,6 +22,7 @@ interface DateInputProps {
   label?: string;
   required?: boolean;
   disabled?: boolean;
+  themeClasses?: InputThemeClasses;
 }
 
 export function DateInput({
@@ -32,6 +34,7 @@ export function DateInput({
   label,
   required,
   disabled,
+  themeClasses,
 }: DateInputProps) {
   const inputLabel = label || field.name;
   const isRequired = required ?? field.required ?? false;
@@ -55,10 +58,10 @@ export function DateInput({
   const isControlled = value !== undefined;
 
   return (
-    <div className="space-y-2">
-      <Label htmlFor={`field-${field.id}`}>
+    <div className={themeClasses?.fieldGroup || "space-y-2"}>
+      <Label htmlFor={`field-${field.id}`} className={themeClasses?.label || undefined}>
         {inputLabel}
-        {isRequired && <span className="text-destructive ml-1">*</span>}
+        {isRequired && <span className={themeClasses?.error || "text-destructive ml-1"}>*</span>}
       </Label>
       <Input
         id={`field-${field.id}`}
@@ -69,6 +72,7 @@ export function DateInput({
         onChange={onChange ? handleChange : undefined}
         required={isRequired}
         disabled={disabled}
+        className={themeClasses?.input || undefined}
       />
     </div>
   );

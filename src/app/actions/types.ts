@@ -251,5 +251,6 @@ export interface UpdateViewData {
     visible: boolean;
     order: number;
   }>;
+  viewConfig?: Record<string, any>;
 }
 

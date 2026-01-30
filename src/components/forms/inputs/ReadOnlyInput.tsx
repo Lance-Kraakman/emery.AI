@@ -11,14 +11,16 @@ import React from 'react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
+import type { InputThemeClasses } from '../input-mapper';
 
 interface ReadOnlyInputProps {
   field: FieldDTO;
   value: string | number | Date | null;
   label?: string;
+  themeClasses?: InputThemeClasses;
 }
 
-export function ReadOnlyInput({ field, value, label }: ReadOnlyInputProps) {
+export function ReadOnlyInput({ field, value, label, themeClasses }: ReadOnlyInputProps) {
   const inputLabel = label || field.name;
 
   // Format value based on field type
@@ -63,8 +65,8 @@ export function ReadOnlyInput({ field, value, label }: ReadOnlyInputProps) {
   };
 
   return (
-    <div className="space-y-2">
-      <Label htmlFor={`field-${field.id}`}>
+    <div className={themeClasses?.fieldGroup || "space-y-2"}>
+      <Label htmlFor={`field-${field.id}`} className={themeClasses?.label || undefined}>
         {inputLabel}
         <span className="ml-2 text-xs text-muted-foreground">
           ({getFieldTypeLabel()})
@@ -74,7 +76,7 @@ export function ReadOnlyInput({ field, value, label }: ReadOnlyInputProps) {
         id={`field-${field.id}`}
         value={formatValue()}
         disabled
-        className="bg-muted cursor-not-allowed"
+        className={themeClasses?.input || "bg-muted cursor-not-allowed"}
       />
       <p className="text-xs text-muted-foreground">
         This field is automatically managed by the system
