@@ -700,11 +700,9 @@ class AgentExecutor:
         )
 
         # Execute steps and yield progress
-        # Use raw proto steps (preserved from boundary conversion) for StepExecutorService
-        # which expects proto SkillStep objects with full read/write/agentic configs
         step_results = []
         async for step_progress in step_executor.execute_steps(
-            steps=skill._proto_steps or list(skill.steps),
+            steps=list(skill.steps),
             available_skills=available_skills,
             initial_inputs=context.skill_inputs or {},
             org_model=context.org_model,

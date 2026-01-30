@@ -11,9 +11,13 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union, o
 
 from PIL import Image
 
-from ...entities.skill_config import SkillConfigDTO
+from ...entities.skill_config import (
+    SkillConfigDTO, SkillStepDTO,
+    AgenticStepConfig as AgenticStepConfigDTO,
+    ReadConfig as ReadConfigDTO, WriteConfig as WriteConfigDTO,
+    RowIdSource, ReadFieldMapping, WriteFieldMapping,
+)
 from ...entities.task import SkillOutputValue
-from ...grpc.generated import agent_worker_pb2
 from ...reasoning.modules.extractor import OutputExtractorModule
 from ...types import SkillExecutionResult
 from ...utils.step_utils import step_to_progress_dict, RawProgressDict
@@ -24,40 +28,6 @@ from ...entities.models.plan import Plan
 
 
 logger = logging.getLogger(__name__)
-
-
-def _plan_to_stored_proto(plan: Plan) -> 'agent_worker_pb2.StoredPlan':
-    """Convert Plan entity to StoredPlan proto for DAG construction.
-
-    Service-layer helper — keeps Plan entity free of proto knowledge.
-    """
-    proto = agent_worker_pb2.StoredPlan(
-        id=plan.id,
-        goal=plan.goal,
-        basic_instructions=plan.basic_instructions,
-        context=plan.context or "",
-        analysis=plan.analysis or "",
-        version=plan.version,
-        generated_at=plan.generated_at.isoformat() if plan.generated_at else "",
-        approved_at=plan.approved_at.isoformat() if plan.approved_at else "",
-    )
-    for s in plan.steps:
-        ps = agent_worker_pb2.StoredPlanStep(
-            step_id=s.step_id,
-            description=s.description,
-            tool_call=s.tool_call or "",
-            target_agent=s.target_agent or "",
-            prompt_template=s.prompt_template or "",
-        )
-        if s.parameters:
-            for k, v in s.parameters.items():
-                ps.parameters[k] = json.dumps(v) if not isinstance(v, str) else v
-        for ct in s.context_tables:
-            ps.context_tables.append(ct)
-        for rc in s.required_context:
-            ps.required_context.append(rc)
-        proto.steps.append(ps)
-    return proto
 
 
 def map_node_outputs_to_skill_outputs(
@@ -125,7 +95,7 @@ class SkillExecutorService:
         self,
         skill_config: SkillConfigDTO,
         runtime_inputs: Dict[str, Any],
-    ) -> List['agent_worker_pb2.SkillStep']:
+    ) -> List[SkillStepDTO]:
         """Build wrapper DAG from agentic skill config.
 
         Generates:
@@ -134,9 +104,9 @@ class SkillExecutorService:
         - Write step (if skill has output mappings)
 
         Returns:
-            List of SkillStep protos for DAG execution
+            List of SkillStepDTO for DAG execution
         """
-        steps: List['agent_worker_pb2.SkillStep'] = []
+        steps: List[SkillStepDTO] = []
 
         # Step 1: Generate Read step from input mappings
         read_step = self._build_read_step_from_inputs(skill_config)
@@ -147,28 +117,22 @@ class SkillExecutorService:
         # Step 2: Build Agentic step with stored plan
         stored_plan = self._extract_plan_from_skill(skill_config)
 
-        agentic_config = agent_worker_pb2.AgenticStepConfig(
+        agentic_config = AgenticStepConfigDTO(
             instructions=skill_config.instructions,
             agent_type=skill_config.agent_type or "",
             model=skill_config.model or "",
+            tools=[t.name for t in skill_config.tools] if skill_config.tools else [],
+            plan=stored_plan,
         )
-        # Convert DTO tools to proto ToolConfig
-        for tool_dto in skill_config.tools:
-            proto_tool = agent_worker_pb2.ToolConfig(name=tool_dto.name)
-            if tool_dto.config:
-                for key, value in tool_dto.config.items():
-                    proto_tool.config[key] = str(value) if not isinstance(value, str) else value
-            agentic_config.tools.append(proto_tool)
-
         if stored_plan:
-            agentic_config.plan.CopyFrom(_plan_to_stored_proto(stored_plan))
             logger.info(f"📋 Skill {skill_config.name}: using stored plan")
 
-        agentic_step = agent_worker_pb2.SkillStep(
+        agentic_step = SkillStepDTO(
             id=f"agentic_{skill_config.id}",
             name=skill_config.name,
+            step_type="agentic",
+            agentic_config=agentic_config,
         )
-        agentic_step.agentic_config.CopyFrom(agentic_config)
         steps.append(agentic_step)
 
         # Step 3: Generate Write step from output mappings
@@ -183,11 +147,11 @@ class SkillExecutorService:
     def _build_read_step_from_inputs(
         self,
         skill_config: SkillConfigDTO,
-    ) -> Optional['agent_worker_pb2.SkillStep']:
+    ) -> Optional[SkillStepDTO]:
         """Generate Read step from skill input mappings.
 
         Returns:
-            SkillStep with read_config, or None if no input mappings
+            SkillStepDTO with read_config, or None if no input mappings
         """
         inputs_with_mapping = [
             inp for inp in skill_config.inputs
@@ -200,45 +164,48 @@ class SkillExecutorService:
         # For now, use first input's mapping as source table
         first_source = inputs_with_mapping[0].input_mapping["source"]
 
-        read_config = agent_worker_pb2.ReadConfig(
-            mode="single_row",
-            source_table_id=first_source["table_id"],
-        )
+        row_id_source = None
         if "row_source" in first_source:
             rs = first_source["row_source"]
-            row_source = agent_worker_pb2.RowIdSource(
+            row_id_source = RowIdSource(
                 static_id=rs.get("static_id", ""),
                 skill_input=rs.get("skill_input", ""),
                 skill_output=rs.get("skill_output", ""),
                 use_source_row=rs.get("use_source_row", False),
             )
-            read_config.row_id_source.CopyFrom(row_source)
 
-        # Build field mappings: table field → variable name
+        # Build field mappings: table field -> variable name
+        field_mappings = []
         for inp in inputs_with_mapping:
             if inp.input_mapping is not None and "source" in inp.input_mapping:
                 source = inp.input_mapping["source"]
-                field_mapping = agent_worker_pb2.ReadFieldMapping(
+                field_mappings.append(ReadFieldMapping(
                     source_field_id=source["field_id"],
                     target_variable=inp.name,
-                )
-                read_config.field_mappings.append(field_mapping)
+                ))
 
-        read_step = agent_worker_pb2.SkillStep(
+        read_config = ReadConfigDTO(
+            mode="single_row",
+            source_table_id=first_source["table_id"],
+            row_id_source=row_id_source,
+            field_mappings=field_mappings,
+        )
+
+        return SkillStepDTO(
             id=f"read_{skill_config.id}",
             name=f"Read inputs for {skill_config.name}",
+            step_type="read",
+            read_config=read_config,
         )
-        read_step.read_config.CopyFrom(read_config)
-        return read_step
 
     def _build_write_step_from_outputs(
         self,
         skill_config: SkillConfigDTO,
-    ) -> Optional['agent_worker_pb2.SkillStep']:
+    ) -> Optional[SkillStepDTO]:
         """Generate Write step from skill output mappings.
 
         Returns:
-            SkillStep with write_config, or None if no output mappings
+            SkillStepDTO with write_config, or None if no output mappings
         """
         outputs_with_mapping = [
             out for out in skill_config.outputs
@@ -252,25 +219,25 @@ class SkillExecutorService:
         # Use first table mapping as target
         first_table = outputs_with_mapping[0].output_mapping["table_mappings"][0]
 
-        write_config = agent_worker_pb2.WriteConfig(
-            target_table_id=first_table["table_id"],
-            row_action=first_table.get("row_action", "create"),
-        )
-
-        # Build field mappings: output variable → table field
+        field_mappings = []
         for fm in first_table.get("field_mappings", []):
-            wfm = agent_worker_pb2.WriteFieldMapping(
+            field_mappings.append(WriteFieldMapping(
                 skill_input_name=fm["source_name"],
                 target_field_id=fm["field_id"],
-            )
-            write_config.field_mappings.append(wfm)
+            ))
 
-        write_step = agent_worker_pb2.SkillStep(
+        write_config = WriteConfigDTO(
+            target_table_id=first_table["table_id"],
+            row_action=first_table.get("row_action", "create"),
+            field_mappings=field_mappings,
+        )
+
+        return SkillStepDTO(
             id=f"write_{skill_config.id}",
             name=f"Write outputs for {skill_config.name}",
+            step_type="write",
+            write_config=write_config,
         )
-        write_step.write_config.CopyFrom(write_config)
-        return write_step
 
     @overload
     def execute_skill(
@@ -363,7 +330,7 @@ class SkillExecutorService:
         Builds a wrapper DAG: [Read Node?] → [Agentic Node] → [Write Node?]
         This ensures consistent execution regardless of how the skill is invoked.
         """
-        # Build wrapper DAG steps (proto SkillStep objects for StepExecutorService)
+        # Build wrapper DAG steps for StepExecutorService
         steps = self._build_wrapper_dag(skill_config, runtime_inputs)
 
         if not steps:
@@ -603,16 +570,10 @@ class SkillExecutorService:
 
         available_skills: Dict[int, Any] = {}
 
-        # Use raw proto steps if available (from proto boundary conversion)
-        # Otherwise convert DTO steps to proto (from API path)
-        proto_steps = skill_config._proto_steps
-        if proto_steps is None:
-            proto_steps = self._dto_steps_to_proto(skill_config.steps)
-
-        # Execute steps synchronously
+        # Execute steps synchronously (DTO steps passed directly)
         result = execute_steps_sync(
             step_executor=step_executor,
-            steps=proto_steps,
+            steps=list(skill_config.steps),
             available_skills=available_skills,
             initial_inputs=runtime_inputs,
             org_model=org_model,
@@ -635,34 +596,6 @@ class SkillExecutorService:
             )
 
         return result
-
-    def _dto_steps_to_proto(
-        self,
-        steps: List[Any],
-    ) -> List['agent_worker_pb2.SkillStep']:
-        """Convert SkillStepDTO list to proto SkillStep list for StepExecutorService."""
-        from ...entities.skill_config import SkillStepDTO
-
-        proto_steps = []
-        for step in steps:
-            proto_step = agent_worker_pb2.SkillStep(
-                id=step.id,
-                name=step.name,
-            )
-            for dep in step.dependencies:
-                proto_step.dependencies.append(dep)
-
-            if step.step_type == "agentic" and step.agentic_config:
-                agentic_config = agent_worker_pb2.AgenticStepConfig(
-                    instructions=step.agentic_config.instructions,
-                    model=step.agentic_config.model,
-                    agent_type=step.agentic_config.agent_type,
-                )
-                proto_step.agentic_config.CopyFrom(agentic_config)
-
-            proto_steps.append(proto_step)
-
-        return proto_steps
 
     def _process_skill_attachments(
         self,

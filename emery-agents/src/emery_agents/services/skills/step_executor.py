@@ -18,7 +18,13 @@ from tenacity import (
 )
 
 from ...grpc.generated import agent_worker_pb2
-from ...entities.skill_config import SkillConfigDTO
+from ...entities.skill_config import (
+    SkillConfigDTO, SkillStepDTO,
+    ErrorConfig, RetryConfig, StepOutput, LoopConfig,
+    ReadConfig, WriteConfig, ToolExecutionConfig, TaskModelConfig,
+    AgenticStepConfig, InputDef, OutputDef,
+    RowIdSource, QueryFilter,
+)
 from ...reasoning.modules.extractor import OutputExtractorModule
 from ...types import SkillExecutionResult
 from ...utils.error_classifier import classify_error
@@ -105,104 +111,6 @@ class StepError:
 
 
 @dataclass
-class ErrorConfig:
-    """Error handling configuration for a step."""
-    continue_on_error: bool = False
-    error_output_var: str = "__error__"
-
-
-@dataclass
-class RetryConfig:
-    """Retry configuration for error recovery."""
-    max_attempts: int = 3
-    backoff_ms: int = 1000
-    backoff_type: Literal["fixed", "exponential", "linear"] = "exponential"
-
-
-@dataclass
-class StepOutput:
-    """Step output routing - determines which steps to execute based on outcome."""
-    type: Literal["success", "error", "condition", "default"]
-    condition: str = ""
-    next_steps: List[str] = field(default_factory=list)
-
-
-@dataclass
-class LoopConfig:
-    """Loop configuration for iteration support."""
-    type: Literal["for_each", "while", "until"]
-    items_var: str = ""          # For for_each: variable containing array
-    current_item_var: str = "item"  # Variable name for current item
-    condition: str = ""          # For while/until: condition expression
-    max_iterations: int = 100    # Safety limit
-
-
-@dataclass
-class ReadConfig:
-    """Read configuration for direct table read steps."""
-    mode: str = "single_row"
-    source_table_id: int = 0
-    row_id_source: Optional[Any] = None  # Proto RowIdSource
-    query_filters: List[Any] = field(default_factory=list)  # Proto QueryFilter
-    query_limit: int = 100
-    field_mappings: List[Any] = field(default_factory=list)  # Proto ReadFieldMapping
-
-
-@dataclass
-class WriteConfig:
-    """Write configuration for direct table write steps."""
-    target_table_id: int = 0
-    row_action: str = "create"
-    field_mappings: List[Any] = field(default_factory=list)
-    update_match: Optional[Any] = None
-
-
-@dataclass
-class ToolExecutionConfig:
-    """Tool execution configuration for direct tool call steps."""
-    tool_id: str = ""
-    input_mappings: List[Any] = field(default_factory=list)
-    output_table_id: Optional[int] = None  # Table to store flattened outputs
-
-
-@dataclass
-class TaskModelConfig:
-    """Task model configuration for direct inference steps."""
-    model_id: str = ""
-    task_type: str = ""
-    parameters: Dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class AgenticConfig:
-    """Agentic execution configuration with stored plan.
-
-    Used for agentic steps that execute via PlanStepExecutor.
-    Requires a stored plan - no fallback to DSPy ReAct.
-    """
-    instructions: str = ""
-    tools: List[str] = field(default_factory=list)
-    agent_type: str = ""
-    model: str = ""
-    plan: Optional[Plan] = None
-
-
-@dataclass
-class InputDef:
-    """Input definition for a step."""
-    name: str
-    required: bool = False
-    type: str = "text"
-
-
-@dataclass
-class OutputDef:
-    """Output definition for a step."""
-    name: str
-    type: str = "text"
-
-
-@dataclass
 class Step:
     """Internal representation of a workflow step."""
     id: str  # Stable UUID for references (used for step_context keys)
@@ -225,109 +133,24 @@ class Step:
     write_config: Optional[WriteConfig] = None
     tool_execution_config: Optional[ToolExecutionConfig] = None
     task_model_config: Optional[TaskModelConfig] = None
-    agentic_config: Optional[AgenticConfig] = None  # For agentic steps with stored plan
+    agentic_config: Optional[AgenticStepConfig] = None  # For agentic steps with stored plan
     # UI state
     is_disabled: bool = False
 
     @classmethod
     def from_proto(cls, proto: 'agent_worker_pb2.SkillStep') -> 'Step':
-        """Convert proto SkillStep to internal Step."""
-        # Parse error config
-        error_config = None
-        if proto.error_config and proto.error_config.continue_on_error:
-            error_config = ErrorConfig(
-                continue_on_error=proto.error_config.continue_on_error,
-                error_output_var=proto.error_config.error_output_var or "__error__"
-            )
+        """Convert proto SkillStep to internal Step.
 
-        # Parse retry config
-        retry_config = None
-        if proto.retry_config and proto.retry_config.max_attempts > 0:
-            retry_config = RetryConfig(
-                max_attempts=proto.retry_config.max_attempts,
-                backoff_ms=proto.retry_config.backoff_ms or 1000,
-                backoff_type=proto.retry_config.backoff_type or "exponential"
-            )
-
-        # Parse step outputs
-        step_outputs = []
-        for output in proto.step_outputs:
-            step_outputs.append(StepOutput(
-                type=output.type or "default",
-                condition=output.condition or "",
-                next_steps=list(output.next_steps)
-            ))
-
-        # Parse input/output defs
-        input_defs = [
-            InputDef(name=d.name, required=d.required, type=d.type or "text")
-            for d in proto.input_defs
-        ]
-        output_defs = [
-            OutputDef(name=d.name, type=d.type or "text")
-            for d in proto.output_defs
-        ]
-
-        # Parse loop config
-        loop_config = None
-        if proto.loop_config and proto.loop_config.type:
-            loop_config = LoopConfig(
-                type=proto.loop_config.type,
-                items_var=proto.loop_config.items_var or "",
-                current_item_var=proto.loop_config.current_item_var or "item",
-                condition=proto.loop_config.condition or "",
-                max_iterations=proto.loop_config.max_iterations or 100
-            )
-
-        # Parse step-level execution configs
-        read_config = None
-        if proto.HasField('read_config') and proto.read_config.source_table_id:
-            read_config = ReadConfig(
-                mode=proto.read_config.mode or "single_row",
-                source_table_id=proto.read_config.source_table_id,
-                row_id_source=proto.read_config.row_id_source if proto.read_config.HasField('row_id_source') else None,
-                query_filters=list(proto.read_config.query_filters),
-                query_limit=proto.read_config.query_limit or 100,
-                field_mappings=list(proto.read_config.field_mappings)
-            )
-
-        write_config = None
-        if proto.HasField('write_config') and proto.write_config.target_table_id:
-            write_config = WriteConfig(
-                target_table_id=proto.write_config.target_table_id,
-                row_action=proto.write_config.row_action or "create",
-                field_mappings=list(proto.write_config.field_mappings),
-                update_match=proto.write_config.update_match if proto.write_config.HasField('update_match') else None
-            )
-
-        tool_execution_config = None
-        if proto.HasField('tool_execution_config') and proto.tool_execution_config.tool_id:
-            tool_execution_config = ToolExecutionConfig(
-                tool_id=proto.tool_execution_config.tool_id,
-                input_mappings=list(proto.tool_execution_config.input_mappings),
-                output_table_id=proto.tool_execution_config.output_table_id if proto.tool_execution_config.HasField('output_table_id') else None
-            )
-
-        task_model_config = None
-        if proto.HasField('task_model_config') and proto.task_model_config.model_id:
-            task_model_config = TaskModelConfig(
-                model_id=proto.task_model_config.model_id,
-                task_type=proto.task_model_config.task_type or "",
-                parameters=dict(proto.task_model_config.parameters)
-            )
-
-        # Parse agentic_config (for agentic steps with stored plans)
-        agentic_config = None
-        if proto.HasField('agentic_config'):
-            ac = proto.agentic_config
-            plan = Plan.from_stored_proto(ac.plan) if ac.HasField('plan') and ac.plan.id else None
-            agentic_config = AgenticConfig(
-                instructions=ac.instructions or "",
-                tools=list(ac.tools) if ac.tools else [],
-                agent_type=ac.agent_type or "",
-                model=ac.model or "",
-                plan=plan,
-            )
+        Delegates sub-object parsing to entity-layer from_proto() methods.
+        """
+        error_config = ErrorConfig.from_proto(proto.error_config) if proto.error_config and proto.error_config.continue_on_error else None
+        retry_config = RetryConfig.from_proto(proto.retry_config) if proto.retry_config and proto.retry_config.max_attempts > 0 else None
+        loop_config = LoopConfig.from_proto(proto.loop_config) if proto.loop_config and proto.loop_config.type else None
+        read_config = ReadConfig.from_proto(proto.read_config) if proto.HasField('read_config') and proto.read_config.source_table_id else None
+        write_config = WriteConfig.from_proto(proto.write_config) if proto.HasField('write_config') and proto.write_config.target_table_id else None
+        tool_execution_config = ToolExecutionConfig.from_proto(proto.tool_execution_config) if proto.HasField('tool_execution_config') and proto.tool_execution_config.tool_id else None
+        task_model_config = TaskModelConfig.from_proto(proto.task_model_config) if proto.HasField('task_model_config') and proto.task_model_config.model_id else None
+        agentic_config = AgenticStepConfig.from_proto(proto.agentic_config) if proto.HasField('agentic_config') else None
 
         return cls(
             id=proto.id,
@@ -338,11 +161,11 @@ class Step:
             inputs=dict(proto.inputs),
             outputs=dict(proto.outputs),
             condition=proto.condition or "",
-            input_defs=input_defs,
-            output_defs=output_defs,
+            input_defs=[InputDef.from_proto(d) for d in proto.input_defs],
+            output_defs=[OutputDef.from_proto(d) for d in proto.output_defs],
             error_config=error_config,
             retry_config=retry_config,
-            step_outputs=step_outputs,
+            step_outputs=[StepOutput.from_proto(o) for o in proto.step_outputs],
             parallel_group=proto.parallel_group or "",
             loop_config=loop_config,
             read_config=read_config,
@@ -350,7 +173,38 @@ class Step:
             tool_execution_config=tool_execution_config,
             task_model_config=task_model_config,
             agentic_config=agentic_config,
-            is_disabled=proto.is_disabled
+            is_disabled=proto.is_disabled,
+        )
+
+    @classmethod
+    def from_dto(cls, dto: 'SkillStepDTO') -> 'Step':
+        """Convert SkillStepDTO to internal Step.
+
+        Straightforward field copy since DTO and Step share the same
+        config types from entities.skill_config.
+        """
+        return cls(
+            id=dto.id,
+            name=dto.name,
+            instruction=dto.instruction,
+            skill_id=dto.skill_id,
+            tools=list(dto.tools),
+            inputs=dict(dto.inputs),
+            outputs=dict(dto.outputs),
+            condition=dto.condition,
+            input_defs=list(dto.input_defs),
+            output_defs=list(dto.output_defs),
+            error_config=dto.error_config,
+            retry_config=dto.retry_config,
+            step_outputs=list(dto.step_outputs),
+            parallel_group=dto.parallel_group,
+            loop_config=dto.loop_config,
+            read_config=dto.read_config,
+            write_config=dto.write_config,
+            tool_execution_config=dto.tool_execution_config,
+            task_model_config=dto.task_model_config,
+            agentic_config=dto.agentic_config,
+            is_disabled=dto.is_disabled,
         )
 
 
@@ -412,7 +266,7 @@ class StepExecutorService:
 
     async def execute_steps(
         self,
-        steps: List['agent_worker_pb2.SkillStep'],
+        steps: List[SkillStepDTO],
         available_skills: Dict[int, SkillConfigDTO],
         initial_inputs: Dict[str, Any],
         org_model: Optional[str] = None,
@@ -423,7 +277,7 @@ class StepExecutorService:
         """Execute steps as a DAG workflow.
 
         Args:
-            steps: List of SkillStep proto messages
+            steps: List of SkillStepDTO objects
             available_skills: Map of skill_id to SkillConfig for delegation
             initial_inputs: Initial inputs to seed the step_context
             org_model: Organization default model
@@ -434,8 +288,8 @@ class StepExecutorService:
         Yields:
             StepProgress updates as each step executes
         """
-        # Convert proto steps to internal Step objects
-        internal_steps = [Step.from_proto(s) for s in steps]
+        # Convert DTO steps to internal Step objects
+        internal_steps = [Step.from_dto(s) for s in steps]
         # AIDEV-NOTE: Changed from name-based to ID-based routing for stability.
         # Names can be renamed by users; IDs are immutable UUIDs.
         step_by_id: Dict[str, Step] = {s.id: s for s in internal_steps}
@@ -1625,7 +1479,7 @@ class StepExecutorService:
 
     def _resolve_row_id_source(
         self,
-        row_id_source: Any,
+        row_id_source: Optional[RowIdSource],
         step_inputs: Dict[str, Any]
     ) -> Optional[str]:
         """Resolve row ID from source configuration."""
@@ -1646,7 +1500,7 @@ class StepExecutorService:
 
     def _build_query_filters(
         self,
-        query_filters: List[Any],
+        query_filters: List[QueryFilter],
         step_inputs: Dict[str, Any]
     ) -> List[Dict[str, Any]]:
         """Build query filters from config."""
@@ -1656,7 +1510,9 @@ class StepExecutorService:
             operator = qf.operator
 
             value_source = qf.value_source
-            if value_source.type == "static":
+            if value_source is None:
+                value = ""
+            elif value_source.type == "static":
                 value = value_source.static_id
             elif value_source.type == "skill_input":
                 value = step_inputs.get(value_source.skill_input, "")
@@ -1793,7 +1649,7 @@ class StepExecutorService:
 
 def execute_steps_sync(
     step_executor: StepExecutorService,
-    steps: List['agent_worker_pb2.SkillStep'],
+    steps: List[SkillStepDTO],
     available_skills: Dict[int, SkillConfigDTO],
     initial_inputs: Dict[str, Any],
     org_model: Optional[str] = None,
