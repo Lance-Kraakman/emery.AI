@@ -24,9 +24,17 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { cn } from '@/lib/utils';
-import { Undo2, Redo2, StickyNote, Search, Maximize, LayoutGrid, FileDown, FileUp } from 'lucide-react';
+import { Undo2, Redo2, StickyNote, Search, Maximize, LayoutGrid, FileDown, FileUp, Layers } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuCheckboxItem,
+} from '@/components/ui/dropdown-menu';
 import { orgChartNodeTypes } from '@/components/org-chart/nodes';
 import { orgChartEdgeTypes } from '@/components/org-chart/edges';
 import { orgChartNodeSizes } from '@/components/org-chart/theme';
@@ -57,7 +65,7 @@ import { OrgChartDragProvider } from '@/components/org-chart/context';
 import { attachContextTable } from '@/app/actions/context-mappings';
 import { transferSkillToAgent, duplicateSkill } from '@/app/actions/skills';
 import { toast } from 'sonner';
-import type { OrgChartCanvasMetadata, OrgChartNodeType, AgentContainerNodeData, OrgChartEdge } from '@/components/org-chart/types';
+import type { OrgChartCanvasMetadata, OrgChartNodeType, AgentContainerNodeData, OrgChartEdge, OrgChartEdgeData } from '@/components/org-chart/types';
 
 interface OrgChartCanvasProps {
   /** Initial agents */
@@ -130,6 +138,13 @@ export function OrgChartCanvas({
   const [isDeleting, setIsDeleting] = useState(false);
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+
+  // Edge layer visibility - which edge types are shown
+  const ALL_EDGE_LAYERS = ['skill_ref', 'skill_table', 'data_source', 'automation_skill'] as const;
+  const [visibleEdgeLayers, setVisibleEdgeLayers] = useState<Set<string>>(
+    () => new Set(ALL_EDGE_LAYERS)
+  );
+  const [selectedOnlyEdges, setSelectedOnlyEdges] = useState(false);
 
   // Assignment dialog state for database/skill drops
   const [assignmentDialog, setAssignmentDialog] = useState<{
@@ -228,6 +243,40 @@ export function OrgChartCanvas({
 
     return [...edges, ...newEdges];
   }, [edges, dataSources, databases]);
+
+  // Filter edges by visible layers and selected-only mode
+  const filteredEdges = useMemo(() => {
+    let result = allEdges;
+
+    // Filter by layer visibility
+    const allLayersVisible = visibleEdgeLayers.size === ALL_EDGE_LAYERS.length;
+    if (!allLayersVisible) {
+      result = result.filter((edge) => {
+        const edgeType = (edge.data as OrgChartEdgeData | undefined)?.edgeType;
+        if (!edgeType) return true; // keep edges without a type
+        return visibleEdgeLayers.has(edgeType);
+      });
+    }
+
+    // Filter to selected node only
+    if (selectedOnlyEdges && selectedNodeId) {
+      result = result.filter(
+        (e) => e.source === selectedNodeId || e.target === selectedNodeId
+      );
+    }
+
+    return result;
+  }, [allEdges, visibleEdgeLayers, selectedOnlyEdges, selectedNodeId]);
+
+  // Toggle an edge layer on/off
+  const toggleEdgeLayer = useCallback((layerType: string) => {
+    setVisibleEdgeLayers((prev) => {
+      const next = new Set(prev);
+      if (next.has(layerType)) next.delete(layerType);
+      else next.add(layerType);
+      return next;
+    });
+  }, []);
 
   // Handler for sticky note updates
   const handleUpdateStickyNote = useCallback(
@@ -903,7 +952,7 @@ export function OrgChartCanvas({
       <StickyNoteProvider updateNote={handleUpdateStickyNote}>
         <ReactFlow
         nodes={nodes}
-        edges={allEdges}
+        edges={filteredEdges}
         onNodesChange={disabled ? undefined : onNodesChange}
         onEdgesChange={disabled ? undefined : onEdgesChange}
         onConnect={disabled ? undefined : handleConnect}
@@ -1055,6 +1104,69 @@ export function OrgChartCanvas({
                       <p>Search <kbd className="ml-1 text-[10px] opacity-60">⌘K</kbd></p>
                     </TooltipContent>
                   </Tooltip>
+                  <div className="w-px h-6 bg-border mx-0.5" />
+                  {/* Edge layer visibility dropdown */}
+                  <DropdownMenu>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className={cn(
+                              'h-8 w-8',
+                              (visibleEdgeLayers.size < ALL_EDGE_LAYERS.length || selectedOnlyEdges) &&
+                                'text-primary'
+                            )}
+                          >
+                            <Layers className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom">
+                        <p>Edge Layers</p>
+                      </TooltipContent>
+                    </Tooltip>
+                    <DropdownMenuContent align="start" className="w-52">
+                      <DropdownMenuLabel>Edge Layers</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuCheckboxItem
+                        checked={visibleEdgeLayers.has('skill_table')}
+                        onCheckedChange={() => toggleEdgeLayer('skill_table')}
+                      >
+                        <span className="inline-block w-2.5 h-2.5 rounded-full bg-cyan-500 mr-2 shrink-0" />
+                        Table connections
+                      </DropdownMenuCheckboxItem>
+                      <DropdownMenuCheckboxItem
+                        checked={visibleEdgeLayers.has('skill_ref')}
+                        onCheckedChange={() => toggleEdgeLayer('skill_ref')}
+                      >
+                        <span className="inline-block w-2.5 h-2.5 rounded-full bg-violet-500 mr-2 shrink-0" />
+                        Skill references
+                      </DropdownMenuCheckboxItem>
+                      <DropdownMenuCheckboxItem
+                        checked={visibleEdgeLayers.has('data_source')}
+                        onCheckedChange={() => toggleEdgeLayer('data_source')}
+                      >
+                        <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 mr-2 shrink-0" />
+                        Data sources
+                      </DropdownMenuCheckboxItem>
+                      <DropdownMenuCheckboxItem
+                        checked={visibleEdgeLayers.has('automation_skill')}
+                        onCheckedChange={() => toggleEdgeLayer('automation_skill')}
+                      >
+                        <span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-500 mr-2 shrink-0" />
+                        Automations
+                      </DropdownMenuCheckboxItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuCheckboxItem
+                        checked={selectedOnlyEdges}
+                        onCheckedChange={() => setSelectedOnlyEdges((v) => !v)}
+                      >
+                        Selected node only
+                      </DropdownMenuCheckboxItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                   <div className="w-px h-6 bg-border mx-0.5" />
                   <Tooltip>
                     <TooltipTrigger asChild>
