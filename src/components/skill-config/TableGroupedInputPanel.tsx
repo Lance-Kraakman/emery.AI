@@ -32,7 +32,7 @@ export function TableGroupedInputPanel({
   const [tablesLoading, setTablesLoading] = useState(true);
   const [showAddManual, setShowAddManual] = useState(false);
   const [newInputName, setNewInputName] = useState('');
-  const [collapsedTables, setCollapsedTables] = useState<Set<number>>(new Set());
+  const [expandedTables, setExpandedTables] = useState<Set<number>>(new Set());
 
   // Load tables for selectors
   useEffect(() => {
@@ -97,6 +97,7 @@ export function TableGroupedInputPanel({
 
     if (newInputs.length > 0) {
       onInputsChange([...inputs, ...newInputs]);
+      setExpandedTables((prev) => new Set(prev).add(tableId));
     }
   };
 
@@ -120,7 +121,7 @@ export function TableGroupedInputPanel({
   };
 
   const toggleTableCollapse = (tableId: number) => {
-    setCollapsedTables((prev) => {
+    setExpandedTables((prev) => {
       const next = new Set(prev);
       if (next.has(tableId)) next.delete(tableId);
       else next.add(tableId);
@@ -145,7 +146,7 @@ export function TableGroupedInputPanel({
         const table = tables.find((t) => t.id === tableId);
         const tableName = table?.name || `Table #${tableId}`;
         const fields = tableFieldsMap.get(tableId) || [];
-        const isCollapsed = collapsedTables.has(tableId);
+        const isCollapsed = !expandedTables.has(tableId);
 
         return (
           <div

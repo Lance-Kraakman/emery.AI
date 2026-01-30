@@ -79,7 +79,7 @@ export function TableGroupedOutputPanel({
   const [tablesLoading, setTablesLoading] = useState(true);
   const [showAddManual, setShowAddManual] = useState(false);
   const [newOutputName, setNewOutputName] = useState('');
-  const [collapsedTables, setCollapsedTables] = useState<Set<number>>(new Set());
+  const [expandedTables, setExpandedTables] = useState<Set<number>>(new Set());
 
   // Load tables
   useEffect(() => {
@@ -288,6 +288,9 @@ export function TableGroupedOutputPanel({
 
     if (newOutputDefs.length === 0) return;
 
+    // Auto-expand the table group so user sees newly added fields
+    setExpandedTables((prev) => new Set(prev).add(tableId));
+
     // Add new output definitions
     const updatedOutputs = [...outputs, ...newOutputDefs];
 
@@ -343,7 +346,7 @@ export function TableGroupedOutputPanel({
   };
 
   const toggleTableCollapse = (tableId: number) => {
-    setCollapsedTables((prev) => {
+    setExpandedTables((prev) => {
       const next = new Set(prev);
       if (next.has(tableId)) next.delete(tableId);
       else next.add(tableId);
@@ -378,7 +381,7 @@ export function TableGroupedOutputPanel({
               {outputMapping.tableMappings.map((tm, index) => {
                 const table = tables.find((t) => t.id === tm.targetTableId);
                 const tableName = table?.name || `Table #${tm.targetTableId}`;
-                const isCollapsed = collapsedTables.has(tm.targetTableId);
+                const isCollapsed = !expandedTables.has(tm.targetTableId);
 
                 return (
                   <div
