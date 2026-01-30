@@ -174,7 +174,7 @@ export function createDatabaseNode(
       slug: db.slug,
       agentId: db.agentId ?? null,
       tableCount: db.tableCount,
-      tables: db.tables?.slice(0, 5).map(t => ({ id: t.id, name: t.name })),
+      tables: db.tables?.map(t => ({ id: t.id, name: t.name })),
     } as DatabaseNodeData,
   };
 }
