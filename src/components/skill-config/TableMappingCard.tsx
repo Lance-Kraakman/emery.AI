@@ -29,6 +29,8 @@ export interface TableMappingCardProps {
   };
   /** Hide the table selector when the table is implicit from a group heading */
   hideTableSelector?: boolean;
+  /** When true, render only the inner content without Card/CardHeader/CardContent wrappers */
+  renderContentOnly?: boolean;
 }
 
 export function TableMappingCard({
@@ -43,6 +45,7 @@ export function TableMappingCard({
   isReadOnly,
   dragHandleProps,
   hideTableSelector = false,
+  renderContentOnly = false,
 }: TableMappingCardProps) {
   const [expanded, setExpanded] = useState(true);
   const targetFields = tableFieldsMap.get(tableMapping.targetTableId) || [];
@@ -105,6 +108,175 @@ export function TableMappingCard({
     }
   };
 
+  const innerContent = (
+    <div className="space-y-2">
+      {/* Table, action, and mode selectors */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {!hideTableSelector && (
+          <Select
+            value={tableMapping.targetTableId?.toString()}
+            onValueChange={(value) =>
+              onUpdate({ ...tableMapping, targetTableId: parseInt(value), mappings: [] })
+            }
+            disabled={isReadOnly}
+          >
+            <SelectTrigger className="h-7 w-[130px] text-[11px]">
+              <SelectValue placeholder="Table..." />
+            </SelectTrigger>
+            <SelectContent>
+              {tables.map((table) => (
+                <SelectItem key={table.id} value={table.id.toString()}>
+                  {table.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
+        <Select
+          value={tableMapping.rowAction}
+          onValueChange={(value) =>
+            onUpdate({
+              ...tableMapping,
+              rowAction: value as 'create' | 'update' | 'upsert',
+            })
+          }
+          disabled={isReadOnly}
+        >
+          <SelectTrigger className="h-7 w-[90px] text-[11px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="create">Create</SelectItem>
+            <SelectItem value="update">Update</SelectItem>
+            <SelectItem value="upsert">Upsert</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {/* Per-table mode selector */}
+        <Select
+          value={tableMapping.mode || 'single_row'}
+          onValueChange={(value) =>
+            onUpdate({
+              ...tableMapping,
+              mode: value as 'single_row' | 'multi_row',
+            })
+          }
+          disabled={isReadOnly}
+        >
+          <SelectTrigger className="h-7 w-[80px] text-[11px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="single_row">Single</SelectItem>
+            <SelectItem value="multi_row">Multi</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Row ID source selector for update/upsert mode */}
+      {(tableMapping.rowAction === 'update' || tableMapping.rowAction === 'upsert') && (
+        <div className="flex items-center gap-2">
+          <Label className="text-[10px] text-muted-foreground">Row ID from:</Label>
+          <Select
+            value={serializeRowIdSource(tableMapping.rowIdSource)}
+            onValueChange={(v) =>
+              onUpdate({ ...tableMapping, rowIdSource: deserializeRowIdSource(v) })
+            }
+            disabled={isReadOnly}
+          >
+            <SelectTrigger className="h-7 w-[160px] text-[11px]">
+              <SelectValue placeholder="Select source..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="source_row">Source Row</SelectItem>
+              {skillInputs.length > 0 && (
+                <SelectGroup>
+                  <SelectLabel className="text-[10px]">Skill Inputs</SelectLabel>
+                  {skillInputs.map((input) => (
+                    <SelectItem key={`input:${input.name}`} value={`input:${input.name}`}>
+                      Input: {input.name}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              )}
+              {skillOutputs.length > 0 && (
+                <SelectGroup>
+                  <SelectLabel className="text-[10px]">Skill Outputs</SelectLabel>
+                  {skillOutputs.map((output) => (
+                    <SelectItem key={`output:${output.field}`} value={`output:${output.field}`}>
+                      Output: {output.field}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              )}
+              {previousTableMappings.length > 0 && (
+                <SelectGroup>
+                  <SelectLabel className="text-[10px]">Table References</SelectLabel>
+                  {previousTableMappings.map((tm) => (
+                    <SelectItem
+                      key={`table:${tm.order}:row_id`}
+                      value={`table:${tm.order}:row_id`}
+                    >
+                      Table #{tm.order} → row_id
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {/* Field mappings */}
+      <div className="space-y-1.5">
+        {tableMapping.mappings.map((mapping, index) => (
+          <FieldMappingRow
+            key={index}
+            mapping={mapping}
+            skillOutputs={skillOutputs}
+            skillInputs={skillInputs}
+            previousTableMappings={previousTableMappings}
+            targetFields={targetFields}
+            tableFieldsMap={tableFieldsMap}
+            onUpdate={(m) => handleUpdateMapping(index, m)}
+            onRemove={() => handleRemoveMapping(index)}
+            isReadOnly={isReadOnly}
+          />
+        ))}
+        {!isReadOnly && tableMapping.targetTableId > 0 && (
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={handleAddMapping}
+              className="h-6 px-2 text-[11px]"
+            >
+              <Plus className="h-3 w-3 mr-1" />
+              Add Field
+            </Button>
+            {targetFields.length > 0 && tableMapping.mappings.length === 0 && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleAutoMap}
+                className="h-6 px-2 text-[11px]"
+              >
+                Auto-map
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  if (renderContentOnly) {
+    return expanded ? innerContent : null;
+  }
+
   return (
     <Card className="border-muted">
       <CardHeader
@@ -156,167 +328,8 @@ export function TableMappingCard({
       </CardHeader>
 
       {expanded && (
-        <CardContent className="py-2 px-3 space-y-2">
-          {/* Table, action, and mode selectors */}
-          <div className="flex items-center gap-2 flex-wrap">
-            {!hideTableSelector && (
-              <Select
-                value={tableMapping.targetTableId?.toString()}
-                onValueChange={(value) =>
-                  onUpdate({ ...tableMapping, targetTableId: parseInt(value), mappings: [] })
-                }
-                disabled={isReadOnly}
-              >
-                <SelectTrigger className="h-7 w-[130px] text-[11px]">
-                  <SelectValue placeholder="Table..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {tables.map((table) => (
-                    <SelectItem key={table.id} value={table.id.toString()}>
-                      {table.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-
-            <Select
-              value={tableMapping.rowAction}
-              onValueChange={(value) =>
-                onUpdate({
-                  ...tableMapping,
-                  rowAction: value as 'create' | 'update' | 'upsert',
-                })
-              }
-              disabled={isReadOnly}
-            >
-              <SelectTrigger className="h-7 w-[90px] text-[11px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="create">Create</SelectItem>
-                <SelectItem value="update">Update</SelectItem>
-                <SelectItem value="upsert">Upsert</SelectItem>
-              </SelectContent>
-            </Select>
-
-            {/* Per-table mode selector */}
-            <Select
-              value={tableMapping.mode || 'single_row'}
-              onValueChange={(value) =>
-                onUpdate({
-                  ...tableMapping,
-                  mode: value as 'single_row' | 'multi_row',
-                })
-              }
-              disabled={isReadOnly}
-            >
-              <SelectTrigger className="h-7 w-[80px] text-[11px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="single_row">Single</SelectItem>
-                <SelectItem value="multi_row">Multi</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Row ID source selector for update/upsert mode */}
-          {(tableMapping.rowAction === 'update' || tableMapping.rowAction === 'upsert') && (
-            <div className="flex items-center gap-2">
-              <Label className="text-[10px] text-muted-foreground">Row ID from:</Label>
-              <Select
-                value={serializeRowIdSource(tableMapping.rowIdSource)}
-                onValueChange={(v) =>
-                  onUpdate({ ...tableMapping, rowIdSource: deserializeRowIdSource(v) })
-                }
-                disabled={isReadOnly}
-              >
-                <SelectTrigger className="h-7 w-[160px] text-[11px]">
-                  <SelectValue placeholder="Select source..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="source_row">Source Row</SelectItem>
-                  {skillInputs.length > 0 && (
-                    <SelectGroup>
-                      <SelectLabel className="text-[10px]">Skill Inputs</SelectLabel>
-                      {skillInputs.map((input) => (
-                        <SelectItem key={`input:${input.name}`} value={`input:${input.name}`}>
-                          Input: {input.name}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  )}
-                  {skillOutputs.length > 0 && (
-                    <SelectGroup>
-                      <SelectLabel className="text-[10px]">Skill Outputs</SelectLabel>
-                      {skillOutputs.map((output) => (
-                        <SelectItem key={`output:${output.field}`} value={`output:${output.field}`}>
-                          Output: {output.field}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  )}
-                  {previousTableMappings.length > 0 && (
-                    <SelectGroup>
-                      <SelectLabel className="text-[10px]">Table References</SelectLabel>
-                      {previousTableMappings.map((tm) => (
-                        <SelectItem
-                          key={`table:${tm.order}:row_id`}
-                          value={`table:${tm.order}:row_id`}
-                        >
-                          Table #{tm.order} → row_id
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {/* Field mappings */}
-          <div className="space-y-1.5">
-            {tableMapping.mappings.map((mapping, index) => (
-              <FieldMappingRow
-                key={index}
-                mapping={mapping}
-                skillOutputs={skillOutputs}
-                skillInputs={skillInputs}
-                previousTableMappings={previousTableMappings}
-                targetFields={targetFields}
-                tableFieldsMap={tableFieldsMap}
-                onUpdate={(m) => handleUpdateMapping(index, m)}
-                onRemove={() => handleRemoveMapping(index)}
-                isReadOnly={isReadOnly}
-              />
-            ))}
-            {!isReadOnly && tableMapping.targetTableId > 0 && (
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleAddMapping}
-                  className="h-6 px-2 text-[11px]"
-                >
-                  <Plus className="h-3 w-3 mr-1" />
-                  Add Field
-                </Button>
-                {targetFields.length > 0 && tableMapping.mappings.length === 0 && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleAutoMap}
-                    className="h-6 px-2 text-[11px]"
-                  >
-                    Auto-map
-                  </Button>
-                )}
-              </div>
-            )}
-          </div>
+        <CardContent className="py-2 px-3">
+          {innerContent}
         </CardContent>
       )}
     </Card>

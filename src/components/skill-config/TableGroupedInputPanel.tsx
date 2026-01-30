@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Table2, ArrowLeft, Plus, X } from 'lucide-react';
+import { Table2, ArrowLeft, Plus, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -32,6 +32,7 @@ export function TableGroupedInputPanel({
   const [tablesLoading, setTablesLoading] = useState(true);
   const [showAddManual, setShowAddManual] = useState(false);
   const [newInputName, setNewInputName] = useState('');
+  const [collapsedTables, setCollapsedTables] = useState<Set<number>>(new Set());
 
   // Load tables for selectors
   useEffect(() => {
@@ -118,6 +119,19 @@ export function TableGroupedInputPanel({
     setShowAddManual(false);
   };
 
+  const toggleTableCollapse = (tableId: number) => {
+    setCollapsedTables((prev) => {
+      const next = new Set(prev);
+      if (next.has(tableId)) next.delete(tableId);
+      else next.add(tableId);
+      return next;
+    });
+  };
+
+  const handleRemoveTableGroup = (tableId: number) => {
+    onInputsChange(inputs.filter((i) => i.inputMapping?.source?.tableId !== tableId));
+  };
+
   return (
     <div className="space-y-3">
       {/* Header */}
@@ -131,41 +145,76 @@ export function TableGroupedInputPanel({
         const table = tables.find((t) => t.id === tableId);
         const tableName = table?.name || `Table #${tableId}`;
         const fields = tableFieldsMap.get(tableId) || [];
+        const isCollapsed = collapsedTables.has(tableId);
 
         return (
           <div
             key={tableId}
             className="rounded-lg border bg-emerald-50/30 dark:bg-emerald-900/10 p-2.5"
           >
-            <div className="flex items-center gap-1.5 mb-2">
-              <Table2 className="h-3.5 w-3.5 text-emerald-600" />
-              <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
-                From: {tableName}
-              </span>
+            <div
+              className="flex items-center justify-between cursor-pointer"
+              onClick={() => toggleTableCollapse(tableId)}
+            >
+              <div className="flex items-center gap-1.5">
+                <Table2 className="h-3.5 w-3.5 text-emerald-600" />
+                <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                  From: {tableName}
+                </span>
+                {isCollapsed && (
+                  <span className="text-[10px] text-muted-foreground">
+                    ({tableInputs.length} field{tableInputs.length !== 1 ? 's' : ''})
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-1">
+                {!isReadOnly && (
+                  <button
+                    type="button"
+                    className="h-5 w-5 rounded text-muted-foreground hover:text-destructive hover:bg-muted flex items-center justify-center"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRemoveTableGroup(tableId);
+                    }}
+                    title="Remove table group"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+                {isCollapsed ? (
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                )}
+              </div>
             </div>
 
-            <div className="space-y-1">
-              {tableInputs.map((input) => (
-                <InputMappingRow
-                  key={input.name}
-                  input={input}
-                  fields={fields}
-                  otherInputs={inputs.filter((i) => i.name !== input.name)}
-                  onUpdate={(updated) => handleUpdateInput(input.name, updated)}
-                  onRemove={() => handleRemoveInput(input.name)}
-                  isReadOnly={isReadOnly}
-                />
-              ))}
-            </div>
+            {!isCollapsed && (
+              <>
+                <div className="space-y-1 mt-2">
+                  {tableInputs.map((input) => (
+                    <InputMappingRow
+                      key={input.name}
+                      input={input}
+                      fields={fields}
+                      otherInputs={inputs.filter((i) => i.name !== input.name)}
+                      onUpdate={(updated) => handleUpdateInput(input.name, updated)}
+                      onRemove={() => handleRemoveInput(input.name)}
+                      isReadOnly={isReadOnly}
+                    />
+                  ))}
+                </div>
 
-            {!isReadOnly && (
-              <FieldPickerPopover
-                tableId={tableId}
-                buttonLabel="+ Add fields"
-                onSelectFields={(selectedFields) =>
-                  handleAddInputsFromTable(tableId, selectedFields)
-                }
-              />
+                {!isReadOnly && (
+                  <FieldPickerPopover
+                    tableId={tableId}
+                    buttonLabel="+ Add fields"
+                    onSelectFields={(selectedFields) =>
+                      handleAddInputsFromTable(tableId, selectedFields)
+                    }
+                  />
+                )}
+              </>
             )}
           </div>
         );

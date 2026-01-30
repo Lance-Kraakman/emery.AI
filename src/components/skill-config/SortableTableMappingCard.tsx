@@ -8,9 +8,10 @@ import type { TableMappingCardProps } from './TableMappingCard';
 
 interface SortableTableMappingCardProps extends Omit<TableMappingCardProps, 'dragHandleProps'> {
   id: number;
+  renderContentOnly?: boolean;
 }
 
-export function SortableTableMappingCard({ id, ...props }: SortableTableMappingCardProps) {
+export function SortableTableMappingCard({ id, renderContentOnly, ...props }: SortableTableMappingCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
   });
@@ -23,7 +24,7 @@ export function SortableTableMappingCard({ id, ...props }: SortableTableMappingC
 
   return (
     <div ref={setNodeRef} style={style}>
-      <TableMappingCard {...props} dragHandleProps={{ attributes, listeners: listeners || {} }} />
+      <TableMappingCard {...props} dragHandleProps={{ attributes, listeners: listeners || {} }} renderContentOnly={renderContentOnly} />
     </div>
   );
 }

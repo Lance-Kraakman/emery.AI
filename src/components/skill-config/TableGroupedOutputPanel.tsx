@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Table2, Database, Plus, X, Info } from 'lucide-react';
+import { Table2, Database, Plus, X, Info, ChevronDown, ChevronUp } from 'lucide-react';
 import {
   DndContext,
   DragEndEvent,
@@ -79,6 +79,7 @@ export function TableGroupedOutputPanel({
   const [tablesLoading, setTablesLoading] = useState(true);
   const [showAddManual, setShowAddManual] = useState(false);
   const [newOutputName, setNewOutputName] = useState('');
+  const [collapsedTables, setCollapsedTables] = useState<Set<number>>(new Set());
 
   // Load tables
   useEffect(() => {
@@ -190,22 +191,6 @@ export function TableGroupedOutputPanel({
     onOutputsChange(newOutputs);
   };
 
-  const handleAddTableMapping = () => {
-    const currentMappings = outputMapping?.tableMappings || [];
-    const newOrder = currentMappings.length + 1;
-    const newTableMapping: TableMapping = {
-      order: newOrder,
-      targetTableId: 0,
-      rowAction: 'create',
-      mappings: [],
-    };
-
-    updateOutputMapping({
-      mode: outputMapping?.mode || 'single_row',
-      tableMappings: [...currentMappings, newTableMapping],
-    });
-  };
-
   const handleUpdateTableMapping = (index: number, tm: TableMapping) => {
     if (!outputMapping) return;
     const newMappings = [...outputMapping.tableMappings];
@@ -215,15 +200,37 @@ export function TableGroupedOutputPanel({
 
   const handleRemoveTableMapping = (index: number) => {
     if (!outputMapping) return;
-    const newMappings = outputMapping.tableMappings
+    const removedMapping = outputMapping.tableMappings[index];
+
+    // Collect output names referenced by this table mapping's field mappings
+    const outputNamesToRemove = new Set<string>();
+    removedMapping.mappings.forEach((fm) => {
+      if (fm.source?.type === 'skill_output' && fm.source.name) {
+        outputNamesToRemove.add(fm.source.name);
+      }
+    });
+
+    const newTableMappings = outputMapping.tableMappings
       .filter((_, i) => i !== index)
       .map((tm, i) => ({ ...tm, order: i + 1 }));
 
-    if (newMappings.length === 0) {
-      updateOutputMapping(undefined);
-    } else {
-      updateOutputMapping({ ...outputMapping, tableMappings: newMappings });
-    }
+    // Remove the output definitions that were mapped to this table
+    const newOutputs = outputs.filter((o) => !outputNamesToRemove.has(o.name));
+
+    // Update mapping on first output (or clear if none left)
+    const finalOutputs = newOutputs.map((o, i) =>
+      i === 0
+        ? {
+            ...o,
+            outputMapping:
+              newTableMappings.length > 0
+                ? { ...outputMapping, tableMappings: newTableMappings }
+                : undefined,
+          }
+        : o
+    );
+
+    onOutputsChange(finalOutputs);
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -335,6 +342,15 @@ export function TableGroupedOutputPanel({
     setShowAddManual(false);
   };
 
+  const toggleTableCollapse = (tableId: number) => {
+    setCollapsedTables((prev) => {
+      const next = new Set(prev);
+      if (next.has(tableId)) next.delete(tableId);
+      else next.add(tableId);
+      return next;
+    });
+  };
+
   return (
     <div className="space-y-3">
       {/* Header */}
@@ -361,39 +377,89 @@ export function TableGroupedOutputPanel({
             <div className="space-y-2">
               {outputMapping.tableMappings.map((tm, index) => {
                 const table = tables.find((t) => t.id === tm.targetTableId);
+                const tableName = table?.name || `Table #${tm.targetTableId}`;
+                const isCollapsed = collapsedTables.has(tm.targetTableId);
+
                 return (
-                  <div key={tm.order}>
-                    {/* "To: TableName" header */}
-                    {tm.targetTableId > 0 && table && (
-                      <div className="flex items-center gap-1.5 mb-1">
+                  <div
+                    key={tm.order}
+                    className="rounded-lg border bg-blue-50/30 dark:bg-blue-900/10 p-2.5"
+                  >
+                    {/* Group header */}
+                    <div
+                      className="flex items-center justify-between cursor-pointer"
+                      onClick={() => toggleTableCollapse(tm.targetTableId)}
+                    >
+                      <div className="flex items-center gap-1.5">
                         <Table2 className="h-3.5 w-3.5 text-blue-600" />
                         <span className="text-xs font-medium text-blue-700 dark:text-blue-400">
-                          To: {table.name}
+                          To: {tableName}
                         </span>
+                        <span className="text-[10px] text-muted-foreground px-1.5 py-0.5 bg-muted rounded">
+                          {tm.rowAction}
+                        </span>
+                        {tm.mode && (
+                          <span className="text-[10px] text-muted-foreground px-1.5 py-0.5 bg-muted rounded">
+                            {tm.mode === 'multi_row' ? 'multi' : 'single'}
+                          </span>
+                        )}
+                        {isCollapsed && (
+                          <span className="text-[10px] text-muted-foreground">
+                            ({tm.mappings.length} field{tm.mappings.length !== 1 ? 's' : ''})
+                          </span>
+                        )}
                       </div>
-                    )}
-                    <SortableTableMappingCard
-                      id={tm.order}
-                      tableMapping={tm}
-                      tables={tables}
-                      tableFieldsMap={tableFieldsMap}
-                      skillOutputs={sourceFields}
-                      skillInputs={inputs}
-                      previousTableMappings={outputMapping.tableMappings.slice(0, index)}
-                      onUpdate={(updated) => handleUpdateTableMapping(index, updated)}
-                      onRemove={() => handleRemoveTableMapping(index)}
-                      isReadOnly={isReadOnly}
-                      hideTableSelector={tm.targetTableId > 0}
-                    />
-                    {/* Add fields from same table */}
-                    {!isReadOnly && tm.targetTableId > 0 && (
-                      <FieldPickerPopover
-                        tableId={tm.targetTableId}
-                        buttonLabel="+ Add output fields"
-                        onSelectFields={(fields) =>
-                          handleAddOutputsToTable(tm.targetTableId, fields)
-                        }
-                      />
+                      <div className="flex items-center gap-1">
+                        {!isReadOnly && (
+                          <button
+                            type="button"
+                            className="h-5 w-5 rounded text-muted-foreground hover:text-destructive hover:bg-muted flex items-center justify-center"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoveTableMapping(index);
+                            }}
+                            title="Remove table group"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        )}
+                        {isCollapsed ? (
+                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                        ) : (
+                          <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Collapsible content */}
+                    {!isCollapsed && (
+                      <>
+                        <div className="mt-2">
+                          <SortableTableMappingCard
+                            id={tm.order}
+                            tableMapping={tm}
+                            tables={tables}
+                            tableFieldsMap={tableFieldsMap}
+                            skillOutputs={sourceFields}
+                            skillInputs={inputs}
+                            previousTableMappings={outputMapping.tableMappings.slice(0, index)}
+                            onUpdate={(updated) => handleUpdateTableMapping(index, updated)}
+                            onRemove={() => handleRemoveTableMapping(index)}
+                            isReadOnly={isReadOnly}
+                            hideTableSelector={tm.targetTableId > 0}
+                            renderContentOnly
+                          />
+                        </div>
+                        {!isReadOnly && tm.targetTableId > 0 && (
+                          <FieldPickerPopover
+                            tableId={tm.targetTableId}
+                            buttonLabel="+ Add output fields"
+                            onSelectFields={(fields) =>
+                              handleAddOutputsToTable(tm.targetTableId, fields)
+                            }
+                          />
+                        )}
+                      </>
                     )}
                   </div>
                 );
@@ -479,19 +545,70 @@ export function TableGroupedOutputPanel({
             </Button>
           )}
           {!tablesLoading && tables.length > 0 && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleAddTableMapping}
-              className="h-6 px-2 text-[11px]"
-            >
-              <Plus className="h-3 w-3 mr-1" />
-              Add table target
-            </Button>
+            <AddToTableButton
+              tables={tables}
+              onAddFields={(tableId, fields) => handleAddOutputsToTable(tableId, fields)}
+            />
           )}
         </div>
       )}
     </div>
+  );
+}
+
+/** Button to add outputs to a new table (table picker → field picker) */
+function AddToTableButton({
+  tables,
+  onAddFields,
+}: {
+  tables: TableDTO[];
+  onAddFields: (tableId: number, fields: FieldDTO[]) => void;
+}) {
+  const [selectedTableId, setSelectedTableId] = useState<number | null>(null);
+
+  if (selectedTableId) {
+    return (
+      <div className="flex items-center gap-1.5">
+        <span className="text-[10px] text-muted-foreground">
+          {tables.find((t) => t.id === selectedTableId)?.name}:
+        </span>
+        <FieldPickerPopover
+          tableId={selectedTableId}
+          buttonLabel="Pick fields"
+          onSelectFields={(fields) => {
+            onAddFields(selectedTableId, fields);
+            setSelectedTableId(null);
+          }}
+        />
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => setSelectedTableId(null)}
+          className="h-5 px-1"
+        >
+          <X className="h-3 w-3" />
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <Select
+      onValueChange={(v) => {
+        setSelectedTableId(parseInt(v));
+      }}
+    >
+      <SelectTrigger className="h-6 w-[140px] text-[10px] text-muted-foreground">
+        <SelectValue placeholder="+ Add to table" />
+      </SelectTrigger>
+      <SelectContent>
+        {tables.map((table) => (
+          <SelectItem key={table.id} value={table.id.toString()}>
+            {table.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
