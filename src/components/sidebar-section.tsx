@@ -91,7 +91,7 @@ export function SidebarSection<T>({
         </SidebarGroupLabel>
         <CollapsibleContent className="group-data-[collapsible=icon]:hidden">
           <SidebarGroupContent>
-            <SidebarMenu className="gap-0.5 pl-4">
+            <SidebarMenu className="gap-0 pl-2">
               {items.map((item) => {
                 const itemKey = getItemKey(item)
                 const isRenaming = renamingItemKey === itemKey

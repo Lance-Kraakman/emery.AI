@@ -8,6 +8,7 @@ import {
   Bot,
   ChevronRight,
   Database,
+  Table2,
   Users,
   Workflow,
   Plug,
@@ -609,7 +610,7 @@ export function AppSidebar({
         {/* Data - Databases with nested tables */}
         <NestedSidebarSection
           icon={Database}
-          childIcon={FileText}
+          childIcon={Table2}
           label="Data"
           parents={databases}
           pathname={pathname}

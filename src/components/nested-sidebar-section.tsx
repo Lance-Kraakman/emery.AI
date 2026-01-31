@@ -140,7 +140,7 @@ export function NestedSidebarSection<TParent, TChild>({
         </SidebarGroupLabel>
         <CollapsibleContent className="group-data-[collapsible=icon]:hidden">
           <SidebarGroupContent>
-            <SidebarMenu className="gap-0.5 pl-4">
+            <SidebarMenu className="gap-0 pl-2">
               {parents.map((parent) => {
                 const parentId = getParentId(parent)
                 const children = getChildren(parent)
@@ -155,7 +155,7 @@ export function NestedSidebarSection<TParent, TChild>({
                   >
                     <SidebarMenuItem className="group">
                       {isRenamingParent ? (
-                        <div className="flex-1 px-2 h-7">
+                        <div className="flex-1 px-2 h-6">
                           <InlineRename
                             value={getParentName(parent)}
                             onSave={(newName) => handleRenameParent(parent, newName)}
@@ -201,7 +201,7 @@ export function NestedSidebarSection<TParent, TChild>({
                             return (
                               <SidebarMenuSubItem key={childKey} className="group/child">
                                 {isRenamingChild ? (
-                                  <div className="flex-1 px-2 h-7">
+                                  <div className="flex-1 px-2 h-6">
                                     <InlineRename
                                       value={getChildName(child)}
                                       onSave={(newName) => handleRenameChild(child, parent, newName)}
