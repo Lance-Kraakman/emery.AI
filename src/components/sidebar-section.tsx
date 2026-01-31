@@ -86,7 +86,6 @@ export function SidebarSection<T>({
             <span className="shrink-0 flex items-center">
               <ChevronRight className="h-3 w-3 transition-transform duration-200 group-data-[state=open]/section:rotate-90" />
             </span>
-            <Icon className="h-4 w-4" />
             <span className="group-data-[collapsible=icon]:hidden">{label}</span>
           </CollapsibleTrigger>
         </SidebarGroupLabel>
@@ -110,8 +109,9 @@ export function SidebarSection<T>({
                         </div>
                       ) : (
                         <>
-                          <SidebarMenuButton asChild isActive={isItemActive(item, pathname)} className="h-6 flex-1">
+                          <SidebarMenuButton asChild isActive={isItemActive(item, pathname)} size="sm" className="flex-1">
                             <Link href={getItemHref(item)}>
+                              <Icon className="h-4 w-4 shrink-0" />
                               <span className="group-data-[collapsible=icon]:hidden">
                                 {getItemName(item)}
                               </span>
@@ -136,7 +136,8 @@ export function SidebarSection<T>({
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
-                      className="w-full justify-start h-6 px-2 text-sm mt-0.5 group-data-[collapsible=icon]:hidden"
+                      size="xs"
+                      className="w-full justify-start mt-0.5 group-data-[collapsible=icon]:hidden"
                       disabled={isCreating}
                     >
                       <Plus className="h-4 w-4" />
@@ -157,7 +158,8 @@ export function SidebarSection<T>({
               ) : (
                 <Button
                   variant="ghost"
-                  className="w-full justify-start h-6 px-2 text-sm mt-0.5 group-data-[collapsible=icon]:hidden"
+                  size="xs"
+                      className="w-full justify-start mt-0.5 group-data-[collapsible=icon]:hidden"
                   onClick={onAdd}
                   disabled={isCreating}
                 >

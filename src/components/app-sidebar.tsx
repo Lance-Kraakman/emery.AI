@@ -8,7 +8,6 @@ import {
   Bot,
   ChevronRight,
   Database,
-  Settings,
   Users,
   Workflow,
   Plug,
@@ -494,7 +493,8 @@ export function AppSidebar({
       <SidebarContent>
         {/* Apps */}
         <NestedSidebarSection<AppData, PageData>
-          icon={FileText}
+          icon={AppWindow}
+          childIcon={FileText}
           label="Apps"
           parents={apps}
           pathname={pathname}
@@ -609,6 +609,7 @@ export function AppSidebar({
         {/* Data - Databases with nested tables */}
         <NestedSidebarSection
           icon={Database}
+          childIcon={FileText}
           label="Data"
           parents={databases}
           pathname={pathname}
@@ -664,7 +665,6 @@ export function AppSidebar({
                 <span className="shrink-0 flex items-center">
                   <ChevronRight className="h-3 w-3 transition-transform duration-200 group-data-[state=open]/settings:rotate-90" />
                 </span>
-                <Settings className="h-4 w-4" />
                 <span className="group-data-[collapsible=icon]:hidden">Settings</span>
               </CollapsibleTrigger>
             </SidebarGroupLabel>

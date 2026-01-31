@@ -142,9 +142,11 @@ export function GroupedSidebarSection<T>({
               <SidebarMenuButton
                 asChild
                 isActive={isItemActive(item, pathname)}
-                className={`h-6 flex-1 ${className}`}
+                size="sm"
+                className={`flex-1 ${className}`}
               >
                 <Link href={getItemHref(item)}>
+                  <Icon className="h-4 w-4 shrink-0" />
                   <span className="group-data-[collapsible=icon]:hidden">
                     {getItemName(item)}
                   </span>
@@ -173,7 +175,6 @@ export function GroupedSidebarSection<T>({
             <span className="shrink-0 flex items-center">
               <ChevronRight className="h-3 w-3 transition-transform duration-200 group-data-[state=open]/section:rotate-90" />
             </span>
-            <Icon className="h-4 w-4" />
             <span className="group-data-[collapsible=icon]:hidden">{label}</span>
           </CollapsibleTrigger>
         </SidebarGroupLabel>
@@ -205,8 +206,8 @@ export function GroupedSidebarSection<T>({
                             )}
                           />
                         </CollapsibleTrigger>
-                        <SidebarMenuButton className="h-6 flex-1 pointer-events-none">
-                          <span className="text-xs text-muted-foreground font-medium truncate">
+                        <SidebarMenuButton size="sm" className="flex-1 pointer-events-none">
+                          <span className="text-xs font-medium truncate">
                             {groupName}
                           </span>
                         </SidebarMenuButton>
@@ -234,9 +235,10 @@ export function GroupedSidebarSection<T>({
                                     asChild
                                     size="sm"
                                     isActive={isItemActive(item, pathname)}
-                                    className="h-6 flex-1"
+                                    className="flex-1"
                                   >
                                     <Link href={getItemHref(item)}>
+                                      <Icon className="h-3.5 w-3.5 shrink-0" />
                                       <span>{getItemName(item)}</span>
                                     </Link>
                                   </SidebarMenuSubButton>
@@ -266,7 +268,8 @@ export function GroupedSidebarSection<T>({
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
-                      className="w-full justify-start h-6 px-2 text-sm mt-0.5 group-data-[collapsible=icon]:hidden"
+                      size="xs"
+                      className="w-full justify-start mt-0.5 group-data-[collapsible=icon]:hidden"
                       disabled={isCreating}
                     >
                       <Plus className="h-4 w-4" />
@@ -287,7 +290,8 @@ export function GroupedSidebarSection<T>({
               ) : (
                 <Button
                   variant="ghost"
-                  className="w-full justify-start h-6 px-2 text-sm mt-0.5 group-data-[collapsible=icon]:hidden"
+                  size="xs"
+                      className="w-full justify-start mt-0.5 group-data-[collapsible=icon]:hidden"
                   onClick={onAdd}
                   disabled={isCreating}
                 >
