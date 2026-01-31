@@ -180,7 +180,7 @@ export function GroupedSidebarSection<T>({
         </SidebarGroupLabel>
         <CollapsibleContent className="group-data-[collapsible=icon]:hidden">
           <SidebarGroupContent>
-            <SidebarMenu className="gap-0 pl-2">
+            <SidebarMenu className="gap-0 ml-2 border-l border-sidebar-border pl-3">
               {/* Ungrouped items (top level) */}
               {ungroupedItems.map((item) => renderItem(item))}
 
@@ -197,21 +197,19 @@ export function GroupedSidebarSection<T>({
                     onOpenChange={() => toggleGroup(groupKey)}
                   >
                     <SidebarMenuItem>
-                      <div className="flex items-center w-full">
-                        <CollapsibleTrigger className="shrink-0 p-0.5 rounded-sm hover:bg-sidebar-accent">
+                      <CollapsibleTrigger asChild>
+                        <SidebarMenuButton size="sm" className="flex-1">
                           <ChevronRight
                             className={cn(
                               "h-3 w-3 transition-transform duration-200",
                               isGroupOpen && "rotate-90"
                             )}
                           />
-                        </CollapsibleTrigger>
-                        <SidebarMenuButton size="sm" className="flex-1 pointer-events-none">
                           <span className="text-xs font-medium truncate">
                             {groupName}
                           </span>
                         </SidebarMenuButton>
-                      </div>
+                      </CollapsibleTrigger>
                     </SidebarMenuItem>
                     <CollapsibleContent>
                       <SidebarMenuSub>

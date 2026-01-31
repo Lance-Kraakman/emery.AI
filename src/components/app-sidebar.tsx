@@ -672,7 +672,7 @@ export function AppSidebar({
             <CollapsibleContent className="group-data-[collapsible=icon]:hidden">
               <SidebarGroupContent>
                 <div className="max-h-[40vh] overflow-y-auto">
-                  <SidebarMenu className="gap-0.5 pl-4">
+                  <SidebarMenu className="gap-0 ml-2 border-l border-sidebar-border pl-3">
                     <SidebarMenuItem>
                       <SidebarMenuButton asChild isActive={pathname === "/templates"} size="sm">
                         <Link href="/templates">

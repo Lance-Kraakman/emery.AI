@@ -140,7 +140,7 @@ export function NestedSidebarSection<TParent, TChild>({
         </SidebarGroupLabel>
         <CollapsibleContent className="group-data-[collapsible=icon]:hidden">
           <SidebarGroupContent>
-            <SidebarMenu className="gap-0 pl-2">
+            <SidebarMenu className="gap-0 ml-2 border-l border-sidebar-border pl-3">
               {parents.map((parent) => {
                 const parentId = getParentId(parent)
                 const children = getChildren(parent)
@@ -193,7 +193,7 @@ export function NestedSidebarSection<TParent, TChild>({
                         </div>
                       )}
                       <CollapsibleContent className="group-data-[collapsible=icon]:hidden">
-                        <SidebarMenuSub className="gap-0.5">
+                        <SidebarMenuSub>
                           {children?.map((child) => {
                             const childKey = getChildKey(child)
                             const isRenamingChild = renamingChildKey === childKey
