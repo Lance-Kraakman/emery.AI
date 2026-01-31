@@ -218,6 +218,61 @@ def create_external_search_tool() -> dspy.Tool:
     )
 
 
+def create_web_search_tool() -> dspy.Tool | None:
+    """Create web_search tool wrapping DuckDuckGo search.
+
+    Returns None if duckduckgo-search package is not installed.
+    """
+    try:
+        from duckduckgo_search import DDGS
+    except ImportError:
+        logger.warning("web_search tool unavailable (missing duckduckgo-search package)")
+        return None
+
+    def web_search(query: str, max_results: int = 5) -> str:
+        """Search the web for information.
+
+        IMPORTANT BOUNDARIES:
+        - Use this tool for RESEARCH and INFORMATION GATHERING only
+        - Results are reference material — do NOT copy-paste raw content as implementation
+        - To BUILD anything based on research, use the appropriate capability tools
+          (schema_builder, app_builder, page_builder, etc.)
+        - This tool helps you understand WHAT to build, not HOW to build it in Emery
+        """
+        try:
+            ddgs = DDGS()
+            results = list(ddgs.text(query, max_results=min(max_results, 10)))
+            if not results:
+                return f"No results found for: {query}"
+
+            formatted = []
+            for i, r in enumerate(results, 1):
+                title = r.get("title", "No title")
+                body = r.get("body", "No description")
+                href = r.get("href", "")
+                formatted.append(f"{i}. {title}\n   {body}\n   URL: {href}")
+            return "\n\n".join(formatted)
+        except Exception as e:
+            logger.error(f"Web search failed: {e}")
+            return f"Search failed: {e}"
+
+    return dspy.Tool(
+        func=web_search,
+        name="web_search",
+        desc=(
+            "Search the web for external information (READ-ONLY research tool). "
+            "Use for: researching businesses, finding examples, understanding industry practices, "
+            "gathering requirements. "
+            "DO NOT use results as direct implementation — use Emery capability tools "
+            "(schema_builder, app_builder, etc.) to build based on research findings."
+        ),
+        arg_desc={
+            "query": "Search query string (e.g., 'CRM best practices', 'competitor company overview')",
+            "max_results": "Maximum results to return (default: 5, max: 10)",
+        },
+    )
+
+
 def create_discovery_tools(
     api_key: str,
     org_id: str,
@@ -242,6 +297,11 @@ def create_discovery_tools(
 
     if capability_registry:
         tools.append(create_capability_search_tool(capability_registry))
+
+    # Add web search if available (graceful degradation if package missing)
+    web_search_tool = create_web_search_tool()
+    if web_search_tool:
+        tools.append(web_search_tool)
 
     logger.info(f"Created {len(tools)} discovery tools")
     return tools

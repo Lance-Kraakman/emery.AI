@@ -298,6 +298,10 @@ class CoordinatorStreamingHandler:
                         task=task,
                         org_model=org_model,
                         external_tools=tools,
+                        workspace_context=workspace,
+                        memory_context=memory_context_str,
+                        conversation_history=conversation_history,
+                        capability_registry=capability_registry,
                     ):
                         yield event
                     return
@@ -519,6 +523,10 @@ class CoordinatorStreamingHandler:
         task: str,
         org_model: Optional[str],
         external_tools: Optional[List[Any]] = None,
+        workspace_context: Optional[Any] = None,
+        memory_context: str = "",
+        conversation_history: Optional[List[Any]] = None,
+        capability_registry: Optional[Any] = None,
     ) -> AsyncIterator[Any]:
         """
         Handle direct execution without a plan using DSPy.
@@ -529,10 +537,11 @@ class CoordinatorStreamingHandler:
 
         logger.info("Direct execution: Starting DSPy ReAct execution...")
 
-        # Create DSPy tools with auth
+        # Create DSPy tools with auth (pass capability_registry for search_capabilities)
         tools = create_all_tools(
             api_key=context.tool_provider.api_key,
             org_id=str(context.tool_provider.organization_id),
+            capability_registry=capability_registry,
         )
 
         # Include loaded tools (skill tools, etc.) from agent config
@@ -553,11 +562,27 @@ class CoordinatorStreamingHandler:
         # Get DSPy LM
         lm = get_dspy_lm(org_model=org_model)
 
-        # Build minimal context
-        execution_context = {
+        # Build execution context with available information
+        execution_context: Dict[str, Any] = {
             "task": task,
             "org_id": str(context.tool_provider.organization_id),
         }
+
+        # Add workspace context so executor knows existing resources
+        if workspace_context:
+            execution_context["workspace"] = workspace_context.resource_summary()
+
+        # Add memory context from past interactions
+        if memory_context:
+            execution_context["memory"] = memory_context
+
+        # Add conversation history for follow-up context
+        if conversation_history:
+            formatted = _convert_history(conversation_history)
+            recent = formatted[-10:] if formatted else []
+            execution_context["conversation_history"] = [
+                {"role": m.role, "content": m.content[:500]} for m in recent
+            ]
 
         try:
             # Execute with DSPy

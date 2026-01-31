@@ -38,7 +38,6 @@ READ_ONLY_TOOLS: Set[str] = {
     "table_data",
     # External read-only
     "web_search",
-    "web_fetch",
     # File reading
     "file_reader",
     "document_reader",
