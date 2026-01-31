@@ -2,7 +2,7 @@
 
 AIDEV-NOTE: Only supports 'agentic' and 'workflow' execution types.
 Dead code for 'operation', 'tool', 'read', 'write' modes removed Jan 2026.
-DTO migration: executor accepts SkillConfigDTO only. Proto converted at boundary.
+Executor accepts SkillConfig entity only. Proto converted at boundary.
 """
 
 import json
@@ -12,7 +12,7 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union, o
 from PIL import Image
 
 from ...entities.skill_config import (
-    SkillConfigDTO, SkillStepDTO,
+    SkillConfig, SkillStep,
     AgenticStepConfig as AgenticStepConfigDTO,
     ReadConfig as ReadConfigDTO, WriteConfig as WriteConfigDTO,
     RowIdSource, ReadFieldMapping, WriteFieldMapping,
@@ -64,7 +64,7 @@ def map_node_outputs_to_skill_outputs(
 class SkillExecutorService:
     """Executes skills via agentic (LLM orchestration) or workflow (DAG steps).
 
-    Accepts SkillConfigDTO only (created from API response).
+    Accepts SkillConfig only (created from API response).
     """
 
     def __init__(
@@ -77,7 +77,7 @@ class SkillExecutorService:
 
     def _extract_plan_from_skill(
         self,
-        skill_config: SkillConfigDTO,
+        skill_config: SkillConfig,
     ) -> Optional[Plan]:
         """Extract stored plan from skill's agentic step configuration.
 
@@ -92,9 +92,9 @@ class SkillExecutorService:
 
     def _build_wrapper_dag(
         self,
-        skill_config: SkillConfigDTO,
+        skill_config: SkillConfig,
         runtime_inputs: Dict[str, Any],
-    ) -> List[SkillStepDTO]:
+    ) -> List[SkillStep]:
         """Build wrapper DAG from agentic skill config.
 
         Generates:
@@ -103,9 +103,9 @@ class SkillExecutorService:
         - Write step (if skill has output mappings)
 
         Returns:
-            List of SkillStepDTO for DAG execution
+            List of SkillStep for DAG execution
         """
-        steps: List[SkillStepDTO] = []
+        steps: List[SkillStep] = []
 
         # Step 1: Generate Read step from input mappings
         read_step = self._build_read_step_from_inputs(skill_config)
@@ -126,7 +126,7 @@ class SkillExecutorService:
         if stored_plan:
             logger.info(f"📋 Skill {skill_config.name}: using stored plan")
 
-        agentic_step = SkillStepDTO(
+        agentic_step = SkillStep(
             id=f"agentic_{skill_config.id}",
             name=skill_config.name,
             step_type="agentic",
@@ -145,12 +145,12 @@ class SkillExecutorService:
 
     def _build_read_step_from_inputs(
         self,
-        skill_config: SkillConfigDTO,
-    ) -> Optional[SkillStepDTO]:
+        skill_config: SkillConfig,
+    ) -> Optional[SkillStep]:
         """Generate Read step from skill input mappings.
 
         Returns:
-            SkillStepDTO with read_config, or None if no input mappings
+            SkillStep with read_config, or None if no input mappings
         """
         inputs_with_mapping = [
             inp for inp in skill_config.inputs
@@ -190,7 +190,7 @@ class SkillExecutorService:
             field_mappings=field_mappings,
         )
 
-        return SkillStepDTO(
+        return SkillStep(
             id=f"read_{skill_config.id}",
             name=f"Read inputs for {skill_config.name}",
             step_type="read",
@@ -199,12 +199,12 @@ class SkillExecutorService:
 
     def _build_write_step_from_outputs(
         self,
-        skill_config: SkillConfigDTO,
-    ) -> Optional[SkillStepDTO]:
+        skill_config: SkillConfig,
+    ) -> Optional[SkillStep]:
         """Generate Write step from skill output mappings.
 
         Returns:
-            SkillStepDTO with write_config, or None if no output mappings
+            SkillStep with write_config, or None if no output mappings
         """
         outputs_with_mapping = [
             out for out in skill_config.outputs
@@ -232,7 +232,7 @@ class SkillExecutorService:
             match_field_id=first_table.get("match_field_id"),
         )
 
-        return SkillStepDTO(
+        return SkillStep(
             id=f"write_{skill_config.id}",
             name=f"Write outputs for {skill_config.name}",
             step_type="write",
@@ -242,7 +242,7 @@ class SkillExecutorService:
     @overload
     def execute_skill(
         self,
-        skill_config: SkillConfigDTO,
+        skill_config: SkillConfig,
         runtime_inputs: Dict[str, Any],
         org_model: Optional[str] = None,
         capture_outputs: Literal[False] = False,
@@ -256,7 +256,7 @@ class SkillExecutorService:
     @overload
     def execute_skill(
         self,
-        skill_config: SkillConfigDTO,
+        skill_config: SkillConfig,
         runtime_inputs: Dict[str, Any],
         org_model: Optional[str] = None,
         capture_outputs: Literal[True] = ...,
@@ -269,7 +269,7 @@ class SkillExecutorService:
 
     def execute_skill(
         self,
-        skill_config: SkillConfigDTO,
+        skill_config: SkillConfig,
         runtime_inputs: Dict[str, Any],
         org_model: Optional[str] = None,
         capture_outputs: bool = False,
@@ -282,7 +282,7 @@ class SkillExecutorService:
         """Execute a skill.
 
         Args:
-            skill_config: SkillConfigDTO (from API or proto boundary)
+            skill_config: SkillConfig (from API or proto boundary)
             runtime_inputs: Runtime inputs from caller
             org_model: Organization default model (fallback)
             capture_outputs: If True, return SkillExecutionResult with captured outputs
@@ -318,7 +318,7 @@ class SkillExecutorService:
 
     def _execute_agentic(
         self,
-        skill_config: SkillConfigDTO,
+        skill_config: SkillConfig,
         runtime_inputs: Dict[str, Any],
         org_model: Optional[str],
         capture_outputs: bool,
@@ -386,7 +386,7 @@ class SkillExecutorService:
 
     def _execute_agent(
         self,
-        skill_config: SkillConfigDTO,
+        skill_config: SkillConfig,
         runtime_inputs: Dict[str, Any],
         org_model: Optional[str],
         capture_outputs: bool,
@@ -536,7 +536,7 @@ class SkillExecutorService:
 
     def _execute_steps(
         self,
-        skill_config: SkillConfigDTO,
+        skill_config: SkillConfig,
         runtime_inputs: Dict[str, Any],
         org_model: Optional[str] = None,
         api_key: Optional[str] = None,
@@ -642,9 +642,12 @@ class SkillExecutorService:
 
     def _process_skill_attachments(
         self,
-        skill_config: SkillConfigDTO,
+        skill_config: SkillConfig,
     ) -> Tuple[List[Image.Image], List[str]]:
-        """Process attachments from skill_config.content (raw proto MessagePart objects)."""
+        """Process attachments from skill_config.content (entity MessagePart objects)."""
+        from ...entities.message import TextPart, ImagePart
+        from ..data.image_processor import ImageProcessor
+
         images = []
         text_parts = []
 
@@ -654,16 +657,18 @@ class SkillExecutorService:
         logger.info(f"📎 Processing {len(skill_config.content)} attachments from skill config")
 
         try:
-            from ..grpc.mappers.message_mapper import proto_parts_to_content
-            content_list = run_async_in_thread(
-                proto_parts_to_content(skill_config.content)
-            )
+            image_urls = []
+            for part in skill_config.content:
+                if isinstance(part, TextPart):
+                    text_parts.append(f"\n\n{part.text}")
+                elif isinstance(part, ImagePart) and part.url:
+                    image_urls.append(part.url)
 
-            for content_item in content_list:
-                if content_item["type"] == "image":
-                    images.append(content_item["image"])
-                elif content_item["type"] == "text":
-                    text_parts.append(f"\n\n{content_item['text']}")
+            if image_urls:
+                pil_images = run_async_in_thread(
+                    ImageProcessor.download_images_from_urls(image_urls)
+                )
+                images.extend(pil_images)
 
             logger.info(f"✅ Processed: {len(images)} images, {len(text_parts)} text parts")
         except Exception as e:
@@ -715,13 +720,13 @@ class SkillExecutorService:
     ) -> Callable:
         """Create callback for SkillTool delegation.
 
-        Accepts SkillConfigDTO directly (callers pass DTOs, not protos).
+        Accepts SkillConfig directly (callers pass DTOs, not protos).
 
         Returns:
             Callable that takes (skill_config, inputs, capture_outputs) and returns result
         """
         def callback(
-            skill_config: SkillConfigDTO,
+            skill_config: SkillConfig,
             runtime_inputs: Dict[str, Any],
             capture_outputs: bool = False
         ) -> Union[str, SkillExecutionResult]:

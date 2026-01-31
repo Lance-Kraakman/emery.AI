@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Any, Callable
 
-from ....grpc.generated.agent_worker_pb2 import ToolConfig
+from ....entities.tool_config import ToolConfig
 
 
 class MeasurementAPITool:

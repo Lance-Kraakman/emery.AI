@@ -14,7 +14,7 @@ import os
 import threading
 from typing import Any, Callable, TYPE_CHECKING
 
-from ....entities.skill_config import SkillConfigDTO
+from ....entities.skill_config import SkillConfig
 from ....services.data.output_mapping import MappingContext, OutputMappingService
 from ....types import SkillExecutionResult
 from ....utils import run_async_in_thread
@@ -44,7 +44,7 @@ class SkillTool:
 
     def __init__(
         self,
-        skill_config: SkillConfigDTO,
+        skill_config: SkillConfig,
         skill_executor: Callable,
         api_key: str | None = None,
         organization_id: int | None = None,

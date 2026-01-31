@@ -15,7 +15,7 @@ import os
 from typing import Any, Dict, List, Optional, Callable
 from pathlib import Path
 
-from ...grpc.generated.agent_worker_pb2 import ToolConfig, AgentConfig
+from ...entities.tool_config import ToolConfig
 # SkillConfig removed - skills now loaded dynamically via API
 from ...reasoning.tools import (
     create_table_crud,
@@ -176,7 +176,7 @@ class UnifiedToolLoader:
         Load a tool instance from ToolConfig using unified metadata.
 
         Args:
-            tool_config: Tool configuration from proto
+            tool_config: ToolConfig entity
             api_key: API key for tool authentication
             api_key_mode: API key mode ("agent" or "user")
             organization_id: Optional org ID for RLS context
@@ -384,7 +384,7 @@ class UnifiedToolLoader:
             context: Execution context containing environment data (api_key, base_url, etc.)
 
         Returns:
-            List of ToolConfig protobuf objects
+            List of ToolConfig entities
         """
         import logging
         logger = logging.getLogger(__name__)
@@ -432,16 +432,12 @@ class UnifiedToolLoader:
         workspace_path: Optional[Path] = None
     ) -> List[Any]:
         """
-        Load smolagents tools from ToolConfig protobuf objects.
+        Load smolagents tools from ToolConfig entities.
 
-        Consolidates functionality from chat_processing_service._convert_tools_to_smolagents().
         Handles errors gracefully, returning successfully loaded tools.
 
-        AIDEV-NOTE: skill_executor, inference_client, agent_config removed (Jan 2026)
-        Skills are now executed dynamically via skill_crud tool which loads configs via API.
-
         Args:
-            tool_configs: List of ToolConfig protobuf objects
+            tool_configs: List of ToolConfig entities
             api_key: Optional API key for tool authentication
             api_key_mode: API key mode ("agent" or "user")
             organization_id: Optional org ID for RLS context

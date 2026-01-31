@@ -12,7 +12,7 @@ from io import BytesIO
 from typing import Any, List, Optional
 from PIL import Image
 
-from ...grpc.generated import agent_worker_pb2
+from ...entities.message import ImageAttachment
 
 logger = logging.getLogger(__name__)
 
@@ -60,13 +60,13 @@ class ImageProcessor:
 
     @staticmethod
     async def download_images_from_attachments(
-        image_attachments: List[agent_worker_pb2.ImageAttachment]
+        image_attachments: List[ImageAttachment]
     ) -> List[Image.Image]:
         """
-        Download images from ImageAttachment protobuf objects.
+        Download images from ImageAttachment entities.
 
         Args:
-            image_attachments: List of ImageAttachment protobuf objects with URLs
+            image_attachments: List of ImageAttachment entities with URLs
 
         Returns:
             List of PIL.Image objects

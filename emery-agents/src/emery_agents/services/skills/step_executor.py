@@ -8,8 +8,7 @@ import time
 from dataclasses import dataclass, asdict, field
 from typing import Any, AsyncIterator, Callable, Dict, List, Literal, Optional, Set
 from ...utils import run_async_in_thread
-from ..grpc.generated.agent_worker_pb2 import ToolConfig
-from ..grpc.generated.agent_worker_pb2 import ToolConfig as ProtoToolConfig
+from ...entities.tool_config import ToolConfig
 
 
 from tenacity import (
@@ -22,7 +21,7 @@ from tenacity import (
 )
 
 from ...entities.skill_config import (
-    SkillConfigDTO, SkillStepDTO,
+    SkillConfig, SkillStep,
     ErrorConfig, RetryConfig, StepOutput, LoopConfig,
     ReadConfig, WriteConfig, ToolExecutionConfig,
     AgenticStepConfig, InputDef, OutputDef,
@@ -148,8 +147,8 @@ class Step:
     is_disabled: bool = False
 
     @classmethod
-    def from_dto(cls, dto: 'SkillStepDTO') -> 'Step':
-        """Convert SkillStepDTO to internal Step.
+    def from_dto(cls, dto: 'SkillStep') -> 'Step':
+        """Convert SkillStep to internal Step.
 
         Straightforward field copy since DTO and Step share the same
         config types from entities.skill_config.
@@ -236,8 +235,8 @@ class StepExecutorService:
 
     async def execute_steps(
         self,
-        steps: List[SkillStepDTO],
-        available_skills: Dict[int, SkillConfigDTO],
+        steps: List[SkillStep],
+        available_skills: Dict[int, SkillConfig],
         initial_inputs: Dict[str, Any],
         org_model: Optional[str] = None,
         api_key: Optional[str] = None,
@@ -247,8 +246,8 @@ class StepExecutorService:
         """Execute steps as a DAG workflow.
 
         Args:
-            steps: List of SkillStepDTO objects
-            available_skills: Map of skill_id to SkillConfigDTO for delegation
+            steps: List of SkillStep objects
+            available_skills: Map of skill_id to SkillConfig for delegation
             initial_inputs: Initial inputs to seed the step_context
             org_model: Organization default model
             api_key: API key for authenticated calls
@@ -488,7 +487,7 @@ class StepExecutorService:
         step_counter: int,
         total_steps: int,
         step_context: Dict[str, Any],
-        available_skills: Dict[int, SkillConfigDTO],
+        available_skills: Dict[int, SkillConfig],
         execution_stack: Set[int],
         org_model: Optional[str],
         api_key: Optional[str],
@@ -732,7 +731,7 @@ class StepExecutorService:
         self,
         step: Step,
         step_context: Dict[str, Any],
-        available_skills: Dict[int, SkillConfigDTO],
+        available_skills: Dict[int, SkillConfig],
         execution_stack: Set[int],
         org_model: Optional[str],
         api_key: Optional[str],
@@ -818,7 +817,7 @@ class StepExecutorService:
         self,
         step: Step,
         step_context: Dict[str, Any],
-        available_skills: Dict[int, SkillConfigDTO],
+        available_skills: Dict[int, SkillConfig],
         execution_stack: Set[int],
         org_model: Optional[str],
         api_key: Optional[str],
@@ -990,7 +989,7 @@ class StepExecutorService:
         self,
         step: Step,
         step_inputs: Dict[str, Any],
-        available_skills: Dict[int, SkillConfigDTO],
+        available_skills: Dict[int, SkillConfig],
         org_model: Optional[str],
         api_key: Optional[str],
         organization_id: Optional[int],
@@ -1258,10 +1257,10 @@ class StepExecutorService:
                 tool_inputs[mapping.tool_param] = mapping.static_value
 
         # Load the specific Pipedream tool
-        proto_tool_config = ProtoToolConfig(name=tool_id, tool_type="pipedream", config={})
+        tool_config = ToolConfig(name=tool_id, config={})
 
         tools = self.tool_loader.load_tools_from_configs(
-            tool_configs=[proto_tool_config],
+            tool_configs=[tool_config],
             api_key=api_key,
             api_key_mode="user"
         )
@@ -1504,8 +1503,8 @@ class StepExecutorService:
 
 def execute_steps_sync(
     step_executor: StepExecutorService,
-    steps: List[SkillStepDTO],
-    available_skills: Dict[int, SkillConfigDTO],
+    steps: List[SkillStep],
+    available_skills: Dict[int, SkillConfig],
     initial_inputs: Dict[str, Any],
     org_model: Optional[str] = None,
     api_key: Optional[str] = None,

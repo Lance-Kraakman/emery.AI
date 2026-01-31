@@ -16,7 +16,7 @@ from typing import Any, Callable
 
 import requests
 
-from ....grpc.generated.agent_worker_pb2 import ToolConfig
+from ....entities.tool_config import ToolConfig
 
 logger = logging.getLogger(__name__)
 

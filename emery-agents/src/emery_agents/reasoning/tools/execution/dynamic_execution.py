@@ -20,7 +20,7 @@ from typing import Any, Dict, Optional
 import requests
 
 from ..http_client import get_base_url
-from ....entities.skill_config import SkillConfigDTO
+from ....entities.skill_config import SkillConfig
 
 logger = logging.getLogger(__name__)
 
@@ -83,8 +83,8 @@ def execute_skill_by_id(
         execution_api_key = api_key
         logger.info("[DYNAMIC-EXEC] Using caller credentials (org-level skill)")
 
-    # 3. Create SkillConfigDTO from API response
-    skill_config = SkillConfigDTO.from_api_response(skill_dto)
+    # 3. Create SkillConfig from API response
+    skill_config = SkillConfig.from_api_response(skill_dto)
     logger.info(f"[DYNAMIC-EXEC] Skill config: {skill_config.name} (type={skill_config.execution_type})")
 
     # 4. Create executor and execute in-process

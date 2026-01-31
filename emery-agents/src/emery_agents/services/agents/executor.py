@@ -18,9 +18,10 @@ from PIL import Image
 
 
 from ...entities.execution_context import ExecutionContext
-from ...entities.skill_config import SkillConfigDTO
+from ...entities.skill_config import SkillConfig
 from ...types import ExecutionMode, AgentId, OrganizationId
-from ...grpc.generated.agent_worker_pb2 import ToolConfig, TokenUsage as TokenUsageProto, ImageAttachment
+from ...entities.tool_config import ToolConfig
+from ...entities.message import ImageAttachment, ImagePart, FilePart, FileAttachment
 from ...entities.task import TaskRequest
 from ..models import ModelProvider
 from ..data import ImageProcessor
@@ -111,7 +112,7 @@ class AgentExecutor:
         # Agent cache now managed by AgentFactory
         logger.info("AgentExecutor initialized with shared utilities")
 
-    def _extract_token_usage(self, result) -> Optional[TokenUsageProto]:
+    def _extract_token_usage(self, result) -> Optional[Any]:
         """Extract token usage using consolidated TokenUsageExtractor."""
         return TokenUsageExtractor.extract_from_result(result)
 
@@ -119,7 +120,7 @@ class AgentExecutor:
         """Download images using consolidated ImageProcessor."""
         return await ImageProcessor.download_images_from_attachments(image_attachments)
 
-    def _is_agent_skill(self, skill: SkillConfigDTO) -> bool:
+    def _is_agent_skill(self, skill: SkillConfig) -> bool:
         """
         Check if skill uses step-based agent execution (DAG workflow).
 
@@ -128,7 +129,7 @@ class AgentExecutor:
         """
         return skill.execution_type == 'agent' and len(skill.steps) > 0
 
-    def _is_agentic_skill(self, skill: SkillConfigDTO) -> bool:
+    def _is_agentic_skill(self, skill: SkillConfig) -> bool:
         """
         Check if skill uses agentic execution (flat instructions, LLM orchestration).
 
@@ -156,7 +157,7 @@ class AgentExecutor:
         if not request.skill_name:
             raise ValueError("Skill name is required for skill-based execution")
         # Skills resolved via API — agent_config.skills is no longer populated via proto
-        all_skill_dtos: list[SkillConfigDTO] = []
+        all_skill_dtos: list[SkillConfig] = []
         skill = self._find_skill_by_name(all_skill_dtos, request.skill_name)
 
         if not skill:
@@ -181,31 +182,29 @@ class AgentExecutor:
         org_model = request.organization_model or None
 
         # Extract attachments from skill definition (skill-level attachments)
-        # Protobuf repeated fields are always present (empty list if not set)
         skill_content = list(skill.content) if skill.content else []
 
         # Extract runtime input attachments (passed during invocation)
-        # Protobuf repeated fields - access directly
         input_content = list(request.input_content) if request.input_content else []
 
         # Merge skill-level and runtime attachments
         all_content = skill_content + input_content
 
-        # Separate images and files from MessageParts
-        # MessagePart is protobuf - use HasField() for oneof fields
+        # Separate images and files from MessageParts (entity types)
         images = []
         attachments = []
         for part in all_content:
-            if part.HasField('image_url') and part.image_url.url:
-                # Convert MessagePart.ImageUrlPart to ImageAttachment for compatibility
-                img_attachment = ImageAttachment(url=part.image_url.url)
-                images.append(img_attachment)
-            elif part.HasField('file') and part.file:
-                # Files are already in the right format
-                attachments.append(part.file)
+            if isinstance(part, ImagePart):
+                images.append(ImageAttachment(url=part.url))
+            elif isinstance(part, FilePart):
+                attachments.append(FileAttachment(
+                    url=part.url,
+                    mime_type=part.mime_type,
+                    filename=part.filename,
+                ))
 
         # Get all available skills for delegation (excluding the current skill)
-        # Reuse all_skill_dtos from above (already converted proto → DTO at boundary)
+        # Reuse all_skill_dtos from above
         available_skills = [s for s in all_skill_dtos if s.name != request.skill_name]
 
         # Extract skill inputs from trigger_data.skill_inputs (automation inputMappings)
@@ -242,14 +241,12 @@ class AgentExecutor:
         instruction_config = request.instruction_config
 
         # Extract tool names from instruction config
-        # instruction_config is protobuf InstructionConfig - tools is repeated field
         tool_names = []
         if instruction_config.tools:
             tool_names = [tool.name for tool in instruction_config.tools]
 
         # Extract model overrides
         # Priority: instruction model > request agent model > config default model
-        # Protobuf string field - empty string if not set
         instruction_model = instruction_config.model or None
 
         # Read from request-level fields FIRST (set by frontend), then fallback to config
@@ -281,7 +278,7 @@ class AgentExecutor:
             resolved_context=request.resolved_context,  # Context table mappings
         )
 
-    def _find_skill_by_name(self, skills: list[SkillConfigDTO], skill_name: str) -> Optional[SkillConfigDTO]:
+    def _find_skill_by_name(self, skills: list[SkillConfig], skill_name: str) -> Optional[SkillConfig]:
         """Find specific skill by name in agent skills."""
         for skill in skills:
             if skill.name == skill_name:
@@ -501,7 +498,7 @@ class AgentExecutor:
         }
 
         # Build available skills map for delegation (skill_id -> config)
-        available_skills: Dict[int, SkillConfigDTO] = {}
+        available_skills: Dict[int, SkillConfig] = {}
         if context.available_skills:
             for s in context.available_skills:
                 available_skills[s.id] = s
@@ -916,7 +913,7 @@ class AgentExecutor:
 
         return self.agent_factory.create_agent(agent_config)
 
-    def _has_output_mappings(self, skill: SkillConfigDTO) -> bool:
+    def _has_output_mappings(self, skill: SkillConfig) -> bool:
         """Check if skill has any outputs with output mappings configured."""
         if not skill.outputs:
             return False
@@ -925,7 +922,7 @@ class AgentExecutor:
                 return True
         return False
 
-    def _get_task_instructions(self, skill: SkillConfigDTO) -> str:
+    def _get_task_instructions(self, skill: SkillConfig) -> str:
         """Get task instructions from skill config.
 
         Note: Output capture instructions removed - extraction happens after execution.
@@ -934,7 +931,7 @@ class AgentExecutor:
 
     async def _create_skill_agent(
         self,
-        skill: SkillConfigDTO,
+        skill: SkillConfig,
         context: ExecutionContext,
     ) -> dspy.Module:
         """Create DSPy executor module from skill configuration."""
@@ -994,7 +991,7 @@ class AgentExecutor:
 
     def _create_skill_tools(
         self,
-        skills: List[SkillConfigDTO],
+        skills: List[SkillConfig],
         org_model: Optional[str] = None,
         api_key: Optional[str] = None,
         organization_id: Optional[int] = None
@@ -1087,7 +1084,7 @@ class AgentExecutor:
 
     async def _apply_agent_output_mappings(
         self,
-        skill: SkillConfigDTO,
+        skill: SkillConfig,
         captured_values: Dict[str, Any],
         api_key: Optional[str],
         organization_id: Optional[str]

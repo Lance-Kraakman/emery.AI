@@ -80,8 +80,9 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
         ProcessMessage task-based execution. Workspace sync remains here as it's
         specific to background task execution.
         """
-        # Convert protobuf to TaskData for TaskExecutor
-        task_data = TaskExecutor.from_task_request(request, self.proto_mapper)
+        # Convert protobuf to entity at boundary, then build TaskData
+        task_request = self.proto_mapper.task_request_from_proto(request)
+        task_data = TaskExecutor.from_task_request(task_request)
 
         print(f"🚀 [TASK-{task_data.task_id[:8]}] Starting execution for agent: {task_data.agent_id}")
         print(f"📋 [TASK-{task_data.task_id[:8]}] Name: {request.name}")

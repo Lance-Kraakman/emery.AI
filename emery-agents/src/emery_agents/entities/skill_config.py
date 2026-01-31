@@ -1,8 +1,8 @@
 """
-Skill Configuration DTO for Dynamic Execution.
+Skill Configuration entities for Dynamic Execution.
 
 AIDEV-NOTE: Part of dynamic execution architecture (Jan 2026).
-API-driven skill execution via SkillConfigDTO.
+API-driven skill execution via SkillConfig.
 Converts camelCase API response to snake_case dataclass.
 
 Step config types (ReadConfig, WriteConfig, etc.) are also defined here
@@ -336,7 +336,7 @@ class InputDefinition:
 
 
 @dataclass
-class OutputSourceDTO:
+class OutputSource:
     """Output source configuration for mapping node outputs to skill outputs."""
     type: str = ""
     node_id: str = ""
@@ -349,14 +349,14 @@ class OutputDefinition:
     name: str
     type: str = "string"
     description: str = ""
-    source: Optional[OutputSourceDTO] = None
+    source: Optional[OutputSource] = None
     output_mapping: Optional[Dict[str, Any]] = None
 
     @classmethod
     def from_api_response(cls, data: Dict[str, Any]) -> OutputDefinition:
         """Create from API response (camelCase)."""
         source_data = data.get("source")
-        source = OutputSourceDTO(**source_data) if isinstance(source_data, dict) else None
+        source = OutputSource(**source_data) if isinstance(source_data, dict) else None
         return cls(
             name=data.get("name", ""),
             type=data.get("type", "string"),
@@ -366,14 +366,14 @@ class OutputDefinition:
 
 
 @dataclass
-class ToolConfigDTO:
+class StepToolConfig:
     """Tool configuration for skill execution."""
     name: str
     tool_type: str = "pipedream"
     config: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_api_response(cls, data: Dict[str, Any]) -> ToolConfigDTO:
+    def from_api_response(cls, data: Dict[str, Any]) -> StepToolConfig:
         """Create from API response (camelCase)."""
         return cls(
             name=data.get("name", ""),
@@ -387,7 +387,7 @@ class ToolConfigDTO:
 # =============================================================================
 
 @dataclass
-class SkillStepDTO:
+class SkillStep:
     """Skill step for workflow execution -- feature-complete DTO.
 
     All step types (read, write, agentic, tool, etc.)
@@ -417,7 +417,7 @@ class SkillStepDTO:
     dependencies: List[str] = field(default_factory=list)
 
     @classmethod
-    def from_api_response(cls, data: Dict[str, Any]) -> SkillStepDTO:
+    def from_api_response(cls, data: Dict[str, Any]) -> SkillStep:
         """Create from API response (camelCase)."""
         agentic_data = data.get("agenticConfig", data.get("agentic_config"))
         read_data = data.get("readConfig", data.get("read_config"))
@@ -458,7 +458,7 @@ class SkillStepDTO:
 # =============================================================================
 
 @dataclass
-class SkillConfigDTO:
+class SkillConfig:
     """
     Skill configuration for execution.
 
@@ -474,12 +474,12 @@ class SkillConfigDTO:
     agent_type: Optional[str] = None
     inputs: List[InputDefinition] = field(default_factory=list)
     outputs: List[OutputDefinition] = field(default_factory=list)
-    tools: List[ToolConfigDTO] = field(default_factory=list)
-    steps: List[SkillStepDTO] = field(default_factory=list)
+    tools: List[StepToolConfig] = field(default_factory=list)
+    steps: List[SkillStep] = field(default_factory=list)
     content: List[Any] = field(default_factory=list)
 
     @classmethod
-    def from_api_response(cls, data: Dict[str, Any]) -> SkillConfigDTO:
+    def from_api_response(cls, data: Dict[str, Any]) -> SkillConfig:
         """Create from API response (camelCase)."""
         inputs = [
             InputDefinition.from_api_response(i) if isinstance(i, dict) else i
@@ -490,11 +490,11 @@ class SkillConfigDTO:
             for o in data.get("outputs", [])
         ]
         tools = [
-            ToolConfigDTO.from_api_response(t) if isinstance(t, dict) else t
+            StepToolConfig.from_api_response(t) if isinstance(t, dict) else t
             for t in data.get("tools", [])
         ]
         steps = [
-            SkillStepDTO.from_api_response(s) if isinstance(s, dict) else s
+            SkillStep.from_api_response(s) if isinstance(s, dict) else s
             for s in data.get("steps", [])
         ]
 

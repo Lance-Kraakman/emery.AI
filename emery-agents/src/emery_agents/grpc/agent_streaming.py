@@ -47,9 +47,12 @@ from .response_types import (
     StreamResponseDict,
 )
 from .generated import agent_worker_pb2
+from .mappers.proto_mapper import tool_configs_from_proto
 from .coordinator_streaming import CoordinatorStreamingHandler
 
 from .mappers.message_types import ChatMessage
+from ..entities.tool_config import ToolConfig
+from ..entities.message import FileAttachment, HistoryMessage
 from .agents.agent_models import ChatAgent, AgentDescriptor, get_builder_descriptors
 from ..services.tools.capability_registry import CapabilityRegistry
 
@@ -99,17 +102,17 @@ class AgentStreamingHandler:
     async def stream_response(
         self,
         conversation_messages: List['ChatMessage'],
-        tools: List['agent_worker_pb2.ToolConfig'],
+        tools: List[ToolConfig],
         domain_context: Optional['agent_worker_pb2.ChatContext'] = None,
         org_model: Optional[str] = None,
         has_images: bool = False,
         session_id: Optional[str] = None,
         user_id: Optional[str] = None,
         org_id: Optional[int] = None,
-        conversation_history: Optional[List] = None,
+        conversation_history: Optional[List[HistoryMessage]] = None,
         agent_config: Optional['agent_worker_pb2.AgentConfig'] = None,
         user_api_key: Optional[str] = None,
-        file_attachments: Optional[List['agent_worker_pb2.FileAttachment']] = None,
+        file_attachments: Optional[List[FileAttachment]] = None,
         workspace_path: Optional[Path] = None,
         workspace_id: Optional[str] = None,
         workspace_prefix: Optional[str] = None,
@@ -251,7 +254,7 @@ class AgentStreamingHandler:
         session_id: Optional[str],
         user_id: Optional[str],
         org_id: Optional[int],
-        conversation_history: Optional[List],
+        conversation_history: Optional[List[HistoryMessage]],
         workspace_path: Optional[Path] = None,
         workspace_id: Optional[str] = None,
         workspace_prefix: Optional[str] = None,
@@ -328,7 +331,7 @@ class AgentStreamingHandler:
         org_model: Optional[str],
         agent_config: Optional['agent_worker_pb2.AgentConfig'],
         file_attachments: Optional[List],
-        conversation_history: Optional[List],
+        conversation_history: Optional[List[HistoryMessage]],
         workspace_path: Optional[Path] = None,
         user_id: Optional[str] = None,
         workspace_type: Optional[str] = None,
@@ -623,13 +626,13 @@ class AgentStreamingHandler:
 
     def _convert_tools_to_smolagents(
         self,
-        tools: List['agent_worker_pb2.ToolConfig'],
+        tools: List[ToolConfig],
         agent_config: Optional['agent_worker_pb2.AgentConfig'] = None,
         org_model: Optional[str] = None,
         org_id: Optional[int] = None,
         api_key: Optional[str] = None
     ) -> List[Any]:
-        """Convert protobuf ToolConfig objects to smolagents tools."""
+        """Convert entity ToolConfig objects to smolagents tools."""
         if not self.tool_loader:
             logger.error("❌ Tool registry not available - tools cannot be loaded")
             return []

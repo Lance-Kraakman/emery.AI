@@ -18,7 +18,6 @@ from ..services.models.provider import ModelProvider
 from ..services.tools.loader import UnifiedToolLoader
 from ..services.context.session_manager import SessionManager
 from ..services.agents.factory import AgentFactory
-from ..services.analysis.token_usage import TokenUsageExtractor
 from ..services.skills.executor import SkillExecutorService
 from ..services.plan_service import PlanService
 from ..services.execution.events import PlanCreatedEvent, AwaitingClarificationEvent
@@ -28,6 +27,7 @@ from ..orchestrators.runtime import RuntimeContext
 from ..services.tools.provider import ToolProvider
 from ..entities.models.plan import Plan, SkillInputDefinition, SkillOutputDefinition
 from .message_processor import extract_file_attachments
+from .mappers.proto_mapper import tool_configs_from_proto, history_messages_from_proto, token_usage_to_proto
 from .agent_streaming import AgentStreamingHandler
 from .coordinator_streaming import CoordinatorStreamingHandler
 from .response_converter import convert_response_to_proto
@@ -246,8 +246,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             tools_to_use = []
 
             if agent_config:
-                tools_to_use = list(agent_config.tools) if agent_config.tools else []
-                # AIDEV-NOTE: Skills removed from gRPC - discovered dynamically via skill_crud tool
+                # Convert proto ToolConfig to entity ToolConfig at gRPC boundary
+                proto_tools = list(agent_config.tools) if agent_config.tools else []
+                tools_to_use = tool_configs_from_proto(proto_tools)
 
                 logger.info(f"📨 AgentConfig tools received: {len(tools_to_use)} tools")
                 if tools_to_use:
@@ -300,7 +301,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 session_id=session_id,
                 user_id=user_id,
                 org_id=org_id,
-                conversation_history=request.conversation_history,
+                conversation_history=history_messages_from_proto(list(request.conversation_history)),
                 agent_config=agent_config,  # Pass agent_config for skill execution
                 user_api_key=effective_api_key,  # Resolved credentials (user or agent)
                 file_attachments=file_attachments,  # File attachments for skill context injection
@@ -352,7 +353,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
             processing_time = int((time.time() - start_time) * 1000)
             handler_token_usage = self._agent_handler.last_token_usage
-            token_usage_proto = TokenUsageExtractor.to_proto(handler_token_usage)
+            token_usage_proto = token_usage_to_proto(handler_token_usage)
             model_used = getattr(handler_token_usage, 'model_name', '') if handler_token_usage else ''
 
             completion_metadata = {

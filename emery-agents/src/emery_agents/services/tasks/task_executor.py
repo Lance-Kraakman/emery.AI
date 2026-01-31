@@ -27,8 +27,6 @@ from ..credentials import ResolvedCredentials, CredentialSource
 from ..tools.provider import ToolProvider
 from ...entities.execution_context import ExecutionContext
 from ...entities.task import TaskRequest
-from ...grpc.generated import agent_worker_pb2
-from ...grpc.mappers import ProtoMapper
 
 logger = logging.getLogger(__name__)
 
@@ -427,20 +425,14 @@ class TaskExecutor:
 
     @staticmethod
     def from_task_request(
-        request: "agent_worker_pb2.TaskRequest",
-        proto_mapper: "ProtoMapper",
+        task_request: TaskRequest,
     ) -> TaskData:
         """
-        Build TaskData from TaskRequest proto.
+        Build TaskData from entity TaskRequest.
 
-        Used by ExecuteTask gRPC handler.
-
-        AIDEV-NOTE: The original task_request is stored for use by
-        AgentExecutor.determine_execution_context which handles full
-        skill parsing, tools, attachments, etc.
+        Used by ExecuteTask gRPC handler. Proto→entity conversion
+        happens at the gRPC boundary before calling this method.
         """
-        task_request: TaskRequest = proto_mapper.task_request_from_proto(request)
-
         # Extract task instruction from instruction_config
         task_text = ""
         if task_request.instruction_config:

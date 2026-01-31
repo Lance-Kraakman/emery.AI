@@ -10,12 +10,12 @@ from .task import Task, TaskConfig, TaskInstructions
 from .execution_context import ExecutionContext
 from .task import SkillInputValue, SkillOutputValue, RowMappingContext
 from .skill_config import (
-    SkillConfigDTO,
+    SkillConfig,
     InputDefinition,
     OutputDefinition,
-    OutputSourceDTO,
-    ToolConfigDTO,
-    SkillStepDTO,
+    OutputSource,
+    StepToolConfig,
+    SkillStep,
 )
 
 __all__ = [
@@ -29,10 +29,10 @@ __all__ = [
     "SkillOutputValue",
     "RowMappingContext",
     # Skill config DTO
-    "SkillConfigDTO",
+    "SkillConfig",
     "InputDefinition",
     "OutputDefinition",
-    "OutputSourceDTO",
-    "ToolConfigDTO",
-    "SkillStepDTO",
+    "OutputSource",
+    "StepToolConfig",
+    "SkillStep",
 ]
