@@ -387,7 +387,7 @@ interface TableMappingDTO {
   targetTableId: number;
   rowAction: 'create' | 'update' | 'upsert';
   rowIdSource?: RowIdSourceDTO;
-  matchFieldId?: number;
+  matchFieldIds?: number[];
   mappings: Array<{
     source: FieldSourceDTO;
     targetFieldId: number;

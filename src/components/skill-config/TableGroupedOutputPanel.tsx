@@ -409,6 +409,13 @@ export function TableGroupedOutputPanel({
                             {tm.mode === 'multi_row' ? 'multi' : 'single'}
                           </span>
                         )}
+                        {isCollapsed && tm.rowAction === 'upsert' && tm.matchFieldIds && tm.matchFieldIds.length > 0 && (
+                          <span className="text-[10px] text-blue-600 dark:text-blue-400 px-1.5 py-0.5 bg-blue-100/50 dark:bg-blue-900/30 rounded">
+                            match: {tm.matchFieldIds
+                              .map((id) => (tableFieldsMap.get(tm.targetTableId) || []).find((f) => f.id === id)?.name || `#${id}`)
+                              .join(', ')}
+                          </span>
+                        )}
                         {isCollapsed && (
                           <span className="text-[10px] text-muted-foreground">
                             ({tm.mappings.length} field{tm.mappings.length !== 1 ? 's' : ''})

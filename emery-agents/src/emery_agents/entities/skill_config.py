@@ -217,7 +217,7 @@ class WriteConfig:
     row_action: str = "create"
     field_mappings: List[WriteFieldMapping] = field(default_factory=list)
     update_match: Optional[UpdateMatchConfig] = None
-    match_field_id: Optional[int] = None  # For upsert: target field to match on
+    match_field_ids: Optional[List[int]] = None  # For upsert: target fields to match on (composite key)
 
     @classmethod
     def from_api_response(cls, data: Dict[str, Any]) -> WriteConfig:
@@ -227,7 +227,7 @@ class WriteConfig:
             row_action=data.get("rowAction", data.get("row_action", "create")),
             field_mappings=[WriteFieldMapping.from_api_response(fm) for fm in data.get("fieldMappings", data.get("field_mappings", []))],
             update_match=UpdateMatchConfig.from_api_response(um) if um else None,
-            match_field_id=data.get("matchFieldId", data.get("match_field_id")),
+            match_field_ids=data.get("matchFieldIds", data.get("match_field_ids")) or None,
         )
 
 

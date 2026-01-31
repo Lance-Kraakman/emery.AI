@@ -228,28 +228,37 @@ export function TableMappingCard({
         </div>
       )}
 
-      {/* Match field selector for upsert mode */}
+      {/* Match fields selector for upsert mode (multi-select) */}
       {tableMapping.rowAction === 'upsert' && (
-        <div className="flex items-center gap-2">
-          <Label className="text-[10px] text-muted-foreground">Match on:</Label>
-          <Select
-            value={tableMapping.matchFieldId?.toString()}
-            onValueChange={(v) =>
-              onUpdate({ ...tableMapping, matchFieldId: parseInt(v) })
-            }
-            disabled={isReadOnly}
-          >
-            <SelectTrigger className="h-7 w-[160px] text-[11px]">
-              <SelectValue placeholder="Select field..." />
-            </SelectTrigger>
-            <SelectContent>
-              {targetFields.map((field) => (
-                <SelectItem key={field.id} value={field.id.toString()}>
-                  {field.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Label className="text-[10px] text-muted-foreground shrink-0">Match on:</Label>
+          {targetFields.map((field) => {
+            const isSelected = tableMapping.matchFieldIds?.includes(field.id) ?? false;
+            return (
+              <button
+                key={field.id}
+                type="button"
+                disabled={isReadOnly}
+                className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
+                  isSelected
+                    ? 'bg-blue-100 dark:bg-blue-900/40 border-blue-300 dark:border-blue-700 text-blue-800 dark:text-blue-300'
+                    : 'bg-muted/30 border-transparent text-muted-foreground hover:border-muted-foreground/30'
+                }`}
+                onClick={() => {
+                  const current = tableMapping.matchFieldIds || [];
+                  const updated = isSelected
+                    ? current.filter((id) => id !== field.id)
+                    : [...current, field.id];
+                  onUpdate({ ...tableMapping, matchFieldIds: updated.length > 0 ? updated : undefined });
+                }}
+              >
+                {field.name}
+              </button>
+            );
+          })}
+          {(!tableMapping.matchFieldIds || tableMapping.matchFieldIds.length === 0) && (
+            <span className="text-[10px] text-muted-foreground/60 italic">click fields to select</span>
+          )}
         </div>
       )}
 

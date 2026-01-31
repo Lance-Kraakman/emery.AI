@@ -1219,7 +1219,7 @@ class StepExecutorService:
             )
         elif row_action == "upsert":
             result = await asyncio.to_thread(
-                row_api.upsert_row, table_id, field_values, write_config.match_field_id
+                row_api.upsert_row, table_id, field_values, write_config.match_field_ids
             )
         else:
             raise ValueError(f"Unknown row_action: {row_action}")

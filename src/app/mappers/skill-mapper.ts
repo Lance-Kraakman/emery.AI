@@ -65,7 +65,7 @@ export interface TableMapping {
   targetTableId: number;                       // Which table to write to
   rowAction: 'create' | 'update' | 'upsert';   // Create, update, or upsert row
   rowIdSource?: RowIdSource;                   // For update mode - typed source for row ID
-  matchFieldId?: number;                       // For upsert mode - target field to match on
+  matchFieldIds?: number[];                     // For upsert mode - target fields to match on (composite key)
   mappings: FieldMapping[];                    // Field mappings for this table
   displayFieldId?: number;                     // Field to use for relation display value
   mode?: 'single_row' | 'multi_row';           // Per-table mode (overrides config default)

@@ -19,7 +19,7 @@ class RowAPI:
         rows = api.get_rows(table_id=1)
         row = api.get_row(table_id=1, row_id="abc")
         result = api.create_row(table_id=1, data={"name": "test"})
-        result = api.upsert_row(table_id=1, data={...}, match_field_id=42)
+        result = api.upsert_row(table_id=1, data={...}, match_field_ids=[42, 55])
     """
 
     def __init__(self, api_key: str, org_id: str):
@@ -144,40 +144,41 @@ class RowAPI:
         self,
         table_id: int,
         data: Dict[str, Any],
-        match_field_id: Optional[int] = None,
+        match_field_ids: Optional[List[int]] = None,
     ) -> Dict[str, Any]:
-        """Create or update a row based on a match field value.
+        """Create or update a row based on match field values.
 
-        Queries for a row where match_field_id equals the value in data.
-        Updates if found, creates if not.
+        Queries for a row where all match fields equal their values in data.
+        Updates if found, creates if not. Supports composite matching
+        (e.g. Name + Phone must both match).
 
         Args:
             table_id: Target table ID
             data: Field values {field_id: value, ...}
-            match_field_id: Field ID to match on for finding existing row
+            match_field_ids: Field IDs to match on (AND logic)
 
         Returns:
             Created or updated row data
         """
-        if not match_field_id:
+        if not match_field_ids:
             return self.create_row(table_id, data)
 
-        match_value = data.get(str(match_field_id))
-        if not match_value:
-            logger.info(f"Upsert: no value for match field {match_field_id}, creating")
-            return self.create_row(table_id, data)
+        # Build AND filters for all match fields
+        filters = []
+        for fid in match_field_ids:
+            value = data.get(str(fid))
+            if not value:
+                logger.info(f"Upsert: no value for match field {fid}, creating")
+                return self.create_row(table_id, data)
+            filters.append({"field": str(fid), "operator": "eq", "value": value})
 
-        # Query for existing row by match field
-        rows = self.get_rows(
-            table_id,
-            filters=[{"field": str(match_field_id), "operator": "eq", "value": match_value}],
-            limit=1,
-        )
+        # Query for existing row matching all fields
+        rows = self.get_rows(table_id, filters=filters, limit=1)
 
         if rows:
             row_id = rows[0]["id"]
-            logger.info(f"Upsert: found row {row_id}, updating")
+            logger.info(f"Upsert: found row {row_id} matching {len(filters)} fields, updating")
             return self.update_row(table_id, row_id, data)
         else:
-            logger.info(f"Upsert: no match, creating new row")
+            logger.info(f"Upsert: no match on {len(filters)} fields, creating new row")
             return self.create_row(table_id, data)
