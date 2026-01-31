@@ -32,7 +32,7 @@ import { useOrganizationPlan } from '@/stores/app-state.store'
 import { UnifiedChatInput } from '@/components/shared/UnifiedChatInput'
 import { ChatHistoryDropdown } from './ChatHistoryDropdown'
 import { createChatContextForPage, type ChatContextConfig } from '@/components/layout/types'
-import type { DomainType } from '@/ddd/domain/shared/types/domain-type'
+
 import { useEmery } from '@/contexts/EmeryStoreProvider'
 import { ToolPanel } from './ToolPanel'
 import { useChatHandler } from './ChatProvider'
@@ -71,8 +71,6 @@ export const CHAT_HISTORY_EXPANDED_WIDTH = 'w-80'  // 320px
  */
 
 interface EmeryChatHeaderProps {
-  domainType?: DomainType | 'organizations' | 'general'
-  domainName?: string
   currentChatId?: string
   currentChatModel?: string
   onChatSelect: (chatId: string, model?: string) => void
@@ -84,8 +82,6 @@ interface EmeryChatHeaderProps {
 }
 
 function EmeryChatHeader({
-  domainType,
-  domainName,
   currentChatId,
   currentChatModel,
   onChatSelect,
@@ -157,8 +153,6 @@ function EmeryChatHeader({
           onChatSelect={onChatSelect}
           onNewChat={onNewChat}
           onChatHistoryUpdate={onChatHistoryUpdate}
-          domainType={domainType}
-          domainName={domainName}
           userId={userId}
           organizationId={organizationId}
         />
@@ -750,8 +744,6 @@ export function EmeryChat() {
       {/* Chat Section - dynamic width based on chatWidthMode */}
       <div className={`flex flex-col w-full h-full`}>
         <EmeryChatHeader
-          domainType={chatContext?.domainType}
-          domainName={chatContext?.domainName}
           currentChatId={currentChatId}
           currentChatModel={currentChatModel}
           onChatSelect={handleChatSelect}

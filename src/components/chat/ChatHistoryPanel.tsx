@@ -15,7 +15,6 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { ChatSessionItem } from './ChatSessionItem'
 import { getChatSessions, createNewChatSession } from '@/app/actions/chat-history'
 import type { ChatSessionDTO, ChatContextDTO } from '@/app/mappers/chat-mapper'
-import type { DomainType } from '@/ddd/domain/shared/types/domain-type'
 import { CHAT_COLLAPSED_WIDTH, CHAT_HISTORY_EXPANDED_WIDTH } from './EmeryChat'
 
 interface ChatHistoryPanelProps {
@@ -24,11 +23,7 @@ interface ChatHistoryPanelProps {
   currentChatId?: string
   onChatSelect: (chatId: string) => void
   onNewChat: () => void
-  
-  // Context for filtering chats
-  domainType?: DomainType | 'organizations' | 'general'
-  domainId?: number
-  domainName?: string
+
   userId: string
   organizationId: number
 }
@@ -39,9 +34,6 @@ export function ChatHistoryPanel({
   currentChatId,
   onChatSelect,
   onNewChat,
-  domainType,
-  domainId,
-  domainName,
   userId,
   organizationId
 }: ChatHistoryPanelProps) {
@@ -58,8 +50,6 @@ export function ChatHistoryPanel({
       setError(null)
       
       const context: ChatContextDTO = {
-        domainType: domainType === 'general' ? undefined : domainType,
-        domainId,
         organizationId,
         userId,
         limit: 50
@@ -85,7 +75,7 @@ export function ChatHistoryPanel({
   // Load sessions when context changes
   useEffect(() => {
     loadChatSessions()
-  }, [domainType, domainId, organizationId, userId])
+  }, [organizationId, userId])
 
   // Handle creating new chat
   const handleNewChat = async () => {
@@ -93,9 +83,6 @@ export function ChatHistoryPanel({
       setIsCreatingNew(true)
       
       const result = await createNewChatSession({
-        domainType: domainType === 'general' ? undefined : domainType,
-        domainId,
-        domainName,
         organizationId,
         userId
       })
@@ -131,13 +118,6 @@ export function ChatHistoryPanel({
     session.description?.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
-  // Get context label for header
-  const getContextLabel = () => {
-    if (domainType === 'general') return 'General Chat'
-    if (domainType === 'organizations') return 'Organization Chat'
-    if (domainName) return `${domainType}: ${domainName}`
-    return `${domainType} Chat`
-  }
 
   // Collapsed view
   if (isCollapsed) {
@@ -173,9 +153,6 @@ export function ChatHistoryPanel({
           <History className="h-4 w-4 text-muted-foreground flex-shrink-0" />
           <div className="min-w-0 flex-1">
             <h3 className="font-medium text-sm truncate">Chat History</h3>
-            <p className="text-xs text-muted-foreground truncate">
-              {getContextLabel()}
-            </p>
           </div>
         </div>
         
