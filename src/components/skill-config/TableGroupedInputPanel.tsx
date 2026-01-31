@@ -157,9 +157,12 @@ export function TableGroupedInputPanel({
               className="flex items-center justify-between cursor-pointer"
               onClick={() => toggleTableCollapse(tableId)}
             >
-              <div className="flex items-center gap-1.5">
-                <Table2 className="h-3.5 w-3.5 text-emerald-600" />
-                <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+              <div className="flex items-center gap-1.5 flex-nowrap min-w-0">
+                <Table2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                <span
+                  className="text-xs font-medium text-emerald-700 dark:text-emerald-400 truncate max-w-[160px]"
+                  title={tableName}
+                >
                   From: {tableName}
                 </span>
                 {isCollapsed && (
@@ -224,7 +227,6 @@ export function TableGroupedInputPanel({
       {/* Manual inputs */}
       {(manual.length > 0 || showAddManual) && (
         <div className="space-y-1.5">
-          <Label className="text-[10px] text-muted-foreground">Manual inputs</Label>
           <div className="flex flex-wrap gap-1">
             {manual.map((input) => (
               <ManualInputItem

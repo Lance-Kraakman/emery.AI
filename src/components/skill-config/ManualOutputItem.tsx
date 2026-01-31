@@ -11,7 +11,7 @@ interface ManualOutputItemProps {
 
 export function ManualOutputItem({ output, onRemove }: ManualOutputItemProps) {
   return (
-    <div className="inline-flex items-center gap-1 px-2 py-1 rounded border bg-muted/30 text-[11px] group">
+    <div className="inline-flex items-center gap-1 px-2 py-1 rounded border bg-blue-50/40 dark:bg-blue-900/15 border-blue-200/50 dark:border-blue-800/30 text-[11px] group">
       <code className="font-mono">{output.name}</code>
       {output.type && output.type !== 'text' && (
         <span className="text-[9px] bg-muted px-1 rounded">{output.type}</span>

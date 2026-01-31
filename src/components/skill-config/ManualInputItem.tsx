@@ -11,7 +11,7 @@ interface ManualInputItemProps {
 
 export function ManualInputItem({ input, onRemove }: ManualInputItemProps) {
   return (
-    <div className="inline-flex items-center gap-1 px-2 py-1 rounded border bg-muted/30 text-[11px] group">
+    <div className="inline-flex items-center gap-1 px-2 py-1 rounded border bg-emerald-50/40 dark:bg-emerald-900/15 border-emerald-200/50 dark:border-emerald-800/30 text-[11px] group">
       <code className="font-mono">{input.name}</code>
       {input.type && input.type !== 'text' && (
         <span className="text-[9px] bg-muted px-1 rounded">{input.type}</span>

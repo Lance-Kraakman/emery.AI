@@ -393,9 +393,12 @@ export function TableGroupedOutputPanel({
                       className="flex items-center justify-between cursor-pointer"
                       onClick={() => toggleTableCollapse(tm.targetTableId)}
                     >
-                      <div className="flex items-center gap-1.5">
-                        <Table2 className="h-3.5 w-3.5 text-blue-600" />
-                        <span className="text-xs font-medium text-blue-700 dark:text-blue-400">
+                      <div className="flex items-center gap-1.5 flex-nowrap min-w-0">
+                        <Table2 className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+                        <span
+                          className="text-xs font-medium text-blue-700 dark:text-blue-400 truncate max-w-[160px]"
+                          title={tableName}
+                        >
                           To: {tableName}
                         </span>
                         <span className="text-[10px] text-muted-foreground px-1.5 py-0.5 bg-muted rounded">
@@ -483,7 +486,6 @@ export function TableGroupedOutputPanel({
       {/* Manual outputs */}
       {manualOutputs.length > 0 && (
         <div className="space-y-1.5">
-          <Label className="text-[10px] text-muted-foreground">Manual outputs</Label>
           <div className="flex flex-wrap gap-1">
             {manualOutputs.map((output) => (
               <ManualOutputItem

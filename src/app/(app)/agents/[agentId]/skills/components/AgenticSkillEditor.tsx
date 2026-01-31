@@ -1,9 +1,7 @@
 'use client';
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { ChevronDown, Settings2 } from 'lucide-react';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -11,11 +9,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { uploadSkillAttachment } from '@/app/actions/skills';
@@ -45,14 +38,12 @@ interface AgenticSkillEditorProps {
 }
 
 /**
- * Agentic mode skill editor - Table-grouped layout
- * Config (always expanded) → Plan (Instructions + Plan Generation)
+ * Agentic mode skill editor - Unified flat layout
  *
  * Layout:
- *   Description
- *   Data Sources (horizontal cards) + Agent Type
- *   Inputs + Input Mapping (left) | Outputs + Output Mapping (right)
- *   Plan Builder
+ *   Data Sources + Agent Type
+ *   Inputs (left) | Outputs (right)
+ *   Plan Builder (Instructions + Plan)
  */
 export function AgenticSkillEditor({
   value,
@@ -196,133 +187,99 @@ export function AgenticSkillEditor({
     onChange({ ...value, ...updates });
   };
 
-  // Track collapsible state
-  const [isConfigOpen, setIsConfigOpen] = useState(true);
-
   return (
     <div className={cn(
-      'h-full flex flex-col p-4 overflow-y-auto',
+      'h-full flex flex-col p-4 overflow-y-auto space-y-4',
       hasFloatingHeader && 'pt-24'
     )}>
-      {/* Skill Config Section - Collapsible */}
-      <Collapsible open={isConfigOpen} onOpenChange={setIsConfigOpen}>
-        <CollapsibleTrigger className="flex items-center gap-2 w-full text-left mb-3 group">
-          <Settings2 className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-medium">Skill Config</span>
-          <ChevronDown className={cn(
-            "h-4 w-4 text-muted-foreground transition-transform",
-            !isConfigOpen && "-rotate-90"
-          )} />
-        </CollapsibleTrigger>
-        <CollapsibleContent className="space-y-4">
-          {/* Description - compact */}
-          <div className="space-y-1">
-            <Label className="text-xs">Description</Label>
-            <Textarea
-              value={value.description}
-              onChange={(e) => handleChange({ description: e.target.value })}
-              placeholder="Briefly describe what this skill does..."
-              rows={1}
-              className="text-sm resize-none min-h-[36px]"
-              disabled={isReadOnly}
-            />
+      {/* Data Sources + Agent Type — compact row */}
+      <div className="flex items-start gap-4">
+        <div className="flex-1 space-y-1">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs">Data Sources</Label>
+            {dataSources.length > 0 && (
+              <span className="text-[10px] text-muted-foreground">
+                {dataSources.length}
+              </span>
+            )}
           </div>
+          <DataSourceCards
+            dataSources={dataSources}
+            isLoading={isLoadingDataSources}
+            isReadOnly={isReadOnly}
+            skillId={skillId}
+            onAddDataSource={handleAddDataSource}
+            onUpdateDataSource={handleUpdateDataSource}
+            onRemoveDataSource={handleRemoveDataSource}
+            excludeTableIds={dataSources.map((ds) => ds.tableId)}
+          />
+        </div>
 
-          {/* Data Sources (horizontal cards) + Agent Type */}
-          <div className="flex items-start gap-4">
-            <div className="flex-1 space-y-1">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs">Data Sources</Label>
-                <span className="text-[10px] text-muted-foreground">
-                  {dataSources.length}
+        <div className="w-40 shrink-0 space-y-1">
+          <Label className="text-xs">Agent Type</Label>
+          <Select
+            value={value.agentType || 'tool_calling'}
+            onValueChange={(agentType) => handleChange({ agentType })}
+            disabled={isReadOnly}
+          >
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="tool_calling">Tool Calling</SelectItem>
+              <SelectItem value="code_agent">Code Agent</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Tools display */}
+          {value.tools && value.tools.length > 0 && (
+            <div className="flex flex-wrap gap-1 pt-0.5">
+              {value.tools.slice(0, 3).map((tool, idx) => (
+                <span
+                  key={idx}
+                  className="text-[10px] px-1.5 py-0.5 rounded bg-violet-100 dark:bg-violet-900 text-violet-700 dark:text-violet-300"
+                >
+                  {tool.name}
                 </span>
-              </div>
-              <DataSourceCards
-                dataSources={dataSources}
-                isLoading={isLoadingDataSources}
-                isReadOnly={isReadOnly}
-                skillId={skillId}
-                onAddDataSource={handleAddDataSource}
-                onUpdateDataSource={handleUpdateDataSource}
-                onRemoveDataSource={handleRemoveDataSource}
-                excludeTableIds={dataSources.map((ds) => ds.tableId)}
-              />
-            </div>
-
-            <div className="w-48 shrink-0 space-y-1">
-              <Label className="text-xs">Agent Type</Label>
-              <Select
-                value={value.agentType || 'tool_calling'}
-                onValueChange={(agentType) => handleChange({ agentType })}
-                disabled={isReadOnly}
-              >
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="tool_calling">Tool Calling</SelectItem>
-                  <SelectItem value="code_agent">Code Agent</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-[10px] text-muted-foreground">
-                Tool Calling uses function calls. Code Agent generates Python.
-              </p>
-
-              {/* Tools display */}
-              {value.tools && value.tools.length > 0 && (
-                <div className="pt-1">
-                  <div className="flex flex-wrap gap-1">
-                    {value.tools.slice(0, 3).map((tool, idx) => (
-                      <span
-                        key={idx}
-                        className="text-[10px] px-1.5 py-0.5 rounded bg-violet-100 dark:bg-violet-900 text-violet-700 dark:text-violet-300"
-                      >
-                        {tool.name}
-                      </span>
-                    ))}
-                    {value.tools.length > 3 && (
-                      <span className="text-[10px] px-1.5 py-0.5 text-muted-foreground">
-                        +{value.tools.length - 3} more
-                      </span>
-                    )}
-                  </div>
-                </div>
+              ))}
+              {value.tools.length > 3 && (
+                <span className="text-[10px] px-1.5 py-0.5 text-muted-foreground">
+                  +{value.tools.length - 3} more
+                </span>
               )}
             </div>
-          </div>
+          )}
+        </div>
+      </div>
 
-          {/* Inputs + Input Mapping (left) | Outputs + Output Mapping (right) */}
-          <div className="grid grid-cols-2 gap-4">
-            <TableGroupedInputPanel
-              inputs={value.inputs}
-              onInputsChange={(inputs) => handleChange({ inputs })}
-              isReadOnly={isReadOnly}
-            />
-            <TableGroupedOutputPanel
-              outputs={value.outputs}
-              inputs={value.inputs}
-              onOutputsChange={(outputs) => handleChange({ outputs })}
-              isReadOnly={isReadOnly}
-            />
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
-
-      {/* Plan Builder Section - Always visible */}
-      <div className="mt-4">
-        <PlanBuilderSection
-          instructions={value.instructions || ''}
-          onInstructionsChange={(instructions) => handleChange({ instructions })}
-          plan={value.plan}
-          onPlanChange={(plan) => handleChange({ plan: plan || undefined })}
-          skillId={skillId}
-          chatVariables={chatVariables}
+      {/* Inputs (left) | Outputs (right) */}
+      <div className="grid grid-cols-2 gap-4">
+        <TableGroupedInputPanel
+          inputs={value.inputs}
+          onInputsChange={(inputs) => handleChange({ inputs })}
           isReadOnly={isReadOnly}
-          pendingAttachments={pendingAttachments}
-          onAttachmentAdd={handleAttachmentAdd}
-          onAttachmentRemove={handleAttachmentRemove}
+        />
+        <TableGroupedOutputPanel
+          outputs={value.outputs}
+          inputs={value.inputs}
+          onOutputsChange={(outputs) => handleChange({ outputs })}
+          isReadOnly={isReadOnly}
         />
       </div>
+
+      {/* Plan Builder */}
+      <PlanBuilderSection
+        instructions={value.instructions || ''}
+        onInstructionsChange={(instructions) => handleChange({ instructions })}
+        plan={value.plan}
+        onPlanChange={(plan) => handleChange({ plan: plan || undefined })}
+        skillId={skillId}
+        chatVariables={chatVariables}
+        isReadOnly={isReadOnly}
+        pendingAttachments={pendingAttachments}
+        onAttachmentAdd={handleAttachmentAdd}
+        onAttachmentRemove={handleAttachmentRemove}
+      />
     </div>
   );
 }
