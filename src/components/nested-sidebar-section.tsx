@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { LucideIcon, Plus, ChevronRight, FileText, LayoutTemplate } from "lucide-react"
+import { LucideIcon, Plus, ChevronRight, LayoutTemplate } from "lucide-react"
 import {
   Collapsible,
   CollapsibleContent,
@@ -139,7 +139,7 @@ export function NestedSidebarSection<TParent, TChild>({
         </SidebarGroupLabel>
         <CollapsibleContent className="group-data-[collapsible=icon]:hidden">
           <SidebarGroupContent>
-            <SidebarMenu className="gap-0.5">
+            <SidebarMenu className="gap-0.5 pl-4">
               {parents.map((parent) => {
                 const parentId = getParentId(parent)
                 const children = getChildren(parent)
@@ -215,7 +215,6 @@ export function NestedSidebarSection<TParent, TChild>({
                                       className="h-6 flex-1"
                                     >
                                       <Link href={getChildHref(child, parent)}>
-                                        <FileText className="h-3 w-3 group-data-[collapsible=icon]:hidden" />
                                         <span className="group-data-[collapsible=icon]:hidden">
                                           {getChildName(child)}
                                         </span>
