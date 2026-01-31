@@ -49,7 +49,9 @@ _session_cache: Dict[str, Any] = {}
 def _convert_history(
     conversation_history: Optional[List[Any]],
 ) -> Optional[List[ConversationMessage]]:
-    """Convert protobuf HistoryMessage objects to typed ConversationMessage dataclasses."""
+    """Convert HistoryMessage entities to typed ConversationMessage dataclasses."""
+    from ..entities.message import TextPart
+
     if not conversation_history:
         return None
     messages: List[ConversationMessage] = []
@@ -57,13 +59,11 @@ def _convert_history(
         if isinstance(msg, ConversationMessage):
             messages.append(msg)
         else:
-            # Protobuf HistoryMessage: .role str, .content_parts[].text.text str
             role = getattr(msg, "role", "unknown")
             content_parts = getattr(msg, "content_parts", [])
             text = " ".join(
-                getattr(getattr(part, "text", None), "text", "")
-                for part in content_parts
-                if getattr(part, "text", None)
+                part.text for part in content_parts
+                if isinstance(part, TextPart)
             )
             messages.append(ConversationMessage(role=role, content=text))
     return messages

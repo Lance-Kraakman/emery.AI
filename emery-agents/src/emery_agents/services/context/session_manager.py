@@ -243,7 +243,7 @@ class SessionManager:
 
         Args:
             agent: ChatAgent to restore memory into
-            conversation_history: List of HistoryMessage protobuf objects
+            conversation_history: List of HistoryMessage entity objects
 
         Returns:
             Number of messages restored
@@ -411,7 +411,7 @@ class SessionManager:
 
         Args:
             session_id: Session identifier
-            attachments: List of FileAttachment protobuf objects
+            attachments: List of FileAttachment entity objects
         """
         if session_id not in self.metadata:
             logger.warning(f"Cannot add attachments - session {session_id} not found")
@@ -437,7 +437,7 @@ class SessionManager:
             session_id: Session identifier
 
         Returns:
-            List of FileAttachment protobuf objects
+            List of FileAttachment entity objects
         """
         if session_id in self.metadata:
             return self.metadata[session_id].attachments
