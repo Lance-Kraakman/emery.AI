@@ -503,6 +503,7 @@ export function mapSkillToProto(skill: ExecutionSkill): SkillConfigProto {
             targetTableId: tm.targetTableId,
             rowAction: tm.rowAction || 'create',
             rowIdSource: tm.rowIdSource ? mapRowIdSourceToProto(tm.rowIdSource) : undefined,
+            matchFieldIds: tm.matchFieldIds || [],
             displayFieldId: tm.displayFieldId || 0,
             mode: tm.mode || '',
             mappings: tm.mappings

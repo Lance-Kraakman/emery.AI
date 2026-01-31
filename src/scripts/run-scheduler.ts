@@ -291,7 +291,11 @@ class EventDrivenScheduler {
     for (const task of [...stuckTasks, ...orphanedPending]) {
       await withSystemContext(task.organizationId, async () => {
         try {
-          task.fail('Orphaned task cleaned up by scheduler');
+          if (task.isPending) {
+            task.cancel('Orphaned task cleaned up by scheduler');
+          } else {
+            task.fail('Orphaned task cleaned up by scheduler');
+          }
           await this.taskRepository.update(task.id, {
             status: task.status.value,
             error: task.error,

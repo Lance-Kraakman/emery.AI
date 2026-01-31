@@ -238,6 +238,9 @@ export function TableMappingCard({
               <button
                 key={field.id}
                 type="button"
+                role="switch"
+                aria-pressed={isSelected}
+                aria-label={`Match on ${field.name}`}
                 disabled={isReadOnly}
                 className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
                   isSelected

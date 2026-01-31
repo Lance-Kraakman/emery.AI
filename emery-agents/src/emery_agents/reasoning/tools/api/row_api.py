@@ -166,11 +166,11 @@ class RowAPI:
         # Build AND filters for all match fields
         filters = []
         for fid in match_field_ids:
-            value = data.get(str(fid))
-            if not value:
-                logger.info(f"Upsert: no value for match field {fid}, creating")
+            str_fid = str(fid)
+            if str_fid not in data:
+                logger.info(f"Upsert: match field {fid} not in data, creating")
                 return self.create_row(table_id, data)
-            filters.append({"field": str(fid), "operator": "eq", "value": value})
+            filters.append({"field": str_fid, "operator": "eq", "value": data[str_fid]})
 
         # Query for existing row matching all fields
         rows = self.get_rows(table_id, filters=filters, limit=1)
