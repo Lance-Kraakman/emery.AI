@@ -37,6 +37,8 @@ from ..orchestrators import create_session_graph, RuntimeContext
 from ..orchestrators.runtime import ConversationMessage
 from ..orchestrators.state import DEFAULT_STATE
 from ..services.memory import MemoryService
+from ..services.context import WorkspaceContext
+from ..services.tools.capability_registry import CapabilityRegistry
 from ..orchestrators.nodes.planning import _build_workspace_context
 from ..services.planning import PlanFileRepository
 
@@ -300,7 +302,7 @@ class CoordinatorStreamingHandler:
                         external_tools=tools,
                         workspace_context=workspace,
                         memory_context=memory_context_str,
-                        conversation_history=conversation_history,
+                        conversation_history=_convert_history(conversation_history),
                         capability_registry=capability_registry,
                     ):
                         yield event
@@ -333,7 +335,7 @@ class CoordinatorStreamingHandler:
         thread_id: Optional[str] = None,
         runtime_skill_inputs: Optional[Dict[str, str]] = None,
         memory_context: str = "",
-        workspace_context: Optional[Any] = None,
+        workspace_context: Optional[WorkspaceContext] = None,
     ) -> AsyncIterator[Any]:
         """
         LangGraph-based execution path.
@@ -522,11 +524,11 @@ class CoordinatorStreamingHandler:
         context: 'ExecutionContext',
         task: str,
         org_model: Optional[str],
-        external_tools: Optional[List[Any]] = None,
-        workspace_context: Optional[Any] = None,
+        external_tools: Optional[List[dspy.Tool]] = None,
+        workspace_context: Optional[WorkspaceContext] = None,
         memory_context: str = "",
-        conversation_history: Optional[List[Any]] = None,
-        capability_registry: Optional[Any] = None,
+        conversation_history: Optional[List[ConversationMessage]] = None,
+        capability_registry: Optional[CapabilityRegistry] = None,
     ) -> AsyncIterator[Any]:
         """
         Handle direct execution without a plan using DSPy.
@@ -578,8 +580,7 @@ class CoordinatorStreamingHandler:
 
         # Add conversation history for follow-up context
         if conversation_history:
-            formatted = _convert_history(conversation_history)
-            recent = formatted[-10:] if formatted else []
+            recent = conversation_history[-10:]
             execution_context["conversation_history"] = [
                 {"role": m.role, "content": m.content[:500]} for m in recent
             ]

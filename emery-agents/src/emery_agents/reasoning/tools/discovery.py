@@ -18,6 +18,8 @@ import logging
 
 import dspy
 
+from duckduckgo_search import DDGS
+
 from .analysis.research import SystemResearchTool
 from .api.workspace_api import WorkspaceAPI
 from .integrations.pipedream import get_pipedream_tool_info, list_pipedream_tools_by_app
@@ -218,16 +220,8 @@ def create_external_search_tool() -> dspy.Tool:
     )
 
 
-def create_web_search_tool() -> dspy.Tool | None:
-    """Create web_search tool wrapping DuckDuckGo search.
-
-    Returns None if duckduckgo-search package is not installed.
-    """
-    try:
-        from duckduckgo_search import DDGS
-    except ImportError:
-        logger.warning("web_search tool unavailable (missing duckduckgo-search package)")
-        return None
+def create_web_search_tool() -> dspy.Tool:
+    """Create web_search tool wrapping DuckDuckGo search."""
 
     def web_search(query: str, max_results: int = 5) -> str:
         """Search the web for information.
@@ -298,10 +292,8 @@ def create_discovery_tools(
     if capability_registry:
         tools.append(create_capability_search_tool(capability_registry))
 
-    # Add web search if available (graceful degradation if package missing)
-    web_search_tool = create_web_search_tool()
-    if web_search_tool:
-        tools.append(web_search_tool)
+    # Add web search (DuckDuckGo — read-only research tool)
+    tools.append(create_web_search_tool())
 
     logger.info(f"Created {len(tools)} discovery tools")
     return tools
