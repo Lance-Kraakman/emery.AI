@@ -242,6 +242,21 @@ export class DrizzleTaskRepository
     return 0; // Return count not available in this Drizzle version
   }
 
+  async findStuckInProgress(olderThan: Date): Promise<Task[]> {
+    const results = await this.db
+      .select()
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.status, TASK_STATUS.IN_PROGRESS),
+          lt(tasks.startedAt, olderThan)
+        )
+      )
+      .orderBy(asc(tasks.createdAt));
+
+    return results.map((r: TaskRow) => this.fromPersistence(r));
+  }
+
   async deleteFailedOlderThan(cutoffDate: Date): Promise<number> {
     await this.db
       .delete(tasks)

@@ -75,7 +75,11 @@ class EventDrivenScheduler {
       this.startStorageRecalculationCron();
       log('💾', 'Storage recalculation cron started (hourly)');
 
-      // 4. Process any existing queued tasks on startup
+      // 4. Clean up orphaned tasks from previous runs
+      await this.cleanupOrphanedTasks();
+      log('🧹', 'Orphaned task cleanup complete');
+
+      // 5. Process any existing queued tasks on startup
       await this.processQueuedTasks();
       log('📋', 'Initial queue processed');
 
@@ -136,6 +140,9 @@ class EventDrivenScheduler {
 
         // Process retries
         await this.processRetries();
+
+        // Clean up orphaned tasks
+        await this.cleanupOrphanedTasks();
       } catch (error) {
         logError('❌', 'Error in fallback timer:', error);
       }
@@ -264,6 +271,39 @@ class EventDrivenScheduler {
         }
       });
     }
+  }
+
+  private async cleanupOrphanedTasks(): Promise<void> {
+    const cutoff = new Date(Date.now() - 300000); // 5 minutes ago
+
+    // Find zombie IN_PROGRESS tasks (stuck from a crash)
+    const stuckTasks = await this.taskRepository.findStuckInProgress(cutoff);
+
+    // Find stale PENDING tasks (missed their event notification)
+    const stalePending = await this.taskRepository.findPendingTasks();
+    const orphanedPending = stalePending.filter(t => t.createdAt < cutoff);
+
+    const total = stuckTasks.length + orphanedPending.length;
+    if (total === 0) return;
+
+    log('🧹', `Found ${stuckTasks.length} stuck in-progress and ${orphanedPending.length} orphaned pending tasks`);
+
+    for (const task of [...stuckTasks, ...orphanedPending]) {
+      await withSystemContext(task.organizationId, async () => {
+        try {
+          task.fail('Orphaned task cleaned up by scheduler');
+          await this.taskRepository.update(task.id, {
+            status: task.status.value,
+            error: task.error,
+            completedAt: task.completedAt,
+          });
+        } catch (error) {
+          logError('❌', `Failed to clean up orphaned task ${task.id.value}:`, error);
+        }
+      });
+    }
+
+    log('🧹', `Cleaned up ${total} orphaned tasks`);
   }
 
   /**
