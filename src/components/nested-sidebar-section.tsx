@@ -140,7 +140,7 @@ export function NestedSidebarSection<TParent, TChild>({
         </SidebarGroupLabel>
         <CollapsibleContent className="group-data-[collapsible=icon]:hidden">
           <SidebarGroupContent>
-            <SidebarMenu className="gap-0 ml-2 border-l border-sidebar-border pl-3">
+            <SidebarMenu className="gap-0 ml-2 border-l border-sidebar-border pl-2">
               {parents.map((parent) => {
                 const parentId = getParentId(parent)
                 const children = getChildren(parent)
@@ -164,22 +164,20 @@ export function NestedSidebarSection<TParent, TChild>({
                         </div>
                       ) : (
                         <div className="flex items-center w-full">
-                          <CollapsibleTrigger className="shrink-0 p-0.5 rounded-sm hover:bg-sidebar-accent group-data-[collapsible=icon]:hidden">
-                            <ChevronRight
-                              className={cn(
-                                "h-3 w-3 transition-transform duration-200",
-                                isOpen && "rotate-90"
-                              )}
-                            />
-                          </CollapsibleTrigger>
-                          <SidebarMenuButton asChild isActive={isParentActive(parent, pathname)} size="sm" className="flex-1">
-                            <Link href={getParentHref(parent)}>
+                          <CollapsibleTrigger asChild>
+                            <SidebarMenuButton isActive={isParentActive(parent, pathname)} size="sm" className="flex-1">
+                              <ChevronRight
+                                className={cn(
+                                  "h-3 w-3 transition-transform duration-200",
+                                  isOpen && "rotate-90"
+                                )}
+                              />
                               <Icon className="h-4 w-4 shrink-0" />
                               <span className="group-data-[collapsible=icon]:hidden">
                                 {getParentName(parent)}
                               </span>
-                            </Link>
-                          </SidebarMenuButton>
+                            </SidebarMenuButton>
+                          </CollapsibleTrigger>
                           {hasParentActions && (
                             <SidebarItemActions
                               onRename={onRenameParent ? () => setRenamingParentId(parentId) : undefined}
