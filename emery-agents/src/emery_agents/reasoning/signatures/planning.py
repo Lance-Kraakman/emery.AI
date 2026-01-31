@@ -237,6 +237,11 @@ class CreatePlan(dspy.Signature):  # type: ignore[misc]
     - ASK only for: destructive operations, ambiguous business rules, security decisions,
       genuinely unclear user intent.
     - The user can modify the plan before approving — prefer over-planning to over-asking.
+
+    TOOL USAGE DURING PLANNING:
+    You can ONLY call: system_research, search_capabilities, search_external.
+    target_agent names (schema_builder, app_builder, skill_builder, etc.) are NOT tools.
+    Set target_agent in plan step output fields — do NOT attempt to call them.
     """
 
     request: str = dspy.InputField(

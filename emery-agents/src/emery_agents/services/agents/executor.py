@@ -53,7 +53,7 @@ from ..execution.events import (
     ExecutionBlockedEvent,
     FinalSynthesisEvent,
 )
-from ...orchestrators.nodes.planning import generate_plan_node
+from ...orchestrators.nodes.planning import generate_plan_node, _build_workspace_context
 from ...orchestrators import create_session_graph, RuntimeContext
 from ...orchestrators.state import DEFAULT_STATE
 logger = logging.getLogger(__name__)
@@ -628,11 +628,13 @@ class AgentExecutor:
         )
 
         # Phase 1: Generate plan using generate_plan_node directly
+        workspace = _build_workspace_context(api_key, org_id)
         plan_state = {
             "task": instructions,
             "org_model": context.org_model,
             "api_key": api_key,
             "org_id": org_id,
+            "workspace_context": workspace,
         }
 
         result = await generate_plan_node(plan_state, runtime)

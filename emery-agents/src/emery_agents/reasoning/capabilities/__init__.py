@@ -41,6 +41,10 @@ CAPABILITY_ROUTING_HEADER = """
 MULTI-CAPABILITY TASKS: Use multiple target_agents across steps.
 Example: "Build a CRM" → schema_builder (tables) → app_builder (UI) → view_builder (data views).
 Order: always create data (schema) before UI (app/page/view).
+
+IMPORTANT: target_agent values (schema_builder, skill_builder, etc.) are NOT callable tools.
+They are routing labels for plan steps. Do NOT call them as tools.
+Your available tools during planning are ONLY: system_research, search_capabilities, search_external.
 """.strip()
 
 # Mapping from capability ID to planning guidance

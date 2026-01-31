@@ -37,6 +37,7 @@ from ..orchestrators import create_session_graph, RuntimeContext
 from ..orchestrators.runtime import ConversationMessage
 from ..orchestrators.state import DEFAULT_STATE
 from ..services.memory import MemoryService
+from ..orchestrators.nodes.planning import _build_workspace_context
 from ..services.planning import PlanFileRepository
 
 logger = logging.getLogger(__name__)
@@ -270,12 +271,24 @@ class CoordinatorStreamingHandler:
                 yield event
             return
 
+        # === BUILD WORKSPACE CONTEXT (reused for classifier + planning) ===
+        workspace = _build_workspace_context(
+            context.tool_provider.api_key,
+            str(context.tool_provider.organization_id),
+        )
+
         # === CLASSIFY TASK (if no stored plan) ===
         if not stored_plan:
             try:
+                context_str = workspace.resource_summary()
+                if workspace.existing_skills:
+                    skill_names = [s.name for s in workspace.existing_skills]
+                    context_str += f"\nAvailable skills: {', '.join(skill_names)}"
+
                 execution_mode = await self._classify_task(
                     task=task,
                     org_model=org_model,
+                    context=context_str,
                 )
 
                 if execution_mode == TaskExecutionMode.DIRECT:
@@ -302,6 +315,7 @@ class CoordinatorStreamingHandler:
             thread_id=thread_id,
             runtime_skill_inputs=runtime_skill_inputs,
             memory_context=memory_context_str,
+            workspace_context=workspace,
         ):
             yield event
 
@@ -315,6 +329,7 @@ class CoordinatorStreamingHandler:
         thread_id: Optional[str] = None,
         runtime_skill_inputs: Optional[Dict[str, str]] = None,
         memory_context: str = "",
+        workspace_context: Optional[Any] = None,
     ) -> AsyncIterator[Any]:
         """
         LangGraph-based execution path.
@@ -336,6 +351,7 @@ class CoordinatorStreamingHandler:
             "organization_id": context.tool_provider.organization_id if context.tool_provider else None,
             "stored_plan": stored_plan,
             "runtime_skill_inputs": runtime_skill_inputs,
+            "workspace_context": workspace_context,
         }
 
         # Get or create session graph (uses cached instance for thread_id)

@@ -37,6 +37,9 @@ class PlanExecuteState(TypedDict, total=False):
     org_model: Optional[str]
     organization_id: Optional[int]
 
+    # Workspace context — avoids duplicate WorkspaceAPI.get_all() calls
+    workspace_context: Optional[Any]  # WorkspaceContext dataclass (same pattern as Plan)
+
     # Skill template generation (for GeneratePlan RPC)
     skill_inputs: Optional[List[Dict[str, Any]]]  # Input DEFINITIONS (schema)
     skill_outputs: Optional[List[Dict[str, Any]]]
@@ -79,6 +82,8 @@ DEFAULT_STATE: Dict[str, Any] = {
     "org_id": "",
     "org_model": None,
     "organization_id": None,
+    # Workspace context
+    "workspace_context": None,
     # Skill template generation
     "skill_inputs": None,
     "skill_outputs": None,

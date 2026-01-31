@@ -31,8 +31,9 @@ from ..services.plan_service import PlanService
 # HuggingFaceInferenceClient removed - skills now executed dynamically via API
 from ..utils.error_classifier import classify_error
 from ..utils.error_messages import ErrorSeverity
-from ..utils.mention_parser import parse_agent_mention  # parse_skill_invocation removed - skills loaded via API
+from ..utils.mention_parser import parse_agent_mention, parse_skill_invocation
 from .mention_routing import handle_agent_mention_routing
+from .skill_mention_routing import handle_skill_mention_routing
 from .message_processor import (
     extract_user_api_key_from_tools,
     extract_images_from_message,
@@ -215,6 +216,18 @@ class AgentStreamingHandler:
                 ):
                     yield event
                 return  # Agent mention handled
+
+            # === @SKILL MENTION DETECTION ===
+            skill_invocation = parse_skill_invocation(current_task)
+            if skill_invocation:
+                logger.info(f"🎯 Detected @skill mention: '{skill_invocation.skill_name}' with {len(skill_invocation.inputs)} inputs")
+                async for event in handle_skill_mention_routing(
+                    skill_invocation=skill_invocation,
+                    tool_provider=tool_provider,
+                    org_model=org_model,
+                ):
+                    yield event
+                return  # Skill mention handled
 
             # Stream agent execution with coordinator
             async for event in self._execute_with_streaming(

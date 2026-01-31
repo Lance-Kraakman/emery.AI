@@ -49,6 +49,7 @@ def _build_step_prompt(
     completed_steps: list[PlanStep],
     remaining_steps: list[PlanStep],
     resolved_prompt: str | None = None,
+    original_task: str | None = None,
 ) -> str:
     """Build execution prompt for a plan step."""
     parts = [
@@ -56,6 +57,14 @@ def _build_step_prompt(
         "",
         "## Plan Goal",
         goal,
+    ]
+
+    # Include original user request when it contains data not captured in goal
+    if original_task and len(original_task) > len(goal) + 50:
+        display_task = original_task[:8000] + "\n...[truncated]" if len(original_task) > 8000 else original_task
+        parts.extend(["", "## Original User Request (contains input data)", display_task])
+
+    parts.extend([
         "",
         "## Before You Act",
         "",
@@ -66,7 +75,7 @@ def _build_step_prompt(
         "2. Understand schemas — discover field names and types before creating or populating data",
         "3. Use discovered info directly — do not ask the user for things you can look up",
         "4. Chain discoveries — find the table, then list its fields, then populate rows",
-    ]
+    ])
 
     if current_step.phase_name:
         parts.extend(["", f"## Phase: {current_step.phase_name}"])
@@ -307,6 +316,7 @@ class PlanStepExecutor:
                 completed_steps=completed_steps,
                 remaining_steps=remaining_steps,
                 resolved_prompt=resolved_prompt,
+                original_task=plan.basic_instructions,
             )
         else:
             # Interactive mode: use description with interactive executor
@@ -320,6 +330,7 @@ class PlanStepExecutor:
                 total_steps=len(plan.steps),
                 completed_steps=completed_steps,
                 remaining_steps=remaining_steps,
+                original_task=plan.basic_instructions,
             )
 
         logger.info(
@@ -506,6 +517,10 @@ class PlanStepExecutor:
             "previous_results": previous_results,
             "org_id": self.org_id,
         }
+
+        # Include original task when it contains data beyond the goal summary
+        if plan.basic_instructions and plan.basic_instructions != plan.goal:
+            context["original_task"] = plan.basic_instructions[:4000]
 
         # Include planner's analysis — high-level description of the approach
         if plan.analysis:

@@ -266,8 +266,18 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
     else:
         discovery_tools = []
 
-    # Build workspace context, then filter to task-relevant resources
-    full_workspace = _build_workspace_context(api_key, org_id)
+    # Use cached workspace from state if available, otherwise fetch
+    cached_workspace = state.get("workspace_context")
+    if cached_workspace:
+        full_workspace = cached_workspace
+    else:
+        logger.warning(
+            "workspace_context not in graph state — fetching "
+            "(caller should populate state to avoid duplicate API call)"
+        )
+        full_workspace = _build_workspace_context(api_key, org_id)
+
+    # Filter to task-relevant resources
     workspace_context = _filter_relevant_context(full_workspace, task)
 
     # Build session config
