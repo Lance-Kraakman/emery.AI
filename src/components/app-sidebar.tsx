@@ -454,14 +454,14 @@ export function AppSidebar({
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="border-b p-4">
+      <SidebarHeader className="border-b px-2 py-1.5">
         <div className="flex items-center justify-between">
           {isCollapsed ? (
             <Button
               variant="ghost"
               size="icon"
               onClick={toggleSidebar}
-              className="h-12 w-12"
+              className="h-8 w-8"
             >
               <img src="/assets/braintable/logo_logo.png" alt="BrainTable" className="h-6 w-6" />
             </Button>
