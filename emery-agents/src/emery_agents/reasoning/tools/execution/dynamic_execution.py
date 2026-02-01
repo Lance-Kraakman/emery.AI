@@ -15,14 +15,50 @@ from __future__ import annotations
 
 import json
 import logging
+from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 import requests
 
 from ..http_client import get_base_url
+from ....entities.execution_context import ExecutionContext
 from ....entities.skill_config import SkillConfig
+from ....types import ExecutionMode
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class AgentExecutionConfig:
+    """Typed response from POST /api/agents/[id]/execution-config."""
+
+    agent_id: int
+    agent_api_key: str  # Required — no fallback to caller's key
+    agent_name: str
+    agent_description: str
+    agent_persona: Optional[str]
+
+    @classmethod
+    def from_api_response(cls, data: Dict[str, Any]) -> AgentExecutionConfig:
+        """Parse execution-config API response into typed structure.
+
+        Raises:
+            ValueError: If agent has no API key configured.
+        """
+        agent_dto = data.get("agent", {})
+        agent_api_key = data.get("agentApiKey")
+        if not agent_api_key:
+            raise ValueError(
+                f"Agent {agent_dto.get('name', 'unknown')} has no API key configured. "
+                "Agents must have their own API key for execution."
+            )
+        return cls(
+            agent_id=data.get("agentId", agent_dto.get("id", 0)),
+            agent_api_key=agent_api_key,
+            agent_name=agent_dto.get("name", "unknown"),
+            agent_description=agent_dto.get("description", ""),
+            agent_persona=agent_dto.get("persona"),
+        )
 
 
 def execute_skill_by_id(
@@ -171,7 +207,8 @@ def fetch_skill_execution_config(
     elif response.status_code >= 400:
         return {"success": False, "error": f"API error: {response.status_code}"}
 
-    return response.json()
+    result: Dict[str, Any] = response.json()
+    return result
 
 
 def execute_agent_by_id(
@@ -184,14 +221,14 @@ def execute_agent_by_id(
     Execute an agent by ID with dynamic credential resolution.
 
     Flow:
-    1. Fetch agent config from API
-    2. Use agent's credentials
+    1. Fetch agent config + credentials from API
+    2. Use agent's own API key (no fallback)
     3. Execute task in-process using AgentExecutor
 
     Args:
         agent_id: The agent ID to execute
         task: The task/instruction for the agent
-        api_key: Caller's API key
+        api_key: Caller's API key (used for the config fetch, not execution)
         org_id: Organization ID
 
     Returns:
@@ -199,9 +236,15 @@ def execute_agent_by_id(
     """
     logger.info(f"[DYNAMIC-EXEC] Executing agent {agent_id} with task: {task[:100]}...")
 
-    # 1. Fetch agent config from API
+    # 1. Fetch agent config + credentials from API
     try:
-        config_result = fetch_agent_execution_config(agent_id, api_key, org_id)
+        exec_config = fetch_agent_execution_config(agent_id, api_key, org_id)
+    except ValueError as e:
+        logger.error(f"[DYNAMIC-EXEC] Agent config/credential error: {e}")
+        return json.dumps({
+            "status": "error",
+            "error": str(e),
+        })
     except Exception as e:
         logger.error(f"[DYNAMIC-EXEC] Failed to fetch agent config: {e}")
         return json.dumps({
@@ -209,36 +252,16 @@ def execute_agent_by_id(
             "error": f"Failed to fetch agent configuration: {e}",
         })
 
-    if not config_result.get("success"):
-        error = config_result.get("error", "Unknown error")
-        logger.error(f"[DYNAMIC-EXEC] API error: {error}")
-        return json.dumps({
-            "status": "error",
-            "error": error,
-        })
-
-    data = config_result.get("data", {})
-    agent_dto = data.get("agent", {})
-    agent_api_key = data.get("agentApiKey") or api_key
-
-    logger.info(f"[DYNAMIC-EXEC] Agent config: {agent_dto.get('name', 'unknown')}")
+    logger.info(
+        f"[DYNAMIC-EXEC] Agent config: {exec_config.agent_name} "
+        f"(using agent's own API key)"
+    )
 
     # 2. Build ExecutionContext
-    from ....entities.execution_context import ExecutionContext
-    from ....types import ExecutionMode
-
-    # Extract tool names from agent config
-    tools_config = agent_dto.get("tools", {})
-    tool_names = []
-    if isinstance(tools_config, dict):
-        tool_names = list(tools_config.keys())
-    elif isinstance(tools_config, list):
-        tool_names = [t.get("name", "") for t in tools_config if isinstance(t, dict)]
-
     context = ExecutionContext(
         mode=ExecutionMode.INTERACTIVE,
         task=task,
-        available_tools=tool_names,
+        available_tools=[],
         agent_id=agent_id,
         organization_id=int(org_id),
     )
@@ -251,7 +274,7 @@ def execute_agent_by_id(
         agent_executor = AgentExecutor()
 
         # Collect results from async iterator
-        async def collect_results():
+        async def collect_results() -> Optional[str]:
             final_result = None
             async for update in agent_executor.execute_task(context):
                 if update.get("type") == "final_answer":
@@ -283,7 +306,7 @@ def fetch_agent_execution_config(
     agent_id: int,
     api_key: str,
     org_id: str,
-) -> Dict[str, Any]:
+) -> AgentExecutionConfig:
     """
     Fetch agent execution config from API.
 
@@ -298,7 +321,10 @@ def fetch_agent_execution_config(
         org_id: Organization ID
 
     Returns:
-        API response dict with agent config and credentials
+        AgentExecutionConfig with typed fields
+
+    Raises:
+        ValueError: If API call fails or agent has no API key
     """
     base_url = get_base_url()
     url = f"{base_url}/api/agents/{agent_id}/execution-config"
@@ -314,10 +340,14 @@ def fetch_agent_execution_config(
     response = requests.post(url, headers=headers, json={}, timeout=30)
 
     if response.status_code == 403:
-        return {"success": False, "error": "Permission denied: agents:execute required"}
+        raise ValueError("Permission denied: agents:execute required")
     elif response.status_code == 404:
-        return {"success": False, "error": f"Agent {agent_id} not found"}
+        raise ValueError(f"Agent {agent_id} not found")
     elif response.status_code >= 400:
-        return {"success": False, "error": f"API error: {response.status_code}"}
+        raise ValueError(f"API error: {response.status_code}")
 
-    return response.json()
+    result: Dict[str, Any] = response.json()
+    if not result.get("success"):
+        raise ValueError(result.get("error", "Unknown API error"))
+
+    return AgentExecutionConfig.from_api_response(result.get("data", {}))

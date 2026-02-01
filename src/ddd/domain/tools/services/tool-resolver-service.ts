@@ -112,11 +112,6 @@ export class ToolResolverService {
       parameterName: 'file_id'
     },
     {
-      pattern: /@agent:([^@\s]+)/g,
-      toolName: 'emery-read-agent',
-      parameterName: 'agent_id'
-    },
-    {
       pattern: /@database:([^@\s]+)/g,
       toolName: 'emery-read-database',
       parameterName: 'database_id'

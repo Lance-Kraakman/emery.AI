@@ -23,6 +23,7 @@ import dspy
 
 from ..reasoning.modules import ExecutorModule
 from ..reasoning.tools.execution import create_skill_invoker_tools
+from ..services.agents.api import AgentData, SkillData
 from ..utils.persona_sanitizer import sanitize_persona, sanitize_description
 from ..services.skills.validator import create_validator_from_skills
 
@@ -30,8 +31,8 @@ logger = logging.getLogger(__name__)
 
 
 def create_agent_executor(
-    agent_config: dict[str, Any],
-    skills: list[dict[str, Any]],
+    agent_data: AgentData,
+    skills: list[SkillData],
     api_key: str | None = None,
     organization_id: int | None = None,
     additional_tools: list[Callable[..., Any]] | None = None,
@@ -46,8 +47,8 @@ def create_agent_executor(
     - Optional data access tools (row_crud scoped to agent's database)
 
     Args:
-        agent_config: Agent entity data (id, name, persona, databaseId, etc.)
-        skills: List of skill definitions for this agent
+        agent_data: Typed agent configuration (AgentData)
+        skills: List of typed skill definitions (SkillData)
         api_key: API key for tool/skill execution
         organization_id: Organization ID for RLS context
         additional_tools: Extra tools to include (e.g., scoped row_crud)
@@ -57,16 +58,17 @@ def create_agent_executor(
     Returns:
         Configured ExecutorModule for agent execution
     """
-    agent_id = agent_config.get("id")
-    agent_name = agent_config.get("name", "Agent")
+    agent_id = agent_data.id
+    agent_name = agent_data.name
 
     # SECURITY: Sanitize user-provided content
-    agent_description = sanitize_description(agent_config.get("description", ""))
+    agent_description = sanitize_description(agent_data.description)
 
     logger.info(f"[AGENT-EXECUTOR] Creating ExecutorModule for agent: {agent_name} (id={agent_id})")
 
     # SECURITY: Create skill permission validator to enforce skill whitelist
-    skill_validator = create_validator_from_skills(skills, agent_id=agent_id)
+    agent_id_int = int(agent_id) if agent_id else None
+    skill_validator = create_validator_from_skills(skills, agent_id=agent_id_int)
     logger.info(f"[AGENT-EXECUTOR] Created skill validator with {len(skill_validator.allowed_skill_ids)} allowed skills")
 
     # 1. Create SkillInvokerTools for each skill (with permission validation)
@@ -92,14 +94,14 @@ def create_agent_executor(
     )
 
     # 4. Store metadata for identification
-    executor._agent_id = agent_id  # type: ignore[attr-defined]
-    executor._agent_name = f"agent_{agent_name.lower().replace(' ', '_')}"  # type: ignore[attr-defined]
-    executor._agent_description = (  # type: ignore[attr-defined]
+    executor._agent_id = agent_id
+    executor._agent_name = f"agent_{agent_name.lower().replace(' ', '_')}"
+    executor._agent_description = (
         f"User-defined agent: {agent_name}. "
         f"{agent_description or 'Executes skills and interacts with data.'}"
     )
 
-    logger.info(f"✨ Created ExecutorModule: {executor._agent_name}")  # type: ignore[attr-defined]
+    logger.info(f"Created ExecutorModule: {executor._agent_name}")
     tool_names = [getattr(t, "name", getattr(t, "__name__", str(t))) for t in all_tools]
     logger.info(f"   Tools: {tool_names}")
     logger.info(f"   Max iters: {max_steps}")
@@ -113,8 +115,8 @@ def create_agent_executor_from_api(
     organization_id: int | None = None,
     skill_executor_callback: Callable[..., Any] | None = None,
     max_steps: int = 15,
-    fetch_agent_callback: Callable[..., Any] | None = None,
-    fetch_skills_callback: Callable[..., Any] | None = None,
+    fetch_agent_callback: Callable[..., AgentData | None] | None = None,
+    fetch_skills_callback: Callable[..., list[SkillData]] | None = None,
     create_row_crud_callback: Callable[..., Any] | None = None,
 ) -> ExecutorModule:
     """
@@ -132,8 +134,8 @@ def create_agent_executor_from_api(
         organization_id: Organization ID for RLS context
         skill_executor_callback: Callback to execute skills
         max_steps: Maximum ReAct iterations
-        fetch_agent_callback: Callback to fetch agent from API
-        fetch_skills_callback: Callback to fetch skills from API
+        fetch_agent_callback: Callback returning AgentData
+        fetch_skills_callback: Callback returning list[SkillData]
         create_row_crud_callback: Callback to create scoped row_crud tool
 
     Returns:
@@ -143,30 +145,29 @@ def create_agent_executor_from_api(
         raise ValueError("fetch_agent_callback and fetch_skills_callback are required")
 
     # 1. Fetch agent configuration
-    logger.info(f"📥 Fetching agent {agent_id} from API")
-    agent_config = fetch_agent_callback(agent_id)
-    if not agent_config:
+    logger.info(f"Fetching agent {agent_id} from API")
+    agent_data = fetch_agent_callback(agent_id)
+    if not agent_data:
         raise ValueError(f"Agent {agent_id} not found")
 
     # 2. Fetch agent's skills
-    logger.info(f"📥 Fetching skills for agent {agent_id}")
+    logger.info(f"Fetching skills for agent {agent_id}")
     skills = fetch_skills_callback(agent_id)
 
     # 3. Create additional tools (e.g., scoped row_crud for data access)
     additional_tools: list[Callable[..., Any]] = []
-    database_id = agent_config.get("databaseId")
-    if database_id and create_row_crud_callback:
-        logger.info(f"   Creating row_crud scoped to database {database_id}")
+    if agent_data.database_id and create_row_crud_callback:
+        logger.info(f"   Creating row_crud scoped to database {agent_data.database_id}")
         row_crud = create_row_crud_callback(
             api_key=api_key,
             organization_id=organization_id,
-            database_id=database_id,
+            database_id=agent_data.database_id,
         )
         additional_tools.append(row_crud)
 
     # 4. Create the executor
     return create_agent_executor(
-        agent_config=agent_config,
+        agent_data=agent_data,
         skills=skills,
         api_key=api_key,
         organization_id=organization_id,

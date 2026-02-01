@@ -60,7 +60,7 @@ class SkillAPIService:
     def __init__(
         self,
         api_key: str,
-        organization_id: Optional[str] = None,
+        organization_id: Optional[int] = None,
         timeout: float = 15.0,
     ):
         self.api_key = api_key

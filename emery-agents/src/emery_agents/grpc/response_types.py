@@ -61,6 +61,7 @@ class StepMetadata(TypedDict, total=False):
     confidence: str
     # Unified message handling metadata
     plan_id: str
+    agent_id: str
     agent_name: str
     feedback: str
     # Phase execution metadata

@@ -11,9 +11,13 @@ AIDEV-NOTE: DSPy Migration (Jan 2026)
 """
 
 import json
+import logging
 import os
+import re
 from typing import Any, Dict, List, Optional, Callable
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from ...entities.tool_config import ToolConfig
 # SkillConfig removed - skills now loaded dynamically via API
@@ -33,6 +37,7 @@ from ...reasoning.tools import (
 )
 # SkillTool removed - skills now executed dynamically via DynamicSkillTool
 from ...reasoning.tools.integrations import (
+    DynamicAgentTool,
     DynamicSkillTool,
     PipedreamTool,
     create_file_reader_tool,
@@ -95,7 +100,7 @@ class UnifiedToolLoader:
         """Load the unified metadata file."""
         try:
             with open(self.metadata_path, 'r') as f:
-                metadata = json.load(f)
+                metadata: Dict[str, Any] = json.load(f)
 
             pipedream_count = len(metadata.get("pipedream_tools", {}))
             emery_count = len(metadata.get("emery_tools", {}))
@@ -203,12 +208,26 @@ class UnifiedToolLoader:
                 organization_id=org_id,
             )
 
+        # Handle agent reference tools (type: 'reference', name: 'agent-{id}')
+        # These are agent-to-agent references in tool configurations
+        if tool_config.config.get('type') == 'reference':
+            agent_id_match = re.match(r'agent-(\d+)', tool_config.name)
+            if agent_id_match:
+                agent_ref_id = int(agent_id_match.group(1))
+                org_id = organization_id if organization_id else 0
+                logger.info(f"[TOOL-LOADER] Creating DynamicAgentTool for agent_id={agent_ref_id}")
+                return DynamicAgentTool(
+                    agent_id=agent_ref_id,
+                    api_key=api_key,
+                    organization_id=org_id,
+                )
+
         # AIDEV-NOTE: Handle CRUD tools from database - they don't need unified_metadata
         # These tools are seeded in the DB and sent with full config via gRPC
         crud_factory = self._get_crud_factory(tool_config.name)
         if crud_factory:
-            org_id = str(organization_id) if organization_id else ""
-            return crud_factory(api_key, org_id)
+            org_id_str = str(organization_id) if organization_id else ""
+            return crud_factory(api_key, org_id_str)
 
         # Regular tool loading (existing logic)
         # Convert tool name from hyphen to underscore format for lookup (frontend uses hyphens, backend uses underscores)

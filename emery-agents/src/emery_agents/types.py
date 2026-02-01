@@ -41,7 +41,7 @@ class WorkerStatus(Enum):
 
 
 AgentId = int
-OrganizationId = str
+OrganizationId = int
 TaskId = str
 UserId = str
 OwnerId = str

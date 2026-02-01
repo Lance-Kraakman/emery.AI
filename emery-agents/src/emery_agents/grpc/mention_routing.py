@@ -27,6 +27,7 @@ from ..services.tools.provider import ToolProvider
 from ..services.skills.executor import SkillExecutorService
 from ..services.agents.api import AgentAPIService
 from ..agents.agent_executor_agent import create_agent_executor
+from ..reasoning.tools.execution.dynamic_execution import fetch_agent_execution_config
 from .response_types import StreamResponseDict, create_error_response
 
 logger = logging.getLogger(__name__)
@@ -88,30 +89,42 @@ async def handle_agent_mention_routing(
         }
         return
 
-    agent_config = agent_data.raw
     agent_id = agent_data.id
     logger.info(f"[MENTION-ROUTING] Found agent: {agent_data.name} (id={agent_id})")
 
-    # 2. Fetch agent's skills
-    skills_data = await api_service.fetch_skills(agent_id)
-    skills = [s.raw for s in skills_data]
-    logger.info(f"[MENTION-ROUTING] Loaded {len(skills)} skills for agent {agent_id}")
+    # 2. Resolve agent credentials via execution-config API
+    try:
+        exec_config = await asyncio.to_thread(
+            fetch_agent_execution_config,
+            int(agent_id),
+            tool_provider.api_key,
+            str(tool_provider.organization_id),
+        )
+        agent_api_key = exec_config.agent_api_key
+        logger.info(f"[MENTION-ROUTING] Using agent's own API key for {agent_data.name}")
+    except ValueError as e:
+        logger.error(f"[MENTION-ROUTING] Agent credential error: {e}")
+        yield create_error_response("AGENT_CREDENTIAL_ERROR", str(e))
+        return
 
-    # 3. Create AgentExecutor
-    # Create skill executor callback for skill invocation
+    # 3. Fetch agent's skills
+    skills_data = await api_service.fetch_skills(agent_id)
+    logger.info(f"[MENTION-ROUTING] Loaded {len(skills_data)} skills for agent {agent_id}")
+
+    # 4. Create AgentExecutor with typed entities
     skill_executor_callback = None
-    if skills and skill_executor_service:
+    if skills_data and skill_executor_service:
         skill_executor_callback = skill_executor_service.create_executor_callback(
             org_model=org_model,
             return_message_parts=False,
-            api_key=tool_provider.api_key,
+            api_key=agent_api_key,
             organization_id=tool_provider.organization_id
         )
 
     agent_executor = create_agent_executor(
-        agent_config=agent_config,
-        skills=skills,
-        api_key=tool_provider.api_key,
+        agent_data=agent_data,
+        skills=skills_data,
+        api_key=agent_api_key,
         organization_id=tool_provider.organization_id,
         skill_executor_callback=skill_executor_callback,
         max_steps=15,

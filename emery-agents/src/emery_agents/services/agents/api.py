@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,6 @@ class AgentData:
     description: str
     persona: Optional[str]
     database_id: Optional[str]
-    raw: Dict[str, Any]  # Full API response for passthrough
 
 
 @dataclass
@@ -40,7 +40,7 @@ class SkillData:
     id: str
     name: str
     description: str
-    raw: Dict[str, Any]  # Full API response for passthrough
+    inputs: List[Dict[str, Any]]  # InputDefinition dicts (name, type, required, inputMapping)
 
 
 class AgentAPIService:
@@ -66,7 +66,7 @@ class AgentAPIService:
     def __init__(
         self,
         api_key: str,
-        organization_id: Optional[str] = None,
+        organization_id: Optional[int] = None,
         timeout: float = 15.0
     ):
         """
@@ -151,7 +151,6 @@ class AgentAPIService:
                             description=agent.get("description", ""),
                             persona=agent.get("persona"),
                             database_id=agent.get("databaseId"),
-                            raw=agent,
                         )
                         for agent in raw_data
                     ]
@@ -219,7 +218,7 @@ class AgentAPIService:
                         id=skill.get("id", ""),
                         name=skill.get("name", "Unknown"),
                         description=skill.get("description", ""),
-                        raw=skill,
+                        inputs=skill.get("inputs", []),
                     )
                     for skill in raw_skills
                 ]
@@ -267,3 +266,51 @@ class AgentAPIService:
     # NOTE: Permission checks are handled by RLS at the server level.
     # If a user doesn't have access to an agent, the fetch/credential
     # loading will fail with 403. No explicit check_agent_access needed.
+
+
+def fetch_agent_by_id_sync(
+    agent_id: int, api_key: str, organization_id: int
+) -> Optional[AgentData]:
+    """
+    Sync fetch of agent by ID. For use in sync contexts (tool loading).
+
+    Standalone function (not on the async AgentAPIService class) using
+    requests, matching the sync patterns in dynamic_execution.py.
+
+    Args:
+        agent_id: Agent ID to fetch
+        api_key: Bearer token for authentication
+        organization_id: Organization ID for RLS context
+
+    Returns:
+        AgentData if found, None otherwise
+    """
+    base_url = os.getenv("NEXTJS_BASE_URL", "http://localhost:3000")
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "X-Organization-Id": str(organization_id),
+        "Content-Type": "application/json",
+    }
+    try:
+        response = requests.get(
+            f"{base_url}/api/agents/{agent_id}",
+            headers=headers,
+            timeout=10,
+        )
+        if response.status_code >= 400:
+            logger.warning(
+                f"[AGENT-API] Sync fetch agent {agent_id} failed: {response.status_code}"
+            )
+            return None
+        data = response.json()
+        agent = data.get("data", data) if isinstance(data, dict) else {}
+        return AgentData(
+            id=str(agent.get("id", "")),
+            name=agent.get("name", "Unknown"),
+            description=agent.get("description", ""),
+            persona=agent.get("persona"),
+            database_id=agent.get("databaseId"),
+        )
+    except Exception as e:
+        logger.error(f"[AGENT-API] Sync fetch failed for agent {agent_id}: {e}")
+        return None

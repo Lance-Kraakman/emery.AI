@@ -9,16 +9,14 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable
 
+from ....services.agents.api import SkillData
 from ....services.skills.validator import SkillPermissionValidator
 
 logger = logging.getLogger(__name__)
 
 
 def create_skill_invoker_tool(
-    skill_id: int,
-    skill_name: str,
-    skill_description: str,
-    skill_inputs: list[dict[str, Any]],
+    skill: SkillData,
     api_key: str | None = None,
     organization_id: int | None = None,
     skill_executor_callback: Any | None = None,
@@ -32,10 +30,7 @@ def create_skill_invoker_tool(
     - If inputs missing, returns a prompt for the user to provide them
 
     Args:
-        skill_id: Database ID of the skill
-        skill_name: Display name of the skill
-        skill_description: Description for routing/help text
-        skill_inputs: List of InputDefinition dicts from skill config
+        skill: Typed SkillData with id, name, description, inputs
         api_key: API key for skill execution
         organization_id: Organization ID for RLS context
         skill_executor_callback: Callback to execute skill (from SkillExecutorService)
@@ -44,11 +39,13 @@ def create_skill_invoker_tool(
     Returns:
         Callable for skill invocation that DSPy ReAct can use
     """
-    # Capture auth in closure
+    # Extract typed fields into closure
     _auth_token = api_key or ""
     _org_id = organization_id
-    _skill_id = skill_id
-    _skill_inputs = skill_inputs or []
+    _skill_id = int(skill.id)
+    _skill_name = skill.name
+    _skill_description = skill.description
+    _skill_inputs = skill.inputs or []
     _executor = skill_executor_callback
     _validator = permission_validator
 
@@ -62,7 +59,7 @@ def create_skill_invoker_tool(
     inputs_doc = "\n".join(input_details) if input_details else "  No inputs required"
 
     # Create normalized tool name
-    tool_name = f"skill_{skill_name.lower().replace(' ', '_').replace('-', '_')}"
+    tool_name = f"skill_{_skill_name.lower().replace(' ', '_').replace('-', '_')}"
 
     def invoke_skill(
         inputs: dict[str, Any] | None = None,
@@ -103,7 +100,7 @@ def create_skill_invoker_tool(
             return {
                 "success": False,
                 "status": "missing_inputs",
-                "message": f"I need some information to execute {skill_name}.",
+                "message": f"I need some information to execute {_skill_name}.",
                 "missing_inputs": questions,
                 "hint": "Please provide the missing information.",
             }
@@ -115,14 +112,14 @@ def create_skill_invoker_tool(
 
         # Execute the skill
         logger.info(
-            f"[SKILL-INVOKER] Invoking skill {skill_name} (id={_skill_id}) "
+            f"[SKILL-INVOKER] Invoking skill {_skill_name} (id={_skill_id}) "
             f"with inputs: {list(provided_inputs.keys())}"
         )
 
         # SECURITY: Validate permission before execution
         if _validator is not None:
             try:
-                _validator.validate_execution(_skill_id, skill_name)
+                _validator.validate_execution(_skill_id, _skill_name)
             except PermissionError as e:
                 logger.warning(f"[SECURITY] Skill execution blocked: {e}")
                 return {"success": False, "error": str(e), "blocked_by": "skill_permission_validator"}
@@ -139,16 +136,16 @@ def create_skill_invoker_tool(
                 organization_id=_org_id,
             )
 
-            logger.info(f"[SKILL-INVOKER] Skill {skill_name} completed successfully")
+            logger.info(f"[SKILL-INVOKER] Skill {_skill_name} completed successfully")
             return {"success": True, "result": result}
 
         except Exception as e:
-            logger.error(f"[SKILL-INVOKER] Skill {skill_name} failed: {e}")
+            logger.error(f"[SKILL-INVOKER] Skill {_skill_name} failed: {e}")
             return {"success": False, "error": str(e)}
 
     # Set function metadata for DSPy introspection
     invoke_skill.__name__ = tool_name
-    invoke_skill.__doc__ = f"""{skill_description}
+    invoke_skill.__doc__ = f"""{_skill_description}
 
 Inputs:
 {inputs_doc}
@@ -165,7 +162,7 @@ Args:
 
 
 def create_skill_invoker_tools(
-    skills: list[dict[str, Any]],
+    skills: list[SkillData],
     api_key: str | None = None,
     organization_id: int | None = None,
     skill_executor_callback: Any | None = None,
@@ -175,7 +172,7 @@ def create_skill_invoker_tools(
     Create skill invoker functions for a list of skills.
 
     Args:
-        skills: List of skill definitions (from API/database)
+        skills: List of typed SkillData from API
         api_key: API key for skill execution
         organization_id: Organization ID for RLS context
         skill_executor_callback: Callback to execute skills
@@ -188,10 +185,7 @@ def create_skill_invoker_tools(
 
     for skill in skills:
         tool = create_skill_invoker_tool(
-            skill_id=skill["id"],
-            skill_name=skill["name"],
-            skill_description=skill.get("description", ""),
-            skill_inputs=skill.get("inputs", []),
+            skill=skill,
             api_key=api_key,
             organization_id=organization_id,
             skill_executor_callback=skill_executor_callback,
