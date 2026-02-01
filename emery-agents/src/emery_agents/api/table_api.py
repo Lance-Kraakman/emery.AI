@@ -7,7 +7,7 @@ import logging
 from dataclasses import dataclass, field as dataclass_field
 from typing import Any, Dict, List, Optional
 
-from .http_client import make_request
+from .http_client import make_request, unwrap_entity
 
 logger = logging.getLogger(__name__)
 
@@ -38,17 +38,6 @@ class TableAPI:
     def __init__(self, api_key: str, org_id: str):
         self._api_key = api_key
         self._org_id = org_id
-
-    @staticmethod
-    def _unwrap_entity(result: str) -> Optional[Dict[str, Any]]:
-        """Unwrap entity from API envelope {"success": true, "data": {...}}."""
-        try:
-            parsed = json.loads(result)
-            if isinstance(parsed, dict) and "data" in parsed:
-                return parsed["data"]  # type: ignore[no-any-return]
-            return parsed  # type: ignore[no-any-return]
-        except (json.JSONDecodeError, TypeError):
-            return None
 
     def list(
         self,
@@ -123,7 +112,7 @@ class TableAPI:
         if result.startswith("ERROR"):
             return None
 
-        entity = self._unwrap_entity(result)
+        entity = unwrap_entity(result)
         if entity is None:
             logger.warning(f"Table get: failed to parse response: {result[:200]}")
             return None
@@ -171,7 +160,7 @@ class TableAPI:
             logger.debug(f"Table create failed: {result}")
             return None
 
-        entity = self._unwrap_entity(result)
+        entity = unwrap_entity(result)
         if entity is None:
             logger.warning(f"Table create: failed to parse response: {result[:200]}")
             return None
@@ -208,7 +197,7 @@ class TableAPI:
         if result.startswith("ERROR"):
             return None
 
-        entity = self._unwrap_entity(result)
+        entity = unwrap_entity(result)
         if entity is None:
             logger.warning(f"Table update: failed to parse response: {result[:200]}")
             return None

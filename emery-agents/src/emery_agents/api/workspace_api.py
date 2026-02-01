@@ -80,16 +80,18 @@ class WorkspaceAPI:
         """Parse apps with their pages."""
         apps = []
         for app in apps_data:
+            app_id = app.get("id", 0)
             pages = [
                 WorkspacePage(
                     id=p.get("id", 0),
                     name=p.get("name", ""),
                     slug=p.get("slug", ""),
+                    app_id=app_id,
                 )
                 for p in app.get("pages", [])
             ]
             apps.append(WorkspaceApp(
-                id=app.get("id", 0),
+                id=app_id,
                 name=app.get("name", ""),
                 slug=app.get("slug", ""),
                 description=app.get("description", ""),
@@ -144,6 +146,7 @@ class WorkspaceAPI:
             databases.append(WorkspaceDatabase(
                 id=db.get("id", 0),
                 name=db.get("name", ""),
+                table_count=len(tables),
                 tables=tables,
             ))
         return databases

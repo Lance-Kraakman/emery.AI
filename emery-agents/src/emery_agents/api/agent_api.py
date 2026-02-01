@@ -1,10 +1,4 @@
-"""
-Agent API — sync and async patterns for agent operations.
-
-Merged from:
-- reasoning/tools/api/agent_api.py (sync AgentAPI using make_request)
-- services/agents/api.py (async AgentAPIService using httpx + sync fetch_agent_by_id_sync)
-"""
+"""Agent API — sync and async patterns for agent operations."""
 
 from __future__ import annotations
 
@@ -17,15 +11,10 @@ from typing import Any, Dict, List, Optional, Tuple
 import httpx
 import requests
 
-from .http_client import make_request
+from .http_client import make_request, unwrap_entity
 from ..entities.workspace import WorkspaceAgent, WorkspaceSkill
 
 logger = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# Sync API (uses make_request / HTTPClient)
-# ---------------------------------------------------------------------------
 
 
 class AgentAPI:
@@ -42,17 +31,6 @@ class AgentAPI:
     def __init__(self, api_key: str, org_id: str):
         self._api_key = api_key
         self._org_id = org_id
-
-    @staticmethod
-    def _unwrap_entity(result: str) -> Optional[Dict[str, Any]]:
-        """Unwrap entity from API envelope {"success": true, "data": {...}}."""
-        try:
-            parsed = json.loads(result)
-            if isinstance(parsed, dict) and "data" in parsed:
-                return parsed["data"]  # type: ignore[no-any-return]
-            return parsed  # type: ignore[no-any-return]
-        except (json.JSONDecodeError, TypeError):
-            return None
 
     def list(self, filters: Optional[Dict[str, Any]] = None) -> List[WorkspaceAgent]:
         """List all agents.
@@ -116,7 +94,7 @@ class AgentAPI:
         if result.startswith("ERROR"):
             return None
 
-        entity = self._unwrap_entity(result)
+        entity = unwrap_entity(result)
         if entity is None:
             logger.warning(f"Agent get: failed to parse response: {result[:200]}")
             return None
@@ -132,11 +110,6 @@ class AgentAPI:
         except KeyError as e:
             logger.warning(f"Agent get: missing field {e}: {result[:200]}")
             return None
-
-
-# ---------------------------------------------------------------------------
-# Async API (uses httpx.AsyncClient directly)
-# ---------------------------------------------------------------------------
 
 
 class AgentAPIService:
@@ -323,11 +296,6 @@ class AgentAPIService:
         """Fetch a single agent by ID."""
         agents = await self.fetch_agents(agent_id=str(agent_id))
         return agents[0] if agents else None
-
-
-# ---------------------------------------------------------------------------
-# Standalone sync fetch (uses requests directly)
-# ---------------------------------------------------------------------------
 
 
 def fetch_agent_by_id_sync(

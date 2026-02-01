@@ -229,6 +229,17 @@ def get_http_client() -> HTTPClient:
     return _client
 
 
+def unwrap_entity(result: str) -> dict[str, Any] | None:
+    """Unwrap entity from API envelope {"success": true, "data": {...}}."""
+    try:
+        parsed = json.loads(result)
+        if isinstance(parsed, dict) and "data" in parsed:
+            return parsed["data"]
+        return parsed
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+
 def make_request(
     endpoint: str,
     method: str,

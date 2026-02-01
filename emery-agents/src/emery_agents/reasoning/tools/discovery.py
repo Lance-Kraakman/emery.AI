@@ -21,7 +21,7 @@ import dspy
 from ddgs import DDGS
 
 from .analysis.research import SystemResearchTool
-from .api.workspace_api import WorkspaceAPI
+from emery_agents.api import WorkspaceAPI
 from .integrations.pipedream import get_pipedream_tool_info, list_pipedream_tools_by_app
 from ...services.tools.capability_registry import CapabilityRegistry
 

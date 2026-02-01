@@ -65,11 +65,7 @@ class WorkspaceApp:
 
 @dataclass
 class WorkspaceAgent:
-    """Agent entity - canonical type for all agent references.
-
-    Merges: AgentData (services/agents), AgentInfo (services/context),
-    WorkspaceAgent (reasoning/tools/api).
-    """
+    """Agent entity."""
     id: int = 0
     name: str = ""
     description: str = ""
@@ -86,11 +82,7 @@ class WorkspaceAgent:
 
 @dataclass
 class WorkspaceSkill:
-    """Skill entity - canonical type for all skill references.
-
-    Merges: SkillData (services/agents), SkillData (services/skills),
-    SkillInfo (services/context), WorkspaceSkill (reasoning/tools/api).
-    """
+    """Skill entity."""
     id: int = 0
     name: str = ""
     description: str = ""

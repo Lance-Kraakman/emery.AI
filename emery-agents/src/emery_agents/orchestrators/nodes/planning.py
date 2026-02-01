@@ -63,7 +63,6 @@ def _build_workspace_context(
     # Build flat table list from nested databases, enriching with parent db info
     all_tables = []
     for db in data.databases:
-        db.table_count = len(db.tables)
         for t in db.tables:
             all_tables.append(WorkspaceTable(
                 id=t.id,

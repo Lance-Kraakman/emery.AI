@@ -26,15 +26,6 @@ from emery_agents.entities.workspace import (
     WorkspaceView,
 )
 
-# Backward-compatible aliases - canonical types live in entities/workspace.py
-DatabaseInfo = WorkspaceDatabase
-TableInfo = WorkspaceTable
-PageInfo = WorkspacePage
-AppInfo = WorkspaceApp
-AgentInfo = WorkspaceAgent
-SkillInfo = WorkspaceSkill
-ViewInfo = WorkspaceView
-
 
 @dataclass(frozen=True)
 class SessionConfig:
@@ -67,12 +58,12 @@ class WorkspaceContext:
     This gives the planner awareness of existing resources to avoid duplicates.
     CapabilityRegistry handles runtime capability routing separately.
     """
-    existing_databases: List[DatabaseInfo] = field(default_factory=list)
-    existing_tables: List[TableInfo] = field(default_factory=list)
-    existing_apps: List[AppInfo] = field(default_factory=list)
-    existing_agents: List[AgentInfo] = field(default_factory=list)
-    existing_skills: List[SkillInfo] = field(default_factory=list)
-    existing_views: List[ViewInfo] = field(default_factory=list)
+    existing_databases: List[WorkspaceDatabase] = field(default_factory=list)
+    existing_tables: List[WorkspaceTable] = field(default_factory=list)
+    existing_apps: List[WorkspaceApp] = field(default_factory=list)
+    existing_agents: List[WorkspaceAgent] = field(default_factory=list)
+    existing_skills: List[WorkspaceSkill] = field(default_factory=list)
+    existing_views: List[WorkspaceView] = field(default_factory=list)
 
     @property
     def has_databases(self) -> bool:
@@ -137,42 +128,42 @@ class WorkspaceContext:
             parts.append(f"{len(self.existing_views)} view(s)")
         return ", ".join(parts) if parts else "empty workspace"
 
-    def get_database_by_name(self, name: str) -> Optional[DatabaseInfo]:
+    def get_database_by_name(self, name: str) -> Optional[WorkspaceDatabase]:
         """Look up database by name."""
         for db in self.existing_databases:
             if db.name == name:
                 return db
         return None
 
-    def get_table_by_name(self, name: str) -> Optional[TableInfo]:
+    def get_table_by_name(self, name: str) -> Optional[WorkspaceTable]:
         """Look up table by name."""
         for table in self.existing_tables:
             if table.name == name:
                 return table
         return None
 
-    def get_app_by_name(self, name: str) -> Optional[AppInfo]:
+    def get_app_by_name(self, name: str) -> Optional[WorkspaceApp]:
         """Look up app by name."""
         for app in self.existing_apps:
             if app.name == name:
                 return app
         return None
 
-    def get_agent_by_name(self, name: str) -> Optional[AgentInfo]:
+    def get_agent_by_name(self, name: str) -> Optional[WorkspaceAgent]:
         """Look up agent by name."""
         for agent in self.existing_agents:
             if agent.name == name:
                 return agent
         return None
 
-    def get_skill_by_name(self, name: str) -> Optional[SkillInfo]:
+    def get_skill_by_name(self, name: str) -> Optional[WorkspaceSkill]:
         """Look up skill by name."""
         for skill in self.existing_skills:
             if skill.name == name:
                 return skill
         return None
 
-    def get_view_by_name(self, name: str) -> Optional[ViewInfo]:
+    def get_view_by_name(self, name: str) -> Optional[WorkspaceView]:
         """Look up view by name."""
         for view in self.existing_views:
             if view.name == name:

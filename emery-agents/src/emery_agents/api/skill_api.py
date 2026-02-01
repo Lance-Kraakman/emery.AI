@@ -1,10 +1,4 @@
-"""
-Skill API — sync and async patterns for skill operations.
-
-Merged from:
-- reasoning/tools/api/skill_api.py (sync SkillAPI using make_request)
-- services/skills/api.py (async SkillAPIService using httpx)
-"""
+"""Skill API — sync and async patterns for skill operations."""
 
 from __future__ import annotations
 
@@ -16,7 +10,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
-from .http_client import make_request
+from .http_client import make_request, unwrap_entity
 from ..entities.workspace import WorkspaceSkill
 
 logger = logging.getLogger(__name__)
@@ -25,11 +19,6 @@ logger = logging.getLogger(__name__)
 def _normalize_name(name: str) -> str:
     """Normalize a skill name for fuzzy matching."""
     return name.lower().replace("-", "_").replace(" ", "_")
-
-
-# ---------------------------------------------------------------------------
-# Sync API (uses make_request / HTTPClient)
-# ---------------------------------------------------------------------------
 
 
 class SkillAPI:
@@ -47,17 +36,6 @@ class SkillAPI:
     def __init__(self, api_key: str, org_id: str):
         self._api_key = api_key
         self._org_id = org_id
-
-    @staticmethod
-    def _unwrap_entity(result: str) -> Optional[Dict[str, Any]]:
-        """Unwrap entity from API envelope {"success": true, "data": {...}}."""
-        try:
-            parsed = json.loads(result)
-            if isinstance(parsed, dict) and "data" in parsed:
-                return parsed["data"]  # type: ignore[no-any-return]
-            return parsed  # type: ignore[no-any-return]
-        except (json.JSONDecodeError, TypeError):
-            return None
 
     def list(
         self,
@@ -131,7 +109,7 @@ class SkillAPI:
         if result.startswith("ERROR"):
             return None
 
-        entity = self._unwrap_entity(result)
+        entity = unwrap_entity(result)
         if entity is None:
             logger.warning(f"Skill get: failed to parse response: {result[:200]}")
             return None
@@ -147,11 +125,6 @@ class SkillAPI:
         except KeyError as e:
             logger.warning(f"Skill get: missing field {e}: {result[:200]}")
             return None
-
-
-# ---------------------------------------------------------------------------
-# Async API (uses httpx.AsyncClient directly)
-# ---------------------------------------------------------------------------
 
 
 class SkillAPIService:
