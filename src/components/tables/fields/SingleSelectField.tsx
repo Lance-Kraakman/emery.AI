@@ -65,10 +65,11 @@ export function SingleSelectField({
   const [newOptionLabel, setNewOptionLabel] = useState('');
   const [isCreating, setIsCreating] = useState(false);
 
-  // Normalize options: assign id/color if missing (agent-created fields may omit them)
+  // Normalize options: assign id/color/value if missing (agent-created fields may omit them)
   const safeOptions = options.map((opt, i) => ({
     ...opt,
     id: typeof opt.id === 'number' ? opt.id : i + 1,
+    value: opt.value || `Option ${opt.id ?? i + 1}`,
     color: opt.color ?? '#3B82F6',
   }));
 

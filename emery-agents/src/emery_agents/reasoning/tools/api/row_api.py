@@ -27,6 +27,22 @@ class RowAPI:
         self._org_id = org_id
 
     @staticmethod
+    def _clean_data(data: Dict[str, Any]) -> Dict[str, Any]:
+        """Sanitize field values before sending to the API.
+
+        - Strips None values (backend can't handle null for typed fields)
+        - Coerces whole-number floats to int (e.g. 86.0 -> 86)
+        """
+        cleaned: Dict[str, Any] = {}
+        for k, v in data.items():
+            if v is None:
+                continue
+            if isinstance(v, float) and v.is_integer():
+                v = int(v)
+            cleaned[k] = v
+        return cleaned
+
+    @staticmethod
     def _unwrap(result: str) -> Dict[str, Any]:
         """Unwrap API response envelope, raise on error."""
         if result.startswith("ERROR") or result.startswith("PERMISSION_DENIED"):
@@ -52,7 +68,7 @@ class RowAPI:
         result = make_request(
             endpoint="rows",
             method="POST",
-            data={"tableId": table_id, "data": data},
+            data={"tableId": table_id, "data": self._clean_data(data), "dataKeyType": "id"},
             auth_token=self._api_key,
             org_id=self._org_id,
         )
@@ -74,7 +90,7 @@ class RowAPI:
         result = make_request(
             endpoint="rows",
             method="PUT",
-            data={"tableId": table_id, "rowId": row_id, "data": data},
+            data={"tableId": table_id, "rowId": row_id, "data": self._clean_data(data), "dataKeyType": "id"},
             auth_token=self._api_key,
             org_id=self._org_id,
         )
@@ -181,4 +197,5 @@ class RowAPI:
             return self.update_row(table_id, row_id, data)
         else:
             logger.info(f"Upsert: no match on {len(filters)} fields, creating new row")
+            logger.info(f"Upsert create_row data: {data}")
             return self.create_row(table_id, data)

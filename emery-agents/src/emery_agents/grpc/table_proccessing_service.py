@@ -23,8 +23,8 @@ from google.protobuf.json_format import Parse, MessageToJson
 from google.protobuf.struct_pb2 import ListValue
 from grpc import ServicerContext
 from .generated import table_service_pb2, table_service_pb2_grpc
-from .table.transform import normalize_arrow_table_to_large_string
-from .table.schema import get_delta_schema_as_pyarrow, convert_protobuf_field_to_arrow, migrate_column_type
+from .table.transform import normalize_arrow_table_to_large_string, create_empty_arrow_table
+from .table.schema import get_delta_schema_as_pyarrow, convert_protobuf_field_to_arrow, migrate_column_type, evolve_schema, get_field_type_from_metadata
 from .table.schema_operations import (
     detect_new_columns,
     evolve_table_schema,
@@ -40,6 +40,12 @@ from .table.operations import (
     write_with_schema_evolution
 )
 from .table.schema import build_schema_from_table_fields
+from .table.field_validation import (
+    validate_field_type_change,
+    is_metadata_only_change,
+    get_field_operation_description
+)
+import pyarrow.types as pat
 
 
 logger = logging.getLogger(__name__)
@@ -675,18 +681,10 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             new_field_type_arrow = convert_protobuf_field_to_arrow(request.updated_field)
 
             # Get current field type enum from metadata
-            from .table.schema import get_field_type_from_metadata
             current_field_type_enum = get_field_type_from_metadata(current_field.metadata)
             if current_field_type_enum is None:
                 logger.warning(f"[UpdateField] No field type metadata found for field ID {request.field_id}, assuming TEXT")
                 current_field_type_enum = table_service_pb2.FIELD_TYPE_TEXT
-
-            # Import validation functions
-            from .table.field_validation import (
-                validate_field_type_change,
-                is_metadata_only_change,
-                get_field_operation_description
-            )
 
             # Log operation description
             operation_desc = get_field_operation_description(
@@ -697,7 +695,17 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             logger.info(f"[UpdateField] Field ID {request.field_id}: {operation_desc}")
 
             # METADATA-ONLY UPDATE PATH (Fast path)
-            if old_field_type_arrow == new_field_type_arrow:
+            # Treat string and large_string as equivalent (older fields may use string,
+            # newer ones use large_string - they are semantically identical)
+            def _are_equivalent_arrow_types(type_a, type_b):
+                if type_a == type_b:
+                    return True
+                if (pat.is_string(type_a) or pat.is_large_string(type_a)) and \
+                   (pat.is_string(type_b) or pat.is_large_string(type_b)):
+                    return True
+                return False
+
+            if _are_equivalent_arrow_types(old_field_type_arrow, new_field_type_arrow):
                 # No type change - this is metadata-only (name, required, fieldConfig, etc.)
                 # We don't need to load data, just update the schema metadata
                 logger.info(f"[UpdateField] METADATA-ONLY update path for field {field_column_name}")
@@ -709,7 +717,6 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 logger.info(f"[UpdateField] Field type: {old_field_type_arrow} (no change)")
 
                 # Update schema metadata using evolve_schema
-                from .table.schema import evolve_schema
                 updated_schema = evolve_schema(current_schema, [request.updated_field])
 
                 # Log new metadata
@@ -719,12 +726,10 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
 
                 # Write empty table with updated schema to trigger metadata evolution
                 # This is FAST - no data loading, Delta Lake handles schema evolution
-                from .table.transform import create_empty_arrow_table, normalize_arrow_table_to_large_string
                 empty_table = create_empty_arrow_table(pa.schema([f for f in updated_schema if f.name == field_column_name]))
                 normalized_empty = normalize_arrow_table_to_large_string(empty_table)
 
                 # Write to Delta Lake (schema evolution will update metadata)
-                from .table.operations import write_with_schema_evolution
                 logger.info(f"[UpdateField] Writing empty table for metadata evolution (append mode)")
                 write_with_schema_evolution(s3_uri, normalized_empty, "append", storage_options)
 
@@ -758,7 +763,6 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 df = pl.from_arrow(arrow_table)
 
                 # Apply type migration
-                from .table.field_utils import field_to_column_name
                 field_column_name = field_to_column_name(request.updated_field)
                 if field_column_name in df.columns:
                     df = migrate_column_type(df, field_column_name, old_field_type_arrow, new_field_type_arrow)

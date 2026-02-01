@@ -231,7 +231,14 @@ export class RowSerializer {
       case 'created-at':
         // AIDEV-NOTE: Timestamp fields (empty → null)
         // Auto-fields (last-updated, created-at) are managed by AutoFieldProcessor
-        return isEmpty ? null : value;
+        if (isEmpty) return null;
+        // Convert ISO date strings to Date objects for Delta Lake
+        // (agent path sends dataKeyType='id', bypassing convertFieldNamesToIds date coercion)
+        if (typeof value === 'string') {
+          const parsed = new Date(value);
+          return isNaN(parsed.getTime()) ? null : parsed;
+        }
+        return value;
 
       default:
         // Unknown types: pass through

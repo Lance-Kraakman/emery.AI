@@ -18,7 +18,7 @@ import logging
 
 import dspy
 
-from duckduckgo_search import DDGS
+from ddgs import DDGS
 
 from .analysis.research import SystemResearchTool
 from .api.workspace_api import WorkspaceAPI

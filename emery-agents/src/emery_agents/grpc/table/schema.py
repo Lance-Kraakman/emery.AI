@@ -6,16 +6,24 @@ Focuses on data structure management without infrastructure concerns.
 """
 
 import logging
+from datetime import datetime, timezone
 from typing import List, Dict, Tuple, Optional
 import pyarrow as pa
 import polars as pl
 from ..generated import table_service_pb2
+
+import pyarrow.types as pat
 
 logger = logging.getLogger(__name__)
 
 
 # Metadata keys for PyArrow field metadata (must be bytes)
 METADATA_KEY_FIELD_TYPE = b"field_type"
+
+
+def _is_any_string_type(arrow_type: pa.DataType) -> bool:
+    """Check if an Arrow type is any string variant (string, large_string, string_view)."""
+    return pat.is_string(arrow_type) or pat.is_large_string(arrow_type) or pat.is_string_view(arrow_type)
 
 
 def build_field_metadata(field_type: int) -> Dict[bytes, bytes]:
@@ -201,36 +209,38 @@ def validate_schema_compatibility(
     new_type: pa.DataType
 ) -> Tuple[bool, Optional[str]]:
     """Check if type conversion is safe and possible."""
-    import pyarrow.types as pat
-    
     # Same type is always compatible
     if old_type == new_type:
         return True, None
-    
+
+    # String variants (string, large_string, string_view) are equivalent - no conversion needed
+    if _is_any_string_type(old_type) and _is_any_string_type(new_type):
+        return True, None
+
     # String to number conversion (with validation)
-    if pat.is_string(old_type) and pat.is_floating(new_type):
+    if _is_any_string_type(old_type) and pat.is_floating(new_type):
         return True, "string_to_float"
-    elif pat.is_string(old_type) and pat.is_integer(new_type):
+    elif _is_any_string_type(old_type) and pat.is_integer(new_type):
         return True, "string_to_int"
-    
+
     # Number to string conversion (always safe)
-    if (pat.is_floating(old_type) or pat.is_integer(old_type)) and pat.is_string(new_type):
+    if (pat.is_floating(old_type) or pat.is_integer(old_type)) and _is_any_string_type(new_type):
         return True, "number_to_string"
-    
+
     # Boolean to string conversion
-    if pat.is_boolean(old_type) and pat.is_string(new_type):
+    if pat.is_boolean(old_type) and _is_any_string_type(new_type):
         return True, "boolean_to_string"
-    
+
     # String to boolean conversion (with validation)
-    if pat.is_string(old_type) and pat.is_boolean(new_type):
+    if _is_any_string_type(old_type) and pat.is_boolean(new_type):
         return True, "string_to_boolean"
-    
+
     # Timestamp conversions
-    if pat.is_timestamp(old_type) and pat.is_string(new_type):
+    if pat.is_timestamp(old_type) and _is_any_string_type(new_type):
         return True, "timestamp_to_string"
-    elif pat.is_string(old_type) and pat.is_timestamp(new_type):
+    elif _is_any_string_type(old_type) and pat.is_timestamp(new_type):
         return True, "string_to_timestamp"
-    
+
     # Incompatible types
     return False, f"incompatible_conversion_{old_type}_to_{new_type}"
 
@@ -242,53 +252,56 @@ def migrate_column_type(
     new_type: pa.DataType
 ) -> pl.DataFrame:
     """Migrate data from old type to new type."""
-    import pyarrow.types as pat
-    
     logger.info(f"[migrate_column_type] Migrating column '{column_name}' from {old_type} to {new_type}")
-    
+
     if column_name not in df.columns:
         logger.warning(f"[migrate_column_type] Column '{column_name}' not found in DataFrame")
         return df
 
+    # String variants (string, large_string, string_view) are equivalent - no migration needed
+    if _is_any_string_type(old_type) and _is_any_string_type(new_type):
+        logger.info(f"[migrate_column_type] String variant conversion {old_type} -> {new_type}, no data migration needed")
+        return df
+
     # Handle common type conversions
-    if pat.is_string(old_type) and pat.is_floating(new_type):
+    if _is_any_string_type(old_type) and pat.is_floating(new_type):
         # String to float conversion
         df = df.with_columns(
             pl.col(column_name).cast(pl.Float64).alias(column_name)
         )
-    elif pat.is_string(old_type) and pat.is_integer(new_type):
+    elif _is_any_string_type(old_type) and pat.is_integer(new_type):
         # String to int conversion
         df = df.with_columns(
             pl.col(column_name).cast(pl.Int64).alias(column_name)
         )
-    elif (pat.is_floating(old_type) or pat.is_integer(old_type)) and pat.is_string(new_type):
+    elif (pat.is_floating(old_type) or pat.is_integer(old_type)) and _is_any_string_type(new_type):
         # Number to string conversion
         df = df.with_columns(
             pl.col(column_name).cast(pl.Utf8).alias(column_name)
         )
-    elif pat.is_boolean(old_type) and pat.is_string(new_type):
+    elif pat.is_boolean(old_type) and _is_any_string_type(new_type):
         # Boolean to string conversion
         df = df.with_columns(
             pl.col(column_name).cast(pl.Utf8).alias(column_name)
         )
-    elif pat.is_string(old_type) and pat.is_boolean(new_type):
+    elif _is_any_string_type(old_type) and pat.is_boolean(new_type):
         # String to boolean conversion
         df = df.with_columns(
             pl.col(column_name).cast(pl.Boolean).alias(column_name)
         )
-    elif pat.is_timestamp(old_type) and pat.is_string(new_type):
+    elif pat.is_timestamp(old_type) and _is_any_string_type(new_type):
         # Timestamp to string conversion
         df = df.with_columns(
             pl.col(column_name).cast(pl.Utf8).alias(column_name)
         )
-    elif pat.is_string(old_type) and pat.is_timestamp(new_type):
+    elif _is_any_string_type(old_type) and pat.is_timestamp(new_type):
         # String to timestamp conversion
         df = df.with_columns(
             pl.col(column_name).cast(pl.Datetime).alias(column_name)
         )
     else:
         logger.warning(f"[migrate_column_type] Unsupported type conversion: {old_type} -> {new_type}")
-    
+
     return df
 
 
@@ -339,7 +352,13 @@ def create_dataframe_with_schema(
 
     logger.info(f"[create_dataframe_with_schema] Polars schema: {polars_schema}")
 
-    # 3. Extract records from protobuf with schema-aware field handling
+    # 3. Pre-compute datetime columns for O(1) lookup in the row loop
+    datetime_columns = {
+        name for name, dtype in polars_schema.items()
+        if isinstance(dtype, (pl.Datetime, pl.Date))
+    }
+
+    # 4. Extract records from protobuf with schema-aware field handling
     records = []
     for row_data in rows_data:
         record = {}
@@ -354,14 +373,22 @@ def create_dataframe_with_schema(
             if field_name in delta_field_names:
                 # Extract value based on type
                 if value.HasField('text_value'):
-                    record[field_name] = value.text_value
+                    if field_name in datetime_columns and value.text_value:
+                        try:
+                            parsed = datetime.fromisoformat(value.text_value)
+                            if parsed.tzinfo is None:
+                                parsed = parsed.replace(tzinfo=timezone.utc)
+                            record[field_name] = parsed
+                        except ValueError:
+                            logger.warning(f"[create_dataframe_with_schema] Could not parse date string '{value.text_value}' for field '{field_name}'")
+                            record[field_name] = None
+                    else:
+                        record[field_name] = value.text_value
                 elif value.HasField('number_value'):
                     record[field_name] = value.number_value
                 elif value.HasField('boolean_value'):
                     record[field_name] = value.boolean_value
                 elif value.HasField('date_value'):
-                    # Convert timestamp milliseconds to datetime
-                    from datetime import datetime, timezone
                     timestamp_ms = value.date_value
                     record[field_name] = datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc)
                 elif value.HasField('json_value'):
@@ -378,7 +405,7 @@ def create_dataframe_with_schema(
         
         records.append(record)
 
-    # 4. Create Polars DataFrame with explicit schema
+    # 5. Create Polars DataFrame with explicit schema
     df = pl.DataFrame(records, schema=polars_schema)
 
     logger.info(f"[create_dataframe_with_schema] Created DataFrame: {df.shape} with schema {df.schema}")

@@ -9,6 +9,7 @@ import json
 import logging
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union, overload
 
+import dspy
 from PIL import Image
 
 from ...entities.skill_config import (
@@ -19,15 +20,61 @@ from ...entities.skill_config import (
 )
 from ...entities.task import SkillOutputValue
 from ...reasoning.modules.extractor import OutputExtractorModule
+from ...reasoning.signatures.extraction import TargetFieldMeta
+from ...reasoning.tools.api import TableAPI
 from ...types import SkillExecutionResult
 from ...utils.step_utils import step_to_progress_dict, RawProgressDict
 from ..agents.factory import AgentFactory, AgentConfig
 from .step_executor import StepExecutorService, execute_steps_sync
 from ..tools.loader import UnifiedToolLoader
 from ...entities.models.plan import Plan
+from ...reasoning.config import get_dspy_lm
 
 
 logger = logging.getLogger(__name__)
+
+
+def _coerce_extracted_values(
+    values: Dict[str, Any],
+    field_metadata: Dict[str, TargetFieldMeta],
+) -> Dict[str, Any]:
+    """Deterministic coercion of extracted values based on target field constraints.
+
+    Normalizes LLM output to match backend expectations:
+    - single-select: case-insensitive match to valid options
+    - multi-select: same, per item
+    - boolean: normalize string representations
+    """
+    coerced: Dict[str, Any] = {}
+    for name, value in values.items():
+        if value is None:
+            coerced[name] = value
+            continue
+        meta = field_metadata.get(name)
+        if meta is None:
+            coerced[name] = value
+            continue
+
+        if meta.type == "single-select" and meta.options:
+            lookup = {o.lower(): o for o in meta.options}
+            coerced[name] = lookup.get(str(value).strip().lower())
+        elif meta.type == "multi-select" and meta.options:
+            lookup = {o.lower(): o for o in meta.options}
+            if isinstance(value, list):
+                coerced[name] = [
+                    v for v in (lookup.get(str(v).strip().lower()) for v in value)
+                    if v is not None
+                ]
+            else:
+                coerced[name] = value
+        elif meta.type == "boolean":
+            if isinstance(value, str):
+                coerced[name] = value.strip().lower() in ("true", "yes", "1")
+            else:
+                coerced[name] = bool(value)
+        else:
+            coerced[name] = value
+    return coerced
 
 
 def map_node_outputs_to_skill_outputs(
@@ -100,7 +147,9 @@ class SkillExecutorService:
         Generates:
         - Read step (if skill has input mappings)
         - Agentic step (always, with stored plan)
-        - Write step (if skill has output mappings)
+
+        Write step is NOT in the DAG — agentic steps produce text, not structured
+        data. Extraction + write happen as post-DAG phases in _execute_agentic().
 
         Returns:
             List of SkillStep for DAG execution
@@ -131,14 +180,9 @@ class SkillExecutorService:
             name=skill_config.name,
             step_type="agentic",
             agentic_config=agentic_config,
+            inputs={inp.name: f"{{{{{inp.name}}}}}" for inp in skill_config.inputs},
         )
         steps.append(agentic_step)
-
-        # Step 3: Generate Write step from output mappings
-        write_step = self._build_write_step_from_outputs(skill_config)
-        if write_step:
-            steps.append(write_step)
-            logger.info(f"📝 Generated Write step for skill {skill_config.name}")
 
         logger.info(f"📋 Built wrapper DAG: {len(steps)} steps for skill {skill_config.name}")
         return steps
@@ -209,27 +253,35 @@ class SkillExecutorService:
         outputs_with_mapping = [
             out for out in skill_config.outputs
             if out.output_mapping is not None
-            and len(out.output_mapping.get("table_mappings", [])) > 0
+            and len(out.output_mapping.table_mappings) > 0
         ]
 
         if not outputs_with_mapping:
             return None
 
-        # Use first table mapping as target
-        first_table = outputs_with_mapping[0].output_mapping["table_mappings"][0]
+        # Use first output's table mapping for target table config
+        first_table = outputs_with_mapping[0].output_mapping.table_mappings[0]
+        target_table_id = first_table.target_table_id
 
-        field_mappings = []
-        for fm in first_table.get("field_mappings", []):
-            field_mappings.append(WriteFieldMapping(
-                skill_input_name=fm["source_name"],
-                target_field_id=fm["field_id"],
-            ))
+        # Collect field mappings from ALL outputs targeting the same table
+        field_mappings: List[WriteFieldMapping] = []
+        for out in outputs_with_mapping:
+            for tm in out.output_mapping.table_mappings:
+                if tm.target_table_id == target_table_id:
+                    for fm in tm.mappings:
+                        field_mappings.append(WriteFieldMapping(
+                            skill_input_name=fm.source.name,
+                            target_field_id=fm.target_field_id,
+                        ))
+
+        if not field_mappings:
+            return None
 
         write_config = WriteConfigDTO(
-            target_table_id=first_table["table_id"],
-            row_action=first_table.get("row_action", "create"),
+            target_table_id=target_table_id,
+            row_action=first_table.row_action,
             field_mappings=field_mappings,
-            match_field_ids=first_table.get("match_field_ids"),
+            match_field_ids=first_table.match_field_ids,
         )
 
         return SkillStep(
@@ -237,7 +289,149 @@ class SkillExecutorService:
             name=f"Write outputs for {skill_config.name}",
             step_type="write",
             write_config=write_config,
+            inputs={fm.skill_input_name: f"{{{{{fm.skill_input_name}}}}}" for fm in field_mappings},
         )
+
+    def _build_target_field_metadata(
+        self,
+        skill_config: SkillConfig,
+        target_table_id: int,
+        api_key: Optional[str],
+        org_id: Optional[int],
+    ) -> Dict[str, TargetFieldMeta]:
+        """Fetch table schema and build typed metadata for output fields.
+
+        Maps each output name to its target field constraints (type, select options).
+        """
+        if not api_key or not org_id:
+            return {}
+
+        try:
+            table = TableAPI(api_key, str(org_id)).get(target_table_id)
+        except Exception as e:
+            logger.warning(f"Failed to fetch table {target_table_id} metadata: {e}")
+            return {}
+
+        if not table:
+            return {}
+
+        fields_by_id = {f["id"]: f for f in table.fields}
+        metadata: Dict[str, TargetFieldMeta] = {}
+
+        for out in skill_config.outputs:
+            if not out.output_mapping:
+                continue
+            for tm in out.output_mapping.table_mappings:
+                if tm.target_table_id != target_table_id:
+                    continue
+                for fm in tm.mappings:
+                    field = fields_by_id.get(fm.target_field_id, {})
+                    raw_opts = (field.get("metadata") or {}).get("options", [])
+                    metadata[fm.source.name] = TargetFieldMeta(
+                        type=field.get("type", "text"),
+                        options=[o["value"] for o in raw_opts if isinstance(o, dict) and "value" in o],
+                    )
+
+        return metadata
+
+    def _post_dag_output_pipeline(
+        self,
+        skill_config: SkillConfig,
+        result: SkillExecutionResult,
+        step_executor: StepExecutorService,
+        org_model: Optional[str],
+        api_key: Optional[str],
+        organization_id: Optional[int],
+    ) -> Optional[Dict[str, Any]]:
+        """Unified post-DAG pipeline for both agentic and workflow flows.
+
+        Three steps:
+        1. Source mapping: map captured_outputs via OutputDefinition.source config
+        2. Extraction: for unmapped outputs, extract from text result via LLM
+        3. Write: execute write step with final skill_outputs
+
+        Returns:
+            Dict of {output_name: value}, or None if no outputs configured
+        """
+        if not skill_config.outputs:
+            return None
+
+        # Build write step early to get target_table_id for metadata fetch
+        write_step = self._build_write_step_from_outputs(skill_config)
+        target_field_metadata: Dict[str, TargetFieldMeta] = {}
+        if write_step and write_step.write_config:
+            target_field_metadata = self._build_target_field_metadata(
+                skill_config,
+                write_step.write_config.target_table_id,
+                api_key,
+                organization_id,
+            )
+            if target_field_metadata:
+                logger.info(
+                    f"📋 Loaded field metadata for {len(target_field_metadata)} outputs"
+                )
+
+        # Step 1: Source mapping (works when captured_outputs has structured data)
+        skill_outputs: Optional[Dict[str, Any]] = None
+        if result.captured_outputs:
+            skill_outputs = map_node_outputs_to_skill_outputs(
+                all_node_outputs=result.captured_outputs,
+                skill_outputs=list(skill_config.outputs)
+            )
+            mapped_count = sum(1 for v in skill_outputs.values() if v is not None)
+            logger.info(f"📤 Source mapping: {mapped_count}/{len(skill_outputs)} outputs mapped")
+
+        # Step 2: Extraction for unmapped outputs (agentic text results)
+        if result.result:
+            unmapped = [
+                o for o in skill_config.outputs
+                if not skill_outputs or skill_outputs.get(o.name) is None
+            ]
+            if unmapped:
+                logger.info(f"🔍 Extracting {len(unmapped)} unmapped outputs from text result")
+                extractor = OutputExtractorModule(
+                    skill_outputs=[{
+                        'name': o.name, 'type': o.type, 'description': o.description
+                    } for o in unmapped],
+                    target_field_metadata=target_field_metadata or None,
+                )
+                lm = get_dspy_lm(skill_model=skill_config.model, org_model=org_model)
+                with dspy.context(lm=lm):
+                    extracted = extractor.extract(content=result.result)
+                # Coerce extracted values to match target field constraints
+                if extracted and target_field_metadata:
+                    extracted = _coerce_extracted_values(extracted, target_field_metadata)
+                if extracted:
+                    if skill_outputs is None:
+                        skill_outputs = {}
+                    skill_outputs.update({
+                        k: v for k, v in extracted.items() if v is not None
+                    })
+                    extracted_count = sum(1 for v in extracted.values() if v is not None)
+                    logger.info(f"🔍 Extracted {extracted_count}/{len(unmapped)} outputs")
+
+        # Step 3: Write (if output mappings configured and we have values)
+        if skill_outputs and any(v is not None for v in skill_outputs.values()):
+            if write_step:
+                logger.info(f"📝 Post-DAG: writing output mappings for {skill_config.name}")
+                try:
+                    execute_steps_sync(
+                        step_executor=step_executor,
+                        steps=[write_step],
+                        available_skills={},
+                        initial_inputs=skill_outputs,
+                        org_model=org_model,
+                        api_key=api_key,
+                        organization_id=organization_id,
+                    )
+                except Exception as e:
+                    logger.error(f"📝 Write step failed for {skill_config.name}: {e}")
+
+        # Return None if all outputs are None (complete failure)
+        if skill_outputs and all(v is None for v in skill_outputs.values()):
+            return None
+
+        return skill_outputs
 
     @overload
     def execute_skill(
@@ -327,8 +521,8 @@ class SkillExecutorService:
     ) -> Union[str, SkillExecutionResult]:
         """Execute agentic skill via unified StepExecutorService path.
 
-        Builds a wrapper DAG: [Read Node?] → [Agentic Node] → [Write Node?]
-        This ensures consistent execution regardless of how the skill is invoked.
+        Builds a wrapper DAG: [Read Node?] → [Agentic Node]
+        Then runs post-DAG pipeline: source mapping → extraction → write.
         """
         # Build wrapper DAG steps for StepExecutorService
         steps = self._build_wrapper_dag(skill_config, runtime_inputs)
@@ -355,7 +549,7 @@ class SkillExecutorService:
             )
         )
 
-        # Execute steps synchronously
+        # Execute wrapper DAG
         result = execute_steps_sync(
             step_executor=step_executor,
             steps=steps,
@@ -368,18 +562,18 @@ class SkillExecutorService:
 
         logger.info(f"✅ Agentic skill execution complete: {skill_config.name}")
 
-        # Map node outputs to skill outputs via source config
-        if skill_config.outputs and result.captured_outputs:
-            skill_outputs = map_node_outputs_to_skill_outputs(
-                all_node_outputs=result.captured_outputs,
-                skill_outputs=list(skill_config.outputs)
-            )
-            logger.info(f"📤 Mapped node outputs to skill outputs: {list(skill_outputs.keys())}")
-            return SkillExecutionResult(
-                result=result.result,
-                captured_outputs=skill_outputs
-            )
+        # --- Post-DAG pipeline (same pattern as _execute_steps) ---
+        skill_outputs = self._post_dag_output_pipeline(
+            skill_config=skill_config,
+            result=result,
+            step_executor=step_executor,
+            org_model=org_model,
+            api_key=api_key,
+            organization_id=organization_id,
+        )
 
+        if skill_outputs:
+            return SkillExecutionResult(result=result.result, captured_outputs=skill_outputs)
         if capture_outputs:
             return result
         return result.result
@@ -505,7 +699,9 @@ class SkillExecutorService:
                     'description': o.description
                 } for o in skill_config.outputs]
             )
-            captured = extractor.extract(content=result_json)
+            lm = get_dspy_lm(skill_model=skill_config.model, org_model=org_model)
+            with dspy.context(lm=lm):
+                captured = extractor.extract(content=result_json)
 
             # Check if all values are null (complete extraction failure)
             if captured and all(v is None for v in captured.values()):
@@ -609,28 +805,15 @@ class SkillExecutorService:
 
         logger.info(f"✅ Step-based execution complete: {skill_config.name}")
 
-        # Map node outputs to skill outputs via source config
-        skill_outputs = None
-        if skill_config.outputs and result.captured_outputs:
-            skill_outputs = map_node_outputs_to_skill_outputs(
-                all_node_outputs=result.captured_outputs,
-                skill_outputs=list(skill_config.outputs)
-            )
-            logger.info(f"📤 Mapped node outputs to skill outputs: {list(skill_outputs.keys())}")
-
-        # Phase 3: Post-DAG — write output mapping data
-        write_step = self._build_write_step_from_outputs(skill_config)
-        if write_step and skill_outputs:
-            logger.info(f"📝 Post-DAG: writing output mappings for {skill_config.name}")
-            execute_steps_sync(
-                step_executor=step_executor,
-                steps=[write_step],
-                available_skills={},
-                initial_inputs=skill_outputs,
-                org_model=org_model,
-                api_key=api_key,
-                organization_id=organization_id
-            )
+        # Post-DAG pipeline: source mapping → extraction → write
+        skill_outputs = self._post_dag_output_pipeline(
+            skill_config=skill_config,
+            result=result,
+            step_executor=step_executor,
+            org_model=org_model,
+            api_key=api_key,
+            organization_id=organization_id,
+        )
 
         if skill_outputs:
             return SkillExecutionResult(

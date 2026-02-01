@@ -180,7 +180,7 @@ export function GroupedSidebarSection<T>({
         </SidebarGroupLabel>
         <CollapsibleContent className="group-data-[collapsible=icon]:hidden">
           <SidebarGroupContent>
-            <SidebarMenu className="gap-0 ml-2 border-l border-sidebar-border pl-2">
+            <SidebarMenu className="gap-0 ml-1 border-l border-sidebar-border pl-2">
               {/* Ungrouped items (top level) */}
               {ungroupedItems.map((item) => renderItem(item))}
 

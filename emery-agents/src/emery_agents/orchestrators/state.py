@@ -14,6 +14,7 @@ from typing import TypedDict, Annotated, List, Optional, Any, Dict
 
 from ..entities.models.plan import Plan, PlanStep
 from ..entities.models.task_ledger import TaskLedger
+from ..services.context import WorkspaceContext
 
 
 class PlanExecuteState(TypedDict, total=False):
@@ -38,7 +39,7 @@ class PlanExecuteState(TypedDict, total=False):
     organization_id: Optional[int]
 
     # Workspace context — avoids duplicate WorkspaceAPI.get_all() calls
-    workspace_context: Optional[Any]  # WorkspaceContext dataclass (same pattern as Plan)
+    workspace_context: Optional[WorkspaceContext]
 
     # Skill template generation (for GeneratePlan RPC)
     skill_inputs: Optional[List[Dict[str, Any]]]  # Input DEFINITIONS (schema)

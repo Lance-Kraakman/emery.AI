@@ -88,6 +88,81 @@ class WriteFieldMapping:
 
 
 @dataclass
+class OutputFieldSource:
+    """Typed source for an output field mapping value."""
+    type: str = ""       # "skill_output", "skill_input", "table_ref"
+    name: str = ""       # For skill_output / skill_input
+    order: int = 0       # For table_ref
+    field: str = ""      # For table_ref
+
+    @classmethod
+    def from_api_response(cls, data: Dict[str, Any]) -> OutputFieldSource:
+        return cls(
+            type=data.get("type", ""),
+            name=data.get("name", ""),
+            order=data.get("order", 0),
+            field=data.get("field", ""),
+        )
+
+
+@dataclass
+class OutputFieldMapping:
+    """Maps a source value to a target table field in output mapping."""
+    source: OutputFieldSource = field(default_factory=OutputFieldSource)
+    target_field_id: int = 0
+    append_mode: bool = False
+
+    @classmethod
+    def from_api_response(cls, data: Dict[str, Any]) -> OutputFieldMapping:
+        source_data = data.get("source", {})
+        return cls(
+            source=OutputFieldSource.from_api_response(source_data) if source_data else OutputFieldSource(),
+            target_field_id=data.get("targetFieldId", data.get("target_field_id", 0)),
+            append_mode=data.get("appendMode", data.get("append_mode", False)),
+        )
+
+
+@dataclass
+class OutputTableMapping:
+    """Ordered write operation for a single table in output mapping."""
+    order: int = 1
+    target_table_id: int = 0
+    row_action: str = "create"
+    row_id_source: Optional[RowIdSource] = None
+    match_field_ids: Optional[List[int]] = None
+    mappings: List[OutputFieldMapping] = field(default_factory=list)
+
+    @classmethod
+    def from_api_response(cls, data: Dict[str, Any]) -> OutputTableMapping:
+        rid = data.get("rowIdSource", data.get("row_id_source"))
+        return cls(
+            order=data.get("order", 1),
+            target_table_id=data.get("targetTableId", data.get("target_table_id", 0)),
+            row_action=data.get("rowAction", data.get("row_action", "create")),
+            row_id_source=RowIdSource.from_api_response(rid) if rid else None,
+            match_field_ids=data.get("matchFieldIds", data.get("match_field_ids")) or None,
+            mappings=[OutputFieldMapping.from_api_response(m) for m in data.get("mappings", [])],
+        )
+
+
+@dataclass
+class OutputMappingConfig:
+    """Multi-table output mapping configuration."""
+    mode: str = "single_row"
+    table_mappings: List[OutputTableMapping] = field(default_factory=list)
+
+    @classmethod
+    def from_api_response(cls, data: Dict[str, Any]) -> OutputMappingConfig:
+        return cls(
+            mode=data.get("mode", "single_row"),
+            table_mappings=[
+                OutputTableMapping.from_api_response(tm)
+                for tm in data.get("tableMappings", data.get("table_mappings", []))
+            ],
+        )
+
+
+@dataclass
 class UpdateMatchConfig:
     """Update match config for write steps."""
     skill_input_name: str = ""
@@ -342,6 +417,14 @@ class OutputSource:
     node_id: str = ""
     output_name: str = ""
 
+    @classmethod
+    def from_api_response(cls, data: Dict[str, Any]) -> OutputSource:
+        return cls(
+            type=data.get("type", ""),
+            node_id=data.get("nodeId", data.get("node_id", "")),
+            output_name=data.get("outputName", data.get("output_name", "")),
+        )
+
 
 @dataclass
 class OutputDefinition:
@@ -350,18 +433,20 @@ class OutputDefinition:
     type: str = "string"
     description: str = ""
     source: Optional[OutputSource] = None
-    output_mapping: Optional[Dict[str, Any]] = None
+    output_mapping: Optional[OutputMappingConfig] = None
 
     @classmethod
     def from_api_response(cls, data: Dict[str, Any]) -> OutputDefinition:
         """Create from API response (camelCase)."""
         source_data = data.get("source")
-        source = OutputSource(**source_data) if isinstance(source_data, dict) else None
+        source = OutputSource.from_api_response(source_data) if isinstance(source_data, dict) else None
+        mapping_data = data.get("outputMapping", data.get("output_mapping"))
         return cls(
             name=data.get("name", ""),
             type=data.get("type", "string"),
             description=data.get("description", ""),
             source=source,
+            output_mapping=OutputMappingConfig.from_api_response(mapping_data) if mapping_data else None,
         )
 
 

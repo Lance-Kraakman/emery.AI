@@ -105,6 +105,7 @@ class StepProgress:
     name: str  # Display name
     status: Literal["pending", "running", "completed", "failed", "skipped"]
     result: Optional[str] = None
+    captured_data: Optional[Dict[str, Any]] = None  # Structured per-output data (None for text results)
     error: Optional[str] = None
     continued_after_error: bool = False
     retries_attempted: int = 0
@@ -368,7 +369,8 @@ class StepExecutorService:
                     # Capture outputs
                     self._capture_outputs(step, result, step_context)
 
-                    result_str = str(result)[:500] if result else "No result"
+                    result_str = str(result) if result else "No result"
+                    captured_data = self._build_captured_data(step, result)
                     logger.info(f"✅ Step {step_name}: completed")
 
                     yield StepProgress(
@@ -378,6 +380,7 @@ class StepExecutorService:
                         name=step_name,
                         status="completed",
                         result=result_str,
+                        captured_data=captured_data,
                         retries_attempted=retries_attempted
                     )
 
@@ -583,7 +586,8 @@ class StepExecutorService:
             if error is None:
                 # Success
                 self._capture_outputs(step, result, step_context)
-                result_str = str(result)[:500] if result else "No result"
+                result_str = str(result) if result else "No result"
+                captured_data = self._build_captured_data(step, result)
                 logger.info(f"✅ Step {step.name}: completed (parallel)")
 
                 yield StepProgress(
@@ -593,6 +597,7 @@ class StepExecutorService:
                     name=step.name,
                     status="completed",
                     result=result_str,
+                    captured_data=captured_data,
                     retries_attempted=retries
                 )
 
@@ -1195,6 +1200,8 @@ class StepExecutorService:
         row_action = write_config.row_action or "create"
 
         logger.info(f"📝 Step {step.name}: table write -> table {table_id} ({row_action})")
+        logger.info(f"📝 Write step_inputs keys: {list(step_inputs.keys())}")
+        logger.info(f"📝 Write step_inputs: {step_inputs}")
 
         # Build field values from mappings
         field_values = {}
@@ -1203,6 +1210,10 @@ class StepExecutorService:
             field_id = str(mapping.target_field_id)
             if skill_input in step_inputs:
                 field_values[field_id] = step_inputs[skill_input]
+            else:
+                logger.warning(f"📝 Write mapping: '{skill_input}' not in step_inputs, skipping field {field_id}")
+
+        logger.info(f"📝 Write step field_values ({len(field_values)} fields): {field_values}")
 
         row_api = RowAPI(api_key=api_key or "", org_id=str(organization_id or 0))
 
@@ -1425,7 +1436,10 @@ class StepExecutorService:
                 if var_name in context:
                     resolved[param_name] = context[var_name]
                 else:
-                    logger.warning(f"Variable '{var_name}' not found in step context")
+                    raise ValueError(
+                        f"Required input '{var_name}' not found in step context. "
+                        f"Available: {list(context.keys())}"
+                    )
             else:
                 resolved[param_name] = source
         return resolved
@@ -1454,6 +1468,28 @@ class StepExecutorService:
                 context[target_var] = result
 
         logger.debug(f"📤 Captured outputs: {list(output_mappings.values())}")
+
+    def _build_captured_data(self, step: Step, result: Any) -> Optional[Dict[str, Any]]:
+        """Build structured output dict keyed by output name.
+
+        Returns None if result is not a dict (text results need extraction instead).
+        Used by execute_steps_sync() to build structured captured_outputs for
+        map_node_outputs_to_skill_outputs().
+        """
+        if not isinstance(result, dict):
+            return None
+
+        output_mappings = step.outputs
+        if not output_mappings and step.output_defs:
+            output_mappings = {d.name: d.name for d in step.output_defs}
+        if not output_mappings:
+            return None
+
+        data = {}
+        for output_name in output_mappings:
+            if output_name in result:
+                data[output_name] = result[output_name]
+        return data if data else None
 
     def _inject_context(self, instruction: str, context: Dict[str, Any]) -> str:
         """Replace {{var}} placeholders in instruction with compact JSON."""
@@ -1534,8 +1570,11 @@ def execute_steps_sync(
 
     captured = {}
     for progress in results:
-        if progress.status == "completed" and progress.result:
-            captured[progress.id] = progress.result  # Key by ID for output source mapping
+        if progress.status == "completed":
+            if progress.captured_data:
+                captured[progress.id] = progress.captured_data  # Structured: {output_name: value}
+            elif progress.result:
+                captured[progress.id] = progress.result  # Fallback: raw string
 
     return SkillExecutionResult(
         result=final_result or "Steps completed",
