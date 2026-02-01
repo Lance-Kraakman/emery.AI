@@ -15,32 +15,18 @@ import json
 import logging
 import os
 import uuid
-from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 import requests
 
+from emery_agents.entities.workspace import WorkspaceAgent, WorkspaceSkill
+
+# Backward-compatible aliases - canonical types in entities/workspace.py
+AgentData = WorkspaceAgent
+SkillData = WorkspaceSkill
+
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class AgentData:
-    """Agent configuration data from API."""
-    id: str
-    name: str
-    description: str
-    persona: Optional[str]
-    database_id: Optional[str]
-
-
-@dataclass
-class SkillData:
-    """Skill definition data from API."""
-    id: str
-    name: str
-    description: str
-    inputs: List[Dict[str, Any]]  # InputDefinition dicts (name, type, required, inputMapping)
 
 
 class AgentAPIService:
@@ -146,11 +132,11 @@ class AgentAPIService:
 
                     agents = [
                         AgentData(
-                            id=agent.get("id", ""),
+                            id=int(agent.get("id", 0)),
                             name=agent.get("name", "Unknown"),
                             description=agent.get("description", ""),
                             persona=agent.get("persona"),
-                            database_id=agent.get("databaseId"),
+                            database_id=int(agent["databaseId"]) if agent.get("databaseId") else None,
                         )
                         for agent in raw_data
                     ]
@@ -215,7 +201,7 @@ class AgentAPIService:
                 raw_skills = data.get("data", [])
                 skills = [
                     SkillData(
-                        id=skill.get("id", ""),
+                        id=int(skill.get("id", 0)),
                         name=skill.get("name", "Unknown"),
                         description=skill.get("description", ""),
                         inputs=skill.get("inputs", []),
@@ -305,11 +291,11 @@ def fetch_agent_by_id_sync(
         data = response.json()
         agent = data.get("data", data) if isinstance(data, dict) else {}
         return AgentData(
-            id=str(agent.get("id", "")),
+            id=int(agent.get("id", 0)),
             name=agent.get("name", "Unknown"),
             description=agent.get("description", ""),
             persona=agent.get("persona"),
-            database_id=agent.get("databaseId"),
+            database_id=int(agent["databaseId"]) if agent.get("databaseId") else None,
         )
     except Exception as e:
         logger.error(f"[AGENT-API] Sync fetch failed for agent {agent_id}: {e}")

@@ -15,21 +15,16 @@ import json
 import logging
 import os
 import uuid
-from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 import httpx
 
+from emery_agents.entities.workspace import WorkspaceSkill
+
+# Backward-compatible alias - canonical type in entities/workspace.py
+SkillData = WorkspaceSkill
+
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class SkillData:
-    """Skill data from API."""
-    id: str
-    name: str
-    description: str
-    raw: Dict[str, Any]  # Full API response for passthrough
 
 
 def _normalize_name(name: str) -> str:
@@ -134,7 +129,7 @@ class SkillAPIService:
             raw_skills = data.get("data", [])
             skills = [
                 SkillData(
-                    id=str(skill.get("id", "")),
+                    id=int(skill.get("id", 0)),
                     name=skill.get("name", "Unknown"),
                     description=skill.get("description", ""),
                     raw=skill,
@@ -191,7 +186,7 @@ class SkillAPIService:
 
             raw = data["data"]
             return SkillData(
-                id=str(raw.get("id", "")),
+                id=int(raw.get("id", 0)),
                 name=raw.get("name", "Unknown"),
                 description=raw.get("description", ""),
                 raw=raw,

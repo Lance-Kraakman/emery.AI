@@ -16,122 +16,24 @@ creating duplicates. CapabilityRegistry handles runtime capability routing.
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from emery_agents.entities.workspace import (
+    WorkspaceDatabase,
+    WorkspaceTable,
+    WorkspacePage,
+    WorkspaceApp,
+    WorkspaceAgent,
+    WorkspaceSkill,
+    WorkspaceView,
+)
 
-@dataclass
-class DatabaseInfo:
-    """Pre-resolved database information for context injection."""
-    name: str
-    id: Optional[str] = None
-    table_count: int = 0
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "name": self.name,
-            "id": self.id,
-            "table_count": self.table_count,
-        }
-
-
-@dataclass
-class TableInfo:
-    """Pre-resolved table information for context injection."""
-    name: str
-    id: Optional[str] = None
-    database_id: Optional[str] = None
-    database_name: Optional[str] = None
-    field_count: int = 0
-    fields: List[str] = field(default_factory=list)
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "name": self.name,
-            "id": self.id,
-            "database_id": self.database_id,
-            "database_name": self.database_name,
-            "field_count": self.field_count,
-            "fields": self.fields,
-        }
-
-
-@dataclass
-class PageInfo:
-    """Page information for context injection."""
-    name: str
-    id: Optional[str] = None
-    app_id: Optional[str] = None
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "name": self.name,
-            "id": self.id,
-            "app_id": self.app_id,
-        }
-
-
-@dataclass
-class AppInfo:
-    """Pre-resolved app information for context injection."""
-    name: str
-    id: Optional[str] = None
-    description: str = ""
-    pages: List[PageInfo] = field(default_factory=list)
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "name": self.name,
-            "id": self.id,
-            "description": self.description,
-            "pages": [p.to_dict() for p in self.pages],
-        }
-
-
-@dataclass
-class AgentInfo:
-    """Agent information for context injection."""
-    name: str
-    id: Optional[str] = None
-    description: str = ""
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "name": self.name,
-            "id": self.id,
-            "description": self.description,
-        }
-
-
-@dataclass
-class SkillInfo:
-    """Skill information for context injection."""
-    name: str
-    id: Optional[str] = None
-    description: str = ""
-    agent_id: Optional[str] = None
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "name": self.name,
-            "id": self.id,
-            "description": self.description,
-            "agent_id": self.agent_id,
-        }
-
-
-@dataclass
-class ViewInfo:
-    """Data view information for context injection."""
-    name: str
-    id: Optional[str] = None
-    table_id: Optional[str] = None
-    view_type: str = "grid"
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "name": self.name,
-            "id": self.id,
-            "table_id": self.table_id,
-            "view_type": self.view_type,
-        }
+# Backward-compatible aliases - canonical types live in entities/workspace.py
+DatabaseInfo = WorkspaceDatabase
+TableInfo = WorkspaceTable
+PageInfo = WorkspacePage
+AppInfo = WorkspaceApp
+AgentInfo = WorkspaceAgent
+SkillInfo = WorkspaceSkill
+ViewInfo = WorkspaceView
 
 
 @dataclass(frozen=True)

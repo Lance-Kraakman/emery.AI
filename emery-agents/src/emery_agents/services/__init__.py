@@ -32,7 +32,8 @@ from .tools import UnifiedToolLoader, CapabilityRegistry
 from .data import ResultStorageService, ResultStorageServiceFactory, StoredResult
 
 # Agents (agent-related services)
-from .agents import AgentExecutor, AgentAPIService, AgentData, SkillData
+# AgentExecutor omitted: import directly from services.agents.executor (heavy, circular if eager)
+from .agents import AgentAPIService, AgentData, SkillData
 
 # Tasks (unified task execution)
 from .tasks import TaskExecutor
@@ -70,7 +71,6 @@ __all__ = [
     "ModelProvider",
     "TokenUsage",
     "UnifiedToolLoader",
-    "AgentExecutor",
     "ContextResolver",
     "ContextSyncService",
     "ContextSyncServiceFactory",

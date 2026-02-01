@@ -17,6 +17,17 @@ from .skill_config import (
     StepToolConfig,
     SkillStep,
 )
+from .workspace import (
+    WorkspaceField,
+    WorkspacePage,
+    WorkspaceApp,
+    WorkspaceAgent,
+    WorkspaceSkill,
+    WorkspaceTable,
+    WorkspaceDatabase,
+    WorkspaceView,
+    WorkspaceData,
+)
 
 __all__ = [
     "Agent",
@@ -35,4 +46,14 @@ __all__ = [
     "OutputSource",
     "StepToolConfig",
     "SkillStep",
+    # Workspace resource entities
+    "WorkspaceField",
+    "WorkspacePage",
+    "WorkspaceApp",
+    "WorkspaceAgent",
+    "WorkspaceSkill",
+    "WorkspaceTable",
+    "WorkspaceDatabase",
+    "WorkspaceView",
+    "WorkspaceData",
 ]

@@ -4,92 +4,22 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from ..http_client import make_request
+from ....entities.workspace import (
+    WorkspaceField,
+    WorkspacePage,
+    WorkspaceApp,
+    WorkspaceAgent,
+    WorkspaceSkill,
+    WorkspaceTable,
+    WorkspaceDatabase,
+    WorkspaceView,
+    WorkspaceData,
+)
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class WorkspacePage:
-    """Page within an app."""
-    id: int
-    name: str
-    slug: str
-
-
-@dataclass
-class WorkspaceApp:
-    """App with its pages."""
-    id: int
-    name: str
-    slug: str
-    description: str = ""
-    pages: List[WorkspacePage] = field(default_factory=list)
-
-
-@dataclass
-class WorkspaceAgent:
-    """Agent entity."""
-    id: int
-    name: str
-    description: str = ""
-
-
-@dataclass
-class WorkspaceSkill:
-    """Skill entity."""
-    id: int
-    name: str
-    description: str = ""
-    agent_id: Optional[int] = None
-    agent_name: Optional[str] = None
-
-
-@dataclass
-class WorkspaceField:
-    """Field within a table."""
-    name: str
-    type: str
-    related_table_id: Optional[int] = None
-
-
-@dataclass
-class WorkspaceTable:
-    """Table within a database."""
-    id: int
-    name: str
-    field_count: int = 0
-    fields: List[WorkspaceField] = field(default_factory=list)
-
-
-@dataclass
-class WorkspaceDatabase:
-    """Database with its tables."""
-    id: int
-    name: str
-    tables: List[WorkspaceTable] = field(default_factory=list)
-
-
-@dataclass
-class WorkspaceView:
-    """Data view entity."""
-    id: int
-    name: str
-    table_id: int
-    view_type: str = "grid"
-
-
-@dataclass
-class WorkspaceData:
-    """Complete workspace data from unified endpoint."""
-    apps: List[WorkspaceApp] = field(default_factory=list)
-    agents: List[WorkspaceAgent] = field(default_factory=list)
-    skills: List[WorkspaceSkill] = field(default_factory=list)
-    databases: List[WorkspaceDatabase] = field(default_factory=list)
-    views: List[WorkspaceView] = field(default_factory=list)
 
 
 class WorkspaceAPI:

@@ -16,7 +16,7 @@ import logging
 from typing import Set, Optional
 from dataclasses import dataclass, field
 
-from ..agents.api import SkillData
+from ...entities.workspace import WorkspaceSkill as SkillData
 
 logger = logging.getLogger(__name__)
 

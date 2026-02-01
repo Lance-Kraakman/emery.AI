@@ -10,7 +10,19 @@ from .row_api import RowAPI
 from .app_api import AppAPI, App
 from .agent_api import AgentAPI, Agent
 from .skill_api import SkillAPI, Skill
-from .workspace_api import WorkspaceAPI, WorkspaceData, WorkspaceApp, WorkspaceAgent, WorkspaceSkill, WorkspaceDatabase, WorkspaceTable, WorkspaceView, WorkspacePage
+from .workspace_api import WorkspaceAPI
+# Workspace entity types now canonical in entities/workspace.py
+from ....entities.workspace import (
+    WorkspaceData,
+    WorkspaceApp,
+    WorkspaceAgent,
+    WorkspaceSkill,
+    WorkspaceDatabase,
+    WorkspaceTable,
+    WorkspaceView,
+    WorkspacePage,
+    WorkspaceField,
+)
 
 __all__ = [
     "DatabaseAPI",
@@ -33,4 +45,5 @@ __all__ = [
     "WorkspaceTable",
     "WorkspaceView",
     "WorkspacePage",
+    "WorkspaceField",
 ]

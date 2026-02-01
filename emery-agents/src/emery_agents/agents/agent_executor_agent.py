@@ -23,7 +23,7 @@ import dspy
 
 from ..reasoning.modules import ExecutorModule
 from ..reasoning.tools.execution import create_skill_invoker_tools
-from ..services.agents.api import AgentData, SkillData
+from ..entities.workspace import WorkspaceAgent as AgentData, WorkspaceSkill as SkillData
 from ..utils.persona_sanitizer import sanitize_persona, sanitize_description
 from ..services.skills.validator import create_validator_from_skills
 

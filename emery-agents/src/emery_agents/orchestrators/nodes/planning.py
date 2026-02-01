@@ -14,14 +14,8 @@ from ...services.plan_service import PlanService
 from ...services.context import (
     SessionConfig,
     WorkspaceContext,
-    TableInfo,
-    DatabaseInfo,
-    AppInfo,
-    PageInfo,
-    AgentInfo,
-    SkillInfo,
-    ViewInfo,
 )
+from ...entities.workspace import WorkspaceTable
 from ...services.execution.events import (
     PlanCreatedEvent,
     PlanningStartedEvent,
@@ -66,59 +60,27 @@ def _build_workspace_context(
         f"{len(data.skills)} skills, {len(data.views)} views"
     )
 
-    # Build flat table list from nested databases (now includes field schemas)
+    # Build flat table list from nested databases, enriching with parent db info
     all_tables = []
     for db in data.databases:
+        db.table_count = len(db.tables)
         for t in db.tables:
-            all_tables.append(TableInfo(
+            all_tables.append(WorkspaceTable(
+                id=t.id,
                 name=t.name,
-                id=str(t.id),
-                database_id=str(db.id),
+                database_id=db.id,
                 database_name=db.name,
                 field_count=t.field_count,
-                fields=[f"{f.name} ({f.type})" for f in t.fields],  # e.g. "gang_name (text)"
+                fields=t.fields,
             ))
 
     return WorkspaceContext(
-        existing_databases=[
-            DatabaseInfo(name=db.name, id=str(db.id), table_count=len(db.tables))
-            for db in data.databases
-        ],
+        existing_databases=data.databases,
         existing_tables=all_tables,
-        existing_apps=[
-            AppInfo(
-                name=app.name,
-                id=str(app.id),
-                description=app.description,
-                pages=[
-                    PageInfo(name=p.name, id=str(p.id), app_id=str(app.id))
-                    for p in app.pages
-                ],
-            )
-            for app in data.apps
-        ],
-        existing_agents=[
-            AgentInfo(name=a.name, id=str(a.id), description=a.description)
-            for a in data.agents
-        ],
-        existing_skills=[
-            SkillInfo(
-                name=s.name,
-                id=str(s.id),
-                description=s.description,
-                agent_id=str(s.agent_id) if s.agent_id else None,
-            )
-            for s in data.skills
-        ],
-        existing_views=[
-            ViewInfo(
-                name=v.name,
-                id=str(v.id),
-                table_id=str(v.table_id),
-                view_type=v.view_type,
-            )
-            for v in data.views
-        ],
+        existing_apps=data.apps,
+        existing_agents=data.agents,
+        existing_skills=data.skills,
+        existing_views=data.views,
     )
 
 
