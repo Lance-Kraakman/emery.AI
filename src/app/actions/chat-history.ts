@@ -61,12 +61,6 @@ export async function getChatSessions(context: ChatContextDTO): Promise<ChatActi
         return metadata?.contextType === context.domainType &&
                metadata?.domainSchema?.id === context.domainId
       })
-    } else if (!context.domainType) {
-      // Filter for general/organization chats (when domainType is undefined, meaning 'general')
-      chats = chats.filter(chat => {
-        const metadata = chat.contextMetadata
-        return !metadata?.contextType || metadata.contextType === 'organizations'
-      })
     }
 
     // Service already returns DTOs, no mapping needed
@@ -220,12 +214,6 @@ export async function getCurrentChatSession(context: ChatContextDTO): Promise<Ch
         const metadata = chat.contextMetadata
         return metadata?.contextType === context.domainType &&
                metadata?.domainSchema?.id === context.domainId
-      })
-    } else if (!context.domainType) {
-      // Filter for general/organization chats
-      chats = chats.filter(chat => {
-        const metadata = chat.contextMetadata
-        return !metadata?.contextType || metadata.contextType === 'organizations'
       })
     }
 
