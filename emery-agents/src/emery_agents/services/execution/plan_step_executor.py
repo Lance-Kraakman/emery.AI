@@ -86,6 +86,16 @@ def _build_step_prompt(
     else:
         parts.extend(["", "## Current Step", current_step.description])
 
+    # Skill execution hint — guide executor to use skill_crud
+    if current_step.target_agent == "skill_executor":
+        parts.extend([
+            "",
+            "## Skill Execution",
+            "This step executes an existing skill. Use `skill_crud(method='execute', skill_id=<ID>, data={inputs})`.",
+            "If you don't have the skill_id yet, call `skill_crud(method='list')` first.",
+            "Do NOT replicate the skill's logic — just execute it by ID.",
+        ])
+
     # Step scope constraint — prevent LLM from executing beyond this step
     parts.extend([
         "",

@@ -17,6 +17,7 @@ from . import (
     page_builder,
     schema_builder,
     skill_builder,
+    skill_executor,
     table_builder,
     view_builder,
 )
@@ -35,8 +36,12 @@ CAPABILITY_ROUTING_HEADER = """
 | Create data views (grids, forms, detail) | view_builder | agent:view_builder |
 | Create/configure agents | agent_builder | agent:agent_builder |
 | Create/configure skills (automations) | skill_builder | agent:skill_builder |
+| Execute existing skills/automations | skill_executor | agent:skill_executor |
 | Generate documents, reports, templates | document_builder | agent:document_builder |
 | Add/update/delete records in tables | table_builder | agent:table_builder |
+
+SKILL EXECUTION: When user asks to "run", "execute", or "trigger" an existing skill,
+use skill_executor (NOT skill_builder). Check workspace_context for the skill ID.
 
 MULTI-CAPABILITY TASKS: Use multiple target_agents across steps.
 Example: "Build a CRM" → schema_builder (tables) → app_builder (UI) → view_builder (data views).
@@ -51,6 +56,7 @@ Your available tools during planning are ONLY: system_research, search_capabilit
 _GUIDANCE_MAP: dict[str, str] = {
     "agent:schema_builder": schema_builder.PLANNING_GUIDANCE,
     "agent:skill_builder": skill_builder.PLANNING_GUIDANCE,
+    "agent:skill_executor": skill_executor.PLANNING_GUIDANCE,
     "agent:app_builder": app_builder.PLANNING_GUIDANCE,
     "agent:document_builder": document_builder.PLANNING_GUIDANCE,
     "agent:agent_builder": agent_builder.PLANNING_GUIDANCE,

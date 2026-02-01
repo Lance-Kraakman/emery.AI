@@ -138,11 +138,16 @@ def create_skill_crud(api_key: str, org_id: str) -> dspy.Tool:
     return dspy.Tool(
         func=skill_crud,
         name="skill_crud",
-        desc="Skill management: read, update, list, execute. Skills have name, description, instructions, inputs, outputs, tools, model.",
+        desc=(
+            "Skill management: read, update, list, execute. "
+            "To RUN an existing skill, use method='execute' with the skill's numeric ID "
+            "and optional input data. To find a skill's ID, use method='list' first. "
+            "Skills have name, description, instructions, inputs, outputs, tools, model."
+        ),
         arg_desc={
-            "method": "Operation: read, update, list, execute",
+            "method": "Operation: read (get config), update (modify), list (find skills and IDs), execute (RUN a skill by ID)",
             "skill_id": "Skill ID (required for read, update, execute). Must be a number.",
             "agent_id": "Agent ID to filter skills (optional for list)",
-            "data": "Skill data for update, or skill inputs for execute",
+            "data": "For update: skill config fields. For execute: input values as {input_name: value} dict (pass {} if no inputs needed)",
         },
     )

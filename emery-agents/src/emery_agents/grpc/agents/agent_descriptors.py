@@ -30,6 +30,10 @@ def get_builder_descriptors() -> List[AgentDescriptor]:
             description="Creates and configures skills for agents",
         ),
         AgentDescriptor(
+            name="skill_executor",
+            description="Executes existing skills by ID using skill_crud",
+        ),
+        AgentDescriptor(
             name="document_builder",
             description="Creates and edits documents with structured content",
         ),

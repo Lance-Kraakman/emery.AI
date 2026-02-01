@@ -67,7 +67,8 @@ class PlanStepOutput(BaseModel):
     tool_call: Optional[str] = Field(
         default=None,
         description="Discovery tool to invoke (e.g., 'workspace_overview', 'search_capabilities'). "
-                    "Only for discovery steps — execution steps use target_agent instead.",
+                    "Primarily for discovery steps — execution steps use target_agent. "
+                    "Exception: skill_executor steps may reference skill_crud in the description.",
     )
     parameters: Optional[dict[str, Any]] = Field(
         default=None,
@@ -77,7 +78,9 @@ class PlanStepOutput(BaseModel):
     target_agent: Optional[str] = Field(
         default=None,
         description="Capability to delegate execution to (e.g., 'schema_builder', 'app_builder', "
-                    "'skill_builder', 'workflow_builder'). Matched from capability_guidance.",
+                    "'skill_builder', 'skill_executor', 'workflow_builder'). "
+                    "Use 'skill_executor' when user wants to RUN an existing skill. "
+                    "Matched from capability_guidance.",
     )
     required_context: list[str] = Field(
         default_factory=list,
