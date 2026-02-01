@@ -23,7 +23,7 @@ import dspy
 
 from ..reasoning.modules import ExecutorModule
 from ..reasoning.tools.execution import create_skill_invoker_tools
-from ..entities.workspace import WorkspaceAgent as AgentData, WorkspaceSkill as SkillData
+from ..entities.workspace import WorkspaceAgent, WorkspaceSkill
 from ..utils.persona_sanitizer import sanitize_persona, sanitize_description
 from ..services.skills.validator import create_validator_from_skills
 
@@ -31,8 +31,8 @@ logger = logging.getLogger(__name__)
 
 
 def create_agent_executor(
-    agent_data: AgentData,
-    skills: list[SkillData],
+    agent_data: WorkspaceAgent,
+    skills: list[WorkspaceSkill],
     api_key: str | None = None,
     organization_id: int | None = None,
     additional_tools: list[Callable[..., Any]] | None = None,
@@ -47,8 +47,8 @@ def create_agent_executor(
     - Optional data access tools (row_crud scoped to agent's database)
 
     Args:
-        agent_data: Typed agent configuration (AgentData)
-        skills: List of typed skill definitions (SkillData)
+        agent_data: Typed agent configuration (WorkspaceAgent)
+        skills: List of typed skill definitions (WorkspaceSkill)
         api_key: API key for tool/skill execution
         organization_id: Organization ID for RLS context
         additional_tools: Extra tools to include (e.g., scoped row_crud)
@@ -115,8 +115,8 @@ def create_agent_executor_from_api(
     organization_id: int | None = None,
     skill_executor_callback: Callable[..., Any] | None = None,
     max_steps: int = 15,
-    fetch_agent_callback: Callable[..., AgentData | None] | None = None,
-    fetch_skills_callback: Callable[..., list[SkillData]] | None = None,
+    fetch_agent_callback: Callable[..., WorkspaceAgent | None] | None = None,
+    fetch_skills_callback: Callable[..., list[WorkspaceSkill]] | None = None,
     create_row_crud_callback: Callable[..., Any] | None = None,
 ) -> ExecutorModule:
     """
@@ -134,8 +134,8 @@ def create_agent_executor_from_api(
         organization_id: Organization ID for RLS context
         skill_executor_callback: Callback to execute skills
         max_steps: Maximum ReAct iterations
-        fetch_agent_callback: Callback returning AgentData
-        fetch_skills_callback: Callback returning list[SkillData]
+        fetch_agent_callback: Callback returning WorkspaceAgent
+        fetch_skills_callback: Callback returning list[WorkspaceSkill]
         create_row_crud_callback: Callback to create scoped row_crud tool
 
     Returns:

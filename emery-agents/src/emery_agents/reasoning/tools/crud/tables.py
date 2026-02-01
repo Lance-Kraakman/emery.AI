@@ -12,7 +12,7 @@ from typing import Any
 
 import dspy
 
-from ..api import TableAPI
+from emery_agents.api import TableAPI
 from ..mutation_guard import check_mutation_allowed
 
 

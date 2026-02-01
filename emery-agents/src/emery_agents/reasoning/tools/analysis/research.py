@@ -13,7 +13,7 @@ import json
 import logging
 from typing import Any
 
-from ..http_client import make_request
+from emery_agents.api.http_client import make_request
 
 logger = logging.getLogger(__name__)
 

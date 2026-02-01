@@ -9,14 +9,14 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable
 
-from ....entities.workspace import WorkspaceSkill as SkillData
+from ....entities.workspace import WorkspaceSkill
 from ....services.skills.validator import SkillPermissionValidator
 
 logger = logging.getLogger(__name__)
 
 
 def create_skill_invoker_tool(
-    skill: SkillData,
+    skill: WorkspaceSkill,
     api_key: str | None = None,
     organization_id: int | None = None,
     skill_executor_callback: Any | None = None,
@@ -30,7 +30,7 @@ def create_skill_invoker_tool(
     - If inputs missing, returns a prompt for the user to provide them
 
     Args:
-        skill: Typed SkillData with id, name, description, inputs
+        skill: Typed WorkspaceSkill with id, name, description, inputs
         api_key: API key for skill execution
         organization_id: Organization ID for RLS context
         skill_executor_callback: Callback to execute skill (from SkillExecutorService)
@@ -162,7 +162,7 @@ Args:
 
 
 def create_skill_invoker_tools(
-    skills: list[SkillData],
+    skills: list[WorkspaceSkill],
     api_key: str | None = None,
     organization_id: int | None = None,
     skill_executor_callback: Any | None = None,
@@ -172,7 +172,7 @@ def create_skill_invoker_tools(
     Create skill invoker functions for a list of skills.
 
     Args:
-        skills: List of typed SkillData from API
+        skills: List of typed WorkspaceSkill from API
         api_key: API key for skill execution
         organization_id: Organization ID for RLS context
         skill_executor_callback: Callback to execute skills

@@ -19,10 +19,6 @@ import httpx
 from .http_client import make_request
 from ..entities.workspace import WorkspaceSkill
 
-# Backward-compatible aliases
-Skill = WorkspaceSkill
-SkillData = WorkspaceSkill
-
 logger = logging.getLogger(__name__)
 
 
@@ -198,7 +194,7 @@ class SkillAPIService:
     async def fetch_skills(
         self,
         agent_id: Optional[str] = None,
-    ) -> List[SkillData]:
+    ) -> List[WorkspaceSkill]:
         """
         Fetch skills from API.
 
@@ -206,7 +202,7 @@ class SkillAPIService:
             agent_id: Optional filter by agent ID
 
         Returns:
-            List of SkillData objects
+            List of WorkspaceSkill objects
 
         Raises:
             httpx.RequestError: On HTTP connection errors
@@ -248,7 +244,7 @@ class SkillAPIService:
 
             raw_skills = data.get("data", [])
             skills = [
-                SkillData(
+                WorkspaceSkill(
                     id=int(skill.get("id", 0)),
                     name=skill.get("name", "Unknown"),
                     description=skill.get("description", ""),
@@ -260,7 +256,7 @@ class SkillAPIService:
             logger.info(f"[SKILL-API] Fetched {len(skills)} skills - call_id: {call_id}")
             return skills
 
-    async def fetch_skill_by_id(self, skill_id: str) -> Optional[SkillData]:
+    async def fetch_skill_by_id(self, skill_id: str) -> Optional[WorkspaceSkill]:
         """
         Fetch a single skill by ID.
 
@@ -268,7 +264,7 @@ class SkillAPIService:
             skill_id: Skill ID to look up
 
         Returns:
-            SkillData if found, None if 404
+            WorkspaceSkill if found, None if 404
 
         Raises:
             httpx.RequestError: On HTTP connection errors
@@ -305,14 +301,14 @@ class SkillAPIService:
                 return None
 
             raw = data["data"]
-            return SkillData(
+            return WorkspaceSkill(
                 id=int(raw.get("id", 0)),
                 name=raw.get("name", "Unknown"),
                 description=raw.get("description", ""),
                 raw=raw,
             )
 
-    async def fetch_skill_by_name(self, name: str) -> Optional[SkillData]:
+    async def fetch_skill_by_name(self, name: str) -> Optional[WorkspaceSkill]:
         """
         Fetch a single skill by name (normalized fuzzy match).
 
@@ -323,7 +319,7 @@ class SkillAPIService:
             name: Skill name to look up
 
         Returns:
-            SkillData if found, None otherwise
+            WorkspaceSkill if found, None otherwise
         """
         skills = await self.fetch_skills()
         normalized_target = _normalize_name(name)

@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import AsyncIterator, Dict, List, Literal, Optional, TypedDict
 
-from ..agents.api import AgentAPIService
+from emery_agents.api import AgentAPIService
 from ..agents.executor import AgentExecutor
 from ..credentials import ResolvedCredentials, CredentialSource
 from ..tools.provider import ToolProvider

@@ -12,7 +12,7 @@ from dataclasses import asdict, dataclass
 from enum import Enum
 from typing import Any, Callable
 
-from ..http_client import make_request
+from emery_agents.api.http_client import make_request
 
 logger = logging.getLogger(__name__)
 

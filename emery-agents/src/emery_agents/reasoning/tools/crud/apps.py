@@ -11,7 +11,7 @@ from typing import Any
 
 import dspy
 
-from ..http_client import make_request
+from emery_agents.api.http_client import make_request
 from ..mutation_guard import check_mutation_allowed
 
 

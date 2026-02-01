@@ -33,7 +33,7 @@ from .data import ResultStorageService, ResultStorageServiceFactory, StoredResul
 
 # Agents (agent-related services)
 # AgentExecutor omitted: import directly from services.agents.executor (heavy, circular if eager)
-from .agents import AgentAPIService, AgentData, SkillData
+from .agents import AgentAPIService
 
 # Tasks (unified task execution)
 from .tasks import TaskExecutor
@@ -93,8 +93,6 @@ __all__ = [
     "TaskLedger",
     "create_ledger_from_plan",
     "AgentAPIService",
-    "AgentData",
-    "SkillData",
     "CapabilityRegistry",
     # Orchestrators
     "create_session_graph",

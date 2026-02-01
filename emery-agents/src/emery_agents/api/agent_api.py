@@ -20,11 +20,6 @@ import requests
 from .http_client import make_request
 from ..entities.workspace import WorkspaceAgent, WorkspaceSkill
 
-# Backward-compatible aliases
-Agent = WorkspaceAgent
-AgentData = WorkspaceAgent
-SkillData = WorkspaceSkill
-
 logger = logging.getLogger(__name__)
 
 
@@ -185,7 +180,7 @@ class AgentAPIService:
         self,
         agent_id: Optional[str] = None,
         agent_name: Optional[str] = None
-    ) -> List[AgentData]:
+    ) -> List[WorkspaceAgent]:
         """
         Fetch agents from API.
 
@@ -194,7 +189,7 @@ class AgentAPIService:
             agent_name: Optional filter by agent name
 
         Returns:
-            List of AgentData objects (may be empty)
+            List of WorkspaceAgent objects (may be empty)
         """
         call_id = str(uuid.uuid4())[:8]
 
@@ -232,7 +227,7 @@ class AgentAPIService:
                         raw_data = [raw_data]
 
                     agents = [
-                        AgentData(
+                        WorkspaceAgent(
                             id=int(agent.get("id", 0)),
                             name=agent.get("name", "Unknown"),
                             description=agent.get("description", ""),
@@ -254,12 +249,12 @@ class AgentAPIService:
             logger.warning(f"[AGENT-API] Unexpected error fetching agents - call_id: {call_id}, error: {e}")
             return []
 
-    async def fetch_agent_by_name(self, name: str) -> Optional[AgentData]:
+    async def fetch_agent_by_name(self, name: str) -> Optional[WorkspaceAgent]:
         """Fetch a single agent by name."""
         agents = await self.fetch_agents(agent_name=name)
         return agents[0] if agents else None
 
-    async def fetch_skills(self, agent_id: str) -> List[SkillData]:
+    async def fetch_skills(self, agent_id: str) -> List[WorkspaceSkill]:
         """
         Fetch skills for a specific agent.
 
@@ -267,7 +262,7 @@ class AgentAPIService:
             agent_id: Agent ID to fetch skills for
 
         Returns:
-            List of SkillData objects (may be empty)
+            List of WorkspaceSkill objects (may be empty)
         """
         call_id = str(uuid.uuid4())[:8]
 
@@ -293,7 +288,7 @@ class AgentAPIService:
 
                 raw_skills = data.get("data", [])
                 skills = [
-                    SkillData(
+                    WorkspaceSkill(
                         id=int(skill.get("id", 0)),
                         name=skill.get("name", "Unknown"),
                         description=skill.get("description", ""),
@@ -312,7 +307,7 @@ class AgentAPIService:
             logger.warning(f"[AGENT-API] Unexpected error fetching skills - call_id: {call_id}, error: {e}")
             return []
 
-    async def fetch_agents_with_skills(self) -> List[Tuple[AgentData, List[SkillData]]]:
+    async def fetch_agents_with_skills(self) -> List[Tuple[WorkspaceAgent, List[WorkspaceSkill]]]:
         """Fetch all agents with their skills in one operation."""
         agents = await self.fetch_agents()
 
@@ -324,7 +319,7 @@ class AgentAPIService:
         logger.info(f"[AGENT-API] Total: {len(results)} agents with skills loaded")
         return results
 
-    async def fetch_agent_by_id(self, agent_id: int) -> Optional[AgentData]:
+    async def fetch_agent_by_id(self, agent_id: int) -> Optional[WorkspaceAgent]:
         """Fetch a single agent by ID."""
         agents = await self.fetch_agents(agent_id=str(agent_id))
         return agents[0] if agents else None
@@ -337,7 +332,7 @@ class AgentAPIService:
 
 def fetch_agent_by_id_sync(
     agent_id: int, api_key: str, organization_id: int
-) -> Optional[AgentData]:
+) -> Optional[WorkspaceAgent]:
     """
     Sync fetch of agent by ID. For use in sync contexts (tool loading).
 
@@ -350,7 +345,7 @@ def fetch_agent_by_id_sync(
         organization_id: Organization ID for RLS context
 
     Returns:
-        AgentData if found, None otherwise
+        WorkspaceAgent if found, None otherwise
     """
     base_url = os.getenv("NEXTJS_BASE_URL", "http://localhost:3000")
     headers = {
@@ -371,7 +366,7 @@ def fetch_agent_by_id_sync(
             return None
         data = response.json()
         agent = data.get("data", data) if isinstance(data, dict) else {}
-        return AgentData(
+        return WorkspaceAgent(
             id=int(agent.get("id", 0)),
             name=agent.get("name", "Unknown"),
             description=agent.get("description", ""),

@@ -9,13 +9,11 @@ Agent-related services.
 """
 
 from .factory import AgentConfig, AgentFactory
-from .api import AgentData, SkillData, AgentAPIService
+from emery_agents.api import AgentAPIService
 
 
 __all__ = [
     "AgentConfig",
     "AgentFactory",
-    "AgentData",
-    "SkillData",
     "AgentAPIService",
 ]

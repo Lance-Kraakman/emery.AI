@@ -20,7 +20,7 @@ from typing import Any, Dict, Optional
 
 import requests
 
-from ..http_client import get_base_url
+from emery_agents.api.http_client import get_base_url
 from ....entities.execution_context import ExecutionContext
 from ....entities.skill_config import SkillConfig
 from ....types import ExecutionMode

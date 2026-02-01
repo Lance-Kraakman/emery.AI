@@ -16,7 +16,7 @@ import logging
 from typing import Set, Optional
 from dataclasses import dataclass, field
 
-from ...entities.workspace import WorkspaceSkill as SkillData
+from ...entities.workspace import WorkspaceSkill
 
 logger = logging.getLogger(__name__)
 
@@ -115,14 +115,14 @@ class SkillPermissionValidator:
 
 
 def create_validator_from_skills(
-    skills: list[SkillData],
+    skills: list[WorkspaceSkill],
     agent_id: Optional[int] = None
 ) -> SkillPermissionValidator:
     """
-    Create a validator from a list of SkillData.
+    Create a validator from a list of WorkspaceSkill.
 
     Args:
-        skills: List of SkillData objects
+        skills: List of WorkspaceSkill objects
         agent_id: Optional agent ID for logging
 
     Returns:
