@@ -433,6 +433,8 @@ class AgentStreamingHandler:
                 workspace_type=workspace_type,
                 workspace_id=workspace_id,
                 runtime_skill_inputs=skill_inputs,
+                images=images,
+                has_images=len(images) > 0,
             ):
                 if isinstance(event, dict):
                     yield event  # type: ignore[misc]  # Coordinator returns compatible dicts

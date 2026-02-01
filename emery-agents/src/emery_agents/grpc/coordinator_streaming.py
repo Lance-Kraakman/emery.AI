@@ -12,6 +12,7 @@ from typing import AsyncIterator, Optional, List, Any, Dict
 
 import dspy
 from langgraph.types import Command
+from PIL import Image
 
 from ..services.execution.events import (
     ExecutionCompletedEvent,
@@ -24,7 +25,7 @@ from ..tools.tool_modes import ToolMode
 from ..services.agents.executor import AgentExecutor
 from ..services.models.provider import ModelProvider
 from ..services.plan_service import PlanService
-from ..reasoning.config import get_dspy_lm
+from ..reasoning.config import get_dspy_lm, get_lm_for_task
 from ..reasoning.modules.executor import ExecutorModule
 from ..reasoning.modules.classifier import TaskClassifierModule
 from ..reasoning.signatures.planning import TaskExecutionMode
@@ -188,6 +189,8 @@ class CoordinatorStreamingHandler:
         workspace_type: Optional[str] = None,
         workspace_id: Optional[str] = None,
         runtime_skill_inputs: Optional[Dict[str, str]] = None,
+        images: Optional[List[Image.Image]] = None,
+        has_images: bool = False,
     ) -> AsyncIterator[Any]:
         """
         Main entry point for coordinator-driven execution.
@@ -304,6 +307,8 @@ class CoordinatorStreamingHandler:
                         memory_context=memory_context_str,
                         conversation_history=_convert_history(conversation_history),
                         capability_registry=capability_registry,
+                        images=images,
+                        has_images=has_images,
                     ):
                         yield event
                     return
@@ -529,15 +534,18 @@ class CoordinatorStreamingHandler:
         memory_context: str = "",
         conversation_history: Optional[List[ConversationMessage]] = None,
         capability_registry: Optional[CapabilityRegistry] = None,
+        images: Optional[List[Image.Image]] = None,
+        has_images: bool = False,
     ) -> AsyncIterator[Any]:
         """
         Handle direct execution without a plan using DSPy.
 
         Used for simple tasks that don't require planning.
+        When images are present (user uploads or scanned PDFs), uses vision model.
         """
         assert context.tool_provider is not None, "tool_provider required for direct execution"
 
-        logger.info("Direct execution: Starting DSPy ReAct execution...")
+        logger.info(f"Direct execution: Starting DSPy ReAct execution... (has_images={has_images})")
 
         # Create DSPy tools with auth (pass capability_registry for search_capabilities)
         tools = create_all_tools(
@@ -569,8 +577,12 @@ class CoordinatorStreamingHandler:
             threshold=0.8,
         )
 
-        # Get DSPy LM
-        lm = get_dspy_lm(org_model=org_model)
+        # Use vision model when images are present (uploaded images or scanned PDF pages)
+        if has_images:
+            lm = get_lm_for_task("execution", prefer_vision=True)
+            logger.info("Using vision model for image-containing request")
+        else:
+            lm = get_dspy_lm(org_model=org_model)
 
         # Build execution context with available information
         execution_context: Dict[str, Any] = {
