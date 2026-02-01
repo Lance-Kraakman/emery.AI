@@ -24,7 +24,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { cn } from '@/lib/utils';
-import { Undo2, Redo2, StickyNote, Search, Maximize, LayoutGrid, FileDown, FileUp, Layers } from 'lucide-react';
+import { StickyNote, Search, Maximize, LayoutGrid, FileDown, FileUp, Layers } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import {
@@ -188,10 +188,6 @@ export function OrgChartCanvas({
     addStickyNote,
     updateNode,
     deleteNodes,
-    undo,
-    redo,
-    canUndo,
-    canRedo,
     toggleAgentExpanded,
     addAgentNode,
     addSkillNode,
@@ -255,10 +251,14 @@ export function OrgChartCanvas({
     }
 
     // Filter to selected node only
-    if (selectedOnlyEdges && selectedNodeId) {
-      result = result.filter(
-        (e) => e.source === selectedNodeId || e.target === selectedNodeId
-      );
+    if (selectedOnlyEdges) {
+      if (selectedNodeId) {
+        result = result.filter(
+          (e) => e.source === selectedNodeId || e.target === selectedNodeId
+        );
+      } else {
+        result = [];
+      }
     }
 
     return result;
@@ -743,16 +743,6 @@ export function OrgChartCanvas({
         setIsSearchOpen(true);
         return;
       }
-      // Cmd/Ctrl + Z = Undo
-      if ((event.metaKey || event.ctrlKey) && event.key === 'z' && !event.shiftKey) {
-        event.preventDefault();
-        undo();
-      }
-      // Cmd/Ctrl + Shift + Z = Redo
-      if ((event.metaKey || event.ctrlKey) && event.key === 'z' && event.shiftKey) {
-        event.preventDefault();
-        redo();
-      }
       // Delete/Backspace = Delete edges or show node delete confirmation
       if (event.key === 'Delete' || event.key === 'Backspace') {
         event.preventDefault();
@@ -783,7 +773,7 @@ export function OrgChartCanvas({
         }
       }
     },
-    [undo, redo, deleteNodes, selectedNodeIds, nodes, edges, setEdges]
+    [deleteNodes, selectedNodeIds, nodes, edges, setEdges]
   );
 
   // Handle delete confirmation
@@ -953,38 +943,6 @@ export function OrgChartCanvas({
           {/* Toolbar - glassmorphic style */}
           <div className="flex gap-1 bg-background/50 backdrop-blur-sm border rounded-lg shadow-sm p-1">
             <TooltipProvider delayDuration={300}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={undo}
-                    disabled={disabled || !canUndo}
-                  >
-                    <Undo2 className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  <p>Undo <kbd className="ml-1 text-[10px] opacity-60">⌘Z</kbd></p>
-                </TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={redo}
-                    disabled={disabled || !canRedo}
-                  >
-                    <Redo2 className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  <p>Redo <kbd className="ml-1 text-[10px] opacity-60">⌘⇧Z</kbd></p>
-                </TooltipContent>
-              </Tooltip>
               {!disabled && (
                 <>
                   <div className="w-px h-6 bg-border mx-0.5" />

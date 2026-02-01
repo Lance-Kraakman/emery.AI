@@ -389,7 +389,7 @@ export function arrangeOrgChartTopDown(
   const PADDING = 50;
   const GAP = 40;
   const TIER_GAP = 60;
-  const MAX_ROW_WIDTH = 1600;
+  const MAX_ROW_WIDTH = 3000;
 
   let result = [...nodes];
   let cursorY = PADDING;

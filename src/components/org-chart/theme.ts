@@ -108,21 +108,21 @@ export const orgChartHandles = {
  */
 export const orgChartNodeSizes = {
   /** Standard node width for resource nodes */
-  nodeWidth: 180,
+  nodeWidth: 140,
   /** Compact node height */
   nodeHeight: 52,
   /** Container node minimum width */
-  containerMinWidth: 400,
+  containerMinWidth: 260,
   /** Container node minimum height */
-  containerMinHeight: 180,
+  containerMinHeight: 120,
   /** Padding inside container nodes */
-  containerPadding: 16,
+  containerPadding: 12,
   /** Gap between child nodes inside container */
-  childNodeGap: 16,
+  childNodeGap: 12,
   /** Height of agent container header (main header + resource counts bar) */
-  containerHeaderHeight: 80,
+  containerHeaderHeight: 56,
   /** Gap between sections (skills and databases) inside agent */
-  sectionGap: 24,
+  sectionGap: 16,
   /** Height of section label */
   sectionLabelHeight: 20,
 } as const;
