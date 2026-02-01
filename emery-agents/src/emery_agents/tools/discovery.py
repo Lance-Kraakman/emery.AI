@@ -23,7 +23,7 @@ from ddgs import DDGS
 from .analysis.research import SystemResearchTool
 from emery_agents.api import WorkspaceAPI
 from .integrations.pipedream import get_pipedream_tool_info, list_pipedream_tools_by_app
-from ...services.tools.capability_registry import CapabilityRegistry
+from .capability_registry import CapabilityRegistry
 
 logger = logging.getLogger(__name__)
 

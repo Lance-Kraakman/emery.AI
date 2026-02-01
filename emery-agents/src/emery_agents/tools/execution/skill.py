@@ -14,13 +14,13 @@ import os
 import threading
 from typing import Any, Callable, TYPE_CHECKING
 
-from ....entities.skill_config import SkillConfig
-from ....services.data.output_mapping import MappingContext, OutputMappingService
-from ....types import SkillExecutionResult
-from ....utils import run_async_in_thread
+from emery_agents.entities.skill_config import SkillConfig
+from emery_agents.services.data.output_mapping import MappingContext, OutputMappingService
+from emery_agents.types import SkillExecutionResult
+from emery_agents.utils import run_async_in_thread
 
 if TYPE_CHECKING:
-    from ....entities.task import SkillOutputValue
+    from emery_agents.entities.task import SkillOutputValue
 
 logger = logging.getLogger(__name__)
 
@@ -193,7 +193,7 @@ class SkillTool:
         try:
             enriched_kwargs = run_async_in_thread(self._resolve_input_mappings(kwargs))
 
-            from ....services.agents.executor import AgentExecutor
+            from emery_agents.services.agents.executor import AgentExecutor
 
             parent_ctx = AgentExecutor.get_current_context()
             progress_callback = parent_ctx.progress_callback if parent_ctx else None
@@ -355,7 +355,7 @@ class SkillTool:
 
     def _resolve_row_id(self, row_source: dict[str, Any], context: dict[str, Any]) -> str | None:
         """Resolve row ID from row source configuration."""
-        from ....services.agents.executor import AgentExecutor
+        from emery_agents.services.agents.executor import AgentExecutor
 
         if row_source.get("use_source_row", False):
             if "__row_id__" in context:

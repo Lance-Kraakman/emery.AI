@@ -23,11 +23,11 @@ import asyncio
 import logging
 from typing import Any, AsyncIterator, List, Optional
 
-from ..services.tools.provider import ToolProvider
+from emery_agents.tools.provider import ToolProvider
 from ..services.skills.executor import SkillExecutorService
 from emery_agents.api import AgentAPIService
 from ..agents.agent_executor_agent import create_agent_executor
-from ..reasoning.tools.execution.dynamic_execution import fetch_agent_execution_config
+from emery_agents.tools.execution.dynamic_execution import fetch_agent_execution_config
 from .response_types import StreamResponseDict, create_error_response
 
 logger = logging.getLogger(__name__)

@@ -27,12 +27,12 @@ from ..models import ModelProvider
 from ..data import ImageProcessor
 from .factory import AgentFactory, AgentConfig
 from ..analysis import TokenUsageExtractor
-from ...reasoning.tools.execution.skill import SkillTool
-from ...reasoning.tools.execution.bash import create_bash_tool
+from emery_agents.tools.execution.skill import SkillTool
+from emery_agents.tools.execution.bash import create_bash_tool
 from ...reasoning.modules.extractor import OutputExtractorModule
 from ..skills.executor import SkillExecutorService
 from ..skills.step_executor import StepExecutorService
-from ..tools.loader import UnifiedToolLoader
+from emery_agents.tools.loader import UnifiedToolLoader
 from ..context import (
     get_current_context as _get_context,
     set_current_context as _set_context,

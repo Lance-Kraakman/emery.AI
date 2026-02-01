@@ -24,7 +24,7 @@ from ...services.execution.events import (
 )
 from ...tools.tool_modes import ToolMode, filter_tools_for_mode
 from emery_agents.api import WorkspaceAPI
-from ...reasoning.tools.discovery import create_discovery_tools
+from emery_agents.tools.discovery import create_discovery_tools
 from ..state import PlanExecuteState
 from ..runtime import RuntimeContext
 

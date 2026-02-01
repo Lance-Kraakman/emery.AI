@@ -9,8 +9,8 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable
 
-from ....entities.workspace import WorkspaceSkill
-from ....services.skills.validator import SkillPermissionValidator
+from emery_agents.entities.workspace import WorkspaceSkill
+from emery_agents.services.skills.validator import SkillPermissionValidator
 
 logger = logging.getLogger(__name__)
 

@@ -16,7 +16,7 @@ from typing import Any, Callable
 
 import requests
 
-from ....entities.tool_config import ToolConfig
+from emery_agents.entities.tool_config import ToolConfig
 
 logger = logging.getLogger(__name__)
 

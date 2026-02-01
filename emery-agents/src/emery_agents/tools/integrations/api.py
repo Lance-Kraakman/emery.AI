@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Any, Callable
 
-from ....entities.tool_config import ToolConfig
+from emery_agents.entities.tool_config import ToolConfig
 
 
 class MeasurementAPITool:

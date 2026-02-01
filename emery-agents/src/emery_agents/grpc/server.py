@@ -11,7 +11,7 @@ from .generated import agent_worker_pb2, agent_worker_pb2_grpc
 from .generated import table_service_pb2, table_service_pb2_grpc
 from .mappers import ProtoMapper
 from ..services.agents.executor import AgentExecutor
-from ..services.tools.loader import UnifiedToolLoader
+from emery_agents.tools.loader import UnifiedToolLoader
 from ..services.tasks import TaskExecutor
 from ..services.tasks.task_executor import TaskData
 from ..infrastructure.workspace_sync import WorkspaceSync

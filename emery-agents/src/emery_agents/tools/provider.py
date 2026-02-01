@@ -20,7 +20,7 @@ import warnings
 from typing import Dict, List, Optional, Any, Callable, TYPE_CHECKING
 import logging
 
-from ...reasoning.tools import (
+from . import (
     create_database_crud,
     create_skill_crud,
     create_document_crud,
@@ -32,8 +32,8 @@ from ...reasoning.tools import (
     create_page_crud,
     create_view_crud,
 )
-from ...reasoning.tools.analysis import create_security_report_tool
-from ..http import AuthenticatedHttpClient
+from .analysis import create_security_report_tool
+from emery_agents.services.http import AuthenticatedHttpClient
 
 logger = logging.getLogger(__name__)
 

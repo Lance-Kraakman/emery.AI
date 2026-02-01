@@ -19,9 +19,9 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-from ...entities.tool_config import ToolConfig
+from emery_agents.entities.tool_config import ToolConfig
 # SkillConfig removed - skills now loaded dynamically via API
-from ...reasoning.tools import (
+from . import (
     create_table_crud,
     create_field_crud,
     create_row_crud,
@@ -36,7 +36,7 @@ from ...reasoning.tools import (
     create_page_crud,
 )
 # SkillTool removed - skills now executed dynamically via DynamicSkillTool
-from ...reasoning.tools.integrations import (
+from .integrations import (
     DynamicAgentTool,
     DynamicSkillTool,
     PipedreamTool,

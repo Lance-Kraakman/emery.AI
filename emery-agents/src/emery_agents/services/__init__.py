@@ -9,7 +9,6 @@ Submodules:
 - models/: LLM/Model management
 - analysis/: Analysis utilities (gap analyzer, token usage, embeddings)
 - http/: HTTP and external communication
-- tools/: Tool loading and capabilities
 - data/: Data processing and storage
 - skills/: Skill execution
 - agents/: Agent-related services
@@ -25,8 +24,8 @@ from .models import ModelProvider, TokenUsage
 # Context (context and configuration)
 from .context import ContextResolver, ContextSyncService, ContextSyncServiceFactory
 
-# Tools (tool loading and capabilities)
-from .tools import UnifiedToolLoader, CapabilityRegistry
+# Tools (tool loading and capabilities) — moved to emery_agents.tools
+from emery_agents.tools import UnifiedToolLoader, CapabilityRegistry
 
 # Data (data processing and storage)
 from .data import ResultStorageService, ResultStorageServiceFactory, StoredResult

@@ -17,7 +17,7 @@ from collections.abc import Callable
 from typing import Any
 
 from ..reasoning.modules import ExecutorModule
-from ..reasoning.tools.analysis import create_system_research_tool
+from emery_agents.tools.analysis import create_system_research_tool
 
 logger = logging.getLogger(__name__)
 

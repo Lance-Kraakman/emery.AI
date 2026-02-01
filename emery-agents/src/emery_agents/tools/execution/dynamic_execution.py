@@ -21,9 +21,9 @@ from typing import Any, Dict, Optional
 import requests
 
 from emery_agents.api.http_client import get_base_url
-from ....entities.execution_context import ExecutionContext
-from ....entities.skill_config import SkillConfig
-from ....types import ExecutionMode
+from emery_agents.entities.execution_context import ExecutionContext
+from emery_agents.entities.skill_config import SkillConfig
+from emery_agents.types import ExecutionMode
 
 logger = logging.getLogger(__name__)
 
@@ -125,10 +125,10 @@ def execute_skill_by_id(
 
     # 4. Create executor and execute in-process
     try:
-        from ....services.tools.loader import UnifiedToolLoader
-        from ....services.models.provider import ModelProvider
-        from ....services.agents.factory import AgentFactory
-        from ....services.skills.executor import SkillExecutorService
+        from emery_agents.tools.loader import UnifiedToolLoader
+        from emery_agents.services.models.provider import ModelProvider
+        from emery_agents.services.agents.factory import AgentFactory
+        from emery_agents.services.skills.executor import SkillExecutorService
 
         tool_loader = UnifiedToolLoader()
         model_provider = ModelProvider()
@@ -268,8 +268,8 @@ def execute_agent_by_id(
 
     # 3. Execute in-process using AgentExecutor
     try:
-        from ....services.agents.executor import AgentExecutor
-        from ....utils import run_async_in_thread
+        from emery_agents.services.agents.executor import AgentExecutor
+        from emery_agents.utils import run_async_in_thread
 
         agent_executor = AgentExecutor()
 

@@ -12,7 +12,7 @@ import operator
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from ....services.sandbox import BwrapExecutor
+from emery_agents.services.sandbox import BwrapExecutor
 
 
 def create_file_reader_tool(workspace_path: Optional[Path] = None) -> Callable[[str], str]:

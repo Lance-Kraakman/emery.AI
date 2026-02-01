@@ -15,7 +15,7 @@ from .mappers.message_mapper import build_conversation_messages, has_images, ext
 from .mappers import format_clarifying_questions
 from ..infrastructure.workspace_sync import WorkspaceSync
 from ..services.models.provider import ModelProvider
-from ..services.tools.loader import UnifiedToolLoader
+from emery_agents.tools.loader import UnifiedToolLoader
 from ..services.context.session_manager import SessionManager
 from ..services.agents.factory import AgentFactory
 from ..services.skills.executor import SkillExecutorService
@@ -24,7 +24,7 @@ from ..services.execution.events import PlanCreatedEvent, AwaitingClarificationE
 from ..orchestrators.nodes.planning import generate_plan_node
 from ..orchestrators.state import PlanExecuteState
 from ..orchestrators.runtime import RuntimeContext
-from ..services.tools.provider import ToolProvider
+from emery_agents.tools.provider import ToolProvider
 from ..entities.models.plan import Plan, SkillInputDefinition, SkillOutputDefinition
 from .message_processor import extract_file_attachments
 from .mappers.proto_mapper import tool_configs_from_proto, history_messages_from_proto, token_usage_to_proto
@@ -32,7 +32,7 @@ from .agent_streaming import AgentStreamingHandler
 from .coordinator_streaming import CoordinatorStreamingHandler
 from .response_converter import convert_response_to_proto
 from .agents.agent_models import get_builder_descriptors
-from ..services.tools.capability_registry import CapabilityRegistry
+from emery_agents.tools.capability_registry import CapabilityRegistry
 from ..services.tasks import TaskExecutor
 from ..services.tasks.task_executor import TaskData
 from ..services.agents.executor import AgentExecutor

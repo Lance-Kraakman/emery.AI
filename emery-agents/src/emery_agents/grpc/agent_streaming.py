@@ -11,7 +11,7 @@ import logging
 from pathlib import Path
 from typing import AsyncIterator, Optional, List, Dict, Any, Tuple
 
-from ..reasoning.tools.execution import SkillTool
+from emery_agents.tools.execution import SkillTool
 from ..tools.tool_modes import filter_tools_for_mode, ToolMode
 from ..services.agents.executor import AgentExecutor
 from ..services.execution.state_machine import (
@@ -22,10 +22,10 @@ from ..entities.execution_context import ExecutionContext
 from ..types import ExecutionMode
 from ..entities.models.plan import Plan, create_plan
 from ..entities.models.capability import Capability, CapabilityType
-from ..services.tools.provider import ToolProvider
+from emery_agents.tools.provider import ToolProvider
 from ..services.context.session_manager import SessionManager
 from ..services.models.provider import ModelProvider
-from ..services.tools.loader import UnifiedToolLoader
+from emery_agents.tools.loader import UnifiedToolLoader
 from ..services.skills.executor import SkillExecutorService
 from ..services.plan_service import PlanService
 # HuggingFaceInferenceClient removed - skills now executed dynamically via API
@@ -55,7 +55,7 @@ from .mappers.message_types import ChatMessage
 from ..entities.tool_config import ToolConfig
 from ..entities.message import FileAttachment, HistoryMessage
 from .agents.agent_models import ChatAgent, AgentDescriptor, get_builder_descriptors
-from ..services.tools.capability_registry import CapabilityRegistry
+from emery_agents.tools.capability_registry import CapabilityRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -449,7 +449,7 @@ class AgentStreamingHandler:
         try:
             from ..reasoning.config import get_dspy_lm
             from ..reasoning.modules.executor import ExecutorModule
-            from ..reasoning.tools import create_all_tools
+            from emery_agents.tools import create_all_tools
 
             import dspy
 

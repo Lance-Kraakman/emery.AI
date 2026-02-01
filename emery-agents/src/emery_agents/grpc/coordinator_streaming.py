@@ -30,7 +30,7 @@ from ..reasoning.modules.executor import ExecutorModule
 from ..reasoning.modules.classifier import TaskClassifierModule
 from ..reasoning.signatures.planning import TaskExecutionMode
 from ..reasoning.utils import extract_dspy_result
-from ..reasoning.tools import create_all_tools, QuestionCollector, create_ask_question_tool
+from emery_agents.tools import create_all_tools, QuestionCollector, create_ask_question_tool
 from .coordinator_event_converter import convert_coordinator_event
 from .approval_handler import is_approval_response
 from .response_types import create_error_response
@@ -39,7 +39,7 @@ from ..orchestrators.runtime import ConversationMessage
 from ..orchestrators.state import DEFAULT_STATE
 from ..services.memory import MemoryService
 from ..services.context import WorkspaceContext
-from ..services.tools.capability_registry import CapabilityRegistry
+from emery_agents.tools.capability_registry import CapabilityRegistry
 from ..orchestrators.nodes.planning import _build_workspace_context
 from ..services.planning import PlanFileRepository
 

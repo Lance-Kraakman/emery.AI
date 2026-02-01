@@ -22,9 +22,9 @@ import logging
 from typing import AsyncIterator, Optional
 
 from ..utils.mention_parser import SkillInvocation
-from ..services.tools.provider import ToolProvider
+from emery_agents.tools.provider import ToolProvider
 from emery_agents.api import SkillAPIService
-from ..reasoning.tools.integrations.dynamic_skill import DynamicSkillTool
+from emery_agents.tools.integrations.dynamic_skill import DynamicSkillTool
 from .response_types import StreamResponseDict, create_error_response
 
 logger = logging.getLogger(__name__)

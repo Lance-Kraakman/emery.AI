@@ -22,7 +22,7 @@ from typing import Any
 import dspy
 
 from ..reasoning.modules import ExecutorModule
-from ..reasoning.tools.execution import create_skill_invoker_tools
+from emery_agents.tools.execution import create_skill_invoker_tools
 from ..entities.workspace import WorkspaceAgent, WorkspaceSkill
 from ..utils.persona_sanitizer import sanitize_persona, sanitize_description
 from ..services.skills.validator import create_validator_from_skills
