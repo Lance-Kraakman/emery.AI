@@ -427,7 +427,7 @@ export async function uploadTaskAttachment(
 
     // Upload to S3
     const buffer = Buffer.from(await file.arrayBuffer());
-    const shouldUseEncryption = !process.env.AWS_ENDPOINT_URL;
+    const shouldUseEncryption = !process.env.S3_ENDPOINT_URL;
 
     const putCommand = new PutObjectCommand({
       Bucket: BUCKET_NAME,
