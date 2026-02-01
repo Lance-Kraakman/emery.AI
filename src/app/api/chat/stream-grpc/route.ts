@@ -734,7 +734,7 @@ export async function POST(req: NextRequest) {
               chatId: currentChatId,
               userId: userId,
               organizationId: organizationId,
-              content: '', // Empty content initially
+              content: '...', // Placeholder content - will be replaced with actual response
               role: 'assistant',
               metadata: {
                 streamingStatus: 'streaming',
