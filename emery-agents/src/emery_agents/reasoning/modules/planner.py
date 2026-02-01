@@ -18,6 +18,7 @@ from emery_agents.reasoning.signatures.planning import (
     CreateSkillTemplate,
     PlanOrQuestionsOutput,
     QuestionType,
+    SelectReasoningApproach,
     SkillInputSpec,
     SkillOutputSpec,
     SkillTemplatePlanOutput,
@@ -60,6 +61,7 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         """
         super().__init__()
         self.analyzer = dspy.ChainOfThought(AnalyzeTask)
+        self.approach_selector = dspy.ChainOfThought(SelectReasoningApproach)
         self.discovery_tools = discovery_tools or []
         self.planner = dspy.ReAct(CreatePlan, tools=self.discovery_tools, max_iters=5)
 
@@ -102,13 +104,30 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
             f"Complexity: {analysis.complexity}"
         )
 
+        # Self-Discover: select reasoning approach before planning
+        approach_result = self.approach_selector(
+            request=request,
+            task_analysis=task_analysis,
+            workspace_context=workspace_context,
+        )
+        approach = approach_result.approach
+        approach_guidance = (
+            f"REASONING APPROACH: {approach.primary_approach}"
+            + (f" + {approach.secondary_approach}" if approach.secondary_approach else "")
+            + f"\n{approach.reasoning}"
+        )
+        if approach.key_considerations:
+            approach_guidance += "\nKEY CONSIDERATIONS:\n" + "\n".join(
+                f"- {c}" for c in approach.key_considerations
+            )
+
         # Build effective guidance with Think Before Asking
         has_workspace = bool(workspace_context and workspace_context != "{}")
         think_first = self._build_think_before_asking_guidance(
             has_delegation=has_delegation,
             has_workspace_context=has_workspace,
         )
-        effective_guidance = f"{think_first}\n\n{capability_guidance}"
+        effective_guidance = f"{approach_guidance}\n\n{think_first}\n\n{capability_guidance}"
 
         result = self.planner(
             request=request,

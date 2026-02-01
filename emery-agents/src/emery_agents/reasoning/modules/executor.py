@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 import dspy
+from dspy.primitives.prediction import Prediction
 
 
 class ExecutorModule(dspy.Module):  # type: ignore[misc]
@@ -61,6 +62,90 @@ class ExecutorModule(dspy.Module):  # type: ignore[misc]
         )
         self.last_trajectory = getattr(result, "trajectory", None)
         return result.result  # type: ignore[no-any-return]
+
+
+def _format_trajectory_evidence(trajectory: dict[str, Any]) -> str:
+    """Extract tool call evidence from a ReAct trajectory for the judge."""
+    evidence_parts: list[str] = []
+    idx = 0
+    while f"tool_name_{idx}" in trajectory:
+        name = trajectory[f"tool_name_{idx}"]
+        obs = str(trajectory.get(f"observation_{idx}", ""))[:200]
+        evidence_parts.append(f"{name}: {obs}")
+        idx += 1
+    return "\n".join(evidence_parts) if evidence_parts else ""
+
+
+def direct_execution_reward(kwargs: dict[str, Any], pred: Prediction) -> float:
+    """LLM-as-judge reward function for DIRECT execution quality.
+
+    Uses a small dspy.ChainOfThought(JudgeDirectExecution) to score
+    whether the result actually addresses the task. Fast-paths obvious
+    failures (empty result, all tool errors) to avoid unnecessary LLM calls.
+    """
+    from ..signatures.evaluation import JudgeDirectExecution
+
+    result_text = str(getattr(pred, "result", ""))
+    trajectory: dict[str, Any] = getattr(pred, "trajectory", None) or {}
+    task = kwargs.get("step_description", "")
+
+    # Fast-path: empty result is always bad
+    if not result_text.strip():
+        return 0.0
+
+    # Fast-path: all tool calls failed
+    tool_count = 0
+    tool_failures = 0
+    idx = 0
+    while f"tool_name_{idx}" in trajectory:
+        tool_count += 1
+        obs = str(trajectory.get(f"observation_{idx}", ""))
+        if obs.startswith(("ERROR:", "Execution error", "BLOCKED:")):
+            tool_failures += 1
+        idx += 1
+    if tool_count > 0 and tool_failures == tool_count:
+        return 0.0
+
+    # LLM judge
+    tool_evidence = _format_trajectory_evidence(trajectory)
+    judge = dspy.ChainOfThought(JudgeDirectExecution)
+    judgement_result = judge(
+        task=task,
+        result=result_text[:1000],
+        tool_evidence=tool_evidence[:500],
+    )
+    return float(judgement_result.judgement.score)
+
+
+class DirectExecutorModule(dspy.Module):  # type: ignore[misc]
+    """Executor for DIRECT mode that returns raw Prediction.
+
+    Unlike ExecutorModule (which returns a string), this returns the full
+    Prediction object from ReAct. Required for dspy.Refine compatibility
+    since Refine calls dict(outputs) on the return value.
+    """
+
+    def __init__(
+        self,
+        execution_tools: list[Any] | None = None,
+        max_iters: int = 10,
+    ) -> None:
+        super().__init__()
+        self.execution_tools = execution_tools or []
+        self.max_iters = max_iters
+
+        self.react = dspy.ReAct(
+            "step_description, context -> result",
+            tools=self.execution_tools,
+            max_iters=max_iters,
+        )
+
+    def forward(self, step_description: str, context: str) -> Prediction:
+        """Execute and return full Prediction (required for dspy.Refine)."""
+        return self.react(  # type: ignore[no-any-return]
+            step_description=step_description,
+            context=context,
+        )
 
 
 class SimpleExecutorModule(dspy.Module):  # type: ignore[misc]

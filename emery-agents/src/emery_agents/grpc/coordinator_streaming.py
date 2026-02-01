@@ -555,10 +555,18 @@ class CoordinatorStreamingHandler:
         ask_question_tool = create_ask_question_tool(question_collector)
         all_tools = [ask_question_tool] + tools
 
-        # Create executor
-        executor = ExecutorModule(
+        # Create executor wrapped in Refine for quality gating
+        from ..reasoning.modules.executor import DirectExecutorModule, direct_execution_reward
+
+        base_executor = DirectExecutorModule(
             execution_tools=all_tools,
             max_iters=10,
+        )
+        executor = dspy.Refine(
+            module=base_executor,
+            N=3,
+            reward_fn=direct_execution_reward,
+            threshold=0.8,
         )
 
         # Get DSPy LM

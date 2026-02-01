@@ -57,6 +57,10 @@ class PlanExecuteState(TypedDict, total=False):
     # Task ledger for evaluation
     ledger: Optional[TaskLedger]
 
+    # === Reflection state (Reflexion pattern) ===
+    step_reflections: Dict[str, Dict[str, Any]]  # step_id → StepReflection.model_dump()
+    reflection_summary: str  # Rolling summary of insights, max ~1500 chars
+
     # === Execution tracking (primitives) ===
     replan_count: int
     max_replans: int
@@ -96,6 +100,9 @@ DEFAULT_STATE: Dict[str, Any] = {
     "stored_plan": None,
     "step_outcomes": {},
     "ledger": None,
+    # Reflection state
+    "step_reflections": {},
+    "reflection_summary": "",
     # Execution tracking
     "replan_count": 0,
     "max_replans": 3,

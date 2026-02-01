@@ -25,6 +25,7 @@ from ..services.execution.events import (
     AutoFixStartedEvent,
     AutoFixCompletedEvent,
     RecoveryPlanProposedEvent,
+    ReflectionCompletedEvent,
     PlanRejectedEvent,
     PlanFeedbackEvent,
     ErrorEvent,
@@ -226,6 +227,23 @@ def convert_coordinator_event(event: Any, step_index: int) -> Optional[Coordinat
                 ],
                 "plan_json": ""
             }
+        }
+
+    # Reflection events (Reflexion pattern)
+    elif isinstance(event, ReflectionCompletedEvent):
+        quality_pct = f"{event.quality_score:.0%}"
+        return {
+            "type": "step_progress",
+            "step_type": "REASONING",
+            "step_name": f"Reflection ({quality_pct} quality)",
+            "content": event.pattern_learned if event.pattern_learned else "Step reflected on",
+            "metadata": {
+                "type": "reflection_completed",
+                "step_id": event.step_id,
+                "quality_score": str(event.quality_score),
+                "was_suboptimal": str(event.was_suboptimal),
+            },
+            "step_index": step_index
         }
 
     # Unified message handling events (handle_message() additions)

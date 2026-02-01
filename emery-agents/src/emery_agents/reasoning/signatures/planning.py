@@ -409,21 +409,33 @@ class ClassifyTask(dspy.Signature):  # type: ignore[misc]
 
     DIRECT mode (execute immediately, no plan needed):
     - Single, well-defined action with clear parameters.
-    - Examples: "Add a 'phone' field to the contacts table", "Delete the old_data table".
-    - All required information is present in the task or context.
+      Examples: "Add a 'phone' field to the contacts table", "Delete the old_data table".
+    - RESEARCH and INFORMATION tasks — gathering info, web search, summarizing findings.
+      These are single-action tasks even when they sound complex.
+      Examples: "Research claude skills and tell me some skills I can copy",
+      "What are best practices for CRM design?", "Find me examples of automation workflows",
+      "Tell me about competitor X", "Summarize what our database contains".
+    - Conversational queries: greetings, questions about capabilities, help requests.
+    - All required information is present in the task or context (or discoverable via tools).
     - No ambiguous business logic or multi-step dependencies.
 
     PLAN_AND_APPROVE mode (create plan, get user approval, then execute):
-    - Multiple steps or resources involved.
+    - Multiple CREATION or MODIFICATION steps involving different resources.
     - Complex business logic or data modeling decisions.
-    - Examples: "Build a CRM system", "Set up an inventory management workflow".
+      Examples: "Build a CRM system", "Set up an inventory management workflow".
     - Cross-capability tasks (needs schema_builder AND app_builder).
+    - NOTE: Research tasks are NOT PLAN_AND_APPROVE even if they sound complex.
+      "Research X and tell me about Y" = DIRECT (uses web_search + synthesize).
+      "What are best practices for X" = DIRECT (uses web_search).
+      Only classify as PLAN_AND_APPROVE when the task requires BUILDING or MODIFYING
+      multiple resources in the workspace.
 
     SCORING FACTORS:
     - Resource count: 1 resource = likely DIRECT, 2+ = likely PLAN_AND_APPROVE.
-    - Verb complexity: "add"/"delete" = simple; "build"/"set up"/"create system" = complex.
+    - Verb complexity: "add"/"delete"/"research"/"find"/"tell me" = DIRECT;
+      "build"/"set up"/"create system" = PLAN_AND_APPROVE.
     - Ambiguity: clear parameters = DIRECT, vague requirements = PLAN_AND_APPROVE.
-    - Risk: read-only/additive = lower risk, destructive/schema changes = higher risk.
+    - Risk: read-only/additive/research = lower risk, destructive/schema changes = higher risk.
 
     CLARIFICATION:
     - Only flag needs_clarification when the task is too vague to even classify.
@@ -442,6 +454,61 @@ class ClassifyTask(dspy.Signature):  # type: ignore[misc]
     )
 
     classification: TaskClassificationResult = dspy.OutputField()
+
+
+class ReasoningApproach(BaseModel):
+    """Self-Discover: selected reasoning approach for plan generation."""
+
+    primary_approach: str = Field(
+        description="Primary reasoning approach: 'analytical' (break down into components), "
+                    "'creative' (novel combinations, analogies), 'systems-thinking' (relationships, dependencies), "
+                    "or 'step-by-step' (sequential decomposition)"
+    )
+    secondary_approach: Optional[str] = Field(
+        default=None,
+        description="Optional secondary approach to combine with primary"
+    )
+    reasoning: str = Field(
+        description="Why this approach fits the task (1-2 sentences)"
+    )
+    key_considerations: list[str] = Field(
+        default_factory=list,
+        description="2-4 key considerations the planner should keep in mind"
+    )
+
+
+class SelectReasoningApproach(dspy.Signature):  # type: ignore[misc]
+    """Select the best reasoning approach for planning this task.
+
+    This is a meta-reasoning step (Self-Discover pattern): before generating a plan,
+    decide HOW to think about the problem.
+
+    APPROACH SELECTION GUIDE:
+    - analytical: Best for tasks with clear structure — data modeling, schema design,
+      CRUD operations, field configurations. Break the task into components.
+    - creative: Best for open-ended tasks — automation design, workflow optimization,
+      finding novel solutions. Use analogies and lateral thinking.
+    - systems-thinking: Best for tasks involving multiple interconnected resources —
+      building systems (CRM, inventory), cross-capability coordination. Focus on
+      relationships and dependencies.
+    - step-by-step: Best for procedural tasks with clear ordering — migrations,
+      setup sequences, data transformations. Focus on correct sequencing.
+
+    Most tasks benefit from a primary approach. Add a secondary only when the task
+    genuinely spans two modes (e.g., systems-thinking + analytical for a complex CRM).
+    """
+
+    request: str = dspy.InputField(
+        desc="The user's goal or task description"
+    )
+    task_analysis: str = dspy.InputField(
+        desc="Pre-analysis: intent, domain, entities, complexity"
+    )
+    workspace_context: str = dspy.InputField(
+        desc="JSON of existing workspace resources (for understanding scope)"
+    )
+
+    approach: ReasoningApproach = dspy.OutputField()
 
 
 class GapItemOutput(BaseModel):

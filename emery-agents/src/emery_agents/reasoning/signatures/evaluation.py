@@ -98,6 +98,55 @@ class EvaluateGoal(dspy.Signature):  # type: ignore[misc]
     evaluation: GoalEvaluation = dspy.OutputField()
 
 
+class DirectExecutionJudgement(BaseModel):
+    """LLM judge assessment of a DIRECT execution result."""
+
+    score: float = Field(
+        ge=0.0, le=1.0,
+        description="Quality score. "
+                    "1.0 = task fully addressed, tools succeeded, result is actionable. "
+                    "0.7-0.9 = task mostly addressed, minor gaps. "
+                    "0.4-0.6 = partially addressed, significant gaps or errors. "
+                    "Below 0.4 = failed, wrong, or irrelevant result.",
+    )
+    reasoning: str = Field(
+        description="Brief explanation of the score (1-2 sentences)"
+    )
+
+
+class JudgeDirectExecution(dspy.Signature):  # type: ignore[misc]
+    """Judge whether a DIRECT execution result adequately addresses the user's task.
+
+    SCORING CRITERIA:
+
+    1. TASK COMPLETION: Does the result address what the user asked for?
+       - Action tasks ("add a field"): Was the action performed? Check tool_evidence.
+       - Research tasks ("research X"): Is the information relevant and substantive?
+       - Conversational tasks ("tell me about"): Is the response helpful?
+
+    2. TOOL EVIDENCE: Did tool calls succeed?
+       - All SUCCESS = strong signal of completion.
+       - Mixed SUCCESS/FAILED = partial, score accordingly.
+       - All FAILED or no tools when tools were needed = low score.
+
+    3. RESULT QUALITY: Is the result actionable and well-formed?
+       - Not empty, not an error message, not a generic non-answer.
+       - Specific to the task (not boilerplate).
+
+    Score generously for conversational/research tasks that provide useful information.
+    Score strictly for action tasks where tool evidence must confirm the action was taken.
+    """
+
+    task: str = dspy.InputField(desc="The user's original task")
+    result: str = dspy.InputField(desc="The execution result to judge")
+    tool_evidence: str = dspy.InputField(
+        desc="Tool call outcomes: tool_name -> SUCCESS/FAILED with response preview. "
+             "Empty string if no tools were called."
+    )
+
+    judgement: DirectExecutionJudgement = dspy.OutputField()
+
+
 class RecoveryAction(BaseModel):
     """Proposed action to recover from a failure.
 
@@ -364,3 +413,67 @@ class SynthesizeAnswer(dspy.Signature):  # type: ignore[misc]
         desc="User-facing summary of what was accomplished. Lead with the outcome, "
              "organize by deliverable, include actionable details. No step IDs or tool names."
     )
+
+
+# === Reflexion Signatures ===
+
+
+class StepReflection(BaseModel):
+    """Reflection on a completed step's execution quality."""
+
+    quality_score: float = Field(
+        ge=0.0, le=1.0,
+        description="Overall quality: 1.0=optimal, 0.7-0.9=good with minor issues, "
+                    "0.5-0.7=suboptimal but functional, below 0.5=poor",
+    )
+    was_suboptimal: bool = Field(
+        description="True if the step succeeded but could have been done better"
+    )
+    what_went_well: str = Field(description="Key positive aspects of the execution")
+    what_could_improve: str = Field(
+        description="Specific improvements for similar steps in the future"
+    )
+    refined_instructions: str = Field(
+        description="Improved instructions that would produce better results. "
+                    "Empty string if execution was optimal.",
+    )
+    pattern_learned: str = Field(
+        description="Reusable insight for subsequent steps. "
+                    "Example: 'Always check if table exists before creating fields'. "
+                    "Empty string if no pattern learned.",
+    )
+
+
+class ReflectOnExecution(dspy.Signature):  # type: ignore[misc]
+    """Reflect on a completed step to extract insights for future steps.
+
+    REFLECTION PROCESS:
+    1. Compare step_result against step_description — did it accomplish the goal?
+    2. Check tool_evidence for efficiency — were unnecessary tools called?
+       Were there retries that could be avoided?
+    3. Consider plan_goal — does this step's output set up the next steps well?
+    4. Look at previous_reflections — are we repeating the same mistakes?
+
+    FOCUS ON ACTIONABLE INSIGHTS:
+    - "The table_crud tool returns the table ID in the response — pass this
+      directly to the next step instead of looking it up again"
+    - "Search returned too many results — use more specific keywords"
+    - NOT vague observations like "the step could be faster"
+    """
+
+    step_description: str = dspy.InputField(desc="What the step was supposed to do")
+    step_result: str = dspy.InputField(
+        desc="What the step actually produced (truncated to 500 chars)"
+    )
+    tool_evidence: str = dspy.InputField(
+        desc="Raw tool call outcomes — SUCCESS/FAILED with response previews"
+    )
+    plan_goal: str = dspy.InputField(
+        desc="The overall plan goal — for assessing how this step contributes"
+    )
+    previous_reflections: str = dspy.InputField(
+        desc="Rolling summary of reflections from previous steps (max 1500 chars). "
+             "Check for recurring patterns.",
+    )
+
+    reflection: StepReflection = dspy.OutputField()
