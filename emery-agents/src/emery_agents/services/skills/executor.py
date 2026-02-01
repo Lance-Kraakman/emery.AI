@@ -21,7 +21,7 @@ from ...entities.skill_config import (
 from ...entities.task import SkillOutputValue
 from ...reasoning.modules.extractor import OutputExtractorModule
 from ...reasoning.signatures.extraction import TargetFieldMeta
-from ...reasoning.tools.api import TableAPI
+from emery_agents.api import TableAPI
 from ...types import SkillExecutionResult
 from ...utils.step_utils import step_to_progress_dict, RawProgressDict
 from ..agents.factory import AgentFactory, AgentConfig

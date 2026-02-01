@@ -1,36 +1,35 @@
-"""Typed Database API - shared by tools and services."""
+"""Typed App API - shared by tools and services."""
 
 from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field as dataclass_field
 from typing import Any, Dict, List, Optional
 
-from ..http_client import make_request
+from .http_client import make_request
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
-class Database:
-    """Database entity."""
+class App:
+    """App entity."""
 
     id: int
     name: str
     description: str = ""
-    table_count: int = 0
     slug: str = ""
+    pages: List[Any] = dataclass_field(default_factory=list)
 
 
-class DatabaseAPI:
-    """Typed API for database operations.
+class AppAPI:
+    """Typed API for app operations.
 
     Usage:
-        api = DatabaseAPI(api_key, org_id)
-        databases = api.list()
-        db = api.get(123)
-        new_db = api.create("My Database", "Description")
+        api = AppAPI(api_key, org_id)
+        apps = api.list()
+        app = api.get(123)
     """
 
     def __init__(self, api_key: str, org_id: str):
@@ -39,11 +38,7 @@ class DatabaseAPI:
 
     @staticmethod
     def _unwrap_entity(result: str) -> Optional[Dict[str, Any]]:
-        """Unwrap entity from API envelope {"success": true, "data": {...}}.
-
-        All Next.js API routes return responses wrapped in a standard envelope.
-        This method extracts the inner entity from the "data" key.
-        """
+        """Unwrap entity from API envelope {"success": true, "data": {...}}."""
         try:
             parsed = json.loads(result)
             if isinstance(parsed, dict) and "data" in parsed:
@@ -52,16 +47,16 @@ class DatabaseAPI:
         except (json.JSONDecodeError, TypeError):
             return None
 
-    def list(self, filters: Optional[Dict[str, Any]] = None) -> List[Database]:
-        """List all databases.
+    def list(self, filters: Optional[Dict[str, Any]] = None) -> List[App]:
+        """List all apps.
 
         Args:
             filters: Optional filter criteria
 
         Returns:
-            List of Database objects
+            List of App objects
         """
-        endpoint = "databases"
+        endpoint = "apps"
         if filters:
             params = "&".join(f"{key}={value}" for key, value in filters.items())
             endpoint += f"?{params}"
@@ -74,41 +69,37 @@ class DatabaseAPI:
             org_id=self._org_id,
         )
 
-        logger.info(f"📡 DatabaseAPI.list response: {result[:200]}..." if len(result) > 200 else f"📡 DatabaseAPI.list response: {result}")
-
         if result.startswith("ERROR"):
-            logger.warning(f"Database list failed: {result}")
+            logger.debug(f"App list failed: {result}")
             return []
 
         try:
             data = json.loads(result)
-            databases = [
-                Database(
-                    id=db["id"],
-                    name=db.get("name", ""),
-                    description=db.get("description", ""),
-                    table_count=db.get("tableCount", 0),
-                    slug=db.get("slug", ""),
+            return [
+                App(
+                    id=app["id"],
+                    name=app.get("name", ""),
+                    description=app.get("description", ""),
+                    slug=app.get("slug", ""),
+                    pages=app.get("pages", []),
                 )
-                for db in data.get("data", [])
+                for app in data.get("data", [])
             ]
-            logger.info(f"📁 Parsed {len(databases)} databases from API")
-            return databases
         except (json.JSONDecodeError, KeyError) as e:
-            logger.warning(f"Database parse failed: {e}, raw: {result[:200]}")
+            logger.debug(f"App parse failed: {e}")
             return []
 
-    def get(self, database_id: int) -> Optional[Database]:
-        """Get database by ID.
+    def get(self, app_id: int) -> Optional[App]:
+        """Get app by ID.
 
         Args:
-            database_id: Database ID
+            app_id: App ID
 
         Returns:
-            Database object or None if not found
+            App object or None if not found
         """
         result = make_request(
-            endpoint=f"databases/{database_id}",
+            endpoint=f"apps/{app_id}",
             method="GET",
             data=None,
             auth_token=self._api_key,
@@ -120,33 +111,33 @@ class DatabaseAPI:
 
         entity = self._unwrap_entity(result)
         if entity is None:
-            logger.warning(f"Database get: failed to parse response: {result[:200]}")
+            logger.warning(f"App get: failed to parse response: {result[:200]}")
             return None
 
         try:
-            return Database(
+            return App(
                 id=entity["id"],
                 name=entity.get("name", ""),
                 description=entity.get("description", ""),
-                table_count=entity.get("tableCount", 0),
                 slug=entity.get("slug", ""),
+                pages=entity.get("pages", []),
             )
         except KeyError as e:
-            logger.warning(f"Database get: missing field {e}: {result[:200]}")
+            logger.warning(f"App get: missing field {e}: {result[:200]}")
             return None
 
-    def create(self, name: str, description: str = "") -> Optional[Database]:
-        """Create database.
+    def create(self, name: str, description: str = "") -> Optional[App]:
+        """Create app.
 
         Args:
-            name: Database name
+            name: App name
             description: Optional description
 
         Returns:
-            Created Database or None on failure
+            Created App or None on failure
         """
         result = make_request(
-            endpoint="databases",
+            endpoint="apps",
             method="POST",
             data={"name": name, "description": description},
             auth_token=self._api_key,
@@ -154,38 +145,36 @@ class DatabaseAPI:
         )
 
         if result.startswith("ERROR"):
-            logger.debug(f"Database create failed: {result}")
+            logger.debug(f"App create failed: {result}")
             return None
 
         entity = self._unwrap_entity(result)
         if entity is None:
-            logger.warning(f"Database create: failed to parse response: {result[:200]}")
+            logger.warning(f"App create: failed to parse response: {result[:200]}")
             return None
 
         try:
-            return Database(
+            return App(
                 id=entity["id"],
                 name=entity.get("name", name),
                 description=entity.get("description", description),
             )
         except KeyError as e:
-            logger.warning(f"Database create: missing field {e}: {result[:200]}")
+            logger.warning(f"App create: missing field {e}: {result[:200]}")
             return None
 
-    def update(
-        self, database_id: int, data: Dict[str, Any]
-    ) -> Optional[Database]:
-        """Update database.
+    def update(self, app_id: int, data: Dict[str, Any]) -> Optional[App]:
+        """Update app.
 
         Args:
-            database_id: Database ID
-            data: Update data (name, description)
+            app_id: App ID
+            data: Update data
 
         Returns:
-            Updated Database or None on failure
+            Updated App or None on failure
         """
         result = make_request(
-            endpoint=f"databases/{database_id}",
+            endpoint=f"apps/{app_id}",
             method="PUT",
             data=data,
             auth_token=self._api_key,
@@ -197,30 +186,30 @@ class DatabaseAPI:
 
         entity = self._unwrap_entity(result)
         if entity is None:
-            logger.warning(f"Database update: failed to parse response: {result[:200]}")
+            logger.warning(f"App update: failed to parse response: {result[:200]}")
             return None
 
         try:
-            return Database(
+            return App(
                 id=entity["id"],
                 name=entity.get("name", ""),
                 description=entity.get("description", ""),
             )
         except KeyError as e:
-            logger.warning(f"Database update: missing field {e}: {result[:200]}")
+            logger.warning(f"App update: missing field {e}: {result[:200]}")
             return None
 
-    def delete(self, database_id: int) -> bool:
-        """Delete database.
+    def delete(self, app_id: int) -> bool:
+        """Delete app.
 
         Args:
-            database_id: Database ID
+            app_id: App ID
 
         Returns:
             True on success, False on failure
         """
         result = make_request(
-            endpoint=f"databases/{database_id}",
+            endpoint=f"apps/{app_id}",
             method="DELETE",
             data=None,
             auth_token=self._api_key,

@@ -98,6 +98,7 @@ class WorkspaceSkill:
     agent_name: Optional[str] = None
     inputs: List[Dict[str, Any]] = field(default_factory=list)
     raw: Optional[Dict[str, Any]] = None
+    is_system: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         return {

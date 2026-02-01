@@ -1,35 +1,36 @@
-"""Typed App API - shared by tools and services."""
+"""Typed Database API - shared by tools and services."""
 
 from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass, field as dataclass_field
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from ..http_client import make_request
+from .http_client import make_request
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
-class App:
-    """App entity."""
+class Database:
+    """Database entity."""
 
     id: int
     name: str
     description: str = ""
+    table_count: int = 0
     slug: str = ""
-    pages: List[Any] = dataclass_field(default_factory=list)
 
 
-class AppAPI:
-    """Typed API for app operations.
+class DatabaseAPI:
+    """Typed API for database operations.
 
     Usage:
-        api = AppAPI(api_key, org_id)
-        apps = api.list()
-        app = api.get(123)
+        api = DatabaseAPI(api_key, org_id)
+        databases = api.list()
+        db = api.get(123)
+        new_db = api.create("My Database", "Description")
     """
 
     def __init__(self, api_key: str, org_id: str):
@@ -47,16 +48,16 @@ class AppAPI:
         except (json.JSONDecodeError, TypeError):
             return None
 
-    def list(self, filters: Optional[Dict[str, Any]] = None) -> List[App]:
-        """List all apps.
+    def list(self, filters: Optional[Dict[str, Any]] = None) -> List[Database]:
+        """List all databases.
 
         Args:
             filters: Optional filter criteria
 
         Returns:
-            List of App objects
+            List of Database objects
         """
-        endpoint = "apps"
+        endpoint = "databases"
         if filters:
             params = "&".join(f"{key}={value}" for key, value in filters.items())
             endpoint += f"?{params}"
@@ -70,36 +71,36 @@ class AppAPI:
         )
 
         if result.startswith("ERROR"):
-            logger.debug(f"App list failed: {result}")
+            logger.warning(f"Database list failed: {result}")
             return []
 
         try:
             data = json.loads(result)
             return [
-                App(
-                    id=app["id"],
-                    name=app.get("name", ""),
-                    description=app.get("description", ""),
-                    slug=app.get("slug", ""),
-                    pages=app.get("pages", []),
+                Database(
+                    id=db["id"],
+                    name=db.get("name", ""),
+                    description=db.get("description", ""),
+                    table_count=db.get("tableCount", 0),
+                    slug=db.get("slug", ""),
                 )
-                for app in data.get("data", [])
+                for db in data.get("data", [])
             ]
         except (json.JSONDecodeError, KeyError) as e:
-            logger.debug(f"App parse failed: {e}")
+            logger.warning(f"Database parse failed: {e}, raw: {result[:200]}")
             return []
 
-    def get(self, app_id: int) -> Optional[App]:
-        """Get app by ID.
+    def get(self, database_id: int) -> Optional[Database]:
+        """Get database by ID.
 
         Args:
-            app_id: App ID
+            database_id: Database ID
 
         Returns:
-            App object or None if not found
+            Database object or None if not found
         """
         result = make_request(
-            endpoint=f"apps/{app_id}",
+            endpoint=f"databases/{database_id}",
             method="GET",
             data=None,
             auth_token=self._api_key,
@@ -111,33 +112,33 @@ class AppAPI:
 
         entity = self._unwrap_entity(result)
         if entity is None:
-            logger.warning(f"App get: failed to parse response: {result[:200]}")
+            logger.warning(f"Database get: failed to parse response: {result[:200]}")
             return None
 
         try:
-            return App(
+            return Database(
                 id=entity["id"],
                 name=entity.get("name", ""),
                 description=entity.get("description", ""),
+                table_count=entity.get("tableCount", 0),
                 slug=entity.get("slug", ""),
-                pages=entity.get("pages", []),
             )
         except KeyError as e:
-            logger.warning(f"App get: missing field {e}: {result[:200]}")
+            logger.warning(f"Database get: missing field {e}: {result[:200]}")
             return None
 
-    def create(self, name: str, description: str = "") -> Optional[App]:
-        """Create app.
+    def create(self, name: str, description: str = "") -> Optional[Database]:
+        """Create database.
 
         Args:
-            name: App name
+            name: Database name
             description: Optional description
 
         Returns:
-            Created App or None on failure
+            Created Database or None on failure
         """
         result = make_request(
-            endpoint="apps",
+            endpoint="databases",
             method="POST",
             data={"name": name, "description": description},
             auth_token=self._api_key,
@@ -145,36 +146,38 @@ class AppAPI:
         )
 
         if result.startswith("ERROR"):
-            logger.debug(f"App create failed: {result}")
+            logger.debug(f"Database create failed: {result}")
             return None
 
         entity = self._unwrap_entity(result)
         if entity is None:
-            logger.warning(f"App create: failed to parse response: {result[:200]}")
+            logger.warning(f"Database create: failed to parse response: {result[:200]}")
             return None
 
         try:
-            return App(
+            return Database(
                 id=entity["id"],
                 name=entity.get("name", name),
                 description=entity.get("description", description),
             )
         except KeyError as e:
-            logger.warning(f"App create: missing field {e}: {result[:200]}")
+            logger.warning(f"Database create: missing field {e}: {result[:200]}")
             return None
 
-    def update(self, app_id: int, data: Dict[str, Any]) -> Optional[App]:
-        """Update app.
+    def update(
+        self, database_id: int, data: Dict[str, Any]
+    ) -> Optional[Database]:
+        """Update database.
 
         Args:
-            app_id: App ID
-            data: Update data
+            database_id: Database ID
+            data: Update data (name, description)
 
         Returns:
-            Updated App or None on failure
+            Updated Database or None on failure
         """
         result = make_request(
-            endpoint=f"apps/{app_id}",
+            endpoint=f"databases/{database_id}",
             method="PUT",
             data=data,
             auth_token=self._api_key,
@@ -186,30 +189,30 @@ class AppAPI:
 
         entity = self._unwrap_entity(result)
         if entity is None:
-            logger.warning(f"App update: failed to parse response: {result[:200]}")
+            logger.warning(f"Database update: failed to parse response: {result[:200]}")
             return None
 
         try:
-            return App(
+            return Database(
                 id=entity["id"],
                 name=entity.get("name", ""),
                 description=entity.get("description", ""),
             )
         except KeyError as e:
-            logger.warning(f"App update: missing field {e}: {result[:200]}")
+            logger.warning(f"Database update: missing field {e}: {result[:200]}")
             return None
 
-    def delete(self, app_id: int) -> bool:
-        """Delete app.
+    def delete(self, database_id: int) -> bool:
+        """Delete database.
 
         Args:
-            app_id: App ID
+            database_id: Database ID
 
         Returns:
             True on success, False on failure
         """
         result = make_request(
-            endpoint=f"apps/{app_id}",
+            endpoint=f"databases/{database_id}",
             method="DELETE",
             data=None,
             auth_token=self._api_key,

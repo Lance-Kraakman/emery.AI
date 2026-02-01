@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from ....services.agents.api import fetch_agent_by_id_sync
+from emery_agents.api import fetch_agent_by_id_sync
 
 logger = logging.getLogger(__name__)
 

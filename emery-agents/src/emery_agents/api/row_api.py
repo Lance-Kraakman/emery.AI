@@ -6,7 +6,7 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 
-from ..http_client import make_request
+from .http_client import make_request
 
 logger = logging.getLogger(__name__)
 

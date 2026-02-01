@@ -23,7 +23,7 @@ from typing import AsyncIterator, Optional
 
 from ..utils.mention_parser import SkillInvocation
 from ..services.tools.provider import ToolProvider
-from ..services.skills.api import SkillAPIService
+from emery_agents.api import SkillAPIService
 from ..reasoning.tools.integrations.dynamic_skill import DynamicSkillTool
 from .response_types import StreamResponseDict, create_error_response
 

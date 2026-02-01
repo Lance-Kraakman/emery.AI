@@ -1190,7 +1190,7 @@ class StepExecutorService:
     ) -> Dict[str, Any]:
         """Execute a direct table write step (no LLM)."""
         import asyncio
-        from ...reasoning.tools.api import RowAPI
+        from emery_agents.api import RowAPI
 
         write_config = step.write_config
         if not write_config or not write_config.target_table_id:

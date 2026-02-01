@@ -23,7 +23,7 @@ from ...services.execution.events import (
     ErrorEvent,
 )
 from ...tools.tool_modes import ToolMode, filter_tools_for_mode
-from ...reasoning.tools.api import WorkspaceAPI
+from emery_agents.api import WorkspaceAPI
 from ...reasoning.tools.discovery import create_discovery_tools
 from ..state import PlanExecuteState
 from ..runtime import RuntimeContext

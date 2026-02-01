@@ -6,8 +6,8 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 
-from ..http_client import make_request
-from ....entities.workspace import (
+from .http_client import make_request
+from ..entities.workspace import (
     WorkspaceField,
     WorkspacePage,
     WorkspaceApp,
