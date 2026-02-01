@@ -12,7 +12,7 @@ SECURITY: The ToolProvider exposes an http_client property for authenticated
 requests, NOT the raw api_key. This prevents credential exposure to skills/agents.
 
 AIDEV-NOTE: DSPy Migration (Jan 2026)
-- Uses DSPy tool factories from reasoning/tools/crud/
+- Uses DSPy tool factories from tools/crud/
 - Returns plain callables for DSPy ReAct (no wrapper needed)
 """
 

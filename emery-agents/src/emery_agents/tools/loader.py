@@ -5,7 +5,7 @@ Loads tools from the unified metadata JSON file that serves as the single
 source of truth for both frontend and backend tool configurations.
 
 AIDEV-NOTE: DSPy Migration (Jan 2026)
-- CRUD tools use DSPy factories from reasoning/tools/crud/
+- CRUD tools use DSPy factories from tools/crud/
 - Returns plain callables for DSPy ReAct (no wrapper needed)
 - Other tools (pipedream, skills, base) still use smolagents temporarily
 """
