@@ -28,9 +28,14 @@ from ..services.plan_service import PlanService
 from ..reasoning.config import get_dspy_lm, get_lm_for_task
 from ..reasoning.modules.executor import ExecutorModule
 from ..reasoning.modules.classifier import TaskClassifierModule
-from ..reasoning.signatures.planning import TaskExecutionMode
+from ..reasoning.signatures.planning import (
+    TaskClassificationResult,
+    TaskComplexity,
+    TaskExecutionMode,
+)
 from ..reasoning.utils import extract_dspy_result
-from emery_agents.tools import create_all_tools, QuestionCollector, create_ask_question_tool
+from emery_agents.tools.factories import create_all_tools
+from emery_agents.tools.output import QuestionCollector, create_ask_question_tool
 from .coordinator_event_converter import convert_coordinator_event
 from .approval_handler import is_approval_response
 from .response_types import create_error_response
@@ -154,24 +159,43 @@ class CoordinatorStreamingHandler:
         task: str,
         org_model: Optional[str],
         context: str = "",
-    ) -> TaskExecutionMode:
+        available_tools: Optional[List[dspy.Tool]] = None,
+    ) -> TaskClassificationResult:
         """
-        Classify a task to determine execution mode.
+        Classify a task to determine execution mode and recommend tools.
 
         Args:
             task: The user's task
             org_model: Model to use for classification
             context: Optional context about system state
+            available_tools: Optional list of tools to show the classifier for selection
 
         Returns:
-            TaskExecutionMode.DIRECT or TaskExecutionMode.PLAN_AND_APPROVE
+            TaskClassificationResult with mode, recommended_tools, and reasoning
         """
         classifier = self._get_classifier()
 
-        with dspy.context(lm=get_dspy_lm(org_model)):
-            result = classifier.classify(task=task, context=context)
+        # Build tool descriptions for the classifier
+        tools_desc = ""
+        if available_tools:
+            tools_desc = json.dumps([
+                {"name": t.name, "description": getattr(t, 'desc', str(t))[:100]}
+                for t in available_tools
+            ])
 
-        return result.mode
+        with dspy.context(lm=get_dspy_lm(org_model)):
+            result = classifier.classify(
+                task=task,
+                context=context,
+                available_tools=tools_desc,
+            )
+
+        if result.recommended_tools:
+            logger.info(
+                f"Classifier recommended tools: {result.recommended_tools}"
+            )
+
+        return result
 
     async def stream_response(
         self,

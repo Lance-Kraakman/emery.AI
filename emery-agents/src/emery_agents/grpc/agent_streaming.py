@@ -449,7 +449,7 @@ class AgentStreamingHandler:
         try:
             from ..reasoning.config import get_dspy_lm
             from ..reasoning.modules.executor import ExecutorModule
-            from emery_agents.tools import create_all_tools
+            from emery_agents.tools.factories import create_all_tools
 
             import dspy
 

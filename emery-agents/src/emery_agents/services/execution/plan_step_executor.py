@@ -29,11 +29,9 @@ from ...ace import StepResult
 from ...reasoning.config import get_dspy_lm
 from ...reasoning.modules.executor import ExecutorModule, SimpleExecutorModule
 from ...reasoning.utils import extract_dspy_result, build_step_outcome, StepOutcome
-from emery_agents.tools import (
-    create_all_tools,
-)
+from emery_agents.tools.factories import create_all_tools
 from ...entities.models.plan import Plan, PlanStep, PlanStepStatus
-from emery_agents.tools import CapabilityRegistry
+from emery_agents.tools.capability_registry import CapabilityRegistry
 from ...utils.session_logger import get_session_logger
 from .prompt_template_resolver import resolve_prompt_template
 from ..protocols import ModelProviderProtocol
