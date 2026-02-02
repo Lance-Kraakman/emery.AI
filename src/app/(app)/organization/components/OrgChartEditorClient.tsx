@@ -622,7 +622,7 @@ export function OrgChartEditorClient({
         {selectedNodeId && selectedNodeType && (
           <div
             className={cn(
-              'absolute top-2 right-2 w-80 max-h-[calc(100%-1rem)] bg-background/50 backdrop-blur-sm border rounded-lg shadow-lg overflow-hidden flex flex-col',
+              'absolute top-2 right-2 w-56 max-h-[calc(100%-1rem)] bg-background/50 backdrop-blur-sm border rounded-lg shadow-lg overflow-hidden flex flex-col',
               'transition-all duration-200'
             )}
           >

@@ -3,23 +3,27 @@
 /**
  * EntityPalette Component
  *
- * Draggable palette for adding new entities to the org chart.
- * Supports creating agents, skills, and databases.
+ * Icon-only vertical toolbar for adding new entities to the org chart.
+ * Supports creating agents, skills, and databases via drag or click.
  */
 
 import React from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Bot, Sparkles, Database, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useOrgChartDragSafe } from '@/components/org-chart/context';
 import type { OrgChartNodeType } from '@/components/org-chart/types';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { Button } from '@/components/ui/button';
 
 interface PaletteItem {
   type: OrgChartNodeType;
   label: string;
   icon: React.ReactNode;
-  description: string;
-  color: string;
 }
 
 const paletteItems: PaletteItem[] = [
@@ -27,35 +31,24 @@ const paletteItems: PaletteItem[] = [
     type: 'agent',
     label: 'Agent',
     icon: <Bot className="h-4 w-4" />,
-    description: 'Create a new agent',
-    color: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900 dark:text-emerald-400',
   },
   {
     type: 'skill',
     label: 'Skill',
     icon: <Sparkles className="h-4 w-4" />,
-    description: 'Add a new skill',
-    color: 'bg-violet-100 text-violet-600 dark:bg-violet-900 dark:text-violet-400',
   },
   {
     type: 'database',
     label: 'Database',
     icon: <Database className="h-4 w-4" />,
-    description: 'Create a database',
-    color: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
   },
 ];
 
 interface EntityPaletteProps {
-  /** Whether the palette is disabled */
   disabled?: boolean;
-  /** Callback when an entity should be created */
   onCreateEntity?: (type: OrgChartNodeType) => void;
 }
 
-/**
- * EntityPalette - Drag-and-drop palette for adding entities to org chart
- */
 export function EntityPalette({ disabled, onCreateEntity }: EntityPaletteProps) {
   const { setDragType } = useOrgChartDragSafe();
 
@@ -76,39 +69,35 @@ export function EntityPalette({ disabled, onCreateEntity }: EntityPaletteProps) 
   };
 
   return (
-    <Card className="w-48 shadow-lg bg-background">
-      <CardHeader className="p-3 pb-2">
-        <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-          <Plus className="h-3 w-3" />
-          Add Entity
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="p-2 pt-0 space-y-1">
+    <TooltipProvider delayDuration={300}>
+      <div className="flex flex-col gap-1 bg-background/50 backdrop-blur-sm border rounded-lg shadow-sm p-1">
+        <div className="flex items-center justify-center h-8 w-8">
+          <Plus className="h-4 w-4 text-muted-foreground" />
+        </div>
+        <div className="h-px bg-border mx-1" />
         {paletteItems.map((item) => (
-          <div
-            key={item.type}
-            draggable={!disabled}
-            onDragStart={(e) => onDragStart(e, item.type)}
-            onDragEnd={onDragEnd}
-            onClick={() => handleClick(item.type)}
-            className={cn(
-              'flex items-center gap-2 p-2 rounded-md cursor-grab',
-              'hover:bg-muted transition-colors',
-              'active:cursor-grabbing',
-              disabled && 'opacity-50 cursor-not-allowed'
-            )}
-          >
-            <div className={cn('p-1.5 rounded', item.color)}>{item.icon}</div>
-            <div className="min-w-0">
-              <p className="text-sm font-medium">{item.label}</p>
-              <p className="text-[10px] text-muted-foreground truncate">
-                {item.description}
-              </p>
-            </div>
-          </div>
+          <Tooltip key={item.type}>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn('h-8 w-8', disabled && 'opacity-50')}
+                draggable={!disabled}
+                onDragStart={(e) => onDragStart(e, item.type)}
+                onDragEnd={onDragEnd}
+                onClick={() => handleClick(item.type)}
+                disabled={disabled}
+              >
+                {item.icon}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">
+              <p>{item.label}</p>
+            </TooltipContent>
+          </Tooltip>
         ))}
-      </CardContent>
-    </Card>
+      </div>
+    </TooltipProvider>
   );
 }
 
