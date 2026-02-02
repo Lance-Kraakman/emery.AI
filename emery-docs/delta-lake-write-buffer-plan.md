@@ -121,7 +121,12 @@ All existing filter/sort/pagination logic works unchanged on the merged DataFram
 
 ### Flush Mechanism
 
-A **daemon thread** in the Python gRPC worker flushes every N seconds (default: 5s, configurable via `BUFFER_FLUSH_INTERVAL_SECONDS`).
+A **daemon thread** in the Python gRPC worker flushes based on a dual trigger — time or size, whichever comes first:
+
+- **Time trigger**: 60 seconds since last flush for a table (configurable via `BUFFER_FLUSH_INTERVAL_SECONDS`, default: 60)
+- **Size trigger**: Buffer exceeds threshold for a table (configurable via `BUFFER_FLUSH_SIZE_MB`, default: 5MB)
+
+The flush worker checks both thresholds each cycle (runs every ~5s to poll). Per-table buffer size is tracked by summing JSON byte lengths on HSET.
 
 Flush procedure per table:
 1. `RENAME buffer:{s3_uri}:ops -> buffer:{s3_uri}:flushing` (atomic -- new writes go to fresh `:ops` key)
@@ -421,8 +426,37 @@ BUFFER_ENABLED=true
 
 ---
 
+## Complexity Assessment
+
+- **~250 lines new code, ~280 lines reused** from existing operations
+- **Fully isolated** in `emery-agents/src/emery_agents/grpc/table/` — 3 new files, small mods to 3 existing
+- **Runs as a daemon thread** inside the existing table gRPC server (port 50052), not a separate service
+- **Flush worker reuses existing functions directly** — `write_with_schema_evolution`, `write_with_merge_operation`, `DeltaTable.delete()` have no gRPC coupling
+- **Follows established patterns** — `delta_cache.py` for thread-safe singleton, `SessionManager._cleanup_loop()` for background timer
+
+### Relationship to `delta_cache.py`
+
+The delta cache and write buffer solve different problems and are both needed:
+
+| | Delta Cache | Write Buffer |
+|---|---|---|
+| What it caches | `DeltaTable` metadata objects | Actual row data waiting to be written |
+| Problem it solves | Avoids ~50-100ms S3 metadata reads | Avoids new Parquet file per row write |
+| Lives in | Python process memory | Redis |
+
+With the write buffer, delta cache becomes *more* important — the flush worker needs `DeltaTable` objects and shouldn't re-read S3 metadata every cycle.
+
+### Infra Gap
+
+`REDIS_URL` is not currently passed to the Python worker. Must be added to:
+- `docker-compose.yml` (Python worker environment)
+- `infra/app_stack.py` (agent ECS task definition)
+
+---
+
 ## Future Considerations (Not In Scope)
 
+- **Redis Multi-AZ failover**: Current setup is single-node ElastiCache Redis (`cache.t4g.micro`, ~$9/month). With a 60-second buffer window, up to 1 minute of writes could be lost on node failure. Upgrading to a `CfnReplicationGroup` with `num_cache_clusters=2` and `automatic_failover_enabled=True` adds a replica in another AZ for ~$18/month total. Recommended when write volume or data criticality increases.
 - **Delta Lake VACUUM job**: Separate concern -- clean up old Parquet files from past flushes. Should be scheduled independently (e.g., daily cron).
 - **Delta Lake OPTIMIZE/COMPACT**: Separate concern -- consolidate small files from historical writes. Run periodically.
 - **TypeScript-side cache invalidation on flush**: Could publish Redis Pub/Sub from flush worker. Low priority since TS cache has TTL-based expiry already.
