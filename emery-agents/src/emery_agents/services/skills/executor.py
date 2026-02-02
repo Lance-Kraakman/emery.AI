@@ -649,7 +649,7 @@ class SkillExecutorService:
             skill_model=skill_model,
             org_model=org_model,
             has_images=has_images,
-            max_steps=10,
+            max_iters=10,
             agent_name=f"skill_{skill_config.name}",
             agent_description=skill_config.description,
             enable_caching=False,
