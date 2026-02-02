@@ -38,7 +38,7 @@ from .query_operations import (
 )
 from functools import partial
 from .filter_operations import extract_jsonb_target_ids, json_array_contains_id
-from .write_buffer import merge_buffer_into_dataframe
+from .write_buffer import merge_buffer_into_dataframe, WriteBuffer
 
 logger = logging.getLogger(__name__)
 
@@ -150,7 +150,7 @@ def prepare_query_rows(
     offset: int = 0,
     aggregation: Optional[table_service_pb2.AggregationConfig] = None,
     s3_uri: Optional[str] = None,
-    write_buffer: Optional[Any] = None,
+    write_buffer: Optional[WriteBuffer] = None,
 ) -> Tuple[pl.DataFrame, Dict[str, Any]]:
     """Prepare data for QueryRows operation.
 

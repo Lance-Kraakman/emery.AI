@@ -19,12 +19,14 @@ Design notes:
 import json
 import logging
 import time
+from datetime import datetime
 from typing import Dict, List, Optional, Any
 
 import polars as pl
 import pyarrow as pa
 
 from .redis_client import get_redis_client
+from .schema import extract_protobuf_value, arrow_to_polars_type
 
 logger = logging.getLogger(__name__)
 
@@ -59,9 +61,12 @@ class WriteBuffer:
                 row_id = row_data.id
                 data_dict: Dict[str, Any] = {"id": row_id}
                 for key, value in row_data.data.items():
-                    data_dict[key] = _extract_protobuf_value(value)
+                    data_dict[key] = extract_protobuf_value(value)
 
-                entry = json.dumps({"op": "insert", "data": data_dict, "ts": _now_ms()})
+                entry = json.dumps(
+                    {"op": "insert", "data": data_dict, "ts": _now_ms()},
+                    default=lambda o: o.isoformat() if isinstance(o, datetime) else str(o),
+                )
                 total_bytes += len(entry)
                 pipe.hset(ops_key, row_id, entry)
 
@@ -90,9 +95,12 @@ class WriteBuffer:
                 row_id = row_data.id
                 data_dict: Dict[str, Any] = {"id": row_id}
                 for key, value in row_data.data.items():
-                    data_dict[key] = _extract_protobuf_value(value)
+                    data_dict[key] = extract_protobuf_value(value)
 
-                entry = json.dumps({"op": "update", "data": data_dict, "ts": _now_ms()})
+                entry = json.dumps(
+                    {"op": "update", "data": data_dict, "ts": _now_ms()},
+                    default=lambda o: o.isoformat() if isinstance(o, datetime) else str(o),
+                )
                 total_bytes += len(entry)
                 pipe.hset(ops_key, row_id, entry)
 
@@ -267,41 +275,29 @@ def merge_buffer_into_dataframe(
     if delete_ids:
         df = df.filter(~pl.col("id").is_in(delete_ids))
 
-    # 2. Append inserts and updated rows
+    # 2. Append inserts and updated rows (schema-aware)
     if upsert_rows:
-        # Build a DataFrame from buffered rows aligned to existing columns
-        new_df = pl.DataFrame(upsert_rows)
+        polars_schema = {f.name: arrow_to_polars_type(f.type) for f in schema}
+        delta_field_names = {f.name for f in schema}
+        datetime_cols = {name for name, dtype in polars_schema.items()
+                         if isinstance(dtype, (pl.Datetime, pl.Date))}
 
-        # Add missing columns as null
-        for col in df.columns:
-            if col not in new_df.columns:
-                new_df = new_df.with_columns(pl.lit(None).alias(col))
+        # Pre-process: parse ISO date strings back to datetime objects
+        cleaned = []
+        for row in upsert_rows:
+            r = {k: v for k, v in row.items() if k in delta_field_names}
+            for col in datetime_cols:
+                if col in r and isinstance(r[col], str):
+                    try:
+                        r[col] = datetime.fromisoformat(r[col])
+                    except ValueError:
+                        r[col] = None
+            cleaned.append(r)
 
-        # Drop extra columns not in the original df
-        new_df = new_df.select([c for c in df.columns if c in new_df.columns])
-
+        new_df = pl.DataFrame(cleaned, schema=polars_schema)
         df = pl.concat([df, new_df], how="vertical_relaxed")
 
     return df
-
-
-# --- Helpers ---
-
-def _extract_protobuf_value(value: Any) -> Any:
-    """Extract a Python value from a protobuf RowDataValue."""
-    if value.HasField("text_value"):
-        return value.text_value
-    elif value.HasField("number_value"):
-        return value.number_value
-    elif value.HasField("boolean_value"):
-        return value.boolean_value
-    elif value.HasField("date_value"):
-        return value.date_value
-    elif value.HasField("json_value"):
-        return value.json_value
-    elif value.HasField("embedding_value"):
-        return list(value.embedding_value.values)
-    return None
 
 
 def _now_ms() -> int:

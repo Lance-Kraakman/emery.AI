@@ -7,7 +7,7 @@ Focuses on data structure management without infrastructure concerns.
 
 import logging
 from datetime import datetime, timezone
-from typing import List, Dict, Tuple, Optional
+from typing import Any, List, Dict, Tuple, Optional
 import pyarrow as pa
 import polars as pl
 from ..generated import table_service_pb2
@@ -96,6 +96,39 @@ def arrow_to_polars_type(arrow_type: pa.DataType) -> pl.DataType:
         return pl.List(pl.Float32())
     else:
         return pl.Utf8()  # Default
+
+
+def extract_protobuf_value(value: Any, is_datetime_column: bool = False) -> Any:
+    """Extract Python value from a protobuf RowDataValue.
+
+    Shared extraction logic used by both direct writes (create_dataframe_with_schema)
+    and the Redis write buffer (buffer_creates/buffer_updates).
+
+    Args:
+        value: Protobuf RowDataValue message
+        is_datetime_column: If True, parse text_value as datetime ISO string
+    """
+    if value.HasField("text_value"):
+        if is_datetime_column and value.text_value:
+            try:
+                parsed = datetime.fromisoformat(value.text_value)
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=timezone.utc)
+                return parsed
+            except ValueError:
+                return None
+        return value.text_value
+    elif value.HasField("number_value"):
+        return value.number_value
+    elif value.HasField("boolean_value"):
+        return value.boolean_value
+    elif value.HasField("date_value"):
+        return datetime.fromtimestamp(value.date_value / 1000, tz=timezone.utc)
+    elif value.HasField("json_value"):
+        return value.json_value
+    elif value.HasField("embedding_value"):
+        return list(value.embedding_value.values)
+    return None
 
 
 def build_schema_from_table_fields(table_fields: List[table_service_pb2.TableField]) -> pa.Schema:
@@ -371,35 +404,9 @@ def create_dataframe_with_schema(
             field_name = key  # Use field ID as column name (already a string)
             
             if field_name in delta_field_names:
-                # Extract value based on type
-                if value.HasField('text_value'):
-                    if field_name in datetime_columns and value.text_value:
-                        try:
-                            parsed = datetime.fromisoformat(value.text_value)
-                            if parsed.tzinfo is None:
-                                parsed = parsed.replace(tzinfo=timezone.utc)
-                            record[field_name] = parsed
-                        except ValueError:
-                            logger.warning(f"[create_dataframe_with_schema] Could not parse date string '{value.text_value}' for field '{field_name}'")
-                            record[field_name] = None
-                    else:
-                        record[field_name] = value.text_value
-                elif value.HasField('number_value'):
-                    record[field_name] = value.number_value
-                elif value.HasField('boolean_value'):
-                    record[field_name] = value.boolean_value
-                elif value.HasField('date_value'):
-                    timestamp_ms = value.date_value
-                    record[field_name] = datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc)
-                elif value.HasField('json_value'):
-                    record[field_name] = value.json_value
-                elif value.HasField('embedding_value'):
-                    # Handle embedding arrays
-                    embedding_list = list(value.embedding_value.values)
-                    record[field_name] = embedding_list
-                else:
-                    # No value set - use None for missing data
-                    record[field_name] = None
+                record[field_name] = extract_protobuf_value(
+                    value, is_datetime_column=(field_name in datetime_columns)
+                )
             else:
                 logger.warning(f"[create_dataframe_with_schema] Field '{field_name}' not in Delta Lake schema, skipping")
         

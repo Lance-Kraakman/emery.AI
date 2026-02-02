@@ -14,6 +14,7 @@ import logging
 import os
 import threading
 import time
+from datetime import datetime
 from typing import Callable, Dict, List, Any
 
 import pyarrow as pa
@@ -181,9 +182,18 @@ def _rows_to_arrow(rows: List[Dict[str, Any]], delta_table: DeltaTable) -> pa.Ta
 
     # Only include columns that exist in the Delta schema
     delta_field_names = {f.name for f in schema}
+    datetime_cols = {name for name, dtype in polars_schema.items()
+                     if isinstance(dtype, (pl.Datetime, pl.Date))}
+
     cleaned_rows = []
     for row in rows:
         cleaned = {k: v for k, v in row.items() if k in delta_field_names}
+        for col in datetime_cols:
+            if col in cleaned and isinstance(cleaned[col], str):
+                try:
+                    cleaned[col] = datetime.fromisoformat(cleaned[col])
+                except ValueError:
+                    cleaned[col] = None
         cleaned_rows.append(cleaned)
 
     df = pl.DataFrame(cleaned_rows, schema=polars_schema)
