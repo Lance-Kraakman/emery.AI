@@ -233,6 +233,7 @@ export function TableGroupedInputPanel({
                 key={input.name}
                 input={input}
                 onRemove={() => handleRemoveInput(input.name)}
+                onToggleRequired={() => handleUpdateInput(input.name, { ...input, required: !input.required })}
               />
             ))}
           </div>
@@ -351,7 +352,16 @@ function InputMappingRow({
       <code className="text-[11px] font-mono text-emerald-700 dark:text-emerald-300">
         {input.name}
       </code>
-      {input.required && <span className="text-[9px] text-orange-600">req</span>}
+      <button
+        type="button"
+        className="text-[9px] hover:opacity-70"
+        onClick={() => onUpdate({ ...input, required: !input.required })}
+        disabled={isReadOnly}
+      >
+        {input.required
+          ? <span className="text-orange-600">req</span>
+          : <span className="text-muted-foreground">opt</span>}
+      </button>
 
       <ArrowLeft className="h-3 w-3 text-muted-foreground shrink-0" />
 

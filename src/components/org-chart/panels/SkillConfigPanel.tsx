@@ -34,9 +34,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { updateSkill } from '@/app/actions/skills';
+import { getTables } from '@/app/actions/tables';
 import { DataSourcePicker } from '@/components/data-sources';
 import {
   attachContextTable,
@@ -50,6 +58,7 @@ import { ManualOutputItem } from '@/components/skill-config/ManualOutputItem';
 import { fieldTypeToInputType, fieldTypeToOutputType } from '@/components/skill-config/field-type-maps';
 import type { InputDefinition, OutputDefinition, TableMapping, FieldMapping } from '@/app/mappers/skill-mapper';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
+import type { TableDTO } from '@/app/mappers/table-mapper';
 import type { FieldType } from '@/ddd/domain/tables/value-objects/table-field';
 import type { DataSourceMapping } from '../types';
 
@@ -114,11 +123,13 @@ function TableInputGroup({
   inputs,
   onAddFields,
   onRemoveInput,
+  onToggleRequired,
 }: {
   table: ConnectedTable;
   inputs: InputDefinition[];
   onAddFields: (fields: FieldDTO[]) => void;
   onRemoveInput: (inputName: string) => void;
+  onToggleRequired: (inputName: string) => void;
 }) {
   return (
     <div className="rounded-lg border bg-emerald-50/30 dark:bg-emerald-900/10 p-2.5">
@@ -136,6 +147,15 @@ function TableInputGroup({
             className="flex items-center gap-2 text-[11px] py-1 px-2 bg-background/60 rounded group"
           >
             <code className="font-mono text-emerald-700 dark:text-emerald-300">{input.name}</code>
+            <button
+              type="button"
+              className="text-[9px] hover:opacity-70"
+              onClick={() => onToggleRequired(input.name)}
+            >
+              {input.required
+                ? <span className="text-orange-600">req</span>
+                : <span className="text-muted-foreground">opt</span>}
+            </button>
             {input.type && input.type !== 'text' && (
               <span className="text-[9px] bg-emerald-100 dark:bg-emerald-900/50 px-1 rounded">
                 {input.type}
@@ -578,6 +598,24 @@ export function SkillConfigPanel({
     [localOutputs, handleOutputsChange]
   );
 
+  // Toggle input required
+  const handleToggleInputRequired = useCallback(
+    (inputName: string) => {
+      handleInputsChange(
+        localInputs.map((i) => (i.name === inputName ? { ...i, required: !i.required } : i))
+      );
+    },
+    [localInputs, handleInputsChange]
+  );
+
+  // All tables (for "add from table" picker)
+  const [allTables, setAllTables] = useState<TableDTO[]>([]);
+  const [selectedAddTableId, setSelectedAddTableId] = useState<number | null>(null);
+
+  useEffect(() => {
+    getTables().then(setAllTables);
+  }, []);
+
   // Add manual input
   const [showAddInput, setShowAddInput] = useState(false);
   const [newInputName, setNewInputName] = useState('');
@@ -885,6 +923,7 @@ export function SkillConfigPanel({
             inputs={inputsByTable.byTable.get(table.tableId) || []}
             onAddFields={(fields) => handleAddInputsFromTable(table.tableId, fields)}
             onRemoveInput={handleRemoveInput}
+            onToggleRequired={handleToggleInputRequired}
           />
         ))}
 
@@ -899,6 +938,7 @@ export function SkillConfigPanel({
                   key={input.name}
                   input={input}
                   onRemove={() => handleRemoveInput(input.name)}
+                  onToggleRequired={() => handleToggleInputRequired(input.name)}
                 />
               ))}
               {showAddInput ? (
@@ -945,6 +985,48 @@ export function SkillConfigPanel({
               )}
             </div>
           </div>
+
+        {/* Add from table */}
+        {allTables.length > 0 && (
+          <div className="flex items-center gap-1.5">
+            {selectedAddTableId ? (
+              <>
+                <span className="text-[10px] text-muted-foreground">
+                  {allTables.find((t) => t.id === selectedAddTableId)?.name}:
+                </span>
+                <FieldPickerPopover
+                  tableId={selectedAddTableId}
+                  buttonLabel="Pick fields"
+                  onSelectFields={(fields) => {
+                    handleAddInputsFromTable(selectedAddTableId, fields);
+                    setSelectedAddTableId(null);
+                  }}
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-5 w-5"
+                  onClick={() => setSelectedAddTableId(null)}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </>
+            ) : (
+              <Select onValueChange={(v) => setSelectedAddTableId(parseInt(v))}>
+                <SelectTrigger className="h-6 w-[140px] text-[10px] text-muted-foreground">
+                  <SelectValue placeholder="+ Add from table" />
+                </SelectTrigger>
+                <SelectContent>
+                  {allTables.map((table) => (
+                    <SelectItem key={table.id} value={table.id.toString()}>
+                      {table.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+        )}
       </div>
 
       {/* OUTPUTS Section */}
