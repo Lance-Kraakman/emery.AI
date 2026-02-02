@@ -483,6 +483,14 @@ class TriageTask(dspy.Signature):  # type: ignore[misc]
         desc="Current workspace state: existing resources (databases, tables, apps, agents, skills). "
              "Check this before making routing decisions."
     )
+    conversation_history: str = dspy.InputField(
+        desc="Recent messages in this chat session. Use to understand follow-up "
+             "questions and what was previously discussed. Empty if first message."
+    )
+    memory_context: str = dspy.InputField(
+        desc="Relevant memories from previous sessions. Lightweight background "
+             "context — use for continuity. Empty if none."
+    )
 
     execution_mode: str = dspy.OutputField(
         desc="One of: 'direct', 'plan', 'respond'"

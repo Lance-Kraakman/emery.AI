@@ -35,6 +35,8 @@ from emery_agents.entities.models.plan import Plan, PlanStep, create_plan, creat
 from emery_agents.services.context import WorkspaceContext
 from emery_agents.services.protocols import ModelProviderProtocol, Tool
 
+from emery_agents.orchestrators.runtime import format_conversation_history
+
 if TYPE_CHECKING:
     from emery_agents.orchestrators.runtime import ConversationMessage
 
@@ -128,7 +130,7 @@ class DSPyPlanGenerator:
         planner = self._get_planner()
         workspace_context = self._format_workspace_context(request.workspace)
         capability_guidance = self._get_capability_guidance(request)
-        conversation_history = self._format_conversation_history(request.conversation_history)
+        conversation_history = format_conversation_history(request.conversation_history)
 
         try:
             with dspy.context(lm=lm):
@@ -179,7 +181,7 @@ class DSPyPlanGenerator:
         template_planner = self._get_template_planner()
         workspace_context = self._format_workspace_context(request.workspace)
         capability_guidance = self._get_capability_guidance(request)
-        conversation_history = self._format_conversation_history(request.conversation_history)
+        conversation_history = format_conversation_history(request.conversation_history)
 
         # Convert skill inputs/outputs to dicts for the module
         skill_inputs = [
@@ -208,21 +210,6 @@ class DSPyPlanGenerator:
 
         plan = self._convert_template_plan(template_plan, request.basic_instructions)
         return PlanGenerationResult(plan=plan, strategy_guidance=strategy_guidance)
-
-    def _format_conversation_history(
-        self,
-        history: Optional[list["ConversationMessage"]],
-    ) -> str:
-        """Format conversation history as a string for the DSPy signature."""
-        if not history:
-            return ""
-
-        parts = []
-        for msg in history[-10:]:  # Last 10 messages to keep context bounded
-            if msg.content:
-                parts.append(f"{msg.role}: {msg.content}")
-
-        return "\n".join(parts)
 
     def _format_workspace_context(
         self,

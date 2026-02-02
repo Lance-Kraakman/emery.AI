@@ -27,7 +27,7 @@ from ...tools.factories import create_all_tools
 from ...tools.output import QuestionCollector, create_ask_question_tool
 from ...services.memory import create_memory_crud
 from ..state import PlanExecuteState
-from ..runtime import RuntimeContext
+from ..runtime import RuntimeContext, format_conversation_history
 
 logger = logging.getLogger(__name__)
 
@@ -105,11 +105,9 @@ async def direct_execute_node(state: PlanExecuteState, runtime: RuntimeContext) 
         execution_context["memory"] = memory_context
     if triage_context:
         execution_context["triage_findings"] = triage_context
-    if runtime.conversation_history:
-        recent = runtime.conversation_history[-10:]
-        execution_context["conversation_history"] = [
-            {"role": m.role, "content": m.content[:500]} for m in recent
-        ]
+    conversation_str = format_conversation_history(runtime.conversation_history)
+    if conversation_str:
+        execution_context["conversation_history"] = conversation_str
 
     try:
         lm = get_dspy_lm(org_model=org_model)

@@ -17,7 +17,7 @@ from ...reasoning.signatures.planning import TriageTask
 from ...tools.discovery import create_discovery_tools
 from ...services.execution.events import ErrorEvent, FinalSynthesisEvent, ExecutionCompletedEvent
 from ..state import PlanExecuteState
-from ..runtime import RuntimeContext
+from ..runtime import RuntimeContext, format_conversation_history
 
 logger = logging.getLogger(__name__)
 
@@ -47,9 +47,11 @@ async def triage_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[
 
     events: List[Any] = []
 
-    # Build workspace context summary for triage
+    # Build context for triage
     workspace = state.get("workspace_context")
     workspace_summary = workspace.resource_summary() if workspace else ""
+    conversation_str = format_conversation_history(runtime.conversation_history)
+    memory_context = state.get("memory_context", "") or ""
 
     # Create discovery tools for ReAct triage
     discovery_tools: list[dspy.Tool] = []
@@ -71,6 +73,8 @@ async def triage_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[
             result = react(
                 task=task,
                 workspace_context=workspace_summary,
+                conversation_history=conversation_str,
+                memory_context=memory_context,
             )
 
         execution_mode = getattr(result, "execution_mode", "plan").strip().lower()

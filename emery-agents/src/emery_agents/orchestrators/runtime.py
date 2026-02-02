@@ -25,6 +25,27 @@ class ConversationMessage:
     content: str
 
 
+def format_conversation_history(
+    history: Optional[List[ConversationMessage]],
+    max_messages: int = 10,
+    max_content_length: int = 500,
+) -> str:
+    """Format recent conversation history as a string for prompt injection.
+
+    Returns last N messages as "role: content" lines, truncated per message.
+    Used by triage, direct execution, and planning nodes.
+    """
+    if not history:
+        return ""
+    recent = history[-max_messages:]
+    parts = []
+    for msg in recent:
+        if msg.content:
+            content = msg.content[:max_content_length]
+            parts.append(f"{msg.role}: {content}")
+    return "\n".join(parts)
+
+
 @dataclass
 class RuntimeContext:
     """Typed container for non-serializable runtime objects.
