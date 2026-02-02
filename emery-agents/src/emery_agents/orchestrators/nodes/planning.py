@@ -147,46 +147,46 @@ def _filter_relevant_context(
 
     try:
         task_embedding = get_embedding(task)
+
+        # Caps per resource type
+        TABLE_CAP = 15
+        APP_CAP = 10
+        AGENT_CAP = 10
+        SKILL_CAP = 10
+        VIEW_CAP = 10
+
+        filtered_tables = _top_n_relevant(
+            workspace.existing_tables, TABLE_CAP,
+            lambda t: _score_resource(task_embedding, t.name, " ".join(f.name for f in t.fields)),
+        )
+        filtered_apps = _top_n_relevant(
+            workspace.existing_apps, APP_CAP,
+            lambda a: _score_resource(task_embedding, a.name, a.description),
+        )
+        filtered_agents = _top_n_relevant(
+            workspace.existing_agents, AGENT_CAP,
+            lambda a: _score_resource(task_embedding, a.name, a.description),
+        )
+        filtered_skills = _top_n_relevant(
+            workspace.existing_skills, SKILL_CAP,
+            lambda s: _score_resource(task_embedding, s.name, s.description),
+        )
+        filtered_views = _top_n_relevant(
+            workspace.existing_views, VIEW_CAP,
+            lambda v: _score_resource(task_embedding, v.name),
+        )
+
+        return WorkspaceContext(
+            existing_databases=workspace.existing_databases,  # Always include all
+            existing_tables=filtered_tables,
+            existing_apps=filtered_apps,
+            existing_agents=filtered_agents,
+            existing_skills=filtered_skills,
+            existing_views=filtered_views,
+        )
     except Exception:
         logger.warning("Embedding service unavailable, returning full workspace context")
         return workspace
-
-    # Caps per resource type
-    TABLE_CAP = 15
-    APP_CAP = 10
-    AGENT_CAP = 10
-    SKILL_CAP = 10
-    VIEW_CAP = 10
-
-    filtered_tables = _top_n_relevant(
-        workspace.existing_tables, TABLE_CAP,
-        lambda t: _score_resource(task_embedding, t.name, " ".join(f.name for f in t.fields)),
-    )
-    filtered_apps = _top_n_relevant(
-        workspace.existing_apps, APP_CAP,
-        lambda a: _score_resource(task_embedding, a.name, a.description),
-    )
-    filtered_agents = _top_n_relevant(
-        workspace.existing_agents, AGENT_CAP,
-        lambda a: _score_resource(task_embedding, a.name, a.description),
-    )
-    filtered_skills = _top_n_relevant(
-        workspace.existing_skills, SKILL_CAP,
-        lambda s: _score_resource(task_embedding, s.name, s.description),
-    )
-    filtered_views = _top_n_relevant(
-        workspace.existing_views, VIEW_CAP,
-        lambda v: _score_resource(task_embedding, v.name),
-    )
-
-    return WorkspaceContext(
-        existing_databases=workspace.existing_databases,  # Always include all
-        existing_tables=filtered_tables,
-        existing_apps=filtered_apps,
-        existing_agents=filtered_agents,
-        existing_skills=filtered_skills,
-        existing_views=filtered_views,
-    )
 
 
 async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[str, Any]:

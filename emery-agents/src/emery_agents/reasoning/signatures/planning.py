@@ -104,6 +104,11 @@ class PlanStepOutput(BaseModel):
         default=None,
         description="Jinja2 prompt template with {{ variable }} placeholders for skill inputs.",
     )
+    connection_required: Optional[str] = Field(
+        default=None,
+        description="App slug requiring OAuth connection (e.g., 'gmail', 'slack', 'github'). "
+                    "Set when the step uses an external integration that needs user authorization.",
+    )
 
 
 class SkillTemplateStepOutput(BaseModel):
@@ -147,6 +152,11 @@ class SkillTemplateStepOutput(BaseModel):
                     "Do NOT summarize rules - copy them. "
                     "Use {{ variable }} EVERYWHERE including inside {% if %} blocks: "
                     "{% if family %}{{ name }} has {{ family }}{% endif %} (NOT: name has family)."
+    )
+    connection_required: Optional[str] = Field(
+        default=None,
+        description="App slug requiring OAuth connection (e.g., 'gmail', 'slack', 'github'). "
+                    "Set when the step uses an external integration that needs user authorization.",
     )
 
 
@@ -236,15 +246,23 @@ class CreatePlan(dspy.Signature):  # type: ignore[misc]
        simple = 1-2 steps, medium = 3-4 steps, complex = 5+ steps.
 
     WHEN TO ASK QUESTIONS vs PLAN:
-    - PLAN with sensible defaults: field names, data types, layout choices, standard configs.
-    - ASK only for: destructive operations, ambiguous business rules, security decisions,
-      genuinely unclear user intent.
-    - The user can modify the plan before approving — prefer over-planning to over-asking.
+    - ALWAYS analyze first: check workspace_context, capability_guidance, and task_analysis.
+    - PLAN with sensible defaults for: field names, data types, layout choices, standard configs.
+    - ASK when you genuinely need information: which specific action (send vs draft),
+      destructive operations, ambiguous business rules, security decisions, multiple valid
+      approaches where the user's preference matters, or when you are not confident.
+    - The user can modify the plan before approving — prefer a concrete plan over vague questions,
+      but prefer asking over guessing wrong.
 
     TOOL USAGE DURING PLANNING:
     You can ONLY call: system_research, search_capabilities, search_external.
     target_agent names (schema_builder, app_builder, skill_builder, etc.) are NOT tools.
     Set target_agent in plan step output fields — do NOT attempt to call them.
+
+    EXTERNAL INTEGRATIONS: When the task involves a third-party service (Gmail, Slack,
+    GitHub, Google Sheets, etc.), you MUST call search_external(service="<name>") to
+    discover available actions. Include the specific integration name (e.g., gmail_send_email)
+    in the step description and set connection_required to the service slug.
     """
 
     request: str = dspy.InputField(
@@ -309,6 +327,11 @@ class CreateSkillTemplate(dspy.Signature):  # type: ignore[misc]
     TWO FIELDS:
     1. description: Summarize task + mention key rules. {{ variable }} OK. NO {% if %}.
     2. prompt_template: ALL rules from request, using {% if %} for conditionals.
+
+    EXTERNAL TOOLS:
+    If the skill uses a third-party service (Gmail, Slack, etc.), the prompt_template
+    MUST name the specific tool to call (e.g., "Use the gmail_send_email tool to...").
+    Set connection_required on the step to the service slug (e.g., 'gmail').
     """
 
     request: str = dspy.InputField(desc="What the skill should accomplish")

@@ -185,8 +185,11 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
             "and configurations in the plan. The user can modify before approving.\n"
             "   Example: 'Create contacts table' → plan with: name (text), email (email), "
             "phone (phone), company (text), status (single-select)\n"
-            "3. ASK ONLY WHEN NECESSARY: security decisions, destructive operations, "
-            "ambiguous business rules, or genuinely unclear user preference."
+            "3. ASK WHEN GENUINELY NEEDED: security decisions, destructive operations, "
+            "ambiguous business rules, unclear user preference, or when multiple valid "
+            "approaches exist and you are not confident which the user wants. "
+            "For external services (Gmail, Slack, etc.), call search_external first — "
+            "if multiple actions exist (e.g., send vs draft), ask or pick the most obvious one."
         )
 
         if not has_workspace_context:
