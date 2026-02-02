@@ -196,32 +196,24 @@ export function UnifiedChatInput<T = ToolDTO>({
       setDropdownType('tools');
       setShowDropdown(true);
 
-      // Position above input since chat is at bottom of screen
-      if (inputRef.current) {
+      // Calculate fixed position for form mode (chat mode uses Popover positioning)
+      if (mode === 'form' && inputRef.current) {
         const rect = inputRef.current.getBoundingClientRect();
-        const gap = 8; // Gap between dropdown and input
-
-        // Position dropdown so its bottom is at the top of the input
-        const bottom = window.innerHeight - rect.top + gap;
-        const maxHeight = rect.top - gap - 20; // 20px margin from top of viewport
-
+        const gap = 8;
         let left = rect.left;
+        const dropdownWidth = 440;
 
-        // Prevent going off right side of screen
-        const dropdownWidth = 440; // Match w-[440px] in ToolDropdown
-
-        // Check if dropdown would overflow on right side
         if (left + dropdownWidth > window.innerWidth) {
-          // Position from right edge instead
-          left = window.innerWidth - dropdownWidth - 16; // 16px margin
+          left = window.innerWidth - dropdownWidth - 16;
         }
-
-        // Prevent going off left side of screen
         if (left < 0) {
-          left = 16; // 16px margin
+          left = 16;
         }
 
-        setDropdownPosition({ bottom, left, maxHeight });
+        // Position at the top of the textarea, overlaying content
+        const top = rect.top + gap;
+        const maxHeight = Math.min(500, window.innerHeight - top - 20);
+        setDropdownPosition({ top, left, maxHeight });
       }
     } else {
       setShowDropdown(false);
@@ -548,9 +540,9 @@ export function UnifiedChatInput<T = ToolDTO>({
           </Button>
         )}
 
-        {/* Textarea with Popover for both variable and tool dropdowns */}
+        {/* Textarea with Popover for variable dropdown and chat mode tool dropdown */}
         <Popover
-          open={showDropdown}
+          open={showDropdown && !(mode === 'form' && dropdownType === 'tools')}
           onOpenChange={() => {}}
         >
           <PopoverAnchor asChild>
@@ -632,6 +624,18 @@ export function UnifiedChatInput<T = ToolDTO>({
             )}
           </PopoverContent>
         </Popover>
+
+        {/* Form mode: fixed overlay tool dropdown (positioned at top of textarea) */}
+        {mode === 'form' && showDropdown && dropdownType === 'tools' && (
+          <ToolDropdown
+            query={dropdownQuery}
+            isOpen={showDropdown}
+            onClose={() => setShowDropdown(false)}
+            onSelect={handleToolSelect}
+            position={dropdownPosition}
+            renderMode="fixed"
+          />
+        )}
 
         {/* Send button - inline when single-line in chat mode */}
         {enableSendButton && isSingleLine && mode === 'chat' && (
