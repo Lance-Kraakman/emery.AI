@@ -29,7 +29,6 @@ from emery_agents.reasoning.signatures.planning import (
     ClarifyingQuestionOutput,
     PlanOutput,
     PlanOrQuestionsOutput,
-    PlanStepOutput,
     SkillTemplatePlanOutput,
 )
 from emery_agents.entities.models.plan import Plan, PlanStep, create_plan, create_step
@@ -332,10 +331,9 @@ class DSPyPlanGenerator:
         for dspy_step in dspy_plan.steps:
             step = create_step(
                 description=dspy_step.description,
-                target_agent=dspy_step.target_agent,
                 prompt_template=dspy_step.prompt_template,
                 required_context=dspy_step.required_context,
-                connection_required=getattr(dspy_step, "connection_required", None),
+                connection_required=dspy_step.connection_required,
                 phase_name=dspy_step.phase_name,
                 phase_order=dspy_step.phase_order,
                 replan_after=dspy_step.replan_after,
@@ -362,10 +360,9 @@ class DSPyPlanGenerator:
                 description=s.description,
                 tool_call=s.tool_call,
                 parameters=s.parameters,
-                target_agent=s.target_agent,
                 prompt_template=s.prompt_template,
                 required_context=s.required_context,
-                connection_required=getattr(s, "connection_required", None),
+                connection_required=s.connection_required,
                 phase_name=s.phase_name,
                 phase_order=s.phase_order,
                 replan_after=s.replan_after,

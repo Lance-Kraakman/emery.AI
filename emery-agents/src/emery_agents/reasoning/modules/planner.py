@@ -18,7 +18,6 @@ from emery_agents.reasoning.signatures.planning import (
     CreateSkillTemplate,
     PlanOrQuestionsOutput,
     QuestionType,
-    SelectReasoningApproach,
     SkillInputSpec,
     SkillOutputSpec,
     SkillTemplatePlanOutput,
@@ -29,11 +28,16 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
     """
     DSPy module for creating execution plans using ReAct.
 
-    Uses dspy.ReAct with discovery tools so the planner can dynamically
-    look up resources and capabilities during reasoning. Static context
-    (workspace, capability guidance) is still provided as baseline.
+    Two LLM calls:
+    1. AnalyzeTask — understand intent, approach, external services
+    2. ReAct(CreatePlan) — generate plan with discovery tool access
 
-    The Think Before Asking pattern is injected via guidance text.
+    Each input field to the planner has one clear purpose:
+    - request: what the user wants
+    - workspace_context: what already exists
+    - capability_guidance: routing table + matched capability instructions
+    - proven_strategies: what worked before (ACE)
+    - task_analysis: pre-analyzed intent, approach, external service hints
     """
 
     # Phrases that indicate user wants us to propose defaults
@@ -61,7 +65,6 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         """
         super().__init__()
         self.analyzer = dspy.ChainOfThought(AnalyzeTask)
-        self.approach_selector = dspy.ChainOfThought(SelectReasoningApproach)
         self.discovery_tools = discovery_tools or []
         self.planner = dspy.ReAct(CreatePlan, tools=self.discovery_tools, max_iters=5)
 
@@ -80,7 +83,7 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         Args:
             request: The user's goal or task description
             workspace_context: JSON string of existing workspace resources
-            capability_guidance: Domain-specific instructions from capability registry
+            capability_guidance: Routing table + matched capability instructions
             proven_strategies: ACE patterns for similar goals
             conversation_history: Formatted previous messages for context continuity
             memory_context: Relevant memories from previous interactions
@@ -90,49 +93,36 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         """
         has_delegation = self._has_delegation_phrase(request)
 
-        # Analyze the task to understand intent and complexity
+        # Step 1: Analyze the task — intent, approach, external services
         analysis = self.analyzer(
             request=request,
             context=workspace_context,
         )
 
-        # Format analysis for the planner (guides step count and capability selection)
+        # Step 2: Format enriched task_analysis for the planner
+        external_services = analysis.external_services or []
+        external_hint = ""
+        if external_services:
+            services_str = ", ".join(external_services)
+            external_hint = f"\nExternal services: {services_str} (call search_external to discover actions)"
+
         task_analysis = (
             f"Intent: {analysis.intent}\n"
             f"Domain: {analysis.domain}\n"
             f"Entities: {', '.join(analysis.entities)}\n"
-            f"Complexity: {analysis.complexity}"
+            f"Approach: {analysis.approach}"
+            f"{external_hint}"
         )
 
-        # Self-Discover: select reasoning approach before planning
-        approach_result = self.approach_selector(
-            request=request,
-            task_analysis=task_analysis,
-            workspace_context=workspace_context,
-        )
-        approach = approach_result.approach
-        approach_guidance = (
-            f"REASONING APPROACH: {approach.primary_approach}"
-            + (f" + {approach.secondary_approach}" if approach.secondary_approach else "")
-            + f"\n{approach.reasoning}"
-        )
-        if approach.key_considerations:
-            approach_guidance += "\nKEY CONSIDERATIONS:\n" + "\n".join(
-                f"- {c}" for c in approach.key_considerations
-            )
+        if has_delegation:
+            task_analysis += "\nUser delegated decisions — propose sensible defaults, do not ask questions."
 
-        # Build effective guidance with Think Before Asking
-        has_workspace = bool(workspace_context and workspace_context != "{}")
-        think_first = self._build_think_before_asking_guidance(
-            has_delegation=has_delegation,
-            has_workspace_context=has_workspace,
-        )
-        effective_guidance = f"{approach_guidance}\n\n{think_first}\n\n{capability_guidance}"
-
+        # Step 3: Call planner with clean, separated fields
+        # capability_guidance is passed directly — no approach or behavioral rules prepended
         result = self.planner(
             request=request,
             workspace_context=workspace_context,
-            capability_guidance=effective_guidance,
+            capability_guidance=capability_guidance,
             proven_strategies=proven_strategies,
             conversation_history=conversation_history,
             memory_context=memory_context,
@@ -145,61 +135,9 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         return plan_result  # type: ignore[no-any-return]
 
     def _has_delegation_phrase(self, request: str) -> bool:
-        """
-        Check if the request contains phrases indicating user wants us to decide.
-
-        This implements the "Think Before Asking" pattern - if the user says
-        "whatever you think" or "standard approach", we should propose defaults
-        rather than asking clarifying questions.
-        """
+        """Check if the request contains phrases indicating user wants us to decide."""
         normalized = request.lower()
         return any(phrase in normalized for phrase in self.DELEGATION_PHRASES)
-
-    def _build_think_before_asking_guidance(
-        self,
-        has_delegation: bool,
-        has_workspace_context: bool,
-    ) -> str:
-        """
-        Build Think Before Asking guidance.
-
-        Args:
-            has_delegation: Whether user used delegation phrases
-            has_workspace_context: Whether workspace context is non-empty
-        """
-        sections: list[str] = []
-
-        if has_delegation:
-            sections.append(
-                "USER DELEGATED — propose sensible defaults for everything. "
-                "Do NOT ask questions. Include all decisions in the plan."
-            )
-
-        # Core Think Before Asking rules (always included)
-        sections.append(
-            "THINK BEFORE ASKING — 3-step process:\n"
-            "1. CHECK CONTEXT: workspace_context shows existing databases, tables "
-            "(with field schemas), apps, agents. Use what's there — never ask about "
-            "resources you can already see.\n"
-            "2. SUGGEST DEFAULTS: For new resources, propose sensible names, field types, "
-            "and configurations in the plan. The user can modify before approving.\n"
-            "   Example: 'Create contacts table' → plan with: name (text), email (email), "
-            "phone (phone), company (text), status (single-select)\n"
-            "3. ASK WHEN GENUINELY NEEDED: security decisions, destructive operations, "
-            "ambiguous business rules, unclear user preference, or when multiple valid "
-            "approaches exist and you are not confident which the user wants. "
-            "For external services (Gmail, Slack, etc.), call search_external first — "
-            "if multiple actions exist (e.g., send vs draft), ask or pick the most obvious one."
-        )
-
-        if not has_workspace_context:
-            sections.append(
-                "NOTE: Workspace context is empty — the executor can discover "
-                "resources at runtime. Plan a Discovery phase if you need to find "
-                "existing resources."
-            )
-
-        return "\n\n".join(sections)
 
     def _ensure_valid_output(self, result: PlanOrQuestionsOutput) -> None:
         """
@@ -282,7 +220,6 @@ class SkillTemplatePlannerModule(PlannerModule):
 
     Extends PlannerModule to inherit shared logic:
     - _has_delegation_phrase()
-    - _build_think_before_asking_guidance()
     - Discovery tools handling
     """
 

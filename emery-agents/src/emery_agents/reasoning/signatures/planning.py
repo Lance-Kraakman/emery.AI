@@ -66,21 +66,13 @@ class PlanStepOutput(BaseModel):
     )
     tool_call: Optional[str] = Field(
         default=None,
-        description="Discovery tool to invoke (e.g., 'workspace_overview', 'search_capabilities'). "
-                    "Primarily for discovery steps — execution steps use target_agent. "
-                    "Exception: skill_executor steps may reference skill_crud in the description.",
+        description="Tool to invoke for this step (e.g., 'skill_crud' for skill execution). "
+                    "Include the specific tool name when the step calls an external integration.",
     )
     parameters: Optional[dict[str, Any]] = Field(
         default=None,
         description="Parameters for the tool_call. Values can be strings, lists, or nested dicts. "
                     "Use {{ variable }} placeholders for skill template inputs.",
-    )
-    target_agent: Optional[str] = Field(
-        default=None,
-        description="Capability to delegate execution to (e.g., 'schema_builder', 'app_builder', "
-                    "'skill_builder', 'skill_executor', 'workflow_builder'). "
-                    "Use 'skill_executor' when user wants to RUN an existing skill. "
-                    "Matched from capability_guidance.",
     )
     required_context: list[str] = Field(
         default_factory=list,
@@ -126,9 +118,6 @@ class SkillTemplateStepOutput(BaseModel):
     )
     parameters: Optional[dict[str, Any]] = Field(
         default=None, description="Parameters for the tool call (values can include {{ }} for inputs)"
-    )
-    target_agent: Optional[str] = Field(
-        default=None, description="Specialized agent to delegate to (e.g., 'schema_builder')"
     )
     required_context: list[str] = Field(
         default_factory=list, description="Context keys required from previous steps"
@@ -177,11 +166,9 @@ class PlanOutput(BaseModel):
                     "which capabilities, and any trade-offs considered"
     )
     steps: list[PlanStepOutput] = Field(
-        description="Ordered steps grouped by phase (Discovery → Analysis → Execution → Summary). "
-                    "Each step delegates to ONE capability via target_agent. "
-                    "IMPORTANT: Create separate steps for each distinct action — "
-                    "do NOT combine multiple capabilities into one step. "
-                    "Simple tasks: 1-2 steps. Medium tasks: 3-4 steps. Complex tasks: 5+ steps."
+        description="Ordered steps. One step per distinct action — "
+                    "do NOT combine multiple actions into one step. "
+                    "Include specific tool names and resource details in each step description."
     )
 
 
@@ -220,49 +207,23 @@ class PlanOrQuestionsOutput(BaseModel):
 
 
 class CreatePlan(dspy.Signature):  # type: ignore[misc]
-    """Create an execution plan or ask clarifying questions if truly ambiguous.
+    """Create an execution plan or ask clarifying questions.
 
-    PLANNING PROCESS (follow in order):
+    One step per distinct action. Never combine multiple actions into one step.
+    Check workspace_context for existing resources before asking about them.
+    Use capability_guidance to understand what the system can do.
+    Use task_analysis for pre-analyzed intent, approach, and external service hints.
 
-    1. PARSE REQUEST: Identify the user's goal, target resources, and constraints.
-       Check conversation_history for prior context (e.g., follow-up requests).
+    EXTERNAL INTEGRATIONS: If task_analysis lists external services (Gmail, Slack, etc.),
+    call search_external(service="<name>") to discover available actions.
+    Include the specific tool name (e.g., gmail_send_email) in step descriptions.
+    Set connection_required to the service slug for OAuth services.
 
-    2. CHECK WORKSPACE: Search workspace_context for existing resources the task
-       references. Use existing table schemas, app names, agent configs — never ask
-       about things already visible in the context.
+    DEFAULTS vs QUESTIONS: Prefer a concrete plan with sensible defaults over vague questions.
+    The user can modify the plan before approving. Ask only when genuinely unsure:
+    destructive operations, ambiguous business rules, multiple valid approaches.
 
-    3. MATCH CAPABILITIES: Use capability_guidance to pick the right capability for
-       each step. Each step should delegate to exactly one capability via target_agent
-       (e.g., 'schema_builder' for table/field ops, 'app_builder' for UI).
-
-    4. APPLY STRATEGIES: Check proven_strategies for patterns from past successful
-       executions of similar goals. Reuse proven step sequences when applicable.
-
-    5. STRUCTURE PLAN: Organize steps into phases (Discovery → Analysis → Execution → Summary).
-       Set replan_after=true on steps whose output may change the remaining plan.
-       Use required_context to chain step outputs.
-       STEP COUNT: One step per distinct action/capability. Never combine creating a table
-       and building an app into the same step. Use task_analysis complexity as a guide:
-       simple = 1-2 steps, medium = 3-4 steps, complex = 5+ steps.
-
-    WHEN TO ASK QUESTIONS vs PLAN:
-    - ALWAYS analyze first: check workspace_context, capability_guidance, and task_analysis.
-    - PLAN with sensible defaults for: field names, data types, layout choices, standard configs.
-    - ASK when you genuinely need information: which specific action (send vs draft),
-      destructive operations, ambiguous business rules, security decisions, multiple valid
-      approaches where the user's preference matters, or when you are not confident.
-    - The user can modify the plan before approving — prefer a concrete plan over vague questions,
-      but prefer asking over guessing wrong.
-
-    TOOL USAGE DURING PLANNING:
-    You can ONLY call: system_research, search_capabilities, search_external.
-    target_agent names (schema_builder, app_builder, skill_builder, etc.) are NOT tools.
-    Set target_agent in plan step output fields — do NOT attempt to call them.
-
-    EXTERNAL INTEGRATIONS: When the task involves a third-party service (Gmail, Slack,
-    GitHub, Google Sheets, etc.), you MUST call search_external(service="<name>") to
-    discover available actions. Include the specific integration name (e.g., gmail_send_email)
-    in the step description and set connection_required to the service slug.
+    TOOLS: You can call search_external, search_capabilities, system_research during planning.
     """
 
     request: str = dspy.InputField(
@@ -273,28 +234,24 @@ class CreatePlan(dspy.Signature):  # type: ignore[misc]
              "apps, agents, skills, views). Check this BEFORE asking about existing resources."
     )
     capability_guidance: str = dspy.InputField(
-        desc="Instructions for when to use each capability (schema_builder, app_builder, etc.). "
-             "Maps intent verbs to the correct target_agent for each plan step."
+        desc="Routing table and instructions for system capabilities. "
+             "Shows what the system can do and when to use each capability."
     )
     proven_strategies: str = dspy.InputField(
-        desc="ACE (Agentic Context Engineering) patterns from past successful executions. "
-             "Reuse proven step sequences for similar goals. Empty string if no relevant history."
+        desc="Patterns from past successful executions of similar goals. "
+             "Reuse proven step sequences when applicable. Empty string if none."
     )
     conversation_history: str = dspy.InputField(
-        desc="Formatted previous messages in this chat session. Use for follow-up context "
-             "(e.g., 'now add a status field' refers to the table from the previous message)."
+        desc="Previous messages in this chat session for follow-up context."
     )
     memory_context: str = dspy.InputField(
-        desc="Background context from previous interactions (memories). "
-             "Use for continuity but do NOT treat as the current request. "
-             "The user's actual request is in the 'request' field. "
-             "Empty string if no relevant memories."
+        desc="Background context from previous interactions. "
+             "Use for continuity but the current request is in the 'request' field. "
+             "Empty string if none."
     )
     task_analysis: str = dspy.InputField(
-        desc="Pre-analysis of the task: intent, domain, entities, and complexity. "
-             "Use complexity to determine step count: "
-             "simple = 1-2 steps, medium = 3-4 steps, complex = 5+ steps. "
-             "Each distinct capability or resource should be its own step."
+        desc="Pre-analysis: intent, domain, entities, approach, and external services detected. "
+             "Use to guide planning decisions and tool discovery."
     )
 
     result: PlanOrQuestionsOutput = dspy.OutputField()
@@ -357,21 +314,21 @@ class CreateSkillTemplate(dspy.Signature):  # type: ignore[misc]
 
 
 class AnalyzeTask(dspy.Signature):  # type: ignore[misc]
-    """Analyze a user request to understand intent, domain, and complexity before planning.
+    """Analyze a user request before planning. Extract intent, entities, approach, and external services.
 
-    ANALYSIS PROCESS:
-    1. INTENT: What action does the user want? (create, modify, delete, query, research)
-    2. DOMAIN: Where does this action happen?
-       - emery: workspace resources (tables, apps, agents, skills)
-       - web: external websites, APIs, scraping
-       - automation: workflows, scheduling, integrations
-       - research: information gathering, comparisons, best practices
-    3. ENTITIES: Extract concrete nouns — table names, field names, app names, domains.
-       Use context to resolve references (e.g., "the table" → actual table name from context).
-    4. COMPLEXITY:
-       - simple: single resource, single action (e.g., "add a field")
-       - medium: 2-4 steps or resources (e.g., "create a table with 5 fields")
-       - complex: 5+ steps, cross-resource, or business logic (e.g., "build a CRM system")
+    1. INTENT: What action does the user want? Start with a verb.
+    2. DOMAIN: emery (workspace resources), web (external), automation (workflows), research (info gathering).
+    3. ENTITIES: Concrete nouns — table names, field names, app names, service names.
+       Resolve references using context (e.g., "the table" → actual table name).
+    4. APPROACH: How should the planner think about this task?
+       - analytical: data modeling, schema design, CRUD — break into components
+       - systems-thinking: multiple interconnected resources — focus on relationships
+       - step-by-step: procedural tasks with clear ordering — focus on sequencing
+       - creative: open-ended tasks — automation design, workflow optimization
+    5. EXTERNAL SERVICES: List any third-party services mentioned (gmail, slack, github, etc.).
+       The planner will use this to call search_external during planning.
+    6. NEEDS CLARIFICATION: true only if the request is too vague to plan at all.
+       Missing details with sensible defaults do NOT need clarification.
     """
 
     request: str = dspy.InputField(
@@ -387,16 +344,23 @@ class AnalyzeTask(dspy.Signature):  # type: ignore[misc]
              "(e.g., 'Create a contacts table with name, email, and phone fields')."
     )
     domain: TaskDomain = dspy.OutputField(
-        desc="Primary domain: 'emery' (workspace resources), 'web' (external), "
-             "'automation' (workflows), or 'research' (information gathering)."
+        desc="Primary domain: 'emery', 'web', 'automation', or 'research'."
     )
     entities: list[str] = dspy.OutputField(
-        desc="Concrete nouns from the request: resource names, field names, capability names. "
-             "Resolve references using context (e.g., 'it' → 'contacts table')."
+        desc="Concrete nouns: resource names, field names, service names. "
+             "Resolve references using context."
     )
-    complexity: TaskComplexity = dspy.OutputField(
-        desc="Task complexity: 'simple' (1 action, 1 resource), 'medium' (2-4 steps), "
-             "'complex' (5+ steps or cross-resource dependencies)."
+    approach: str = dspy.OutputField(
+        desc="Reasoning approach: 'analytical', 'systems-thinking', 'step-by-step', or 'creative'. "
+             "Guides how the planner structures the plan."
+    )
+    external_services: list[str] = dspy.OutputField(
+        desc="Third-party services mentioned (e.g., ['gmail', 'slack']). "
+             "Empty list if none. The planner will call search_external for each."
+    )
+    needs_clarification: bool = dspy.OutputField(
+        desc="True only if the request is too vague to plan. "
+             "Missing details with sensible defaults = false."
     )
 
 
@@ -530,61 +494,6 @@ class TriageTask(dspy.Signature):  # type: ignore[misc]
         desc="Key findings from any research tools called (resource IDs, capability matches, etc.). "
              "Passed to the next node to avoid duplicate lookups. Empty string if no research done."
     )
-
-
-class ReasoningApproach(BaseModel):
-    """Self-Discover: selected reasoning approach for plan generation."""
-
-    primary_approach: str = Field(
-        description="Primary reasoning approach: 'analytical' (break down into components), "
-                    "'creative' (novel combinations, analogies), 'systems-thinking' (relationships, dependencies), "
-                    "or 'step-by-step' (sequential decomposition)"
-    )
-    secondary_approach: Optional[str] = Field(
-        default=None,
-        description="Optional secondary approach to combine with primary"
-    )
-    reasoning: str = Field(
-        description="Why this approach fits the task (1-2 sentences)"
-    )
-    key_considerations: list[str] = Field(
-        default_factory=list,
-        description="2-4 key considerations the planner should keep in mind"
-    )
-
-
-class SelectReasoningApproach(dspy.Signature):  # type: ignore[misc]
-    """Select the best reasoning approach for planning this task.
-
-    This is a meta-reasoning step (Self-Discover pattern): before generating a plan,
-    decide HOW to think about the problem.
-
-    APPROACH SELECTION GUIDE:
-    - analytical: Best for tasks with clear structure — data modeling, schema design,
-      CRUD operations, field configurations. Break the task into components.
-    - creative: Best for open-ended tasks — automation design, workflow optimization,
-      finding novel solutions. Use analogies and lateral thinking.
-    - systems-thinking: Best for tasks involving multiple interconnected resources —
-      building systems (CRM, inventory), cross-capability coordination. Focus on
-      relationships and dependencies.
-    - step-by-step: Best for procedural tasks with clear ordering — migrations,
-      setup sequences, data transformations. Focus on correct sequencing.
-
-    Most tasks benefit from a primary approach. Add a secondary only when the task
-    genuinely spans two modes (e.g., systems-thinking + analytical for a complex CRM).
-    """
-
-    request: str = dspy.InputField(
-        desc="The user's goal or task description"
-    )
-    task_analysis: str = dspy.InputField(
-        desc="Pre-analysis: intent, domain, entities, complexity"
-    )
-    workspace_context: str = dspy.InputField(
-        desc="JSON of existing workspace resources (for understanding scope)"
-    )
-
-    approach: ReasoningApproach = dspy.OutputField()
 
 
 class GapItemOutput(BaseModel):
