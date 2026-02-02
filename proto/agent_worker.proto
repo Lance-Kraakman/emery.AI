@@ -147,10 +147,9 @@ message SkillConfig {
   repeated MessagePart content = 9;    // Skill-level attachments (images, files, text)
   string agent_type = 10;              // Optional: "tool_calling" (default) or "code_agent"
   string execution_type = 11;          // 'agentic' or 'agent' (step-based DAG workflow)
-  TaskModelConfig task_model_config = 12; // DEPRECATED: was for operation execution
-  ToolExecutionConfig tool_execution_config = 13; // DEPRECATED: was for tool execution
-  WriteConfig write_config = 14;       // DEPRECATED at skill-level; still used in SkillStep
-  ReadConfig read_config = 15;         // DEPRECATED at skill-level; still used in SkillStep
+  reserved 12, 13, 14, 15;
+  // 12 was task_model_config, 13 was tool_execution_config,
+  // 14 was write_config, 15 was read_config
   repeated SkillStep steps = 20;       // Steps for step-based execution (when execution_type='agent')
 }
 
@@ -257,11 +256,9 @@ message SkillStep {
   string parallel_group = 14;          // Steps with same group ID execute concurrently
   // Loop/iteration support
   LoopConfig loop_config = 15;         // For-each, while, until loops
-  // Step-level execution configs (for non-agentic steps)
-  ReadConfig read_config = 16;         // For read steps
-  WriteConfig write_config = 17;       // For write steps
-  ToolExecutionConfig tool_execution_config = 18; // For tool steps
-  TaskModelConfig task_model_config = 19; // For operation steps
+  reserved 16, 17, 18, 19;
+  // 16 was read_config, 17 was write_config,
+  // 18 was tool_execution_config, 19 was task_model_config
   // UI state
   bool is_disabled = 21;               // Step can be disabled without deletion
   // Agentic step configuration (for nodeType='agentic')
@@ -320,72 +317,10 @@ message StoredSubPlan {
   string planning_observations = 4;    // Observations from planning phase
 }
 
-// Configuration for operation execution (direct model invocation without LLM orchestration)
-message TaskModelConfig {
-  string model_id = 1;                 // HuggingFace model ID (e.g., 'black-forest-labs/FLUX.1-schnell')
-  string task_type = 2;                // Task type: text-to-image, speech-to-text, etc.
-  map<string, string> parameters = 3;  // Model-specific parameters (steps, guidance_scale, etc.)
-}
-
-// DEPRECATED at skill-level. Was for direct tool execution (execution_type='tool').
-// Still used within SkillStep for tool nodes in workflow skills.
-message ToolExecutionConfig {
-  string tool_id = 1;                  // Pipedream tool ID (e.g., 'gmail-send-email', 'slack-send-message')
-  repeated ToolInputMapping input_mappings = 2; // Map skill inputs to tool parameters
-  optional int32 output_table_id = 3;  // Table to store outputs (schema auto-discovered from response)
-}
-
-// Maps skill input to tool parameter
-message ToolInputMapping {
-  string tool_param = 1;               // Tool parameter name
-  string skill_input_name = 2;         // Skill input to use (if set)
-  string static_value = 3;             // Static value (used if skill_input_name not set)
-}
-
-// Table write configuration. DEPRECATED at skill-level; used within SkillStep for write nodes.
-message WriteConfig {
-  int32 target_table_id = 1;           // Table to write to
-  string row_action = 2;               // 'create' or 'update'
-  repeated WriteFieldMapping field_mappings = 3; // Map skill inputs to table fields
-  UpdateMatchConfig update_match = 4;  // For update: which field to match
-}
-
-// Maps skill input to table field
-message WriteFieldMapping {
-  string skill_input_name = 1;         // Skill input name
-  int32 target_field_id = 2;           // Table field ID
-}
-
-// Configuration for matching rows during update
-message UpdateMatchConfig {
-  string skill_input_name = 1;         // Skill input with match value
-  int32 target_field_id = 2;           // Field to match against
-}
-
-// Table read configuration. DEPRECATED at skill-level; used within SkillStep for read nodes.
-message ReadConfig {
-  string mode = 1;                     // 'single_row' or 'query'
-  int32 source_table_id = 2;           // Table to read from
-  RowIdSource row_id_source = 3;       // For single_row mode: which row to read
-  repeated QueryFilter query_filters = 4; // For query mode: filter conditions
-  int32 query_limit = 5;               // For query mode: max rows to return (default: 100)
-  repeated ReadFieldMapping field_mappings = 6; // Map table fields to output variables
-}
-
-// Filter condition for query mode reads
-message QueryFilter {
-  int32 field_id = 1;                  // Field to filter on
-  string operator = 2;                 // 'equals', 'not_equals', 'contains', 'gt', 'lt', 'gte', 'lte', 'is_empty', 'is_not_empty'
-  RowIdSource value_source = 3;        // Source for filter value (reuses RowIdSource for flexibility)
-}
-
-// Maps table field to output variable
-message ReadFieldMapping {
-  int32 source_field_id = 1;           // Table field ID to read from
-  string target_variable = 2;          // Output variable name to store value
-}
-
-// NOTE: SkillInput, SkillOutput, SkillInputFileConfig removed - replaced by unified InputDefinition/OutputDefinition
+// NOTE: TaskModelConfig, ToolExecutionConfig, ToolInputMapping, WriteConfig,
+// WriteFieldMapping, UpdateMatchConfig, ReadConfig, QueryFilter, ReadFieldMapping
+// removed — deprecated execution mode configs replaced by instruction-based execution.
+// SkillInput, SkillOutput, SkillInputFileConfig also previously removed — replaced by unified InputDefinition/OutputDefinition.
 
 // Target field metadata - provides LLM guidance based on database field type
 message TargetFieldMetadata {

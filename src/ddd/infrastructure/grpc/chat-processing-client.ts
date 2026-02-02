@@ -25,7 +25,6 @@ import type {
   AwaitingInput,
 } from './generated/agent_worker';
 import { toProtoMessageParts } from './mappers/message-part-mapper';
-// mapSkillToProto removed - skills no longer passed via gRPC
 
 // Load protobuf definition
 const PROTO_PATH = path.join(process.cwd(), 'proto', 'agent_worker.proto');
