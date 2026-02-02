@@ -117,12 +117,36 @@ def direct_execution_reward(kwargs: dict[str, Any], pred: Prediction) -> float:
     return float(judgement_result.judgement.score)
 
 
+class DirectExecution(dspy.Signature):  # type: ignore[misc]
+    """Execute the user's task using the provided tools.
+
+    After a tool call succeeds and the task is addressed, call finish().
+    Do not continue with additional operations after the task is complete.
+    If you need to discover a resource first (e.g., find an ID before acting),
+    that discovery step is fine — discovery + action + finish is normal.
+    """
+
+    step_description: str = dspy.InputField(
+        desc="The user's task to execute."
+    )
+    context: str = dspy.InputField(
+        desc="Workspace state and conversation history."
+    )
+    result: str = dspy.OutputField(
+        desc="What was accomplished and the outcome."
+    )
+
+
 class DirectExecutorModule(dspy.Module):  # type: ignore[misc]
     """Executor for DIRECT mode that returns raw Prediction.
 
     Unlike ExecutorModule (which returns a string), this returns the full
     Prediction object from ReAct. Required for dspy.Refine compatibility
     since Refine calls dict(outputs) on the return value.
+
+    Uses DirectExecution signature which provides ReAct with completion
+    instructions via its docstring (DSPy prepends signature.instructions
+    before the agent loop prompt).
     """
 
     def __init__(
@@ -135,7 +159,7 @@ class DirectExecutorModule(dspy.Module):  # type: ignore[misc]
         self.max_iters = max_iters
 
         self.react = dspy.ReAct(
-            "step_description, context -> result",
+            DirectExecution,
             tools=self.execution_tools,
             max_iters=max_iters,
         )

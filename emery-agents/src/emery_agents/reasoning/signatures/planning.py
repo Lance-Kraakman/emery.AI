@@ -441,6 +441,7 @@ class ClassifyTask(dspy.Signature):  # type: ignore[misc]
     - Only flag needs_clarification when the task is too vague to even classify.
     - Missing details that have sensible defaults do NOT need clarification.
     - Prefer PLAN_AND_APPROVE with sensible defaults over asking questions.
+
     """
 
     task: str = dspy.InputField(desc="The user's task or request in natural language")
@@ -452,7 +453,6 @@ class ClassifyTask(dspy.Signature):  # type: ignore[misc]
             "and how complex the execution would be."
         )
     )
-
     classification: TaskClassificationResult = dspy.OutputField()
 
 

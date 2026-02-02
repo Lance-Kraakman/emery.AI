@@ -159,40 +159,24 @@ class CoordinatorStreamingHandler:
         task: str,
         org_model: Optional[str],
         context: str = "",
-        available_tools: Optional[List[dspy.Tool]] = None,
     ) -> TaskClassificationResult:
         """
-        Classify a task to determine execution mode and recommend tools.
+        Classify a task to determine execution mode.
 
         Args:
             task: The user's task
             org_model: Model to use for classification
             context: Optional context about system state
-            available_tools: Optional list of tools to show the classifier for selection
 
         Returns:
-            TaskClassificationResult with mode, recommended_tools, and reasoning
+            TaskClassificationResult with mode, complexity, and reasoning
         """
         classifier = self._get_classifier()
-
-        # Build tool descriptions for the classifier
-        tools_desc = ""
-        if available_tools:
-            tools_desc = json.dumps([
-                {"name": t.name, "description": getattr(t, 'desc', str(t))[:100]}
-                for t in available_tools
-            ])
 
         with dspy.context(lm=get_dspy_lm(org_model)):
             result = classifier.classify(
                 task=task,
                 context=context,
-                available_tools=tools_desc,
-            )
-
-        if result.recommended_tools:
-            logger.info(
-                f"Classifier recommended tools: {result.recommended_tools}"
             )
 
         return result
@@ -314,18 +298,18 @@ class CoordinatorStreamingHandler:
                     skill_names = [s.name for s in workspace.existing_skills]
                     context_str += f"\nAvailable skills: {', '.join(skill_names)}"
 
-                execution_mode = await self._classify_task(
+                classification = await self._classify_task(
                     task=task,
                     org_model=org_model,
                     context=context_str,
                 )
 
-                if execution_mode == TaskExecutionMode.DIRECT:
-                    # Direct execution with tools (skill_crud + loaded skill tools)
+                if classification.mode == TaskExecutionMode.DIRECT:
                     async for event in self._handle_direct_execution(
                         context=context,
                         task=task,
                         org_model=org_model,
+                        classification=classification,
                         external_tools=tools,
                         workspace_context=workspace,
                         memory_context=memory_context_str,
@@ -537,7 +521,7 @@ class CoordinatorStreamingHandler:
                 "content": "\n\nExecution completed with issues. Some steps may have failed."
             }
         else:
-            # No steps executed — direct execution fallback
+            # No steps executed — direct execution fallback (no classification)
             async for event in self._handle_direct_execution(
                 context=context,
                 task="",  # Task already processed by graph
@@ -553,6 +537,7 @@ class CoordinatorStreamingHandler:
         context: 'ExecutionContext',
         task: str,
         org_model: Optional[str],
+        classification: Optional[TaskClassificationResult] = None,
         external_tools: Optional[List[dspy.Tool]] = None,
         workspace_context: Optional[WorkspaceContext] = None,
         memory_context: str = "",
@@ -578,7 +563,7 @@ class CoordinatorStreamingHandler:
             capability_registry=capability_registry,
         )
 
-        # Include loaded tools (skill tools, etc.) from agent config
+        # Include loaded tools (skill tools, Pipedream, etc.) from agent config
         if external_tools:
             tools.extend(external_tools)
 
@@ -587,12 +572,18 @@ class CoordinatorStreamingHandler:
         ask_question_tool = create_ask_question_tool(question_collector)
         all_tools = [ask_question_tool] + tools
 
+        max_iters = self._max_iters_for_direct(classification)
+
+        logger.info(
+            f"Direct execution: {len(all_tools)} tools, max_iters={max_iters}"
+        )
+
         # Create executor wrapped in Refine for quality gating
         from ..reasoning.modules.executor import DirectExecutorModule, direct_execution_reward
 
         base_executor = DirectExecutorModule(
             execution_tools=all_tools,
-            max_iters=10,
+            max_iters=max_iters,
         )
         executor = dspy.Refine(
             module=base_executor,
@@ -678,6 +669,17 @@ class CoordinatorStreamingHandler:
                 "DIRECT_EXECUTION_FAILED",
                 f"Failed to execute task: {e}",
             )
+
+    @staticmethod
+    def _max_iters_for_direct(classification: Optional[TaskClassificationResult]) -> int:
+        """Determine max ReAct iterations based on task complexity."""
+        if not classification:
+            return 10  # fallback default
+        if classification.complexity == TaskComplexity.SIMPLE:
+            return 5
+        if classification.complexity == TaskComplexity.MEDIUM:
+            return 7
+        return 9
 
     def _get_managed_agents_list(self, managed_agents: Optional[List[Any]]) -> List[Any]:
         """Convert managed_agents to list format."""

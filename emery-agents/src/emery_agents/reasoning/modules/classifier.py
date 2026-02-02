@@ -46,9 +46,12 @@ class TaskClassifierModule(dspy.Module):  # type: ignore[misc]
             context: Available context about the system state (optional)
 
         Returns:
-            TaskClassificationResult with mode, needs_clarification, and reasoning
+            TaskClassificationResult with mode, complexity, and reasoning
         """
-        result = self.classifier(task=task, context=context)
+        result = self.classifier(
+            task=task,
+            context=context,
+        )
         classification = result.classification
 
         logger.info(
