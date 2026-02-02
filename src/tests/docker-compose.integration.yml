@@ -154,10 +154,13 @@ services:
       S3_BUCKET_NAME: emery-files
       AWS_ALLOW_HTTP: "true"
       AWS_S3_ALLOW_UNSAFE_RENAME: "true"
+      REDIS_URL: redis://redis-integration:6379
     depends_on:
       postgres-integration:
         condition: service_healthy
       minio-integration:
+        condition: service_healthy
+      redis-integration:
         condition: service_healthy
     command: ["python", "-m", "emery_agents.grpc.server", "--mode=table", "--port=50052"]
     healthcheck:
