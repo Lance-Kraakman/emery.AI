@@ -27,6 +27,7 @@ import type { FilterConfig } from "@/lib/types/filters"
 import type { FieldValue as DomainFieldValue } from "@/ddd/domain/tables/value-objects/field-values"
 import type { FieldDTO } from "@/app/mappers/field-mapper"
 import type { DSGRow } from "@/app/mappers/dsg-mapper"
+import type { RowDTO } from "@/app/mappers/row-mapper"
 import { createDebugLogger } from '@/lib/utils/debug-logger'
 
 const logger = createDebugLogger('DataViewsClient')
@@ -483,8 +484,20 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
       // Replace temp rows with server-returned rows (with real IDs)
       if (data?.success && data?.data && effectiveTableId) {
         const queryKey = rowQueryKeys.infinite(effectiveTableId, sortBy, activeFilters ?? [])
-        const serverRows = data.data as DSGRow[]
+        const serverRowDTOs = data.data as RowDTO[]
         const tempIds = context?.tempRows?.map((r: DSGRow) => r.id) || []
+
+        // Convert RowDTO (fieldValues array) → DSGRow (flat field-name keys)
+        const serverRows: DSGRow[] = serverRowDTOs.map(dto => {
+          const dsgRow: Record<string, any> = { id: dto.id }
+          for (const fv of dto.fieldValues) {
+            const field = fields.find(f => f.id.toString() === fv.fieldId)
+            if (field) {
+              dsgRow[field.name] = fv.value
+            }
+          }
+          return dsgRow as DSGRow
+        })
 
         queryClient.setQueryData(queryKey, (old: any) => {
           if (!old?.pages) return old
