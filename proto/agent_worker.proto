@@ -32,6 +32,7 @@ message TaskRequest {
   string organization_model = 12;  // Organization default model (fallback for agent model)
   repeated MessagePart input_content = 13; // Runtime input attachments for skill execution
   ResolvedContextProto resolved_context = 14; // Context table mappings for this execution
+  int32 skill_id = 15;               // Skill ID for direct execution (avoids name-based lookup)
 }
 
 // AIDEV-NOTE: Simplified for single-instruction execution (removed step_id and step_type)

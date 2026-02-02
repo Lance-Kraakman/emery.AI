@@ -125,6 +125,7 @@ class ProtoMapper:
             timeout_seconds=proto.timeout_seconds,
             name=proto.name,
             skill_name=skill_name,
+            skill_id=proto.skill_id or None,
             instruction_config=instruction_config,
             organization_model=proto.organization_model or None,
             agent_model=proto.agent_model or None,

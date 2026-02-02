@@ -219,7 +219,11 @@ export interface TaskRequest {
   /** Runtime input attachments for skill execution */
   inputContent: MessagePart[];
   /** Context table mappings for this execution */
-  resolvedContext: ResolvedContextProto | undefined;
+  resolvedContext:
+    | ResolvedContextProto
+    | undefined;
+  /** Skill ID for direct execution (avoids name-based lookup) */
+  skillId: number;
 }
 
 /**
@@ -1174,6 +1178,7 @@ function createBaseTaskRequest(): TaskRequest {
     organizationModel: "",
     inputContent: [],
     resolvedContext: undefined,
+    skillId: 0,
   };
 }
 
@@ -1220,6 +1225,9 @@ export const TaskRequest: MessageFns<TaskRequest> = {
     }
     if (message.resolvedContext !== undefined) {
       ResolvedContextProto.encode(message.resolvedContext, writer.uint32(114).fork()).join();
+    }
+    if (message.skillId !== 0) {
+      writer.uint32(120).int32(message.skillId);
     }
     return writer;
   },
@@ -1343,6 +1351,14 @@ export const TaskRequest: MessageFns<TaskRequest> = {
           message.resolvedContext = ResolvedContextProto.decode(reader, reader.uint32());
           continue;
         }
+        case 15: {
+          if (tag !== 120) {
+            break;
+          }
+
+          message.skillId = reader.int32();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1374,6 +1390,7 @@ export const TaskRequest: MessageFns<TaskRequest> = {
       resolvedContext: isSet(object.resolvedContext)
         ? ResolvedContextProto.fromJSON(object.resolvedContext)
         : undefined,
+      skillId: isSet(object.skillId) ? globalThis.Number(object.skillId) : 0,
     };
   },
 
@@ -1421,6 +1438,9 @@ export const TaskRequest: MessageFns<TaskRequest> = {
     if (message.resolvedContext !== undefined) {
       obj.resolvedContext = ResolvedContextProto.toJSON(message.resolvedContext);
     }
+    if (message.skillId !== 0) {
+      obj.skillId = Math.round(message.skillId);
+    }
     return obj;
   },
 
@@ -1451,6 +1471,7 @@ export const TaskRequest: MessageFns<TaskRequest> = {
     message.resolvedContext = (object.resolvedContext !== undefined && object.resolvedContext !== null)
       ? ResolvedContextProto.fromPartial(object.resolvedContext)
       : undefined;
+    message.skillId = object.skillId ?? 0;
     return message;
   },
 };

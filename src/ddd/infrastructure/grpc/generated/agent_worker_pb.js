@@ -1452,7 +1452,8 @@ proto.emery.agents.TaskRequest.toObject = function(includeInstance, msg) {
     organizationModel: jspb.Message.getFieldWithDefault(msg, 12, ""),
     inputContentList: jspb.Message.toObjectList(msg.getInputContentList(),
     proto.emery.agents.MessagePart.toObject, includeInstance),
-    resolvedContext: (f = msg.getResolvedContext()) && proto.emery.agents.ResolvedContextProto.toObject(includeInstance, f)
+    resolvedContext: (f = msg.getResolvedContext()) && proto.emery.agents.ResolvedContextProto.toObject(includeInstance, f),
+    skillId: jspb.Message.getFieldWithDefault(msg, 15, 0)
   };
 
   if (includeInstance) {
@@ -1549,6 +1550,10 @@ proto.emery.agents.TaskRequest.deserializeBinaryFromReader = function(msg, reade
       var value = new proto.emery.agents.ResolvedContextProto;
       reader.readMessage(value,proto.emery.agents.ResolvedContextProto.deserializeBinaryFromReader);
       msg.setResolvedContext(value);
+      break;
+    case 15:
+      var value = /** @type {number} */ (reader.readInt32());
+      msg.setSkillId(value);
       break;
     default:
       reader.skipField();
@@ -1680,6 +1685,13 @@ proto.emery.agents.TaskRequest.serializeBinaryToWriter = function(message, write
       14,
       f,
       proto.emery.agents.ResolvedContextProto.serializeBinaryToWriter
+    );
+  }
+  f = message.getSkillId();
+  if (f !== 0) {
+    writer.writeInt32(
+      15,
+      f
     );
   }
 };
@@ -2048,6 +2060,24 @@ proto.emery.agents.TaskRequest.prototype.clearResolvedContext = function() {
  */
 proto.emery.agents.TaskRequest.prototype.hasResolvedContext = function() {
   return jspb.Message.getField(this, 14) != null;
+};
+
+
+/**
+ * optional int32 skill_id = 15;
+ * @return {number}
+ */
+proto.emery.agents.TaskRequest.prototype.getSkillId = function() {
+  return /** @type {number} */ (jspb.Message.getFieldWithDefault(this, 15, 0));
+};
+
+
+/**
+ * @param {number} value
+ * @return {!proto.emery.agents.TaskRequest} returns this
+ */
+proto.emery.agents.TaskRequest.prototype.setSkillId = function(value) {
+  return jspb.Message.setProto3IntField(this, 15, value);
 };
 
 

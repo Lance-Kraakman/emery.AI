@@ -56,6 +56,7 @@ class TaskRequest:
     timeout_seconds: int
     name: str
     skill_name: Optional[str] = None
+    skill_id: Optional[int] = None
     instruction_config: Optional[InstructionConfig] = None
     organization_model: Optional[str] = None  # For model selection
     agent_model: Optional[str] = None  # For model selection

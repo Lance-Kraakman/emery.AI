@@ -16,17 +16,21 @@ Credential resolution:
 from __future__ import annotations
 
 import logging
+import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import AsyncIterator, Dict, List, Literal, Optional, TypedDict
 
-from emery_agents.api import AgentAPIService
+from emery_agents.api import AgentAPIService, SkillAPIService
+from emery_agents.entities.skill_config import SkillConfig
+from emery_agents.tools.execution.dynamic_execution import fetch_skill_execution_config
+from emery_agents.tools.provider import ToolProvider
 from ..agents.executor import AgentExecutor
 from ..credentials import ResolvedCredentials, CredentialSource
-from emery_agents.tools.provider import ToolProvider
 from ...entities.execution_context import ExecutionContext
 from ...entities.task import TaskRequest
+from ...types import ExecutionMode
 
 logger = logging.getLogger(__name__)
 
@@ -180,8 +184,8 @@ class TaskExecutor:
             if (task_data._task_request is not None
                     and task_data._task_request.skill_name):
                 pre_fetched_skill = await self._fetch_skill_for_task(
+                    skill_id=task_data._task_request.skill_id,
                     skill_name=task_data._task_request.skill_name,
-                    agent_id=task_data.agent_id,
                     api_key=credentials.api_key,
                     org_id=str(task_data.organization_id),
                 )
@@ -324,7 +328,6 @@ class TaskExecutor:
             )
 
         # Fallback to environment
-        import os
         api_key = os.getenv("HF_TOKEN", "")
         return ResolvedCredentials(
             api_key=api_key,
@@ -344,7 +347,6 @@ class TaskExecutor:
         """
         if not self.api_service:
             # Fallback to environment
-            import os
             api_key = os.getenv("HF_TOKEN", "")
             return ResolvedCredentials(
                 api_key=api_key,
@@ -406,32 +408,31 @@ class TaskExecutor:
 
     async def _fetch_skill_for_task(
         self,
+        skill_id: Optional[int],
         skill_name: str,
-        agent_id: Optional[int],
         api_key: str,
         org_id: str,
-    ) -> Optional["SkillConfig"]:
+    ) -> Optional[SkillConfig]:
         """
         Fetch full skill config from API for task execution.
 
-        Skills are no longer sent via gRPC proto. This fetches the skill
-        by name, then gets the full execution-config (including steps with
-        stored plans) via the /api/skills/:id/execution-config endpoint.
+        Uses skill_id directly when available (sent via proto), falling back
+        to name-based lookup for backwards compatibility with older clients.
         """
-        from emery_agents.api import SkillAPIService
-        from emery_agents.entities.skill_config import SkillConfig
-        from emery_agents.tools.execution.dynamic_execution import fetch_skill_execution_config
-
         try:
-            # 1. Find skill ID by name
-            service = SkillAPIService(api_key=api_key, organization_id=int(org_id))
-            skill_data = await service.fetch_skill_by_name(skill_name)
-            if not skill_data:
-                logger.warning(f"Skill '{skill_name}' not found via API")
-                return None
+            resolved_skill_id = skill_id
 
-            # 2. Fetch full execution config (includes steps with agenticConfig.plan)
-            result = fetch_skill_execution_config(int(skill_data.id), api_key, org_id)
+            # Fallback: if no skill_id, look up by name
+            if not resolved_skill_id:
+                service = SkillAPIService(api_key=api_key, organization_id=int(org_id))
+                skill_data = await service.fetch_skill_by_name(skill_name)
+                if not skill_data:
+                    logger.warning(f"Skill '{skill_name}' not found via API")
+                    return None
+                resolved_skill_id = int(skill_data.id)
+
+            # Fetch full execution config (includes steps with agenticConfig.plan)
+            result = fetch_skill_execution_config(resolved_skill_id, api_key, org_id)
             if result.get("success") is False:
                 logger.warning(
                     f"Failed to fetch execution config for skill '{skill_name}': "
@@ -462,9 +463,6 @@ class TaskExecutor:
 
         This reuses the same context structure that server.py:ExecuteTask uses.
         """
-        from ...entities.execution_context import ExecutionContext
-        from ...types import ExecutionMode
-
         # Determine execution mode
         if task_data.skill_id:
             mode = ExecutionMode.AUTONOMOUS
@@ -521,7 +519,7 @@ class TaskExecutor:
             task_id=task_request.task_id,
             organization_id=org_id_int,
             agent_id=task_request.agent_id,
-            skill_id=None,  # Will be resolved from skill_name
+            skill_id=task_request.skill_id,
             instructions=instructions,
             skill_inputs=skill_inputs,
             created_by=None,  # Not available in TaskRequest

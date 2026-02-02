@@ -240,7 +240,8 @@ export function createTaskRequest(params: {
     agentModel: params.agentModel || '', // Agent default model (overrides org model in hierarchy) - empty string if not set
     organizationModel: params.organizationModel || '', // Organization default model for fallback - empty string if not set
     inputContent: [], // Runtime input attachments (empty for now, can be extended later)
-    resolvedContext: params.resolvedContext ? mapResolvedContextToProto(params.resolvedContext) : undefined
+    resolvedContext: params.resolvedContext ? mapResolvedContextToProto(params.resolvedContext) : undefined,
+    skillId: 0, // Default; set below when skill is provided
   };
 
   // Debug logging for model selection
@@ -256,9 +257,10 @@ export function createTaskRequest(params: {
   // Set execution mode (oneof field)
   // Priority: skill-based > skillName > instructionConfig
   if (params.skill) {
-    // Skill-based execution: use skill_name mode
+    // Skill-based execution: use skill_name mode + pass skill_id for direct lookup
     request.skillName = params.skill.name;
-    console.log(`[PROTO-MAPPER] Using skill_name mode for skill: ${params.skill.name}`);
+    request.skillId = params.skill.id;
+    console.log(`[PROTO-MAPPER] Using skill_name mode for skill: ${params.skill.name} (id=${params.skill.id})`);
   } else if (params.skillName) {
     request.skillName = params.skillName;
   } else if (params.instructionConfig) {
