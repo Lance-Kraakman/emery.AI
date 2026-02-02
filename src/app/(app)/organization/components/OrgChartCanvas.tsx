@@ -24,7 +24,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { cn } from '@/lib/utils';
-import { StickyNote, Search, Maximize, LayoutGrid, FileDown, FileUp, Layers } from 'lucide-react';
+import { StickyNote, Search, Maximize, LayoutGrid, FileDown, FileUp, Layers, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import {
@@ -56,6 +56,7 @@ import {
 import { extractDataSourceEdges, type DataSourceMapping } from '@/components/org-chart/edgeUtils';
 import { EntityPalette } from './EntityPalette';
 import { SearchDialog } from './SearchDialog';
+import { SecurityPanel } from './SecurityPanel';
 import { StickyNoteProvider } from '@/components/shared/StickyNoteContext';
 import { OrgChartDragProvider } from '@/components/org-chart/context';
 import { attachContextTable } from '@/app/actions/context-mappings';
@@ -134,6 +135,7 @@ export function OrgChartCanvas({
   const [isDeleting, setIsDeleting] = useState(false);
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [isSecurityPanelOpen, setIsSecurityPanelOpen] = useState(false);
 
   // Edge layer visibility - which edge types are shown
   const ALL_EDGE_LAYERS = ['skill_ref', 'skill_table', 'data_source', 'automation_skill'] as const;
@@ -915,7 +917,7 @@ export function OrgChartCanvas({
         {/* Controls (zoom in/out/fit) */}
         <Controls
           showInteractive={false}
-          className="!bg-card !border-border !shadow-sm"
+          className="!bg-card !border-border !shadow-sm [&_button]:!bg-card [&_button]:!border-border [&_button]:!fill-foreground [&_button]:!text-foreground"
         />
 
         {/* Minimap */}
@@ -1090,6 +1092,22 @@ export function OrgChartCanvas({
                       </Tooltip>
                     </>
                   )}
+                  <div className="w-px h-6 bg-border mx-0.5" />
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className={cn('h-8 w-8', isSecurityPanelOpen && 'text-primary')}
+                        onClick={() => setIsSecurityPanelOpen((v) => !v)}
+                      >
+                        <ShieldCheck className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      <p>Security</p>
+                    </TooltipContent>
+                  </Tooltip>
                 </>
               )}
             </TooltipProvider>
@@ -1103,6 +1121,13 @@ export function OrgChartCanvas({
             />
           )}
         </Panel>
+
+        {/* Security panel */}
+        {isSecurityPanelOpen && (
+          <Panel position="top-right" className="!p-0">
+            <SecurityPanel onClose={() => setIsSecurityPanelOpen(false)} />
+          </Panel>
+        )}
 
         {/* Selection info panel */}
         {selectedNodeId && (
