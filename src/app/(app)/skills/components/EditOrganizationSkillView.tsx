@@ -65,17 +65,16 @@ export function EditOrganizationSkillView({ skill, isSystem = false }: EditOrgan
   };
 
   return (
-    <div className="h-full relative">
-      {/* Floating Header - centered in canvas area (between side panels) */}
-      <div className="absolute top-2 left-56 right-[21.5rem] z-20 flex justify-center">
-        <div className="flex items-center gap-2 px-4 py-2 bg-background/50 backdrop-blur-sm border rounded-full shadow-sm">
+    <div className="h-full flex flex-col">
+      {/* Docked Header */}
+      <div className="shrink-0 z-20 flex items-center gap-2 px-4 py-2 bg-background/80 backdrop-blur-sm border-b overflow-hidden min-w-0">
         <Globe className="h-4 w-4 text-muted-foreground shrink-0" />
 
         <Input
           value={formData.name}
           onChange={(e) => setFormData({ ...formData, name: e.target.value })}
           placeholder="Skill name..."
-          className="h-8 w-[180px] text-sm bg-transparent border-0 focus-visible:ring-1"
+          className="h-8 min-w-0 max-w-[240px] flex-1 text-sm bg-transparent border-0 focus-visible:ring-1"
           disabled={isSystem}
         />
 
@@ -86,7 +85,7 @@ export function EditOrganizationSkillView({ skill, isSystem = false }: EditOrgan
           </Badge>
         )}
 
-        {!isSystem && <SaveStatusIndicator status={saveStatus} />}
+        {!isSystem && <SaveStatusIndicator status={saveStatus} className="shrink-0" />}
 
         <ModelSelector
           value={formData.model}
@@ -96,12 +95,12 @@ export function EditOrganizationSkillView({ skill, isSystem = false }: EditOrgan
           inheritLabel="Inherit"
           inheritFromModel="IBM Granite 3.3 8B"
           requiredCapabilities={['toolCalling']}
-          className="w-[180px] h-8"
+          className="w-auto max-w-[180px] h-8 shrink"
           disabled={isSystem}
         />
 
         {/* Mode Toggle - Agentic vs Workflow */}
-        <div className="flex items-center gap-0.5 p-0.5 bg-muted rounded-lg h-8">
+        <div className="flex items-center gap-0.5 p-0.5 bg-muted rounded-lg h-8 shrink-0">
           <Button
             variant={formData.executionType !== 'agent' ? 'default' : 'ghost'}
             size="sm"
@@ -166,19 +165,20 @@ export function EditOrganizationSkillView({ skill, isSystem = false }: EditOrgan
           </>
         )}
       </div>
-      </div>
 
       {/* Full-height Editor */}
-      <SkillEditor
-        value={formData}
-        onChange={setFormData}
-        agentId={null}
-        skillId={skill.id}
-        isReadOnly={isSystem}
-        organizationTier={organizationTier}
-        availableSkills={availableSkills}
-        hasFloatingHeader={true}
-      />
+      <div className="flex-1 min-h-0">
+        <SkillEditor
+          value={formData}
+          onChange={setFormData}
+          agentId={null}
+          skillId={skill.id}
+          isReadOnly={isSystem}
+          organizationTier={organizationTier}
+          availableSkills={availableSkills}
+          hasFloatingHeader={false}
+        />
+      </div>
 
       {/* Share Dialog */}
       <ShareDialog

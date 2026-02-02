@@ -47,18 +47,18 @@ export function getNextGridSlotPosition(
 ): XYPosition {
   const { containerPadding, nodeWidth, nodeHeight, childNodeGap, containerHeaderHeight, sectionGap, sectionLabelHeight } = orgChartNodeSizes;
 
-  const col = existingCount % 2;
-  const row = Math.floor(existingCount / 2);
-  const x = containerPadding + col * (nodeWidth + childNodeGap);
-
   if (entityType === 'skill') {
-    const y = containerHeaderHeight + sectionLabelHeight + row * (nodeHeight + childNodeGap);
+    // Skills: single vertical column
+    const x = containerPadding;
+    const y = containerHeaderHeight + sectionLabelHeight + existingCount * (nodeHeight + childNodeGap);
     return { x, y };
   } else {
+    // Databases: single horizontal row
     const skillRows = 1;
     const skillSectionEnd = containerHeaderHeight + sectionLabelHeight + skillRows * (nodeHeight + childNodeGap);
     const databaseSectionStart = skillSectionEnd + sectionGap + sectionLabelHeight;
-    const y = databaseSectionStart + row * (nodeHeight + childNodeGap);
+    const x = containerPadding + existingCount * (nodeWidth + childNodeGap);
+    const y = databaseSectionStart;
     return { x, y };
   }
 }
@@ -98,14 +98,16 @@ export function calculateAgentContentHeight(
 ): number {
   const contentStartY = orgChartNodeSizes.containerHeaderHeight + orgChartNodeSizes.containerPadding;
 
-  const skillRows = Math.ceil(skillCount / 2);
+  // Skills: 1 column = 1 row per skill
+  const skillRows = skillCount;
   const skillSectionHeight = skillRows > 0
     ? skillRows * (orgChartNodeSizes.nodeHeight + orgChartNodeSizes.childNodeGap)
     : 0;
 
   const sectionGap = (skillCount > 0 && databaseCount > 0) ? orgChartNodeSizes.sectionGap : 0;
 
-  const databaseRows = Math.ceil(databaseCount / 2);
+  // Databases: always 1 horizontal row
+  const databaseRows = databaseCount > 0 ? 1 : 0;
   const databaseSectionHeight = databaseRows > 0
     ? databaseRows * (orgChartNodeSizes.nodeHeight + orgChartNodeSizes.childNodeGap)
     : 0;
@@ -120,7 +122,11 @@ export function calculateAgentDimensions(
   skillCount: number,
   databaseCount: number
 ): { width: number; height: number } {
-  const width = orgChartNodeSizes.containerMinWidth;
+  // Width must accommodate horizontal database row
+  const dbRowWidth = databaseCount > 0
+    ? orgChartNodeSizes.containerPadding * 2 + databaseCount * orgChartNodeSizes.nodeWidth + (databaseCount - 1) * orgChartNodeSizes.childNodeGap
+    : 0;
+  const width = Math.max(orgChartNodeSizes.containerMinWidth, dbRowWidth);
   const height = Math.max(
     orgChartNodeSizes.containerMinHeight,
     calculateAgentContentHeight(skillCount, databaseCount)
@@ -148,7 +154,8 @@ export function getAgentSectionLayout(
 
   // Use compact height for empty placeholder, full height for actual items
   const skillRowHeight = skillCount === 0 ? COMPACT_PLACEHOLDER_HEIGHT : orgChartNodeSizes.nodeHeight;
-  const skillRows = Math.ceil(Math.max(skillCount, 1) / 2);
+  // Skills: 1 column = 1 row per skill
+  const skillRows = Math.max(skillCount, 1);
   const skillSectionHeight = skillRows * (skillRowHeight + orgChartNodeSizes.childNodeGap);
   const skillsStartY = contentStartY;
   const skillsEndY = contentStartY + skillSectionHeight;
@@ -158,7 +165,8 @@ export function getAgentSectionLayout(
   const databaseStartY = skillsEndY + sectionGap;
 
   const databaseRowHeight = databaseCount === 0 ? COMPACT_PLACEHOLDER_HEIGHT : orgChartNodeSizes.nodeHeight;
-  const databaseRows = Math.ceil(Math.max(databaseCount, 1) / 2);
+  // Databases: always 1 horizontal row
+  const databaseRows = 1;
   const databaseSectionHeight = databaseRows * (databaseRowHeight + orgChartNodeSizes.childNodeGap);
   const databasesEndY = databaseStartY + databaseSectionHeight;
 
@@ -254,30 +262,28 @@ export function arrangeChildrenInGrid(
   const childIds = new Set(children.map((c) => c.id));
   const contentStartY = orgChartNodeSizes.containerHeaderHeight + orgChartNodeSizes.containerPadding;
 
+  // Skills: single vertical column
   const skillPositions = new Map<string, { x: number; y: number }>();
   skills.forEach((node, index) => {
-    const col = index % 2;
-    const row = Math.floor(index / 2);
-    const x = orgChartNodeSizes.containerPadding + col * (orgChartNodeSizes.nodeWidth + orgChartNodeSizes.childNodeGap);
-    const y = contentStartY + row * (orgChartNodeSizes.nodeHeight + orgChartNodeSizes.childNodeGap);
+    const x = orgChartNodeSizes.containerPadding;
+    const y = contentStartY + index * (orgChartNodeSizes.nodeHeight + orgChartNodeSizes.childNodeGap);
     skillPositions.set(node.id, { x, y });
   });
 
-  const skillRows = Math.ceil(skills.length / 2);
+  const skillRows = skills.length;
   const skillSectionHeight = skillRows * (orgChartNodeSizes.nodeHeight + orgChartNodeSizes.childNodeGap);
   const databaseStartY = contentStartY +
     (skills.length > 0 ? skillSectionHeight + orgChartNodeSizes.sectionGap : 0);
 
+  // Databases: single horizontal row
   const databasePositions = new Map<string, { x: number; y: number }>();
   databases.forEach((node, index) => {
-    const col = index % 2;
-    const row = Math.floor(index / 2);
-    const x = orgChartNodeSizes.containerPadding + col * (orgChartNodeSizes.nodeWidth + orgChartNodeSizes.childNodeGap);
-    const y = databaseStartY + row * (orgChartNodeSizes.nodeHeight + orgChartNodeSizes.childNodeGap);
+    const x = orgChartNodeSizes.containerPadding + index * (orgChartNodeSizes.nodeWidth + orgChartNodeSizes.childNodeGap);
+    const y = databaseStartY;
     databasePositions.set(node.id, { x, y });
   });
 
-  const databaseRows = Math.ceil(databases.length / 2);
+  const databaseRows = databases.length > 0 ? 1 : 0;
   const databaseSectionHeight = databaseRows * (orgChartNodeSizes.nodeHeight + orgChartNodeSizes.childNodeGap);
   const otherStartY = databaseStartY +
     (databases.length > 0 ? databaseSectionHeight + orgChartNodeSizes.sectionGap : 0);
@@ -480,27 +486,28 @@ export function arrangeOrgChartTopDown(
     const dbIds = agentDatabases.get(agentId);
     if (!dbIds || dbIds.length === 0) continue;
 
-    let dbCursorY = dbTierY;
+    // Place affiliated databases side-by-side under the agent
+    let dbCursorX = layout.x;
     for (const dbId of dbIds) {
-      dbPositions.set(dbId, { x: layout.x, y: dbCursorY });
+      dbPositions.set(dbId, { x: dbCursorX, y: dbTierY });
       const dbNode = result.find((n) => n.id === dbId);
-      const dbHeight = dbNode ? getNodeDimensions(dbNode).height : orgChartNodeSizes.nodeHeight;
-      dbCursorY += dbHeight + GAP;
+      const dbWidth = dbNode ? getNodeDimensions(dbNode).width : orgChartNodeSizes.nodeWidth;
+      dbCursorX += dbWidth + GAP;
     }
   }
 
-  // Place unaffiliated databases after the rightmost agent column
+  // Place unaffiliated databases side-by-side after the rightmost agent column
   if (unaffiliated.length > 0) {
     const rightmostX = sortedAgents.length > 0
       ? sortedAgents[sortedAgents.length - 1][1].x + sortedAgents[sortedAgents.length - 1][1].width + GAP
       : PADDING;
 
-    let dbCursorY = dbTierY;
+    let dbCursorX = rightmostX;
     for (const dbId of unaffiliated) {
-      dbPositions.set(dbId, { x: rightmostX, y: dbCursorY });
+      dbPositions.set(dbId, { x: dbCursorX, y: dbTierY });
       const dbNode = result.find((n) => n.id === dbId);
-      const dbHeight = dbNode ? getNodeDimensions(dbNode).height : orgChartNodeSizes.nodeHeight;
-      dbCursorY += dbHeight + GAP;
+      const dbWidth = dbNode ? getNodeDimensions(dbNode).width : orgChartNodeSizes.nodeWidth;
+      dbCursorX += dbWidth + GAP;
     }
   }
 
