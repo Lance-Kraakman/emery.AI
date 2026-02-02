@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 from emery_agents.entities.tool_config import ToolConfig
 # SkillConfig removed - skills now loaded dynamically via API
-from . import (
+from .crud import (
     create_table_crud,
     create_field_crud,
     create_row_crud,
