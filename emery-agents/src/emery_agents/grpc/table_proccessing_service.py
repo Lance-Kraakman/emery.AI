@@ -46,6 +46,8 @@ from .table.field_validation import (
     get_field_operation_description
 )
 import pyarrow.types as pat
+from .table.write_buffer import WriteBuffer
+from .table.flush_worker import FlushWorker
 
 
 logger = logging.getLogger(__name__)
@@ -60,8 +62,18 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
 
     def __init__(self):
         """Initialize the TableService with cached storage options."""
-        # Cache storage options once at startup - they don't change during runtime
         self._storage_options_cache: Optional[Dict[str, str]] = None
+        self._write_buffer = WriteBuffer()
+
+    def start_flush_worker(self) -> None:
+        """Start the background flush worker for the write buffer."""
+        self._flush_worker = FlushWorker(
+            write_buffer=self._write_buffer,
+            storage_options_fn=self._get_storage_options,
+            flush_interval=int(os.getenv("BUFFER_FLUSH_INTERVAL_SECONDS", "60")),
+            flush_size_mb=float(os.getenv("BUFFER_FLUSH_SIZE_MB", "5")),
+        )
+        self._flush_worker.start()
 
     def _get_storage_options(self) -> Dict[str, str]:
         """Get S3/MinIO storage options for Delta Lake (cached).
@@ -229,7 +241,6 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
 
     def CreateRows(self, request: table_service_pb2.CreateRowsRequest, context: ServicerContext) -> table_service_pb2.CreateRowsResponse:
         """Efficiently create multiple rows in a Delta table."""
-        from datetime import datetime
         try:
             # Compact logging
             self._log_request("CreateRows", table_id=request.table_id, organization_id=request.organization_id,
@@ -248,22 +259,18 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                     message=f"Delta table not found. Call CreateTable before CreateRows: {error_msg}"
                 )
 
-            # Use table library operations
             write_mode = request.mode if request.mode else "append"
-            df, arrow_table = prepare_create_rows(request.rows_data, delta_table, write_mode)
-            
-            self._log_dataframe(df, "CreateRows", show_sample=True)
-            
-            # Use library write function
-            write_with_schema_evolution(s3_uri, arrow_table, write_mode, storage_options)
 
-            # Invalidate cache after write
-            invalidate_delta_cache(s3_uri or "")
+            # Try buffering in Redis first, fall back to direct write
+            buffered = self._write_buffer.buffer_creates(s3_uri, request.rows_data)
+            if not buffered:
+                df, arrow_table = prepare_create_rows(request.rows_data, delta_table, write_mode)
+                self._log_dataframe(df, "CreateRows", show_sample=True)
+                write_with_schema_evolution(s3_uri, arrow_table, write_mode, storage_options)
+                invalidate_delta_cache(s3_uri or "")
 
-            # NOTE: Removed _verify_write_operation call - Delta Lake provides ACID guarantees
-            # and verification was adding ~100-200ms latency by reloading entire table from S3
-
-            # Create row entities for response (unchanged)
+            # Create row entities for response
+            row_count = len(request.rows_data)
             rows = [
                 table_service_pb2.Row(
                     row_id=row_data.id,
@@ -279,12 +286,12 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 for row_data in request.rows_data
             ]
 
-            logger.info(f"CreateRows ✅ Created {len(df)} rows in table '{request.table_id}'")
+            logger.info(f"CreateRows ✅ Created {row_count} rows in table '{request.table_id}'")
             return table_service_pb2.CreateRowsResponse(
                 success=True,
                 rows=rows,
-                rows_created=len(df),
-                message=f"Successfully created {len(df)} rows"
+                rows_created=row_count,
+                message=f"Successfully created {row_count} rows"
             )
 
         except Exception as e:
@@ -409,18 +416,17 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                     message=f"Cannot update rows in non-existent table: {error_msg}"
                 )
 
-            # Use table library operations (always overwrite for updates)
-            df, arrow_table = prepare_update_rows(request.rows_data, delta_table)
-            self._log_dataframe(df, "UpdateRows", show_sample=True)
-            
-            # Use proper merge operation to update only specific rows, not overwrite entire table
-            write_with_merge_operation(s3_uri or "", arrow_table, storage_options)
+            # Try buffering in Redis first, fall back to direct write
+            buffered = self._write_buffer.buffer_updates(s3_uri, request.rows_data)
+            if not buffered:
+                df, arrow_table = prepare_update_rows(request.rows_data, delta_table)
+                self._log_dataframe(df, "UpdateRows", show_sample=True)
+                write_with_merge_operation(s3_uri or "", arrow_table, storage_options)
+                invalidate_delta_cache(s3_uri or "")
 
-            # Invalidate cache after write so next read gets fresh data
-            invalidate_delta_cache(s3_uri or "")
-
-            logger.info(f"[UpdateRows] ✅ Updated {len(df)} rows in '{request.table_id}'")
-            return table_service_pb2.UpdateRowsResponse(success=True, rows_updated=len(df))
+            row_count = len(request.rows_data)
+            logger.info(f"[UpdateRows] ✅ Updated {row_count} rows in '{request.table_id}'")
+            return table_service_pb2.UpdateRowsResponse(success=True, rows_updated=row_count)
 
         except Exception as e:
             logger.error(f"[UpdateRows] Error: {type(e).__name__}: {e}", exc_info=True)
@@ -451,21 +457,16 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             if not dt:
                 return table_service_pb2.DeleteRowsResponse(success=False, message=f"Delta table not found: {error_msg}")
 
-            self._log_delta_state(dt, "DeleteRows BEFORE delete")
-
-            # Build delete predicate (id IN ('row1', 'row2', ...))
-            # AIDEV-NOTE: Escape single quotes in row IDs to prevent SQL injection
-            escaped_ids = [row_id.replace("'", "''") for row_id in request.row_ids]
-            row_ids_str = "', '".join(escaped_ids)
-            predicate = f"id IN ('{row_ids_str}')"
-
-            logger.info(f"[DeleteRows] Executing delete with predicate: {predicate}")
-
-            # AIDEV-NOTE: Efficient row-level deletes without rewriting entire table
-            dt.delete(predicate)
-
-            # Invalidate cache after write so next read gets fresh data
-            invalidate_delta_cache(s3_uri or "")
+            # Try buffering in Redis first, fall back to direct delete
+            buffered = self._write_buffer.buffer_deletes(s3_uri, list(request.row_ids))
+            if not buffered:
+                self._log_delta_state(dt, "DeleteRows BEFORE delete")
+                escaped_ids = [row_id.replace("'", "''") for row_id in request.row_ids]
+                row_ids_str = "', '".join(escaped_ids)
+                predicate = f"id IN ('{row_ids_str}')"
+                logger.info(f"[DeleteRows] Executing delete with predicate: {predicate}")
+                dt.delete(predicate)
+                invalidate_delta_cache(s3_uri or "")
 
             logger.info(f"[DeleteRows] ✅ Deleted {len(request.row_ids)} rows from '{request.table_id}'")
             return table_service_pb2.DeleteRowsResponse(success=True, rows_deleted=len(request.row_ids))
@@ -499,7 +500,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             storage_options = self._get_storage_options()
             delta_table = get_delta_table_cached(s3_uri, storage_options)
 
-            # Use table library operations
+            # Use table library operations (pass write buffer for read consistency)
             df, metadata = prepare_query_rows(
                 delta_table,
                 list(request.filters),
@@ -507,7 +508,9 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                 request.order_direction if hasattr(request, 'order_direction') and request.order_direction else 'ASC',
                 request.limit,
                 request.offset,
-                request.aggregation if request.HasField('aggregation') else None
+                request.aggregation if request.HasField('aggregation') else None,
+                s3_uri=s3_uri,
+                write_buffer=self._write_buffer,
             )
 
             # Convert to Arrow for response
@@ -552,6 +555,13 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
                     success=False, message="Invalid S3 path"
                 )
             stats = prepare_table_stats(s3_uri, self._get_storage_options())
+
+            # Adjust row_count for buffered operations not yet flushed
+            buffered_ops = self._write_buffer.get_buffered_ops(s3_uri)
+            if buffered_ops:
+                insert_count = sum(1 for e in buffered_ops.values() if e["op"] == "insert")
+                delete_count = sum(1 for e in buffered_ops.values() if e["op"] == "delete")
+                stats['row_count'] = stats['row_count'] + insert_count - delete_count
 
             logger.info(f"[GetTableStats] ✅ Stats: {stats['row_count']} rows, {stats['size_bytes']} bytes")
             return table_service_pb2.GetTableStatsResponse(

@@ -229,6 +229,8 @@ def register_table_services(server):
     from .table_proccessing_service import TableService
     table_service_impl = TableService()
     table_service_pb2_grpc.add_TableServiceServicer_to_server(table_service_impl, server)
+    # Start background flush worker for Redis write buffer
+    table_service_impl.start_flush_worker()
 
 async def serve_chat_server(port: int):
     """Chat processing server (port 50051) - AgentWorker + ChatProcessing only."""

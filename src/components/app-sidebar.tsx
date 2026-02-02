@@ -18,6 +18,7 @@ import {
   ScrollText,
   LayoutTemplate,
   Globe,
+  ShieldCheck,
 } from "lucide-react"
 
 import {
@@ -698,6 +699,18 @@ export function AppSidebar({
                         <Link href="/organization/settings/permissions">
                           <Users className="h-4 w-4" />
                           <span className="group-data-[collapsible=icon]:hidden">Permissions</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={pathname === "/organization/settings/security"}
+                        size="sm"
+                      >
+                        <Link href="/organization/settings/security">
+                          <ShieldCheck className="h-4 w-4" />
+                          <span className="group-data-[collapsible=icon]:hidden">Security</span>
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
