@@ -56,7 +56,6 @@ import {
 import { extractDataSourceEdges, type DataSourceMapping } from '@/components/org-chart/edgeUtils';
 import { EntityPalette } from './EntityPalette';
 import { SearchDialog } from './SearchDialog';
-import { SecurityPanel } from './SecurityPanel';
 import { StickyNoteProvider } from '@/components/shared/StickyNoteContext';
 import { OrgChartDragProvider } from '@/components/org-chart/context';
 import { attachContextTable } from '@/app/actions/context-mappings';
@@ -111,6 +110,10 @@ interface OrgChartCanvasProps {
   initialViewport?: { x: number; y: number; zoom: number } | null;
   /** Callback when viewport changes (for session persistence) */
   onViewportChange?: (viewport: { x: number; y: number; zoom: number }) => void;
+  /** Whether the security panel is open (controlled by parent) */
+  isSecurityOpen?: boolean;
+  /** Callback to toggle the security panel */
+  onSecurityToggle?: (open: boolean) => void;
 }
 
 export function OrgChartCanvas({
@@ -126,6 +129,8 @@ export function OrgChartCanvas({
   onDeleteEntities,
   initialViewport,
   onViewportChange,
+  isSecurityOpen,
+  onSecurityToggle,
 }: OrgChartCanvasProps) {
   const router = useRouter();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
@@ -135,7 +140,6 @@ export function OrgChartCanvas({
   const [isDeleting, setIsDeleting] = useState(false);
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
-  const [isSecurityPanelOpen, setIsSecurityPanelOpen] = useState(false);
 
   // Edge layer visibility - which edge types are shown
   const ALL_EDGE_LAYERS = ['skill_ref', 'skill_table', 'data_source', 'automation_skill'] as const;
@@ -941,7 +945,7 @@ export function OrgChartCanvas({
         />
 
         {/* Left panel - toolbar + entity palette in vertical stack */}
-        <Panel position="top-left" className="flex flex-col gap-2">
+        <Panel position="top-left" className="flex flex-col items-start gap-2">
           {/* Toolbar - glassmorphic style */}
           <div className="flex gap-1 bg-background/50 backdrop-blur-sm border rounded-lg shadow-sm p-1">
             <TooltipProvider delayDuration={300}>
@@ -1093,21 +1097,23 @@ export function OrgChartCanvas({
                     </>
                   )}
                   <div className="w-px h-6 bg-border mx-0.5" />
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className={cn('h-8 w-8', isSecurityPanelOpen && 'text-primary')}
-                        onClick={() => setIsSecurityPanelOpen((v) => !v)}
-                      >
-                        <ShieldCheck className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom">
-                      <p>Security</p>
-                    </TooltipContent>
-                  </Tooltip>
+                  {onSecurityToggle && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className={cn('h-8 w-8', isSecurityOpen && 'text-primary')}
+                          onClick={() => onSecurityToggle(!isSecurityOpen)}
+                        >
+                          <ShieldCheck className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom">
+                        <p>Security</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
                 </>
               )}
             </TooltipProvider>
@@ -1121,13 +1127,6 @@ export function OrgChartCanvas({
             />
           )}
         </Panel>
-
-        {/* Security panel */}
-        {isSecurityPanelOpen && (
-          <Panel position="top-right" className="!p-0">
-            <SecurityPanel onClose={() => setIsSecurityPanelOpen(false)} />
-          </Panel>
-        )}
 
         {/* Selection info panel */}
         {selectedNodeId && (

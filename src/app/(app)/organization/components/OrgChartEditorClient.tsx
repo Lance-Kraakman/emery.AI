@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { OrgChartCanvas } from './OrgChartCanvas';
+import { SecurityPanel } from './SecurityPanel';
 import {
   AgentConfigPanel,
   SkillConfigPanel,
@@ -142,6 +143,9 @@ export function OrgChartEditorClient({
   const [selectedEdges, setSelectedEdges] = useState<
     Array<{ id: string; target: string; edgeType: string; tableId?: number }>
   >([]);
+
+  // Security panel
+  const [isSecurityPanelOpen, setIsSecurityPanelOpen] = useState(false);
 
   // Data sources for all agents (context mappings)
   const [dataSources, setDataSources] = useState<DataSourceMapping[]>([]);
@@ -616,6 +620,8 @@ export function OrgChartEditorClient({
           onDeleteEntities={handleDeleteEntities}
           initialViewport={sessionViewport}
           onViewportChange={setSessionViewport}
+          isSecurityOpen={isSecurityPanelOpen}
+          onSecurityToggle={setIsSecurityPanelOpen}
         />
 
         {/* Floating Config Panel - matching skill editor style */}
@@ -650,6 +656,18 @@ export function OrgChartEditorClient({
 
             {/* Panel content */}
             <div className="flex-1 overflow-y-auto p-3">{renderConfigPanel()}</div>
+          </div>
+        )}
+
+        {/* Security Panel - shifts left when config panel is open */}
+        {isSecurityPanelOpen && (
+          <div
+            className={cn(
+              'absolute top-2 max-h-[calc(100%-1rem)] transition-all duration-200',
+              selectedNodeId && selectedNodeType ? 'right-[15.5rem]' : 'right-2'
+            )}
+          >
+            <SecurityPanel onClose={() => setIsSecurityPanelOpen(false)} />
           </div>
         )}
       </div>

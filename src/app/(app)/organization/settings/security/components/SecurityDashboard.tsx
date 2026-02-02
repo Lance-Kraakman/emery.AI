@@ -23,7 +23,6 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   generateSecurityReport,
   listSecurityReports,
@@ -104,7 +103,6 @@ export function SecurityDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
-  const [activeTab, setActiveTab] = useState<'overview' | 'findings' | 'validated'>('overview');
 
   useEffect(() => {
     startTransition(async () => {
@@ -164,6 +162,23 @@ export function SecurityDashboard() {
     });
   };
 
+  // Derive active OWASP violations from open findings only
+  const activeOwaspViolations = useMemo(() => {
+    const result = { llm2025: new Set<string>(), agentic2026: new Set<string>(), web2025: new Set<string>() };
+    findings.filter((f) => f.status === 'open').forEach((f) => {
+      f.findingData.owaspRefs.forEach((ref) => {
+        if (ref.category === 'LLM_2025') result.llm2025.add(ref.code);
+        else if (ref.category === 'AGENTIC_2026') result.agentic2026.add(ref.code);
+        else if (ref.category === 'WEB_2025') result.web2025.add(ref.code);
+      });
+    });
+    return {
+      llm2025: Array.from(result.llm2025),
+      agentic2026: Array.from(result.agentic2026),
+      web2025: Array.from(result.web2025),
+    };
+  }, [findings]);
+
   // Group findings by resource type
   const findingsByResource = useMemo(() => {
     const groups: Record<ResourceType, SecurityFinding[]> = {
@@ -178,7 +193,6 @@ export function SecurityDashboard() {
         groups[type].push(f);
       }
     });
-    // Sort each group by severity
     Object.keys(groups).forEach((key) => {
       groups[key as ResourceType].sort(
         (a, b) => riskLevelOrder.indexOf(a.riskLevel) - riskLevelOrder.indexOf(b.riskLevel)
@@ -272,9 +286,15 @@ export function SecurityDashboard() {
 
       {report && (
         <>
+          {/* Introduction */}
+          <p className="text-sm text-muted-foreground">
+            This report analyzes your agents, skills, automations, and access configurations
+            for common security risks including prompt injection, excessive permissions, and
+            unapproved triggers — mapped to OWASP LLM, Agentic AI, and Web Top 10 standards.
+          </p>
+
           {/* Score Summary Bar */}
           <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-            {/* Grade */}
             <div className="col-span-2 flex items-center gap-3 p-3 border rounded-lg bg-card">
               <div
                 className={cn(
@@ -289,7 +309,6 @@ export function SecurityDashboard() {
                 <div className="text-xs text-muted-foreground">Security Score</div>
               </div>
             </div>
-            {/* Quick Stats */}
             <StatCard
               icon={<XCircle className="h-3.5 w-3.5 text-red-500" />}
               label="Critical"
@@ -316,305 +335,296 @@ export function SecurityDashboard() {
             />
           </div>
 
-          {/* Tabs */}
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
-            <TabsList>
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="findings" className="flex items-center gap-2">
-                Issues
-                {findingsByStatus.open > 0 && (
-                  <Badge variant="destructive" className="text-xs px-1.5 py-0">
-                    {findingsByStatus.open}
-                  </Badge>
-                )}
-              </TabsTrigger>
-              <TabsTrigger value="validated" className="flex items-center gap-2">
-                Validated
-                <Badge variant="outline" className="text-xs px-1.5 py-0 text-green-600">
-                  {report.reportData.strengths.length}
-                </Badge>
-              </TabsTrigger>
-            </TabsList>
-
-            {/* Overview Tab - Unified Report */}
-            <TabsContent value="overview" className="mt-4">
-              <div className="border rounded-lg divide-y">
-                {/* Agent Risk Profiles */}
-                {report.reportData.agentProfiles.length > 0 && (
-                  <div className="p-3">
-                    <div className="text-sm font-medium mb-2">Agent Risk Profiles</div>
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-muted/50">
-                          <TableHead className="h-8 text-xs">Agent</TableHead>
-                          <TableHead className="h-8 text-xs w-24 text-center">Score</TableHead>
-                          <TableHead className="h-8 text-xs w-24 text-center">Findings</TableHead>
-                          <TableHead className="h-8 text-xs w-20 text-center">Status</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {report.reportData.agentProfiles.map((agent) => (
-                          <TableRow key={agent.agentId}>
-                            <TableCell className="py-2 font-medium text-sm">
-                              <div className="flex items-center gap-2">
-                                <Bot className="h-3.5 w-3.5 text-muted-foreground" />
-                                {agent.agentName}
-                              </div>
-                            </TableCell>
-                            <TableCell className="py-2 text-center">
-                              <span
-                                className={cn(
-                                  'font-mono text-sm font-medium',
-                                  agent.riskScore >= 80
-                                    ? 'text-green-600'
-                                    : agent.riskScore >= 60
-                                      ? 'text-yellow-600'
-                                      : agent.riskScore >= 40
-                                        ? 'text-orange-600'
-                                        : 'text-red-600'
-                                )}
-                              >
-                                {agent.riskScore}
-                              </span>
-                            </TableCell>
-                            <TableCell className="py-2 text-center">
-                              {agent.findingCount > 0 ? (
-                                <Badge variant="outline" className="text-xs text-red-600 border-red-200">
-                                  {agent.findingCount}
-                                </Badge>
-                              ) : (
-                                <span className="text-muted-foreground text-xs">-</span>
-                              )}
-                            </TableCell>
-                            <TableCell className="py-2 text-center">
-                              {agent.findingCount === 0 ? (
-                                <CheckCircle className="h-3.5 w-3.5 text-green-500 mx-auto" />
-                              ) : (
-                                <AlertTriangle className="h-3.5 w-3.5 text-amber-500 mx-auto" />
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-
-                {/* OWASP Compliance */}
-                {(report.reportData.owaspViolations.llm2025.length > 0 ||
-                  report.reportData.owaspViolations.agentic2026.length > 0 ||
-                  report.reportData.owaspViolations.web2025.length > 0) && (
-                  <div className="p-3">
-                    <div className="text-sm font-medium mb-2 flex items-center gap-1.5">
-                      <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                      OWASP Compliance Issues
-                    </div>
-                    <div className="space-y-1.5">
-                      {report.reportData.owaspViolations.llm2025.length > 0 && (
-                        <div className="flex items-center gap-3 text-sm">
-                          <span className="text-muted-foreground min-w-[150px]">LLM Top 10 (2025)</span>
-                          <div className="flex gap-1.5 flex-wrap">
-                            {report.reportData.owaspViolations.llm2025.map((code) => (
-                              <Badge key={code} variant="secondary" className="font-mono text-xs">
-                                {code}
-                              </Badge>
-                            ))}
+          {/* Unified Report Body */}
+          <div className="border rounded-lg divide-y">
+            {/* Agent Risk Profiles */}
+            {report.reportData.agentProfiles.length > 0 && (
+              <div className="p-3">
+                <div className="text-sm font-medium mb-2">Agent Risk Profiles</div>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50">
+                      <TableHead className="h-8 text-xs">Agent</TableHead>
+                      <TableHead className="h-8 text-xs w-24 text-center">Score</TableHead>
+                      <TableHead className="h-8 text-xs w-24 text-center">Findings</TableHead>
+                      <TableHead className="h-8 text-xs w-20 text-center">Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {report.reportData.agentProfiles.map((agent) => (
+                      <TableRow key={agent.agentId}>
+                        <TableCell className="py-2 font-medium text-sm">
+                          <div className="flex items-center gap-2">
+                            <Bot className="h-3.5 w-3.5 text-muted-foreground" />
+                            {agent.agentName}
                           </div>
-                        </div>
-                      )}
-                      {report.reportData.owaspViolations.agentic2026.length > 0 && (
-                        <div className="flex items-center gap-3 text-sm">
-                          <span className="text-muted-foreground min-w-[150px]">Agentic AI Top 10 (2026)</span>
-                          <div className="flex gap-1.5 flex-wrap">
-                            {report.reportData.owaspViolations.agentic2026.map((code) => (
-                              <Badge key={code} variant="secondary" className="font-mono text-xs">
-                                {code}
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      {report.reportData.owaspViolations.web2025.length > 0 && (
-                        <div className="flex items-center gap-3 text-sm">
-                          <span className="text-muted-foreground min-w-[150px]">Web Top 10 (2025)</span>
-                          <div className="flex gap-1.5 flex-wrap">
-                            {report.reportData.owaspViolations.web2025.map((code) => (
-                              <Badge key={code} variant="secondary" className="font-mono text-xs">
-                                {code}
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Recommendations */}
-                {report.reportData.topRecommendations.length > 0 && (
-                  <div className="p-3">
-                    <div className="text-sm font-medium mb-2">Recommendations</div>
-                    <ul className="space-y-1">
-                      {report.reportData.topRecommendations.map((rec, i) => (
-                        <li key={i} className="flex gap-2 text-sm text-muted-foreground">
-                          <span className="text-foreground shrink-0">&bull;</span>
-                          <span>{rec}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {/* Authorized Access */}
-                {(report.reportData.authorizedAccess.approvedPlans.length > 0 ||
-                  report.reportData.authorizedAccess.apiTokens.length > 0) && (
-                  <div className="p-3">
-                    <div className="text-sm font-medium mb-2">Authorized Access</div>
-                    <div className="space-y-2">
-                      {report.reportData.authorizedAccess.approvedPlans.length > 0 && (
-                        <div>
-                          <div className="text-xs text-muted-foreground mb-1">Approved Execution Plans</div>
-                          <div className="space-y-0.5">
-                            {report.reportData.authorizedAccess.approvedPlans.map((plan, i) => (
-                              <div key={i} className="flex items-center gap-1.5 text-sm">
-                                <CheckCircle className="h-3 w-3 text-green-500 shrink-0" />
-                                <span>{plan.skillName}</span>
-                                <span className="text-muted-foreground text-xs">
-                                  (approved {new Date(plan.approvedAt).toLocaleDateString()})
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      {report.reportData.authorizedAccess.apiTokens.length > 0 && (
-                        <div>
-                          <div className="text-xs text-muted-foreground mb-1">API Access Tokens</div>
-                          <div className="space-y-0.5">
-                            {report.reportData.authorizedAccess.apiTokens.map((token, i) => (
-                              <div key={i} className="flex items-center gap-1.5 text-sm">
-                                <span>{token.agentName}:</span>
-                                {token.hasApiKey && (
-                                  <Badge variant="outline" className="text-xs py-0">
-                                    API Key
-                                  </Badge>
-                                )}
-                                {token.hasWebhook && (
-                                  <Badge variant="outline" className="text-xs py-0">
-                                    Webhook
-                                  </Badge>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
+                        </TableCell>
+                        <TableCell className="py-2 text-center">
+                          <span
+                            className={cn(
+                              'font-mono text-sm font-medium',
+                              agent.riskScore >= 80
+                                ? 'text-green-600'
+                                : agent.riskScore >= 60
+                                  ? 'text-yellow-600'
+                                  : agent.riskScore >= 40
+                                    ? 'text-orange-600'
+                                    : 'text-red-600'
+                            )}
+                          >
+                            {agent.riskScore}
+                          </span>
+                        </TableCell>
+                        <TableCell className="py-2 text-center">
+                          {agent.findingCount > 0 ? (
+                            <Badge variant="outline" className="text-xs text-red-600 border-red-200">
+                              {agent.findingCount}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="py-2 text-center">
+                          {agent.findingCount === 0 ? (
+                            <CheckCircle className="h-3.5 w-3.5 text-green-500 mx-auto" />
+                          ) : (
+                            <AlertTriangle className="h-3.5 w-3.5 text-amber-500 mx-auto" />
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               </div>
-            </TabsContent>
+            )}
 
-            {/* Findings Tab */}
-            <TabsContent value="findings" className="space-y-3 mt-4">
-              {/* Status Summary */}
-              <div className="flex gap-4 text-sm">
-                <span className="text-muted-foreground">
-                  <span className="font-medium text-red-600">{findingsByStatus.open}</span> open
-                </span>
-                <span className="text-muted-foreground">
-                  <span className="font-medium text-amber-600">{findingsByStatus.acknowledged}</span>{' '}
-                  acknowledged
-                </span>
-                <span className="text-muted-foreground">
-                  <span className="font-medium text-green-600">{findingsByStatus.mitigated}</span>{' '}
-                  mitigated
-                </span>
-              </div>
-
-              {findings.length === 0 ? (
-                <div className="border rounded-lg p-6 text-center">
-                  <CheckCircle className="h-10 w-10 mx-auto text-green-500 mb-2" />
-                  <p className="text-sm font-medium">No security issues found</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Your organization passed all security checks
-                  </p>
+            {/* OWASP Compliance — derived from open findings only */}
+            {(activeOwaspViolations.llm2025.length > 0 ||
+              activeOwaspViolations.agentic2026.length > 0 ||
+              activeOwaspViolations.web2025.length > 0) && (
+              <div className="p-3">
+                <div className="text-sm font-medium mb-2 flex items-center gap-1.5">
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                  OWASP Compliance Issues
                 </div>
-              ) : (
-                <>
-                  {/* Findings by Resource Type */}
-                  {(['agent', 'skill', 'automation', 'delegation'] as ResourceType[]).map((resourceType) => {
-                    const resourceFindings = findingsByResource[resourceType];
-                    if (resourceFindings.length === 0) return null;
-
-                    return (
-                      <section key={resourceType}>
-                        <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
-                          {resourceTypeIcons[resourceType]}
-                          {resourceTypeLabels[resourceType]}
-                          <Badge variant="outline" className="ml-1 text-xs">
-                            {resourceFindings.length}
+                <div className="space-y-1.5">
+                  {activeOwaspViolations.llm2025.length > 0 && (
+                    <div className="flex items-center gap-3 text-sm">
+                      <span className="text-muted-foreground min-w-[150px]">LLM Top 10 (2025)</span>
+                      <div className="flex gap-1.5 flex-wrap">
+                        {activeOwaspViolations.llm2025.map((code) => (
+                          <Badge key={code} variant="secondary" className="font-mono text-xs">
+                            {code}
                           </Badge>
-                        </h3>
-                        <FindingsTable
-                          findings={resourceFindings}
-                          expandedRows={expandedRows}
-                          toggleRow={toggleRow}
-                          handleUpdateStatus={handleUpdateStatus}
-                          isPending={isPending}
-                        />
-                      </section>
-                    );
-                  })}
-                </>
-              )}
-            </TabsContent>
-
-            {/* Validated Tab */}
-            <TabsContent value="validated" className="space-y-3 mt-4">
-              {report.reportData.strengths.length === 0 ? (
-                <div className="border rounded-lg p-6 text-center text-muted-foreground text-sm">
-                  No validated checks to display
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {activeOwaspViolations.agentic2026.length > 0 && (
+                    <div className="flex items-center gap-3 text-sm">
+                      <span className="text-muted-foreground min-w-[150px]">Agentic AI Top 10 (2026)</span>
+                      <div className="flex gap-1.5 flex-wrap">
+                        {activeOwaspViolations.agentic2026.map((code) => (
+                          <Badge key={code} variant="secondary" className="font-mono text-xs">
+                            {code}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {activeOwaspViolations.web2025.length > 0 && (
+                    <div className="flex items-center gap-3 text-sm">
+                      <span className="text-muted-foreground min-w-[150px]">Web Top 10 (2025)</span>
+                      <div className="flex gap-1.5 flex-wrap">
+                        {activeOwaspViolations.web2025.map((code) => (
+                          <Badge key={code} variant="secondary" className="font-mono text-xs">
+                            {code}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              ) : (
-                Object.entries(strengthsByCategory).map(([category, strengths]) => (
-                  <section key={category}>
-                    <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
-                      <CheckCircle className="h-3.5 w-3.5 text-green-500" />
-                      {formatCategoryName(category)}
-                      <Badge variant="outline" className="text-green-600 ml-1 text-xs">
-                        {strengths.length} passed
-                      </Badge>
-                    </h3>
-                    <div className="border rounded-lg divide-y">
-                      {strengths.map((strength, i) => (
-                        <div key={i} className="px-3 py-2">
-                          <div className="flex items-start gap-2">
-                            <CheckCircle className="h-3.5 w-3.5 text-green-500 mt-0.5 flex-shrink-0" />
-                            <div className="flex-1 min-w-0">
-                              <div className="font-medium text-sm">{strength.title}</div>
-                              <div className="text-xs text-muted-foreground mt-0.5">
-                                {strength.description}
-                              </div>
-                              {strength.resourceId && (
-                                <div className="text-xs text-muted-foreground mt-1">
-                                  Resource: {strength.resourceType} #{strength.resourceId}
-                                </div>
-                              )}
+              </div>
+            )}
+
+            {/* Recommendations */}
+            {report.reportData.topRecommendations.length > 0 && (
+              <div className="p-3">
+                <div className="text-sm font-medium mb-2">Recommendations</div>
+                <ul className="space-y-1">
+                  {report.reportData.topRecommendations.map((rec, i) => (
+                    <li key={i} className="flex gap-2 text-sm text-muted-foreground">
+                      <span className="text-foreground shrink-0">&bull;</span>
+                      <span>{rec}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Authorized Access */}
+            {(report.reportData.authorizedAccess.approvedPlans.length > 0 ||
+              report.reportData.authorizedAccess.apiTokens.length > 0) && (
+              <div className="p-3">
+                <div className="text-sm font-medium mb-2">Authorized Access</div>
+                <div className="space-y-2">
+                  {report.reportData.authorizedAccess.approvedPlans.length > 0 && (
+                    <div>
+                      <div className="text-xs text-muted-foreground mb-1">Approved Execution Plans</div>
+                      <div className="space-y-0.5">
+                        {report.reportData.authorizedAccess.approvedPlans.map((plan, i) => (
+                          <div key={i} className="flex items-center gap-1.5 text-sm">
+                            <CheckCircle className="h-3 w-3 text-green-500 shrink-0" />
+                            <span>{plan.skillName}</span>
+                            <span className="text-muted-foreground text-xs">
+                              (approved {new Date(plan.approvedAt).toLocaleDateString()})
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {report.reportData.authorizedAccess.apiTokens.length > 0 && (
+                    <div>
+                      <div className="text-xs text-muted-foreground mb-1">API Access Tokens</div>
+                      <div className="space-y-0.5">
+                        {report.reportData.authorizedAccess.apiTokens.map((token, i) => (
+                          <div key={i} className="flex items-center gap-1.5 text-sm">
+                            <span>{token.agentName}:</span>
+                            {token.hasApiKey && (
+                              <Badge variant="outline" className="text-xs py-0">
+                                API Key
+                              </Badge>
+                            )}
+                            {token.hasWebhook && (
+                              <Badge variant="outline" className="text-xs py-0">
+                                Webhook
+                              </Badge>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Issues */}
+          <section className="space-y-3">
+            <h3 className="text-sm font-semibold flex items-center gap-2">
+              Issues
+              {findingsByStatus.open > 0 && (
+                <Badge variant="destructive" className="text-xs px-1.5 py-0">
+                  {findingsByStatus.open}
+                </Badge>
+              )}
+            </h3>
+
+            <div className="flex gap-4 text-sm">
+              <span className="text-muted-foreground">
+                <span className="font-medium text-red-600">{findingsByStatus.open}</span> open
+              </span>
+              <span className="text-muted-foreground">
+                <span className="font-medium text-amber-600">{findingsByStatus.acknowledged}</span>{' '}
+                acknowledged
+              </span>
+              <span className="text-muted-foreground">
+                <span className="font-medium text-green-600">{findingsByStatus.mitigated}</span>{' '}
+                mitigated
+              </span>
+            </div>
+
+            {findings.length === 0 ? (
+              <div className="border rounded-lg p-6 text-center">
+                <CheckCircle className="h-10 w-10 mx-auto text-green-500 mb-2" />
+                <p className="text-sm font-medium">No security issues found</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Your organization passed all security checks
+                </p>
+              </div>
+            ) : (
+              <>
+                {(['agent', 'skill', 'automation', 'delegation'] as ResourceType[]).map((resourceType) => {
+                  const resourceFindings = findingsByResource[resourceType];
+                  if (resourceFindings.length === 0) return null;
+
+                  return (
+                    <div key={resourceType}>
+                      <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                        {resourceTypeIcons[resourceType]}
+                        {resourceTypeLabels[resourceType]}
+                        <Badge variant="outline" className="ml-1 text-xs">
+                          {resourceFindings.length}
+                        </Badge>
+                      </h4>
+                      <FindingsTable
+                        findings={resourceFindings}
+                        expandedRows={expandedRows}
+                        toggleRow={toggleRow}
+                        handleUpdateStatus={handleUpdateStatus}
+                        isPending={isPending}
+                      />
+                    </div>
+                  );
+                })}
+              </>
+            )}
+          </section>
+
+          {/* Validated */}
+          <section className="space-y-3">
+            <h3 className="text-sm font-semibold flex items-center gap-2">
+              Validated
+              <Badge variant="outline" className="text-xs px-1.5 py-0 text-green-600">
+                {report.reportData.strengths.length}
+              </Badge>
+            </h3>
+
+            {report.reportData.strengths.length === 0 ? (
+              <div className="border rounded-lg p-6 text-center text-muted-foreground text-sm">
+                No validated checks to display
+              </div>
+            ) : (
+              Object.entries(strengthsByCategory).map(([category, strengths]) => (
+                <div key={category}>
+                  <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                    <CheckCircle className="h-3.5 w-3.5 text-green-500" />
+                    {formatCategoryName(category)}
+                    <Badge variant="outline" className="text-green-600 ml-1 text-xs">
+                      {strengths.length} passed
+                    </Badge>
+                  </h4>
+                  <div className="border rounded-lg divide-y">
+                    {strengths.map((strength, i) => (
+                      <div key={i} className="px-3 py-2">
+                        <div className="flex items-start gap-2">
+                          <CheckCircle className="h-3.5 w-3.5 text-green-500 mt-0.5 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-sm">{strength.title}</div>
+                            <div className="text-xs text-muted-foreground mt-0.5">
+                              {strength.description}
                             </div>
+                            {strength.resourceId && (
+                              <div className="text-xs text-muted-foreground mt-1">
+                                Resource: {strength.resourceType} #{strength.resourceId}
+                              </div>
+                            )}
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  </section>
-                ))
-              )}
-            </TabsContent>
-          </Tabs>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+          </section>
         </>
       )}
 
-      {/* Analysis Coverage - always visible when report exists */}
+      {/* Analysis Coverage */}
       {report && <AnalysisCoverage />}
 
       {/* About This Report */}
@@ -872,7 +882,6 @@ function FindingsTable({
 }
 
 function formatCategoryName(category: string): string {
-  // Convert snake_case or camelCase to Title Case
   return category
     .replace(/_/g, ' ')
     .replace(/([A-Z])/g, ' $1')
