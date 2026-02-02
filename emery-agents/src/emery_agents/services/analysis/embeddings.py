@@ -1,11 +1,13 @@
 """
 Embedding Service - Embeddings for semantic search.
 
-Simple embedding service using HuggingFace's feature extraction.
-Used for capability discovery (semantic search across 30K+ capabilities).
+Uses Google Gemini embeddings (gemini-embedding-001) as primary provider.
+Falls back to HuggingFace Inference API if GEMINI_API_KEY is not set.
 
-AIDEV-NOTE: This uses HuggingFace Inference API which is already configured
-in the project, avoiding additional dependencies that could conflict with protobuf.
+Used for:
+- Capability discovery (semantic search across 30K+ capabilities)
+- Workspace context filtering (planning node)
+- Agent memory (ChromaDB vector storage)
 """
 
 import logging
@@ -13,34 +15,80 @@ import os
 from functools import lru_cache
 from typing import Optional
 
-from huggingface_hub import InferenceClient
-
 logger = logging.getLogger(__name__)
 
-# Embedding model - uses HuggingFace Inference API
-# sentence-transformers/all-MiniLM-L6-v2: 384 dimensions, fast, good quality
-EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+# Provider state
+_provider: Optional[str] = None
+_gemini_client = None
+_hf_client = None
 
-# Lazy-loaded client
-_client: Optional[InferenceClient] = None
+# Gemini config
+GEMINI_MODEL = "gemini-embedding-001"
+GEMINI_DIMENSIONS = 768
+
+# HuggingFace fallback config
+HF_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
 
-def _get_client() -> InferenceClient:
-    """Get HuggingFace InferenceClient (lazy initialization)."""
-    global _client
-    if _client is not None:
-        return _client
+def _init_provider() -> str:
+    """Initialize the embedding provider. Prefers Gemini, falls back to HF."""
+    global _provider, _gemini_client, _hf_client
 
-    token = os.getenv("HF_TOKEN")
-    if not token:
-        raise ValueError(
-            "HF_TOKEN environment variable required for embeddings. "
-            "Get your token from https://huggingface.co/settings/tokens"
-        )
+    if _provider is not None:
+        return _provider
 
-    _client = InferenceClient(token=token)
-    logger.info(f"Embedding service initialized with model: {EMBEDDING_MODEL}")
-    return _client
+    gemini_key = os.getenv("GEMINI_API_KEY")
+    if gemini_key:
+        try:
+            from google import genai
+            _gemini_client = genai.Client(api_key=gemini_key)
+            _provider = "gemini"
+            logger.info(f"Embedding service initialized with Gemini model: {GEMINI_MODEL}")
+            return _provider
+        except Exception as e:
+            logger.warning(f"Failed to initialize Gemini embeddings: {e}")
+
+    # Fallback to HuggingFace
+    hf_token = os.getenv("HF_TOKEN")
+    if hf_token:
+        from huggingface_hub import InferenceClient
+        _hf_client = InferenceClient(token=hf_token)
+        _provider = "huggingface"
+        logger.info(f"Embedding service initialized with HuggingFace model: {HF_MODEL}")
+        return _provider
+
+    raise ValueError(
+        "No embedding provider available. "
+        "Set GEMINI_API_KEY (preferred) or HF_TOKEN environment variable."
+    )
+
+
+def _embed_gemini(text: str) -> tuple[float, ...]:
+    """Get embedding from Gemini API."""
+    from google.genai import types
+
+    result = _gemini_client.models.embed_content(
+        model=GEMINI_MODEL,
+        contents=text,
+        config=types.EmbedContentConfig(output_dimensionality=GEMINI_DIMENSIONS),
+    )
+    values = result.embeddings[0].values
+    return tuple(float(x) for x in values)
+
+
+def _embed_huggingface(text: str) -> tuple[float, ...]:
+    """Get embedding from HuggingFace Inference API (fallback)."""
+    result = _hf_client.feature_extraction(text=text, model=HF_MODEL)
+
+    if isinstance(result, list):
+        if len(result) > 0 and isinstance(result[0], list):
+            embedding = result[0]
+        else:
+            embedding = result
+    else:
+        embedding = list(result)
+
+    return tuple(float(x) for x in embedding)
 
 
 @lru_cache(maxsize=1000)
@@ -48,8 +96,8 @@ def get_embedding(text: str) -> tuple[float, ...]:
     """
     Get embedding for text (cached).
 
-    Uses HuggingFace's feature-extraction endpoint which produces
-    embeddings optimized for semantic similarity.
+    Uses Gemini (preferred) or HuggingFace (fallback) for embeddings
+    optimized for semantic similarity.
 
     Args:
         text: Text to embed
@@ -57,25 +105,15 @@ def get_embedding(text: str) -> tuple[float, ...]:
     Returns:
         Tuple of floats (embedding vector). Tuple for hashability/caching.
     """
-    client = _get_client()
+    provider = _init_provider()
 
-    # HuggingFace feature_extraction returns nested array
-    result = client.feature_extraction(text=text, model=EMBEDDING_MODEL)
-
-    # Handle different response formats
-    if isinstance(result, list):
-        if len(result) > 0 and isinstance(result[0], list):
-            # Nested: [[0.1, 0.2, ...]]
-            embedding = result[0]
-        else:
-            # Flat: [0.1, 0.2, ...]
-            embedding = result
+    if provider == "gemini":
+        embedding = _embed_gemini(text)
     else:
-        embedding = list(result)
+        embedding = _embed_huggingface(text)
 
-    embedding_tuple = tuple(float(x) for x in embedding)
-    logger.debug(f"Generated embedding: {len(embedding_tuple)} dims for '{text[:50]}...'")
-    return embedding_tuple
+    logger.debug(f"Generated embedding: {len(embedding)} dims for '{text[:50]}...' (provider={provider})")
+    return embedding
 
 
 def cosine_similarity(a: tuple[float, ...], b: tuple[float, ...]) -> float:

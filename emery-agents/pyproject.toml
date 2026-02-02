@@ -36,6 +36,7 @@ dependencies = [
     "casadi>=3.6.0",
     "numpy>=1.24.0",
     "huggingface-hub>=0.34.3",
+    "google-genai>=1.0.0",  # Google Gemini SDK for embeddings
     "tenacity>=8.2.0",
     "simpleeval>=1.0",  # Safe expression evaluation for workflow conditions
     "ddgs>=6.0.0",  # Required for DuckDuckGoSearchTool in research agent
