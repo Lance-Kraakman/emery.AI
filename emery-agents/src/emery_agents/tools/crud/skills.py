@@ -94,6 +94,13 @@ def create_skill_crud(api_key: str, org_id: str) -> dspy.Tool:
             if '"isSystem":true' in read_result or '"isSystem": true' in read_result:
                 return "ERROR: System skills cannot be edited. Duplicate to create your own version."
 
+            # Normalize tools to proper object format before sending
+            if "tools" in data:
+                data["tools"] = [
+                    t if isinstance(t, dict) else {"name": t}
+                    for t in data["tools"]
+                ]
+
             return make_request(
                 endpoint=f"skills/{skill_id_str}",
                 method="PUT",
@@ -148,6 +155,6 @@ def create_skill_crud(api_key: str, org_id: str) -> dspy.Tool:
             "method": "Operation: read (get config), update (modify), list (find skills and IDs), execute (RUN a skill by ID)",
             "skill_id": "Skill ID (required for read, update, execute). Must be a number.",
             "agent_id": "Agent ID to filter skills (optional for list)",
-            "data": "For update: skill config fields. For execute: input values as {input_name: value} dict (pass {} if no inputs needed)",
+            "data": "For update: skill config fields. tools format: [{\"name\": \"tool_name\"}] (objects, not bare strings). For execute: input values as {input_name: value} dict (pass {} if no inputs needed)",
         },
     )
