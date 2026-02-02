@@ -131,9 +131,18 @@ class SkillExecutorService:
         Returns:
             Plan entity if found, None otherwise
         """
-
-        for step in skill_config.steps:
-            if step.agentic_config and step.agentic_config.plan:
+        logger.info(
+            f"[PLAN-EXTRACT] Skill '{skill_config.name}': "
+            f"{len(skill_config.steps)} steps, execution_type={skill_config.execution_type}"
+        )
+        for i, step in enumerate(skill_config.steps):
+            has_config = step.agentic_config is not None
+            has_plan = has_config and step.agentic_config.plan is not None
+            logger.info(
+                f"[PLAN-EXTRACT]   Step {i} '{step.name}': "
+                f"agentic_config={has_config}, plan={has_plan}"
+            )
+            if has_plan:
                 return step.agentic_config.plan
         return None
 
@@ -499,10 +508,20 @@ class SkillExecutorService:
                     api_key=api_key, organization_id=organization_id
                 )
             else:
-                return self._execute_agentic(
-                    skill_config, runtime_inputs, org_model,
-                    capture_outputs, api_key, organization_id
-                )
+                # Use wrapper DAG if skill has a stored plan, otherwise fall back
+                # to direct LLM agent execution with instructions
+                if self._extract_plan_from_skill(skill_config):
+                    return self._execute_agentic(
+                        skill_config, runtime_inputs, org_model,
+                        capture_outputs, api_key, organization_id
+                    )
+                else:
+                    return self._execute_agent(
+                        skill_config, runtime_inputs, org_model,
+                        capture_outputs, attachments=attachments,
+                        return_message_parts=return_message_parts,
+                        progress_callback=progress_callback
+                    )
         except Exception as e:
             error_msg = f"Skill execution error: {str(e)}"
             logger.error(f"❌ Skill {skill_config.name} failed: {e}", exc_info=True)
@@ -529,13 +548,6 @@ class SkillExecutorService:
 
         if not steps:
             raise ValueError(f"Failed to build wrapper DAG for skill {skill_config.name}")
-
-        # Require stored plan for agentic skills
-        if not self._extract_plan_from_skill(skill_config):
-            raise ValueError(
-                f"Agentic skill '{skill_config.name}' requires a stored plan. "
-                f"No fallback execution available."
-            )
 
         # Create step executor with callback for skill delegation
         step_executor = StepExecutorService(

@@ -174,11 +174,29 @@ class TaskExecutor:
                 f"[TASK-{task_id[:8]}] Created ToolProvider with {credentials.source} credentials"
             )
 
-            # 3. Build execution context
+            # 3. Pre-fetch skill config from API if task executes a skill
+            # Skills are no longer sent via gRPC proto — fetch from API with resolved credentials
+            pre_fetched_skill = None
+            if (task_data._task_request is not None
+                    and task_data._task_request.skill_name):
+                pre_fetched_skill = await self._fetch_skill_for_task(
+                    skill_name=task_data._task_request.skill_name,
+                    agent_id=task_data.agent_id,
+                    api_key=credentials.api_key,
+                    org_id=str(task_data.organization_id),
+                )
+                logger.info(
+                    f"[TASK-{task_id[:8]}] Pre-fetched skill config: "
+                    f"{pre_fetched_skill.name if pre_fetched_skill else 'NOT FOUND'}"
+                )
+
+            # 4. Build execution context
             # If we have the original TaskRequest, use AgentExecutor.determine_execution_context
             # which properly handles skills, tools, attachments, etc.
             if task_data._task_request is not None:
-                context = self.agent_executor.determine_execution_context(task_data._task_request)
+                context = self.agent_executor.determine_execution_context(
+                    task_data._task_request, pre_fetched_skill=pre_fetched_skill
+                )
                 # Add model parameters from task_data
                 context.agent_model = task_data.agent_model
                 context.org_model = task_data.org_model
@@ -385,6 +403,54 @@ class TaskExecutor:
                 api_key = config["api_key"]
                 return str(api_key) if api_key else None
         return None
+
+    async def _fetch_skill_for_task(
+        self,
+        skill_name: str,
+        agent_id: Optional[int],
+        api_key: str,
+        org_id: str,
+    ) -> Optional["SkillConfig"]:
+        """
+        Fetch full skill config from API for task execution.
+
+        Skills are no longer sent via gRPC proto. This fetches the skill
+        by name, then gets the full execution-config (including steps with
+        stored plans) via the /api/skills/:id/execution-config endpoint.
+        """
+        from emery_agents.api import SkillAPIService
+        from emery_agents.entities.skill_config import SkillConfig
+        from emery_agents.tools.execution.dynamic_execution import fetch_skill_execution_config
+
+        try:
+            # 1. Find skill ID by name
+            service = SkillAPIService(api_key=api_key, organization_id=int(org_id))
+            skill_data = await service.fetch_skill_by_name(skill_name)
+            if not skill_data:
+                logger.warning(f"Skill '{skill_name}' not found via API")
+                return None
+
+            # 2. Fetch full execution config (includes steps with agenticConfig.plan)
+            result = fetch_skill_execution_config(int(skill_data.id), api_key, org_id)
+            if result.get("success") is False:
+                logger.warning(
+                    f"Failed to fetch execution config for skill '{skill_name}': "
+                    f"{result.get('error', 'unknown error')}"
+                )
+                return None
+
+            # Extract skill DTO from response (may be at data.skill or data directly)
+            data = result.get("data", {})
+            skill_dto = data.get("skill", data) if isinstance(data, dict) else {}
+            if isinstance(skill_dto, dict) and skill_dto:
+                return SkillConfig.from_api_response(skill_dto)
+
+            logger.warning(f"Empty skill data in execution config for '{skill_name}'")
+            return None
+
+        except Exception as e:
+            logger.error(f"Error fetching skill config for task: {e}")
+            return None
 
     def _build_execution_context(
         self,

@@ -142,23 +142,37 @@ class AgentExecutor:
     # Routing Logic (from CapabilityRoutingService)
     # =========================================================================
 
-    def determine_execution_context(self, request: TaskRequest) -> ExecutionContext:
+    def determine_execution_context(
+        self,
+        request: TaskRequest,
+        pre_fetched_skill: SkillConfig | None = None,
+    ) -> ExecutionContext:
         """Determine execution context from TaskRequest (skill-based or instruction-based)."""
         if request.skill_name:
-            return self._create_skill_context(request)
+            return self._create_skill_context(request, pre_fetched_skill)
         elif request.instruction_config:
             return self._create_instruction_context(request)
         else:
             raise ValueError("TaskRequest must specify either skill_name or instruction_config")
 
-    def _create_skill_context(self, request: TaskRequest) -> ExecutionContext:
+    def _create_skill_context(
+        self,
+        request: TaskRequest,
+        pre_fetched_skill: SkillConfig | None = None,
+    ) -> ExecutionContext:
         """Create execution context for skill-based execution."""
-        # Find skill in agent config
         if not request.skill_name:
             raise ValueError("Skill name is required for skill-based execution")
-        # Skills resolved via API — agent_config.skills is no longer populated via proto
-        all_skill_dtos: list[SkillConfig] = []
-        skill = self._find_skill_by_name(all_skill_dtos, request.skill_name)
+
+        # Use pre-fetched skill from API if available (task execution path),
+        # otherwise fall back to searching (currently empty — legacy proto path)
+        if pre_fetched_skill:
+            skill = pre_fetched_skill
+            all_skill_dtos = [skill]
+            logger.info(f"Using pre-fetched skill config: {skill.name} (id={skill.id})")
+        else:
+            all_skill_dtos: list[SkillConfig] = []
+            skill = self._find_skill_by_name(all_skill_dtos, request.skill_name)
 
         if not skill:
             raise ValueError(f"Skill '{request.skill_name}' not found in agent configuration")
