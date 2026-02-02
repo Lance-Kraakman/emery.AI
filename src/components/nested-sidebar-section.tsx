@@ -164,16 +164,17 @@ export function NestedSidebarSection<TParent, TChild>({
                         </div>
                       ) : (
                         <div className="flex items-center w-full">
-                          <CollapsibleTrigger className="shrink-0 p-0.5 rounded-sm hover:bg-sidebar-accent group-data-[collapsible=icon]:hidden">
-                            <ChevronRight
-                              className={cn(
-                                "h-3 w-3 transition-transform duration-200",
-                                isOpen && "rotate-90"
-                              )}
-                            />
-                          </CollapsibleTrigger>
                           <SidebarMenuButton asChild isActive={isParentActive(parent, pathname)} size="sm" className="flex-1">
-                            <Link href={getParentHref(parent)}>
+                            <Link
+                              href={getParentHref(parent)}
+                              onClick={(e) => { if (isOpen) e.preventDefault(); onToggle(parentId); }}
+                            >
+                              <ChevronRight
+                                className={cn(
+                                  "h-3 w-3 transition-transform duration-200",
+                                  isOpen && "rotate-90"
+                                )}
+                              />
                               <Icon className="h-4 w-4 shrink-0" />
                               <span className="group-data-[collapsible=icon]:hidden">
                                 {getParentName(parent)}

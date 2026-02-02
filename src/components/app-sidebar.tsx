@@ -454,7 +454,7 @@ export function AppSidebar({
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="border-b px-2 py-1.5">
+      <SidebarHeader className="border-b px-2 py-2">
         <div className="flex items-center justify-between">
           {isCollapsed ? (
             <Button
@@ -620,7 +620,7 @@ export function AppSidebar({
           onToggle={toggleDatabase}
           getParentId={(db) => db.id}
           getParentName={(db) => db.name}
-          getParentHref={() => `/data`}
+          getParentHref={(db) => db.tables?.[0] ? `/data/${db.tables[0].id}` : `/data`}
           isParentActive={(db, path) => {
             // Database is active if any of its tables are selected
             const tables = db.tables || []
