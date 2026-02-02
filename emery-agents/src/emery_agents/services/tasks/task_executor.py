@@ -24,7 +24,7 @@ from typing import AsyncIterator, Dict, List, Literal, Optional, TypedDict
 from emery_agents.api import AgentAPIService
 from ..agents.executor import AgentExecutor
 from ..credentials import ResolvedCredentials, CredentialSource
-from ..tools.provider import ToolProvider
+from emery_agents.tools.provider import ToolProvider
 from ...entities.execution_context import ExecutionContext
 from ...entities.task import TaskRequest
 

@@ -26,7 +26,7 @@ from ...types import SkillExecutionResult
 from ...utils.step_utils import step_to_progress_dict, RawProgressDict
 from ..agents.factory import AgentFactory, AgentConfig
 from .step_executor import StepExecutorService, execute_steps_sync
-from ..tools.loader import UnifiedToolLoader
+from emery_agents.tools.loader import UnifiedToolLoader
 from ...entities.models.plan import Plan
 from ...reasoning.config import get_dspy_lm
 

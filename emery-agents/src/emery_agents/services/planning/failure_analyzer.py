@@ -15,7 +15,7 @@ from emery_agents.entities.models.plan import PlanStep, RecoveryResult
 from emery_agents.entities.models.task_ledger import TaskLedger
 from emery_agents.reasoning.signatures.evaluation import AnalyzeRecovery, RecoveryAction
 
-from ..tools.capability_registry import CapabilityRegistry
+from emery_agents.tools.capability_registry import CapabilityRegistry
 from .models import FailureAnalysisRequest
 
 logger = logging.getLogger(__name__)

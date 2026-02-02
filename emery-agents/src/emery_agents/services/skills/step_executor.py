@@ -33,7 +33,7 @@ from ...utils.error_classifier import classify_error
 from ..agents.factory import AgentFactory, AgentConfig
 from ..execution.plan_step_executor import PlanStepExecutor
 from ...entities.models.plan import Plan
-from ..tools.loader import UnifiedToolLoader
+from emery_agents.tools.loader import UnifiedToolLoader
 from simpleeval import simple_eval
 
 logger = logging.getLogger(__name__)
