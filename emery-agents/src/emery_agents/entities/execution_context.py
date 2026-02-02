@@ -10,8 +10,7 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any, Callable
 
 from emery_agents.entities.models.context_mapping import ResolvedContext
-from ..types import AgentId, OrganizationId, ExecutionMode
-from ..tools.tool_modes import ToolMode
+from ..types import AgentId, OrganizationId, ExecutionMode, ToolMode
 
 from .message import ImageAttachment, FileAttachment
 from .skill_config import SkillConfig

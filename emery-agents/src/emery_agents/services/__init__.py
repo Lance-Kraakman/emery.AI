@@ -24,9 +24,6 @@ from .models import ModelProvider, TokenUsage
 # Context (context and configuration)
 from .context import ContextResolver, ContextSyncService, ContextSyncServiceFactory
 
-# Tools (tool loading and capabilities) — moved to emery_agents.tools
-from emery_agents.tools import UnifiedToolLoader, CapabilityRegistry
-
 # Data (data processing and storage)
 from .data import ResultStorageService, ResultStorageServiceFactory, StoredResult
 
@@ -69,7 +66,6 @@ from ..orchestrators import create_session_graph, create_session_plan_only_graph
 __all__ = [
     "ModelProvider",
     "TokenUsage",
-    "UnifiedToolLoader",
     "ContextResolver",
     "ContextSyncService",
     "ContextSyncServiceFactory",
@@ -92,7 +88,6 @@ __all__ = [
     "TaskLedger",
     "create_ledger_from_plan",
     "AgentAPIService",
-    "CapabilityRegistry",
     # Orchestrators
     "create_session_graph",
     "create_session_plan_only_graph",

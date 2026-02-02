@@ -5,17 +5,12 @@ Categorizes tools as read-only or mutation-capable for two-phase execution.
 Planning mode uses only read-only tools, execution mode uses all tools.
 """
 
-from enum import Enum
 from typing import List, Set, Optional, Any
 import logging
 
+from emery_agents.types import ToolMode
+
 logger = logging.getLogger(__name__)
-
-
-class ToolMode(Enum):
-    """Execution mode for tool access."""
-    PLANNING = "planning"   # Read-only tools only
-    EXECUTION = "execution"  # All tools available
 
 
 # Tool names that are read-only (safe for planning phase)

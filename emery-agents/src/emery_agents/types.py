@@ -51,6 +51,12 @@ SkillId = int
 CapabilityId = int
 
 
+class ToolMode(Enum):
+    """Execution mode for tool access."""
+    PLANNING = "planning"   # Read-only tools only
+    EXECUTION = "execution"  # All tools available
+
+
 class ExecutionMode(Enum):
     """
     Execution mode for agent tasks.
