@@ -72,6 +72,11 @@ class PlanExecuteState(TypedDict, total=False):
     # === Event accumulator (append-only for UI streaming) ===
     events: Annotated[List[Any], operator.add]
 
+    # === Triage (set by triage node) ===
+    execution_mode: Optional[str]  # "direct", "plan", "respond"
+    triage_reasoning: Optional[str]
+    triage_context: Optional[str]  # Key findings from triage research
+
     # === Output ===
     response: Optional[str]  # Final answer (signals "done" to routing)
     error: Optional[str]
@@ -111,6 +116,10 @@ DEFAULT_STATE: Dict[str, Any] = {
     "clarifying_questions": [],
     # Event accumulator
     "events": [],
+    # Triage
+    "execution_mode": None,
+    "triage_reasoning": None,
+    "triage_context": None,
     # Output
     "response": None,
     "error": None,

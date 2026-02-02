@@ -1,12 +1,14 @@
 """
 Plan-and-Execute Graph
 
-LangGraph implementation of the two-phase execution pattern:
-  generate_plan -> await_approval -> execute_step -> replan -> (loop or end)
+LangGraph implementation with triage-first routing:
+  triage -> direct_execute | generate_plan -> await_approval -> execute_step -> replan
 
 Session-scoped: each session gets a graph with RuntimeContext bound to nodes via closures.
 
-Graph architecture (5 nodes):
+Graph architecture (7 nodes):
+  - triage: Classifies task with discovery tools, routes to direct/plan/respond
+  - direct_execute: Single ReAct loop for simple tasks, can escalate to plan
   - setup_autonomous: Sets up autonomous mode with pre-approved plan
   - generate_plan: Creates plan from task, may request clarification
   - await_approval: Human-in-the-loop (approval, clarification, recovery)
@@ -26,6 +28,8 @@ from ..nodes.planning import generate_plan_node
 from ..nodes.execution import execute_step_node
 from ..nodes.replan import replan_node
 from ..nodes.human import await_approval_node
+from ..nodes.triage import triage_node
+from ..nodes.direct import direct_execute_node
 from ...entities.models.task_ledger import create_ledger_from_plan
 from ...services.execution.events import PlanCreatedEvent, PlanApprovedEvent
 
@@ -71,6 +75,37 @@ def route_after_approval(state: PlanExecuteState) -> str:
 
     # Plan approved — start executing
     return "execute_step"
+
+
+def route_after_triage(state: PlanExecuteState) -> str:
+    """Route based on triage decision."""
+    mode = state.get("execution_mode", "plan")
+
+    # "respond" sets response directly in triage node
+    if mode == "respond" or state.get("response"):
+        return "end"
+
+    if mode == "direct":
+        return "direct_execute"
+
+    return "generate_plan"
+
+
+def route_after_direct(state: PlanExecuteState) -> str:
+    """Route after direct execution: done, clarify, or escalate to plan."""
+    # Clarification needed
+    if state.get("awaiting_input"):
+        return "await_approval"
+
+    # Success — response set
+    if state.get("response"):
+        return "end"
+
+    # Escalation — direct failed, try full planning
+    if state.get("execution_mode") == "plan":
+        return "generate_plan"
+
+    return "end"
 
 
 def route_after_replan(state: PlanExecuteState) -> str:
@@ -142,7 +177,9 @@ def create_session_graph(
     Non-serializable runtime objects are bound to nodes via closures.
     Each session (thread_id) gets its own graph + runtime.
 
-    Graph: 5 nodes, follows the reference LangGraph plan-execute pattern.
+    Graph: 7 nodes with triage-first routing.
+    Entry: triage → (direct_execute | generate_plan | END)
+    Direct can escalate to plan. Plan follows approve → execute → replan loop.
 
     Args:
         runtime: RuntimeContext with non-serializable objects (tools, registries, etc.)
@@ -153,6 +190,12 @@ def create_session_graph(
         Compiled LangGraph that can be invoked with ainvoke() or astream().
     """
     # Create closure-wrapped node functions that bind runtime
+    async def _triage(state: PlanExecuteState) -> Dict[str, Any]:
+        return await triage_node(state, runtime)
+
+    async def _direct_execute(state: PlanExecuteState) -> Dict[str, Any]:
+        return await direct_execute_node(state, runtime)
+
     async def _generate_plan(state: PlanExecuteState) -> Dict[str, Any]:
         return await generate_plan_node(state, runtime)
 
@@ -164,36 +207,55 @@ def create_session_graph(
 
     graph = StateGraph(PlanExecuteState)
 
-    # === Nodes (5 total) ===
+    # === Nodes (7 total) ===
+    graph.add_node("triage", _triage)
+    graph.add_node("direct_execute", _direct_execute)
     graph.add_node("setup_autonomous", handle_autonomous_entry)
     graph.add_node("generate_plan", _generate_plan)
     graph.add_node("await_approval", await_approval_node)  # No runtime needed
     graph.add_node("execute_step", _execute_step)
     graph.add_node("replan", _replan)
 
-    # === Entry point ===
+    # === Entry point: triage or autonomous ===
     graph.set_conditional_entry_point(route_entry, {
         "autonomous": "setup_autonomous",
-        "interactive": "generate_plan",
+        "interactive": "triage",
     })
 
-    # === Edges ===
+    # === Triage routing ===
+    graph.add_conditional_edges("triage", route_after_triage, {
+        "direct_execute": "direct_execute",
+        "generate_plan": "generate_plan",
+        "end": END,
+    })
+
+    # === Direct execution routing (with escalation + clarification) ===
+    graph.add_conditional_edges("direct_execute", route_after_direct, {
+        "generate_plan": "generate_plan",
+        "await_approval": "await_approval",
+        "end": END,
+    })
+
+    # === Autonomous → execute ===
     graph.add_edge("setup_autonomous", "execute_step")
 
+    # === Plan → approve ===
     graph.add_conditional_edges("generate_plan", route_after_plan, {
         "await_approval": "await_approval",
         "end": END,
     })
 
+    # === Approve → execute or re-plan ===
     graph.add_conditional_edges("await_approval", route_after_approval, {
         "execute_step": "execute_step",
         "generate_plan": "generate_plan",
         "end": END,
     })
 
-    # Always go to replan after step execution (success or failure)
+    # === Execute → replan (always) ===
     graph.add_edge("execute_step", "replan")
 
+    # === Replan → execute, ask user, or end ===
     graph.add_conditional_edges("replan", route_after_replan, {
         "execute_step": "execute_step",
         "await_approval": "await_approval",
@@ -206,7 +268,7 @@ def create_session_graph(
 
     compiled = graph.compile(checkpointer=checkpointer)
 
-    logger.info("Session plan-execute graph compiled successfully")
+    logger.info("Session plan-execute graph compiled successfully (7 nodes)")
 
     return compiled
 

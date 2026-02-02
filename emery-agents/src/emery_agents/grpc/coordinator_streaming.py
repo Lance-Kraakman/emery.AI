@@ -5,12 +5,10 @@ Handles execution orchestration via LangGraph plan-execute graph.
 Replaces the old ExecutionCoordinator-based two-phase execution.
 """
 
-import json
 import logging
 from pathlib import Path
 from typing import AsyncIterator, Optional, List, Any, Dict
 
-import dspy
 from langgraph.types import Command
 from PIL import Image
 
@@ -23,19 +21,6 @@ from ..entities.models.plan import Plan
 from ..entities.execution_context import ExecutionContext
 from ..tools.tool_modes import ToolMode
 from ..services.agents.executor import AgentExecutor
-from ..services.models.provider import ModelProvider
-from ..services.plan_service import PlanService
-from ..reasoning.config import get_dspy_lm, get_lm_for_task
-from ..reasoning.modules.executor import ExecutorModule
-from ..reasoning.modules.classifier import TaskClassifierModule
-from ..reasoning.signatures.planning import (
-    TaskClassificationResult,
-    TaskComplexity,
-    TaskExecutionMode,
-)
-from ..reasoning.utils import extract_dspy_result
-from emery_agents.tools.factories import create_all_tools
-from emery_agents.tools.output import QuestionCollector, create_ask_question_tool
 from .coordinator_event_converter import convert_coordinator_event
 from .approval_handler import is_approval_response
 from .response_types import create_error_response
@@ -45,6 +30,7 @@ from ..orchestrators.state import DEFAULT_STATE
 from ..services.memory import MemoryService
 from ..services.context import WorkspaceContext
 from emery_agents.tools.capability_registry import CapabilityRegistry
+from emery_agents.tools.capability_bootstrap import populate_user_skills, populate_external_tools
 from ..orchestrators.nodes.planning import _build_workspace_context
 from ..services.planning import PlanFileRepository
 
@@ -76,25 +62,6 @@ def _convert_history(
             )
             messages.append(ConversationMessage(role=role, content=text))
     return messages
-
-
-def _format_dict_questions(questions: List[dict[str, Any]]) -> List[dict[str, Any]]:
-    """Format dict-based questions from QuestionCollector for serialization."""
-    questions_data = []
-    for i, q in enumerate(questions):
-        q_dict = {
-            "questionId": f"q_{i}",
-            "question": q.get("question", ""),
-            "questionType": q.get("question_type", "text"),
-            "required": q.get("required", True),
-            "allowOther": q.get("allow_other", True),
-        }
-        if q.get("options"):
-            q_dict["options"] = q["options"]
-        if q.get("context"):
-            q_dict["context"] = q["context"]
-        questions_data.append(q_dict)
-    return questions_data
 
 
 def _format_plan_for_message(plan: 'Plan') -> str:
@@ -133,53 +100,13 @@ class CoordinatorStreamingHandler:
     Handles orchestration via LangGraph plan-execute graph.
 
     Execution modes:
-    - NEW REQUEST: Starts the graph from scratch (generate_plan -> await_approval -> execute)
+    - NEW REQUEST: Graph triage routes to direct/plan/respond
     - AUTONOMOUS: Pre-approved stored plan executed directly
     - RESUME: Resumes a paused graph (approval, clarification, recovery)
-    - DIRECT: Simple task without plan (DSPy ReAct execution)
     """
 
-    def __init__(
-        self,
-        plan_service: 'PlanService',
-        model_provider: 'ModelProvider',
-    ):
-        self.plan_service = plan_service
-        self.model_provider = model_provider
-        self._classifier: Optional[TaskClassifierModule] = None
-
-    def _get_classifier(self) -> TaskClassifierModule:
-        """Lazy-initialize task classifier."""
-        if self._classifier is None:
-            self._classifier = TaskClassifierModule()
-        return self._classifier
-
-    async def _classify_task(
-        self,
-        task: str,
-        org_model: Optional[str],
-        context: str = "",
-    ) -> TaskClassificationResult:
-        """
-        Classify a task to determine execution mode.
-
-        Args:
-            task: The user's task
-            org_model: Model to use for classification
-            context: Optional context about system state
-
-        Returns:
-            TaskClassificationResult with mode, complexity, and reasoning
-        """
-        classifier = self._get_classifier()
-
-        with dspy.context(lm=get_dspy_lm(org_model)):
-            result = classifier.classify(
-                task=task,
-                context=context,
-            )
-
-        return result
+    def __init__(self):
+        pass
 
     async def stream_response(
         self,
@@ -188,11 +115,11 @@ class CoordinatorStreamingHandler:
         task: str,
         session_id: Optional[str],
         org_model: Optional[str],
+        capability_registry: CapabilityRegistry,
         sm: Optional[Any] = None,
         managed_agents: Optional[List[Any]] = None,
         stored_plan: Optional[Plan] = None,
         conversation_history: Optional[List[Any]] = None,
-        capability_registry: Optional[Any] = None,
         user_id: Optional[str] = None,
         workspace_type: Optional[str] = None,
         workspace_id: Optional[str] = None,
@@ -290,41 +217,15 @@ class CoordinatorStreamingHandler:
             str(context.tool_provider.organization_id),
         )
 
-        # === CLASSIFY TASK (if no stored plan) ===
-        if not stored_plan:
-            try:
-                context_str = workspace.resource_summary()
-                if workspace.existing_skills:
-                    skill_names = [s.name for s in workspace.existing_skills]
-                    context_str += f"\nAvailable skills: {', '.join(skill_names)}"
+        # === POPULATE CAPABILITY REGISTRY (per-request: user skills + external tools) ===
+        org_id_str = str(context.tool_provider.organization_id)
+        if workspace.existing_skills:
+            populate_user_skills(capability_registry, workspace.existing_skills, org_id_str)
+        if tools:
+            populate_external_tools(capability_registry, tools, org_id_str)
+        capability_registry.enable_all_system_agents(org_id_str)
 
-                classification = await self._classify_task(
-                    task=task,
-                    org_model=org_model,
-                    context=context_str,
-                )
-
-                if classification.mode == TaskExecutionMode.DIRECT:
-                    async for event in self._handle_direct_execution(
-                        context=context,
-                        task=task,
-                        org_model=org_model,
-                        classification=classification,
-                        external_tools=tools,
-                        workspace_context=workspace,
-                        memory_context=memory_context_str,
-                        conversation_history=_convert_history(conversation_history),
-                        capability_registry=capability_registry,
-                        images=images,
-                        has_images=has_images,
-                    ):
-                        yield event
-                    return
-            except Exception as e:
-                logger.warning(f"Task classification failed, defaulting to plan mode: {e}")
-                # Fall through to graph execution on classification failure
-
-        # === NEW REQUEST or AUTONOMOUS ===
+        # === INVOKE GRAPH (triage → direct/plan/respond) ===
         async for event in self.stream_with_graph(
             context=context,
             runtime=runtime,
@@ -520,166 +421,21 @@ class CoordinatorStreamingHandler:
                 "type": "content_chunk",
                 "content": "\n\nExecution completed with issues. Some steps may have failed."
             }
-        else:
-            # No steps executed — direct execution fallback (no classification)
-            async for event in self._handle_direct_execution(
-                context=context,
-                task="",  # Task already processed by graph
-                org_model=None,
-                external_tools=tools,
-            ):
-                yield event
-
-        _clear_session(thread_id)
-
-    async def _handle_direct_execution(
-        self,
-        context: 'ExecutionContext',
-        task: str,
-        org_model: Optional[str],
-        classification: Optional[TaskClassificationResult] = None,
-        external_tools: Optional[List[dspy.Tool]] = None,
-        workspace_context: Optional[WorkspaceContext] = None,
-        memory_context: str = "",
-        conversation_history: Optional[List[ConversationMessage]] = None,
-        capability_registry: Optional[CapabilityRegistry] = None,
-        images: Optional[List[Image.Image]] = None,
-        has_images: bool = False,
-    ) -> AsyncIterator[Any]:
-        """
-        Handle direct execution without a plan using DSPy.
-
-        Used for simple tasks that don't require planning.
-        When images are present (user uploads or scanned PDFs), uses vision model.
-        """
-        assert context.tool_provider is not None, "tool_provider required for direct execution"
-
-        logger.info(f"Direct execution: Starting DSPy ReAct execution... (has_images={has_images})")
-
-        # Create DSPy tools with auth (pass capability_registry for search_capabilities)
-        tools = create_all_tools(
-            api_key=context.tool_provider.api_key,
-            org_id=str(context.tool_provider.organization_id),
-            capability_registry=capability_registry,
-        )
-
-        # Include loaded tools (skill tools, Pipedream, etc.) from agent config
-        if external_tools:
-            tools.extend(external_tools)
-
-        # Add ask_question tool for clarification
-        question_collector = QuestionCollector()
-        ask_question_tool = create_ask_question_tool(question_collector)
-        all_tools = [ask_question_tool] + tools
-
-        max_iters = self._max_iters_for_direct(classification)
-
-        logger.info(
-            f"Direct execution: {len(all_tools)} tools, max_iters={max_iters}"
-        )
-
-        # Create executor wrapped in Refine for quality gating
-        from ..reasoning.modules.executor import DirectExecutorModule, direct_execution_reward
-
-        base_executor = DirectExecutorModule(
-            execution_tools=all_tools,
-            max_iters=max_iters,
-        )
-        executor = dspy.Refine(
-            module=base_executor,
-            N=3,
-            reward_fn=direct_execution_reward,
-            threshold=0.8,
-        )
-
-        # Use vision model when images are present (uploaded images or scanned PDF pages)
-        if has_images:
-            lm = get_lm_for_task("execution", prefer_vision=True)
-            logger.info("Using vision model for image-containing request")
-        else:
-            lm = get_dspy_lm(org_model=org_model)
-
-        # Build execution context with available information
-        execution_context: Dict[str, Any] = {
-            "task": task,
-            "org_id": str(context.tool_provider.organization_id),
-        }
-
-        # Add workspace context so executor knows existing resources
-        if workspace_context:
-            execution_context["workspace"] = workspace_context.resource_summary()
-
-        # Add memory context from past interactions
-        if memory_context:
-            execution_context["memory"] = memory_context
-
-        # Add conversation history for follow-up context
-        if conversation_history:
-            recent = conversation_history[-10:]
-            execution_context["conversation_history"] = [
-                {"role": m.role, "content": m.content[:500]} for m in recent
-            ]
-
-        try:
-            # Execute with DSPy
-            with dspy.context(lm=lm):
-                result = executor(
-                    step_description=task,
-                    context=json.dumps(execution_context),
-                )
-
-            result_str = extract_dspy_result(result)
-
-            # Check for clarification questions
-            if question_collector.has_questions():
-                questions = question_collector.get_questions()
-                logger.info(f"Direct execution needs clarification: {len(questions)} question(s)")
-                yield {
-                    "type": "awaiting_input",
-                    "data": {
-                        "input_type": "questions",
-                        "title": "Clarification Needed",
-                        "content": "I need some additional information to complete this task.",
-                        "questions": _format_dict_questions(questions),
-                        "options": [],
-                        "plan_json": ""
-                    }
-                }
-                return
-
-            logger.info(f"Direct execution completed: {len(result_str)} chars")
-
-            # Yield result as content chunks
-            yield {
-                "type": "step_progress",
-                "step_type": "ACTION",
-                "step_name": "Direct Execution",
-                "content": "Task executed directly",
-                "metadata": {},
-                "step_index": 0
-            }
+        elif final_synthesis:
+            # Triage → direct or respond path completed with a synthesis
             yield {
                 "type": "content_chunk",
-                "content": result_str
+                "content": f"\n\n{final_synthesis}"
+            }
+        else:
+            # No steps and no synthesis — graph terminated without producing output
+            logger.warning("Graph completed without producing any output")
+            yield {
+                "type": "content_chunk",
+                "content": "Task completed."
             }
 
-        except Exception as e:
-            logger.error(f"Direct execution failed: {e}", exc_info=True)
-            yield create_error_response(
-                "DIRECT_EXECUTION_FAILED",
-                f"Failed to execute task: {e}",
-            )
-
-    @staticmethod
-    def _max_iters_for_direct(classification: Optional[TaskClassificationResult]) -> int:
-        """Determine max ReAct iterations based on task complexity."""
-        if not classification:
-            return 10  # fallback default
-        if classification.complexity == TaskComplexity.SIMPLE:
-            return 5
-        if classification.complexity == TaskComplexity.MEDIUM:
-            return 7
-        return 9
+        _clear_session(thread_id)
 
     def _get_managed_agents_list(self, managed_agents: Optional[List[Any]]) -> List[Any]:
         """Convert managed_agents to list format."""

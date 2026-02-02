@@ -56,6 +56,7 @@ from ..entities.tool_config import ToolConfig
 from ..entities.message import FileAttachment, HistoryMessage
 from .agents.agent_models import ChatAgent, AgentDescriptor, get_builder_descriptors
 from emery_agents.tools.capability_registry import CapabilityRegistry
+from emery_agents.tools.capability_bootstrap import populate_system_agents
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +97,8 @@ class AgentStreamingHandler:
         self.coordinator_handler = coordinator_handler
         # Capability registry for agent/skill discovery (replaces managed_agents_factory.capability_registry)
         self.capability_registry = capability_registry or CapabilityRegistry()
+        if not capability_registry:
+            populate_system_agents(self.capability_registry)
 
         # Token usage from last execution (for ProcessMessage to capture)
         self.last_token_usage = None

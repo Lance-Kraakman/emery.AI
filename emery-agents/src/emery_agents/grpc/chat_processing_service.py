@@ -33,6 +33,7 @@ from .coordinator_streaming import CoordinatorStreamingHandler
 from .response_converter import convert_response_to_proto
 from .agents.agent_models import get_builder_descriptors
 from emery_agents.tools.capability_registry import CapabilityRegistry
+from emery_agents.tools.capability_bootstrap import populate_system_agents
 from ..services.tasks import TaskExecutor
 from ..services.tasks.task_executor import TaskData
 from ..services.agents.executor import AgentExecutor
@@ -80,6 +81,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             self.agent_factory: Optional[AgentFactory] = AgentFactory(self.model_provider)
             # CapabilityRegistry replaces ManagedAgentsFactory.capability_registry
             self.capability_registry = CapabilityRegistry()
+            populate_system_agents(self.capability_registry)
 
             self.skill_executor_service = SkillExecutorService(
                 tool_loader=self.tool_loader,
@@ -91,10 +93,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 model_provider=self.model_provider,
             )
 
-            self._coordinator_handler = CoordinatorStreamingHandler(
-                plan_service=self.plan_service,
-                model_provider=self.model_provider,
-            )
+            self._coordinator_handler = CoordinatorStreamingHandler()
             self._agent_handler = AgentStreamingHandler(
                 session_manager=self.session_manager,
                 model_provider=self.model_provider,

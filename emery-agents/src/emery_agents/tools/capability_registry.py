@@ -266,6 +266,26 @@ class CapabilityRegistry:
         self._capabilities.clear()
         self._enabled.clear()
 
+    def clear_by_type(self, capability_type: CapabilityType) -> int:
+        """Remove all capabilities of a given type.
+
+        Used for per-request refresh of SKILL/TOOL registrations
+        before re-populating with current data.
+
+        Returns:
+            Number of capabilities removed
+        """
+        to_remove = [
+            cap_id for cap_id, cap in self._capabilities.items()
+            if cap.type == capability_type
+        ]
+        for cap_id in to_remove:
+            del self._capabilities[cap_id]
+            # Clean up enabled references
+            for enabled_set in self._enabled.values():
+                enabled_set.discard(cap_id)
+        return len(to_remove)
+
     def clear_org(self, org_id: str) -> None:
         """Remove all enabled tracking for an org."""
         if org_id in self._enabled:

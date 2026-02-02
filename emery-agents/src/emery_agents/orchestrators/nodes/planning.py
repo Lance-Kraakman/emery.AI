@@ -160,7 +160,7 @@ def _filter_relevant_context(
 
     filtered_tables = _top_n_relevant(
         workspace.existing_tables, TABLE_CAP,
-        lambda t: _score_resource(task_embedding, t.name, " ".join(t.fields)),
+        lambda t: _score_resource(task_embedding, t.name, " ".join(f.name for f in t.fields)),
     )
     filtered_apps = _top_n_relevant(
         workspace.existing_apps, APP_CAP,

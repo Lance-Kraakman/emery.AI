@@ -456,6 +456,59 @@ class ClassifyTask(dspy.Signature):  # type: ignore[misc]
     classification: TaskClassificationResult = dspy.OutputField()
 
 
+class TriageTask(dspy.Signature):  # type: ignore[misc]
+    """Analyze the user's task and determine the best execution approach.
+
+    You have access to discovery tools — use them to research before deciding.
+
+    ROUTING RULES:
+
+    "direct" — Single clear action, execute immediately:
+    - One well-defined action (add a field, run a skill, delete a table)
+    - Research/information tasks (web search, summarize, explain)
+    - Conversational queries (greetings, questions, help)
+    - All required information is in context or discoverable with one tool call
+
+    "plan" — Multi-step, needs user approval before execution:
+    - Multiple CREATION or MODIFICATION steps across different resources
+    - Complex business logic or data modeling (build a CRM, set up workflows)
+    - Cross-capability tasks (needs schema + app + views)
+    - Only for tasks that BUILD or MODIFY multiple workspace resources
+
+    "respond" — Pure conversation, no tools needed:
+    - Greetings, thank you messages
+    - Questions about what the platform can do
+    - Requests for clarification on previous responses
+
+    RESEARCH BEFORE DECIDING:
+    - Use search_capabilities to check what capabilities exist for the task
+    - Use system_research to check if referenced resources exist
+    - Don't guess — verify when uncertain
+
+    WHEN IN DOUBT: prefer "direct" for single actions, "plan" for multi-resource tasks.
+    Research tasks are ALWAYS "direct" regardless of how complex they sound.
+    """
+
+    task: str = dspy.InputField(
+        desc="The user's task or request in natural language"
+    )
+    workspace_context: str = dspy.InputField(
+        desc="Current workspace state: existing resources (databases, tables, apps, agents, skills). "
+             "Check this before making routing decisions."
+    )
+
+    execution_mode: str = dspy.OutputField(
+        desc="One of: 'direct', 'plan', 'respond'"
+    )
+    reasoning: str = dspy.OutputField(
+        desc="Brief explanation of why this route was chosen (1-2 sentences)"
+    )
+    context_notes: str = dspy.OutputField(
+        desc="Key findings from any research tools called (resource IDs, capability matches, etc.). "
+             "Passed to the next node to avoid duplicate lookups. Empty string if no research done."
+    )
+
+
 class ReasoningApproach(BaseModel):
     """Self-Discover: selected reasoning approach for plan generation."""
 
