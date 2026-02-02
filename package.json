@@ -40,7 +40,9 @@
     "seed:all": "npm run seed:apps && npm run seed:tools",
     "fetch:pipedream-tools": "npx tsx src/scripts/fetch-pipedream-tools-with-env.ts",
     "test:agent-execution": "node src/scripts/test-agent-execution.js",
-    "generate:blocks-schema": "tsx scripts/generate-blocks-schema.ts"
+    "generate:blocks-schema": "tsx scripts/generate-blocks-schema.ts",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
   },
   "packageManager": "pnpm@10.14.0",
   "dependencies": {
@@ -187,6 +189,8 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.3.7",
+    "@tauri-apps/api": "^2.9.1",
+    "@tauri-apps/cli": "^2.10.0",
     "@testing-library/jest-dom": "^6.7.0",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1",

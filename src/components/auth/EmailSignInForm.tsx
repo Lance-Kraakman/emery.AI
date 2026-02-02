@@ -2,6 +2,7 @@
 
 import React, { useState } from "react"
 import { signIn } from "next-auth/react"
+import { useDeviceFlow } from "@/hooks/useDeviceFlow"
 
 interface EmailSignInFormProps {
   callbackUrl?: string
@@ -30,6 +31,7 @@ export function EmailSignInForm({
   const [email, setEmail] = useState("")
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState("")
+  const deviceFlow = useDeviceFlow()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -48,11 +50,16 @@ export function EmailSignInForm({
       const result = await signIn("email", {
         email,
         redirect: false,
-        callbackUrl: finalCallbackUrl,
+        callbackUrl: deviceFlow.isDeviceFlow
+          ? deviceFlow.getDeviceCallbackUrl(finalCallbackUrl)
+          : finalCallbackUrl,
       })
 
       if (result?.ok) {
         setMessage("Check your email for a sign-in link.")
+        if (deviceFlow.isDeviceFlow) {
+          deviceFlow.startPolling()
+        }
       } else {
         setMessage(result?.error || "An error occurred. Please try again.")
       }
@@ -101,6 +108,29 @@ export function EmailSignInForm({
         >
           {message}
         </p>
+      )}
+      {deviceFlow.status === 'polling' && (
+        <p className="text-sm text-center mt-2" style={{ color: 'var(--theme-text-muted, #64748b)' }}>
+          Waiting for sign-in from your email...
+        </p>
+      )}
+      {deviceFlow.status === 'success' && (
+        <p className="text-sm text-center mt-2" style={{ color: '#22c55e' }}>
+          Sign-in successful! Redirecting...
+        </p>
+      )}
+      {deviceFlow.status === 'expired' && (
+        <div className="text-sm text-center mt-2">
+          <p style={{ color: '#ef4444' }}>{deviceFlow.error}</p>
+          <button
+            type="button"
+            onClick={deviceFlow.reset}
+            className="mt-1 underline"
+            style={{ color: 'var(--theme-text-muted, #64748b)' }}
+          >
+            Try again
+          </button>
+        </div>
       )}
     </form>
   )
