@@ -665,10 +665,11 @@ class SkillExecutorService:
                 "content": f"Executing skill: {skill_config.name}",
             })
 
-        result = executor_module.forward(
-            step_description=task,
-            context=context_str,
-        )
+        with dspy.context(lm=executor_module._lm):
+            result = executor_module.forward(
+                step_description=task,
+                context=context_str,
+            )
 
         # Emit progress complete if callback provided
         if progress_callback:

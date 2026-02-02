@@ -349,10 +349,11 @@ class AgentExecutor:
                     "has_images": len(pil_images) > 0,
                     "image_count": len(pil_images),
                 })
-                result = agent.forward(
-                    step_description=context.task,
-                    context=context_str,
-                )
+                with dspy.context(lm=agent._lm):
+                    result = agent.forward(
+                        step_description=context.task,
+                        context=context_str,
+                    )
 
                 yield {
                     "status": "completed",
@@ -420,10 +421,11 @@ class AgentExecutor:
                     "has_images": len(pil_images) > 0,
                     "image_count": len(pil_images),
                 })
-                result = agent.forward(
-                    step_description=task_instructions,
-                    context=context_str,
-                )
+                with dspy.context(lm=agent._lm):
+                    result = agent.forward(
+                        step_description=task_instructions,
+                        context=context_str,
+                    )
 
                 # Extract outputs using DSPy module if skill has output mappings
                 captured_outputs = None

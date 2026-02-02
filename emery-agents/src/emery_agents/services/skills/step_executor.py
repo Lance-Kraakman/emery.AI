@@ -7,6 +7,9 @@ import re
 import time
 from dataclasses import dataclass, asdict, field
 from typing import Any, AsyncIterator, Callable, Dict, List, Literal, Optional, Set
+
+import dspy
+
 from ...utils import run_async_in_thread
 from ...entities.tool_config import ToolConfig
 
@@ -1087,7 +1090,8 @@ class StepExecutorService:
         )
 
         sub_agent = self.agent_factory.create_agent(agent_config)
-        result = sub_agent.run(task=task, stream=False, reset=True)
+        with dspy.context(lm=sub_agent._lm):
+            result = sub_agent.run(task=task, stream=False, reset=True)
 
         # Extract outputs using DSPy module if step has output_defs
         if step.output_defs:
