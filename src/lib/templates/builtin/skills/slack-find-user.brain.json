@@ -20,7 +20,7 @@
       "outputs": [
         { "name": "result", "type": "text" }
       ],
-      "instructions": "",
+      "instructions": "Find a Slack user by their email address.\n\nLook up a Slack workspace member using their email address.\n\n**Inputs:**\n- {email}: The email address to look up\n\n**Output:** {result} contains the user's Slack profile including their user ID and display name.",
       "tools": [],
       "executionType": "tool",
       "toolExecutionConfig": {

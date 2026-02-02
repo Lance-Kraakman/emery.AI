@@ -21,7 +21,7 @@
       "outputs": [
         { "name": "result", "type": "text" }
       ],
-      "instructions": "",
+      "instructions": "Create a new Slack channel.\n\nCreate a public or private channel with the specified name.\n\n**Inputs:**\n- {name}: Channel name (lowercase, no spaces)\n- {is_private}: Whether to create as a private channel (optional, defaults to false)\n\n**Output:** {result} contains the created channel details including the channel ID.",
       "tools": [],
       "executionType": "tool",
       "toolExecutionConfig": {

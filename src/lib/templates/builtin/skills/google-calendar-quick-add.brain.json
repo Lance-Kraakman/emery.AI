@@ -20,7 +20,7 @@
       "outputs": [
         { "name": "result", "type": "text" }
       ],
-      "instructions": "",
+      "instructions": "Quickly create a Google Calendar event from a natural language description.\n\nGoogle interprets the description to set the event time, title, and details automatically.\n\n**Inputs:**\n- {description}: Natural language event description (e.g., \"Meeting with Bob tomorrow at 3pm\")\n\n**Output:** {result} contains the created event details.",
       "tools": [],
       "executionType": "tool",
       "toolExecutionConfig": {

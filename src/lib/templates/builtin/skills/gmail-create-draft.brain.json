@@ -22,7 +22,7 @@
       "outputs": [
         { "name": "result", "type": "text" }
       ],
-      "instructions": "",
+      "instructions": "Create a draft email in Gmail without sending it.\n\nThe draft will appear in your Gmail Drafts folder ready for review and sending.\n\n**Inputs:**\n- {to}: Recipient email address(es)\n- {subject}: Email subject line\n- {body}: Email body content\n\n**Output:** {result} contains the created draft details including the draft ID.",
       "tools": [],
       "executionType": "tool",
       "toolExecutionConfig": {

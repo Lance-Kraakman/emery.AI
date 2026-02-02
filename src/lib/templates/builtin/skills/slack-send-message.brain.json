@@ -21,7 +21,7 @@
       "outputs": [
         { "name": "result", "type": "text" }
       ],
-      "instructions": "",
+      "instructions": "Send a message to a Slack channel.\n\nPost a text message to a specific Slack channel. The bot must be a member of the channel.\n\n**Inputs:**\n- {channel}: The Slack channel ID (bot must be a member)\n- {message}: Message text (supports Slack markdown formatting)\n\n**Output:** {result} contains the sent message confirmation including timestamp.",
       "tools": [],
       "executionType": "tool",
       "toolExecutionConfig": {

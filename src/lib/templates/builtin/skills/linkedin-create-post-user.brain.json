@@ -21,7 +21,7 @@
       "outputs": [
         { "name": "result", "type": "text" }
       ],
-      "instructions": "",
+      "instructions": "Create a text post on LinkedIn from your personal account.\n\nPublish content to your LinkedIn feed with the specified visibility.\n\n**Inputs:**\n- {content}: The text content of the post\n- {visibility}: Post visibility — \"PUBLIC\" or \"CONNECTIONS\"\n\n**Output:** {result} contains the created post confirmation.",
       "tools": [],
       "executionType": "tool",
       "toolExecutionConfig": {

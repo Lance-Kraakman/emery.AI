@@ -20,7 +20,7 @@
       "outputs": [
         { "name": "result", "type": "text" }
       ],
-      "instructions": "",
+      "instructions": "Search for emails in Microsoft Outlook.\n\nSearch across your Outlook mailbox using free text search. The search looks through email subjects, bodies, and other fields.\n\n**Inputs:**\n- {search_query}: Search text to find in emails\n\n**Output:** {result} contains matching emails with metadata and content.",
       "tools": [],
       "executionType": "tool",
       "toolExecutionConfig": {

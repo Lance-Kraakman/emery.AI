@@ -22,7 +22,7 @@
       "outputs": [
         { "name": "result", "type": "text" }
       ],
-      "instructions": "",
+      "instructions": "List events from Google Calendar within a date range.\n\nRetrieve upcoming events, optionally filtered by date range and limited in count.\n\n**Inputs:**\n- {start_date}: Lower bound in RFC3339 format (optional)\n- {end_date}: Upper bound in RFC3339 format (optional)\n- {max_results}: Maximum number of events to return (optional)\n\n**Output:** {result} contains the list of calendar events.",
       "tools": [],
       "executionType": "tool",
       "toolExecutionConfig": {

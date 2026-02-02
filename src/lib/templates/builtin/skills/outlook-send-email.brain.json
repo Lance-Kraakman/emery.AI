@@ -23,7 +23,7 @@
       "outputs": [
         { "name": "result", "type": "text" }
       ],
-      "instructions": "",
+      "instructions": "Send an email through Microsoft Outlook.\n\nProvide recipient(s), subject, and body content. Optionally include CC recipients.\n\n**Inputs:**\n- {to}: Recipient email address(es)\n- {subject}: Email subject line\n- {body}: Email body content (plain text or HTML)\n- {cc}: CC recipients (optional)\n\n**Output:** {result} contains the sent message confirmation.",
       "tools": [],
       "executionType": "tool",
       "toolExecutionConfig": {

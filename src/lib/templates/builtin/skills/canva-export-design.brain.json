@@ -21,7 +21,7 @@
       "outputs": [
         { "name": "result", "type": "text" }
       ],
-      "instructions": "",
+      "instructions": "Export an existing Canva design to a downloadable file.\n\nSpecify the design ID and desired export format (pdf, png, jpg).\n\n**Inputs:**\n- {design_id}: The Canva design ID to export\n- {format}: Export format — \"pdf\", \"png\", or \"jpg\"\n\n**Output:** {result} contains the export download URL.",
       "tools": [],
       "executionType": "tool",
       "toolExecutionConfig": {

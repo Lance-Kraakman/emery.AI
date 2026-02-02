@@ -21,7 +21,7 @@
       "outputs": [
         { "name": "result", "type": "text" }
       ],
-      "instructions": "",
+      "instructions": "Reply to an existing email in Microsoft Outlook.\n\nProvide the message ID of the email to reply to and the reply body text.\n\n**Inputs:**\n- {message_id}: The ID of the email message to reply to\n- {reply_body}: The text content of your reply\n\n**Output:** {result} contains the reply confirmation.",
       "tools": [],
       "executionType": "tool",
       "toolExecutionConfig": {

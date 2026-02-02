@@ -23,7 +23,7 @@
       "outputs": [
         { "name": "result", "type": "text" }
       ],
-      "instructions": "",
+      "instructions": "Find a row in a Google Sheets spreadsheet by searching a specific column.\n\nSearch for a value in a specific column and return the matching row.\n\n**Inputs:**\n- {spreadsheet_id}: The Google Sheets spreadsheet ID\n- {worksheet_id}: The worksheet/tab ID\n- {column}: Column letter to search (e.g., \"A\", \"B\", \"C\")\n- {search_value}: The value to search for in the column\n\n**Output:** {result} contains the matching row data.",
       "tools": [],
       "executionType": "tool",
       "toolExecutionConfig": {

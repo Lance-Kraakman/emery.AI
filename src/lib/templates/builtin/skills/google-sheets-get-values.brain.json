@@ -22,7 +22,7 @@
       "outputs": [
         { "name": "result", "type": "text" }
       ],
-      "instructions": "",
+      "instructions": "Get cell values from a range in a Google Sheets spreadsheet.\n\nRetrieve data from a specific range or the entire worksheet.\n\n**Inputs:**\n- {spreadsheet_id}: The Google Sheets spreadsheet ID\n- {worksheet_id}: The worksheet/tab ID\n- {range}: A1 notation range (e.g., \"A1:E5\") — leave empty for all data (optional)\n\n**Output:** {result} contains the cell values from the specified range.",
       "tools": [],
       "executionType": "tool",
       "toolExecutionConfig": {

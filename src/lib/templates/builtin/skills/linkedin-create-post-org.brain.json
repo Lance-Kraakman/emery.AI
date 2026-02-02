@@ -21,7 +21,7 @@
       "outputs": [
         { "name": "result", "type": "text" }
       ],
-      "instructions": "",
+      "instructions": "Create a text post on LinkedIn on behalf of an organization.\n\nPublish content to an organization's LinkedIn page. The post will be publicly visible.\n\n**Inputs:**\n- {organization_id}: The LinkedIn organization ID\n- {content}: The text content of the post\n\n**Output:** {result} contains the created post confirmation.",
       "tools": [],
       "executionType": "tool",
       "toolExecutionConfig": {

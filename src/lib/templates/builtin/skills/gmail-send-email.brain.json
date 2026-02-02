@@ -24,7 +24,7 @@
       "outputs": [
         { "name": "result", "type": "text" }
       ],
-      "instructions": "",
+      "instructions": "Send an email through Gmail.\n\nProvide the recipient email address(es), subject line, and email body. Optionally include CC and BCC recipients.\n\n**Inputs:**\n- {to}: Recipient email address(es)\n- {subject}: Email subject line\n- {body}: Email body content (plain text)\n- {cc}: CC recipients (optional)\n- {bcc}: BCC recipients (optional)\n\n**Output:** {result} contains the sent message details including the message ID.",
       "tools": [],
       "executionType": "tool",
       "toolExecutionConfig": {

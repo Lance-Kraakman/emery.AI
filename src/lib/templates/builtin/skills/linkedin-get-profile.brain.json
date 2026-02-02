@@ -18,7 +18,7 @@
       "outputs": [
         { "name": "result", "type": "text" }
       ],
-      "instructions": "",
+      "instructions": "Retrieve the LinkedIn profile of the currently authenticated user.\n\nNo inputs required — returns profile information for the connected LinkedIn account.\n\n**Output:** {result} contains profile details including name, headline, and profile URL.",
       "tools": [],
       "executionType": "tool",
       "toolExecutionConfig": {

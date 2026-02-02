@@ -22,7 +22,7 @@
       "outputs": [
         { "name": "result", "type": "text" }
       ],
-      "instructions": "",
+      "instructions": "Add a new row to a Google Sheets spreadsheet.\n\nAppend a row to the specified worksheet. If the sheet has headers, column names will be available for data entry.\n\n**Inputs:**\n- {spreadsheet_id}: The Google Sheets spreadsheet ID (from the URL)\n- {worksheet_id}: The worksheet/tab ID within the spreadsheet\n- {has_headers}: Whether the first row contains column headers (true/false)\n\n**Output:** {result} contains the added row confirmation.",
       "tools": [],
       "executionType": "tool",
       "toolExecutionConfig": {

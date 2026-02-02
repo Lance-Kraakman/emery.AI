@@ -20,7 +20,7 @@
       "outputs": [
         { "name": "result", "type": "text" }
       ],
-      "instructions": "",
+      "instructions": "Search for emails in Gmail using Gmail's search query syntax.\n\nSupports Gmail search operators: from:, to:, subject:, has:attachment, is:unread, label:, after:, before:, and more.\n\n**Inputs:**\n- {search_query}: Gmail search query (e.g., \"from:john@example.com subject:meeting\")\n\n**Output:** {result} contains matching emails with their content and metadata.",
       "tools": [],
       "executionType": "tool",
       "toolExecutionConfig": {

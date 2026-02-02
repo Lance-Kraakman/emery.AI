@@ -21,7 +21,7 @@
       "outputs": [
         { "name": "result", "type": "text" }
       ],
-      "instructions": "",
+      "instructions": "Create a new design in Canva.\n\nSpecify the type of design to create (e.g., Presentation, Poster, Instagram Post) and optionally a title.\n\n**Inputs:**\n- {design_type}: Type of design (e.g., \"Presentation\", \"Poster\", \"Instagram Post\")\n- {title}: Name for the design (optional)\n\n**Output:** {result} contains the created design details including the design ID.",
       "tools": [],
       "executionType": "tool",
       "toolExecutionConfig": {

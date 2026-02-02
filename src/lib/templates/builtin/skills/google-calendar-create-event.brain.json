@@ -24,7 +24,7 @@
       "outputs": [
         { "name": "result", "type": "text" }
       ],
-      "instructions": "",
+      "instructions": "Create a new event on Google Calendar.\n\nSchedule an event with a title, start/end times, and optional description and attendees.\n\n**Inputs:**\n- {title}: Event title/summary\n- {start_date}: Start date — \"yyyy-mm-dd\" for all-day or RFC3339 \"yyyy-mm-ddThh:mm:ss+00:00\"\n- {end_date}: End date — same format as start_date\n- {description}: Event description (optional)\n- {attendees}: Attendee email addresses (optional)\n\n**Output:** {result} contains the created event details including the event ID.",
       "tools": [],
       "executionType": "tool",
       "toolExecutionConfig": {
