@@ -4,8 +4,8 @@ import { ThemeProvider } from '@/components/ThemeProvider'
 import AnimatedBackground from '@/app/components/AnimatedBackground'
 
 export const metadata: Metadata = {
-  title: 'Sign In - Emery',
-  description: 'Sign in to your Emery account',
+  title: 'Sign In - enhancd.ai',
+  description: 'Sign in to your enhancd.ai account',
 }
 
 export default function AuthLayout({
@@ -19,6 +19,7 @@ export default function AuthLayout({
       defaultTheme="system"
       enableSystem
       disableTransitionOnChange
+      themes={["light", "dark", "enhancd-light", "enhancd-dark", "system"]}
     >
       <div className="relative min-h-screen">
         <AnimatedBackground />

@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "Emery",
+  "productName": "enhancd.ai",
   "version": "0.1.0",
-  "identifier": "com.emery.app",
+  "identifier": "ai.enhancd.app",
   "build": {
     "frontendDist": "http://localhost:3002",
     "devUrl": "http://localhost:3002"
@@ -10,7 +10,7 @@
   "app": {
     "windows": [
       {
-        "title": "Emery",
+        "title": "enhancd.ai",
         "width": 1280,
         "height": 860,
         "minWidth": 900,

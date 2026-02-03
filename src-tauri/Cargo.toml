@@ -1,8 +1,8 @@
 [package]
-name = "emery"
+name = "enhancd"
 version = "0.1.0"
-description = "Emery Desktop"
-authors = ["Emery"]
+description = "enhancd.ai Desktop"
+authors = ["enhancd.ai"]
 license = ""
 repository = ""
 edition = "2021"

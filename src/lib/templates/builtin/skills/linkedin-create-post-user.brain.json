@@ -7,7 +7,7 @@
     "category": "Integrations",
     "tags": ["linkedin", "post", "social", "personal"],
     "version": "1.0.0",
-    "author": "BrainTable"
+    "author": "enhancd.ai"
   },
   "template": {
     "type": "skill",

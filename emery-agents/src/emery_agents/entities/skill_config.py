@@ -575,7 +575,9 @@ class SkillConfig:
             for o in data.get("outputs", [])
         ]
         tools = [
-            StepToolConfig.from_api_response(t) if isinstance(t, dict) else t
+            StepToolConfig.from_api_response(t) if isinstance(t, dict)
+            else StepToolConfig(name=t) if isinstance(t, str)
+            else t
             for t in data.get("tools", [])
         ]
         steps = [

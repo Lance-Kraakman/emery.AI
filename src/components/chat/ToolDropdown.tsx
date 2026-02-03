@@ -8,7 +8,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp, X } from 'lucide-react';
 import type { ToolDTO } from '@/app/mappers/tool-mapper';
 import { getToolInsertTextWithParameters } from './tool-dropdown/utils';
 import { useToolFilters } from './hooks/useToolFilters';
@@ -48,7 +48,7 @@ export function ToolDropdown({
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [focusedCategoryIndex, setFocusedCategoryIndex] = useState(-1);
   const [isInCategoryMode, setIsInCategoryMode] = useState(false);
-  const [filtersExpanded, setFiltersExpanded] = useState(false);
+  const [filtersExpanded, setFiltersExpanded] = useState(true);
 
   // Fix hydration mismatch
   useEffect(() => {
@@ -173,7 +173,7 @@ export function ToolDropdown({
   // Content rendered inside either fixed wrapper or directly (for Popover use)
   const content = (
     <>
-      {/* Compact header with icon filters and expand toggle */}
+      {/* Compact header with icon filters, clear all, and expand toggle */}
       <div className="px-2.5 py-2 border-b border-border flex items-center gap-2">
         <CategoryFilters
           selectedCategories={filters.selectedCategories}
@@ -182,16 +182,31 @@ export function ToolDropdown({
           isInCategoryMode={isInCategoryMode}
           compact={true}
         />
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setFiltersExpanded(!filtersExpanded);
-          }}
-          className="ml-auto p-1 rounded hover:bg-accent text-muted-foreground"
-          title={filtersExpanded ? 'Hide filters' : 'Show more filters'}
-        >
-          {filtersExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-        </button>
+        <div className="ml-auto flex items-center gap-1">
+          {filters.hasActiveFilters && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                filters.clearAllFilters();
+              }}
+              className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/20 px-2 py-1 rounded transition-colors"
+              title="Clear all filters"
+            >
+              <X className="w-3 h-3" />
+              Clear all
+            </button>
+          )}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setFiltersExpanded(!filtersExpanded);
+            }}
+            className="p-1 rounded hover:bg-accent text-muted-foreground"
+            title={filtersExpanded ? 'Hide filters' : 'Show more filters'}
+          >
+            {filtersExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
+        </div>
       </div>
 
       {/* Advanced Filters - collapsible */}
@@ -212,8 +227,6 @@ export function ToolDropdown({
           onRequiresConnectionChange={filters.setRequiresConnection}
           showReferenceTools={filters.showReferenceTools}
           onShowReferenceToolsChange={filters.setShowReferenceTools}
-          hasActiveFilters={filters.hasActiveFilters}
-          onClearAll={filters.clearAllFilters}
         />
       )}
 

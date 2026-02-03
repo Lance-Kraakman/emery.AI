@@ -649,19 +649,19 @@ export function EmeryChat() {
     handler.setModel?.(model || undefined)
   }
   
-  // Collapsed state - show minimal icon strip with braintable logo
+  // Collapsed state - show minimal icon strip with enhancd logo
   if (chatState === 'collapsed') {
     return (
       <div className={`${CHAT_COLLAPSED_WIDTH} h-full flex flex-col bg-card flex-shrink-0 items-center py-4 gap-4`}>
-        {/* Braintable logo */}
+        {/* enhancd.ai logo */}
         <button
           onClick={() => uiStateActions.toggleChat()}
           className="flex items-center justify-center hover:opacity-80 transition-opacity"
           title="Expand chat"
         >
           <img
-            src="/assets/braintable/logo_logo.png"
-            alt="Braintable"
+            src="/assets/enhancd/logo.svg"
+            alt="enhancd.ai"
             className="h-6 w-6"
           />
         </button>

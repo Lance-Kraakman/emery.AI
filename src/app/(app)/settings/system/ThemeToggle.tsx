@@ -1,7 +1,7 @@
 "use client"
 
 import React from "react"
-import { Moon, Sun } from "lucide-react"
+import { Moon, Sun, Monitor } from "lucide-react"
 import { useTheme } from "next-themes"
 
 import { Button } from "@/components/ui/button"
@@ -10,10 +10,14 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu"
 
 export function ThemeToggle() {
-  const { theme, setTheme, systemTheme } = useTheme()
+  const { theme, setTheme } = useTheme()
+
+  const isDark = theme === "dark" || theme === "enhancd-dark"
 
   return (
     <DropdownMenu>
@@ -25,14 +29,34 @@ export function ThemeToggle() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
+        <DropdownMenuLabel className="text-xs text-muted-foreground">Classic</DropdownMenuLabel>
         <DropdownMenuItem onClick={() => setTheme("light")}>
+          <Sun className="mr-2 h-4 w-4" />
           Light
+          {theme === "light" && <span className="ml-auto text-xs text-primary">Active</span>}
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => setTheme("dark")}>
+          <Moon className="mr-2 h-4 w-4" />
           Dark
+          {theme === "dark" && <span className="ml-auto text-xs text-primary">Active</span>}
         </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="text-xs text-muted-foreground">enhancd.ai</DropdownMenuLabel>
+        <DropdownMenuItem onClick={() => setTheme("enhancd-light")}>
+          <Sun className="mr-2 h-4 w-4" />
+          Light
+          {theme === "enhancd-light" && <span className="ml-auto text-xs text-primary">Active</span>}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setTheme("enhancd-dark")}>
+          <Moon className="mr-2 h-4 w-4" />
+          Dark
+          {theme === "enhancd-dark" && <span className="ml-auto text-xs text-primary">Active</span>}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => setTheme("system")}>
+          <Monitor className="mr-2 h-4 w-4" />
           System
+          {theme === "system" && <span className="ml-auto text-xs text-primary">Active</span>}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

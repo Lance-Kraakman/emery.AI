@@ -41,6 +41,7 @@
     "fetch:pipedream-tools": "npx tsx src/scripts/fetch-pipedream-tools-with-env.ts",
     "test:agent-execution": "node src/scripts/test-agent-execution.js",
     "generate:blocks-schema": "tsx scripts/generate-blocks-schema.ts",
+    "stripe:listen": "source .env.local && stripe listen --forward-to $NEXTAUTH_URL/api/webhooks/stripe",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"
   },

@@ -4,7 +4,7 @@ import AuthProvider from '@/components/AuthProvider'
 import { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Emery - Dynamic Database Builder',
+  title: 'enhancd.ai - Dynamic Database Builder',
   description: 'Build dynamic databases with tables, fields, and rows',
 }
 

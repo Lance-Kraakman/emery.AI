@@ -90,6 +90,7 @@ export function EmeryProviders({
         defaultTheme="system"
         enableSystem
         disableTransitionOnChange
+        themes={["light", "dark", "enhancd-light", "enhancd-dark", "system"]}
       >
         <EmeryStoreProvider>
           <LayoutProvider>

@@ -454,6 +454,9 @@ export function UnifiedChatInput<T = ToolDTO>({
       // Don't close if clicking on input or dropdown elements
       if (input && input.contains(target)) return;
       if (dropdownRef.current && dropdownRef.current.contains(target)) return;
+      // Check fixed-position tool dropdown (form mode)
+      const fixedDropdown = document.querySelector('[data-tool-dropdown]');
+      if (fixedDropdown && fixedDropdown.contains(target)) return;
 
       setShowDropdown(false);
     };

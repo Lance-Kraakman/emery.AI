@@ -7,7 +7,7 @@
     "category": "Integrations",
     "tags": ["outlook", "microsoft", "email", "send"],
     "version": "1.0.0",
-    "author": "BrainTable"
+    "author": "enhancd.ai"
   },
   "template": {
     "type": "skill",

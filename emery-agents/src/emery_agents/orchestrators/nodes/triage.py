@@ -54,6 +54,11 @@ async def triage_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[
     workspace_summary = workspace.resource_summary() if workspace else ""
     memory_context = state.get("memory_context", "") or ""
 
+    # Build image context for triage routing decisions
+    image_context = ""
+    if runtime.images:
+        image_context = f"{len(runtime.images)} image(s) uploaded by the user, available for visual analysis in direct/plan execution."
+
     # Create discovery tools for ReAct triage
     discovery_tools: list[dspy.Tool] = []
     if api_key and org_id:
@@ -81,6 +86,7 @@ async def triage_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[
                 task=task,
                 workspace_context=workspace_summary,
                 memory_context=memory_context,
+                image_context=image_context,
             )
 
         execution_mode = getattr(result, "execution_mode", "plan").strip().lower()

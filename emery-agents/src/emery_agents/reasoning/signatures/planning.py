@@ -467,6 +467,12 @@ class TriageTask(dspy.Signature):  # type: ignore[misc]
     - Questions about what the platform can do
     - Requests for clarification on previous responses
 
+    IMAGE HANDLING:
+    - When images are uploaded, they are available for visual analysis in direct/plan nodes
+    - "what's in this image/PDF" + images → "direct" (single vision analysis task)
+    - "build an app based on this mockup" + images → "plan" (multi-step using images)
+    - Never route to "respond" when images are present — respond cannot process images
+
     RESEARCH BEFORE DECIDING:
     - Use search_capabilities to check what capabilities exist for the task
     - Use system_research to check if referenced resources exist
@@ -486,6 +492,12 @@ class TriageTask(dspy.Signature):  # type: ignore[misc]
     memory_context: str = dspy.InputField(
         desc="Relevant memories from previous sessions. Lightweight background "
              "context — use for continuity. Empty if none."
+    )
+    image_context: str = dspy.InputField(
+        desc="Description of user-uploaded images available for visual analysis. "
+             "Empty string if no images. When present, 'direct' and 'plan' nodes "
+             "can analyze these images — 'respond' cannot.",
+        default="",
     )
 
     execution_mode: str = dspy.OutputField(

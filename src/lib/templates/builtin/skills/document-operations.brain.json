@@ -7,7 +7,7 @@
     "category": "Documents",
     "tags": ["document", "tiptap", "create", "update", "read"],
     "version": "1.0.0",
-    "author": "BrainTable"
+    "author": "enhancd.ai"
   },
   "template": {
     "type": "skill",

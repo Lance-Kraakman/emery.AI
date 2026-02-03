@@ -7,7 +7,7 @@
     "category": "Integrations",
     "tags": ["google-sheets", "spreadsheet", "row", "add"],
     "version": "1.0.0",
-    "author": "BrainTable"
+    "author": "enhancd.ai"
   },
   "template": {
     "type": "skill",

@@ -464,7 +464,7 @@ export function AppSidebar({
               onClick={toggleSidebar}
               className="h-8 w-8"
             >
-              <img src="/assets/braintable/logo_logo.png" alt="BrainTable" className="h-6 w-6" />
+              <img src="/assets/enhancd/logo.svg" alt="enhancd.ai" className="h-6 w-6" />
             </Button>
           ) : (
             <EmeryOrganizationModal isCollapsed={isCollapsed} />
