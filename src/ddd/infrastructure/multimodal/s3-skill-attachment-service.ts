@@ -15,7 +15,7 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { v4 as uuidv4 } from 'uuid'
 import { s3Client, BUCKET_NAME } from '@/lib/s3/client'
-import { getSkillAttachmentKey } from '@/lib/s3/path-registry'
+import { getSkillAttachmentKey, SKILL_ATTACHMENTS_PREFIX } from '@/lib/s3/path-registry'
 import { invalidateOrgStorageCache } from '@/ddd/infrastructure/storage/repositories/s3-file-storage-repository'
 import type {
   AttachmentMetadata,
@@ -210,7 +210,7 @@ export class S3SkillAttachmentService {
    */
   async deleteSkillAttachments(organizationId: number, skillId: number): Promise<void> {
     try {
-      const prefix = `skill-attachments/${organizationId}/${skillId}/`
+      const prefix = `${SKILL_ATTACHMENTS_PREFIX}/${organizationId}/${skillId}/`
 
       // In production, would need to list objects first and batch delete
       // For now, this is a placeholder for the deletion logic

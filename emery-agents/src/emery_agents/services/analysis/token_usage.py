@@ -13,7 +13,7 @@ from typing import Any, Optional
 from ...reasoning.modules.step_tracker import TrackedStep, TokenUsage as DSPyTokenUsage
 from ..models.provider import TokenUsage
 from ..models.registry import calculate_token_cost
-from .embedding_usage import get_embedding_usage, reset_embedding_usage
+from .embedding_usage import get_embedding_usage
 
 logger = logging.getLogger(__name__)
 
@@ -115,11 +115,11 @@ class TokenUsageExtractor:
     @staticmethod
     def extract_embedding_usage() -> Optional[TokenUsage]:
         """
-        Extract accumulated embedding usage for the current execution.
+        Extract accumulated embedding usage for the current request.
 
         Returns a TokenUsage object representing all embedding API calls
-        made since the last reset. Resets the tracker after extraction
-        so the next task execution starts fresh.
+        made during this request. The tracker is scoped per async context
+        via contextvars, so no explicit reset is needed.
 
         Returns:
             TokenUsage if any embedding calls were made, None otherwise
@@ -129,7 +129,6 @@ class TokenUsageExtractor:
             return None
 
         cost = calculate_token_cost(model_name, total_tokens, 0)
-        reset_embedding_usage()
 
         logger.info(
             f"Extracted embedding usage: {total_tokens} tokens, "

@@ -13,6 +13,7 @@ import { IFileStorageRepository, type StorageBreakdown } from '@/ddd/domain/tabl
 import { s3Client, BUCKET_NAME } from '@/lib/s3/client';
 import {
   getOrgPrefixes,
+  getTaskAttachmentPrefix,
   getAgentWorkspaceKey,
   getUserWorkspaceKey,
   extractOrgIdFromKey,
@@ -351,12 +352,13 @@ export class S3FileStorageRepository implements IFileStorageRepository {
     };
 
     try {
-      // Scan all three org-scoped prefixes
+      // Scan all org-scoped prefixes
       const prefixes = getOrgPrefixes(organizationId);
       const prefixEntries: Array<{ prefix: string; category: StorageCategory }> = [
         { prefix: prefixes.database, category: 'database' },
         { prefix: prefixes.chat, category: 'chat' },
         { prefix: prefixes.skill, category: 'skill' },
+        { prefix: getTaskAttachmentPrefix(organizationId), category: 'database' },
       ];
 
       for (const { prefix, category } of prefixEntries) {

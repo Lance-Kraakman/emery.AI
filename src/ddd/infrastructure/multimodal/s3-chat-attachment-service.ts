@@ -16,7 +16,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { v4 as uuidv4 } from 'uuid'
 import crypto from 'crypto'
 import { s3Client, BUCKET_NAME } from '@/lib/s3/client'
-import { getChatAttachmentKey } from '@/lib/s3/path-registry'
+import { getChatAttachmentKey, CHAT_ATTACHMENTS_PREFIX } from '@/lib/s3/path-registry'
 import { invalidateOrgStorageCache } from '@/ddd/infrastructure/storage/repositories/s3-file-storage-repository'
 import type {
   AttachmentMetadata,
@@ -209,7 +209,7 @@ export class S3ChatAttachmentService {
     messageId: string
   ): Promise<void> {
     try {
-      const prefix = `chat-attachments/${organizationId}/${chatId}/${messageId}/`
+      const prefix = `${CHAT_ATTACHMENTS_PREFIX}/${organizationId}/${chatId}/${messageId}/`
 
       // Note: This is a simplified version - in production you might want to list objects first
       // For now, we'll rely on individual deleteAttachment() calls from the API layer

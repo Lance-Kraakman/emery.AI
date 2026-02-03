@@ -35,32 +35,12 @@ export class DrizzleOrganizationRepository
 
   async findByUserId(userId: UserId): Promise<Organization[]> {
     const result = await this.db
-      .select({
-        id: organizations.id,
-        name: organizations.name,
-        mission: organizations.mission,
-        sharedTools: organizations.sharedTools,
-        sharedServers: organizations.sharedServers,
-        databaseId: organizations.databaseId,
-        viewConfig: organizations.viewConfig,
-        analysisCapabilities: organizations.analysisCapabilities,
-        plan: organizations.plan,
-        stripeCustomerId: organizations.stripeCustomerId,
-        stripeSubscriptionId: organizations.stripeSubscriptionId,
-        stripeSubscriptionStatus: organizations.stripeSubscriptionStatus,
-        // Billing and model configuration
-        defaultModel: organizations.defaultModel,
-        availableModels: organizations.availableModels,
-        tokenQuotaMonthly: organizations.tokenQuotaMonthly,
-        tokenUsageCurrentMonth: organizations.tokenUsageCurrentMonth,
-        quotaResetAt: organizations.quotaResetAt,
-        createdAt: organizations.createdAt,
-      })
+      .select()
       .from(organizations)
       .innerJoin(userOrganizations, eq(organizations.id, userOrganizations.organizationId))
       .where(eq(userOrganizations.userId, userId.value));
 
-    return result.map((org: OrganizationRow) => this.fromPersistence(org));
+    return result.map((row: { organizations: OrganizationRow }) => this.fromPersistence(row.organizations));
   }
 
   async findAll(): Promise<Organization[]> {
@@ -325,9 +305,8 @@ export class DrizzleOrganizationRepository
       });
       return result.map((org: OrganizationRow) => this.fromPersistence(org));
     } catch (error) {
-      console.log("error finding org", error);
-    } finally {
-      return []
+      console.error("Failed to find organizations by name:", error);
+      return [];
     }
   }
 
@@ -383,11 +362,12 @@ export class DrizzleOrganizationRepository
       databaseStorageBytes: data.databaseStorageBytes,
       chatStorageBytes: data.chatStorageBytes,
       skillStorageBytes: data.skillStorageBytes,
+      workspaceStorageBytes: data.workspaceStorageBytes,
       storageOverageNotifiedAt: data.storageOverageNotifiedAt,
       createdAt: data.createdAt
     };
   }
-  
+
   protected toPersistence(organization: Organization): any {
     return {
       id: organization.id.value,
@@ -424,6 +404,7 @@ export class DrizzleOrganizationRepository
       databaseStorageBytes: organization.databaseStorageBytes,
       chatStorageBytes: organization.chatStorageBytes,
       skillStorageBytes: organization.skillStorageBytes,
+      workspaceStorageBytes: organization.workspaceStorageBytes,
       storageOverageNotifiedAt: organization.storageOverageNotifiedAt,
       createdAt: organization.createdAt
     };
