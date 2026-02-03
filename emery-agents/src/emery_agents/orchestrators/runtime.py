@@ -13,6 +13,8 @@ via Python closures when the session graph is created.
 from dataclasses import dataclass, field
 from typing import Any, List, Optional
 
+from PIL import Image as PILImage
+
 from emery_agents.services.context import ConversationMessage, format_conversation_history
 
 # Re-export so existing `from ..runtime import ConversationMessage` still works
@@ -52,3 +54,4 @@ class RuntimeContext:
     workspace_id: Optional[str] = None
     memory_service: Optional[Any] = None
     plan_file_repository: Optional[Any] = None
+    images: List[PILImage.Image] = field(default_factory=list)

@@ -13,6 +13,7 @@ import logging
 from typing import Any, Dict, List
 
 import dspy
+from dspy.adapters.types.image import Image as DspyImage
 
 from ...reasoning.config import get_dspy_lm
 from ...reasoning.modules.executor import DirectExecutorModule, direct_execution_reward
@@ -110,12 +111,18 @@ async def direct_execute_node(state: PlanExecuteState, runtime: RuntimeContext) 
     if conversation_str:
         execution_context["conversation_history"] = conversation_str
 
+    # Convert PIL images to DSPy Image objects for multimodal LLM support
+    dspy_images = [DspyImage(img) for img in runtime.images]
+    if dspy_images:
+        logger.info(f"Direct execution: passing {len(dspy_images)} image(s) to LLM")
+
     try:
         lm = get_dspy_lm(org_model=org_model)
         with dspy.context(lm=lm):
             result = executor(
                 step_description=task,
                 context=json.dumps(execution_context),
+                images=dspy_images,
             )
 
         result_str = extract_dspy_result(result)

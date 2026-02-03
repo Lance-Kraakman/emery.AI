@@ -179,6 +179,7 @@ class CoordinatorStreamingHandler:
             workspace_id=workspace_id,
             memory_service=memory_service,
             plan_file_repository=plan_file_repo,
+            images=images or [],
         )
 
         # Check if there's a pending graph interrupt to resume

@@ -173,13 +173,21 @@ def has_images(message_parts: List[agent_worker_pb2.MessagePart]) -> bool:
     """
     Check if any message part contains an image.
 
+    Detects both direct image_url parts and file parts with image mime types
+    (e.g., images uploaded as file attachments).
+
     Args:
         message_parts: List of protobuf MessagePart objects
 
     Returns:
         True if images present, False otherwise
     """
-    return any(part.HasField('image_url') for part in message_parts)
+    for part in message_parts:
+        if part.HasField('image_url'):
+            return True
+        if part.HasField('file') and part.file.mime_type.startswith('image/'):
+            return True
+    return False
 
 
 async def build_conversation_messages(
