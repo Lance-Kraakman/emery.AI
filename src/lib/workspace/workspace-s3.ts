@@ -11,16 +11,16 @@
 
 import { GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 import { s3Client, BUCKET_NAME } from '@/lib/s3/client';
+import { getAgentWorkspaceKey } from '@/lib/s3/path-registry';
 import type { Readable } from 'stream';
-
-const WORKSPACE_PREFIX = 'workspaces/agents';
 
 export class WorkspaceS3Service {
   /**
    * Get S3 key for an agent's workspace archive.
+   * Uses the shared path registry for consistency.
    */
   static getWorkspaceKey(agentId: number): string {
-    return `${WORKSPACE_PREFIX}/${agentId}.tar.gz`;
+    return getAgentWorkspaceKey(agentId);
   }
 
   /**

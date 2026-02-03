@@ -13,6 +13,7 @@ from typing import Any, Optional
 from ...reasoning.modules.step_tracker import TrackedStep, TokenUsage as DSPyTokenUsage
 from ..models.provider import TokenUsage
 from ..models.registry import calculate_token_cost
+from .embedding_usage import get_embedding_usage, reset_embedding_usage
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +111,62 @@ class TokenUsageExtractor:
         except Exception as e:
             logger.error(f"Failed to extract token usage from tracked steps: {e}")
             return None
+
+    @staticmethod
+    def extract_embedding_usage() -> Optional[TokenUsage]:
+        """
+        Extract accumulated embedding usage for the current execution.
+
+        Returns a TokenUsage object representing all embedding API calls
+        made since the last reset. Resets the tracker after extraction
+        so the next task execution starts fresh.
+
+        Returns:
+            TokenUsage if any embedding calls were made, None otherwise
+        """
+        total_tokens, model_name = get_embedding_usage()
+        if total_tokens == 0:
+            return None
+
+        cost = calculate_token_cost(model_name, total_tokens, 0)
+        reset_embedding_usage()
+
+        logger.info(
+            f"Extracted embedding usage: {total_tokens} tokens, "
+            f"model={model_name}, cost=${cost:.6f}"
+        )
+
+        return TokenUsage(
+            input_tokens=total_tokens,
+            output_tokens=0,
+            total_tokens=total_tokens,
+            cost_usd=cost,
+            model_name=model_name,
+        )
+
+    @staticmethod
+    def merge_usage(
+        base: Optional[TokenUsage],
+        additional: Optional[TokenUsage],
+    ) -> Optional[TokenUsage]:
+        """
+        Merge two TokenUsage objects by summing their values.
+
+        Used to combine LLM token usage with embedding token usage
+        into a single record before reporting via gRPC.
+        """
+        if base is None:
+            return additional
+        if additional is None:
+            return base
+
+        return TokenUsage(
+            input_tokens=base.input_tokens + additional.input_tokens,
+            output_tokens=base.output_tokens + additional.output_tokens,
+            total_tokens=base.total_tokens + additional.total_tokens,
+            cost_usd=base.cost_usd + additional.cost_usd,
+            model_name=base.model_name,  # Keep the primary model name
+        )
 
     @staticmethod
     def extract_from_agent_memory(

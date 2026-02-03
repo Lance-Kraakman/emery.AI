@@ -26,18 +26,21 @@ export interface StorageDiscrepancy {
     databaseBytes: number;
     chatBytes: number;
     skillBytes: number;
+    workspaceBytes: number;
   };
   actual: {
     totalBytes: number;
     databaseBytes: number;
     chatBytes: number;
     skillBytes: number;
+    workspaceBytes: number;
   };
   difference: {
     totalBytes: number;
     databaseBytes: number;
     chatBytes: number;
     skillBytes: number;
+    workspaceBytes: number;
   };
   percentageDrift: number;
 }
@@ -90,6 +93,7 @@ export class StorageRecalculationApplicationService {
       const trackedDatabase = organization.databaseStorageBytes || 0;
       const trackedChat = organization.chatStorageBytes || 0;
       const trackedSkill = organization.skillStorageBytes || 0;
+      const trackedWorkspace = organization.workspaceStorageBytes || 0;
 
       logger.debug(
         `Recalculating storage for organization ${organizationId} (${organization.name.value})`
@@ -124,6 +128,7 @@ export class StorageRecalculationApplicationService {
         databaseStorageBytes: actualBreakdown.databaseStorageBytes,
         chatStorageBytes: actualBreakdown.chatStorageBytes,
         skillStorageBytes: actualBreakdown.skillStorageBytes,
+        workspaceStorageBytes: actualBreakdown.workspaceStorageBytes,
       });
 
       logger.debug(
@@ -150,18 +155,21 @@ export class StorageRecalculationApplicationService {
             databaseBytes: trackedDatabase,
             chatBytes: trackedChat,
             skillBytes: trackedSkill,
+            workspaceBytes: trackedWorkspace,
           },
           actual: {
             totalBytes: actualBreakdown.totalBytes,
             databaseBytes: actualBreakdown.databaseStorageBytes,
             chatBytes: actualBreakdown.chatStorageBytes,
             skillBytes: actualBreakdown.skillStorageBytes,
+            workspaceBytes: actualBreakdown.workspaceStorageBytes,
           },
           difference: {
             totalBytes: difference,
             databaseBytes: actualBreakdown.databaseStorageBytes - trackedDatabase,
             chatBytes: actualBreakdown.chatStorageBytes - trackedChat,
             skillBytes: actualBreakdown.skillStorageBytes - trackedSkill,
+            workspaceBytes: actualBreakdown.workspaceStorageBytes - trackedWorkspace,
           },
           percentageDrift,
         };
@@ -287,12 +295,14 @@ export class StorageRecalculationApplicationService {
               databaseBytes: org.databaseStorageBytes || 0,
               chatBytes: org.chatStorageBytes || 0,
               skillBytes: org.skillStorageBytes || 0,
+              workspaceBytes: org.workspaceStorageBytes || 0,
             },
             actual: {
               totalBytes: actualBreakdown.totalBytes,
               databaseBytes: actualBreakdown.databaseStorageBytes,
               chatBytes: actualBreakdown.chatStorageBytes,
               skillBytes: actualBreakdown.skillStorageBytes,
+              workspaceBytes: actualBreakdown.workspaceStorageBytes,
             },
             difference: {
               totalBytes: difference,
@@ -300,6 +310,7 @@ export class StorageRecalculationApplicationService {
                 actualBreakdown.databaseStorageBytes - (org.databaseStorageBytes || 0),
               chatBytes: actualBreakdown.chatStorageBytes - (org.chatStorageBytes || 0),
               skillBytes: actualBreakdown.skillStorageBytes - (org.skillStorageBytes || 0),
+              workspaceBytes: actualBreakdown.workspaceStorageBytes - (org.workspaceStorageBytes || 0),
             },
             percentageDrift: trackedTotal > 0 ? Math.abs((difference / trackedTotal) * 100) : 0,
           });

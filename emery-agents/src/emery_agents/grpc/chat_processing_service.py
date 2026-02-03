@@ -33,6 +33,7 @@ from .coordinator_streaming import CoordinatorStreamingHandler
 from .response_converter import convert_response_to_proto
 from .agents.agent_models import get_builder_descriptors
 from emery_agents.tools.capability_registry import CapabilityRegistry
+from ..services.analysis.token_usage import TokenUsageExtractor
 from emery_agents.tools.capability_bootstrap import populate_system_agents
 from ..services.tasks import TaskExecutor
 from ..services.tasks.task_executor import TaskData
@@ -352,6 +353,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
             processing_time = int((time.time() - start_time) * 1000)
             handler_token_usage = self._agent_handler.last_token_usage
+            # Merge embedding usage (capability discovery, planning) into total
+            embedding_usage = TokenUsageExtractor.extract_embedding_usage()
+            handler_token_usage = TokenUsageExtractor.merge_usage(handler_token_usage, embedding_usage)
             token_usage_proto = token_usage_to_proto(handler_token_usage)
             model_used = getattr(handler_token_usage, 'model_name', '') if handler_token_usage else ''
 

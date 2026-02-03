@@ -15,6 +15,8 @@ import os
 from functools import lru_cache
 from typing import Optional
 
+from .embedding_usage import get_embedding_tracker
+
 logger = logging.getLogger(__name__)
 
 # Provider state
@@ -99,6 +101,9 @@ def get_embedding(text: str) -> tuple[float, ...]:
     Uses Gemini (preferred) or HuggingFace (fallback) for embeddings
     optimized for semantic similarity.
 
+    Note: The @lru_cache decorator means repeated identical texts will NOT
+    call the API or the tracker again. Only actual API calls are billed.
+
     Args:
         text: Text to embed
 
@@ -106,11 +111,14 @@ def get_embedding(text: str) -> tuple[float, ...]:
         Tuple of floats (embedding vector). Tuple for hashability/caching.
     """
     provider = _init_provider()
+    tracker = get_embedding_tracker()
 
     if provider == "gemini":
         embedding = _embed_gemini(text)
+        tracker.record(text, GEMINI_MODEL)
     else:
         embedding = _embed_huggingface(text)
+        tracker.record(text, HF_MODEL)
 
     logger.debug(f"Generated embedding: {len(embedding)} dims for '{text[:50]}...' (provider={provider})")
     return embedding
