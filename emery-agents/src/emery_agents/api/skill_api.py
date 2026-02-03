@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 def _normalize_name(name: str) -> str:
     """Normalize a skill name for fuzzy matching."""
-    return name.lower().replace("-", "_").replace(" ", "_")
+    return name.lower().replace(":", "").replace("-", "_").replace(" ", "_")
 
 
 class SkillAPI:

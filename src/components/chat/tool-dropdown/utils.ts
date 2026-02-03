@@ -67,10 +67,16 @@ export function getToolInsertText(tool: ToolDTO): string {
     switch (tool.category) {
       case 'documents': return `@doc:${tool.name}`;
       case 'files': return `@file:${tool.name}`;
-      case 'agents': return `@agent:${tool.name}`;
+      case 'agents': {
+        const slug = tool.name.replace(/:\s*/g, '').toLowerCase().replace(/\s+/g, '-');
+        return `@agent:${slug}`;
+      }
       case 'tables': return `@table:${tool.name}`;
       case 'databases': return `@database:${tool.name}`;
-      case 'skills': return `@skill:${tool.name}`;
+      case 'skills': {
+        const slug = tool.name.replace(/:\s*/g, '').toLowerCase().replace(/\s+/g, '-');
+        return `@skill:${slug}`;
+      }
       default: return `@tool:${tool.name}`;
     }
   }

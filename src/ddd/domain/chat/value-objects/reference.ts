@@ -86,7 +86,7 @@ export class Reference {
     name: string,
     description?: string
   ): Reference {
-    const slug = name.toLowerCase().replace(/\s+/g, '-')
+    const slug = name.replace(/:\s*/g, '').toLowerCase().replace(/\s+/g, '-')
     return new Reference(
       id,
       `@agent:${slug}`,
@@ -139,7 +139,7 @@ export class Reference {
     skillName: string,
     description?: string
   ): Reference {
-    const slug = skillName.toLowerCase().replace(/\s+/g, '-')
+    const slug = skillName.replace(/:\s*/g, '').toLowerCase().replace(/\s+/g, '-')
     return new Reference(
       id,
       `@skill:${slug}`,
