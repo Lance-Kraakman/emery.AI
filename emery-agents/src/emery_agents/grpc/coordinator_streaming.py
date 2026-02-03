@@ -180,6 +180,7 @@ class CoordinatorStreamingHandler:
             memory_service=memory_service,
             plan_file_repository=plan_file_repo,
             images=images or [],
+            extra_headers=context.tool_provider.extra_headers,
         )
 
         # Check if there's a pending graph interrupt to resume

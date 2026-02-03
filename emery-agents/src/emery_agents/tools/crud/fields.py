@@ -32,7 +32,7 @@ VALID_FIELD_TYPES = {
 }
 
 
-def create_field_crud(api_key: str, org_id: str) -> dspy.Tool:
+def create_field_crud(api_key: str, org_id: str, extra_headers: dict[str, str] | None = None) -> dspy.Tool:
     """
     Factory: Create field_crud tool with auth captured in closure.
 
@@ -139,6 +139,7 @@ def create_field_crud(api_key: str, org_id: str) -> dspy.Tool:
                 data=create_data,
                 auth_token=api_key,
                 org_id=org_id,
+                extra_headers=extra_headers,
             )
 
         elif method == "list_fields":
@@ -150,6 +151,7 @@ def create_field_crud(api_key: str, org_id: str) -> dspy.Tool:
                 data=None,
                 auth_token=api_key,
                 org_id=org_id,
+                extra_headers=extra_headers,
             )
 
         elif method == "delete_field":
@@ -165,6 +167,7 @@ def create_field_crud(api_key: str, org_id: str) -> dspy.Tool:
                 data=None,
                 auth_token=api_key,
                 org_id=org_id,
+                extra_headers=extra_headers,
             )
 
         else:

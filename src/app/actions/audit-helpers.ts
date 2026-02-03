@@ -24,11 +24,22 @@ export interface AuditActor {
   name?: string;
 }
 
+export interface TriggerMetadata {
+  triggerType?: string;        // 'manual' | 'webhook' | 'database_event' | 'calendar' | 'public_api'
+  triggeredByUserId?: string;
+  triggeredByUserName?: string;
+  taskId?: string;
+  taskName?: string;
+  agentId?: string;
+  agentName?: string;
+}
+
 export interface RowAuditContext {
   organizationId: number;
   tableId: number;
   tableName: string;
   actor: AuditActor;
+  triggerMetadata?: TriggerMetadata;
 }
 
 export interface RowChangeData {
@@ -112,6 +123,7 @@ export function logRowCreate(
       parentResourceType: 'table',
       parentResourceId: String(context.tableId),
       eventData: { tableName: context.tableName },
+      metadata: context.triggerMetadata ? { ...context.triggerMetadata } : undefined,
       success: true,
     }
   );
@@ -165,6 +177,7 @@ export function logRowUpdate(
       parentResourceId: String(context.tableId),
       eventData: { tableName: context.tableName, changedFields },
       previousData: data.previousData,
+      metadata: context.triggerMetadata ? { ...context.triggerMetadata } : undefined,
       success: true,
     }
   );
@@ -210,6 +223,7 @@ export function logRowDelete(
       parentResourceId: String(context.tableId),
       eventData: { tableName: context.tableName },
       previousData: data.rowSnapshot,
+      metadata: context.triggerMetadata ? { ...context.triggerMetadata } : undefined,
       success: true,
     }
   );

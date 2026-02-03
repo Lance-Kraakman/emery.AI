@@ -21,7 +21,18 @@ import {
   computeFieldChanges,
   type RowAuditContext,
   type AuditActor,
+  type TriggerMetadata,
 } from "./audit-helpers";
+
+/**
+ * Actor override for API route calls (when agents perform actions).
+ * Replaces the default session-user actor with the actual actor (agent)
+ * and attaches trigger metadata for the audit trail.
+ */
+export interface ActorOverride {
+  actor: AuditActor;
+  triggerMetadata?: TriggerMetadata;
+}
 
 /**
  * Convert row data to use field IDs as keys
@@ -71,7 +82,7 @@ function convertFieldNamesToIds(
 }
 
 
-export async function createRow(data: CreateRowCommand, revalidateUrl?: string): Promise<Result> {
+export async function createRow(data: CreateRowCommand, revalidateUrl?: string, actorOverride?: ActorOverride): Promise<Result> {
   try {
     const session = await requirePermission("table:manage");
     const { tableId, data: rowData, dataKeyType = 'name' } = data;
@@ -133,11 +144,12 @@ export async function createRow(data: CreateRowCommand, revalidateUrl?: string):
         organizationId: table.organizationId.value,
         tableId,
         tableName: table.name,
-        actor: {
+        actor: actorOverride?.actor ?? {
           type: 'user',
           id: session.user.id,
           name: session.user.name || undefined,
         },
+        triggerMetadata: actorOverride?.triggerMetadata,
       };
 
       logRowCreate(auditContext, { rowId: createdRowId, rowSnapshot });
@@ -308,7 +320,7 @@ export async function createRowAction(formData: FormData) {
 }
 
 
-export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: string): Promise<Result> {
+export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: string, actorOverride?: ActorOverride): Promise<Result> {
   try {
     console.log('[updateRowData] Called with:', { tableId: data.tableId, rowId: data.rowId, data: data.data });
 
@@ -423,11 +435,12 @@ export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: stri
         organizationId: table.organizationId.value,
         tableId,
         tableName: table.name,
-        actor: {
+        actor: actorOverride?.actor ?? {
           type: 'user',
           id: session.user.id,
           name: session.user.name || undefined,
         },
+        triggerMetadata: actorOverride?.triggerMetadata,
       };
 
       logRowUpdate(auditContext, {
@@ -638,7 +651,7 @@ export async function updateRowAction(formData: FormData) {
   return result;
 }
 
-export async function deleteRowData(tableId: number, rowId: string, revalidateUrl?: string): Promise<Result> {
+export async function deleteRowData(tableId: number, rowId: string, revalidateUrl?: string, actorOverride?: ActorOverride): Promise<Result> {
   try {
     const session = await requirePermission("table:manage");
 
@@ -687,11 +700,12 @@ export async function deleteRowData(tableId: number, rowId: string, revalidateUr
         organizationId: table.organizationId.value,
         tableId,
         tableName: table.name,
-        actor: {
+        actor: actorOverride?.actor ?? {
           type: 'user',
           id: session.user.id,
           name: session.user.name || undefined,
         },
+        triggerMetadata: actorOverride?.triggerMetadata,
       };
 
       logRowDelete(auditContext, { rowId, rowSnapshot });

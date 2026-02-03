@@ -224,6 +224,12 @@ export interface TaskRequest {
     | undefined;
   /** Skill ID for direct execution (avoids name-based lookup) */
   skillId: number;
+  /** Trigger context for audit trail (passed to Python worker → HTTP headers on tool calls) */
+  triggerType: string;
+  /** Root-cause user ID who initiated the trigger chain */
+  triggeredByUserId: string;
+  /** Display name of the triggering user */
+  triggeredByUserName: string;
 }
 
 /**
@@ -1179,6 +1185,9 @@ function createBaseTaskRequest(): TaskRequest {
     inputContent: [],
     resolvedContext: undefined,
     skillId: 0,
+    triggerType: "",
+    triggeredByUserId: "",
+    triggeredByUserName: "",
   };
 }
 
@@ -1228,6 +1237,15 @@ export const TaskRequest: MessageFns<TaskRequest> = {
     }
     if (message.skillId !== 0) {
       writer.uint32(120).int32(message.skillId);
+    }
+    if (message.triggerType !== "") {
+      writer.uint32(130).string(message.triggerType);
+    }
+    if (message.triggeredByUserId !== "") {
+      writer.uint32(138).string(message.triggeredByUserId);
+    }
+    if (message.triggeredByUserName !== "") {
+      writer.uint32(146).string(message.triggeredByUserName);
     }
     return writer;
   },
@@ -1359,6 +1377,30 @@ export const TaskRequest: MessageFns<TaskRequest> = {
           message.skillId = reader.int32();
           continue;
         }
+        case 16: {
+          if (tag !== 130) {
+            break;
+          }
+
+          message.triggerType = reader.string();
+          continue;
+        }
+        case 17: {
+          if (tag !== 138) {
+            break;
+          }
+
+          message.triggeredByUserId = reader.string();
+          continue;
+        }
+        case 18: {
+          if (tag !== 146) {
+            break;
+          }
+
+          message.triggeredByUserName = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1391,6 +1433,9 @@ export const TaskRequest: MessageFns<TaskRequest> = {
         ? ResolvedContextProto.fromJSON(object.resolvedContext)
         : undefined,
       skillId: isSet(object.skillId) ? globalThis.Number(object.skillId) : 0,
+      triggerType: isSet(object.triggerType) ? globalThis.String(object.triggerType) : "",
+      triggeredByUserId: isSet(object.triggeredByUserId) ? globalThis.String(object.triggeredByUserId) : "",
+      triggeredByUserName: isSet(object.triggeredByUserName) ? globalThis.String(object.triggeredByUserName) : "",
     };
   },
 
@@ -1441,6 +1486,15 @@ export const TaskRequest: MessageFns<TaskRequest> = {
     if (message.skillId !== 0) {
       obj.skillId = Math.round(message.skillId);
     }
+    if (message.triggerType !== "") {
+      obj.triggerType = message.triggerType;
+    }
+    if (message.triggeredByUserId !== "") {
+      obj.triggeredByUserId = message.triggeredByUserId;
+    }
+    if (message.triggeredByUserName !== "") {
+      obj.triggeredByUserName = message.triggeredByUserName;
+    }
     return obj;
   },
 
@@ -1472,6 +1526,9 @@ export const TaskRequest: MessageFns<TaskRequest> = {
       ? ResolvedContextProto.fromPartial(object.resolvedContext)
       : undefined;
     message.skillId = object.skillId ?? 0;
+    message.triggerType = object.triggerType ?? "";
+    message.triggeredByUserId = object.triggeredByUserId ?? "";
+    message.triggeredByUserName = object.triggeredByUserName ?? "";
     return message;
   },
 };

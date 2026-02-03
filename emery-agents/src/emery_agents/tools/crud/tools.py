@@ -19,7 +19,7 @@ from emery_agents.api.http_client import get_base_url
 logger = logging.getLogger(__name__)
 
 
-def create_tool_crud(api_key: str, org_id: str) -> dspy.Tool:
+def create_tool_crud(api_key: str, org_id: str, extra_headers: dict[str, str] | None = None) -> dspy.Tool:
     """
     Factory: Create tool_crud tool with auth captured in closure.
 
@@ -75,6 +75,7 @@ def create_tool_crud(api_key: str, org_id: str) -> dspy.Tool:
                 params=params or {},
                 api_key=api_key,
                 org_id=org_id,
+                extra_headers=extra_headers,
             )
 
         else:
@@ -159,6 +160,7 @@ def _execute_tool(
     params: Dict[str, Any],
     api_key: str,
     org_id: str,
+    extra_headers: dict[str, str] | None = None,
 ) -> str:
     """Execute a tool via the proxy endpoint."""
     base_url = get_base_url()
@@ -169,6 +171,8 @@ def _execute_tool(
         "X-Organization-Id": org_id,
         "Content-Type": "application/json",
     }
+    if extra_headers:
+        headers.update(extra_headers)
 
     payload = {
         "service": service,

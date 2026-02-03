@@ -69,17 +69,25 @@ class ToolProvider:
         "view_crud": create_view_crud,
     }
 
-    def __init__(self, api_key: str, organization_id: int):
+    def __init__(
+        self,
+        api_key: str,
+        organization_id: int,
+        extra_headers: Dict[str, str] | None = None,
+    ):
         """
         Initialize tool provider with auth credentials.
 
         Args:
             api_key: API key for authenticating tool requests
             organization_id: Organization ID for RLS context
+            extra_headers: Optional headers merged into every HTTP request
+                           (agent context, trigger info for audit trail)
         """
         self._api_key = api_key
         self._organization_id = organization_id
         self._org_id_str = str(organization_id) if organization_id else ""
+        self._extra_headers = extra_headers
         self._cache: Dict[str, Any] = {}
         self._http_client = AuthenticatedHttpClient(api_key, organization_id)
         logger.info(f"[TOOL-PROVIDER] Initialized (api_key present: {bool(api_key)}, org_id: {organization_id})")
@@ -115,6 +123,11 @@ class ToolProvider:
     def organization_id(self) -> int:
         """Get the organization ID (for passing to ExecutionContext)."""
         return self._organization_id
+
+    @property
+    def extra_headers(self) -> Dict[str, str] | None:
+        """Get extra HTTP headers (agent context for audit trail)."""
+        return self._extra_headers
 
     def get(self, name: str) -> Any:
         """
@@ -201,7 +214,7 @@ class ToolProvider:
         """
         # Check DSPy factories first
         if name in self.DSPY_FACTORIES:
-            return self.DSPY_FACTORIES[name](self._api_key, self._org_id_str)
+            return self.DSPY_FACTORIES[name](self._api_key, self._org_id_str, extra_headers=self._extra_headers)
 
         # Security report tool
         if name == "security_report":

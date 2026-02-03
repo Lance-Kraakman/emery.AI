@@ -14,13 +14,14 @@ from emery_agents.api.http_client import make_request
 from ..mutation_guard import check_mutation_allowed
 
 
-def create_row_crud(api_key: str, org_id: str) -> dspy.Tool:
+def create_row_crud(api_key: str, org_id: str, extra_headers: dict[str, str] | None = None) -> dspy.Tool:
     """
     Factory: Create row_crud tool with auth captured in closure.
 
     Args:
         api_key: Bearer token for authentication
         org_id: Organization ID for RLS context
+        extra_headers: Optional HTTP headers for agent context audit trail
 
     Returns:
         dspy.Tool wrapping the row_crud function
@@ -69,6 +70,7 @@ def create_row_crud(api_key: str, org_id: str) -> dspy.Tool:
                 data={"tableId": int(table_id), "data": data},
                 auth_token=api_key,
                 org_id=org_id,
+                extra_headers=extra_headers,
             )
 
         elif method == "get_rows":
@@ -91,6 +93,7 @@ def create_row_crud(api_key: str, org_id: str) -> dspy.Tool:
                 data=None,
                 auth_token=api_key,
                 org_id=org_id,
+                extra_headers=extra_headers,
             )
 
         elif method == "update_row":
@@ -106,6 +109,7 @@ def create_row_crud(api_key: str, org_id: str) -> dspy.Tool:
                 data={"tableId": int(table_id), "rowId": row_id, "data": data},
                 auth_token=api_key,
                 org_id=org_id,
+                extra_headers=extra_headers,
             )
 
         elif method == "delete_row":
@@ -119,6 +123,7 @@ def create_row_crud(api_key: str, org_id: str) -> dspy.Tool:
                 data=None,
                 auth_token=api_key,
                 org_id=org_id,
+                extra_headers=extra_headers,
             )
 
         else:

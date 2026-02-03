@@ -170,6 +170,11 @@ export interface AgentExecutionRequest {
   skill?: ExecutionSkill; // Optional - skill to execute (enables skill_name mode)
   skillInputs?: Record<string, any>; // Optional - resolved skill inputs (from automation inputMappings)
   onProgress?: (logMessage: string) => void; // Callback for real-time log messages
+  // Trigger context for audit trail (flows through to Python worker as HTTP headers)
+  triggerType?: string;           // 'manual' | 'webhook' | 'database_event' | 'calendar' | 'public_api'
+  triggeredByUserId?: string;     // Root-cause user ID
+  triggeredByUserName?: string;   // Root-cause user display name
+  taskName?: string;              // Task name for audit metadata
 }
 
 export interface AgentExecutionResult {

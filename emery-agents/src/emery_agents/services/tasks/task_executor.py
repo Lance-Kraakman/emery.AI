@@ -168,17 +168,21 @@ class TaskExecutor:
                 f"[TASK-{task_id[:8]}] Credentials resolved from: {credentials.source}"
             )
 
-            # 2. Create ToolProvider with resolved credentials
-            # This ensures all tools use the correct auth based on task assignment
+            # 2. Build agent context headers for audit trail
+            # These flow through ToolProvider → CRUD tools → make_request() → TS API routes
+            agent_headers = self._build_agent_headers(task_data)
+
+            # 3. Create ToolProvider with resolved credentials + agent context headers
             tool_provider = ToolProvider(
                 api_key=credentials.api_key,
                 organization_id=credentials.organization_id,
+                extra_headers=agent_headers,
             )
             logger.info(
                 f"[TASK-{task_id[:8]}] Created ToolProvider with {credentials.source} credentials"
             )
 
-            # 3. Pre-fetch skill config from API if task executes a skill
+            # 4. Pre-fetch skill config from API if task executes a skill
             # Skills are no longer sent via gRPC proto — fetch from API with resolved credentials
             pre_fetched_skill = None
             if (task_data._task_request is not None
@@ -194,7 +198,7 @@ class TaskExecutor:
                     f"{pre_fetched_skill.name if pre_fetched_skill else 'NOT FOUND'}"
                 )
 
-            # 4. Build execution context
+            # 5. Build execution context
             # If we have the original TaskRequest, use AgentExecutor.determine_execution_context
             # which properly handles skills, tools, attachments, etc.
             if task_data._task_request is not None:
@@ -208,14 +212,14 @@ class TaskExecutor:
                 # Fallback to simplified context (for chat tasks)
                 context = self._build_execution_context(task_data, credentials)
 
-            # 4. Inject ToolProvider into context for credential isolation
+            # 6. Inject ToolProvider into context for credential isolation
             context.tool_provider = tool_provider
 
-            # 5. Add workspace path for bash tool access
+            # 7. Add workspace path for bash tool access
             if task_data.workspace_path:
                 context.workspace_path = task_data.workspace_path
 
-            # 6. Execute via AgentExecutor (reuse existing logic)
+            # 8. Execute via AgentExecutor (reuse existing logic)
             async for progress in self.agent_executor.execute_task(context):
                 # Add task_id to all progress events
                 progress["task_id"] = task_id
@@ -279,6 +283,35 @@ class TaskExecutor:
                 "timestamp_ms": int(time.time() * 1000),
                 "progress_percent": 0.0,
             }
+
+    @staticmethod
+    def _build_agent_headers(task_data: TaskData) -> dict[str, str] | None:
+        """
+        Build HTTP headers for agent context audit trail.
+
+        These headers are sent with every CRUD tool request back to the
+        TypeScript API, where they are extracted to set the audit actor
+        and trigger metadata.
+        """
+        req = task_data._task_request
+        if req is None:
+            return None
+
+        headers: dict[str, str] = {}
+
+        if task_data.agent_id is not None:
+            headers["X-Agent-ID"] = str(task_data.agent_id)
+        if req.name:
+            headers["X-Agent-Name"] = req.name
+        headers["X-Task-ID"] = task_data.task_id
+        if req.trigger_type:
+            headers["X-Trigger-Type"] = req.trigger_type
+        if req.triggered_by_user_id:
+            headers["X-Triggered-By-User-Id"] = req.triggered_by_user_id
+        if req.triggered_by_user_name:
+            headers["X-Triggered-By-User-Name"] = req.triggered_by_user_name
+
+        return headers if headers else None
 
     async def _resolve_credentials(
         self,

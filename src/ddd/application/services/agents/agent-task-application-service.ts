@@ -16,6 +16,7 @@ import type { ITaskRepository } from '@/ddd/domain/tasks/repositories/task-repos
 import type { IAgentExecutionRepository, AgentExecutionRequest } from '@/ddd/domain/agents/repositories/agent-execution-repository';
 import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
 import { Task } from '@/ddd/domain/tasks/entities/task';
+import type { TriggerContext } from '@/ddd/domain/tasks/entities/task';
 import { isActiveAgent } from '@/ddd/domain/agents/entities/agent';
 import { AgentId, OrganizationId, TaskId, UserId, TaskStatus, TeamId } from '@/ddd/domain/shared/value-objects';
 import type { CreateTaskDTO, ExecuteTaskDTO, TaskExecutionResultDTO, TaskDTO } from '@/app/dtos/task.dto';
@@ -24,8 +25,37 @@ import type { Result } from '@/ddd/domain/shared/result';
 import { createDebugLogger } from '@/lib/utils/debug-logger';
 import { InstructionTemplateService } from '@/ddd/domain/tasks/services/instruction-template-service';
 import type { EnrichedSkill, SkillEnrichmentService } from '@/ddd/application/services/skills/skill-enrichment-service';
+import { getAuditApplicationService } from '@/ddd/application/di/container';
 
 const logger = createDebugLogger('AgentTaskService');
+
+/** Map TriggerContext.type (uppercase) to audit-trail trigger type (lowercase). */
+function mapTriggerType(type: string | undefined): string | undefined {
+  if (!type) return undefined;
+  const TRIGGER_TYPE_MAP: Record<string, string> = {
+    'MANUAL': 'manual',
+    'WEBHOOK': 'webhook',
+    'DATABASE_EVENT': 'database_event',
+    'CALENDAR': 'calendar',
+  };
+  return TRIGGER_TYPE_MAP[type] || type.toLowerCase();
+}
+
+/** Build a TriggerContext from a DTO trigger type string (e.g. 'manual' → { type: 'MANUAL' }). */
+function buildTriggerContextFromType(triggerType: string): TriggerContext {
+  const VALID_TRIGGER_TYPES: Record<string, TriggerContext['type']> = {
+    'manual': 'MANUAL',
+    'webhook': 'WEBHOOK',
+    'database_event': 'DATABASE_EVENT',
+    'calendar': 'CALENDAR',
+  };
+  const type = VALID_TRIGGER_TYPES[triggerType.toLowerCase()];
+  if (!type) {
+    logger.summary(`Unknown trigger type "${triggerType}", defaulting to MANUAL`);
+    return { type: 'MANUAL' };
+  }
+  return { type };
+}
 
 export class AgentTaskApplicationService {
   constructor(
@@ -89,13 +119,30 @@ export class AgentTaskApplicationService {
         };
       }
 
+      // Build TriggerContext from DTO trigger fields (if provided)
+      const triggerContext: TriggerContext | undefined = dto.triggerType
+        ? buildTriggerContextFromType(dto.triggerType)
+        : undefined;
+
+      // Store triggeredByUserName in instructions metadata for audit trail
+      const instructions = dto.triggeredByUserName
+        ? {
+            ...dto.instructions,
+            metadata: {
+              ...dto.instructions.metadata,
+              triggeredByUserName: dto.triggeredByUserName,
+            },
+          }
+        : dto.instructions;
+
       // Create task using domain entity
       const task = Task.create({
         agentId,
         organizationId,
         name: dto.name,
-        instructions: dto.instructions,
+        instructions,
         skillId: dto.skillId, // Optional skill to execute
+        triggerContext,
         createdBy,
         status: TaskStatus.pending()
       });
@@ -110,7 +157,8 @@ export class AgentTaskApplicationService {
         skillId: task.skillId, // Optional skill to execute
         status: task.status.value,
         createdBy: task.createdBy?.value || null,
-        createdAt: task.createdAt
+        createdAt: task.createdAt,
+        triggerContext: task.triggerContext || undefined,
       };
       const savedTask = await this.taskRepository.create(taskData);
 
@@ -224,6 +272,8 @@ export class AgentTaskApplicationService {
 
       // 8. Execute via execution repository
       // AIDEV-NOTE: task.agentId is guaranteed non-null here (we return early if null above)
+      const triggerType = mapTriggerType(task.triggerContext?.type);
+      const triggeredByUserName = task.instructions.metadata?.triggeredByUserName as string | undefined;
       const executionRequest: AgentExecutionRequest = {
         agentId: task.agentId!.value,
         instructions: expandedInstructions,
@@ -236,21 +286,77 @@ export class AgentTaskApplicationService {
         timeoutSeconds,
         skill: enrichedSkill || undefined, // Pass enriched skill if present
         skillInputs, // Pass resolved skill inputs (from automation inputMappings)
+        triggerType,
+        triggeredByUserId: task.createdBy?.value,
+        triggeredByUserName,
+        taskName: task.name,
         onProgress: (logMessage: string) => {
           task.appendLog(logMessage);
         }
       };
 
+      // 9. Audit: task execution started
+      const organizationId = task.organizationId;
+      const triggerMetadata: Record<string, unknown> = {
+        ...(triggerType && { triggerType }),
+        ...(task.createdBy && { triggeredByUserId: task.createdBy.value }),
+        ...(triggeredByUserName && { triggeredByUserName }),
+        taskId: task.id.value,
+        taskName: task.name,
+        agentId: task.agentId!.value,
+        agentName: agent.name,
+      };
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(organizationId, {
+        eventType: 'agent',
+        eventCategory: 'task_execution',
+        eventAction: 'execute',
+        actorType: 'agent',
+        actorId: String(task.agentId!.value),
+        actorName: agent.name,
+        resourceType: 'task',
+        resourceId: task.id.value,
+        resourceName: task.name,
+        eventData: {
+          ...(task.skillId && { skillId: task.skillId }),
+          ...(enrichedSkill && { skillName: enrichedSkill.name }),
+        },
+        metadata: triggerMetadata,
+        success: true,
+      });
+
+      const executionStartTime = Date.now();
       try {
         const executionResult = await this.executionRepository.executeAgent(executionRequest);
 
-        // 5. Update task based on execution result (domain logic)
+        // 10. Update task based on execution result (domain logic)
         if (executionResult.success) {
           task.complete(executionResult.outputData);
           logger.summary(`Task ${taskId.substring(0, 8)} completed successfully`);
         } else {
           task.fail(executionResult.error || 'Execution failed');
         }
+
+        // 11. Audit: task execution completed/failed
+        auditService.logEvent(organizationId, {
+          eventType: 'agent',
+          eventCategory: 'task_execution',
+          eventAction: executionResult.success ? 'complete' : 'fail',
+          actorType: 'agent',
+          actorId: String(task.agentId!.value),
+          actorName: agent.name,
+          resourceType: 'task',
+          resourceId: task.id.value,
+          resourceName: task.name,
+          eventData: {
+            ...(task.skillId && { skillId: task.skillId }),
+            ...(enrichedSkill && { skillName: enrichedSkill.name }),
+          },
+          durationMs: Date.now() - executionStartTime,
+          metadata: triggerMetadata,
+          success: executionResult.success,
+          error: executionResult.error,
+        });
 
         logger.summary(`Completed task ${taskId.substring(0, 8)}: ${executionResult.success ? 'SUCCESS' : 'FAILED'}`);
 

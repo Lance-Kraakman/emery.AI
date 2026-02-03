@@ -121,6 +121,7 @@ class AgentStreamingHandler:
         workspace_id: Optional[str] = None,
         workspace_prefix: Optional[str] = None,
         workspace_type: Optional[str] = None,
+        extra_headers: Optional[Dict[str, str]] = None,
     ) -> AsyncIterator[StreamResponseDict]:
         """
         Stream AI response using ToolCallingAgent with stateful session support.
@@ -151,8 +152,8 @@ class AgentStreamingHandler:
             else:
                 logger.warning("⚠️ No API key available for tools")
 
-            # Create centralized tool provider
-            tool_provider = ToolProvider(effective_api_key or "", org_id or 0)
+            # Create centralized tool provider (with audit headers if available)
+            tool_provider = ToolProvider(effective_api_key or "", org_id or 0, extra_headers=extra_headers)
 
             agent = self.session_manager.get_agent(session_id) if session_id else None
 

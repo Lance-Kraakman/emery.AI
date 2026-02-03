@@ -46,7 +46,7 @@ def _ensure_block_ids(template_data: dict[str, Any]) -> dict[str, Any]:
     return template_data
 
 
-def create_app_crud(api_key: str, org_id: str) -> dspy.Tool:
+def create_app_crud(api_key: str, org_id: str, extra_headers: dict[str, str] | None = None) -> dspy.Tool:
     """
     Factory: Create app_crud tool with auth captured in closure.
 
@@ -87,6 +87,7 @@ def create_app_crud(api_key: str, org_id: str) -> dspy.Tool:
                 data=None,
                 auth_token=api_key,
                 org_id=org_id,
+                extra_headers=extra_headers,
             )
 
         elif method == "read":
@@ -98,6 +99,7 @@ def create_app_crud(api_key: str, org_id: str) -> dspy.Tool:
                 data=None,
                 auth_token=api_key,
                 org_id=org_id,
+                extra_headers=extra_headers,
             )
 
         elif method == "create":
@@ -109,6 +111,7 @@ def create_app_crud(api_key: str, org_id: str) -> dspy.Tool:
                 data=data,
                 auth_token=api_key,
                 org_id=org_id,
+                extra_headers=extra_headers,
             )
 
         elif method == "update":
@@ -120,6 +123,7 @@ def create_app_crud(api_key: str, org_id: str) -> dspy.Tool:
                 data=data,
                 auth_token=api_key,
                 org_id=org_id,
+                extra_headers=extra_headers,
             )
 
         elif method == "delete":
@@ -131,6 +135,7 @@ def create_app_crud(api_key: str, org_id: str) -> dspy.Tool:
                 data=None,
                 auth_token=api_key,
                 org_id=org_id,
+                extra_headers=extra_headers,
             )
 
         else:
@@ -148,7 +153,7 @@ def create_app_crud(api_key: str, org_id: str) -> dspy.Tool:
     )
 
 
-def create_page_crud(api_key: str, org_id: str) -> dspy.Tool:
+def create_page_crud(api_key: str, org_id: str, extra_headers: dict[str, str] | None = None) -> dspy.Tool:
     """
     Factory: Create page_crud tool with auth captured in closure.
 
@@ -195,6 +200,7 @@ def create_page_crud(api_key: str, org_id: str) -> dspy.Tool:
                 data=None,
                 auth_token=api_key,
                 org_id=org_id,
+                extra_headers=extra_headers,
             )
 
         elif method == "read":
@@ -206,6 +212,7 @@ def create_page_crud(api_key: str, org_id: str) -> dspy.Tool:
                 data=None,
                 auth_token=api_key,
                 org_id=org_id,
+                extra_headers=extra_headers,
             )
 
         elif method == "create":
@@ -221,6 +228,7 @@ def create_page_crud(api_key: str, org_id: str) -> dspy.Tool:
                 data=data,
                 auth_token=api_key,
                 org_id=org_id,
+                extra_headers=extra_headers,
             )
 
         elif method == "update":
@@ -232,6 +240,7 @@ def create_page_crud(api_key: str, org_id: str) -> dspy.Tool:
                 data=data,
                 auth_token=api_key,
                 org_id=org_id,
+                extra_headers=extra_headers,
             )
 
         elif method == "update_content":
@@ -259,6 +268,7 @@ def create_page_crud(api_key: str, org_id: str) -> dspy.Tool:
                 data=data,
                 auth_token=api_key,
                 org_id=org_id,
+                extra_headers=extra_headers,
             )
 
         elif method == "publish":
@@ -270,6 +280,7 @@ def create_page_crud(api_key: str, org_id: str) -> dspy.Tool:
                 data=None,
                 auth_token=api_key,
                 org_id=org_id,
+                extra_headers=extra_headers,
             )
 
         elif method == "unpublish":
@@ -281,6 +292,7 @@ def create_page_crud(api_key: str, org_id: str) -> dspy.Tool:
                 data=None,
                 auth_token=api_key,
                 org_id=org_id,
+                extra_headers=extra_headers,
             )
 
         elif method == "delete":
@@ -292,6 +304,7 @@ def create_page_crud(api_key: str, org_id: str) -> dspy.Tool:
                 data=None,
                 auth_token=api_key,
                 org_id=org_id,
+                extra_headers=extra_headers,
             )
 
         else:

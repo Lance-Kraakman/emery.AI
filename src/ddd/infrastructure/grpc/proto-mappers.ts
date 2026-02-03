@@ -187,6 +187,10 @@ export function createTaskRequest(params: {
   organizationModel?: string; // Organization default model (fallback for agent model)
   // Context table mappings for this execution
   resolvedContext?: ResolvedContextData;
+  // Trigger context for audit trail (flows to Python worker as HTTP headers on tool calls)
+  triggerType?: string;
+  triggeredByUserId?: string;
+  triggeredByUserName?: string;
 }): TaskRequest {
   // Build typed skill inputs for TriggerData
   const skillInputValues: SkillInputValue[] = (params.skillInputs || []).map(input => {
@@ -242,6 +246,10 @@ export function createTaskRequest(params: {
     inputContent: [], // Runtime input attachments (empty for now, can be extended later)
     resolvedContext: params.resolvedContext ? mapResolvedContextToProto(params.resolvedContext) : undefined,
     skillId: 0, // Default; set below when skill is provided
+    // Trigger context for audit trail
+    triggerType: params.triggerType || '',
+    triggeredByUserId: params.triggeredByUserId || '',
+    triggeredByUserName: params.triggeredByUserName || '',
   };
 
   // Debug logging for model selection

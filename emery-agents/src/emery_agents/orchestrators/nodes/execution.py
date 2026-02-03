@@ -86,6 +86,7 @@ async def execute_step_node(state: PlanExecuteState, runtime: RuntimeContext) ->
         skill_inputs=runtime_skill_inputs,  # Pass runtime inputs for template resolution
         capability_registry=runtime.capability_registry,
         extra_tools=extra_tools or None,
+        extra_headers=runtime.extra_headers,  # Audit trail headers for CRUD tool calls
     )
 
     # Hydrate with previous step results so context flows between steps

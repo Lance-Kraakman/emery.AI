@@ -130,6 +130,10 @@ class ProtoMapper:
             organization_model=proto.organization_model or None,
             agent_model=proto.agent_model or None,
             resolved_context=resolved_context,
+            # Trigger context for audit trail
+            trigger_type=proto.trigger_type or None,
+            triggered_by_user_id=proto.triggered_by_user_id or None,
+            triggered_by_user_name=proto.triggered_by_user_name or None,
         )
 
     def task_progress_to_proto(self, progress: TaskProgressDict) -> agent_worker_pb2.TaskProgress:
