@@ -9,6 +9,8 @@
 
 import React, { useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { useStore } from '@tanstack/react-store';
+import { uiStateStore, uiStateSelectors } from '@/stores/ui-state.store';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -73,6 +75,14 @@ export function TemplateGallery({
   isRefreshing = false,
 }: TemplateGalleryProps) {
   const router = useRouter();
+
+  // Layout-aware grid: reduce columns when both sidebar and chat are expanded
+  const sidebarState = useStore(uiStateStore, uiStateSelectors.sidebarState);
+  const chatState = useStore(uiStateStore, uiStateSelectors.chatState);
+  const bothPanelsExpanded = sidebarState === 'expanded' && chatState === 'expanded';
+  const gridClassName = bothPanelsExpanded
+    ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3'
+    : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3';
 
   // Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -351,7 +361,7 @@ export function TemplateGallery({
                 : 'No builtin templates available'}
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            <div className={gridClassName}>
               {filteredBuiltins.map((template) => (
                 <TemplateCard
                   key={template.id}
@@ -379,7 +389,7 @@ export function TemplateGallery({
                 : 'No saved templates yet. Import a .brain file or save a builtin template to get started.'}
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            <div className={gridClassName}>
               {filteredSaved.map((template) => (
                 <TemplateCard
                   key={template.id}

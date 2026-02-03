@@ -14,6 +14,7 @@ import { s3Client, BUCKET_NAME } from '@/lib/s3/client';
 import {
   getOrgPrefixes,
   getTaskAttachmentPrefix,
+  getDatabaseFileKey,
   getAgentWorkspaceKey,
   getUserWorkspaceKey,
   extractOrgIdFromKey,
@@ -67,7 +68,14 @@ export class S3FileStorageRepository implements IFileStorageRepository {
   async uploadFile(request: FileUploadRequest): Promise<StoredFile> {
     try {
       const fileId = uuidv4();
-      const key = this.generateS3Key(request, fileId);
+      const sanitizedFilename = request.filename.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const key = getDatabaseFileKey(
+        request.organizationId!.value,
+        request.tableId!.value,
+        request.fieldId!.value,
+        fileId,
+        sanitizedFilename,
+      );
 
       // Generate checksums for integrity verification
       const md5Hash = crypto.createHash('md5').update(request.buffer).digest('hex');
@@ -294,31 +302,6 @@ export class S3FileStorageRepository implements IFileStorageRepository {
         { key }
       );
     }
-  }
-
-  // Helper method to generate S3 key
-  private generateS3Key(request: FileUploadRequest, fileId: string): string {
-    const parts: string[] = [];
-
-    if (request.organizationId) {
-      parts.push(`org_${request.organizationId}`);
-    }
-
-    if (request.tableId) {
-      parts.push(`table_${request.tableId}`);
-    }
-
-    if (request.fieldId) {
-      parts.push(`field_${request.fieldId}`);
-    }
-
-    // Remove date-based partitioning for cleaner paths
-
-    // Add file ID and sanitized filename
-    const sanitizedFilename = request.filename.replace(/[^a-zA-Z0-9.-]/g, '_');
-    parts.push(`${fileId}_${sanitizedFilename}`);
-
-    return parts.join('/');
   }
 
   /**
