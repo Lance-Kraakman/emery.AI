@@ -3,13 +3,16 @@
 import React, { useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { TemplateRenderer, type KnownVariable } from './TemplateRenderer';
+import { ToolChip } from './ToolChip';
 import { cn } from '@/lib/utils';
-import type { StoredPlanStep } from '@/ddd/domain/skills/entities/skill';
+import type { StoredPlanStep, ToolConfig } from '@/ddd/domain/skills/entities/skill';
 
 interface PlanStepCardProps {
   step: StoredPlanStep;
   stepNumber: number;
   knownVariables?: KnownVariable[];
+  /** Skill-level tools array for resolving tool icons */
+  tools?: ToolConfig[];
   compact?: boolean;
 }
 
@@ -23,19 +26,41 @@ export function PlanStepCard({
   step,
   stepNumber,
   knownVariables = [],
+  tools = [],
   compact = false,
 }: PlanStepCardProps) {
   const hasPromptTemplate = !!step.promptTemplate?.trim();
   const [activeTab, setActiveTab] = useState<string>('summary');
 
-  // If no template, just render the description
+  const hasVariables = /\{\{.+?\}\}/.test(step.description || '');
+
+  // Resolve icon URL for the step's toolCall from the skill's tools[]
+  const toolIconUrl = step.toolCall
+    ? tools.find((t) => t.name === step.toolCall || t.name.endsWith(`:${step.toolCall}`))?.iconUrl
+    : undefined;
+  const toolDisplayName = step.toolCall
+    ? tools.find((t) => t.name === step.toolCall || t.name.endsWith(`:${step.toolCall}`))?.config?.displayName
+    : undefined;
+
+  // If no template, just render the description (with optional variable chips + tool chip)
   if (!hasPromptTemplate) {
     return (
       <div className={cn('flex gap-2 text-xs', compact && 'py-0.5')}>
         <span className="text-muted-foreground font-medium min-w-[1.5rem]">
           {stepNumber}.
         </span>
-        <span className="text-muted-foreground">{step.description}</span>
+        <div className="text-muted-foreground flex items-center gap-1.5 flex-wrap">
+          {hasVariables ? (
+            <TemplateRenderer
+              template={step.description}
+              knownVariables={knownVariables}
+              className="text-xs inline"
+            />
+          ) : (
+            <span>{step.description}</span>
+          )}
+          {step.toolCall && <ToolChip toolName={step.toolCall} displayName={toolDisplayName} iconUrl={toolIconUrl} />}
+        </div>
       </div>
     );
   }
@@ -58,7 +83,18 @@ export function PlanStepCard({
             </TabsList>
 
             <TabsContent value="summary" className="mt-2">
-              <p className="text-xs text-muted-foreground">{step.description}</p>
+              <div className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
+                {hasVariables ? (
+                  <TemplateRenderer
+                    template={step.description}
+                    knownVariables={knownVariables}
+                    className="text-xs inline"
+                  />
+                ) : (
+                  <span>{step.description}</span>
+                )}
+                {step.toolCall && <ToolChip toolName={step.toolCall} displayName={toolDisplayName} iconUrl={toolIconUrl} />}
+              </div>
             </TabsContent>
 
             <TabsContent value="prompt" className="mt-2">

@@ -16,7 +16,8 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
-import type { StoredPlan } from '@/ddd/domain/skills/entities/skill';
+import type { StoredPlan, ToolConfig } from '@/ddd/domain/skills/entities/skill';
+import { PlanStepCard } from './PlanStepCard';
 
 interface StoredPlanSectionProps {
   plan?: StoredPlan;
@@ -24,6 +25,8 @@ interface StoredPlanSectionProps {
   isReadOnly?: boolean;
   /** Compact mode for smaller panels */
   compact?: boolean;
+  /** Skill-level tools for icon resolution in plan steps */
+  tools?: ToolConfig[];
 }
 
 export function StoredPlanSection({
@@ -31,6 +34,7 @@ export function StoredPlanSection({
   onRemove,
   isReadOnly = false,
   compact = false,
+  tools = [],
 }: StoredPlanSectionProps) {
   if (!plan) return null;
 
@@ -75,16 +79,17 @@ export function StoredPlanSection({
             View steps <ChevronDown className="h-3 w-3 ml-1" />
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <ul className={`${textSize} space-y-1 mt-1`}>
+            <div className="space-y-1 mt-1">
               {plan.steps.map((step, i) => (
-                <li
+                <PlanStepCard
                   key={step.stepId}
-                  className="pl-2 border-l border-muted-foreground/30"
-                >
-                  {i + 1}. {step.description}
-                </li>
+                  step={step}
+                  stepNumber={i + 1}
+                  tools={tools}
+                  compact
+                />
               ))}
-            </ul>
+            </div>
           </CollapsibleContent>
         </Collapsible>
       )}

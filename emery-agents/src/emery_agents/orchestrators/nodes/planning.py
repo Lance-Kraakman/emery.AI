@@ -23,6 +23,7 @@ from ...services.execution.events import (
     AwaitingClarificationEvent,
     ErrorEvent,
 )
+from ...services.analysis.embeddings import get_embedding, cosine_similarity
 from ...tools.tool_modes import ToolMode, filter_tools_for_mode
 from emery_agents.api import WorkspaceAPI
 from emery_agents.tools.discovery import create_discovery_tools
@@ -98,8 +99,6 @@ def _score_resource(
     Uses the same embedding infrastructure as CapabilityRegistry.search().
     Embeddings are LRU-cached (1000 entries) so repeated resource names are free.
     """
-    from ...services.analysis.embeddings import get_embedding, cosine_similarity
-
     resource_text = f"{name} {description}".strip()
     if not resource_text:
         return 0.0
@@ -141,8 +140,6 @@ def _filter_relevant_context(
     Embeddings are LRU-cached, so after the first call resource embeddings are free.
     If no resource scores above the threshold, returns full context unchanged.
     """
-    from ...services.analysis.embeddings import get_embedding
-
     if not task.strip():
         return workspace
 
@@ -190,7 +187,7 @@ def _filter_relevant_context(
         return workspace
 
 
-_DESTRUCTIVE_KEYWORDS = {"delete", "remove", "destroy", "drop"}
+_DESTRUCTIVE_KEYWORDS = {"delete", "remove", "destroy", "drop", "truncate", "clear", "wipe", "purge"}
 
 
 def _is_low_risk_plan(plan: Plan) -> bool:
@@ -235,6 +232,7 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
     org_model = state.get("org_model")
     memory_context = state.get("memory_context") or ""
     triage_analysis = state.get("triage_analysis")
+    configured_tools = state.get("configured_tools")
 
     events: List[Any] = []
 
@@ -307,6 +305,7 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
             is_template_generation=is_template_generation,
             memory_context=memory_context,
             triage_analysis=triage_analysis,
+            configured_tools=configured_tools,
         )
     except Exception as e:
         logger.error(f"Plan generation failed: {e}")

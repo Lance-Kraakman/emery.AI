@@ -14,6 +14,7 @@ and outputs for plan generation. This enables:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import json
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from emery_agents.entities.models.context_mapping import ResolvedContext
@@ -86,6 +87,17 @@ class PlanGenerationRequest:
     # Pre-computed triage analysis (intent, entities, approach, external_services)
     # Avoids duplicate AnalyzeTask call in PlannerModule
     triage_analysis: Optional[Dict[str, Any]] = None
+
+    # Tools explicitly configured for the skill (from UI tools[] array).
+    # Passed to the planner so it uses these tools in generated plan steps.
+    configured_tools: Optional[List[Dict[str, Any]]] = None
+
+    @property
+    def configured_tools_json(self) -> str:
+        """Format configured_tools as JSON string for DSPy signature input."""
+        if not self.configured_tools:
+            return ""
+        return json.dumps(self.configured_tools)
 
 
 

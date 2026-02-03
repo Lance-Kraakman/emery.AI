@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   Loader2,
   Wand2,
@@ -27,6 +27,8 @@ import { UnifiedChatInput } from '@/components/shared/UnifiedChatInput';
 import { generateSkillPlan, type GeneratePlanResult } from '@/app/actions/skills';
 import type { StoredPlan, StoredPlanStep } from '@/ddd/domain/skills/entities/skill';
 import type { AwaitingInput } from '@/ddd/infrastructure/grpc/generated/agent_worker';
+import type { ToolConfigDTO } from '@/app/mappers/skill-mapper';
+import { extractToolReferences, mergeToolReferences } from '@/lib/utils/extract-tool-references';
 import type { ChatVariable } from '../hooks/useChatVariables';
 import { PlanStepCard } from './PlanStepCard';
 import type { KnownVariable } from './TemplateRenderer';
@@ -48,6 +50,8 @@ function buildKnownVariables(chatVariables: ChatVariable[]): KnownVariable[] {
 interface PlanBuilderSectionProps {
   instructions: string;
   onInstructionsChange: (instructions: string) => void;
+  tools?: ToolConfigDTO[];
+  onToolsChange?: (tools: ToolConfigDTO[]) => void;
   plan: StoredPlan | null | undefined;
   onPlanChange: (plan: StoredPlan | null) => void;
   skillId?: number;
@@ -70,6 +74,8 @@ interface PlanBuilderSectionProps {
 export function PlanBuilderSection({
   instructions,
   onInstructionsChange,
+  tools = [],
+  onToolsChange,
   plan,
   onPlanChange,
   skillId,
@@ -88,6 +94,23 @@ export function PlanBuilderSection({
   // Clarifying questions from backend
   const [pendingQuestions, setPendingQuestions] = useState<AwaitingInput | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
+
+  // Sync @ references in instructions to the tools[] array
+  const prevInstructionsRef = useRef(instructions);
+  useEffect(() => {
+    if (!onToolsChange || prevInstructionsRef.current === instructions) return;
+    prevInstructionsRef.current = instructions;
+
+    const instructionTools = extractToolReferences(instructions);
+    const merged = mergeToolReferences(tools, instructionTools);
+
+    // Only update if the tool list actually changed
+    const currentNames = tools.map((t) => t.name).sort().join(',');
+    const mergedNames = merged.map((t) => t.name).sort().join(',');
+    if (currentNames !== mergedNames) {
+      onToolsChange(merged);
+    }
+  }, [instructions, tools, onToolsChange]);
 
   // Determine current state
   const getState = (): PlanState => {
@@ -304,6 +327,7 @@ export function PlanBuilderSection({
                   step={step}
                   stepNumber={index + 1}
                   knownVariables={buildKnownVariables(chatVariables)}
+                  tools={tools}
                   compact
                 />
               ))}

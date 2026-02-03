@@ -23,6 +23,11 @@ from typing import Any, Optional, TYPE_CHECKING
 import dspy
 
 from emery_agents.ace import StrategyAccumulationService
+from emery_agents.reasoning.capabilities import (
+    CAPABILITY_ROUTING_HEADER,
+    format_planning_guidance,
+    get_planning_guidance,
+)
 from emery_agents.reasoning.config import get_dspy_lm
 from emery_agents.reasoning.modules.planner import PlannerModule, SkillTemplatePlannerModule
 from emery_agents.reasoning.signatures.planning import (
@@ -33,7 +38,7 @@ from emery_agents.reasoning.signatures.planning import (
 )
 from emery_agents.entities.models.plan import Plan, PlanStep, create_plan, create_step
 from emery_agents.services.context import WorkspaceContext, format_conversation_history
-from emery_agents.services.protocols import ModelProviderProtocol, Tool
+from emery_agents.services.protocols import Tool
 
 if TYPE_CHECKING:
     from emery_agents.services.context import ConversationMessage
@@ -61,10 +66,8 @@ class DSPyPlanGenerator:
 
     def __init__(
         self,
-        model_provider: Optional["ModelProviderProtocol"] = None,
         discovery_tools: Optional[list["Tool"]] = None,
     ) -> None:
-        self.model_provider = model_provider
         self.discovery_tools = discovery_tools or []
         self._last_strategy_guidance: str = ""
 
@@ -140,6 +143,7 @@ class DSPyPlanGenerator:
                     conversation_history=conversation_history,
                     memory_context=request.memory_context,
                     triage_analysis=request.triage_analysis,
+                    configured_tools=request.configured_tools_json,
                 )
         except Exception as e:
             logger.error(f"DSPy planning failed: {e}")
@@ -202,6 +206,7 @@ class DSPyPlanGenerator:
                     conversation_history=conversation_history,
                     skill_inputs=skill_inputs,
                     skill_outputs=skill_outputs,
+                    configured_tools=request.configured_tools_json,
                 )
         except Exception as e:
             logger.error(f"DSPy template planning failed: {e}")
@@ -285,15 +290,9 @@ class DSPyPlanGenerator:
         Matched capability guidance includes tool mappings and step description
         templates — these are the primary instructions for writing executor-ready steps.
         """
-        from emery_agents.reasoning.capabilities import (
-            CAPABILITY_ROUTING_HEADER,
-            format_planning_guidance,
-            get_planning_guidance,
-        )
-
         # Fallback: no registry means return all guidance (includes routing header)
         if not request.capability_registry:
-            logger.warning("No capability_registry in request — using all guidance")
+            logger.warning("capability_registry missing in request — returning all guidance (this shouldn't happen)")
             return format_planning_guidance()
 
         org_id = request.config.org_id if request.config else None

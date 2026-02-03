@@ -72,6 +72,9 @@ class PlanExecuteState(TypedDict, total=False):
     # === Event accumulator (append-only for UI streaming) ===
     events: Annotated[List[Any], operator.add]
 
+    # === Configured tools (from skill UI) ===
+    configured_tools: Optional[List[Dict[str, Any]]]
+
     # === Triage (set by triage node) ===
     execution_mode: Optional[str]  # "direct", "plan", "respond"
     triage_reasoning: Optional[str]
@@ -120,6 +123,8 @@ DEFAULT_STATE: Dict[str, Any] = {
     "clarifying_questions": [],
     # Event accumulator
     "events": [],
+    # Configured tools
+    "configured_tools": None,
     # Triage
     "execution_mode": None,
     "triage_reasoning": None,

@@ -94,6 +94,15 @@ def _build_step_prompt(
             "Do NOT replicate the skill's logic — just execute it by ID.",
         ])
 
+    # Tool directive — when the plan specifies a tool, the executor MUST use it
+    if current_step.tool_call:
+        parts.extend([
+            "",
+            "## Required Tool",
+            f"You MUST use the `{current_step.tool_call}` tool to complete this step.",
+            "Do NOT use alternative tools or skip the tool call.",
+        ])
+
     # Step scope constraint — prevent LLM from executing beyond this step
     parts.extend([
         "",

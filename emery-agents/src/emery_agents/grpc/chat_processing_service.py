@@ -526,6 +526,17 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             user_feedback = request.user_feedback or None
             task_instructions = request.instructions
 
+            # Extract configured tools appendix from instructions
+            configured_tools: List[Dict[str, Any]] = []
+            if "---CONFIGURED_TOOLS---" in task_instructions:
+                parts = task_instructions.split("---CONFIGURED_TOOLS---", 1)
+                task_instructions = parts[0].strip()
+                try:
+                    configured_tools = json.loads(parts[1].strip())
+                    logger.info(f"📋 GeneratePlan: Extracted {len(configured_tools)} configured tools")
+                except json.JSONDecodeError:
+                    logger.warning("📋 GeneratePlan: Failed to parse configured tools JSON")
+
             if request.session_id and request.answers:
                 logger.info(f"📋 GeneratePlan: Resuming session {session_id} with {len(request.answers)} answers")
                 yield _make_progress("Resuming with your answers...", "resuming")
@@ -581,6 +592,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     for o in skill_outputs
                 ] if skill_outputs else None,
                 "is_template_generation": bool(skill_inputs),
+                "configured_tools": configured_tools if configured_tools else None,
             }
 
             result = await generate_plan_node(cast(PlanExecuteState, plan_state), runtime)

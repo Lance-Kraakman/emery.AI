@@ -1393,9 +1393,19 @@ export async function generateSkillPlan(
       error: string | null;
     } = { plan: null, questions: null, error: null };
 
+    // Build instructions with configured tools appendix
+    const configuredTools = (skill.tools || []).map(t => ({
+      name: t.name,
+      type: t.config?.type || 'system',
+      category: t.config?.category,
+    }));
+    const instructionsWithTools = configuredTools.length > 0
+      ? `${instructions}\n\n---CONFIGURED_TOOLS---\n${JSON.stringify(configuredTools)}`
+      : instructions;
+
     await grpcClient.streamGeneratePlan(
       {
-        instructions,
+        instructions: instructionsWithTools,
         organizationId: skill.organizationId.value,
         userId: session.user.id,
         skillId,

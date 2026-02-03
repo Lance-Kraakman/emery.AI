@@ -468,6 +468,7 @@ export interface OutputDefinition {
 export interface ToolConfig {
   name: string;
   config?: Record<string, any>;
+  iconUrl?: string;
 }
 
 /**

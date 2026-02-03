@@ -24,6 +24,7 @@ import { DataSourceCards } from '@/components/skill-config/DataSourceCards';
 import { TableGroupedInputPanel } from '@/components/skill-config/TableGroupedInputPanel';
 import { TableGroupedOutputPanel } from '@/components/skill-config/TableGroupedOutputPanel';
 import { PlanBuilderSection } from './editor/PlanBuilderSection';
+import { ToolsSection } from './editor/ToolsSection';
 import { useChatVariables } from './hooks';
 import type { SkillFormData } from './SkillEditor';
 
@@ -231,24 +232,13 @@ export function AgenticSkillEditor({
             </SelectContent>
           </Select>
 
-          {/* Tools display */}
-          {value.tools && value.tools.length > 0 && (
-            <div className="flex flex-wrap gap-1 pt-0.5">
-              {value.tools.slice(0, 3).map((tool, idx) => (
-                <span
-                  key={idx}
-                  className="text-[10px] px-1.5 py-0.5 rounded bg-violet-100 dark:bg-violet-900 text-violet-700 dark:text-violet-300"
-                >
-                  {tool.name}
-                </span>
-              ))}
-              {value.tools.length > 3 && (
-                <span className="text-[10px] px-1.5 py-0.5 text-muted-foreground">
-                  +{value.tools.length - 3} more
-                </span>
-              )}
-            </div>
-          )}
+          {/* Tools display + management */}
+          <div className="pt-0.5">
+            <ToolsSection
+              tools={value.tools || []}
+              onToolsChange={(tools) => handleChange({ tools })}
+            />
+          </div>
         </div>
       </div>
 
@@ -271,6 +261,8 @@ export function AgenticSkillEditor({
       <PlanBuilderSection
         instructions={value.instructions || ''}
         onInstructionsChange={(instructions) => handleChange({ instructions })}
+        tools={value.tools || []}
+        onToolsChange={(tools) => handleChange({ tools })}
         plan={value.plan}
         onPlanChange={(plan) => handleChange({ plan: plan || undefined })}
         skillId={skillId}

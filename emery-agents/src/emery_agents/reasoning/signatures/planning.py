@@ -276,6 +276,13 @@ class CreatePlan(dspy.Signature):  # type: ignore[misc]
     conversation_history: str = dspy.InputField(
         desc="Previous messages in this chat session for follow-up context."
     )
+    configured_tools: str = dspy.InputField(
+        desc="JSON list of tools explicitly configured for this skill. "
+             "When tools are listed here, you MUST use them in the plan steps. "
+             "Include the exact tool name in the step's tool_call field. "
+             "You may also discover additional tools via search_external if needed. "
+             "Empty string if no tools are configured."
+    )
 
     result: PlanOrQuestionsOutput = dspy.OutputField()
 
@@ -318,7 +325,6 @@ class CreateSkillTemplate(dspy.Signature):  # type: ignore[misc]
     workspace_context: str = dspy.InputField(
         desc="JSON of existing databases, tables, apps - check FIRST before asking"
     )
-    available_tools: list[str] = dspy.InputField(desc="Discovery tools available")
     capability_guidance: str = dspy.InputField(
         desc="Capability planning guidance - when to use each capability"
     )
@@ -331,6 +337,12 @@ class CreateSkillTemplate(dspy.Signature):  # type: ignore[misc]
     )
     skill_outputs: list[SkillOutputSpec] = dspy.InputField(
         desc="Expected outputs to be extracted post-execution"
+    )
+    configured_tools: str = dspy.InputField(
+        desc="JSON list of tools explicitly configured for this skill. "
+             "When tools are listed here, you MUST use them in the plan steps. "
+             "Include the exact tool name in the step's tool_call field. "
+             "Empty string if no tools are configured."
     )
 
     result: SkillTemplatePlanOutput = dspy.OutputField()

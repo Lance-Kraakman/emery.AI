@@ -7,9 +7,12 @@ It replaces the Jinja2-based planning templates.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import dspy
+
+logger = logging.getLogger(__name__)
 
 from emery_agents.reasoning.signatures.planning import (
     AnalyzeTask,
@@ -77,6 +80,7 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         conversation_history: str = "",
         memory_context: str = "",
         triage_analysis: dict[str, Any] | None = None,
+        configured_tools: str = "",
     ) -> PlanOrQuestionsOutput:
         """
         Generate a plan or clarifying questions for a user request.
@@ -100,7 +104,7 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         if triage_analysis and triage_analysis.get("intent"):
             analysis_data = triage_analysis
         else:
-            # Fallback: run separate AnalyzeTask (e.g., SimplePlannerModule path)
+            # Fallback: run separate AnalyzeTask when no triage analysis available
             analysis = self.analyzer(
                 request=request,
                 context=workspace_context,
@@ -128,6 +132,7 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
             capability_guidance=capability_guidance,
             planning_context=planning_context,
             conversation_history=conversation_history,
+            configured_tools=configured_tools,
         )
 
         plan_result = result.result
@@ -213,66 +218,6 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         ]
 
 
-class SimplePlannerModule(dspy.Module):  # type: ignore[misc]
-    """
-    Simplified planner that skips analysis for straightforward tasks.
-
-    Use this for simple, well-defined tasks that don't need pre-analysis.
-    """
-
-    def __init__(self, discovery_tools: list[Any] | None = None) -> None:
-        """
-        Initialize the simple planner module.
-
-        Args:
-            discovery_tools: List of tools available during planning phase
-        """
-        super().__init__()
-        self.planner = dspy.ChainOfThought(CreatePlan)
-        self.discovery_tools = discovery_tools or []
-
-    def forward(
-        self,
-        request: str,
-        workspace_context: str,
-        capability_guidance: str = "",
-        proven_strategies: str = "",
-        conversation_history: str = "",
-        memory_context: str = "",
-    ) -> PlanOrQuestionsOutput:
-        """
-        Generate a plan directly without pre-analysis.
-
-        Args:
-            request: The user's goal or task description
-            workspace_context: JSON string of existing workspace resources
-            capability_guidance: Domain-specific instructions
-            proven_strategies: ACE patterns for similar goals
-            conversation_history: Formatted previous messages for context continuity
-            memory_context: Background memories from previous interactions
-
-        Returns:
-            PlanOrQuestionsOutput with either a plan or clarifying questions
-        """
-        # Build planning_context from available fields (no AnalyzeTask here)
-        sections: list[str] = []
-        if proven_strategies and proven_strategies.strip():
-            sections.append(f"## Proven Strategies\n{proven_strategies}")
-        if memory_context and memory_context.strip():
-            sections.append(f"## Background Memory\n{memory_context}")
-        planning_context = "\n\n".join(sections) if sections else ""
-
-        result = self.planner(
-            request=request,
-            workspace_context=workspace_context,
-            capability_guidance=capability_guidance,
-            planning_context=planning_context,
-            conversation_history=conversation_history,
-        )
-
-        return result.result  # type: ignore[no-any-return]
-
-
 class SkillTemplatePlannerModule(PlannerModule):
     """DSPy module for creating skill templates with {{ variable }} placeholders.
 
@@ -288,8 +233,8 @@ class SkillTemplatePlannerModule(PlannerModule):
             discovery_tools: List of tools available during planning phase
         """
         super().__init__(discovery_tools=discovery_tools)
-        # Use template-specific signature
-        self.template_planner = dspy.ChainOfThought(CreateSkillTemplate)
+        # ReAct with discovery tools so the template planner can call system_research
+        self.template_planner = dspy.ReAct(CreateSkillTemplate, tools=self.discovery_tools, max_iters=5)
 
     def forward(  # type: ignore[override]
         self,
@@ -300,6 +245,7 @@ class SkillTemplatePlannerModule(PlannerModule):
         conversation_history: str,
         skill_inputs: list[dict[str, Any]],
         skill_outputs: list[dict[str, Any]],
+        configured_tools: str = "",
     ) -> SkillTemplatePlanOutput:
         """Generate skill template plan.
 
@@ -315,8 +261,6 @@ class SkillTemplatePlannerModule(PlannerModule):
         Returns:
             SkillTemplatePlanOutput with steps containing prompt_template
         """
-        tool_names = [getattr(t, "name", str(t)) for t in self.discovery_tools]
-
         # Build template-specific guidance (adds template rules to base guidance)
         template_guidance = self._build_template_guidance(capability_guidance)
 
@@ -327,12 +271,12 @@ class SkillTemplatePlannerModule(PlannerModule):
         result = self.template_planner(
             request=request,
             workspace_context=workspace_context,
-            available_tools=tool_names,
             capability_guidance=template_guidance,
             proven_strategies=proven_strategies,
             conversation_history=conversation_history,
             skill_inputs=input_specs,
             skill_outputs=output_specs,
+            configured_tools=configured_tools,
         )
 
         plan = result.result
@@ -375,9 +319,6 @@ VARIABLE SYNTAX:
         - prompt_template is present
         - Warns if inputs provided but no {{ }} found
         """
-        import logging
-        logger = logging.getLogger(__name__)
-
         for step in plan.steps:
             if not step.prompt_template:
                 raise ValueError(f"Step {step.step_id} missing required prompt_template")
