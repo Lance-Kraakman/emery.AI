@@ -6,7 +6,7 @@ import { requireCurrentOrganization } from "./user-organizations";
 import { withAuthContext } from '@/lib/auth/with-context';
 import { createAgentSchema, updateAgentSchema, parseFormDataToAgent } from "@/lib/schemas";
 import { type Result, type CreateAgentData, type CreateAgentClientData } from "./types";
-import { getAgentApplicationService, getAuditApplicationService } from "@/ddd/application/di/container";
+import { getAgentApplicationService, getAgentRepository, getAuditApplicationService } from "@/ddd/application/di/container";
 import type { CreateAgentDTO, UpdateAgentDTO, AgentFiltersDTO, AgentDTO } from "@/app/dtos/agent.dto";
 import { AgentId, OrganizationId, UserId, AgentStatus } from '@/ddd/domain/shared/value-objects';
 import type { UpdateAgentData } from '@/ddd/domain/agents/entities/agent';
@@ -588,9 +588,16 @@ export async function deployPipedreamSource(
       // Import dynamically to avoid issues with server-only code
       const { deploySource } = await import('@/ddd/infrastructure/external/pipedream/sources');
 
-      // Build webhook URL for this agent
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-      const webhookUrl = `${baseUrl}/api/webhooks/pipedream/${agentId}`;
+      // Fetch agent to get webhook token for URL authentication
+      const agentRepo = getAgentRepository();
+      const agent = await agentRepo.findById(AgentId.fromNumber(agentId));
+      if (!agent?.webhookToken) {
+        throw new Error('Agent webhook token not found — cannot build secure webhook URL');
+      }
+
+      // Build webhook URL with token for Pipedream to POST events to
+      const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
+      const webhookUrl = `${baseUrl}/api/webhooks/pipedream/${agentId}/${agent.webhookToken}`;
 
       console.log('[AgentActions] Webhook URL:', webhookUrl);
 
