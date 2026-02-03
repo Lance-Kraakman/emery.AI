@@ -305,16 +305,13 @@ class SkillExecutorService:
         self,
         skill_config: SkillConfig,
         target_table_id: int,
-        api_key: Optional[str],
-        org_id: Optional[int],
+        api_key: str,
+        org_id: int,
     ) -> Dict[str, TargetFieldMeta]:
         """Fetch table schema and build typed metadata for output fields.
 
         Maps each output name to its target field constraints (type, select options).
         """
-        if not api_key or not org_id:
-            return {}
-
         try:
             table = TableAPI(api_key, str(org_id)).get(target_table_id)
         except Exception as e:
@@ -349,8 +346,8 @@ class SkillExecutorService:
         result: SkillExecutionResult,
         step_executor: StepExecutorService,
         org_model: Optional[str],
-        api_key: Optional[str],
-        organization_id: Optional[int],
+        api_key: str,
+        organization_id: int,
     ) -> Optional[Dict[str, Any]]:
         """Unified post-DAG pipeline for both agentic and workflow flows.
 
@@ -451,8 +448,8 @@ class SkillExecutorService:
         capture_outputs: Literal[False] = False,
         attachments: Optional[List[Any]] = None,
         return_message_parts: bool = False,
-        api_key: Optional[str] = None,
-        organization_id: Optional[int] = None,
+        api_key: str = "",
+        organization_id: int = 0,
         progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None
     ) -> str: ...
 
@@ -465,8 +462,8 @@ class SkillExecutorService:
         capture_outputs: Literal[True] = ...,
         attachments: Optional[List[Any]] = None,
         return_message_parts: bool = False,
-        api_key: Optional[str] = None,
-        organization_id: Optional[int] = None,
+        api_key: str = "",
+        organization_id: int = 0,
         progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None
     ) -> SkillExecutionResult: ...
 
@@ -478,8 +475,8 @@ class SkillExecutorService:
         capture_outputs: bool = False,
         attachments: Optional[List[Any]] = None,
         return_message_parts: bool = False,
-        api_key: Optional[str] = None,
-        organization_id: Optional[int] = None,
+        api_key: str = "",
+        organization_id: int = 0,
         progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None
     ) -> Union[str, SkillExecutionResult]:
         """Execute a skill.
@@ -535,8 +532,8 @@ class SkillExecutorService:
         runtime_inputs: Dict[str, Any],
         org_model: Optional[str],
         capture_outputs: bool,
-        api_key: Optional[str],
-        organization_id: Optional[int],
+        api_key: str,
+        organization_id: int,
     ) -> Union[str, SkillExecutionResult]:
         """Execute agentic skill via unified StepExecutorService path.
 
@@ -748,8 +745,8 @@ class SkillExecutorService:
         skill_config: SkillConfig,
         runtime_inputs: Dict[str, Any],
         org_model: Optional[str] = None,
-        api_key: Optional[str] = None,
-        organization_id: Optional[int] = None
+        api_key: str = "",
+        organization_id: int = 0
     ) -> SkillExecutionResult:
         """Execute skill via step-based DAG workflow.
 
@@ -911,8 +908,8 @@ class SkillExecutorService:
         self,
         org_model: Optional[str] = None,
         return_message_parts: bool = False,
-        api_key: Optional[str] = None,
-        organization_id: Optional[int] = None
+        api_key: str = "",
+        organization_id: int = 0
     ) -> Callable:
         """Create callback for SkillTool delegation.
 

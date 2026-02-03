@@ -14,7 +14,7 @@ from emery_agents.api.http_client import make_request
 from ..mutation_guard import check_mutation_allowed
 
 
-def create_file_crud(api_key: str, org_id: str) -> dspy.Tool:
+def create_file_crud(api_key: str, org_id: str, extra_headers: dict[str, str] | None = None) -> dspy.Tool:
     """
     Factory: Create file_crud tool with auth captured in closure.
 
@@ -64,6 +64,7 @@ def create_file_crud(api_key: str, org_id: str) -> dspy.Tool:
                 data=data,
                 auth_token=api_key,
                 org_id=org_id,
+                extra_headers=extra_headers,
             )
 
         elif method == "read":
@@ -78,6 +79,7 @@ def create_file_crud(api_key: str, org_id: str) -> dspy.Tool:
                 data=None,
                 auth_token=api_key,
                 org_id=org_id,
+                extra_headers=extra_headers,
             )
 
         elif method == "update":
@@ -94,6 +96,7 @@ def create_file_crud(api_key: str, org_id: str) -> dspy.Tool:
                 data=data,
                 auth_token=api_key,
                 org_id=org_id,
+                extra_headers=extra_headers,
             )
 
         elif method == "delete":
@@ -108,6 +111,7 @@ def create_file_crud(api_key: str, org_id: str) -> dspy.Tool:
                 data=None,
                 auth_token=api_key,
                 org_id=org_id,
+                extra_headers=extra_headers,
             )
 
         else:

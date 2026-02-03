@@ -301,6 +301,52 @@ export async function createPortalSession(): Promise<PortalSessionResult> {
 }
 
 /**
+ * Create a Stripe Customer Portal session for payment method update only
+ * Uses flow_data to restrict the portal to just payment method management
+ */
+export async function createPaymentMethodPortalSession(): Promise<PortalSessionResult> {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const orgId = session.user.currentOrganizationId;
+    if (!orgId) {
+      return { success: false, error: 'No organization selected' };
+    }
+
+    const org = await db.query.organizations.findFirst({
+      where: eq(organizations.id, orgId),
+    });
+
+    if (!org || !org.stripeCustomerId) {
+      return { success: false, error: 'No active subscription found' };
+    }
+
+    // Create portal session restricted to payment method update
+    const portalSession = await stripe.billingPortal.sessions.create({
+      customer: org.stripeCustomerId,
+      return_url: `${process.env.NEXTAUTH_URL}/settings/billing`,
+      flow_data: {
+        type: 'payment_method_update',
+      },
+    });
+
+    return {
+      success: true,
+      portalUrl: portalSession.url,
+    };
+  } catch (error) {
+    console.error('Error creating payment method portal session:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to open payment method update',
+    };
+  }
+}
+
+/**
  * Update spending limit for overage billing
  * Requires organizations:manage permission
  * Pass null to remove limit (unlimited spending)

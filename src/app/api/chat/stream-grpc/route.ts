@@ -573,6 +573,7 @@ export async function POST(req: NextRequest) {
     let messagePlan: any = null; // Plan from completion metadata (for persistence)
     let messageAwaitingInput: any = null; // HITL awaiting input state (for UI)
     let assistantMessageId: string | null = null; // Track message ID for incremental updates
+    let messageFinalized = false; // Guard against double-finalization between error handlers and flush()
 
     // Create debounced updater for incremental saves (2.5 second delay)
     const debouncedUpdater = createDebouncedUpdater(2500);
@@ -588,6 +589,11 @@ export async function POST(req: NextRequest) {
       },
 
       async flush() {
+        // Skip if message was already finalized by error/catch handlers
+        if (messageFinalized) {
+          console.log('[CHAT-GRPC-API] Message already finalized, skipping flush');
+          return;
+        }
         console.log('[CHAT-GRPC-API] Response stream complete, finalizing assistant message');
 
         // Flush any pending incremental update first
@@ -1026,8 +1032,10 @@ export async function POST(req: NextRequest) {
                   timestamp: new Date().toISOString()
                 });
 
-                // Update message with error status if we have a placeholder (fire-and-forget)
+                // Update message with error status if we have a placeholder
                 if (assistantMessageId && currentChatId) {
+                  // Set flag immediately to prevent flush() from overwriting
+                  messageFinalized = true;
                   const errorUpdateDTO: UpdateMessageDTO = {
                     messageId: assistantMessageId,
                     chatId: currentChatId,
@@ -1067,8 +1075,30 @@ export async function POST(req: NextRequest) {
           currentChatId // Pass chatId as sessionId for stateful agent persistence
         ).then(() => {
           console.log('[CHAT-GRPC-API] gRPC processing completed successfully');
-        }).catch((error) => {
+        }).catch(async (error) => {
           console.error('[CHAT-GRPC-API] gRPC processing failed:', error);
+
+          // Finalize message in DB before closing stream (don't rely on flush)
+          if (assistantMessageId && currentChatId) {
+            try {
+              await chatApplicationService.updateMessage({
+                messageId: assistantMessageId,
+                chatId: currentChatId,
+                organizationId: organizationId,
+                content: fullAssistantResponse || '[Error occurred during generation]',
+                metadata: {
+                  streamingStatus: 'error',
+                  error: error.message || 'AI service unavailable',
+                  executionSteps: collectedSteps
+                }
+              });
+              messageFinalized = true;
+              console.log(`[CHAT-GRPC-API] Finalized message on gRPC error: ${assistantMessageId}`);
+            } catch (dbError) {
+              console.error('[CHAT-GRPC-API] Failed to finalize message on gRPC error:', dbError);
+            }
+          }
+
           try {
             const errorMessage = `\n\n[Error: AI service unavailable. Please try again.]`;
             const chunk = new TextEncoder().encode(errorMessage);

@@ -48,13 +48,10 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, TierConfig> = {
       '1,000 credits per month',
       'Up to 3 team members',
       '1GB storage',
-      'Basic chat and task automation',
-      'Community support',
     ],
     limitations: [
       'No connectors/integrations',
       'Limited storage',
-      'Community support only',
     ],
     stripePriceIdMonthly: null,
     stripePriceIdYearly: null,
@@ -74,19 +71,16 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, TierConfig> = {
     creditsPerMonth: 50000, // ~$50 worth of usage
     features: [
       '50,000 credits per month',
-      'Unlimited team members',
+      'Up to 3 team members',
       '10GB storage',
       'Unlimited connectors',
-      'Advanced automation',
-      'Priority support',
-      'Custom configurations',
       'API access',
     ],
     stripePriceIdMonthly: process.env.STRIPE_PRO_PRICE_ID_MONTHLY || null,
     stripePriceIdYearly: process.env.STRIPE_PRO_PRICE_ID_YEARLY || null,
     stripeProductId: process.env.STRIPE_PRO_PRODUCT_ID || null,
     isCustomPricing: false,
-    maxTeamMembers: null,
+    maxTeamMembers: 3,
     storageQuotaGB: 10,
     connectorsAllowed: true,
   },
@@ -111,7 +105,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, TierConfig> = {
     stripePriceIdYearly: process.env.STRIPE_MAX_PRICE_ID_YEARLY || null,
     stripeProductId: process.env.STRIPE_MAX_PRODUCT_ID || null,
     isCustomPricing: false,
-    maxTeamMembers: null,
+    maxTeamMembers: 10,
     storageQuotaGB: 30,
     connectorsAllowed: true,
   },
@@ -167,14 +161,13 @@ export const PRICE_PER_CREDIT_USD = CREDIT_PRICING.PRICE_PER_CREDIT_USD;
  * Default: $0 (allowance-only, no overage)
  */
 export const SPENDING_LIMIT_PRESETS = [
-  { label: 'Allowance only (no overage)', value: 0, recommended: true },
+  { label: '$5/month', value: 5, recommended: true },
   { label: '$10/month', value: 10 },
   { label: '$25/month', value: 25 },
   { label: '$50/month', value: 50 },
   { label: '$100/month', value: 100 },
   { label: '$250/month', value: 250 },
   { label: '$500/month', value: 500 },
-  { label: 'Unlimited', value: null },
   { label: 'Custom', value: -1 },
 ] as const;
 

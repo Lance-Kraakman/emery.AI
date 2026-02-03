@@ -47,7 +47,7 @@ STEP_REASONING: StepType
 STEP_FINAL: StepType
 
 class TaskRequest(_message.Message):
-    __slots__ = ("task_id", "agent_id", "skill_name", "instruction_config", "agent_config", "trigger_data", "organization_id", "owner_id", "timeout_seconds", "name", "agent_model", "organization_model", "input_content", "resolved_context", "skill_id")
+    __slots__ = ("task_id", "agent_id", "skill_name", "instruction_config", "agent_config", "trigger_data", "organization_id", "owner_id", "timeout_seconds", "name", "agent_model", "organization_model", "input_content", "resolved_context", "skill_id", "trigger_type", "triggered_by_user_id", "triggered_by_user_name")
     TASK_ID_FIELD_NUMBER: _ClassVar[int]
     AGENT_ID_FIELD_NUMBER: _ClassVar[int]
     SKILL_NAME_FIELD_NUMBER: _ClassVar[int]
@@ -63,6 +63,9 @@ class TaskRequest(_message.Message):
     INPUT_CONTENT_FIELD_NUMBER: _ClassVar[int]
     RESOLVED_CONTEXT_FIELD_NUMBER: _ClassVar[int]
     SKILL_ID_FIELD_NUMBER: _ClassVar[int]
+    TRIGGER_TYPE_FIELD_NUMBER: _ClassVar[int]
+    TRIGGERED_BY_USER_ID_FIELD_NUMBER: _ClassVar[int]
+    TRIGGERED_BY_USER_NAME_FIELD_NUMBER: _ClassVar[int]
     task_id: str
     agent_id: int
     skill_name: str
@@ -78,7 +81,10 @@ class TaskRequest(_message.Message):
     input_content: _containers.RepeatedCompositeFieldContainer[MessagePart]
     resolved_context: ResolvedContextProto
     skill_id: int
-    def __init__(self, task_id: _Optional[str] = ..., agent_id: _Optional[int] = ..., skill_name: _Optional[str] = ..., instruction_config: _Optional[_Union[InstructionConfig, _Mapping]] = ..., agent_config: _Optional[_Union[AgentConfig, _Mapping]] = ..., trigger_data: _Optional[_Union[TriggerData, _Mapping]] = ..., organization_id: _Optional[str] = ..., owner_id: _Optional[str] = ..., timeout_seconds: _Optional[int] = ..., name: _Optional[str] = ..., agent_model: _Optional[str] = ..., organization_model: _Optional[str] = ..., input_content: _Optional[_Iterable[_Union[MessagePart, _Mapping]]] = ..., resolved_context: _Optional[_Union[ResolvedContextProto, _Mapping]] = ..., skill_id: _Optional[int] = ...) -> None: ...
+    trigger_type: str
+    triggered_by_user_id: str
+    triggered_by_user_name: str
+    def __init__(self, task_id: _Optional[str] = ..., agent_id: _Optional[int] = ..., skill_name: _Optional[str] = ..., instruction_config: _Optional[_Union[InstructionConfig, _Mapping]] = ..., agent_config: _Optional[_Union[AgentConfig, _Mapping]] = ..., trigger_data: _Optional[_Union[TriggerData, _Mapping]] = ..., organization_id: _Optional[str] = ..., owner_id: _Optional[str] = ..., timeout_seconds: _Optional[int] = ..., name: _Optional[str] = ..., agent_model: _Optional[str] = ..., organization_model: _Optional[str] = ..., input_content: _Optional[_Iterable[_Union[MessagePart, _Mapping]]] = ..., resolved_context: _Optional[_Union[ResolvedContextProto, _Mapping]] = ..., skill_id: _Optional[int] = ..., trigger_type: _Optional[str] = ..., triggered_by_user_id: _Optional[str] = ..., triggered_by_user_name: _Optional[str] = ...) -> None: ...
 
 class TaskProgress(_message.Message):
     __slots__ = ("task_id", "status", "output_json", "error_message", "timestamp_ms", "progress_percent", "token_usage")

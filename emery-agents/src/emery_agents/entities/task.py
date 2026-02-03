@@ -61,6 +61,10 @@ class TaskRequest:
     organization_model: Optional[str] = None  # For model selection
     agent_model: Optional[str] = None  # For model selection
     resolved_context: Optional[ResolvedContext] = None  # Context table mappings
+    # Trigger context for audit trail (flows from TS → proto → Python → HTTP headers)
+    trigger_type: Optional[str] = None           # 'manual' | 'webhook' | 'database_event' | 'calendar' | 'public_api'
+    triggered_by_user_id: Optional[str] = None   # Root-cause user ID
+    triggered_by_user_name: Optional[str] = None # Root-cause user display name
 
 
 @dataclass

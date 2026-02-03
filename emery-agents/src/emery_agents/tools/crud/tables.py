@@ -16,7 +16,7 @@ from emery_agents.api import TableAPI
 from ..mutation_guard import check_mutation_allowed
 
 
-def create_table_crud(api_key: str, org_id: str) -> dspy.Tool:
+def create_table_crud(api_key: str, org_id: str, extra_headers: dict[str, str] | None = None) -> dspy.Tool:
     """
     Factory: Create table_crud tool with auth captured in closure.
 
@@ -27,7 +27,7 @@ def create_table_crud(api_key: str, org_id: str) -> dspy.Tool:
     Returns:
         dspy.Tool wrapping the table_crud function
     """
-    api = TableAPI(api_key, org_id)
+    api = TableAPI(api_key, org_id, extra_headers=extra_headers)
 
     def table_crud(
         method: str,

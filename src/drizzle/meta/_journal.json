@@ -470,6 +470,13 @@
       "when": 1770094557666,
       "tag": "0066_broad_beast",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1770120373354,
+      "tag": "0067_unique_vulture",
+      "breakpoints": true
     }
   ]
 }

@@ -12,6 +12,7 @@
 
 import { NextRequest } from 'next/server';
 import { withAuthenticatedRoute } from '@/lib/api/base';
+import { logAgentMutation } from '@/lib/api/agent-context';
 import { getDocumentApplicationService } from '@/ddd/application/di/container';
 import { OrganizationId, TableId, FieldId, UserId } from '@/ddd/domain/shared/value-objects';
 
@@ -215,6 +216,13 @@ export async function PUT(
           status: 400
         };
       }
+
+      logAgentMutation(request, user, {
+        action: 'update',
+        resourceType: 'document',
+        resourceId: id,
+        resourceName: body.title,
+      });
 
       return {
         success: true,

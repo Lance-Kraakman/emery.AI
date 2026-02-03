@@ -15,6 +15,7 @@ export interface StorageBreakdown {
   databaseStorageBytes: number;
   chatStorageBytes: number;
   skillStorageBytes: number;
+  workspaceStorageBytes: number;
   fileCount: number;
   scannedAt: Date;
 }

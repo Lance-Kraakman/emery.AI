@@ -26,21 +26,25 @@ if TYPE_CHECKING:
     from .capability_registry import CapabilityRegistry
 
 
-def create_crud_tools(api_key: str, org_id: str) -> list[dspy.Tool]:
+def create_crud_tools(
+    api_key: str,
+    org_id: str,
+    extra_headers: dict[str, str] | None = None,
+) -> list[dspy.Tool]:
     """Create all CRUD tool functions with auth captured."""
     return [
-        create_table_crud(api_key, org_id),
-        create_field_crud(api_key, org_id),
-        create_row_crud(api_key, org_id),
-        create_database_crud(api_key, org_id),
-        create_view_crud(api_key, org_id),
-        create_app_crud(api_key, org_id),
-        create_page_crud(api_key, org_id),
-        create_document_crud(api_key, org_id),
-        create_file_crud(api_key, org_id),
-        create_skill_crud(api_key, org_id),
-        create_agent_crud(api_key, org_id),
-        create_team_crud(api_key, org_id),
+        create_table_crud(api_key, org_id, extra_headers=extra_headers),
+        create_field_crud(api_key, org_id, extra_headers=extra_headers),
+        create_row_crud(api_key, org_id, extra_headers=extra_headers),
+        create_database_crud(api_key, org_id, extra_headers=extra_headers),
+        create_view_crud(api_key, org_id, extra_headers=extra_headers),
+        create_app_crud(api_key, org_id, extra_headers=extra_headers),
+        create_page_crud(api_key, org_id, extra_headers=extra_headers),
+        create_document_crud(api_key, org_id, extra_headers=extra_headers),
+        create_file_crud(api_key, org_id, extra_headers=extra_headers),
+        create_skill_crud(api_key, org_id, extra_headers=extra_headers),
+        create_agent_crud(api_key, org_id, extra_headers=extra_headers),
+        create_team_crud(api_key, org_id, extra_headers=extra_headers),
     ]
 
 
@@ -48,9 +52,10 @@ def create_all_tools(
     api_key: str,
     org_id: str,
     capability_registry: "CapabilityRegistry | None" = None,
+    extra_headers: dict[str, str] | None = None,
 ) -> list[dspy.Tool]:
     """Create all DSPy tool functions with auth captured."""
     tools: list[dspy.Tool] = []
-    tools.extend(create_crud_tools(api_key, org_id))
+    tools.extend(create_crud_tools(api_key, org_id, extra_headers=extra_headers))
     tools.extend(create_discovery_tools(api_key, org_id, capability_registry))
     return tools

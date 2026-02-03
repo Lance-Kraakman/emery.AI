@@ -4,6 +4,7 @@
 
 import { NextRequest } from 'next/server';
 import { withAuthenticatedRoute, parseJsonBody, requireParam } from '@/lib/api/base';
+import { logAgentMutation } from '@/lib/api/agent-context';
 import { getTableApplicationService } from "@/ddd/application/di/container";
 import { DatabaseId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import type { CreateTableCommand } from '@/ddd/application/services/tables/table-application-service';
@@ -41,6 +42,13 @@ export async function POST(request: NextRequest): Promise<Response> {
     if (!result.success) {
       return { success: false, error: result.error || 'Failed to create table', status: 400 };
     }
+
+    logAgentMutation(request, user, {
+      action: 'create',
+      resourceType: 'table',
+      resourceId: String(result.data?.id),
+      resourceName: name,
+    });
 
     return {
       success: true,

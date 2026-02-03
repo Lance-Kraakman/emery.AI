@@ -546,6 +546,7 @@ export async function getOwnerDelegationsSummary(): Promise<{
     try {
       const session = await requireAuth();
       const userId = session.user.id;
+      const currentOrgId = session.user.currentOrganizationId;
 
       const delegationService = container.get('CredentialDelegationApplicationService') as CredentialDelegationApplicationService;
       const connectionService = container.get('ConnectionApplicationService') as ConnectionApplicationService;
@@ -607,11 +608,13 @@ export async function getOwnerDelegationsSummary(): Promise<{
         // Skip non-approved delegations
         if (delegation.status !== 'approved') continue;
 
-        // Get agent name and access list
+        // Get agent and skip if it doesn't exist or belongs to a different organization
         const agent = await agentRepository.findById(delegation.agentId);
+        if (!agent || agent.organizationId.value !== currentOrgId) continue;
+
         const agentInfo: AgentWithAccess = {
           id: delegation.agentId.value,
-          name: agent?.name || `Agent ${delegation.agentId.value}`,
+          name: agent.name,
           accessList: agentAccessMap.get(delegation.agentId.value) || []
         };
 

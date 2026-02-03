@@ -6,6 +6,7 @@
 
 import { NextRequest } from 'next/server';
 import { withAuthenticatedRoute } from '@/lib/api/base';
+import { logAgentMutation } from '@/lib/api/agent-context';
 import { getAppApplicationService } from '@/ddd/application/di/getters';
 import { AppId } from '@/ddd/domain/puck/value-objects/app-id';
 import { AppMapper } from '@/app/mappers/puck-app-mapper';
@@ -88,6 +89,13 @@ export async function PUT(request: NextRequest, { params }: RouteParams): Promis
       return { success: false, error: result.error || 'Failed to update app', status: 400 };
     }
 
+    logAgentMutation(request, user, {
+      action: 'update',
+      resourceType: 'app',
+      resourceId: String(appId),
+      resourceName: body.name,
+    });
+
     return { success: true, data: AppMapper.toDTO(result.data) };
   });
 }
@@ -124,6 +132,13 @@ export async function DELETE(request: NextRequest, { params }: RouteParams): Pro
     if (!result.success) {
       return { success: false, error: result.error || 'Failed to delete app', status: 400 };
     }
+
+    logAgentMutation(request, user, {
+      action: 'delete',
+      resourceType: 'app',
+      resourceId: String(appId),
+      resourceName: appName,
+    });
 
     return { success: true, data: { id: appId, name: appName }, message: 'App deleted successfully' };
   });

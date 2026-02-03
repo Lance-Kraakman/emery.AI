@@ -10,11 +10,12 @@ import {
   PutObjectCommand,
   GetObjectCommand,
   DeleteObjectCommand,
-  DeleteObjectsCommand,
 } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { v4 as uuidv4 } from 'uuid'
 import { s3Client, BUCKET_NAME } from '@/lib/s3/client'
+import { getSkillAttachmentKey, SKILL_ATTACHMENTS_PREFIX } from '@/lib/s3/path-registry'
+import { invalidateOrgStorageCache } from '@/ddd/infrastructure/storage/repositories/s3-file-storage-repository'
 import type {
   AttachmentMetadata,
   ImageAttachmentMetadata,
@@ -55,7 +56,7 @@ export class S3SkillAttachmentService {
   }
 
   /**
-   * Generate S3 key for skill attachment
+   * Generate S3 key for skill attachment using the shared path registry.
    * Pattern: skill-attachments/{org_id}/{skill_id}/{uuid}.{ext}
    */
   private generateS3Key(
@@ -67,7 +68,7 @@ export class S3SkillAttachmentService {
     const extension = filename.split('.').pop() || 'bin'
     const sanitizedExt = extension.replace(/[^\w.-]/g, '_')
 
-    return `skill-attachments/${organizationId}/${skillId}/${fileId}.${sanitizedExt}`
+    return getSkillAttachmentKey(organizationId, skillId, fileId, sanitizedExt)
   }
 
   /**
@@ -109,6 +110,9 @@ export class S3SkillAttachmentService {
       })
 
       await this.s3.send(putCommand)
+
+      // Invalidate storage breakdown cache so recalculation picks up this upload
+      invalidateOrgStorageCache(request.organizationId)
 
       // Generate pre-signed URL
       const url = await this.generateAttachmentUrl(s3Key)
@@ -205,7 +209,7 @@ export class S3SkillAttachmentService {
    */
   async deleteSkillAttachments(organizationId: number, skillId: number): Promise<void> {
     try {
-      const prefix = `skill-attachments/${organizationId}/${skillId}/`
+      const prefix = `${SKILL_ATTACHMENTS_PREFIX}/${organizationId}/${skillId}/`
 
       // In production, would need to list objects first and batch delete
       // For now, this is a placeholder for the deletion logic

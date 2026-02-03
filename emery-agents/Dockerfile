@@ -13,14 +13,18 @@ ARG VERSION=""
 # curl: HTTP requests (when network enabled)
 # git: Version control operations
 # tree: Directory visualization
+# socat: Unix socket to TCP bridge for sandbox network proxy
+# iproute2: Loopback interface setup inside sandbox (ip link set lo up)
+# libseccomp-dev: Required for seccomp Python bindings (syscall filtering)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bubblewrap \
     jq \
     curl \
     git \
     tree \
-    pandoc \
-    wkhtmltopdf \
+    socat \
+    iproute2 \
+    libseccomp-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv for faster Python package installation (pinned version)

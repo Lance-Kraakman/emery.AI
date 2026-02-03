@@ -1453,7 +1453,10 @@ proto.emery.agents.TaskRequest.toObject = function(includeInstance, msg) {
     inputContentList: jspb.Message.toObjectList(msg.getInputContentList(),
     proto.emery.agents.MessagePart.toObject, includeInstance),
     resolvedContext: (f = msg.getResolvedContext()) && proto.emery.agents.ResolvedContextProto.toObject(includeInstance, f),
-    skillId: jspb.Message.getFieldWithDefault(msg, 15, 0)
+    skillId: jspb.Message.getFieldWithDefault(msg, 15, 0),
+    triggerType: jspb.Message.getFieldWithDefault(msg, 16, ""),
+    triggeredByUserId: jspb.Message.getFieldWithDefault(msg, 17, ""),
+    triggeredByUserName: jspb.Message.getFieldWithDefault(msg, 18, "")
   };
 
   if (includeInstance) {
@@ -1554,6 +1557,18 @@ proto.emery.agents.TaskRequest.deserializeBinaryFromReader = function(msg, reade
     case 15:
       var value = /** @type {number} */ (reader.readInt32());
       msg.setSkillId(value);
+      break;
+    case 16:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setTriggerType(value);
+      break;
+    case 17:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setTriggeredByUserId(value);
+      break;
+    case 18:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setTriggeredByUserName(value);
       break;
     default:
       reader.skipField();
@@ -1691,6 +1706,27 @@ proto.emery.agents.TaskRequest.serializeBinaryToWriter = function(message, write
   if (f !== 0) {
     writer.writeInt32(
       15,
+      f
+    );
+  }
+  f = message.getTriggerType();
+  if (f.length > 0) {
+    writer.writeString(
+      16,
+      f
+    );
+  }
+  f = message.getTriggeredByUserId();
+  if (f.length > 0) {
+    writer.writeString(
+      17,
+      f
+    );
+  }
+  f = message.getTriggeredByUserName();
+  if (f.length > 0) {
+    writer.writeString(
+      18,
       f
     );
   }
@@ -2078,6 +2114,60 @@ proto.emery.agents.TaskRequest.prototype.getSkillId = function() {
  */
 proto.emery.agents.TaskRequest.prototype.setSkillId = function(value) {
   return jspb.Message.setProto3IntField(this, 15, value);
+};
+
+
+/**
+ * optional string trigger_type = 16;
+ * @return {string}
+ */
+proto.emery.agents.TaskRequest.prototype.getTriggerType = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 16, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.emery.agents.TaskRequest} returns this
+ */
+proto.emery.agents.TaskRequest.prototype.setTriggerType = function(value) {
+  return jspb.Message.setProto3StringField(this, 16, value);
+};
+
+
+/**
+ * optional string triggered_by_user_id = 17;
+ * @return {string}
+ */
+proto.emery.agents.TaskRequest.prototype.getTriggeredByUserId = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 17, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.emery.agents.TaskRequest} returns this
+ */
+proto.emery.agents.TaskRequest.prototype.setTriggeredByUserId = function(value) {
+  return jspb.Message.setProto3StringField(this, 17, value);
+};
+
+
+/**
+ * optional string triggered_by_user_name = 18;
+ * @return {string}
+ */
+proto.emery.agents.TaskRequest.prototype.getTriggeredByUserName = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 18, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.emery.agents.TaskRequest} returns this
+ */
+proto.emery.agents.TaskRequest.prototype.setTriggeredByUserName = function(value) {
+  return jspb.Message.setProto3StringField(this, 18, value);
 };
 
 

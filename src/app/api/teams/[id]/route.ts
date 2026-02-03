@@ -11,6 +11,7 @@
 
 import { NextRequest } from 'next/server';
 import { withAuthenticatedRoute, parseIntParam, parseJsonBody } from '@/lib/api/base';
+import { logAgentMutation } from '@/lib/api/agent-context';
 import { getTeamApplicationService } from '@/ddd/application/di/container';
 import { TeamMapper } from '@/app/mappers/team-mapper';
 
@@ -98,6 +99,13 @@ export async function PUT(
       };
     }
 
+    logAgentMutation(request, user, {
+      action: 'update',
+      resourceType: 'team',
+      resourceId: String(teamId),
+      resourceName: body.name,
+    });
+
     return {
       success: true,
       data: result.data,
@@ -131,6 +139,7 @@ export async function DELETE(
     }
 
     // Delete team
+    const teamName = team.name;
     const result = await teamService.deleteTeam(teamId);
 
     if (!result.success) {
@@ -140,6 +149,13 @@ export async function DELETE(
         status: 400
       };
     }
+
+    logAgentMutation(request, user, {
+      action: 'delete',
+      resourceType: 'team',
+      resourceId: String(teamId),
+      resourceName: teamName,
+    });
 
     return {
       success: true,

@@ -15,7 +15,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { format } from 'date-fns';
-import { ChevronDown, ChevronRight, RefreshCw, Filter } from 'lucide-react';
+import { ChevronDown, ChevronRight, RefreshCw, Filter, User, Bot, Settings, Webhook, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -189,6 +189,8 @@ export function AuditTable({
             <SelectItem value="user">User</SelectItem>
             <SelectItem value="agent">Agent</SelectItem>
             <SelectItem value="system">System</SelectItem>
+            <SelectItem value="webhook">Webhook</SelectItem>
+            <SelectItem value="public_app">Public App</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -207,6 +209,7 @@ export function AuditTable({
             <SelectItem value="table">Table</SelectItem>
             <SelectItem value="agent">Agent</SelectItem>
             <SelectItem value="skill">Skill</SelectItem>
+            <SelectItem value="task">Task</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -375,6 +378,7 @@ function AuditEventRow({
         </td>
         <td className="px-3 py-1.5">
           <div className="flex items-center gap-1.5">
+            <ActorIcon actorType={event.actorType} />
             <Badge variant={event.actorType === 'user' ? 'default' : 'secondary'} className="text-[10px] px-1.5 py-0">
               {event.actorType}
             </Badge>
@@ -644,6 +648,21 @@ function formatValue(value: unknown): string {
   return String(value);
 }
 
+// Actor type icon mapping
+const ACTOR_TYPE_ICONS: Record<string, React.ElementType> = {
+  user: User,
+  agent: Bot,
+  system: Settings,
+  webhook: Webhook,
+  public_app: Globe,
+};
+
+function ActorIcon({ actorType }: { actorType: string }) {
+  const Icon = ACTOR_TYPE_ICONS[actorType];
+  if (!Icon) return null;
+  return <Icon className="h-3 w-3 text-muted-foreground" />;
+}
+
 // Human-readable labels for event categories
 const EVENT_CATEGORY_LABELS: Record<string, string> = {
   // Database operations
@@ -754,16 +773,26 @@ function getEventPreview(event: AuditEvent): string | null {
 function getTriggeredByContext(event: AuditEvent): { type: string; name: string } | null {
   const { actorType, metadata, eventData } = event;
 
-  // Only relevant for agent actions
-  if (actorType !== 'agent') return null;
+  // Only relevant for non-user actions (agents, webhooks, etc.)
+  if (actorType === 'user') return null;
 
-  // Check metadata for task/user context
   if (metadata) {
-    if (metadata.triggeredByUser && metadata.triggeredByUserName) {
+    // Standardized field names (from audit enrichment)
+    if (metadata.triggeredByUserName) {
       return { type: 'user', name: String(metadata.triggeredByUserName) };
     }
-    if (metadata.taskId && metadata.taskName) {
+    if (metadata.triggeredByUserId) {
+      return { type: 'user', name: String(metadata.triggeredByUserId) };
+    }
+    if (metadata.taskName) {
       return { type: 'task', name: String(metadata.taskName) };
+    }
+    if (metadata.triggerType) {
+      return { type: String(metadata.triggerType), name: String(metadata.triggerType) };
+    }
+    // Legacy field names
+    if (metadata.triggeredByUser) {
+      return { type: 'user', name: String(metadata.triggeredByUser) };
     }
     if (metadata.triggeredBy) {
       return { type: 'request', name: String(metadata.triggeredBy) };

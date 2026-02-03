@@ -217,14 +217,15 @@ export function useChatGRPC(
         const chatMessages: ChatMessage[] = result.data.messages.map(msg => {
           const isIncomplete = msg.metadata?.streamingStatus === 'streaming'
 
-          // For incomplete messages, append indicator to content
+          // For incomplete messages, show content as-is if available
           let displayContent = msg.content
           if (isIncomplete) {
             const trimmed = msg.content?.trim() || ''
-            if (!trimmed) {
-              displayContent = '_Message was interrupted during generation_'
+            if (!trimmed || trimmed === '...') {
+              displayContent = '_Message generation did not complete._'
             } else {
-              displayContent = `${trimmed}\n\n---\n_Message was interrupted. Some content may be missing._`
+              // Show the content without alarming "interrupted" banner
+              displayContent = trimmed
             }
           }
 

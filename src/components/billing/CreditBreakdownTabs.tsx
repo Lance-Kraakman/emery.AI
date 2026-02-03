@@ -72,23 +72,23 @@ export function CreditBreakdownTabs({
       ) : data.length === 0 ? (
         <div className="text-center py-6 text-sm text-muted-foreground">No usage data available</div>
       ) : (
-        <div className="rounded-md border">
-          <table className="w-full text-sm">
+        <div className="rounded-md border overflow-x-auto">
+          <table className="w-full text-xs min-w-0">
             <thead>
               <tr className="border-b bg-muted/50">
-                <th className="p-2 text-left">{label}</th>
-                <th className="p-2 text-right">Credits</th>
-                <th className="p-2 text-right">Executions</th>
-                <th className="p-2 text-right">% of Total</th>
+                <th className="p-1.5 text-left">{label}</th>
+                <th className="p-1.5 text-right">Credits</th>
+                <th className="p-1.5 text-right hidden sm:table-cell">Runs</th>
+                <th className="p-1.5 text-right">%</th>
               </tr>
             </thead>
             <tbody>
               {data.map((item, i) => (
                 <tr key={i} className="border-b last:border-0">
-                  <td className="p-2 capitalize">{item.name}</td>
-                  <td className="p-2 text-right font-medium">{item.creditsUsed.toFixed(2)}</td>
-                  <td className="p-2 text-right">{item.executionCount}</td>
-                  <td className="p-2 text-right">{item.percentageOfTotal.toFixed(1)}%</td>
+                  <td className="p-1.5 capitalize truncate max-w-[120px]">{item.name}</td>
+                  <td className="p-1.5 text-right font-medium tabular-nums">{item.creditsUsed.toFixed(1)}</td>
+                  <td className="p-1.5 text-right hidden sm:table-cell tabular-nums">{item.executionCount}</td>
+                  <td className="p-1.5 text-right tabular-nums">{item.percentageOfTotal.toFixed(0)}%</td>
                 </tr>
               ))}
             </tbody>

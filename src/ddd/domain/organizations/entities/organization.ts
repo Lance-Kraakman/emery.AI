@@ -48,6 +48,7 @@ export interface Organization {
   databaseStorageBytes?: number;
   chatStorageBytes?: number;
   skillStorageBytes?: number;
+  workspaceStorageBytes?: number;
   storageOverageNotifiedAt?: Date | null;
   createdAt?: Date | null;
   // Note: No updatedAt field - not present in organizations table schema
@@ -84,6 +85,7 @@ export interface UpdateOrganizationData extends Partial<CreateOrganizationData> 
   databaseStorageBytes?: number;
   chatStorageBytes?: number;
   skillStorageBytes?: number;
+  workspaceStorageBytes?: number;
   storageOverageNotifiedAt?: Date | null;
 }
 

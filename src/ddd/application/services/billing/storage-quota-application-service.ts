@@ -9,13 +9,11 @@ import { OrganizationId } from '@/ddd/domain/shared/value-objects';
 import type { Result } from '@/ddd/domain/shared/result';
 import { createDebugLogger } from '@/lib/utils/debug-logger';
 import { getTierConfig } from '@/ddd/infrastructure/external/stripe/config';
+import type { StorageCategory } from '@/lib/s3/path-registry';
 
 const logger = createDebugLogger('StorageQuotaService');
 
-/**
- * Storage category types for tracking different types of storage
- */
-export type StorageCategory = 'database' | 'chat' | 'skill';
+export type { StorageCategory };
 
 /**
  * Result of checking storage quota before upload
@@ -57,6 +55,7 @@ export interface StorageUsageBreakdown {
   databaseStorageBytes: number;
   chatStorageBytes: number;
   skillStorageBytes: number;
+  workspaceStorageBytes: number;
   percentageUsed: number;
   availableBytes: number;
 }
@@ -98,7 +97,7 @@ export class StorageQuotaApplicationService {
       const projectedUsageBytes = currentUsageBytes + dto.uploadSizeBytes;
 
       // Calculate metrics
-      const percentageUsed = (currentUsageBytes / quotaBytes) * 100;
+      const percentageUsed = Math.round((currentUsageBytes / quotaBytes) * 100);
       const quotaExceeded = projectedUsageBytes > quotaBytes;
       const availableBytes = Math.max(0, quotaBytes - currentUsageBytes);
 
@@ -225,7 +224,7 @@ export class StorageQuotaApplicationService {
       const quotaBytes = tierConfig.storageQuotaGB * 1024 * 1024 * 1024;
 
       const totalUsageBytes = organization.storageUsedBytes || 0;
-      const percentageUsed = (totalUsageBytes / quotaBytes) * 100;
+      const percentageUsed = Math.round((totalUsageBytes / quotaBytes) * 100);
       const availableBytes = Math.max(0, quotaBytes - totalUsageBytes);
 
       return {
@@ -236,6 +235,7 @@ export class StorageQuotaApplicationService {
           databaseStorageBytes: organization.databaseStorageBytes || 0,
           chatStorageBytes: organization.chatStorageBytes || 0,
           skillStorageBytes: organization.skillStorageBytes || 0,
+          workspaceStorageBytes: organization.workspaceStorageBytes || 0,
           percentageUsed,
           availableBytes
         }

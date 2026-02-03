@@ -1212,6 +1212,67 @@ export const HUGGINGFACE_MODELS: Record<string, ModelMetadata> = {
       type: 'inference-api',
     },
   },
+
+  // Internal embedding models used by agent backend (capability discovery, planning)
+  'google/gemini-embedding-001': {
+    id: 'google/gemini-embedding-001',
+    name: 'Gemini Embedding 001',
+    provider: 'huggingface',
+    description: 'Google Gemini embedding model used internally for capability discovery and workspace context filtering. 768 dimensions.',
+    contextWindow: 2048,
+    maxOutputTokens: 0,
+    taskType: 'feature-extraction',
+    outputType: 'embedding',
+    capabilities: {
+      toolCalling: false,
+      streaming: false,
+      vision: false,
+      jsonMode: false,
+      multimodal: false,
+    },
+    pricing: {
+      inputPer1M: 0.004,
+      outputPer1M: 0,
+      currency: 'USD',
+      inputCreditsPerK: 0.01,
+      outputCreditsPerK: 0,
+    },
+    tier: 'free',
+    category: 'fast',
+    endpoint: {
+      type: 'inference-api',
+    },
+  },
+
+  'sentence-transformers/all-MiniLM-L6-v2': {
+    id: 'sentence-transformers/all-MiniLM-L6-v2',
+    name: 'MiniLM L6 v2',
+    provider: 'huggingface',
+    description: 'Lightweight sentence transformer used as fallback for embeddings. 384 dimensions.',
+    contextWindow: 256,
+    maxOutputTokens: 0,
+    taskType: 'feature-extraction',
+    outputType: 'embedding',
+    capabilities: {
+      toolCalling: false,
+      streaming: false,
+      vision: false,
+      jsonMode: false,
+      multimodal: false,
+    },
+    pricing: {
+      inputPer1M: 0.002,
+      outputPer1M: 0,
+      currency: 'USD',
+      inputCreditsPerK: 0.005,
+      outputCreditsPerK: 0,
+    },
+    tier: 'free',
+    category: 'fast',
+    endpoint: {
+      type: 'inference-api',
+    },
+  },
 };
 
 /**

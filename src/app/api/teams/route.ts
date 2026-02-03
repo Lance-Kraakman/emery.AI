@@ -10,6 +10,7 @@
 
 import { NextRequest } from 'next/server';
 import { withAuthenticatedRoute, parseJsonBody } from '@/lib/api/base';
+import { logAgentMutation } from '@/lib/api/agent-context';
 import { getTeamApplicationService } from '@/ddd/application/di/container';
 import { TeamMapper } from '@/app/mappers/team-mapper';
 
@@ -99,6 +100,13 @@ export async function POST(request: NextRequest): Promise<Response> {
         status: 400
       };
     }
+
+    logAgentMutation(request, user, {
+      action: 'create',
+      resourceType: 'team',
+      resourceId: String(result.data?.id),
+      resourceName: body.name,
+    });
 
     return {
       success: true,

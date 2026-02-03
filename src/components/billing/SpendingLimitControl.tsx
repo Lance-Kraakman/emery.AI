@@ -25,7 +25,7 @@ export interface SpendingLimitControlProps {
 export function SpendingLimitControl({
   currentLimit,
   onSave,
-  minLimit = 0,
+  minLimit = 5,
   maxLimit = 10000,
 }: SpendingLimitControlProps) {
   const [isEditing, setIsEditing] = useState(false);

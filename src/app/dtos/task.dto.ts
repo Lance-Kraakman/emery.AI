@@ -21,6 +21,10 @@ export interface CreateTaskDTO {
   skillId?: number;           // Optional - execute this skill instead of raw instructions
   createdBy?: string;
   organizationId: number;
+  // Trigger context for audit trail
+  triggerType?: string;           // 'manual' | 'webhook' | 'database_event' | 'calendar' | 'public_api'
+  triggeredByUserId?: string;     // Root-cause user who initiated the trigger chain
+  triggeredByUserName?: string;   // Display name of triggering user
 }
 
 /**

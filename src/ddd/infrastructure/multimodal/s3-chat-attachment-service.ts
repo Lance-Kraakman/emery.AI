@@ -10,12 +10,13 @@ import {
   PutObjectCommand,
   GetObjectCommand,
   DeleteObjectCommand,
-  DeleteObjectsCommand,
 } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { v4 as uuidv4 } from 'uuid'
 import crypto from 'crypto'
 import { s3Client, BUCKET_NAME } from '@/lib/s3/client'
+import { getChatAttachmentKey, CHAT_ATTACHMENTS_PREFIX } from '@/lib/s3/path-registry'
+import { invalidateOrgStorageCache } from '@/ddd/infrastructure/storage/repositories/s3-file-storage-repository'
 import type {
   AttachmentMetadata,
   ImageAttachmentMetadata,
@@ -57,7 +58,7 @@ export class S3ChatAttachmentService {
   }
 
   /**
-   * Generate S3 key for chat attachment
+   * Generate S3 key for chat attachment using the shared path registry.
    * Pattern: chat-attachments/{org_id}/{chat_id}/{msg_id}/{uuid}.{ext}
    */
   private generateS3Key(
@@ -70,7 +71,7 @@ export class S3ChatAttachmentService {
     const extension = filename.split('.').pop() || 'bin'
     const sanitizedExt = extension.replace(/[^\w.-]/g, '_')
 
-    return `chat-attachments/${organizationId}/${chatId}/${messageId}/${fileId}.${sanitizedExt}`
+    return getChatAttachmentKey(organizationId, chatId, messageId, fileId, sanitizedExt)
   }
 
   /**
@@ -143,6 +144,9 @@ export class S3ChatAttachmentService {
         uploadedAt: new Date(),
       }
 
+      // Invalidate storage breakdown cache so recalculation picks up this upload
+      invalidateOrgStorageCache(request.organizationId)
+
       return {
         s3Key,
         url,
@@ -204,7 +208,7 @@ export class S3ChatAttachmentService {
     messageId: string
   ): Promise<void> {
     try {
-      const prefix = `chat-attachments/${organizationId}/${chatId}/${messageId}/`
+      const prefix = `${CHAT_ATTACHMENTS_PREFIX}/${organizationId}/${chatId}/${messageId}/`
 
       // Note: This is a simplified version - in production you might want to list objects first
       // For now, we'll rely on individual deleteAttachment() calls from the API layer

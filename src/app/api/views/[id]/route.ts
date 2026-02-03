@@ -6,6 +6,7 @@
 
 import { NextRequest } from 'next/server';
 import { withAuthenticatedRoute } from '@/lib/api/base';
+import { logAgentMutation } from '@/lib/api/agent-context';
 import { getViewApplicationService } from '@/ddd/application/di/getters';
 import { ViewMapper } from '@/app/mappers/view-mapper';
 import { ViewId } from '@/ddd/domain/views/value-objects/view-id';
@@ -91,6 +92,13 @@ export async function PUT(request: NextRequest, { params }: RouteParams): Promis
       return { success: false, error: result.error || 'Failed to update view', status: 400 };
     }
 
+    logAgentMutation(request, user, {
+      action: 'update',
+      resourceType: 'view',
+      resourceId: String(viewId),
+      resourceName: body.name,
+    });
+
     return {
       success: true,
       data: ViewMapper.toDTO(result.data),
@@ -113,7 +121,6 @@ export async function DELETE(request: NextRequest, { params }: RouteParams): Pro
   return withAuthenticatedRoute(request, async (user) => {
     const viewService = getViewApplicationService();
 
-    // Verify view exists and user has access
     const existingResult = await viewService.getView(ViewId.fromNumber(viewId));
     if (!existingResult.success || !existingResult.data) {
       return { success: false, error: 'View not found', status: 404 };
@@ -123,12 +130,18 @@ export async function DELETE(request: NextRequest, { params }: RouteParams): Pro
     }
 
     const viewName = existingResult.data.name;
-
     const result = await viewService.deleteView(ViewId.fromNumber(viewId));
 
     if (!result.success) {
       return { success: false, error: result.error || 'Failed to delete view', status: 400 };
     }
+
+    logAgentMutation(request, user, {
+      action: 'delete',
+      resourceType: 'view',
+      resourceId: String(viewId),
+      resourceName: viewName,
+    });
 
     return { success: true, data: { id: viewId, name: viewName }, message: 'View deleted successfully' };
   });

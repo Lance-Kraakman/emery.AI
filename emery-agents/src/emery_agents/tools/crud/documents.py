@@ -6,6 +6,7 @@ Ported from tools/crud_tools.py (load_document_crud).
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import dspy
@@ -55,7 +56,7 @@ def _build_list(items: list[str], ordered: bool = False) -> dict[str, Any]:
     }
 
 
-def create_document_crud(api_key: str, org_id: str) -> dspy.Tool:
+def create_document_crud(api_key: str, org_id: str, extra_headers: dict[str, str] | None = None) -> dspy.Tool:
     """
     Factory: Create document_crud tool with auth captured in closure.
 
@@ -138,6 +139,7 @@ def create_document_crud(api_key: str, org_id: str) -> dspy.Tool:
                 data=create_data,
                 auth_token=api_key,
                 org_id=org_id,
+                extra_headers=extra_headers,
             )
 
         elif method == "read":
@@ -151,6 +153,7 @@ def create_document_crud(api_key: str, org_id: str) -> dspy.Tool:
                 data=None,
                 auth_token=api_key,
                 org_id=org_id,
+                extra_headers=extra_headers,
             )
 
         elif method == "list":
@@ -160,6 +163,7 @@ def create_document_crud(api_key: str, org_id: str) -> dspy.Tool:
                 data=None,
                 auth_token=api_key,
                 org_id=org_id,
+                extra_headers=extra_headers,
             )
 
         elif method == "append_text":
@@ -168,7 +172,7 @@ def create_document_crud(api_key: str, org_id: str) -> dspy.Tool:
             if not text:
                 return "ERROR: text is required for append_text"
             node = _build_paragraph(text, bold=bool(bold), italic=bool(italic))
-            return _modify_content(document_id, table_id_str, field_id_str, node, None, api_key, org_id)
+            return _modify_content(document_id, table_id_str, field_id_str, node, None, api_key, org_id, extra_headers=extra_headers)
 
         elif method == "append_heading":
             if not document_id or not table_id_str or not field_id_str:
@@ -177,7 +181,7 @@ def create_document_crud(api_key: str, org_id: str) -> dspy.Tool:
                 return "ERROR: text is required for append_heading"
             heading_level = level if level and 1 <= level <= 6 else 2
             node = _build_heading(text, heading_level)
-            return _modify_content(document_id, table_id_str, field_id_str, node, None, api_key, org_id)
+            return _modify_content(document_id, table_id_str, field_id_str, node, None, api_key, org_id, extra_headers=extra_headers)
 
         elif method == "append_list":
             if not document_id or not table_id_str or not field_id_str:
@@ -185,7 +189,7 @@ def create_document_crud(api_key: str, org_id: str) -> dspy.Tool:
             if not items or not isinstance(items, list):
                 return "ERROR: items (array of strings) is required for append_list"
             node = _build_list(items, ordered=bool(ordered))
-            return _modify_content(document_id, table_id_str, field_id_str, node, None, api_key, org_id)
+            return _modify_content(document_id, table_id_str, field_id_str, node, None, api_key, org_id, extra_headers=extra_headers)
 
         elif method == "update_text":
             if not document_id or not table_id_str or not field_id_str:
@@ -195,7 +199,7 @@ def create_document_crud(api_key: str, org_id: str) -> dspy.Tool:
             if not text:
                 return "ERROR: text is required for update_text"
             node = _build_paragraph(text, bold=bool(bold), italic=bool(italic))
-            return _modify_content(document_id, table_id_str, field_id_str, node, position, api_key, org_id)
+            return _modify_content(document_id, table_id_str, field_id_str, node, position, api_key, org_id, extra_headers=extra_headers)
 
         elif method == "update_heading":
             if not document_id or not table_id_str or not field_id_str:
@@ -206,7 +210,7 @@ def create_document_crud(api_key: str, org_id: str) -> dspy.Tool:
                 return "ERROR: text is required for update_heading"
             heading_level = level if level and 1 <= level <= 6 else 2
             node = _build_heading(text, heading_level)
-            return _modify_content(document_id, table_id_str, field_id_str, node, position, api_key, org_id)
+            return _modify_content(document_id, table_id_str, field_id_str, node, position, api_key, org_id, extra_headers=extra_headers)
 
         else:
             return (
@@ -245,9 +249,9 @@ def _modify_content(
     position: int | None,
     api_key: str,
     org_id: str,
+    extra_headers: dict[str, str] | None = None,
 ) -> str:
     """Read document, append or replace at position, save."""
-    import json
 
     # Read current document
     read_result = make_request(
@@ -256,6 +260,7 @@ def _modify_content(
         data=None,
         auth_token=api_key,
         org_id=org_id,
+        extra_headers=extra_headers,
     )
 
     if read_result.startswith("ERROR"):
@@ -290,4 +295,5 @@ def _modify_content(
         data={"tiptapContent": updated},
         auth_token=api_key,
         org_id=org_id,
+        extra_headers=extra_headers,
     )

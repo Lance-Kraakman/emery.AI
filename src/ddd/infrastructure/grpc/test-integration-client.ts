@@ -103,6 +103,11 @@ export class AgentWorkerTestClient {
     return new Promise((resolve, reject) => {
       // Build the gRPC request object
       const grpcRequest: TaskRequest = {
+        triggeredByUserId: request.ownerId,
+        triggeredByUserName: 'Integration Test User',
+        triggerType: 'manual',
+        instructionConfig: undefined,
+        skillName: request.skillName || '',
         name: request.name,
         taskId: request.taskId,
         agentId: request.agentId,

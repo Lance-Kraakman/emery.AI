@@ -11,6 +11,7 @@
 
 import { NextRequest } from 'next/server';
 import { withAuthenticatedRoute, parseIntParam, parseJsonBody } from '@/lib/api/base';
+import { logAgentMutation } from '@/lib/api/agent-context';
 import { getTableApplicationService } from '@/ddd/application/di/container';
 import { TableId } from '@/ddd/domain/shared/value-objects';
 import type { UpdateTableCommand } from '@/ddd/application/services/tables/table-application-service';
@@ -108,6 +109,13 @@ export async function PUT(
       };
     }
 
+    logAgentMutation(request, user, {
+      action: 'update',
+      resourceType: 'table',
+      resourceId: String(tableId),
+      resourceName: name,
+    });
+
     return {
       success: true,
       data: result.data ? TableMapper.toDTO(result.data) : null,
@@ -129,7 +137,6 @@ export async function DELETE(
     const tableId = parseIntParam(id, 'table id');
     const tableService = getTableApplicationService();
 
-    // Verify table exists before attempting deletion
     const table = await tableService.getTable(TableId.fromNumber(tableId));
 
     if (!table) {
@@ -140,8 +147,14 @@ export async function DELETE(
       };
     }
 
-    // Delete table and all associated data
     await tableService.deleteTable(TableId.fromNumber(tableId));
+
+    logAgentMutation(request, user, {
+      action: 'delete',
+      resourceType: 'table',
+      resourceId: String(tableId),
+      resourceName: table.name,
+    });
 
     return {
       success: true,

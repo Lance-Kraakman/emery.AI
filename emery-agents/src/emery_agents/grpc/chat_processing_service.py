@@ -33,6 +33,7 @@ from .coordinator_streaming import CoordinatorStreamingHandler
 from .response_converter import convert_response_to_proto
 from .agents.agent_models import get_builder_descriptors
 from emery_agents.tools.capability_registry import CapabilityRegistry
+from ..services.analysis.token_usage import TokenUsageExtractor
 from emery_agents.tools.capability_bootstrap import populate_system_agents
 from ..services.tasks import TaskExecutor
 from ..services.tasks.task_executor import TaskData
@@ -135,6 +136,32 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         """
         # Skills removed from agent_config - resolved dynamically via API
         return None
+
+    @staticmethod
+    def _build_chat_audit_headers(
+        user_id: str,
+        agent_id: int | None,
+        task_id: str | None,
+    ) -> dict[str, str] | None:
+        """
+        Build HTTP headers for audit trail in chat-initiated executions.
+
+        When a user executes a skill from chat, CRUD tool calls should
+        carry context so the TypeScript API can attribute the action
+        correctly in the audit log.
+        """
+        if not agent_id:
+            # Org-level (no agent) - user is the actor; no extra headers needed
+            return None
+
+        headers: dict[str, str] = {
+            "X-Agent-ID": str(agent_id),
+            "X-Trigger-Type": "manual",
+            "X-Triggered-By-User-Id": user_id,
+        }
+        if task_id:
+            headers["X-Task-ID"] = task_id
+        return headers
 
     def _get_workspace_id(
         self,
@@ -291,6 +318,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 else:
                     logger.warning("⚠️ No user API key provided - managed agents may fail auth")
 
+            # Build audit headers for chat-initiated tool calls
+            chat_audit_headers = self._build_chat_audit_headers(user_id, agent_id, task_id)
+
             async for response_dict in self._agent_handler.stream_response(
                 conversation_messages,
                 tools_to_use,
@@ -308,6 +338,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 workspace_id=workspace_id,  # Workspace ID for S3 (user_id or agent_id)
                 workspace_prefix=workspace_prefix,  # S3 prefix ("workspaces/users" or "workspaces/agents")
                 workspace_type=workspace_type,  # "agents" or "users" — determines memory PII filtering
+                extra_headers=chat_audit_headers,  # Audit trail headers for CRUD tool calls
             ):
                 # Check for cancellation
                 if self.active_streams.get(message_id, False):
@@ -352,6 +383,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
             processing_time = int((time.time() - start_time) * 1000)
             handler_token_usage = self._agent_handler.last_token_usage
+            # Merge embedding usage (capability discovery, planning) into total
+            embedding_usage = TokenUsageExtractor.extract_embedding_usage()
+            handler_token_usage = TokenUsageExtractor.merge_usage(handler_token_usage, embedding_usage)
             token_usage_proto = token_usage_to_proto(handler_token_usage)
             model_used = getattr(handler_token_usage, 'model_name', '') if handler_token_usage else ''
 

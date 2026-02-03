@@ -1222,6 +1222,47 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.BALANCED,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
+
+    # Internal embedding models used by agent backend (capability discovery, planning)
+    "google/gemini-embedding-001": ModelMetadata(
+        id="google/gemini-embedding-001",
+        name="Gemini Embedding 001",
+        provider="google",
+        description="Google Gemini embedding model for capability discovery and workspace context filtering. 768 dimensions.",
+        context_window=2048,
+        max_output_tokens=0,
+        capabilities=ModelCapabilities(
+            tool_calling=False,
+            streaming=False,
+            vision=False,
+            json_mode=False,
+            multimodal=False,
+        ),
+        pricing=ModelPricing(input_per_1m=0.004, output_per_1m=0),
+        tier=ModelTier.FREE,
+        category=ModelCategory.FAST,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
+
+    "sentence-transformers/all-MiniLM-L6-v2": ModelMetadata(
+        id="sentence-transformers/all-MiniLM-L6-v2",
+        name="MiniLM L6 v2",
+        provider="huggingface",
+        description="Lightweight sentence transformer used as fallback for embeddings. 384 dimensions.",
+        context_window=256,
+        max_output_tokens=0,
+        capabilities=ModelCapabilities(
+            tool_calling=False,
+            streaming=False,
+            vision=False,
+            json_mode=False,
+            multimodal=False,
+        ),
+        pricing=ModelPricing(input_per_1m=0.002, output_per_1m=0),
+        tier=ModelTier.FREE,
+        category=ModelCategory.FAST,
+        endpoint=ModelEndpoint(type="inference-api"),
+    ),
 }
 
 

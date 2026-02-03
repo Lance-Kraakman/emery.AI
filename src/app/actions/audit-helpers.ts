@@ -9,7 +9,7 @@
  */
 
 import { getAuditApplicationService } from '@/ddd/application/di/container';
-import type { OrganizationId } from '@/ddd/domain/shared/value-objects';
+import { OrganizationId } from '@/ddd/domain/shared/value-objects';
 
 // ============================================================================
 // Types
@@ -24,11 +24,24 @@ export interface AuditActor {
   name?: string;
 }
 
+export type AuditTriggerType = 'manual' | 'webhook' | 'database_event' | 'calendar' | 'public_api';
+
+export interface TriggerMetadata {
+  triggerType?: AuditTriggerType;
+  triggeredByUserId?: string;
+  triggeredByUserName?: string;
+  taskId?: string;
+  taskName?: string;
+  agentId?: string;
+  agentName?: string;
+}
+
 export interface RowAuditContext {
   organizationId: number;
   tableId: number;
   tableName: string;
   actor: AuditActor;
+  triggerMetadata?: TriggerMetadata;
 }
 
 export interface RowChangeData {
@@ -85,7 +98,7 @@ export function logRowCreate(
 
   // Log to row_history table
   auditService.logRowChange(
-    { value: context.organizationId } as OrganizationId,
+    OrganizationId.fromNumber(context.organizationId),
     context.tableId,
     data.rowId,
     'INSERT',
@@ -99,7 +112,7 @@ export function logRowCreate(
 
   // Log to audit_events table
   auditService.logEvent(
-    { value: context.organizationId } as OrganizationId,
+    OrganizationId.fromNumber(context.organizationId),
     {
       eventType: 'database',
       eventCategory: 'row_crud',
@@ -112,6 +125,7 @@ export function logRowCreate(
       parentResourceType: 'table',
       parentResourceId: String(context.tableId),
       eventData: { tableName: context.tableName },
+      metadata: context.triggerMetadata ? { ...context.triggerMetadata } : undefined,
       success: true,
     }
   );
@@ -136,7 +150,7 @@ export function logRowUpdate(
 
   // Log to row_history table
   auditService.logRowChange(
-    { value: context.organizationId } as OrganizationId,
+    OrganizationId.fromNumber(context.organizationId),
     context.tableId,
     data.rowId,
     'UPDATE',
@@ -151,7 +165,7 @@ export function logRowUpdate(
 
   // Log to audit_events table
   auditService.logEvent(
-    { value: context.organizationId } as OrganizationId,
+    OrganizationId.fromNumber(context.organizationId),
     {
       eventType: 'database',
       eventCategory: 'row_crud',
@@ -165,6 +179,7 @@ export function logRowUpdate(
       parentResourceId: String(context.tableId),
       eventData: { tableName: context.tableName, changedFields },
       previousData: data.previousData,
+      metadata: context.triggerMetadata ? { ...context.triggerMetadata } : undefined,
       success: true,
     }
   );
@@ -182,7 +197,7 @@ export function logRowDelete(
 
   // Log to row_history table
   auditService.logRowChange(
-    { value: context.organizationId } as OrganizationId,
+    OrganizationId.fromNumber(context.organizationId),
     context.tableId,
     data.rowId,
     'DELETE',
@@ -196,7 +211,7 @@ export function logRowDelete(
 
   // Log to audit_events table
   auditService.logEvent(
-    { value: context.organizationId } as OrganizationId,
+    OrganizationId.fromNumber(context.organizationId),
     {
       eventType: 'database',
       eventCategory: 'row_crud',
@@ -210,6 +225,7 @@ export function logRowDelete(
       parentResourceId: String(context.tableId),
       eventData: { tableName: context.tableName },
       previousData: data.rowSnapshot,
+      metadata: context.triggerMetadata ? { ...context.triggerMetadata } : undefined,
       success: true,
     }
   );

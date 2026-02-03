@@ -496,6 +496,7 @@ export const organizations = pgTable("organizations", {
   databaseStorageBytes: bigint("database_storage_bytes", { mode: "number" }).default(sql`0`).notNull(), // Storage used by database files/docs
   chatStorageBytes: bigint("chat_storage_bytes", { mode: "number" }).default(sql`0`).notNull(), // Storage used by chat attachments
   skillStorageBytes: bigint("skill_storage_bytes", { mode: "number" }).default(sql`0`).notNull(), // Storage used by skill attachments
+  workspaceStorageBytes: bigint("workspace_storage_bytes", { mode: "number" }).default(sql`0`).notNull(), // Storage used by agent/user workspaces
   storageOverageNotifiedAt: timestamp("storage_overage_notified_at"), // Last time user was notified about storage overage
 
   createdAt: timestamp("created_at").defaultNow(),

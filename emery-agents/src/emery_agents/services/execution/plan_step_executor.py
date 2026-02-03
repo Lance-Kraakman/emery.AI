@@ -137,6 +137,7 @@ class PlanStepExecutor:
         skill_inputs: dict[str, Any] | None = None,
         capability_registry: CapabilityRegistry | None = None,
         extra_tools: list[Any] | None = None,
+        extra_headers: dict[str, str] | None = None,
     ):
         """
         Initialize PlanStepExecutor.
@@ -149,12 +150,13 @@ class PlanStepExecutor:
             skill_inputs: Runtime inputs for skill execution (used with prompt templates)
             capability_registry: Registry of capabilities for dynamic discovery in templates
             extra_tools: Additional tools to include (e.g., memory_crud)
+            extra_headers: Optional HTTP headers for agent context audit trail
         """
         self.api_key = api_key
         self.org_id = org_id
         self.org_model = org_model
         self.max_steps = max_steps
-        self.skill_inputs = skill_inputs or {}
+        self.skill_inputs = skill_inputs if skill_inputs is not None else {}
         self.capability_registry = capability_registry
 
         # Create DSPy tools with auth captured (includes CRUD + discovery tools)
@@ -162,6 +164,7 @@ class PlanStepExecutor:
             api_key=api_key,
             org_id=org_id,
             capability_registry=capability_registry,
+            extra_headers=extra_headers,
         )
 
         # Step execution tools — NO ask_question tool.

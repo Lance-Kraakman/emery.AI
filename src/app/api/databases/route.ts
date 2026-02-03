@@ -4,6 +4,7 @@
 
 import { NextRequest } from 'next/server';
 import { withAuthenticatedRoute, parseJsonBody } from '@/lib/api/base';
+import { logAgentMutation } from '@/lib/api/agent-context';
 import { getDatabaseApplicationService } from '@/ddd/application/di/container';
 
 /**
@@ -50,6 +51,13 @@ export async function POST(request: NextRequest): Promise<Response> {
     if (!result.success) {
       return { success: false, error: result.error || 'Failed to create database', status: 400 };
     }
+
+    logAgentMutation(request, user, {
+      action: 'create',
+      resourceType: 'database',
+      resourceId: String(result.data?.id),
+      resourceName: body.name,
+    });
 
     return { success: true, data: result.data, message: 'Database created successfully' };
   });

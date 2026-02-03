@@ -127,7 +127,11 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
         timeoutSeconds: timeoutSeconds || 300,
         agentModel: agentModel || undefined, // Pass agent model for hierarchy
         organizationModel: organizationModel || undefined, // Pass organization model for hierarchy
-        resolvedContext // Context table mappings for this execution
+        resolvedContext, // Context table mappings for this execution
+        // Trigger context for audit trail (flows to Python worker → HTTP headers on tool calls)
+        triggerType: request.triggerType,
+        triggeredByUserId: request.triggeredByUserId,
+        triggeredByUserName: request.triggeredByUserName,
       });
 
 

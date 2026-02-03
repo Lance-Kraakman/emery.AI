@@ -8,6 +8,7 @@
 
 import { NextRequest } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
+import { logAgentMutation } from '@/lib/api/agent-context';
 import { getAgentApplicationService } from '@/ddd/application/di/container';
 import type { CreateAgentDTO } from '@/app/dtos/agent.dto';
 
@@ -64,6 +65,13 @@ export async function POST(request: NextRequest): Promise<Response> {
         error: result.error || 'Failed to create agent'
       }, { status: 400 });
     }
+
+    logAgentMutation(request, authResult.user, {
+      action: 'create',
+      resourceType: 'agent',
+      resourceId: String(result.data?.id),
+      resourceName: body.name,
+    });
 
     return Response.json({
       success: true,

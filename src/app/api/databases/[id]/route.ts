@@ -11,6 +11,7 @@
 
 import { NextRequest } from 'next/server';
 import { withAuthenticatedRoute, parseIntParam, parseJsonBody } from '@/lib/api/base';
+import { logAgentMutation } from '@/lib/api/agent-context';
 import { getDatabaseApplicationService } from '@/ddd/application/di/container';
 import { DatabaseId, OrganizationId } from '@/ddd/domain/shared/value-objects';
 import { DatabaseMapper } from '@/app/mappers/database-mapper';
@@ -93,6 +94,13 @@ export async function PUT(
       };
     }
 
+    logAgentMutation(request, user, {
+      action: 'update',
+      resourceType: 'database',
+      resourceId: String(databaseId),
+      resourceName: body.name,
+    });
+
     return {
       success: true,
       data: result.data,
@@ -142,6 +150,13 @@ export async function DELETE(
         status: 400
       };
     }
+
+    logAgentMutation(request, user, {
+      action: 'delete',
+      resourceType: 'database',
+      resourceId: String(databaseId),
+      resourceName: database.name,
+    });
 
     return {
       success: true,

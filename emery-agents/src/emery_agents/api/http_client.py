@@ -8,6 +8,7 @@ Ported from tools/crud_tools.py AsyncHTTPManager.
 from __future__ import annotations
 
 import asyncio
+import atexit
 import json
 import logging
 import os
@@ -75,6 +76,7 @@ class HTTPClient:
         org_id: str,
         base_url: str | None = None,
         deadline_ms: int | None = None,
+        extra_headers: dict[str, str] | None = None,
     ) -> str:
         """
         Make authenticated HTTP request.
@@ -93,6 +95,7 @@ class HTTPClient:
             org_id=org_id,
             base_url=base_url,
             deadline_ms=deadline_ms,
+            extra_headers=extra_headers,
         )
         future = asyncio.run_coroutine_threadsafe(coro, self._loop)
 
@@ -114,6 +117,7 @@ class HTTPClient:
         org_id: str,
         base_url: str | None = None,
         deadline_ms: int | None = None,
+        extra_headers: dict[str, str] | None = None,
     ) -> str:
         """Core async HTTP request with deadline propagation."""
         call_id = str(uuid.uuid4())[:8]
@@ -145,6 +149,10 @@ class HTTPClient:
 
         if data is not None:
             headers["Content-Type"] = "application/json"
+
+        # Merge extra headers (agent context, trigger info, etc.)
+        if extra_headers:
+            headers.update(extra_headers)
 
         # Calculate timeout from deadline
         timeout = 25.0
@@ -248,6 +256,7 @@ def make_request(
     org_id: str,
     base_url: str | None = None,
     deadline_ms: int | None = None,
+    extra_headers: dict[str, str] | None = None,
 ) -> str:
     """
     Make authenticated HTTP request using the global client.
@@ -262,6 +271,7 @@ def make_request(
         org_id: Organization ID for RLS context
         base_url: Optional base URL override
         deadline_ms: Optional deadline in milliseconds
+        extra_headers: Optional headers to merge (agent context, trigger info)
 
     Returns:
         JSON string on success, error string on failure.
@@ -275,11 +285,11 @@ def make_request(
         org_id=org_id,
         base_url=base_url,
         deadline_ms=deadline_ms,
+        extra_headers=extra_headers,
     )
 
 
 # Cleanup on exit
-import atexit
 
 
 def _cleanup_http_client() -> None:

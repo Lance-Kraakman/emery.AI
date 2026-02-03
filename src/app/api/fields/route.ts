@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest } from '@/lib/auth/test-auth';
+import { logAgentMutation } from '@/lib/api/agent-context';
 import { getTableApplicationService } from "@/ddd/application/di/container";
 import type { FieldType } from '@/ddd/domain/tables/value-objects/table-field';
 import { TableId } from '@/ddd/domain/shared/value-objects';
@@ -57,6 +58,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (authResult.user) {
+      logAgentMutation(request, authResult.user, {
+        action: 'create',
+        resourceType: 'field',
+        resourceId: String(result.data?.id),
+        resourceName: name,
+      });
+    }
+
     return NextResponse.json(result.data, { status: 201 });
   } catch (error) {
     console.error("Error creating field:", error);
@@ -98,6 +108,14 @@ export async function GET(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   try {
+    const authResult = await authenticateRequest(request);
+    if (!authResult.success) {
+      return NextResponse.json(
+        { error: authResult.error || 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const tableId = searchParams.get("tableId");
     const fieldName = searchParams.get("fieldName");
@@ -109,9 +127,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // Use TableApplicationService for field deletion
     const tableApplicationService = getTableApplicationService();
-
     const result = await tableApplicationService.deleteField(TableId.fromNumber(parseInt(tableId)), fieldName);
 
     if (!result.success) {
@@ -119,6 +135,14 @@ export async function DELETE(request: NextRequest) {
         { error: result.error || "Failed to delete field" },
         { status: 400 }
       );
+    }
+
+    if (authResult.user) {
+      logAgentMutation(request, authResult.user, {
+        action: 'delete',
+        resourceType: 'field',
+        resourceName: fieldName,
+      });
     }
 
     return NextResponse.json({ message: "Field deleted successfully" });

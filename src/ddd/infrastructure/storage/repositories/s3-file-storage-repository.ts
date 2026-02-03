@@ -2,6 +2,7 @@ import {
   PutObjectCommand,
   GetObjectCommand,
   DeleteObjectCommand,
+  HeadObjectCommand,
   ListObjectsV2Command,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -10,17 +11,41 @@ import crypto from 'crypto';
 import { FileUploadRequest, StoredFile, FileStorageError, FileKey, FileUrlOptions, FileValidationRule, FileValidationResult } from '@/ddd/domain/tables/entities/file-storage';
 import { IFileStorageRepository, type StorageBreakdown } from '@/ddd/domain/tables/repositories/file-storage-repository';
 import { s3Client, BUCKET_NAME } from '@/lib/s3/client';
+import {
+  getOrgPrefixes,
+  getTaskAttachmentPrefix,
+  getDatabaseFileKey,
+  getAgentWorkspaceKey,
+  getUserWorkspaceKey,
+  extractOrgIdFromKey,
+  type StorageCategory,
+} from '@/lib/s3/path-registry';
+import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
+import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
+import { OrganizationId } from '@/ddd/domain/shared/value-objects';
 
 // Cache for storage breakdown results to reduce expensive ListObjectsV2 calls
 // TTL: 1 hour (3600000 ms)
 const STORAGE_BREAKDOWN_CACHE_TTL_MS = 60 * 60 * 1000;
 const storageBreakdownCache = new Map<number, { data: StorageBreakdown; cachedAt: number }>();
 
+/**
+ * Invalidate storage breakdown cache for an organization.
+ * Exported so chat/skill attachment services can call it after uploads.
+ */
+export function invalidateOrgStorageCache(organizationId: number): void {
+  storageBreakdownCache.delete(organizationId);
+}
+
 export class S3FileStorageRepository implements IFileStorageRepository {
   private readonly bucketName: string;
   private readonly s3: typeof s3Client;
 
-  constructor(bucketName?: string) {
+  constructor(
+    bucketName?: string,
+    private readonly agentRepository?: IAgentRepository,
+    private readonly organizationRepository?: IOrganizationRepository,
+  ) {
     this.bucketName = bucketName || BUCKET_NAME;
     this.s3 = s3Client;
   }
@@ -30,21 +55,28 @@ export class S3FileStorageRepository implements IFileStorageRepository {
    * Call this after file upload/delete operations.
    */
   invalidateStorageBreakdownCache(organizationId: number): void {
-    storageBreakdownCache.delete(organizationId);
+    invalidateOrgStorageCache(organizationId);
   }
 
   private shouldUseEncryption(): boolean {
     const customEndpoint = process.env.S3_ENDPOINT_URL;
     return !customEndpoint;
   }
-  
+
 
   // Core file upload operation
   async uploadFile(request: FileUploadRequest): Promise<StoredFile> {
     try {
       const fileId = uuidv4();
-      const key = this.generateS3Key(request, fileId);
-      
+      const sanitizedFilename = request.filename.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const key = getDatabaseFileKey(
+        request.organizationId!.value,
+        request.tableId!.value,
+        request.fieldId!.value,
+        fileId,
+        sanitizedFilename,
+      );
+
       // Generate checksums for integrity verification
       const md5Hash = crypto.createHash('md5').update(request.buffer).digest('hex');
       const sha256Hash = crypto.createHash('sha256').update(request.buffer).digest('hex');
@@ -163,10 +195,10 @@ export class S3FileStorageRepository implements IFileStorageRepository {
 
       await this.s3.send(command);
 
-      // Invalidate storage breakdown cache for this organization
-      const orgMatch = key.match(/^org_(\d+)\//);
-      if (orgMatch) {
-        this.invalidateStorageBreakdownCache(parseInt(orgMatch[1], 10));
+      // Invalidate storage breakdown cache using the path registry
+      const orgId = extractOrgIdFromKey(key);
+      if (orgId !== null) {
+        this.invalidateStorageBreakdownCache(orgId);
       }
     } catch (error: any) {
       throw new FileStorageError(
@@ -182,8 +214,8 @@ export class S3FileStorageRepository implements IFileStorageRepository {
     const command = new GetObjectCommand({
       Bucket: this.bucketName,
       Key: key,
-      ResponseContentDisposition: options?.downloadFilename 
-        ? `attachment; filename="${options.downloadFilename}"` 
+      ResponseContentDisposition: options?.downloadFilename
+        ? `attachment; filename="${options.downloadFilename}"`
         : undefined,
       ResponseContentType: options?.contentType,
     });
@@ -249,9 +281,9 @@ export class S3FileStorageRepository implements IFileStorageRepository {
         Bucket: this.bucketName,
         Key: key,
       });
-      
+
       const response = await this.s3.send(command);
-      
+
       if (!response.Body) {
         throw new FileStorageError(
           `File content not found for key: ${key}`,
@@ -259,10 +291,10 @@ export class S3FileStorageRepository implements IFileStorageRepository {
           { key }
         );
       }
-      
+
       // Convert the stream to Buffer
       return Buffer.from(await response.Body.transformToByteArray());
-      
+
     } catch (error: any) {
       throw new FileStorageError(
         `Failed to download file: ${error.message}`,
@@ -272,36 +304,17 @@ export class S3FileStorageRepository implements IFileStorageRepository {
     }
   }
 
-  // Helper method to generate S3 key
-  private generateS3Key(request: FileUploadRequest, fileId: string): string {
-    const parts: string[] = [];
-
-    if (request.organizationId) {
-      parts.push(`org_${request.organizationId}`);
-    }
-
-    if (request.tableId) {
-      parts.push(`table_${request.tableId}`);
-    }
-
-    if (request.fieldId) {
-      parts.push(`field_${request.fieldId}`);
-    }
-
-    // Remove date-based partitioning for cleaner paths
-
-    // Add file ID and sanitized filename
-    const sanitizedFilename = request.filename.replace(/[^a-zA-Z0-9.-]/g, '_');
-    parts.push(`${fileId}_${sanitizedFilename}`);
-
-    return parts.join('/');
-  }
-
   /**
-   * Scan S3 storage for an organization and calculate actual usage breakdown
-   * Used for periodic storage quota validation to detect drift from incremental counters
+   * Scan S3 storage for an organization and calculate actual usage breakdown.
    *
-   * Results are cached for 1 hour to reduce expensive ListObjectsV2 calls.
+   * Scans ALL prefixes that belong to an organization:
+   *   - org_{id}/               → database storage (tables, files, delta-lake)
+   *   - chat-attachments/{id}/  → chat attachment storage
+   *   - skill-attachments/{id}/ → skill attachment storage
+   *   - workspaces/agents/      → agent workspace archives (via HeadObject per agent)
+   *   - workspaces/users/       → user workspace archives (via HeadObject per member)
+   *
+   * Results are cached for 1 hour to reduce expensive S3 calls.
    * Cache is invalidated on file upload/delete.
    */
   async getOrganizationStorageBreakdown(organizationId: number): Promise<StorageBreakdown> {
@@ -311,57 +324,71 @@ export class S3FileStorageRepository implements IFileStorageRepository {
       return cached.data;
     }
 
-    const prefix = `org_${organizationId}/`;
-
     const breakdown: StorageBreakdown = {
       totalBytes: 0,
       databaseStorageBytes: 0,
       chatStorageBytes: 0,
       skillStorageBytes: 0,
+      workspaceStorageBytes: 0,
       fileCount: 0,
       scannedAt: new Date(),
     };
 
-    let continuationToken: string | undefined;
-
     try {
-      // Paginate through all objects with this organization prefix
-      do {
-        const command = new ListObjectsV2Command({
-          Bucket: this.bucketName,
-          Prefix: prefix,
-          ContinuationToken: continuationToken,
-          MaxKeys: 1000, // S3 max per request
-        });
+      // Scan all org-scoped prefixes
+      const prefixes = getOrgPrefixes(organizationId);
+      const prefixEntries: Array<{ prefix: string; category: StorageCategory }> = [
+        { prefix: prefixes.database, category: 'database' },
+        { prefix: prefixes.chat, category: 'chat' },
+        { prefix: prefixes.skill, category: 'skill' },
+        { prefix: getTaskAttachmentPrefix(organizationId), category: 'database' },
+      ];
 
-        const response = await this.s3.send(command);
+      for (const { prefix, category } of prefixEntries) {
+        let continuationToken: string | undefined;
 
-        if (response.Contents && response.Contents.length > 0) {
-          for (const object of response.Contents) {
-            if (!object.Key || !object.Size) continue;
+        do {
+          const command = new ListObjectsV2Command({
+            Bucket: this.bucketName,
+            Prefix: prefix,
+            ContinuationToken: continuationToken,
+            MaxKeys: 1000,
+          });
 
-            const size = object.Size;
-            const category = this.categorizeFileByKey(object.Key);
+          const response = await this.s3.send(command);
 
-            breakdown.totalBytes += size;
-            breakdown.fileCount++;
+          if (response.Contents && response.Contents.length > 0) {
+            for (const object of response.Contents) {
+              if (!object.Key || !object.Size) continue;
 
-            switch (category) {
-              case 'database':
-                breakdown.databaseStorageBytes += size;
-                break;
-              case 'chat':
-                breakdown.chatStorageBytes += size;
-                break;
-              case 'skill':
-                breakdown.skillStorageBytes += size;
-                break;
+              const size = object.Size;
+              breakdown.totalBytes += size;
+              breakdown.fileCount++;
+
+              switch (category) {
+                case 'database':
+                  breakdown.databaseStorageBytes += size;
+                  break;
+                case 'chat':
+                  breakdown.chatStorageBytes += size;
+                  break;
+                case 'skill':
+                  breakdown.skillStorageBytes += size;
+                  break;
+              }
             }
           }
-        }
 
-        continuationToken = response.NextContinuationToken;
-      } while (continuationToken);
+          continuationToken = response.NextContinuationToken;
+        } while (continuationToken);
+      }
+
+      // Scan workspace storage (requires agent/org repository for attribution)
+      if (this.agentRepository && this.organizationRepository) {
+        const workspaceBytes = await this.scanWorkspaceStorage(organizationId);
+        breakdown.workspaceStorageBytes = workspaceBytes;
+        breakdown.totalBytes += workspaceBytes;
+      }
 
       // Cache the result
       storageBreakdownCache.set(organizationId, { data: breakdown, cachedAt: Date.now() });
@@ -371,38 +398,57 @@ export class S3FileStorageRepository implements IFileStorageRepository {
       throw new FileStorageError(
         `Failed to scan storage for organization ${organizationId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
         'NETWORK_ERROR',
-        { organizationId, prefix }
+        { organizationId }
       );
     }
   }
 
   /**
-   * Categorize file by S3 key pattern for storage breakdown
-   *
-   * Patterns:
-   * - org_{id}/table_{id}/... -> database
-   * - org_{id}/chat_{id}/... -> chat
-   * - org_{id}/skill_{id}/... -> skill
-   * - org_{id}/... -> database (default for uncategorized)
+   * Scan workspace storage for an organization by looking up its agents and members.
+   * Uses HeadObject (O(1) per key) rather than LIST to keep it efficient.
    */
-  private categorizeFileByKey(key: string): 'database' | 'chat' | 'skill' {
-    // Extract the path after org_{id}/
-    const match = key.match(/^org_\d+\/(.+)/);
-    if (!match) {
-      return 'database'; // Default to database if no match
+  private async scanWorkspaceStorage(organizationId: number): Promise<number> {
+    let totalBytes = 0;
+
+    try {
+      // Get agent workspace sizes
+      const orgId = OrganizationId.fromNumber(organizationId);
+      const agents = await this.agentRepository!.findByOrganization(orgId);
+
+      for (const agent of agents) {
+        const key = getAgentWorkspaceKey(agent.id.value);
+        const size = await this.getObjectSize(key);
+        if (size > 0) totalBytes += size;
+      }
+
+      // Get user workspace sizes
+      const members = await this.organizationRepository!.getMembers(orgId);
+
+      for (const member of members) {
+        const key = getUserWorkspaceKey(member.userId.value);
+        const size = await this.getObjectSize(key);
+        if (size > 0) totalBytes += size;
+      }
+    } catch (error) {
+      // Non-fatal: workspace scanning is best-effort
+      console.warn(`Failed to scan workspace storage for org ${organizationId}:`, error);
     }
 
-    const path = match[1];
+    return totalBytes;
+  }
 
-    if (path.startsWith('table_')) {
-      return 'database';
-    } else if (path.startsWith('chat_') || path.includes('/chat/')) {
-      return 'chat';
-    } else if (path.startsWith('skill_') || path.includes('/skill/')) {
-      return 'skill';
+  /**
+   * Get the size of an S3 object using HeadObject. Returns 0 if not found.
+   */
+  private async getObjectSize(key: string): Promise<number> {
+    try {
+      const response = await this.s3.send(
+        new HeadObjectCommand({ Bucket: this.bucketName, Key: key })
+      );
+      return response.ContentLength ?? 0;
+    } catch {
+      // Object does not exist — not an error
+      return 0;
     }
-
-    // Default to database for backward compatibility
-    return 'database';
   }
 }

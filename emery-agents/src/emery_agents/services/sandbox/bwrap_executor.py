@@ -10,6 +10,17 @@ Security model:
 - /usr, /lib, /bin: System tools (read-only)
 - /tmp: Ephemeral tmpfs (agent's own, not host's)
 - No host env vars, no access to other agent workspaces, no network by default
+- Network access (when enabled) goes through a filtering proxy that blocks
+  all private/reserved IPs (RFC1918, localhost, AWS metadata, etc.)
+
+Network isolation architecture (when allow_network=True):
+- --unshare-net is ALWAYS used (sandbox has zero network interfaces)
+- A filtering proxy runs on the host, listening on a Unix socket
+- The socket is bind-mounted into the sandbox
+- socat bridges the Unix socket to sandbox-local TCP (loopback)
+- http_proxy/https_proxy env vars route all traffic through the proxy
+- Tools that ignore proxy vars get ZERO network (safe default)
+- Proxy resolves DNS and blocks private/reserved destination IPs
 
 This mirrors Claude Code's sandboxing approach:
 https://www.anthropic.com/engineering/claude-code-sandboxing
@@ -22,6 +33,9 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, List, Tuple
+
+from .proxy_manager import ProxyManager
+from .seccomp_filter import create_seccomp_fd
 
 logger = logging.getLogger(__name__)
 
@@ -60,8 +74,8 @@ class BwrapExecutor:
     """
 
     # Base bwrap command - works unprivileged in containers
-    # Key: use --ro-bind for /proc and /dev instead of --proc and --dev
-    # which try to mount new filesystems (requires CAP_SYS_ADMIN)
+    # Key: use --ro-bind for /proc instead of --proc
+    # which tries to mount a new filesystem (requires CAP_SYS_ADMIN)
     BWRAP_BASE_CMD = [
         "bwrap",
         # User namespace FIRST - enables unprivileged operation
@@ -70,12 +84,24 @@ class BwrapExecutor:
         "--unshare-pid",
         "--unshare-uts",
         "--unshare-cgroup",
+        "--unshare-ipc",
         # System tools (read-only)
         "--ro-bind", "/usr", "/usr",
         "--ro-bind", "/bin", "/bin",
-        # Bind existing proc/dev read-only (instead of mounting new ones)
+        # Bind existing proc read-only (instead of mounting new procfs)
         "--ro-bind", "/proc", "/proc",
-        "--dev-bind", "/dev", "/dev",
+        # Minimal /dev — only essential device nodes, not full host /dev tree
+        # (removes /dev/mem, /dev/kmem, raw block devices, etc.)
+        "--tmpfs", "/dev",
+        "--dev-bind", "/dev/null", "/dev/null",
+        "--dev-bind", "/dev/zero", "/dev/zero",
+        "--dev-bind", "/dev/full", "/dev/full",
+        "--dev-bind", "/dev/random", "/dev/random",
+        "--dev-bind", "/dev/urandom", "/dev/urandom",
+        "--symlink", "/proc/self/fd", "/dev/fd",
+        "--symlink", "/proc/self/fd/0", "/dev/stdin",
+        "--symlink", "/proc/self/fd/1", "/dev/stdout",
+        "--symlink", "/proc/self/fd/2", "/dev/stderr",
         # Ephemeral tmpfs for system dirs
         "--tmpfs", "/tmp",
         "--tmpfs", "/var",
@@ -164,15 +190,23 @@ class BwrapExecutor:
         workspace_path = self._validate_workspace_id(workspace_id)
         return WorkspaceShell(self, workspace_path, allow_network)
 
+    # Port used by socat inside the sandbox for the proxy bridge
+    _PROXY_BRIDGE_PORT = 18080
+
     def _build_command(
         self,
         command: str,
         workspace_path: Path,
+        seccomp_fd: int,
         allow_network: bool = False,
+        proxy_socket_path: Optional[str] = None,
         additional_binds: Optional[List[Tuple[str, str]]] = None,
     ) -> List[str]:
         """Build the full bwrap command with all options."""
         cmd = self.BWRAP_BASE_CMD.copy()
+
+        # Seccomp syscall filter (blocks dangerous syscalls like io_uring, bpf, ptrace)
+        cmd.extend(["--seccomp", str(seccomp_fd)])
 
         # Handle lib directories (may vary by distro)
         for lib_dir in ["/lib", "/lib64", "/lib32"]:
@@ -182,17 +216,42 @@ class BwrapExecutor:
         # Bind the agent's workspace (read-write)
         cmd.extend(["--bind", str(workspace_path), "/workspace"])
 
-        # Network isolation (default: no network)
-        if not allow_network:
-            cmd.extend(["--unshare-net"])
+        # Network isolation: ALWAYS unshare network namespace
+        # When allow_network=True, proxy socket is mounted for filtered access
+        cmd.extend(["--unshare-net"])
+
+        # When network access is requested, mount the proxy socket into the sandbox
+        if allow_network and proxy_socket_path:
+            cmd.extend(["--bind", proxy_socket_path, "/tmp/proxy.sock"])
 
         # Additional bind mounts (for special cases)
         if additional_binds:
             for src, dest in additional_binds:
                 cmd.extend(["--ro-bind", src, dest])
 
-        # Run bash command in workspace
-        cmd.extend(["bash", "-c", f"cd /workspace && {command}"])
+        # Build the actual command to run inside the sandbox
+        if allow_network and proxy_socket_path:
+            # Wrap command with proxy bridge setup:
+            # 1. Bring up loopback interface (needed for socat TCP listener)
+            # 2. Start socat to bridge Unix socket → TCP on loopback
+            # 3. Set proxy env vars so curl/git/wget use the proxy
+            # 4. Run the actual command
+            port = self._PROXY_BRIDGE_PORT
+            proxy_setup = (
+                f"ip link set lo up 2>/dev/null; "
+                f"socat TCP-LISTEN:{port},fork,reuseaddr UNIX-CONNECT:/tmp/proxy.sock &"
+                f" SOCAT_PID=$!; sleep 0.2; "
+                f"export http_proxy=http://127.0.0.1:{port}; "
+                f"export https_proxy=http://127.0.0.1:{port}; "
+                f"export HTTP_PROXY=http://127.0.0.1:{port}; "
+                f"export HTTPS_PROXY=http://127.0.0.1:{port}; "
+                f"cd /workspace && {command}; "
+                f"EXIT_CODE=$?; kill $SOCAT_PID 2>/dev/null; exit $EXIT_CODE"
+            )
+            cmd.extend(["bash", "-c", proxy_setup])
+        else:
+            # Standard: no network at all
+            cmd.extend(["bash", "-c", f"cd /workspace && {command}"])
 
         return cmd
 
@@ -207,11 +266,15 @@ class BwrapExecutor:
         """
         Execute a command in an isolated bwrap sandbox.
 
+        Network is ALWAYS isolated (--unshare-net). When allow_network=True,
+        a filtering proxy is started and bridged into the sandbox via socat.
+        The proxy blocks all private/reserved IPs while allowing public internet.
+
         Args:
             command: Bash command to execute
             workspace_path: Path to agent's workspace (mounted at /workspace)
             timeout: Maximum execution time in seconds (default 5 minutes)
-            allow_network: Whether to allow network access (default False)
+            allow_network: Whether to allow filtered network access (default False)
             env: Optional environment variables (empty by default for security)
 
         Returns:
@@ -222,8 +285,40 @@ class BwrapExecutor:
             workspace_path.mkdir(parents=True, exist_ok=True)
             logger.info(f"Created workspace directory: {workspace_path}")
 
+        # When network is requested, ensure the filtering proxy is running
+        proxy_socket_path = None
+        if allow_network:
+            try:
+                proxy_mgr = ProxyManager.get_instance()
+                proxy_socket_path = proxy_mgr.ensure_running()
+                logger.info(
+                    f"Network access enabled via filtering proxy at {proxy_socket_path}"
+                )
+            except Exception as e:
+                logger.error(
+                    f"Failed to start network proxy, disabling network access: {e}"
+                )
+                # Fall back to no network rather than unrestricted network
+                proxy_socket_path = None
+
+        # Create seccomp filter — mandatory, fail if unavailable
+        try:
+            seccomp_fd = create_seccomp_fd()
+        except Exception as e:
+            logger.error(f"Seccomp filter creation failed: {e}")
+            return ExecutionResult(
+                exit_code=-1,
+                stdout="",
+                stderr=f"Sandbox security error: seccomp filter unavailable ({e})",
+                timed_out=False,
+            )
+
         # Build bwrap command
-        cmd = self._build_command(command, workspace_path, allow_network)
+        cmd = self._build_command(
+            command, workspace_path, seccomp_fd,
+            allow_network=allow_network,
+            proxy_socket_path=proxy_socket_path,
+        )
 
         logger.debug(f"Executing sandboxed command: {command[:100]}...")
         logger.debug(f"Workspace: {workspace_path}")
@@ -238,6 +333,7 @@ class BwrapExecutor:
                 timeout=timeout,
                 env=exec_env,
                 cwd=str(workspace_path),
+                pass_fds=(seccomp_fd,),
             )
             return ExecutionResult(
                 exit_code=result.returncode,
@@ -260,6 +356,8 @@ class BwrapExecutor:
                 stderr=f"Sandbox execution error: {str(e)}",
                 timed_out=False,
             )
+        finally:
+            os.close(seccomp_fd)
 
     def get_shell(self, workspace_path: Path, allow_network: bool = False) -> "WorkspaceShell":
         """Get a shell bound to a specific workspace."""

@@ -11,7 +11,7 @@ via Python closures when the session graph is created.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from PIL import Image as PILImage
 
@@ -55,3 +55,4 @@ class RuntimeContext:
     memory_service: Optional[Any] = None
     plan_file_repository: Optional[Any] = None
     images: List[PILImage.Image] = field(default_factory=list)
+    extra_headers: Optional[Dict[str, str]] = None  # Audit trail headers for CRUD tool calls

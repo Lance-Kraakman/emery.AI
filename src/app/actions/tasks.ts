@@ -12,6 +12,8 @@ import { PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { v4 as uuidv4 } from 'uuid';
 import { s3Client, BUCKET_NAME } from '@/lib/s3/client';
+import { getTaskAttachmentKey } from '@/lib/s3/path-registry';
+import { invalidateOrgStorageCache } from '@/ddd/infrastructure/storage/repositories/s3-file-storage-repository';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { AgentId } from '@/ddd/domain/shared/value-objects/agent-id';
@@ -39,7 +41,10 @@ export async function createTask(data: CreateTaskData): Promise<Result> {
         name,
         instructions,
         createdBy: createdBy || session.user.id,
-        organizationId: currentOrg.id
+        organizationId: currentOrg.id,
+        triggerType: 'manual',
+        triggeredByUserId: session.user.id,
+        triggeredByUserName: session.user.name || undefined,
       };
 
       const result = await taskApplicationService.createTask(createDTO);
@@ -419,11 +424,11 @@ export async function uploadTaskAttachment(
     const isImage = file.type.startsWith('image/');
     const attachmentType = isImage ? 'image' : 'document';
 
-    // Generate S3 key: task-attachments/{org_id}/{agent_id}/{uuid}.{ext}
+    // Generate S3 key using the shared path registry
     const fileId = uuidv4();
     const extension = file.name.split('.').pop() || 'bin';
     const sanitizedExt = extension.replace(/[^\w.-]/g, '_');
-    const s3Key = `task-attachments/${agent.organizationId.value}/${agentId}/${fileId}.${sanitizedExt}`;
+    const s3Key = getTaskAttachmentKey(agent.organizationId.value, agentId, fileId, sanitizedExt);
 
     // Upload to S3
     const buffer = Buffer.from(await file.arrayBuffer());
@@ -440,6 +445,9 @@ export async function uploadTaskAttachment(
     });
 
     await s3Client.send(putCommand);
+
+    // Invalidate storage breakdown cache so recalculation picks up this upload
+    invalidateOrgStorageCache(agent.organizationId.value);
 
     // Generate pre-signed URL
     const getCommand = new GetObjectCommand({
