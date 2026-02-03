@@ -22,7 +22,7 @@ export default async function SetupPage() {
       <div className="bg-white p-8 rounded-lg shadow-md max-w-md w-full">
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold text-gray-900">
-            {isFirstUser ? "Welcome to Emery!" : "Complete Your Setup"}
+            {isFirstUser ? "Welcome to enhancd!" : "Complete Your Setup"}
           </h1>
           <p className="text-gray-600 mt-2">
             {isFirstUser 

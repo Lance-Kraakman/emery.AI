@@ -484,7 +484,7 @@ function ChatContentWithCanvas({
               })
             }}
             onToolsChange={onToolsChange}
-            placeholder="Ask Emery anything... (type @ to add tools, docs, agents, etc.)"
+            placeholder="Ask enhancd anything... (type @ to add tools, docs, agents, etc.)"
             pendingAttachments={handler.pendingAttachments}
             onAttachmentAdd={handler.addAttachment}
             onAttachmentRemove={handler.removeAttachment}

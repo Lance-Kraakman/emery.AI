@@ -19,7 +19,7 @@ export function DeviceCallbackClient({ status, message }: DeviceCallbackClientPr
               </div>
               <h1 className="text-2xl font-bold tracking-tight">Sign-in Successful</h1>
               <p className="mt-2 text-muted-foreground">
-                You can now return to the Emery desktop app.
+                You can now return to the enhancd desktop app.
               </p>
               <p className="mt-4 text-sm text-muted-foreground">
                 You can close this browser tab.

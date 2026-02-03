@@ -1,11 +1,11 @@
 import { SimplifiedToolMetadata } from './fetch-pipedream-tools';
 
-// Add Emery backend tools (hardcoded from actual Python implementations)
-export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
+// Add enhancd.ai backend tools (hardcoded from actual Python implementations)
+export const ENHANCD_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
   // Base Tools (from base_tools.py)
   "file_reader": {
     id: "file_reader",
-    app: "emery",
+    app: "enhancd",
     name: "File Reader",
     description: "Read files from storage",
     type: "action",
@@ -19,7 +19,7 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
   },
   "document_reader": {
     id: "document_reader",
-    app: "emery",
+    app: "enhancd",
     name: "Document Reader",
     description: "Read documents",
     type: "action",
@@ -33,7 +33,7 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
   },
   "table_query": {
     id: "table_query",
-    app: "emery",
+    app: "enhancd",
     name: "Table Query",
     description: "Query table data",
     type: "action",
@@ -48,12 +48,12 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
 
   // CRUD Tools (from crud_tools.py)
   // AIDEV-NOTE: Split into individual action tools to match Pipedream pattern
-  // Naming convention: emery-{action}-{resource}
+  // Naming convention: enhancd-{action}-{resource}
 
   // Agent CRUD Operations
-  "emery-create-agent": {
-    id: "emery-create-agent",
-    app: "emery",
+  "enhancd-create-agent": {
+    id: "enhancd-create-agent",
+    app: "enhancd",
     name: "Create Agent",
     description: "Create a new AI agent",
     type: "action",
@@ -65,9 +65,9 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
       }
     }
   },
-  "emery-read-agent": {
-    id: "emery-read-agent",
-    app: "emery",
+  "enhancd-read-agent": {
+    id: "enhancd-read-agent",
+    app: "enhancd",
     name: "Read Agent",
     description: "Get details of a specific agent",
     type: "action",
@@ -79,9 +79,9 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
       }
     }
   },
-  "emery-update-agent": {
-    id: "emery-update-agent",
-    app: "emery",
+  "enhancd-update-agent": {
+    id: "enhancd-update-agent",
+    app: "enhancd",
     name: "Update Agent",
     description: "Update an existing agent",
     type: "action",
@@ -98,9 +98,9 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
       }
     }
   },
-  "emery-delete-agent": {
-    id: "emery-delete-agent",
-    app: "emery",
+  "enhancd-delete-agent": {
+    id: "enhancd-delete-agent",
+    app: "enhancd",
     name: "Delete Agent",
     description: "Delete an agent",
     type: "action",
@@ -112,9 +112,9 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
       }
     }
   },
-  "emery-list-agents": {
-    id: "emery-list-agents",
-    app: "emery",
+  "enhancd-list-agents": {
+    id: "enhancd-list-agents",
+    app: "enhancd",
     name: "List Agents",
     description: "List all agents in the organization",
     type: "action",
@@ -122,9 +122,9 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
   },
 
   // Document CRUD Operations
-  "emery-create-document": {
-    id: "emery-create-document",
-    app: "emery",
+  "enhancd-create-document": {
+    id: "enhancd-create-document",
+    app: "enhancd",
     name: "Create Document",
     description: "Create a new document",
     type: "action",
@@ -136,9 +136,9 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
       }
     }
   },
-  "emery-read-document": {
-    id: "emery-read-document",
-    app: "emery",
+  "enhancd-read-document": {
+    id: "enhancd-read-document",
+    app: "enhancd",
     name: "Read Document",
     description: "Get document details",
     type: "action",
@@ -150,9 +150,9 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
       }
     }
   },
-  "emery-update-document": {
-    id: "emery-update-document",
-    app: "emery",
+  "enhancd-update-document": {
+    id: "enhancd-update-document",
+    app: "enhancd",
     name: "Update Document",
     description: "Update an existing document",
     type: "action",
@@ -169,9 +169,9 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
       }
     }
   },
-  "emery-delete-document": {
-    id: "emery-delete-document",
-    app: "emery",
+  "enhancd-delete-document": {
+    id: "enhancd-delete-document",
+    app: "enhancd",
     name: "Delete Document",
     description: "Delete a document",
     type: "action",
@@ -183,9 +183,9 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
       }
     }
   },
-  "emery-list-documents": {
-    id: "emery-list-documents",
-    app: "emery",
+  "enhancd-list-documents": {
+    id: "enhancd-list-documents",
+    app: "enhancd",
     name: "List Documents",
     description: "List all documents in the organization",
     type: "action",
@@ -193,9 +193,9 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
   },
 
   // File CRUD Operations
-  "emery-create-file": {
-    id: "emery-create-file",
-    app: "emery",
+  "enhancd-create-file": {
+    id: "enhancd-create-file",
+    app: "enhancd",
     name: "Create File",
     description: "Upload a new file",
     type: "action",
@@ -207,9 +207,9 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
       }
     }
   },
-  "emery-read-file": {
-    id: "emery-read-file",
-    app: "emery",
+  "enhancd-read-file": {
+    id: "enhancd-read-file",
+    app: "enhancd",
     name: "Read File",
     description: "Get file details",
     type: "action",
@@ -221,9 +221,9 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
       }
     }
   },
-  "emery-update-file": {
-    id: "emery-update-file",
-    app: "emery",
+  "enhancd-update-file": {
+    id: "enhancd-update-file",
+    app: "enhancd",
     name: "Update File",
     description: "Update file metadata",
     type: "action",
@@ -240,9 +240,9 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
       }
     }
   },
-  "emery-delete-file": {
-    id: "emery-delete-file",
-    app: "emery",
+  "enhancd-delete-file": {
+    id: "enhancd-delete-file",
+    app: "enhancd",
     name: "Delete File",
     description: "Delete a file",
     type: "action",
@@ -256,9 +256,9 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
   },
 
   // Table Operations
-  "emery-create-table": {
-    id: "emery-create-table",
-    app: "emery",
+  "enhancd-create-table": {
+    id: "enhancd-create-table",
+    app: "enhancd",
     name: "Create Table",
     description: "Create a new table in a database",
     type: "action",
@@ -280,9 +280,9 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
       }
     }
   },
-  "emery-read-table": {
-    id: "emery-read-table",
-    app: "emery",
+  "enhancd-read-table": {
+    id: "enhancd-read-table",
+    app: "enhancd",
     name: "Read Table",
     description: "Get table details and metadata",
     type: "action",
@@ -294,9 +294,9 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
       }
     }
   },
-  "emery-update-table": {
-    id: "emery-update-table",
-    app: "emery",
+  "enhancd-update-table": {
+    id: "enhancd-update-table",
+    app: "enhancd",
     name: "Update Table",
     description: "Update table metadata (name, description)",
     type: "action",
@@ -313,9 +313,9 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
       }
     }
   },
-  "emery-delete-table": {
-    id: "emery-delete-table",
-    app: "emery",
+  "enhancd-delete-table": {
+    id: "enhancd-delete-table",
+    app: "enhancd",
     name: "Delete Table",
     description: "Delete a table and all its data",
     type: "action",
@@ -327,9 +327,9 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
       }
     }
   },
-  "emery-list-tables": {
-    id: "emery-list-tables",
-    app: "emery",
+  "enhancd-list-tables": {
+    id: "enhancd-list-tables",
+    app: "enhancd",
     name: "List Tables",
     description: "List all tables in the organization",
     type: "action",
@@ -337,9 +337,9 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
   },
 
   // Row Operations
-  "emery-create-row": {
-    id: "emery-create-row",
-    app: "emery",
+  "enhancd-create-row": {
+    id: "enhancd-create-row",
+    app: "enhancd",
     name: "Create Row",
     description: "Add a new row to a table",
     type: "action",
@@ -356,9 +356,9 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
       }
     }
   },
-  "emery-get-rows": {
-    id: "emery-get-rows",
-    app: "emery",
+  "enhancd-get-rows": {
+    id: "enhancd-get-rows",
+    app: "enhancd",
     name: "Get Rows",
     description: "Query rows from a table with pagination and filtering",
     type: "action",
@@ -395,9 +395,9 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
       }
     }
   },
-  "emery-update-row": {
-    id: "emery-update-row",
-    app: "emery",
+  "enhancd-update-row": {
+    id: "enhancd-update-row",
+    app: "enhancd",
     name: "Update Row",
     description: "Update an existing row in a table",
     type: "action",
@@ -419,9 +419,9 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
       }
     }
   },
-  "emery-delete-row": {
-    id: "emery-delete-row",
-    app: "emery",
+  "enhancd-delete-row": {
+    id: "enhancd-delete-row",
+    app: "enhancd",
     name: "Delete Row",
     description: "Delete a row from a table",
     type: "action",
@@ -440,9 +440,9 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
   },
 
   // Team CRUD Operations
-  "emery-create-team": {
-    id: "emery-create-team",
-    app: "emery",
+  "enhancd-create-team": {
+    id: "enhancd-create-team",
+    app: "enhancd",
     name: "Create Team",
     description: "Create a new team",
     type: "action",
@@ -454,9 +454,9 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
       }
     }
   },
-  "emery-read-team": {
-    id: "emery-read-team",
-    app: "emery",
+  "enhancd-read-team": {
+    id: "enhancd-read-team",
+    app: "enhancd",
     name: "Read Team",
     description: "Get team details",
     type: "action",
@@ -468,9 +468,9 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
       }
     }
   },
-  "emery-update-team": {
-    id: "emery-update-team",
-    app: "emery",
+  "enhancd-update-team": {
+    id: "enhancd-update-team",
+    app: "enhancd",
     name: "Update Team",
     description: "Update an existing team",
     type: "action",
@@ -487,9 +487,9 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
       }
     }
   },
-  "emery-delete-team": {
-    id: "emery-delete-team",
-    app: "emery",
+  "enhancd-delete-team": {
+    id: "enhancd-delete-team",
+    app: "enhancd",
     name: "Delete Team",
     description: "Delete a team",
     type: "action",
@@ -501,9 +501,9 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
       }
     }
   },
-  "emery-list-teams": {
-    id: "emery-list-teams",
-    app: "emery",
+  "enhancd-list-teams": {
+    id: "enhancd-list-teams",
+    app: "enhancd",
     name: "List Teams",
     description: "List all teams in the organization",
     type: "action",
@@ -511,9 +511,9 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
   },
 
   // Skill CRUD Operations
-  "emery-read-skill": {
-    id: "emery-read-skill",
-    app: "emery",
+  "enhancd-read-skill": {
+    id: "enhancd-read-skill",
+    app: "enhancd",
     name: "Read Skill",
     description: "Get skill details including name, description, instructions, inputs, outputs, tools, and model configuration",
     type: "action",
@@ -525,9 +525,9 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
       }
     }
   },
-  "emery-update-skill": {
-    id: "emery-update-skill",
-    app: "emery",
+  "enhancd-update-skill": {
+    id: "enhancd-update-skill",
+    app: "enhancd",
     name: "Update Skill",
     description: "Update an existing skill's configuration including name, description, instructions, inputs, outputs, tools, and model",
     type: "action",
@@ -544,9 +544,9 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
       }
     }
   },
-  "emery-list-skills": {
-    id: "emery-list-skills",
-    app: "emery",
+  "enhancd-list-skills": {
+    id: "enhancd-list-skills",
+    app: "enhancd",
     name: "List Skills",
     description: "List all skills in the organization, optionally filtered by agent",
     type: "action",
@@ -560,9 +560,9 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
   },
 
   // Database CRUD Operations
-  "emery-create-database": {
-    id: "emery-create-database",
-    app: "emery",
+  "enhancd-create-database": {
+    id: "enhancd-create-database",
+    app: "enhancd",
     name: "Create Database",
     description: "Create a new database",
     type: "action",
@@ -574,9 +574,9 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
       }
     }
   },
-  "emery-read-database": {
-    id: "emery-read-database",
-    app: "emery",
+  "enhancd-read-database": {
+    id: "enhancd-read-database",
+    app: "enhancd",
     name: "Read Database",
     description: "Get database details",
     type: "action",
@@ -588,9 +588,9 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
       }
     }
   },
-  "emery-update-database": {
-    id: "emery-update-database",
-    app: "emery",
+  "enhancd-update-database": {
+    id: "enhancd-update-database",
+    app: "enhancd",
     name: "Update Database",
     description: "Update database metadata",
     type: "action",
@@ -607,9 +607,9 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
       }
     }
   },
-  "emery-delete-database": {
-    id: "emery-delete-database",
-    app: "emery",
+  "enhancd-delete-database": {
+    id: "enhancd-delete-database",
+    app: "enhancd",
     name: "Delete Database",
     description: "Delete a database",
     type: "action",
@@ -621,9 +621,9 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
       }
     }
   },
-  "emery-list-databases": {
-    id: "emery-list-databases",
-    app: "emery",
+  "enhancd-list-databases": {
+    id: "enhancd-list-databases",
+    app: "enhancd",
     name: "List Databases",
     description: "List all databases in the organization",
     type: "action",
@@ -631,9 +631,9 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
   },
 
   // Organizational Tools (from organizational_tools.py)
-  "emery_database": {
-    id: "emery_database",
-    app: "emery",
+  "enhancd_database": {
+    id: "enhancd_database",
+    app: "enhancd",
     name: "Database Access",
     description: "Direct database access",
     type: "action",
@@ -647,7 +647,7 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
   },
   "table_schema": {
     id: "table_schema",
-    app: "emery",
+    app: "enhancd",
     name: "Table Schema",
     description: "Get table schema information",
     type: "action",
@@ -661,7 +661,7 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
   },
   "table_data": {
     id: "table_data",
-    app: "emery",
+    app: "enhancd",
     name: "Table Data",
     description: "Access table data",
     type: "action",
@@ -682,7 +682,7 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
   // API Tools (from api_tools.py)
   "measurement_api": {
     id: "measurement_api",
-    app: "emery",
+    app: "enhancd",
     name: "Measurement API",
     description: "Measurement data operations",
     type: "action",
@@ -701,7 +701,7 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
   },
   "kpi_api": {
     id: "kpi_api",
-    app: "emery",
+    app: "enhancd",
     name: "KPI API",
     description: "KPI management",
     type: "action",
@@ -720,7 +720,7 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
   },
   "analysis_api": {
     id: "analysis_api",
-    app: "emery",
+    app: "enhancd",
     name: "Analysis API",
     description: "Data analysis operations",
     type: "action",
@@ -739,7 +739,7 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
   },
   "process_api": {
     id: "process_api",
-    app: "emery",
+    app: "enhancd",
     name: "Process API",
     description: "Process management",
     type: "action",
@@ -760,7 +760,7 @@ export const EMERY_BACKEND_TOOLS: Record<string, SimplifiedToolMetadata> = {
   // AI Tools (from embedding_tool.py)
   "generate_embedding": {
     id: "generate_embedding",
-    app: "emery",
+    app: "enhancd",
     name: "Generate Embedding",
     description: "Generate vector embeddings for text using HuggingFace sentence-transformer models",
     type: "action",

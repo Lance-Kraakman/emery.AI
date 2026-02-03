@@ -103,6 +103,33 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
                     workspace_id=workspace_id,
                     task_id=task_data.task_id,
                 )
+
+                # Log workspace manifest after download
+                try:
+                    shell = self.workspace_sync._get_shell(workspace_id)
+                    tree_result = shell.run(
+                        "tree -L 2 --noreport 2>/dev/null || find . -maxdepth 2 -type f | head -50",
+                        timeout=10,
+                    )
+                    manifest_text = tree_result.stdout if tree_result.success else "Could not generate manifest"
+                    file_count = len([l for l in manifest_text.strip().split('\n') if l.strip()]) if manifest_text else 0
+
+                    print(f"📂 [TASK-{task_data.task_id[:8]}] Workspace contents ({file_count} entries):\n{manifest_text}")
+                    sys.stdout.flush()
+
+                    self.workspace_sync.append_to_session_log(
+                        workspace_id=workspace_id,
+                        task_id=task_data.task_id,
+                        entry={
+                            "type": "workspace_manifest",
+                            "workspace_id": workspace_id,
+                            "manifest": manifest_text,
+                            "file_count": file_count,
+                        },
+                    )
+                except Exception as manifest_err:
+                    logger.warning(f"Failed to log workspace manifest: {manifest_err}")
+
             except Exception as e:
                 logger.error(f"Failed to download workspace: {e}")
                 # Continue without workspace - task can still execute

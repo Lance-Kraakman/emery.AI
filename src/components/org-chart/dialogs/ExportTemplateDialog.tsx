@@ -135,7 +135,7 @@ export function ExportTemplateDialog({
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `${name.toLowerCase().replace(/\s+/g, '-')}.brain.json`;
+      link.download = `${name.toLowerCase().replace(/\s+/g, '-')}.enhancd.json`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);

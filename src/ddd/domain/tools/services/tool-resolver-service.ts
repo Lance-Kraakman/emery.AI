@@ -87,33 +87,33 @@ export class ToolResolverService {
 
   /**
    * Reference pattern mappings to CRUD tools
-   * Maps @-patterns to emery-read-* tools that exist in database and Python CRUD_TOOL_ROUTING
+   * Maps @-patterns to enhancd-read-* tools that exist in database and Python CRUD_TOOL_ROUTING
    * AIDEV-NOTE: Tool names must match database tool IDs and Python tool_loader.py routing
    */
   private readonly referenceMappings: ReferenceMapping[] = [
     {
       pattern: /@doc:([^@\s]+)/g,
-      toolName: 'emery-read-document',
+      toolName: 'enhancd-read-document',
       parameterName: 'document_id'
     },
     {
       pattern: /@document:([^@\s]+)/g,
-      toolName: 'emery-read-document',
+      toolName: 'enhancd-read-document',
       parameterName: 'document_id'
     },
     {
       pattern: /@table:([^@\s]+)/g,
-      toolName: 'emery-read-table',
+      toolName: 'enhancd-read-table',
       parameterName: 'table_id'
     },
     {
       pattern: /@file:([^@\s]+)/g,
-      toolName: 'emery-read-file',
+      toolName: 'enhancd-read-file',
       parameterName: 'file_id'
     },
     {
       pattern: /@database:([^@\s]+)/g,
-      toolName: 'emery-read-database',
+      toolName: 'enhancd-read-database',
       parameterName: 'database_id'
     }
   ]

@@ -20,10 +20,10 @@
       "outputs": [
         { "name": "found", "type": "text" }
       ],
-      "instructions": "You help find specific records by description. Given a lookup request:\n\n1. Parse what the user is looking for (table name, record characteristics)\n2. Use emery-list-tables() to find relevant tables\n3. Search tables using emery-get-rows(table_id=X) with filters\n4. Return matching IDs and key identifying information\n\nBe specific about which table and row you found. Include the numeric ID in your response.\nIf multiple matches exist, list them all with distinguishing details.\n\n**Output:** Set {found} to the matching records:\n{found} = \"Found [description] with ID [X] in table [name]\"",
+      "instructions": "You help find specific records by description. Given a lookup request:\n\n1. Parse what the user is looking for (table name, record characteristics)\n2. Use enhancd-list-tables() to find relevant tables\n3. Search tables using enhancd-get-rows(table_id=X) with filters\n4. Return matching IDs and key identifying information\n\nBe specific about which table and row you found. Include the numeric ID in your response.\nIf multiple matches exist, list them all with distinguishing details.\n\n**Output:** Set {found} to the matching records:\n{found} = \"Found [description] with ID [X] in table [name]\"",
       "tools": [
-        { "name": "emery-list-tables", "config": {} },
-        { "name": "emery-get-rows", "config": {} }
+        { "name": "enhancd-list-tables", "config": {} },
+        { "name": "enhancd-get-rows", "config": {} }
       ],
       "executionType": "agentic"
     }

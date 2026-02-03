@@ -22,7 +22,7 @@ import {
  *
  * AIDEV-NOTE: Custom viewers use useChatCanvas() directly as standalone
  * components rather than wrapping in ChatCanvas.DocumentArtifact to avoid
- * type filtering that would reject custom artifact types like 'emery-document'.
+ * type filtering that would reject custom artifact types like 'enhancd-document'.
  */
 
 // Standalone viewer for Emery Document artifacts

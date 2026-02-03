@@ -1,0 +1,33 @@
+{
+  "$format": "brain-template",
+  "$version": 1,
+  "metadata": {
+    "name": "Document Operations",
+    "description": "Create, read, and update TipTap documents. Use this skill for document management tasks.",
+    "category": "Documents",
+    "tags": ["document", "tiptap", "create", "update", "read"],
+    "version": "1.0.0",
+    "author": "enhancd.ai"
+  },
+  "template": {
+    "type": "skill",
+    "data": {
+      "name": "Document Operations",
+      "description": "Create, read, and update TipTap documents. Use this skill for document management tasks.",
+      "inputs": [
+        { "name": "request", "required": true, "type": "text" }
+      ],
+      "outputs": [
+        { "name": "result", "type": "text" }
+      ],
+      "instructions": "You are a document specialist. Given a document-related request:\n\n1. For reading: Use enhancd-list-documents() to find documents, then enhancd-read-document(document_id=X, table_id=Y, field_id=Z) to get content\n2. For creating: Use enhancd-create-document(table_id=X, field_id=Y, title=\"...\") with the provided content\n3. For updating: First read the existing document, then use enhancd-update-document(document_id=X, table_id=Y, field_id=Z, data={...})\n\nAlways return the document ID and confirmation of the action taken.\nFormat document content appropriately for TipTap editor.\n\n**Output:** Set {result} to confirmation of what was done:\n{result} = \"Document [ID] successfully [action taken]\"",
+      "tools": [
+        { "name": "enhancd-list-documents", "config": {} },
+        { "name": "enhancd-read-document", "config": {} },
+        { "name": "enhancd-create-document", "config": {} },
+        { "name": "enhancd-update-document", "config": {} }
+      ],
+      "executionType": "agentic"
+    }
+  }
+}

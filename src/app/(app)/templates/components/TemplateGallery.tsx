@@ -184,7 +184,7 @@ export function TemplateGallery({
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `${template.name.toLowerCase().replace(/\s+/g, '-')}.brain.json`;
+        link.download = `${template.name.toLowerCase().replace(/\s+/g, '-')}.enhancd.json`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -213,7 +213,7 @@ export function TemplateGallery({
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `${template.name.toLowerCase().replace(/\s+/g, '-')}.brain.json`;
+        link.download = `${template.name.toLowerCase().replace(/\s+/g, '-')}.enhancd.json`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);

@@ -8,7 +8,7 @@ import { DocumentArtifactViewer, FileArtifactViewer } from './artifacts'
 import { 
   isDocumentArtifact, 
   isFileArtifact, 
-  isEmeryArtifact 
+  isEnhancdArtifact 
 } from './types/chat-artifacts'
 
 /**
@@ -38,7 +38,7 @@ export function ChatCanvas() {
   }
 
   // Check if this is a custom Emery artifact
-  const isCustomArtifact = isEmeryArtifact(displayedArtifact)
+  const isCustomArtifact = isEnhancdArtifact(displayedArtifact)
   
   // Render the canvas content - standard right-side panel format
   return isCustomArtifact ? (

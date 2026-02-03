@@ -562,6 +562,7 @@ class SkillConfig:
     tools: List[StepToolConfig] = field(default_factory=list)
     steps: List[SkillStep] = field(default_factory=list)
     content: List[Any] = field(default_factory=list)
+    allow_network: bool = False  # Whether bash tool should have network access (for git/code skills)
 
     @classmethod
     def from_api_response(cls, data: Dict[str, Any]) -> SkillConfig:

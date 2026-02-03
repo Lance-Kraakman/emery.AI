@@ -35,9 +35,9 @@ export interface DocumentArtifactData {
 
 /**
  * Document artifact for TipTap documents and other document types
- * Uses LlamaIndex Artifact<T> with custom 'emery-document' type
+ * Uses LlamaIndex Artifact<T> with custom 'enhancd-document' type
  */
-export type DocumentArtifact = Artifact<DocumentArtifactData, 'emery-document'>
+export type DocumentArtifact = Artifact<DocumentArtifactData, 'enhancd-document'>
 
 // ========================================
 // File Artifact Type  
@@ -65,9 +65,9 @@ export interface FileArtifactData {
 
 /**
  * File artifact for PDFs, images, and other file types
- * Uses LlamaIndex Artifact<T> with custom 'emery-file' type
+ * Uses LlamaIndex Artifact<T> with custom 'enhancd-file' type
  */
-export type FileArtifact = Artifact<FileArtifactData, 'emery-file'>
+export type FileArtifact = Artifact<FileArtifactData, 'enhancd-file'>
 
 // ========================================
 // Artifact Union and Type Guards
@@ -76,26 +76,26 @@ export type FileArtifact = Artifact<FileArtifactData, 'emery-file'>
 /**
  * Union of all custom artifact types
  */
-export type EmeryArtifact = DocumentArtifact | FileArtifact
+export type EnhancdArtifact = DocumentArtifact | FileArtifact
 
 /**
  * Type guard to check if artifact is a document artifact
  */
 export function isDocumentArtifact(artifact: any): artifact is DocumentArtifact {
-  return artifact && artifact.type === 'emery-document'
+  return artifact && artifact.type === 'enhancd-document'
 }
 
 /**
  * Type guard to check if artifact is a file artifact  
  */
 export function isFileArtifact(artifact: any): artifact is FileArtifact {
-  return artifact && artifact.type === 'emery-file'
+  return artifact && artifact.type === 'enhancd-file'
 }
 
 /**
- * Type guard to check if artifact is any Emery custom artifact
+ * Type guard to check if artifact is any enhancd.ai custom artifact
  */
-export function isEmeryArtifact(artifact: any): artifact is EmeryArtifact {
+export function isEnhancdArtifact(artifact: any): artifact is EnhancdArtifact {
   return isDocumentArtifact(artifact) || isFileArtifact(artifact)
 }
 
@@ -118,7 +118,7 @@ export function createDocumentArtifact(
   // AIDEV-NOTE: Simplified structure that matches expected patterns
   return {
     created_at: Date.now(),
-    type: 'emery-document',
+    type: 'enhancd-document',
     data: {
       documentField,
       organizationId,
@@ -145,7 +145,7 @@ export function createFileArtifact(
   // AIDEV-NOTE: Simplified structure that matches expected patterns
   return {
     created_at: Date.now(),
-    type: 'emery-file',
+    type: 'enhancd-file',
     data: {
       fileField,
       tableId,

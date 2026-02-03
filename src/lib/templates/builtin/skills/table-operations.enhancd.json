@@ -20,11 +20,11 @@
       "outputs": [
         { "name": "data", "type": "text" }
       ],
-      "instructions": "You are a data retrieval specialist. Given a query about table data:\n\n1. First, use emery-list-tables() to find available tables\n2. Identify which table(s) contain the requested data\n3. Use emery-get-rows(table_id=X) with appropriate filters to fetch the data\n4. Format and return the results clearly\n\nAlways verify the table exists before attempting to fetch rows.\nIf the requested data is not found, report what you searched and suggest alternatives.\n\n**Output:** Set {data} to the retrieved results:\n{data} = [your formatted results here]",
+      "instructions": "You are a data retrieval specialist. Given a query about table data:\n\n1. First, use enhancd-list-tables() to find available tables\n2. Identify which table(s) contain the requested data\n3. Use enhancd-get-rows(table_id=X) with appropriate filters to fetch the data\n4. Format and return the results clearly\n\nAlways verify the table exists before attempting to fetch rows.\nIf the requested data is not found, report what you searched and suggest alternatives.\n\n**Output:** Set {data} to the retrieved results:\n{data} = [your formatted results here]",
       "tools": [
-        { "name": "emery-list-tables", "config": {} },
-        { "name": "emery-get-rows", "config": {} },
-        { "name": "emery-read-table", "config": {} }
+        { "name": "enhancd-list-tables", "config": {} },
+        { "name": "enhancd-get-rows", "config": {} },
+        { "name": "enhancd-read-table", "config": {} }
       ],
       "executionType": "agentic"
     }

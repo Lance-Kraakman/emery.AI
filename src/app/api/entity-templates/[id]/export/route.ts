@@ -63,7 +63,7 @@ export async function GET(
   if (download && response.ok) {
     const body = await response.json();
     if (body.success && body.data) {
-      const filename = `${body.data.metadata.name.toLowerCase().replace(/\s+/g, '-')}.brain.json`;
+      const filename = `${body.data.metadata.name.toLowerCase().replace(/\s+/g, '-')}.enhancd.json`;
       return new NextResponse(JSON.stringify(body.data, null, 2), {
         status: 200,
         headers: {

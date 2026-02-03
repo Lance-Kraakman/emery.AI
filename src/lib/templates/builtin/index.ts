@@ -5,58 +5,58 @@
 import type { BrainTemplate, TemplateEntityType, BuiltinTemplateInfo } from '@/ddd/domain/templates/types';
 
 // Import builtin skill templates
-import tableOperations from './skills/table-operations.brain.json';
-import documentOperations from './skills/document-operations.brain.json';
-import dataLookup from './skills/data-lookup.brain.json';
+import tableOperations from './skills/table-operations.enhancd.json';
+import documentOperations from './skills/document-operations.enhancd.json';
+import dataLookup from './skills/data-lookup.enhancd.json';
 
 // Import builtin integration skill templates - Gmail
-import gmailAssistant from './skills/gmail-assistant.brain.json';
-import gmailSendEmail from './skills/gmail-send-email.brain.json';
-import gmailFindEmail from './skills/gmail-find-email.brain.json';
-import gmailCreateDraft from './skills/gmail-create-draft.brain.json';
+import gmailAssistant from './skills/gmail-assistant.enhancd.json';
+import gmailSendEmail from './skills/gmail-send-email.enhancd.json';
+import gmailFindEmail from './skills/gmail-find-email.enhancd.json';
+import gmailCreateDraft from './skills/gmail-create-draft.enhancd.json';
 // Outlook
-import outlookAssistant from './skills/outlook-assistant.brain.json';
-import outlookSendEmail from './skills/outlook-send-email.brain.json';
-import outlookFindEmail from './skills/outlook-find-email.brain.json';
-import outlookReplyToEmail from './skills/outlook-reply-to-email.brain.json';
+import outlookAssistant from './skills/outlook-assistant.enhancd.json';
+import outlookSendEmail from './skills/outlook-send-email.enhancd.json';
+import outlookFindEmail from './skills/outlook-find-email.enhancd.json';
+import outlookReplyToEmail from './skills/outlook-reply-to-email.enhancd.json';
 // Canva
-import canvaAssistant from './skills/canva-assistant.brain.json';
-import canvaCreateDesign from './skills/canva-create-design.brain.json';
-import canvaExportDesign from './skills/canva-export-design.brain.json';
+import canvaAssistant from './skills/canva-assistant.enhancd.json';
+import canvaCreateDesign from './skills/canva-create-design.enhancd.json';
+import canvaExportDesign from './skills/canva-export-design.enhancd.json';
 // LinkedIn
-import linkedinAssistant from './skills/linkedin-assistant.brain.json';
-import linkedinCreatePostUser from './skills/linkedin-create-post-user.brain.json';
-import linkedinCreatePostOrg from './skills/linkedin-create-post-org.brain.json';
-import linkedinGetProfile from './skills/linkedin-get-profile.brain.json';
+import linkedinAssistant from './skills/linkedin-assistant.enhancd.json';
+import linkedinCreatePostUser from './skills/linkedin-create-post-user.enhancd.json';
+import linkedinCreatePostOrg from './skills/linkedin-create-post-org.enhancd.json';
+import linkedinGetProfile from './skills/linkedin-get-profile.enhancd.json';
 // Google Sheets
-import googleSheetsAssistant from './skills/google-sheets-assistant.brain.json';
-import googleSheetsAddRow from './skills/google-sheets-add-row.brain.json';
-import googleSheetsFindRow from './skills/google-sheets-find-row.brain.json';
-import googleSheetsGetValues from './skills/google-sheets-get-values.brain.json';
+import googleSheetsAssistant from './skills/google-sheets-assistant.enhancd.json';
+import googleSheetsAddRow from './skills/google-sheets-add-row.enhancd.json';
+import googleSheetsFindRow from './skills/google-sheets-find-row.enhancd.json';
+import googleSheetsGetValues from './skills/google-sheets-get-values.enhancd.json';
 // Google Calendar
-import googleCalendarAssistant from './skills/google-calendar-assistant.brain.json';
-import googleCalendarCreateEvent from './skills/google-calendar-create-event.brain.json';
-import googleCalendarListEvents from './skills/google-calendar-list-events.brain.json';
-import googleCalendarQuickAdd from './skills/google-calendar-quick-add.brain.json';
+import googleCalendarAssistant from './skills/google-calendar-assistant.enhancd.json';
+import googleCalendarCreateEvent from './skills/google-calendar-create-event.enhancd.json';
+import googleCalendarListEvents from './skills/google-calendar-list-events.enhancd.json';
+import googleCalendarQuickAdd from './skills/google-calendar-quick-add.enhancd.json';
 // Slack
-import slackAssistant from './skills/slack-assistant.brain.json';
-import slackSendMessage from './skills/slack-send-message.brain.json';
-import slackCreateChannel from './skills/slack-create-channel.brain.json';
-import slackFindUser from './skills/slack-find-user.brain.json';
+import slackAssistant from './skills/slack-assistant.enhancd.json';
+import slackSendMessage from './skills/slack-send-message.enhancd.json';
+import slackCreateChannel from './skills/slack-create-channel.enhancd.json';
+import slackFindUser from './skills/slack-find-user.enhancd.json';
 
 // Import builtin database templates
-import crm from './databases/crm.brain.json';
-import projectManagement from './databases/project-management.brain.json';
-import taskManagement from './databases/task-management.brain.json';
-import inventoryManagement from './databases/inventory-management.brain.json';
-import employeeDirectory from './databases/employee-directory.brain.json';
-import contentCalendar from './databases/content-calendar.brain.json';
-import bugTracker from './databases/bug-tracker.brain.json';
-import propertyManagement from './databases/property-management.brain.json';
-import eventPlanning from './databases/event-planning.brain.json';
-import expenseTracking from './databases/expense-tracking.brain.json';
-import productCatalog from './databases/product-catalog.brain.json';
-import meetingNotes from './databases/meeting-notes.brain.json';
+import crm from './databases/crm.enhancd.json';
+import projectManagement from './databases/project-management.enhancd.json';
+import taskManagement from './databases/task-management.enhancd.json';
+import inventoryManagement from './databases/inventory-management.enhancd.json';
+import employeeDirectory from './databases/employee-directory.enhancd.json';
+import contentCalendar from './databases/content-calendar.enhancd.json';
+import bugTracker from './databases/bug-tracker.enhancd.json';
+import propertyManagement from './databases/property-management.enhancd.json';
+import eventPlanning from './databases/event-planning.enhancd.json';
+import expenseTracking from './databases/expense-tracking.enhancd.json';
+import productCatalog from './databases/product-catalog.enhancd.json';
+import meetingNotes from './databases/meeting-notes.enhancd.json';
 
 /**
  * Registry of all builtin templates
