@@ -11,6 +11,7 @@
 
 import { NextRequest } from 'next/server';
 import { withAuthenticatedRoute } from '@/lib/api/base';
+import { logAgentMutation } from '@/lib/api/agent-context';
 import { getTableApplicationService, getRowApplicationService, getDocumentApplicationService } from '@/ddd/application/di/container';
 import { OrganizationId, TableId, FieldId, UserId } from '@/ddd/domain/shared/value-objects';
 import { DocumentFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
@@ -206,6 +207,13 @@ export async function POST(request: NextRequest): Promise<Response> {
           status: 400
         };
       }
+
+      logAgentMutation(request, user, {
+        action: 'create',
+        resourceType: 'document',
+        resourceId: result.data?.id,
+        resourceName: body.title,
+      });
 
       return {
         success: true,

@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
+import { logAgentMutation } from '@/lib/api/agent-context';
 import { getAppApplicationService } from '@/ddd/application/di/getters';
 import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import { AppMapper } from '@/app/mappers/puck-app-mapper';
@@ -102,6 +103,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     const dto = AppMapper.toDTO(result.data);
+
+    logAgentMutation(request, authResult.user, {
+      action: 'create',
+      resourceType: 'app',
+      resourceId: String(dto.id),
+      resourceName: body.name,
+    });
 
     return NextResponse.json({
       success: true,

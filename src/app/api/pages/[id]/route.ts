@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
+import { logAgentMutation } from '@/lib/api/agent-context';
 import { getAppApplicationService, getPuckPageApplicationService } from '@/ddd/application/di/getters';
 import { PageId } from '@/ddd/domain/puck/value-objects/page-id';
 import { PuckPageMapper } from '@/app/mappers/puck-page-mapper';
@@ -123,6 +124,13 @@ export async function PUT(request: NextRequest, { params }: RouteParams): Promis
 
     const dto = PuckPageMapper.toDTO(result.data);
 
+    logAgentMutation(request, authResult.user, {
+      action: 'update',
+      resourceType: 'page',
+      resourceId: String(pageId),
+      resourceName: body.name,
+    });
+
     return NextResponse.json({
       success: true,
       data: dto,
@@ -176,6 +184,13 @@ export async function DELETE(request: NextRequest, { params }: RouteParams): Pro
     if (!result.success) {
       return NextResponse.json({ error: result.error || 'Failed to delete page' }, { status: 400 });
     }
+
+    logAgentMutation(request, authResult.user, {
+      action: 'delete',
+      resourceType: 'page',
+      resourceId: String(pageId),
+      resourceName: existingPage.name,
+    });
 
     return NextResponse.json({
       success: true,

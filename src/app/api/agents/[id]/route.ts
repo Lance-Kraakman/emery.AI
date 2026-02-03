@@ -12,6 +12,7 @@
 
 import { NextRequest } from 'next/server';
 import { withAuthenticatedRoute, parseIntParam, parseJsonBody } from '@/lib/api/base';
+import { logAgentMutation } from '@/lib/api/agent-context';
 import { getAgentApplicationService } from '@/ddd/application/di/container';
 import { AgentId } from '@/ddd/domain/shared/value-objects';
 import { AgentMapper } from '@/app/mappers/agent-mapper';
@@ -100,6 +101,13 @@ export async function PUT(
       };
     }
 
+    logAgentMutation(request, user, {
+      action: 'update',
+      resourceType: 'agent',
+      resourceId: String(agentId),
+      resourceName: body.name,
+    });
+
     return {
       success: true,
       data: result.data,
@@ -133,6 +141,7 @@ export async function DELETE(
     }
 
     // Delete agent
+    const agentName = agent.name;
     const result = await agentService.deleteAgent(AgentId.fromNumber(agentId));
 
     if (!result.success) {
@@ -142,6 +151,13 @@ export async function DELETE(
         status: 400
       };
     }
+
+    logAgentMutation(request, user, {
+      action: 'delete',
+      resourceType: 'agent',
+      resourceId: String(agentId),
+      resourceName: agentName,
+    });
 
     return {
       success: true,

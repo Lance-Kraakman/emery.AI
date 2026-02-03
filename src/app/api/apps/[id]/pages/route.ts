@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
+import { logAgentMutation } from '@/lib/api/agent-context';
 import { getAppApplicationService, getPuckPageApplicationService } from '@/ddd/application/di/getters';
 import { AppId } from '@/ddd/domain/puck/value-objects/app-id';
 import { UserId } from '@/ddd/domain/shared/value-objects';
@@ -135,6 +136,13 @@ export async function POST(request: NextRequest, { params }: RouteParams): Promi
     }
 
     const dto = PuckPageMapper.toDTO(result.data);
+
+    logAgentMutation(request, authResult.user, {
+      action: 'create',
+      resourceType: 'page',
+      resourceId: String(dto.id),
+      resourceName: body.name,
+    });
 
     return NextResponse.json({
       success: true,

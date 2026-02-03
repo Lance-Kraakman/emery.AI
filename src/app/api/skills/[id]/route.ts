@@ -11,6 +11,7 @@
 
 import { NextRequest } from 'next/server';
 import { withAuthenticatedRoute, parseIntParam, parseJsonBody } from '@/lib/api/base';
+import { logAgentMutation } from '@/lib/api/agent-context';
 import { getSkillApplicationService } from '@/ddd/application/di/container';
 import { SkillMapper } from '@/app/mappers/skill-mapper';
 
@@ -119,6 +120,13 @@ export async function PUT(
         status: 500
       };
     }
+
+    logAgentMutation(request, user, {
+      action: 'update',
+      resourceType: 'skill',
+      resourceId: String(skillId),
+      resourceName: body.name,
+    });
 
     return {
       success: true,
