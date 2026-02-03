@@ -1,0 +1,40 @@
+{
+  "$format": "brain-template",
+  "$version": 1,
+  "metadata": {
+    "name": "Outlook: Send Email",
+    "description": "Send an email via Microsoft Outlook. Provide recipients, subject, and body.",
+    "category": "Integrations",
+    "tags": ["outlook", "microsoft", "email", "send"],
+    "version": "1.0.0",
+    "author": "enhancd.ai"
+  },
+  "template": {
+    "type": "skill",
+    "data": {
+      "name": "Outlook: Send Email",
+      "description": "Send an email via Microsoft Outlook. Provide recipients, subject, and body.",
+      "inputs": [
+        { "name": "to", "required": true, "type": "text" },
+        { "name": "subject", "required": true, "type": "text" },
+        { "name": "body", "required": true, "type": "text" },
+        { "name": "cc", "required": false, "type": "text" }
+      ],
+      "outputs": [
+        { "name": "result", "type": "text" }
+      ],
+      "instructions": "Send an email through Microsoft Outlook.\n\nProvide recipient(s), subject, and body content. Optionally include CC recipients.\n\n**Inputs:**\n- {to}: Recipient email address(es)\n- {subject}: Email subject line\n- {body}: Email body content (plain text or HTML)\n- {cc}: CC recipients (optional)\n\n**Output:** {result} contains the sent message confirmation.",
+      "tools": [],
+      "executionType": "tool",
+      "toolExecutionConfig": {
+        "toolId": "microsoft_outlook-send-email",
+        "inputMappings": [
+          { "toolParam": "recipients", "skillInputName": "to" },
+          { "toolParam": "subject", "skillInputName": "subject" },
+          { "toolParam": "content", "skillInputName": "body" },
+          { "toolParam": "ccRecipients", "skillInputName": "cc" }
+        ]
+      }
+    }
+  }
+}

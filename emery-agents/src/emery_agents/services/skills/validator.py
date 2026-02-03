@@ -16,6 +16,8 @@ import logging
 from typing import Set, Optional
 from dataclasses import dataclass, field
 
+from ...entities.workspace import WorkspaceSkill
+
 logger = logging.getLogger(__name__)
 
 
@@ -113,31 +115,29 @@ class SkillPermissionValidator:
 
 
 def create_validator_from_skills(
-    skills: list,
+    skills: list[WorkspaceSkill],
     agent_id: Optional[int] = None
 ) -> SkillPermissionValidator:
     """
-    Create a validator from a list of skill configurations.
+    Create a validator from a list of WorkspaceSkill.
 
     Args:
-        skills: List of skill dicts with 'id' field
+        skills: List of WorkspaceSkill objects
         agent_id: Optional agent ID for logging
 
     Returns:
         SkillPermissionValidator configured with skill IDs
     """
-    skill_ids = set()
+    skill_ids: Set[int] = set()
     for skill in skills:
-        skill_id = skill.get("id")
-        if skill_id is not None:
-            try:
-                skill_ids.add(int(skill_id))
-            except (ValueError, TypeError):
-                logger.warning(f"[SKILL-VALIDATOR] Invalid skill ID: {skill_id}")
+        try:
+            skill_ids.add(int(skill.id))
+        except (ValueError, TypeError):
+            logger.warning(f"[SKILL-VALIDATOR] Invalid skill ID: {skill.id}")
 
     permissions = SkillPermissions(
         allowed_skill_ids=skill_ids,
-        agent_id=agent_id
+        agent_id=agent_id,
     )
 
     return SkillPermissionValidator(permissions)

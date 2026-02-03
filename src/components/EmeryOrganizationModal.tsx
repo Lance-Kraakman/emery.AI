@@ -142,15 +142,13 @@ export function EmeryOrganizationModal({ isCollapsed }: { isCollapsed?: boolean 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
         <DialogTrigger asChild>
           {isCollapsed ? (
-            <Button variant="ghost" size="icon" className="h-12 w-12">
-              <img src="/assets/braintable/logo_logo.png" alt="Braintable" className="h-6 w-6" />
+            <Button variant="ghost" size="icon" className="h-8 w-8">
+              <img src="/assets/enhancd/logo.svg" alt="enhancd.ai" className="h-5 w-5" />
             </Button>
           ) : (
-            <Button variant="ghost" className="w-full justify-start h-12 px-4">
-              <div className="flex flex-col items-start min-w-0 flex-1">
-                <img src="/assets/braintable/text_only_logo.png" alt="Braintable" className="h-5 mb-1" />
-                <span className="truncate text-xs text-muted-foreground">{currentOrg.name}</span>
-              </div>
+            <Button variant="ghost" className="w-full justify-start h-8 px-2 gap-2">
+              <img src="/assets/enhancd/logo.svg" alt="enhancd.ai" className="h-5 w-5 shrink-0" />
+              <span className="truncate text-xs font-medium">{currentOrg.name}</span>
             </Button>
           )}
         </DialogTrigger>
@@ -214,7 +212,7 @@ export function EmeryOrganizationModal({ isCollapsed }: { isCollapsed?: boolean 
                   required
                   value={orgName}
                   onChange={(e) => setOrgName(e.target.value)}
-                  className="w-full p-2 border border-input bg-background rounded-md focus:ring-2 focus:ring-ring focus:border-ring"
+                  className="w-full p-2 border border-input bg-background rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-ring"
                   placeholder="e.g., Acme Corporation"
                 />
               </div>
@@ -230,7 +228,7 @@ export function EmeryOrganizationModal({ isCollapsed }: { isCollapsed?: boolean 
                   required
                   value={orgSlug}
                   onChange={(e) => handleSlugChange(e.target.value)}
-                  className="w-full p-2 border border-input bg-background rounded-md focus:ring-2 focus:ring-ring focus:border-ring font-mono text-sm"
+                  className="w-full p-2 border border-input bg-background rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-ring font-mono text-sm"
                   placeholder="e.g., acme-corp"
                 />
                 <p className="text-xs text-muted-foreground mt-1">
@@ -249,7 +247,7 @@ export function EmeryOrganizationModal({ isCollapsed }: { isCollapsed?: boolean 
                   id="organizationMission"
                   name="organizationMission"
                   rows={3}
-                  className="w-full p-2 border border-input bg-background rounded-md focus:ring-2 focus:ring-ring focus:border-ring"
+                  className="w-full p-2 border border-input bg-background rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-ring"
                   placeholder="Organization mission or description"
                 />
               </div>

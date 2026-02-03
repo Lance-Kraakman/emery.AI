@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-TARGET="${1:-https://dev.braintable.app}"
+TARGET="${1:-https://dev.enhancd.ai}"
 API_KEY="${ZAP_API_KEY:-}"
 REPORT_DIR="./security/reports"
 mkdir -p "$REPORT_DIR"

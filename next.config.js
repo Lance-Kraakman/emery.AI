@@ -26,7 +26,8 @@ const nextConfig = {
   // Increase Server Actions body size limit from 1MB to 5MB
   experimental: {
     serverActions: {
-      bodySizeLimit: '5mb'
+      bodySizeLimit: '5mb',
+      allowedOrigins: ['dev.enhancd.ai']
     }
   },
   

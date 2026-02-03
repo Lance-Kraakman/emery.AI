@@ -231,7 +231,14 @@ export class RowSerializer {
       case 'created-at':
         // AIDEV-NOTE: Timestamp fields (empty → null)
         // Auto-fields (last-updated, created-at) are managed by AutoFieldProcessor
-        return isEmpty ? null : value;
+        if (isEmpty) return null;
+        // Convert ISO date strings to Date objects for Delta Lake
+        // (agent path sends dataKeyType='id', bypassing convertFieldNamesToIds date coercion)
+        if (typeof value === 'string') {
+          const parsed = new Date(value);
+          return isNaN(parsed.getTime()) ? null : parsed;
+        }
+        return value;
 
       default:
         // Unknown types: pass through
@@ -505,11 +512,12 @@ export class RowSerializer {
     // AIDEV-NOTE: Arrow IPC returns timestamps as numbers (milliseconds since epoch)
     // The gRPC mapper expects Date objects for date_value fields
     // Without this conversion, timestamps get sent as numberValue instead of dateValue
+    // Some Arrow implementations may return BigInt for high-precision timestamps
     if (
       (field.type === 'date' || field.type === 'last-updated' || field.type === 'created-at') &&
-      typeof value === 'number'
+      (typeof value === 'number' || typeof value === 'bigint')
     ) {
-      return new Date(value);
+      return new Date(Number(value));
     }
 
     // Non-null values: pass through as-is

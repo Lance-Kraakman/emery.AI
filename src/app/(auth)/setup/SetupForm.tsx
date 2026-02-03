@@ -110,7 +110,7 @@ export function SetupForm() {
           name="organizationName"
           required
           onChange={handleNameChange}
-          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+          className="mt-1 block w-full px-3 py-2 border border-input rounded-md shadow-sm focus-visible:outline-none focus-visible:ring-ring focus-visible:border-ring"
           placeholder="Acme Corp"
         />
       </div>
@@ -123,7 +123,7 @@ export function SetupForm() {
           id="organizationMission"
           name="organizationMission"
           rows={3}
-          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+          className="mt-1 block w-full px-3 py-2 border border-input rounded-md shadow-sm focus-visible:outline-none focus-visible:ring-ring focus-visible:border-ring"
           placeholder="Building innovative solutions..."
         />
       </div>
@@ -139,12 +139,12 @@ export function SetupForm() {
           required
           value={slug}
           onChange={(e) => setSlug(e.target.value.toLowerCase())}
-          className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+          className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus-visible:outline-none focus-visible:ring-ring focus-visible:border-ring ${
             slugError
-              ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
+              ? 'border-destructive focus-visible:ring-destructive focus-visible:border-destructive'
               : slugAvailable === true
-              ? 'border-green-300 focus:ring-green-500 focus:border-green-500'
-              : 'border-gray-300'
+              ? 'border-success focus-visible:ring-success focus-visible:border-success'
+              : 'border-input'
           }`}
           placeholder="acme-corp"
         />
@@ -173,7 +173,7 @@ export function SetupForm() {
       <button
         type="submit"
         disabled={loading || slugAvailable !== true || !!slugError}
-        className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+        className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {loading ? "Setting up..." : "Complete Setup"}
       </button>

@@ -71,7 +71,7 @@ export function StoredPlanSection({
 
       {plan.steps && plan.steps.length > 0 && (
         <Collapsible>
-          <CollapsibleTrigger className={`flex items-center ${textSize} text-blue-600 hover:text-blue-800`}>
+          <CollapsibleTrigger className={`flex items-center ${textSize} text-primary hover:text-primary/80`}>
             View steps <ChevronDown className="h-3 w-3 ml-1" />
           </CollapsibleTrigger>
           <CollapsibleContent>

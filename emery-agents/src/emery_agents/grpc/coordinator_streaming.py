@@ -5,13 +5,12 @@ Handles execution orchestration via LangGraph plan-execute graph.
 Replaces the old ExecutionCoordinator-based two-phase execution.
 """
 
-import json
 import logging
 from pathlib import Path
 from typing import AsyncIterator, Optional, List, Any, Dict
 
-import dspy
 from langgraph.types import Command
+from PIL import Image
 
 from ..services.execution.events import (
     ExecutionCompletedEvent,
@@ -22,21 +21,17 @@ from ..entities.models.plan import Plan
 from ..entities.execution_context import ExecutionContext
 from ..tools.tool_modes import ToolMode
 from ..services.agents.executor import AgentExecutor
-from ..services.models.provider import ModelProvider
-from ..services.plan_service import PlanService
-from ..reasoning.config import get_dspy_lm
-from ..reasoning.modules.executor import ExecutorModule
-from ..reasoning.modules.classifier import TaskClassifierModule
-from ..reasoning.signatures.planning import TaskExecutionMode
-from ..reasoning.utils import extract_dspy_result
-from ..reasoning.tools import create_all_tools, QuestionCollector, create_ask_question_tool
 from .coordinator_event_converter import convert_coordinator_event
 from .approval_handler import is_approval_response
 from .response_types import create_error_response
 from ..orchestrators import create_session_graph, RuntimeContext
-from ..orchestrators.runtime import ConversationMessage
+from ..services.context import ConversationMessage
 from ..orchestrators.state import DEFAULT_STATE
 from ..services.memory import MemoryService
+from ..services.context import WorkspaceContext
+from emery_agents.tools.capability_registry import CapabilityRegistry
+from emery_agents.tools.capability_bootstrap import populate_user_skills, populate_external_tools
+from ..orchestrators.nodes.planning import _build_workspace_context
 from ..services.planning import PlanFileRepository
 
 logger = logging.getLogger(__name__)
@@ -49,7 +44,9 @@ _session_cache: Dict[str, Any] = {}
 def _convert_history(
     conversation_history: Optional[List[Any]],
 ) -> Optional[List[ConversationMessage]]:
-    """Convert protobuf HistoryMessage objects to typed ConversationMessage dataclasses."""
+    """Convert HistoryMessage entities to typed ConversationMessage dataclasses."""
+    from ..entities.message import TextPart
+
     if not conversation_history:
         return None
     messages: List[ConversationMessage] = []
@@ -57,35 +54,14 @@ def _convert_history(
         if isinstance(msg, ConversationMessage):
             messages.append(msg)
         else:
-            # Protobuf HistoryMessage: .role str, .content_parts[].text.text str
             role = getattr(msg, "role", "unknown")
             content_parts = getattr(msg, "content_parts", [])
             text = " ".join(
-                getattr(getattr(part, "text", None), "text", "")
-                for part in content_parts
-                if getattr(part, "text", None)
+                part.text for part in content_parts
+                if isinstance(part, TextPart)
             )
             messages.append(ConversationMessage(role=role, content=text))
     return messages
-
-
-def _format_dict_questions(questions: List[dict[str, Any]]) -> List[dict[str, Any]]:
-    """Format dict-based questions from QuestionCollector for serialization."""
-    questions_data = []
-    for i, q in enumerate(questions):
-        q_dict = {
-            "questionId": f"q_{i}",
-            "question": q.get("question", ""),
-            "questionType": q.get("question_type", "text"),
-            "required": q.get("required", True),
-            "allowOther": q.get("allow_other", True),
-        }
-        if q.get("options"):
-            q_dict["options"] = q["options"]
-        if q.get("context"):
-            q_dict["context"] = q["context"]
-        questions_data.append(q_dict)
-    return questions_data
 
 
 def _format_plan_for_message(plan: 'Plan') -> str:
@@ -124,50 +100,13 @@ class CoordinatorStreamingHandler:
     Handles orchestration via LangGraph plan-execute graph.
 
     Execution modes:
-    - NEW REQUEST: Starts the graph from scratch (generate_plan -> await_approval -> execute)
+    - NEW REQUEST: Graph triage routes to direct/plan/respond
     - AUTONOMOUS: Pre-approved stored plan executed directly
     - RESUME: Resumes a paused graph (approval, clarification, recovery)
-    - DIRECT: Simple task without plan (DSPy ReAct execution)
     """
 
-    def __init__(
-        self,
-        plan_service: 'PlanService',
-        model_provider: 'ModelProvider',
-    ):
-        self.plan_service = plan_service
-        self.model_provider = model_provider
-        self._classifier: Optional[TaskClassifierModule] = None
-
-    def _get_classifier(self) -> TaskClassifierModule:
-        """Lazy-initialize task classifier."""
-        if self._classifier is None:
-            self._classifier = TaskClassifierModule()
-        return self._classifier
-
-    async def _classify_task(
-        self,
-        task: str,
-        org_model: Optional[str],
-        context: str = "",
-    ) -> TaskExecutionMode:
-        """
-        Classify a task to determine execution mode.
-
-        Args:
-            task: The user's task
-            org_model: Model to use for classification
-            context: Optional context about system state
-
-        Returns:
-            TaskExecutionMode.DIRECT or TaskExecutionMode.PLAN_AND_APPROVE
-        """
-        classifier = self._get_classifier()
-
-        with dspy.context(lm=get_dspy_lm(org_model)):
-            result = classifier.classify(task=task, context=context)
-
-        return result.mode
+    def __init__(self):
+        pass
 
     async def stream_response(
         self,
@@ -176,15 +115,17 @@ class CoordinatorStreamingHandler:
         task: str,
         session_id: Optional[str],
         org_model: Optional[str],
+        capability_registry: CapabilityRegistry,
         sm: Optional[Any] = None,
         managed_agents: Optional[List[Any]] = None,
         stored_plan: Optional[Plan] = None,
         conversation_history: Optional[List[Any]] = None,
-        capability_registry: Optional[Any] = None,
         user_id: Optional[str] = None,
         workspace_type: Optional[str] = None,
         workspace_id: Optional[str] = None,
         runtime_skill_inputs: Optional[Dict[str, str]] = None,
+        images: Optional[List[Image.Image]] = None,
+        has_images: bool = False,
     ) -> AsyncIterator[Any]:
         """
         Main entry point for coordinator-driven execution.
@@ -194,12 +135,12 @@ class CoordinatorStreamingHandler:
         handles state management internally.
         """
         thread_id = session_id or "default"
-        raw_task = task  # Preserve original before memory injection
 
         # Build RuntimeContext with non-serializable objects
         assert context.tool_provider is not None, "tool_provider required"
         # Initialize MemoryService from workspace IDs
         memory_service = None
+        memory_context_str = ""
         if workspace_type and workspace_id:
             try:
                 memory_service = MemoryService(
@@ -207,11 +148,10 @@ class CoordinatorStreamingHandler:
                     workspace_id=workspace_id,
                     base_path=Path("/tmp/workspace"),
                 )
-                # Inject relevant memories into task context
-                memory_context = memory_service.get_context_summary(task)
-                if memory_context:
-                    task = f"{task}\n\n[Relevant memories]\n{memory_context}"
-                    logger.info(f"Injected memory context into task ({len(memory_context)} chars)")
+                # Fetch relevant memories (passed separately to planner, not mixed into task)
+                memory_context_str = memory_service.get_context_summary(task)
+                if memory_context_str:
+                    logger.info(f"Found relevant memory context ({len(memory_context_str)} chars)")
             except Exception as e:
                 logger.warning(f"Failed to initialize MemoryService: {e}")
 
@@ -239,6 +179,7 @@ class CoordinatorStreamingHandler:
             workspace_id=workspace_id,
             memory_service=memory_service,
             plan_file_repository=plan_file_repo,
+            images=images or [],
         )
 
         # Check if there's a pending graph interrupt to resume
@@ -255,12 +196,10 @@ class CoordinatorStreamingHandler:
 
         if has_pending_interrupt:
             # === RESUME: Graph is paused at interrupt, resume with user's response ===
-            # Use raw_task (before memory injection) so "approve" isn't corrupted
-            # by appended memory context like "[Relevant memories]\n..."
-            if is_approval_response(raw_task):
+            if is_approval_response(task):
                 response = "approve"
             else:
-                response = raw_task
+                response = task
 
             async for event in self._resume_graph(
                 graph=graph,
@@ -273,28 +212,21 @@ class CoordinatorStreamingHandler:
                 yield event
             return
 
-        # === CLASSIFY TASK (if no stored plan) ===
-        if not stored_plan:
-            try:
-                execution_mode = await self._classify_task(
-                    task=task,
-                    org_model=org_model,
-                )
+        # === BUILD WORKSPACE CONTEXT (reused for classifier + planning) ===
+        workspace = _build_workspace_context(
+            context.tool_provider.api_key,
+            str(context.tool_provider.organization_id),
+        )
 
-                if execution_mode == TaskExecutionMode.DIRECT:
-                    # Direct execution with tools (skill_crud, etc.)
-                    async for event in self._handle_direct_execution(
-                        context=context,
-                        task=task,
-                        org_model=org_model,
-                    ):
-                        yield event
-                    return
-            except Exception as e:
-                logger.warning(f"Task classification failed, defaulting to plan mode: {e}")
-                # Fall through to graph execution on classification failure
+        # === POPULATE CAPABILITY REGISTRY (per-request: user skills + external tools) ===
+        org_id_str = str(context.tool_provider.organization_id)
+        if workspace.existing_skills:
+            populate_user_skills(capability_registry, workspace.existing_skills, org_id_str)
+        if tools:
+            populate_external_tools(capability_registry, tools, org_id_str)
+        capability_registry.enable_all_system_agents(org_id_str)
 
-        # === NEW REQUEST or AUTONOMOUS ===
+        # === INVOKE GRAPH (triage → direct/plan/respond) ===
         async for event in self.stream_with_graph(
             context=context,
             runtime=runtime,
@@ -303,6 +235,8 @@ class CoordinatorStreamingHandler:
             stored_plan=stored_plan,
             thread_id=thread_id,
             runtime_skill_inputs=runtime_skill_inputs,
+            memory_context=memory_context_str,
+            workspace_context=workspace,
         ):
             yield event
 
@@ -315,6 +249,8 @@ class CoordinatorStreamingHandler:
         stored_plan: Optional[Plan] = None,
         thread_id: Optional[str] = None,
         runtime_skill_inputs: Optional[Dict[str, str]] = None,
+        memory_context: str = "",
+        workspace_context: Optional[WorkspaceContext] = None,
     ) -> AsyncIterator[Any]:
         """
         LangGraph-based execution path.
@@ -329,12 +265,14 @@ class CoordinatorStreamingHandler:
         initial_state = {
             **DEFAULT_STATE,
             "task": task,
+            "memory_context": memory_context or None,
             "api_key": runtime.api_key,
             "org_id": runtime.org_id,
             "org_model": org_model,
             "organization_id": context.tool_provider.organization_id if context.tool_provider else None,
             "stored_plan": stored_plan,
             "runtime_skill_inputs": runtime_skill_inputs,
+            "workspace_context": workspace_context,
         }
 
         # Get or create session graph (uses cached instance for thread_id)
@@ -347,6 +285,7 @@ class CoordinatorStreamingHandler:
             config=config,
             context=context,
             thread_id=effective_thread_id,
+            tools=runtime.tools,
         ):
             yield event
 
@@ -381,6 +320,7 @@ class CoordinatorStreamingHandler:
             config=config,
             context=context,
             thread_id=thread_id,
+            tools=tools,
         ):
             yield event
 
@@ -391,6 +331,7 @@ class CoordinatorStreamingHandler:
         config: Dict[str, Any],
         context: 'ExecutionContext',
         thread_id: str,
+        tools: Optional[List[Any]] = None,
     ) -> AsyncIterator[Any]:
         """
         Stream events from graph execution (shared by initial invocation and resume).
@@ -481,107 +422,21 @@ class CoordinatorStreamingHandler:
                 "type": "content_chunk",
                 "content": "\n\nExecution completed with issues. Some steps may have failed."
             }
-        else:
-            # No steps executed — direct execution fallback
-            async for event in self._handle_direct_execution(
-                context=context,
-                task="",  # Task already processed by graph
-                org_model=None,
-            ):
-                yield event
-
-        _clear_session(thread_id)
-
-    async def _handle_direct_execution(
-        self,
-        context: 'ExecutionContext',
-        task: str,
-        org_model: Optional[str],
-    ) -> AsyncIterator[Any]:
-        """
-        Handle direct execution without a plan using DSPy.
-
-        Used for simple tasks that don't require planning.
-        """
-        assert context.tool_provider is not None, "tool_provider required for direct execution"
-
-        logger.info("Direct execution: Starting DSPy ReAct execution...")
-
-        # Create DSPy tools with auth
-        tools = create_all_tools(
-            api_key=context.tool_provider.api_key,
-            org_id=str(context.tool_provider.organization_id),
-        )
-
-        # Add ask_question tool for clarification
-        question_collector = QuestionCollector()
-        ask_question_tool = create_ask_question_tool(question_collector)
-        all_tools = [ask_question_tool] + tools
-
-        # Create executor
-        executor = ExecutorModule(
-            execution_tools=all_tools,
-            max_iters=10,
-        )
-
-        # Get DSPy LM
-        lm = get_dspy_lm(org_model=org_model)
-
-        # Build minimal context
-        execution_context = {
-            "task": task,
-            "org_id": str(context.tool_provider.organization_id),
-        }
-
-        try:
-            # Execute with DSPy
-            with dspy.context(lm=lm):
-                result = executor(
-                    step_description=task,
-                    context=json.dumps(execution_context),
-                )
-
-            result_str = extract_dspy_result(result)
-
-            # Check for clarification questions
-            if question_collector.has_questions():
-                questions = question_collector.get_questions()
-                logger.info(f"Direct execution needs clarification: {len(questions)} question(s)")
-                yield {
-                    "type": "awaiting_input",
-                    "data": {
-                        "input_type": "questions",
-                        "title": "Clarification Needed",
-                        "content": "I need some additional information to complete this task.",
-                        "questions": _format_dict_questions(questions),
-                        "options": [],
-                        "plan_json": ""
-                    }
-                }
-                return
-
-            logger.info(f"Direct execution completed: {len(result_str)} chars")
-
-            # Yield result as content chunks
-            yield {
-                "type": "step_progress",
-                "step_type": "ACTION",
-                "step_name": "Direct Execution",
-                "content": "Task executed directly",
-                "metadata": {},
-                "step_index": 0
-            }
+        elif final_synthesis:
+            # Triage → direct or respond path completed with a synthesis
             yield {
                 "type": "content_chunk",
-                "content": result_str
+                "content": f"\n\n{final_synthesis}"
+            }
+        else:
+            # No steps and no synthesis — graph terminated without producing output
+            logger.warning("Graph completed without producing any output")
+            yield {
+                "type": "content_chunk",
+                "content": "Task completed."
             }
 
-        except Exception as e:
-            logger.error(f"Direct execution failed: {e}", exc_info=True)
-            yield create_error_response(
-                "DIRECT_EXECUTION_FAILED",
-                f"Failed to execute task: {e}",
-            )
+        _clear_session(thread_id)
 
     def _get_managed_agents_list(self, managed_agents: Optional[List[Any]]) -> List[Any]:
         """Convert managed_agents to list format."""

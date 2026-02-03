@@ -82,7 +82,6 @@ class PlanDiff:
         for s in result.steps_to_append:
             step = create_step(
                 description=s.description,
-                target_agent=s.target_agent,
                 phase_name=s.phase_name,
                 phase_order=s.phase_order,
             )

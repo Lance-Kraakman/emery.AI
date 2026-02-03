@@ -1,0 +1,36 @@
+{
+  "$format": "brain-template",
+  "$version": 1,
+  "metadata": {
+    "name": "LinkedIn: Create Personal Post",
+    "description": "Create a text post on LinkedIn as the authenticated user.",
+    "category": "Integrations",
+    "tags": ["linkedin", "post", "social", "personal"],
+    "version": "1.0.0",
+    "author": "enhancd.ai"
+  },
+  "template": {
+    "type": "skill",
+    "data": {
+      "name": "LinkedIn: Create Personal Post",
+      "description": "Create a text post on LinkedIn as the authenticated user.",
+      "inputs": [
+        { "name": "content", "required": true, "type": "text" },
+        { "name": "visibility", "required": true, "type": "text" }
+      ],
+      "outputs": [
+        { "name": "result", "type": "text" }
+      ],
+      "instructions": "Create a text post on LinkedIn from your personal account.\n\nPublish content to your LinkedIn feed with the specified visibility.\n\n**Inputs:**\n- {content}: The text content of the post\n- {visibility}: Post visibility — \"PUBLIC\" or \"CONNECTIONS\"\n\n**Output:** {result} contains the created post confirmation.",
+      "tools": [],
+      "executionType": "tool",
+      "toolExecutionConfig": {
+        "toolId": "linkedin-create-text-post-user",
+        "inputMappings": [
+          { "toolParam": "text", "skillInputName": "content" },
+          { "toolParam": "visibility", "skillInputName": "visibility" }
+        ]
+      }
+    }
+  }
+}

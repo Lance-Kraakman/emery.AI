@@ -24,21 +24,25 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { cn } from '@/lib/utils';
-import { Undo2, Redo2, StickyNote, Search, Maximize, LayoutGrid, FileDown, FileUp } from 'lucide-react';
+import { StickyNote, Search, Maximize, LayoutGrid, FileDown, FileUp, Layers, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuCheckboxItem,
+} from '@/components/ui/dropdown-menu';
 import { orgChartNodeTypes } from '@/components/org-chart/nodes';
 import { orgChartEdgeTypes } from '@/components/org-chart/edges';
-import { orgChartNodeSizes } from '@/components/org-chart/theme';
+
 import { useOrgChart, useOrgChartExport } from '@/components/org-chart/hooks';
 import {
-  getNodeDimensions,
-  arrangeNodesInRow,
-  arrangeAgentsInRows,
-  arrangeChildrenInGrid,
-  calculateAgentDimensions,
   getNextGridSlotPosition,
   normalizeEdgeConnection,
+  arrangeOrgChartTopDown,
 } from '@/components/org-chart/utils';
 import { DeleteConfirmationDialog, buildDeleteImpactItems, AgentAssignmentDialog, ExportTemplateDialog, type AssignmentConfig } from '@/components/org-chart/dialogs';
 import { ImportTemplateDialog } from '@/components/templates/ImportTemplateDialog';
@@ -57,7 +61,7 @@ import { OrgChartDragProvider } from '@/components/org-chart/context';
 import { attachContextTable } from '@/app/actions/context-mappings';
 import { transferSkillToAgent, duplicateSkill } from '@/app/actions/skills';
 import { toast } from 'sonner';
-import type { OrgChartCanvasMetadata, OrgChartNodeType, AgentContainerNodeData, OrgChartEdge } from '@/components/org-chart/types';
+import type { OrgChartCanvasMetadata, OrgChartNodeType, AgentContainerNodeData, OrgChartEdge, OrgChartEdgeData } from '@/components/org-chart/types';
 
 interface OrgChartCanvasProps {
   /** Initial agents */
@@ -106,6 +110,10 @@ interface OrgChartCanvasProps {
   initialViewport?: { x: number; y: number; zoom: number } | null;
   /** Callback when viewport changes (for session persistence) */
   onViewportChange?: (viewport: { x: number; y: number; zoom: number }) => void;
+  /** Whether the security panel is open (controlled by parent) */
+  isSecurityOpen?: boolean;
+  /** Callback to toggle the security panel */
+  onSecurityToggle?: (open: boolean) => void;
 }
 
 export function OrgChartCanvas({
@@ -121,6 +129,8 @@ export function OrgChartCanvas({
   onDeleteEntities,
   initialViewport,
   onViewportChange,
+  isSecurityOpen,
+  onSecurityToggle,
 }: OrgChartCanvasProps) {
   const router = useRouter();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
@@ -130,6 +140,13 @@ export function OrgChartCanvas({
   const [isDeleting, setIsDeleting] = useState(false);
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+
+  // Edge layer visibility - which edge types are shown
+  const ALL_EDGE_LAYERS = ['skill_ref', 'skill_table', 'data_source', 'automation_skill'] as const;
+  const [visibleEdgeLayers, setVisibleEdgeLayers] = useState<Set<string>>(
+    () => new Set(ALL_EDGE_LAYERS)
+  );
+  const [selectedOnlyEdges, setSelectedOnlyEdges] = useState(false);
 
   // Assignment dialog state for database/skill drops
   const [assignmentDialog, setAssignmentDialog] = useState<{
@@ -177,10 +194,6 @@ export function OrgChartCanvas({
     addStickyNote,
     updateNode,
     deleteNodes,
-    undo,
-    redo,
-    canUndo,
-    canRedo,
     toggleAgentExpanded,
     addAgentNode,
     addSkillNode,
@@ -228,6 +241,44 @@ export function OrgChartCanvas({
 
     return [...edges, ...newEdges];
   }, [edges, dataSources, databases]);
+
+  // Filter edges by visible layers and selected-only mode
+  const filteredEdges = useMemo(() => {
+    let result = allEdges;
+
+    // Filter by layer visibility
+    const allLayersVisible = visibleEdgeLayers.size === ALL_EDGE_LAYERS.length;
+    if (!allLayersVisible) {
+      result = result.filter((edge) => {
+        const edgeType = (edge.data as OrgChartEdgeData | undefined)?.edgeType;
+        if (!edgeType) return true; // keep edges without a type
+        return visibleEdgeLayers.has(edgeType);
+      });
+    }
+
+    // Filter to selected node only
+    if (selectedOnlyEdges) {
+      if (selectedNodeId) {
+        result = result.filter(
+          (e) => e.source === selectedNodeId || e.target === selectedNodeId
+        );
+      } else {
+        result = [];
+      }
+    }
+
+    return result;
+  }, [allEdges, visibleEdgeLayers, selectedOnlyEdges, selectedNodeId]);
+
+  // Toggle an edge layer on/off
+  const toggleEdgeLayer = useCallback((layerType: string) => {
+    setVisibleEdgeLayers((prev) => {
+      const next = new Set(prev);
+      if (next.has(layerType)) next.delete(layerType);
+      else next.add(layerType);
+      return next;
+    });
+  }, []);
 
   // Handler for sticky note updates
   const handleUpdateStickyNote = useCallback(
@@ -698,16 +749,6 @@ export function OrgChartCanvas({
         setIsSearchOpen(true);
         return;
       }
-      // Cmd/Ctrl + Z = Undo
-      if ((event.metaKey || event.ctrlKey) && event.key === 'z' && !event.shiftKey) {
-        event.preventDefault();
-        undo();
-      }
-      // Cmd/Ctrl + Shift + Z = Redo
-      if ((event.metaKey || event.ctrlKey) && event.key === 'z' && event.shiftKey) {
-        event.preventDefault();
-        redo();
-      }
       // Delete/Backspace = Delete edges or show node delete confirmation
       if (event.key === 'Delete' || event.key === 'Backspace') {
         event.preventDefault();
@@ -738,7 +779,7 @@ export function OrgChartCanvas({
         }
       }
     },
-    [undo, redo, deleteNodes, selectedNodeIds, nodes, edges, setEdges]
+    [deleteNodes, selectedNodeIds, nodes, edges, setEdges]
   );
 
   // Handle delete confirmation
@@ -794,77 +835,10 @@ export function OrgChartCanvas({
     [setSelectedNodeId, onSelect]
   );
 
-  // Auto-arrange: horizontal org-chart style layout
+  // Auto-arrange: top-down tiered org chart layout
   const handleAutoArrange = useCallback(() => {
-    const GAP = 40;
-    const PADDING = 50;
-    const MAX_ROW_WIDTH = 1600;
-    let currentY = PADDING;
-    let newNodes = [...nodes];
-
-    // 1. Arrange org-level skills in a horizontal row
-    const orgSkillIds = new Set(
-      newNodes.filter((n) => n.type === 'skill' && !n.parentId).map((n) => n.id)
-    );
-    if (orgSkillIds.size > 0) {
-      const result = arrangeNodesInRow(
-        newNodes,
-        orgSkillIds,
-        PADDING,
-        currentY,
-        GAP,
-        orgChartNodeSizes.nodeWidth
-      );
-      newNodes = result.updatedNodes;
-      currentY += Math.max(result.rowHeight, orgChartNodeSizes.nodeHeight) + GAP;
-    }
-
-    // 2. Arrange org-level databases in a horizontal row
-    const orgDatabaseIds = new Set(
-      newNodes.filter((n) => n.type === 'database' && !n.parentId).map((n) => n.id)
-    );
-    if (orgDatabaseIds.size > 0) {
-      const result = arrangeNodesInRow(
-        newNodes,
-        orgDatabaseIds,
-        PADDING,
-        currentY,
-        GAP,
-        orgChartNodeSizes.nodeWidth
-      );
-      newNodes = result.updatedNodes;
-      currentY += Math.max(result.rowHeight, orgChartNodeSizes.nodeHeight) + GAP;
-    }
-
-    // 3. Size agents based on their children and arrange in horizontal rows
-    const agentIds = newNodes.filter((n) => n.type === 'agent').map((n) => n.id);
-
-    // First, resize agents to fit their children (sectioned layout)
-    newNodes = newNodes.map((node) => {
-      if (node.type !== 'agent') return node;
-      const data = node.data as AgentContainerNodeData;
-      const { width, height } = calculateAgentDimensions(
-        data.skillCount ?? 0,
-        data.databaseCount ?? 0
-      );
-      return {
-        ...node,
-        style: { ...node.style, width, height },
-      };
-    });
-
-    // Arrange agents in horizontal rows
-    newNodes = arrangeAgentsInRows(newNodes, agentIds, PADDING, currentY, GAP, MAX_ROW_WIDTH);
-
-    // 4. Arrange children inside each agent in a 2-column grid
-    for (const agentId of agentIds) {
-      newNodes = arrangeChildrenInGrid(newNodes, agentId);
-    }
-
-    // 5. Keep sticky notes in their relative positions (don't rearrange)
-
-    setNodes(newNodes);
-  }, [nodes, setNodes]);
+    setNodes((currentNodes) => arrangeOrgChartTopDown(currentNodes, allEdges));
+  }, [allEdges, setNodes]);
 
   // Handle node double-click (open editor)
   const handleNodeDoubleClick = useCallback(
@@ -903,7 +877,7 @@ export function OrgChartCanvas({
       <StickyNoteProvider updateNote={handleUpdateStickyNote}>
         <ReactFlow
         nodes={nodes}
-        edges={allEdges}
+        edges={filteredEdges}
         onNodesChange={disabled ? undefined : onNodesChange}
         onEdgesChange={disabled ? undefined : onEdgesChange}
         onConnect={disabled ? undefined : handleConnect}
@@ -947,7 +921,7 @@ export function OrgChartCanvas({
         {/* Controls (zoom in/out/fit) */}
         <Controls
           showInteractive={false}
-          className="!bg-card !border-border !shadow-sm"
+          className="!bg-card !border-border !shadow-sm [&_button]:!bg-card [&_button]:!border-border [&_button]:!fill-foreground [&_button]:!text-foreground"
         />
 
         {/* Minimap */}
@@ -971,42 +945,10 @@ export function OrgChartCanvas({
         />
 
         {/* Left panel - toolbar + entity palette in vertical stack */}
-        <Panel position="top-left" className="flex flex-col gap-2">
+        <Panel position="top-left" className="flex flex-col items-start gap-2">
           {/* Toolbar - glassmorphic style */}
           <div className="flex gap-1 bg-background/50 backdrop-blur-sm border rounded-lg shadow-sm p-1">
             <TooltipProvider delayDuration={300}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={undo}
-                    disabled={disabled || !canUndo}
-                  >
-                    <Undo2 className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  <p>Undo <kbd className="ml-1 text-[10px] opacity-60">⌘Z</kbd></p>
-                </TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={redo}
-                    disabled={disabled || !canRedo}
-                  >
-                    <Redo2 className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  <p>Redo <kbd className="ml-1 text-[10px] opacity-60">⌘⇧Z</kbd></p>
-                </TooltipContent>
-              </Tooltip>
               {!disabled && (
                 <>
                   <div className="w-px h-6 bg-border mx-0.5" />
@@ -1056,6 +998,69 @@ export function OrgChartCanvas({
                     </TooltipContent>
                   </Tooltip>
                   <div className="w-px h-6 bg-border mx-0.5" />
+                  {/* Edge layer visibility dropdown */}
+                  <DropdownMenu>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className={cn(
+                              'h-8 w-8',
+                              (visibleEdgeLayers.size < ALL_EDGE_LAYERS.length || selectedOnlyEdges) &&
+                                'text-primary'
+                            )}
+                          >
+                            <Layers className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom">
+                        <p>Edge Layers</p>
+                      </TooltipContent>
+                    </Tooltip>
+                    <DropdownMenuContent align="start" className="w-52">
+                      <DropdownMenuLabel>Edge Layers</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuCheckboxItem
+                        checked={visibleEdgeLayers.has('skill_table')}
+                        onCheckedChange={() => toggleEdgeLayer('skill_table')}
+                      >
+                        <span className="inline-block w-2.5 h-2.5 rounded-full bg-cyan-500 mr-2 shrink-0" />
+                        Table connections
+                      </DropdownMenuCheckboxItem>
+                      <DropdownMenuCheckboxItem
+                        checked={visibleEdgeLayers.has('skill_ref')}
+                        onCheckedChange={() => toggleEdgeLayer('skill_ref')}
+                      >
+                        <span className="inline-block w-2.5 h-2.5 rounded-full bg-violet-500 mr-2 shrink-0" />
+                        Skill references
+                      </DropdownMenuCheckboxItem>
+                      <DropdownMenuCheckboxItem
+                        checked={visibleEdgeLayers.has('data_source')}
+                        onCheckedChange={() => toggleEdgeLayer('data_source')}
+                      >
+                        <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 mr-2 shrink-0" />
+                        Data sources
+                      </DropdownMenuCheckboxItem>
+                      <DropdownMenuCheckboxItem
+                        checked={visibleEdgeLayers.has('automation_skill')}
+                        onCheckedChange={() => toggleEdgeLayer('automation_skill')}
+                      >
+                        <span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-500 mr-2 shrink-0" />
+                        Automations
+                      </DropdownMenuCheckboxItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuCheckboxItem
+                        checked={selectedOnlyEdges}
+                        onCheckedChange={() => setSelectedOnlyEdges((v) => !v)}
+                      >
+                        Selected node only
+                      </DropdownMenuCheckboxItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <div className="w-px h-6 bg-border mx-0.5" />
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
@@ -1090,6 +1095,24 @@ export function OrgChartCanvas({
                         </TooltipContent>
                       </Tooltip>
                     </>
+                  )}
+                  <div className="w-px h-6 bg-border mx-0.5" />
+                  {onSecurityToggle && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className={cn('h-8 w-8', isSecurityOpen && 'text-primary')}
+                          onClick={() => onSecurityToggle(!isSecurityOpen)}
+                        >
+                          <ShieldCheck className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom">
+                        <p>Security</p>
+                      </TooltipContent>
+                    </Tooltip>
                   )}
                 </>
               )}

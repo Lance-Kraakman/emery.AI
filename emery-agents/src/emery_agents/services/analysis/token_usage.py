@@ -10,7 +10,6 @@ Provides consistent token tracking and cost calculation.
 import logging
 from typing import Any, Optional
 
-from ...grpc.generated import agent_worker_pb2
 from ...reasoning.modules.step_tracker import TrackedStep, TokenUsage as DSPyTokenUsage
 from ..models.provider import TokenUsage
 from ..models.registry import calculate_token_cost
@@ -22,7 +21,7 @@ class TokenUsageExtractor:
     """Utility class for extracting and converting token usage data."""
 
     @staticmethod
-    def extract_from_result(result: Any) -> Optional[agent_worker_pb2.TokenUsage]:
+    def extract_from_result(result: Any) -> Optional[TokenUsage]:
         """
         Extract token usage from agent execution result.
 
@@ -32,7 +31,7 @@ class TokenUsageExtractor:
             result: Result object from DSPy module or legacy agent
 
         Returns:
-            TokenUsage protobuf if token usage data exists, None otherwise
+            TokenUsage entity if token usage data exists, None otherwise
         """
         if not hasattr(result, 'token_usage') or not result.token_usage:
             logger.debug("No token_usage found in result")
@@ -41,12 +40,12 @@ class TokenUsageExtractor:
         tu = result.token_usage
         logger.info(f"Extracted token usage: {getattr(tu, 'total_tokens', 0)} tokens, ${getattr(tu, 'cost_usd', 0.0):.6f}")
 
-        return agent_worker_pb2.TokenUsage(
+        return TokenUsage(
             model_name=getattr(tu, 'model_name', ''),
             input_tokens=getattr(tu, 'input_tokens', 0),
             output_tokens=getattr(tu, 'output_tokens', 0),
             total_tokens=getattr(tu, 'total_tokens', 0),
-            cost_usd=getattr(tu, 'cost_usd', 0.0)
+            cost_usd=getattr(tu, 'cost_usd', 0.0),
         )
 
     @staticmethod
@@ -152,24 +151,3 @@ class TokenUsageExtractor:
             logger.error(f"Failed to extract token usage from agent memory: {e}")
             return None
 
-    @staticmethod
-    def to_proto(token_usage: Optional[Any]) -> Optional[agent_worker_pb2.TokenUsage]:
-        """
-        Convert token usage object to protobuf TokenUsage message.
-
-        Args:
-            token_usage: TokenUsage object or similar structure
-
-        Returns:
-            TokenUsage protobuf message or None
-        """
-        if not token_usage:
-            return None
-
-        return agent_worker_pb2.TokenUsage(
-            model_name=getattr(token_usage, 'model_name', ''),
-            input_tokens=getattr(token_usage, 'input_tokens', 0),
-            output_tokens=getattr(token_usage, 'output_tokens', 0),
-            total_tokens=getattr(token_usage, 'total_tokens', 0),
-            cost_usd=getattr(token_usage, 'cost_usd', 0.0)
-        )

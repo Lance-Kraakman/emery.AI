@@ -61,12 +61,10 @@ class AgentFactory:
                 logger.info(f"♻️ Returning cached module: {cache_key}")
                 return self._module_cache[cache_key]
 
-        # Resolve and configure model
+        # Resolve model and get LM instance (no global configure — use dspy.context() at call site)
         model_id = self._resolve_model(config)
         logger.info(f"🤖 Creating DSPy module with model: {model_id}")
-
-        # Configure DSPy with the resolved model
-        self.model_provider.configure_dspy(model_id)
+        lm = self.model_provider.get_dspy_lm(model_id)
 
         # Create appropriate module type
         if config.agent_modules:
@@ -88,6 +86,9 @@ class AgentFactory:
             )
             logger.info(f"⚡ Created ExecutorModule with {len(config.tools)} tools")
 
+        # Store LM on module for callers to use with dspy.context(lm=module._lm)
+        module._lm = lm
+
         # Cache if enabled
         if config.enable_caching:
             cache_key = self._get_cache_key(config)
@@ -102,14 +103,17 @@ class AgentFactory:
         max_iters: int = 10,
         model_id: str | None = None,
     ) -> ExecutorModule:
-        """Create an ExecutorModule directly (convenience method)."""
-        if model_id:
-            self.model_provider.configure_dspy(model_id)
+        """Create an ExecutorModule directly (convenience method).
 
-        return ExecutorModule(
+        Use dspy.context(lm=module._lm) when invoking the module.
+        """
+        module = ExecutorModule(
             execution_tools=tools,
             max_iters=max_iters,
         )
+        if model_id:
+            module._lm = self.model_provider.get_dspy_lm(model_id)
+        return module
 
     def _resolve_model(self, config: AgentConfig) -> str:
         """Resolve which model to use based on configuration hierarchy."""

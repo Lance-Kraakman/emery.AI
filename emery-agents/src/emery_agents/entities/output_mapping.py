@@ -37,30 +37,6 @@ class FieldSource:
     order: Optional[int] = None     # For table_ref type
     field: Optional[str] = None     # For table_ref type
 
-    @classmethod
-    def from_proto(cls, proto_source) -> Optional['FieldSource']:
-        """Create from protobuf FieldSource.
-
-        Returns None if no valid source is set (e.g., legacy data or empty mapping).
-        """
-        # Check which oneof field is set
-        which_source = proto_source.WhichOneof('source')
-
-        if which_source == 'skill_output':
-            return cls(type='skill_output', name=proto_source.skill_output)
-        elif which_source == 'skill_input':
-            return cls(type='skill_input', name=proto_source.skill_input)
-        elif which_source == 'table_ref':
-            return cls(
-                type='table_ref',
-                order=proto_source.table_ref.order,
-                field=proto_source.table_ref.field
-            )
-        else:
-            # No valid source set - return None (caller should skip this mapping)
-            logger.warning(f"FieldSource has no valid source type set: {which_source}")
-            return None
-
 
 @dataclass
 class RowIdSource:
@@ -72,28 +48,6 @@ class RowIdSource:
     table_ref_order: Optional[int] = None
     table_ref_field: Optional[str] = None
 
-    @classmethod
-    def from_proto(cls, proto_source) -> 'RowIdSource':
-        """Create from protobuf RowIdSource."""
-        which_source = proto_source.WhichOneof('source')
-
-        if which_source == 'static_id':
-            return cls(type='static', static_id=proto_source.static_id)
-        elif which_source == 'skill_input':
-            return cls(type='skill_input', skill_input=proto_source.skill_input)
-        elif which_source == 'skill_output':
-            return cls(type='skill_output', skill_output=proto_source.skill_output)
-        elif which_source == 'table_ref':
-            return cls(
-                type='table_ref',
-                table_ref_order=proto_source.table_ref.order,
-                table_ref_field=proto_source.table_ref.field
-            )
-        elif which_source == 'use_source_row':
-            return cls(type='source_row')
-        else:
-            raise ValueError(f"RowIdSource must have a valid source, got: {which_source}")
-
 
 @dataclass
 class FieldMapping:
@@ -102,29 +56,6 @@ class FieldMapping:
     target_field_id: int    # Destination field/column
     append_mode: bool = False  # When true, append to existing relation values instead of replacing
     target_field_type: Optional[str] = None  # Field type (e.g., 'relation', 'text', 'number')
-
-    @classmethod
-    def from_proto(cls, proto_mapping) -> Optional['FieldMapping']:
-        """Create from protobuf FieldMapping.
-
-        Returns None if the source is invalid (caller should skip this mapping).
-        """
-        source = FieldSource.from_proto(proto_mapping.source)
-        if source is None:
-            logger.warning(f"Skipping FieldMapping with invalid source for field {proto_mapping.target_field_id}")
-            return None
-
-        # Extract target field type from metadata if available
-        target_field_type = None
-        if proto_mapping.HasField('target_field_metadata'):
-            target_field_type = proto_mapping.target_field_metadata.field_type or None
-
-        return cls(
-            source=source,
-            target_field_id=proto_mapping.target_field_id,
-            append_mode=proto_mapping.append_mode,
-            target_field_type=target_field_type
-        )
 
 
 @dataclass
@@ -137,29 +68,6 @@ class TableMapping:
     mappings: List[FieldMapping] = field(default_factory=list)  # Field mappings for this table
     display_field_id: Optional[int] = None  # Field to use for relation display value
     mode: Optional[str] = None          # Per-table mode: 'single_row' or 'multi_row'
-
-    @classmethod
-    def from_proto(cls, proto_mapping) -> 'TableMapping':
-        """Create from protobuf TableMapping."""
-        row_id_source = None
-        if proto_mapping.HasField('row_id_source'):
-            row_id_source = RowIdSource.from_proto(proto_mapping.row_id_source)
-
-        # Filter out mappings with invalid sources
-        valid_mappings = [
-            m for m in (FieldMapping.from_proto(pm) for pm in proto_mapping.mappings)
-            if m is not None
-        ]
-
-        return cls(
-            order=proto_mapping.order,
-            target_table_id=proto_mapping.target_table_id,
-            row_action=RowAction(proto_mapping.row_action or 'create'),
-            row_id_source=row_id_source,
-            mappings=valid_mappings,
-            display_field_id=proto_mapping.display_field_id if proto_mapping.display_field_id else None,
-            mode=proto_mapping.mode if proto_mapping.mode else None
-        )
 
 
 @dataclass
@@ -176,21 +84,6 @@ class OutputMappingConfig:
     """Configuration for multi-table output mapping."""
     mode: OutputMappingMode
     table_mappings: List[TableMapping] = field(default_factory=list)
-
-    @classmethod
-    def from_proto(cls, proto_config) -> 'OutputMappingConfig':
-        """Create from protobuf OutputMappingConfig."""
-        mode = OutputMappingMode(proto_config.mode or 'single_row')
-
-        table_mappings = [
-            TableMapping.from_proto(tm)
-            for tm in proto_config.table_mappings
-        ]
-
-        return cls(
-            mode=mode,
-            table_mappings=table_mappings
-        )
 
     @property
     def is_single_row(self) -> bool:

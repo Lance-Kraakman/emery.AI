@@ -1,0 +1,30 @@
+{
+  "$format": "brain-template",
+  "$version": 1,
+  "metadata": {
+    "name": "Git Code Workspace",
+    "description": "Clone repositories, work on code, create branches, commit and push changes in a persistent workspace.",
+    "category": "Development",
+    "tags": ["git", "code", "clone", "development", "workspace", "repository"],
+    "version": "1.0.0",
+    "author": "enhancd.ai"
+  },
+  "template": {
+    "type": "skill",
+    "data": {
+      "name": "Git Code Workspace",
+      "description": "Clone repositories, work on code, create branches, commit and push changes in a persistent workspace.",
+      "inputs": [
+        { "name": "repository_url", "required": true, "type": "text" },
+        { "name": "task_description", "required": true, "type": "text" }
+      ],
+      "outputs": [
+        { "name": "result", "type": "text" }
+      ],
+      "instructions": "You have bash access with git and network access in an isolated workspace.\n\n**Workspace layout:**\n- workspace/repos/ \u2014 clone repositories here\n- workspace/scratch/ \u2014 temporary working files\n- workspace/outputs/ \u2014 final artifacts\n\n**Workflow:**\n1. Clone the repository: `git clone {repository_url} workspace/repos/<repo-name>`\n2. Create a new branch for your changes: `git checkout -b <descriptive-branch-name>`\n3. Make the requested code changes using bash (cat, sed, echo, etc.)\n4. Review your changes: `git diff`\n5. Commit with a clear message: `git add . && git commit -m \"<message>\"`\n6. If pushing is requested: `git push origin <branch-name>`\n\n**Guidelines:**\n- Always create a new branch for changes, never commit directly to main/master\n- Write clear commit messages that describe the why, not just the what\n- Use `tree` or `ls -la` to explore the repository structure before making changes\n- Use `grep -r` to find relevant code before editing\n- All files persist in the workspace across task executions\n\n**Output:** Set {result} to a summary of what was done, including the branch name and commit hash:\n{result} = [your summary here]",
+      "tools": [],
+      "executionType": "agentic",
+      "allowNetwork": true
+    }
+  }
+}

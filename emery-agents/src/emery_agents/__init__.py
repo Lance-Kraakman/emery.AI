@@ -16,7 +16,8 @@ __version__ = "3.0.0-simplified"
 from .entities import Agent, AgentConfig, Task, TaskConfig, TaskInstructions, ExecutionContext
 
 # Export services
-from .services import AgentExecutor, ModelProvider, UnifiedToolLoader, TokenUsage
+# AgentExecutor omitted: import directly from services.agents.executor (heavy, circular if eager)
+from .services import ModelProvider, TokenUsage
 
 # Export types
 from .types import (
@@ -41,9 +42,7 @@ __all__ = [
     "TaskInstructions",
     "ExecutionContext",
     # Services
-    "AgentExecutor",
     "ModelProvider",
-    "UnifiedToolLoader",
     "TokenUsage",
     # Types
     "ExecutionMode",

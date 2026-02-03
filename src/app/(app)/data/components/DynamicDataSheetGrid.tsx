@@ -421,12 +421,12 @@ const LoadingState = () => (
 
 // Error state component
 const ErrorState = ({ error, onRetry }: { error: string; onRetry?: () => void }) => (
-  <div className="flex flex-col items-center justify-center h-32 text-red-600 dark:text-red-400">
+  <div className="flex flex-col items-center justify-center h-32 text-destructive">
     <div className="text-sm mb-2">⚠️ {error}</div>
     {onRetry && (
-      <button 
+      <button
         onClick={onRetry}
-        className="text-xs px-3 py-1 bg-red-100 dark:bg-red-900/20 rounded hover:bg-red-200 dark:hover:bg-red-900/30 transition-colors"
+        className="text-xs px-3 py-1 bg-destructive/10 rounded hover:bg-destructive/20 transition-colors"
       >
         Retry
       </button>
@@ -614,6 +614,7 @@ export function DynamicDataSheetGrid({
   const fieldsFingerprint = useMemo(() => {
     return fields.map(f => f.id).sort().join(',')
   }, [fields])
+
 
   /**
    * Event-driven onChange - uses operations parameter for precise change detection

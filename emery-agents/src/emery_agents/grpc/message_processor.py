@@ -6,26 +6,29 @@ Handles extraction of content from messages and building task prompts.
 """
 
 import logging
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from PIL import Image
 
 from .mappers.message_types import ChatMessage, MessageContentList
+from .mappers.proto_mapper import file_attachments_from_proto
 from .generated import agent_worker_pb2
+from ..entities.message import FileAttachment
 from ..services.data.image_processor import ImageProcessor
 
 logger = logging.getLogger(__name__)
 
 
-def extract_user_api_key_from_tools(tools: List['agent_worker_pb2.ToolConfig']) -> Optional[str]:
+def extract_user_api_key_from_tools(tools: List[Any]) -> Optional[str]:
     """
     Extract user API key from enriched tool configs.
 
     The Next.js layer enriches tool configs with user API keys for authentication.
     This extracts the key so managed agents (like skill_builder) can reuse it.
+    Works with both proto ToolConfig and entity ToolConfig (both have .name, .config).
 
     Args:
-        tools: List of ToolConfig proto objects with config maps
+        tools: List of ToolConfig objects (proto or entity) with config maps
 
     Returns:
         User API key string if found, None otherwise
@@ -42,27 +45,20 @@ def extract_user_api_key_from_tools(tools: List['agent_worker_pb2.ToolConfig']) 
 
 def extract_file_attachments(
     message_parts: List['agent_worker_pb2.MessagePart']
-) -> List['agent_worker_pb2.FileAttachment']:
+) -> List[FileAttachment]:
     """
     Extract file attachments (audio, PDFs, etc.) from message parts.
 
     Used to pass file context to skills that need raw file bytes (e.g., speech-to-text).
+    Converts proto MessagePart to entity FileAttachment at gRPC boundary.
 
     Args:
         message_parts: List of MessagePart from the request
 
     Returns:
-        List of FileAttachment protos with url and mime_type
+        List of entity FileAttachment with url and mime_type
     """
-    attachments = []
-    for part in message_parts:
-        if part.HasField('file'):
-            attachment = agent_worker_pb2.FileAttachment(
-                url=part.file.url,
-                mime_type=part.file.mime_type
-            )
-            attachments.append(attachment)
-    return attachments
+    return file_attachments_from_proto(message_parts)
 
 
 def extract_images_from_message(message: ChatMessage) -> List[Image.Image]:

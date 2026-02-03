@@ -3,7 +3,7 @@
 /**
  * ImportTemplateDialog Component
  *
- * Dialog for importing .brain template files via drag-and-drop or file picker.
+ * Dialog for importing .enhancd template files via drag-and-drop or file picker.
  */
 
 import React, { useState, useCallback, useRef } from 'react';
@@ -119,8 +119,8 @@ export function ImportTemplateDialog({
     setParsedTemplate(null);
 
     // Validate file extension
-    if (!file.name.endsWith('.brain.json') && !file.name.endsWith('.json')) {
-      setParseError('Invalid file type. Please upload a .brain.json file.');
+    if (!file.name.endsWith('.enhancd.json') && !file.name.endsWith('.json')) {
+      setParseError('Invalid file type. Please upload a .enhancd.json file.');
       return;
     }
 
@@ -129,7 +129,7 @@ export function ImportTemplateDialog({
       const parsed = JSON.parse(content);
 
       if (!validateBrainTemplate(parsed)) {
-        setParseError('Invalid template format. File does not contain a valid .brain template.');
+        setParseError('Invalid template format. File does not contain a valid .enhancd template.');
         return;
       }
 
@@ -234,8 +234,8 @@ export function ImportTemplateDialog({
           <DialogTitle>{applyImmediately ? 'Apply Template' : 'Import Template'}</DialogTitle>
           <DialogDescription>
             {applyImmediately
-              ? 'Upload a .brain.json template file to create agents, skills, and databases.'
-              : 'Upload a .brain.json template file to add it to your library.'}
+              ? 'Upload a .enhancd.json template file to create agents, skills, and databases.'
+              : 'Upload a .enhancd.json template file to add it to your library.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -256,7 +256,7 @@ export function ImportTemplateDialog({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".json,.brain.json"
+                accept=".json,.enhancd.json"
                 onChange={handleFileChange}
                 className="hidden"
               />
@@ -266,7 +266,7 @@ export function ImportTemplateDialog({
                 {isDragging ? 'Drop file here' : 'Click to upload or drag and drop'}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                .brain.json files only
+                .enhancd.json files only
               </p>
             </div>
           )}

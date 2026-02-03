@@ -14,6 +14,8 @@ import { withAuthenticatedRoute, parseIntParam, parseJsonBody } from '@/lib/api/
 import { getTableApplicationService } from '@/ddd/application/di/container';
 import { TableId } from '@/ddd/domain/shared/value-objects';
 import type { UpdateTableCommand } from '@/ddd/application/services/tables/table-application-service';
+import { TableMapper } from '@/app/mappers/table-mapper';
+import { FieldMapper } from '@/app/mappers/field-mapper';
 
 /**
  * GET /api/tables/[id]
@@ -40,7 +42,10 @@ export async function GET(
 
     return {
       success: true,
-      data: table
+      data: {
+        ...TableMapper.toDTO(table),
+        fields: table.fields.map(FieldMapper.toDTO),
+      },
     };
   });
 }
@@ -105,7 +110,7 @@ export async function PUT(
 
     return {
       success: true,
-      data: result.data,
+      data: result.data ? TableMapper.toDTO(result.data) : null,
       message: 'Table updated successfully'
     };
   });

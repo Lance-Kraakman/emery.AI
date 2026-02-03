@@ -50,6 +50,7 @@ export interface ITaskRepository {
   findReadyForExecution(before?: Date): Promise<Task[]>;
   findByStatus(status: TaskStatus, limit?: number): Promise<Task[]>;
   findScheduledTasksDue(before?: Date): Promise<Task[]>;
+  findStuckInProgress(olderThan: Date): Promise<Task[]>;
   
   // Bulk operations
   saveMultiple(tasks: Task[]): Promise<void>;

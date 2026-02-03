@@ -10,7 +10,7 @@
 
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import { eq, like, and, desc, asc, or, ilike } from 'drizzle-orm';
+import { eq, asc } from 'drizzle-orm';
 import { parseConnectionString } from '@/ddd/infrastructure/db/client-parser';
 import type {
   IToolRegistryService,
@@ -203,6 +203,8 @@ export class DatabaseToolRegistry implements IToolRegistryService {
 
   /**
    * Internal search with full options (for discoverTools)
+   * Uses in-memory cache (5-min TTL) instead of SQL queries per search.
+   * Tools/appTypes are static data (only change during seeding), so caching is safe.
    */
   private async searchToolsInternal(
     query?: string,
@@ -213,116 +215,70 @@ export class DatabaseToolRegistry implements IToolRegistryService {
     console.log(`[DatabaseToolRegistry] Searching tools: query="${query}", limit=${limit}, offset=${offset}`);
 
     try {
-      let whereConditions = [];
+      // Use cached tools instead of SQL queries - data is static (seeded only)
+      let filtered = await this.loadTools();
 
-      // Add multi-field search query condition with enhanced matching
+      // Text search: match all words across name, displayName, description, app name
       if (query && query.trim()) {
-        const searchQuery = query.trim().toLowerCase();
-
-        // Split query into words for multi-word support
-        const searchWords = searchQuery.split(/\s+/).filter(word => word.length > 0);
+        const searchWords = query.trim().toLowerCase().split(/\s+/).filter(word => word.length > 0);
 
         if (searchWords.length > 0) {
-          // For each word, search across multiple fields using OR conditions
-          const wordConditions = searchWords.map(word => {
-            const searchTerm = `%${word}%`;
-            return or(
-              ilike(tools.id, searchTerm),              // Search tool ID (e.g., "gmail-send-email")
-              ilike(tools.displayName, searchTerm),     // Search display name (e.g., "Send Email")
-              ilike(tools.description, searchTerm),     // Search description
-              ilike(appTypes.name, searchTerm)          // Search app name (e.g., "gmail")
-            );
+          filtered = filtered.filter(tool => {
+            return searchWords.every(word => {
+              const nameLower = tool.name.toLowerCase();
+              const displayLower = tool.displayName.toLowerCase();
+              const descLower = tool.description.toLowerCase();
+              const appLower = (tool.extra?.app || '').toLowerCase();
+              return nameLower.includes(word) || displayLower.includes(word) || descLower.includes(word) || appLower.includes(word);
+            });
           });
 
-          // All words must match (AND condition across words)
-          if (wordConditions.length === 1) {
-            whereConditions.push(wordConditions[0]);
-          } else {
-            whereConditions.push(and(...wordConditions));
-          }
-
-          console.log(`[DatabaseToolRegistry] Multi-field search for "${searchQuery}" (${searchWords.length} words)`);
+          console.log(`[DatabaseToolRegistry] In-memory search for "${query.trim()}" matched ${filtered.length} tools`);
         }
       }
 
-      // Add category filter if specified
+      // Category filter
       if (options?.category) {
-        // Convert ToolCategory enum to string
-        const categoryStr = options.category.toString();
-        whereConditions.push(eq(tools.category, categoryStr));
+        filtered = filtered.filter(tool => tool.category === options.category);
       }
 
-      // Add app filter if specified
+      // App filter
       if (options?.appId) {
-        console.log(`[DatabaseToolRegistry] Adding app filter: appId="${options.appId}"`);
-        whereConditions.push(eq(appTypes.id, options.appId));
+        filtered = filtered.filter(tool => tool.extra?.appId === options.appId);
       }
 
-      // Add connection requirement filters
+      // Connection requirement filter
       if (options?.requiresConnection !== undefined) {
-        if (options.requiresConnection) {
-          // Only tools that require connections (OAuth or API key)
-          whereConditions.push(eq(appTypes.supportsOAuth, true));
-        } else {
-          // Only tools that don't require connections
-          whereConditions.push(eq(appTypes.supportsOAuth, false));
-        }
-      }
-
-      // Track if we need connection filtering (will apply after query)
-      const needsConnectionFilter = options?.connectedOnly && options?.userId && options?.organizationId;
-      if (needsConnectionFilter) {
-        console.log(`[DatabaseToolRegistry] Connected-only filter requested for user ${options.userId}`);
-        // Will filter after query using actual user connections
-      }
-
-      // Build the query
-      let dbQuery = this.db
-        .select({
-          tool: tools,
-          app: appTypes,
-        })
-        .from(tools)
-        .leftJoin(appTypes, eq(tools.appId, appTypes.id))
-        .limit(limit)
-        .offset(offset)
-        .orderBy(asc(tools.displayName));
-
-      // Apply where conditions if any
-      console.log(`[DatabaseToolRegistry] Executing query with ${whereConditions.length} conditions`, {
-        appId: options?.appId,
-        category: options?.category,
-        query: options?.searchQuery
-      });
-
-      let results;
-      if (whereConditions.length > 0) {
-        results = await dbQuery.where(and(...whereConditions));
-      } else {
-        results = await dbQuery;
-      }
-
-      console.log(`[DatabaseToolRegistry] Found ${results.length} tools from database`);
-      if (results.length > 0) {
-        console.log(`[DatabaseToolRegistry] Sample tool apps:`, results.slice(0, 3).map(r => ({
-          toolId: r.tool.id,
-          appId: r.tool.appId,
-          appName: r.app?.name
-        })));
-      }
-      let toolMetadata = results.map(({ tool, app }) => this.convertToToolMetadata(tool, app));
-
-      // Apply connection filter if needed (post-processing)
-      if (needsConnectionFilter && options?.userId && options?.organizationId) {
-        toolMetadata = await this.filterByUserConnections(
-          toolMetadata,
-          options.userId,
-          options.organizationId
+        filtered = filtered.filter(tool =>
+          options.requiresConnection ? tool.extra?.supportsOAuth === true : tool.extra?.supportsOAuth === false
         );
       }
 
-      console.log(`[DatabaseToolRegistry] Returning ${toolMetadata.length} tools after filtering`);
-      return toolMetadata;
+      console.log(`[DatabaseToolRegistry] Found ${filtered.length} tools after filtering`);
+      if (filtered.length > 0) {
+        console.log(`[DatabaseToolRegistry] Sample tool apps:`, filtered.slice(0, 3).map(t => ({
+          toolId: t.name,
+          appId: t.extra?.appId,
+          appName: t.extra?.app
+        })));
+      }
+
+      // Connection filter (needs live data - can't cache)
+      const needsConnectionFilter = options?.connectedOnly && options?.userId && options?.organizationId;
+      if (needsConnectionFilter) {
+        console.log(`[DatabaseToolRegistry] Connected-only filter requested for user ${options.userId}`);
+        filtered = await this.filterByUserConnections(
+          filtered,
+          options.userId!,
+          options.organizationId!
+        );
+      }
+
+      // Apply pagination (cache is already sorted by displayName)
+      const paginated = filtered.slice(offset, offset + limit);
+
+      console.log(`[DatabaseToolRegistry] Returning ${paginated.length} tools after filtering`);
+      return paginated;
 
     } catch (error) {
       console.error('[DatabaseToolRegistry] Error searching tools:', error);

@@ -26,7 +26,7 @@ export function normalizeSelectMetadata(
     ...metadata,
     options: metadata.options.map((opt: any, i: number) => ({
       id: typeof opt.id === 'number' ? opt.id : i + 1,
-      value: opt.value ?? '',
+      value: opt.value || `Option ${typeof opt.id === 'number' ? opt.id : i + 1}`,
       color: opt.color ?? DEFAULT_COLORS[i % DEFAULT_COLORS.length],
     })),
   };

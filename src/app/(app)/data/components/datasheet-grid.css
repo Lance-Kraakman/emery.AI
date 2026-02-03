@@ -86,6 +86,21 @@
   width: 100% !important;
 }
 
+/* Extend the gutter separator line to the full height of the grid.
+   DSG only renders borders on actual data rows, so with few rows the
+   gutter line stops mid-container. This pseudo-element continues it. */
+.dsg-container::before {
+  content: '';
+  position: absolute;
+  left: 58px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: hsl(var(--border));
+  pointer-events: none;
+  z-index: 1;
+}
+
 /* DSG Cell styling - optimized for performance */
 .dsg-cell {
   border-right: 1px solid hsl(var(--border));

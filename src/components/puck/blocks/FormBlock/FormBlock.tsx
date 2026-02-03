@@ -92,6 +92,14 @@ export default function FormBlock({
             successTitle: styles.successTitle,
             successMessage: styles.successMessage,
           }}
+          inputThemeClasses={{
+            input: styles.input,
+            label: styles.fieldLabel,
+            fieldGroup: styles.fieldGroup,
+            select: styles.select,
+            checkbox: styles.checkboxWrapper,
+            error: styles.fieldError,
+          }}
         />
       </div>
     </Section>

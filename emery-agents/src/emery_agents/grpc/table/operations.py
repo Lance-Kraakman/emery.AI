@@ -38,6 +38,7 @@ from .query_operations import (
 )
 from functools import partial
 from .filter_operations import extract_jsonb_target_ids, json_array_contains_id
+from .write_buffer import merge_buffer_into_dataframe, WriteBuffer
 
 logger = logging.getLogger(__name__)
 
@@ -147,7 +148,9 @@ def prepare_query_rows(
     order_direction: str = 'ASC',
     limit: Optional[int] = None,
     offset: int = 0,
-    aggregation: Optional[table_service_pb2.AggregationConfig] = None
+    aggregation: Optional[table_service_pb2.AggregationConfig] = None,
+    s3_uri: Optional[str] = None,
+    write_buffer: Optional[WriteBuffer] = None,
 ) -> Tuple[pl.DataFrame, Dict[str, Any]]:
     """Prepare data for QueryRows operation.
 
@@ -175,6 +178,13 @@ def prepare_query_rows(
 
     # Load data with predicate pushdown
     df = load_filtered_data(delta_table, filters, schema)
+
+    # Merge buffered writes for read consistency (before filters/sort/pagination)
+    if write_buffer and s3_uri:
+        buffered_ops = write_buffer.get_buffered_ops(s3_uri)
+        if buffered_ops:
+            df = merge_buffer_into_dataframe(df, buffered_ops, schema)
+            logger.info(f"[prepare_query_rows] Merged {len(buffered_ops)} buffered ops")
 
     # Apply LIKE/ILIKE filters in-memory (these cannot be pushed down)
     if filters:

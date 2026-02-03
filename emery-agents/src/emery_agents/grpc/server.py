@@ -11,7 +11,7 @@ from .generated import agent_worker_pb2, agent_worker_pb2_grpc
 from .generated import table_service_pb2, table_service_pb2_grpc
 from .mappers import ProtoMapper
 from ..services.agents.executor import AgentExecutor
-from ..services.tools.loader import UnifiedToolLoader
+from emery_agents.tools.loader import UnifiedToolLoader
 from ..services.tasks import TaskExecutor
 from ..services.tasks.task_executor import TaskData
 from ..infrastructure.workspace_sync import WorkspaceSync
@@ -80,8 +80,9 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
         ProcessMessage task-based execution. Workspace sync remains here as it's
         specific to background task execution.
         """
-        # Convert protobuf to TaskData for TaskExecutor
-        task_data = TaskExecutor.from_task_request(request, self.proto_mapper)
+        # Convert protobuf to entity at boundary, then build TaskData
+        task_request = self.proto_mapper.task_request_from_proto(request)
+        task_data = TaskExecutor.from_task_request(task_request)
 
         print(f"🚀 [TASK-{task_data.task_id[:8]}] Starting execution for agent: {task_data.agent_id}")
         print(f"📋 [TASK-{task_data.task_id[:8]}] Name: {request.name}")
@@ -102,6 +103,33 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
                     workspace_id=workspace_id,
                     task_id=task_data.task_id,
                 )
+
+                # Log workspace manifest after download
+                try:
+                    shell = self.workspace_sync._get_shell(workspace_id)
+                    tree_result = shell.run(
+                        "tree -L 2 --noreport 2>/dev/null || find . -maxdepth 2 -type f | head -50",
+                        timeout=10,
+                    )
+                    manifest_text = tree_result.stdout if tree_result.success else "Could not generate manifest"
+                    file_count = len([l for l in manifest_text.strip().split('\n') if l.strip()]) if manifest_text else 0
+
+                    print(f"📂 [TASK-{task_data.task_id[:8]}] Workspace contents ({file_count} entries):\n{manifest_text}")
+                    sys.stdout.flush()
+
+                    self.workspace_sync.append_to_session_log(
+                        workspace_id=workspace_id,
+                        task_id=task_data.task_id,
+                        entry={
+                            "type": "workspace_manifest",
+                            "workspace_id": workspace_id,
+                            "manifest": manifest_text,
+                            "file_count": file_count,
+                        },
+                    )
+                except Exception as manifest_err:
+                    logger.warning(f"Failed to log workspace manifest: {manifest_err}")
+
             except Exception as e:
                 logger.error(f"Failed to download workspace: {e}")
                 # Continue without workspace - task can still execute
@@ -228,6 +256,8 @@ def register_table_services(server):
     from .table_proccessing_service import TableService
     table_service_impl = TableService()
     table_service_pb2_grpc.add_TableServiceServicer_to_server(table_service_impl, server)
+    # Start background flush worker for Redis write buffer
+    table_service_impl.start_flush_worker()
 
 async def serve_chat_server(port: int):
     """Chat processing server (port 50051) - AgentWorker + ChatProcessing only."""

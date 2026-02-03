@@ -74,7 +74,7 @@ export interface DatabaseNodeData extends BaseOrgChartNodeData {
   slug: string;
   agentId?: number | null; // null = org-scoped
   tableCount?: number;
-  /** First few tables for inline display in node */
+  /** Tables for inline display in node */
   tables?: Array<{ id: number; name: string }>;
 }
 

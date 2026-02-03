@@ -156,7 +156,7 @@ export function AppConnectionCard({
   };
 
   return (
-    <Card className={`transition-all duration-200 hover:shadow-md hover:scale-[1.01] ${isConnected ? 'ring-1 ring-green-200 bg-green-50/30' : ''} ${className}`}>
+    <Card className={`transition-all duration-200 hover:shadow-md hover:scale-[1.01] ${isConnected ? 'ring-1 ring-success/30 bg-success/5' : ''} ${className}`}>
       <CardContent className="p-3">
         <div className="space-y-2">
           {/* Top Row: Icon + Menu */}

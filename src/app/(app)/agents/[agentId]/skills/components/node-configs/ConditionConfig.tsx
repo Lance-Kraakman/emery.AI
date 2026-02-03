@@ -36,7 +36,7 @@ export function ConditionConfig({
             value={cond.expression}
             onChange={(value) => updateCondition(i, value)}
             variables={variables}
-            placeholder={`e.g., {{result}} > 100`}
+            placeholder={`e.g., {{result}} > 100 && {{status}} == "active"`}
             disabled={disabled}
             className="h-8"
           />

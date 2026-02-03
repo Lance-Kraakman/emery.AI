@@ -1,0 +1,36 @@
+{
+  "$format": "brain-template",
+  "$version": 1,
+  "metadata": {
+    "name": "Slack: Create Channel",
+    "description": "Create a new public or private Slack channel.",
+    "category": "Integrations",
+    "tags": ["slack", "channel", "create"],
+    "version": "1.0.0",
+    "author": "enhancd.ai"
+  },
+  "template": {
+    "type": "skill",
+    "data": {
+      "name": "Slack: Create Channel",
+      "description": "Create a new public or private Slack channel.",
+      "inputs": [
+        { "name": "name", "required": true, "type": "text" },
+        { "name": "is_private", "required": false, "type": "boolean" }
+      ],
+      "outputs": [
+        { "name": "result", "type": "text" }
+      ],
+      "instructions": "Create a new Slack channel.\n\nCreate a public or private channel with the specified name.\n\n**Inputs:**\n- {name}: Channel name (lowercase, no spaces)\n- {is_private}: Whether to create as a private channel (optional, defaults to false)\n\n**Output:** {result} contains the created channel details including the channel ID.",
+      "tools": [],
+      "executionType": "tool",
+      "toolExecutionConfig": {
+        "toolId": "slack_bot-create-channel",
+        "inputMappings": [
+          { "toolParam": "channelName", "skillInputName": "name" },
+          { "toolParam": "isPrivate", "skillInputName": "is_private" }
+        ]
+      }
+    }
+  }
+}

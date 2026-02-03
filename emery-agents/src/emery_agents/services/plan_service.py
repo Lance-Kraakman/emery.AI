@@ -21,7 +21,7 @@ from emery_agents.entities.models.task_ledger import TaskLedger
 from emery_agents.entities.models.context_mapping import ResolvedContext
 
 from .protocols import ModelProviderProtocol, GRPCClient, Tool
-from .tools import CapabilityRegistry
+from emery_agents.tools.capability_registry import CapabilityRegistry
 from emery_agents.ace import StrategyAccumulationService
 from .planning import (
     DSPyPlanGenerator,
@@ -73,7 +73,6 @@ class PlanService:
         goal: Optional[str] = None,
         tools: Optional[List[Tool]] = None,
         managed_agents: Optional[List[Any]] = None,
-        research_tools: Optional[List[Any]] = None,
         skill_inputs: Optional[List[SkillInputDefinition]] = None,
         previous_plan_json: Optional[str] = None,
         user_feedback: Optional[str] = None,
@@ -84,6 +83,7 @@ class PlanService:
         capability_registry: Optional[Any] = None,
         config: Optional[SessionConfig] = None,
         workspace: Optional[WorkspaceContext] = None,
+        memory_context: str = "",
     ) -> PlanGenerationResult:
         """Generate plan using DSPy PlannerModule. Returns plan or clarifying questions."""
         # Build request dataclass (includes all config for plan generation)
@@ -94,7 +94,6 @@ class PlanService:
             conversation_history=conversation_history,
             tools=tools or [],
             managed_agents=managed_agents or [],
-            research_tools=research_tools,
             skill_inputs=list(skill_inputs) if skill_inputs else [],
             skill_outputs=list(skill_outputs) if skill_outputs else [],
             is_template_generation=is_template_generation,
@@ -103,6 +102,7 @@ class PlanService:
             capability_registry=capability_registry,
             config=config,
             workspace=workspace,
+            memory_context=memory_context,
         )
 
         # Delegate to generator (uses capability-based discovery)

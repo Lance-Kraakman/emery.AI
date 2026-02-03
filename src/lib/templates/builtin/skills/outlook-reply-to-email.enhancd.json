@@ -1,0 +1,36 @@
+{
+  "$format": "brain-template",
+  "$version": 1,
+  "metadata": {
+    "name": "Outlook: Reply to Email",
+    "description": "Reply to an email in Microsoft Outlook by providing the message ID and reply text.",
+    "category": "Integrations",
+    "tags": ["outlook", "microsoft", "email", "reply"],
+    "version": "1.0.0",
+    "author": "enhancd.ai"
+  },
+  "template": {
+    "type": "skill",
+    "data": {
+      "name": "Outlook: Reply to Email",
+      "description": "Reply to an email in Microsoft Outlook by providing the message ID and reply text.",
+      "inputs": [
+        { "name": "message_id", "required": true, "type": "text" },
+        { "name": "reply_body", "required": true, "type": "text" }
+      ],
+      "outputs": [
+        { "name": "result", "type": "text" }
+      ],
+      "instructions": "Reply to an existing email in Microsoft Outlook.\n\nProvide the message ID of the email to reply to and the reply body text.\n\n**Inputs:**\n- {message_id}: The ID of the email message to reply to\n- {reply_body}: The text content of your reply\n\n**Output:** {result} contains the reply confirmation.",
+      "tools": [],
+      "executionType": "tool",
+      "toolExecutionConfig": {
+        "toolId": "microsoft_outlook-reply-to-email",
+        "inputMappings": [
+          { "toolParam": "messageId", "skillInputName": "message_id" },
+          { "toolParam": "comment", "skillInputName": "reply_body" }
+        ]
+      }
+    }
+  }
+}

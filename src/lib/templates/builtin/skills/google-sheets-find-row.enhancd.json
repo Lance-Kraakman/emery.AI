@@ -1,0 +1,40 @@
+{
+  "$format": "brain-template",
+  "$version": 1,
+  "metadata": {
+    "name": "Google Sheets: Find Row",
+    "description": "Find rows in a Google Sheets spreadsheet by searching for a value in a specific column.",
+    "category": "Integrations",
+    "tags": ["google-sheets", "spreadsheet", "row", "find", "search"],
+    "version": "1.0.0",
+    "author": "enhancd.ai"
+  },
+  "template": {
+    "type": "skill",
+    "data": {
+      "name": "Google Sheets: Find Row",
+      "description": "Find rows in a Google Sheets spreadsheet by searching for a value in a specific column.",
+      "inputs": [
+        { "name": "spreadsheet_id", "required": true, "type": "text" },
+        { "name": "worksheet_id", "required": true, "type": "text" },
+        { "name": "column", "required": true, "type": "text" },
+        { "name": "search_value", "required": true, "type": "text" }
+      ],
+      "outputs": [
+        { "name": "result", "type": "text" }
+      ],
+      "instructions": "Find a row in a Google Sheets spreadsheet by searching a specific column.\n\nSearch for a value in a specific column and return the matching row.\n\n**Inputs:**\n- {spreadsheet_id}: The Google Sheets spreadsheet ID\n- {worksheet_id}: The worksheet/tab ID\n- {column}: Column letter to search (e.g., \"A\", \"B\", \"C\")\n- {search_value}: The value to search for in the column\n\n**Output:** {result} contains the matching row data.",
+      "tools": [],
+      "executionType": "tool",
+      "toolExecutionConfig": {
+        "toolId": "google_sheets-find-row",
+        "inputMappings": [
+          { "toolParam": "sheetId", "skillInputName": "spreadsheet_id" },
+          { "toolParam": "worksheetId", "skillInputName": "worksheet_id" },
+          { "toolParam": "column", "skillInputName": "column" },
+          { "toolParam": "value", "skillInputName": "search_value" }
+        ]
+      }
+    }
+  }
+}

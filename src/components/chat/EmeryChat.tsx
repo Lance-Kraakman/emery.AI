@@ -32,7 +32,7 @@ import { useOrganizationPlan } from '@/stores/app-state.store'
 import { UnifiedChatInput } from '@/components/shared/UnifiedChatInput'
 import { ChatHistoryDropdown } from './ChatHistoryDropdown'
 import { createChatContextForPage, type ChatContextConfig } from '@/components/layout/types'
-import type { DomainType } from '@/ddd/domain/shared/types/domain-type'
+
 import { useEmery } from '@/contexts/EmeryStoreProvider'
 import { ToolPanel } from './ToolPanel'
 import { useChatHandler } from './ChatProvider'
@@ -71,8 +71,6 @@ export const CHAT_HISTORY_EXPANDED_WIDTH = 'w-80'  // 320px
  */
 
 interface EmeryChatHeaderProps {
-  domainType?: DomainType | 'organizations' | 'general'
-  domainName?: string
   currentChatId?: string
   currentChatModel?: string
   onChatSelect: (chatId: string, model?: string) => void
@@ -84,8 +82,6 @@ interface EmeryChatHeaderProps {
 }
 
 function EmeryChatHeader({
-  domainType,
-  domainName,
   currentChatId,
   currentChatModel,
   onChatSelect,
@@ -157,8 +153,6 @@ function EmeryChatHeader({
           onChatSelect={onChatSelect}
           onNewChat={onNewChat}
           onChatHistoryUpdate={onChatHistoryUpdate}
-          domainType={domainType}
-          domainName={domainName}
           userId={userId}
           organizationId={organizationId}
         />
@@ -490,7 +484,7 @@ function ChatContentWithCanvas({
               })
             }}
             onToolsChange={onToolsChange}
-            placeholder="Ask Emery anything... (type @ to add tools, docs, agents, etc.)"
+            placeholder="Ask enhancd anything... (type @ to add tools, docs, agents, etc.)"
             pendingAttachments={handler.pendingAttachments}
             onAttachmentAdd={handler.addAttachment}
             onAttachmentRemove={handler.removeAttachment}
@@ -655,19 +649,19 @@ export function EmeryChat() {
     handler.setModel?.(model || undefined)
   }
   
-  // Collapsed state - show minimal icon strip with braintable logo
+  // Collapsed state - show minimal icon strip with enhancd logo
   if (chatState === 'collapsed') {
     return (
       <div className={`${CHAT_COLLAPSED_WIDTH} h-full flex flex-col bg-card flex-shrink-0 items-center py-4 gap-4`}>
-        {/* Braintable logo */}
+        {/* enhancd.ai logo */}
         <button
           onClick={() => uiStateActions.toggleChat()}
           className="flex items-center justify-center hover:opacity-80 transition-opacity"
           title="Expand chat"
         >
           <img
-            src="/assets/braintable/logo_logo.png"
-            alt="Braintable"
+            src="/assets/enhancd/logo.svg"
+            alt="enhancd.ai"
             className="h-6 w-6"
           />
         </button>
@@ -750,8 +744,6 @@ export function EmeryChat() {
       {/* Chat Section - dynamic width based on chatWidthMode */}
       <div className={`flex flex-col w-full h-full`}>
         <EmeryChatHeader
-          domainType={chatContext?.domainType}
-          domainName={chatContext?.domainName}
           currentChatId={currentChatId}
           currentChatModel={currentChatModel}
           onChatSelect={handleChatSelect}

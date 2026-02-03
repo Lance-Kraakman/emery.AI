@@ -213,7 +213,7 @@ export async function updateView(
   revalidateUrl?: string
 ): Promise<Result<ViewDTO>> {
   try {
-    const { id, name, description, requiresAuth, filters, sorting, pagination, fieldMappings } = data;
+    const { id, name, description, requiresAuth, filters, sorting, pagination, fieldMappings, viewConfig } = data;
 
     if (!id) {
       return {
@@ -345,6 +345,12 @@ export async function updateView(
         })
       );
       dataSource.setFieldMappings(fieldMappingVOs);
+    }
+
+    // Update viewConfig if provided (used by form config editor)
+    if (viewConfig !== undefined) {
+      const newConfig = ViewConfig.fromJSON(viewConfig as any);
+      dataSource.updateViewConfig(newConfig);
     }
 
     // Get the repository to save directly
@@ -770,12 +776,22 @@ export async function executeView(
 
         const fieldId = fieldNameToIdMap.get(filter.field);
         if (fieldId === undefined) {
-          console.warn(`Field "${filter.field}" not found, skipping filter`);
+          console.warn(`Field "${filter.field}" not found, skipping filter. Available: ${[...fieldNameToIdMap.keys()].join(', ')}`);
           continue;
         }
 
         // Clear value for no-value operators
         const filterValue = noValueOperators.includes(domainOperator) ? undefined : substitutedValue;
+
+        // Diagnostic: log filter mapping details
+        console.log('[executeView] Filter mapped:', {
+          fieldName: filter.field,
+          fieldId,
+          uiOperator: filter.operator,
+          domainOperator,
+          rawValue: filter.value,
+          filterValue,
+        });
 
         runtimeFilters.push(
           FilterConfig.create({
@@ -1287,6 +1303,102 @@ export async function submitFormView(
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to submit form",
+    };
+  }
+}
+
+/**
+ * Update form view configuration
+ *
+ * AIDEV-NOTE: Used by FormConfigFieldRenderer in the Puck sidebar to persist
+ * form configuration changes (field ordering, page management, field settings).
+ */
+export async function updateFormViewConfig(
+  viewId: number,
+  formConfig: {
+    pages: Array<{
+      id: string;
+      title?: string;
+      description?: string;
+      fields: Array<{
+        fieldId: number;
+        order: number;
+        label?: string;
+        helpText?: string;
+        placeholder?: string;
+        required?: boolean;
+        visible?: boolean;
+        conditionalVisibility?: {
+          dependsOn: number;
+          operator: 'equals' | 'not_equals' | 'is_empty' | 'is_not_empty' | 'contains';
+          value?: any;
+        };
+        validationRules?: Array<{ type: 'min' | 'max' | 'pattern' | 'min_length' | 'max_length' | 'email' | 'url' | 'required'; value?: any; message: string }>;
+        allowMultiple?: boolean;
+        maxFiles?: number;
+      }>;
+      order: number;
+    }>;
+    submitButtonText?: string;
+    successMessage?: string;
+    redirectUrl?: string;
+  }
+): Promise<Result<ViewDTO>> {
+  try {
+    if (!viewId) {
+      return { success: false, error: "View ID is required" };
+    }
+
+    const session = await requireResourcePermission("view:manage", "view", viewId);
+    const currentOrg = await requireCurrentOrganization();
+
+    const viewService = getViewApplicationService();
+
+    const existingResult = await viewService.getView(ViewId.fromNumber(viewId));
+    if (!existingResult.success || !existingResult.data) {
+      return { success: false, error: "View not found" };
+    }
+
+    const view = existingResult.data;
+
+    // Build and apply the new form config
+    const newConfig = ViewConfig.createForm(formConfig as any);
+    view.updateViewConfig(newConfig);
+
+    // Save
+    const dataSourceRepository = (viewService as any).dataSourceRepository;
+    const savedView = await dataSourceRepository.save(view);
+
+    // Audit log
+    const auditService = getAuditApplicationService();
+    auditService.logEvent(
+      OrganizationId.fromNumber(currentOrg.id),
+      {
+        eventType: 'database',
+        eventCategory: 'view_crud',
+        eventAction: 'update',
+        actorType: 'user',
+        actorId: session.user.id,
+        actorName: session.user.name || undefined,
+        resourceType: 'view',
+        resourceId: String(viewId),
+        resourceName: savedView.name,
+        parentResourceType: 'table',
+        parentResourceId: String(savedView.tableId.value),
+        eventData: { updatedFields: ['formConfig'] },
+        success: true,
+      }
+    );
+
+    return {
+      success: true,
+      data: ViewMapper.toDTO(savedView),
+    };
+  } catch (error) {
+    console.error("Error updating form view config:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to update form configuration",
     };
   }
 }

@@ -16,19 +16,21 @@ Credential resolution:
 from __future__ import annotations
 
 import logging
+import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import AsyncIterator, Dict, List, Literal, Optional, TypedDict
 
-from ..agents.api import AgentAPIService
+from emery_agents.api import AgentAPIService, SkillAPIService
+from emery_agents.entities.skill_config import SkillConfig
+from emery_agents.tools.execution.dynamic_execution import fetch_skill_execution_config
+from emery_agents.tools.provider import ToolProvider
 from ..agents.executor import AgentExecutor
 from ..credentials import ResolvedCredentials, CredentialSource
-from ..tools.provider import ToolProvider
 from ...entities.execution_context import ExecutionContext
 from ...entities.task import TaskRequest
-from ...grpc.generated import agent_worker_pb2
-from ...grpc.mappers import ProtoMapper
+from ...types import ExecutionMode
 
 logger = logging.getLogger(__name__)
 
@@ -176,11 +178,29 @@ class TaskExecutor:
                 f"[TASK-{task_id[:8]}] Created ToolProvider with {credentials.source} credentials"
             )
 
-            # 3. Build execution context
+            # 3. Pre-fetch skill config from API if task executes a skill
+            # Skills are no longer sent via gRPC proto — fetch from API with resolved credentials
+            pre_fetched_skill = None
+            if (task_data._task_request is not None
+                    and task_data._task_request.skill_name):
+                pre_fetched_skill = await self._fetch_skill_for_task(
+                    skill_id=task_data._task_request.skill_id,
+                    skill_name=task_data._task_request.skill_name,
+                    api_key=credentials.api_key,
+                    org_id=str(task_data.organization_id),
+                )
+                logger.info(
+                    f"[TASK-{task_id[:8]}] Pre-fetched skill config: "
+                    f"{pre_fetched_skill.name if pre_fetched_skill else 'NOT FOUND'}"
+                )
+
+            # 4. Build execution context
             # If we have the original TaskRequest, use AgentExecutor.determine_execution_context
             # which properly handles skills, tools, attachments, etc.
             if task_data._task_request is not None:
-                context = self.agent_executor.determine_execution_context(task_data._task_request)
+                context = self.agent_executor.determine_execution_context(
+                    task_data._task_request, pre_fetched_skill=pre_fetched_skill
+                )
                 # Add model parameters from task_data
                 context.agent_model = task_data.agent_model
                 context.org_model = task_data.org_model
@@ -308,7 +328,6 @@ class TaskExecutor:
             )
 
         # Fallback to environment
-        import os
         api_key = os.getenv("HF_TOKEN", "")
         return ResolvedCredentials(
             api_key=api_key,
@@ -328,7 +347,6 @@ class TaskExecutor:
         """
         if not self.api_service:
             # Fallback to environment
-            import os
             api_key = os.getenv("HF_TOKEN", "")
             return ResolvedCredentials(
                 api_key=api_key,
@@ -388,6 +406,53 @@ class TaskExecutor:
                 return str(api_key) if api_key else None
         return None
 
+    async def _fetch_skill_for_task(
+        self,
+        skill_id: Optional[int],
+        skill_name: str,
+        api_key: str,
+        org_id: str,
+    ) -> Optional[SkillConfig]:
+        """
+        Fetch full skill config from API for task execution.
+
+        Uses skill_id directly when available (sent via proto), falling back
+        to name-based lookup for backwards compatibility with older clients.
+        """
+        try:
+            resolved_skill_id = skill_id
+
+            # Fallback: if no skill_id, look up by name
+            if not resolved_skill_id:
+                service = SkillAPIService(api_key=api_key, organization_id=int(org_id))
+                skill_data = await service.fetch_skill_by_name(skill_name)
+                if not skill_data:
+                    logger.warning(f"Skill '{skill_name}' not found via API")
+                    return None
+                resolved_skill_id = int(skill_data.id)
+
+            # Fetch full execution config (includes steps with agenticConfig.plan)
+            result = fetch_skill_execution_config(resolved_skill_id, api_key, org_id)
+            if result.get("success") is False:
+                logger.warning(
+                    f"Failed to fetch execution config for skill '{skill_name}': "
+                    f"{result.get('error', 'unknown error')}"
+                )
+                return None
+
+            # Extract skill DTO from response (may be at data.skill or data directly)
+            data = result.get("data", {})
+            skill_dto = data.get("skill", data) if isinstance(data, dict) else {}
+            if isinstance(skill_dto, dict) and skill_dto:
+                return SkillConfig.from_api_response(skill_dto)
+
+            logger.warning(f"Empty skill data in execution config for '{skill_name}'")
+            return None
+
+        except Exception as e:
+            logger.error(f"Error fetching skill config for task: {e}")
+            return None
+
     def _build_execution_context(
         self,
         task_data: TaskData,
@@ -398,9 +463,6 @@ class TaskExecutor:
 
         This reuses the same context structure that server.py:ExecuteTask uses.
         """
-        from ...entities.execution_context import ExecutionContext
-        from ...types import ExecutionMode
-
         # Determine execution mode
         if task_data.skill_id:
             mode = ExecutionMode.AUTONOMOUS
@@ -427,20 +489,14 @@ class TaskExecutor:
 
     @staticmethod
     def from_task_request(
-        request: "agent_worker_pb2.TaskRequest",
-        proto_mapper: "ProtoMapper",
+        task_request: TaskRequest,
     ) -> TaskData:
         """
-        Build TaskData from TaskRequest proto.
+        Build TaskData from entity TaskRequest.
 
-        Used by ExecuteTask gRPC handler.
-
-        AIDEV-NOTE: The original task_request is stored for use by
-        AgentExecutor.determine_execution_context which handles full
-        skill parsing, tools, attachments, etc.
+        Used by ExecuteTask gRPC handler. Proto→entity conversion
+        happens at the gRPC boundary before calling this method.
         """
-        task_request: TaskRequest = proto_mapper.task_request_from_proto(request)
-
         # Extract task instruction from instruction_config
         task_text = ""
         if task_request.instruction_config:
@@ -463,7 +519,7 @@ class TaskExecutor:
             task_id=task_request.task_id,
             organization_id=org_id_int,
             agent_id=task_request.agent_id,
-            skill_id=None,  # Will be resolved from skill_name
+            skill_id=task_request.skill_id,
             instructions=instructions,
             skill_inputs=skill_inputs,
             created_by=None,  # Not available in TaskRequest

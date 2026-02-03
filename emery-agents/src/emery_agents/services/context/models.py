@@ -1,13 +1,15 @@
 """
-Session Config and Workspace Context
+Session Config, Workspace Context, and Conversation Models
 
-Provides two focused dataclasses for context management:
+Provides focused dataclasses for context management:
 1. SessionConfig - Auth and identity (immutable, set at session start)
 2. WorkspaceContext - Workspace resources for planner awareness
+3. ConversationMessage - Single message from conversation history
 
 This separates concerns:
 - Config: Who is making the request (org, auth)
 - Context: What resources exist (databases, tables, apps, agents, skills)
+- Conversation: What was said in the current/past sessions
 
 WorkspaceContext gives the planner visibility into existing resources to avoid
 creating duplicates. CapabilityRegistry handles runtime capability routing.
@@ -16,122 +18,47 @@ creating duplicates. CapabilityRegistry handles runtime capability routing.
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-
-@dataclass
-class DatabaseInfo:
-    """Pre-resolved database information for context injection."""
-    name: str
-    id: Optional[str] = None
-    table_count: int = 0
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "name": self.name,
-            "id": self.id,
-            "table_count": self.table_count,
-        }
+from emery_agents.entities.workspace import (
+    WorkspaceDatabase,
+    WorkspaceTable,
+    WorkspacePage,
+    WorkspaceApp,
+    WorkspaceAgent,
+    WorkspaceSkill,
+    WorkspaceView,
+)
 
 
 @dataclass
-class TableInfo:
-    """Pre-resolved table information for context injection."""
-    name: str
-    id: Optional[str] = None
-    database_id: Optional[str] = None
-    database_name: Optional[str] = None
-    field_count: int = 0
-    fields: List[str] = field(default_factory=list)
+class ConversationMessage:
+    """A single message from the conversation history.
 
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "name": self.name,
-            "id": self.id,
-            "database_id": self.database_id,
-            "database_name": self.database_name,
-            "field_count": self.field_count,
-            "fields": self.fields,
-        }
+    Converted from protobuf HistoryMessage at the gRPC boundary.
+    """
+
+    role: str
+    content: str
 
 
-@dataclass
-class PageInfo:
-    """Page information for context injection."""
-    name: str
-    id: Optional[str] = None
-    app_id: Optional[str] = None
+def format_conversation_history(
+    history: Optional[List["ConversationMessage"]],
+    max_messages: int = 10,
+    max_content_length: int = 500,
+) -> str:
+    """Format recent conversation history as a string for prompt injection.
 
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "name": self.name,
-            "id": self.id,
-            "app_id": self.app_id,
-        }
-
-
-@dataclass
-class AppInfo:
-    """Pre-resolved app information for context injection."""
-    name: str
-    id: Optional[str] = None
-    description: str = ""
-    pages: List[PageInfo] = field(default_factory=list)
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "name": self.name,
-            "id": self.id,
-            "description": self.description,
-            "pages": [p.to_dict() for p in self.pages],
-        }
-
-
-@dataclass
-class AgentInfo:
-    """Agent information for context injection."""
-    name: str
-    id: Optional[str] = None
-    description: str = ""
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "name": self.name,
-            "id": self.id,
-            "description": self.description,
-        }
-
-
-@dataclass
-class SkillInfo:
-    """Skill information for context injection."""
-    name: str
-    id: Optional[str] = None
-    description: str = ""
-    agent_id: Optional[str] = None
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "name": self.name,
-            "id": self.id,
-            "description": self.description,
-            "agent_id": self.agent_id,
-        }
-
-
-@dataclass
-class ViewInfo:
-    """Data view information for context injection."""
-    name: str
-    id: Optional[str] = None
-    table_id: Optional[str] = None
-    view_type: str = "grid"
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "name": self.name,
-            "id": self.id,
-            "table_id": self.table_id,
-            "view_type": self.view_type,
-        }
+    Returns last N messages as "role: content" lines, truncated per message.
+    Used by triage, direct execution, and planning nodes.
+    """
+    if not history:
+        return ""
+    recent = history[-max_messages:]
+    parts = []
+    for msg in recent:
+        if msg.content:
+            content = msg.content[:max_content_length]
+            parts.append(f"{msg.role}: {content}")
+    return "\n".join(parts)
 
 
 @dataclass(frozen=True)
@@ -165,12 +92,12 @@ class WorkspaceContext:
     This gives the planner awareness of existing resources to avoid duplicates.
     CapabilityRegistry handles runtime capability routing separately.
     """
-    existing_databases: List[DatabaseInfo] = field(default_factory=list)
-    existing_tables: List[TableInfo] = field(default_factory=list)
-    existing_apps: List[AppInfo] = field(default_factory=list)
-    existing_agents: List[AgentInfo] = field(default_factory=list)
-    existing_skills: List[SkillInfo] = field(default_factory=list)
-    existing_views: List[ViewInfo] = field(default_factory=list)
+    existing_databases: List[WorkspaceDatabase] = field(default_factory=list)
+    existing_tables: List[WorkspaceTable] = field(default_factory=list)
+    existing_apps: List[WorkspaceApp] = field(default_factory=list)
+    existing_agents: List[WorkspaceAgent] = field(default_factory=list)
+    existing_skills: List[WorkspaceSkill] = field(default_factory=list)
+    existing_views: List[WorkspaceView] = field(default_factory=list)
 
     @property
     def has_databases(self) -> bool:
@@ -218,42 +145,59 @@ class WorkspaceContext:
             "has_views": self.has_views,
         }
 
-    def get_database_by_name(self, name: str) -> Optional[DatabaseInfo]:
+    def resource_summary(self) -> str:
+        """Human-readable summary of resource counts."""
+        parts: List[str] = []
+        if self.existing_databases:
+            parts.append(f"{len(self.existing_databases)} database(s)")
+        if self.existing_tables:
+            parts.append(f"{len(self.existing_tables)} table(s)")
+        if self.existing_apps:
+            parts.append(f"{len(self.existing_apps)} app(s)")
+        if self.existing_agents:
+            parts.append(f"{len(self.existing_agents)} agent(s)")
+        if self.existing_skills:
+            parts.append(f"{len(self.existing_skills)} skill(s)")
+        if self.existing_views:
+            parts.append(f"{len(self.existing_views)} view(s)")
+        return ", ".join(parts) if parts else "empty workspace"
+
+    def get_database_by_name(self, name: str) -> Optional[WorkspaceDatabase]:
         """Look up database by name."""
         for db in self.existing_databases:
             if db.name == name:
                 return db
         return None
 
-    def get_table_by_name(self, name: str) -> Optional[TableInfo]:
+    def get_table_by_name(self, name: str) -> Optional[WorkspaceTable]:
         """Look up table by name."""
         for table in self.existing_tables:
             if table.name == name:
                 return table
         return None
 
-    def get_app_by_name(self, name: str) -> Optional[AppInfo]:
+    def get_app_by_name(self, name: str) -> Optional[WorkspaceApp]:
         """Look up app by name."""
         for app in self.existing_apps:
             if app.name == name:
                 return app
         return None
 
-    def get_agent_by_name(self, name: str) -> Optional[AgentInfo]:
+    def get_agent_by_name(self, name: str) -> Optional[WorkspaceAgent]:
         """Look up agent by name."""
         for agent in self.existing_agents:
             if agent.name == name:
                 return agent
         return None
 
-    def get_skill_by_name(self, name: str) -> Optional[SkillInfo]:
+    def get_skill_by_name(self, name: str) -> Optional[WorkspaceSkill]:
         """Look up skill by name."""
         for skill in self.existing_skills:
             if skill.name == name:
                 return skill
         return None
 
-    def get_view_by_name(self, name: str) -> Optional[ViewInfo]:
+    def get_view_by_name(self, name: str) -> Optional[WorkspaceView]:
         """Look up view by name."""
         for view in self.existing_views:
             if view.name == name:

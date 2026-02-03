@@ -15,24 +15,25 @@ from .mappers.message_mapper import build_conversation_messages, has_images, ext
 from .mappers import format_clarifying_questions
 from ..infrastructure.workspace_sync import WorkspaceSync
 from ..services.models.provider import ModelProvider
-from ..services.tools.loader import UnifiedToolLoader
+from emery_agents.tools.loader import UnifiedToolLoader
 from ..services.context.session_manager import SessionManager
 from ..services.agents.factory import AgentFactory
-from ..services.analysis.token_usage import TokenUsageExtractor
 from ..services.skills.executor import SkillExecutorService
 from ..services.plan_service import PlanService
 from ..services.execution.events import PlanCreatedEvent, AwaitingClarificationEvent
 from ..orchestrators.nodes.planning import generate_plan_node
 from ..orchestrators.state import PlanExecuteState
 from ..orchestrators.runtime import RuntimeContext
-from ..services.tools.provider import ToolProvider
+from emery_agents.tools.provider import ToolProvider
 from ..entities.models.plan import Plan, SkillInputDefinition, SkillOutputDefinition
 from .message_processor import extract_file_attachments
+from .mappers.proto_mapper import tool_configs_from_proto, history_messages_from_proto, token_usage_to_proto
 from .agent_streaming import AgentStreamingHandler
 from .coordinator_streaming import CoordinatorStreamingHandler
 from .response_converter import convert_response_to_proto
 from .agents.agent_models import get_builder_descriptors
-from ..services.tools.capability_registry import CapabilityRegistry
+from emery_agents.tools.capability_registry import CapabilityRegistry
+from emery_agents.tools.capability_bootstrap import populate_system_agents
 from ..services.tasks import TaskExecutor
 from ..services.tasks.task_executor import TaskData
 from ..services.agents.executor import AgentExecutor
@@ -80,6 +81,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             self.agent_factory: Optional[AgentFactory] = AgentFactory(self.model_provider)
             # CapabilityRegistry replaces ManagedAgentsFactory.capability_registry
             self.capability_registry = CapabilityRegistry()
+            populate_system_agents(self.capability_registry)
 
             self.skill_executor_service = SkillExecutorService(
                 tool_loader=self.tool_loader,
@@ -91,10 +93,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 model_provider=self.model_provider,
             )
 
-            self._coordinator_handler = CoordinatorStreamingHandler(
-                plan_service=self.plan_service,
-                model_provider=self.model_provider,
-            )
+            self._coordinator_handler = CoordinatorStreamingHandler()
             self._agent_handler = AgentStreamingHandler(
                 session_manager=self.session_manager,
                 model_provider=self.model_provider,
@@ -246,8 +245,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             tools_to_use = []
 
             if agent_config:
-                tools_to_use = list(agent_config.tools) if agent_config.tools else []
-                # AIDEV-NOTE: Skills removed from gRPC - discovered dynamically via skill_crud tool
+                # Convert proto ToolConfig to entity ToolConfig at gRPC boundary
+                proto_tools = list(agent_config.tools) if agent_config.tools else []
+                tools_to_use = tool_configs_from_proto(proto_tools)
 
                 logger.info(f"📨 AgentConfig tools received: {len(tools_to_use)} tools")
                 if tools_to_use:
@@ -300,7 +300,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 session_id=session_id,
                 user_id=user_id,
                 org_id=org_id,
-                conversation_history=request.conversation_history,
+                conversation_history=history_messages_from_proto(list(request.conversation_history)),
                 agent_config=agent_config,  # Pass agent_config for skill execution
                 user_api_key=effective_api_key,  # Resolved credentials (user or agent)
                 file_attachments=file_attachments,  # File attachments for skill context injection
@@ -352,7 +352,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
             processing_time = int((time.time() - start_time) * 1000)
             handler_token_usage = self._agent_handler.last_token_usage
-            token_usage_proto = TokenUsageExtractor.to_proto(handler_token_usage)
+            token_usage_proto = token_usage_to_proto(handler_token_usage)
             model_used = getattr(handler_token_usage, 'model_name', '') if handler_token_usage else ''
 
             completion_metadata = {
@@ -499,6 +499,14 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     logger.info(f"📋 GeneratePlan: Enhanced instructions with {len(answers_dict)} clarifications")
 
                 await self.session_manager.remove_plan_session(session_id)
+
+            # Append previous plan + user feedback for regeneration
+            if previous_plan_json:
+                task_instructions = f"{task_instructions}\n\nPrevious plan (revise based on feedback):\n{previous_plan_json}"
+            if user_feedback:
+                task_instructions = f"{task_instructions}\n\nUser feedback on previous plan:\n{user_feedback}"
+            if previous_plan_json or user_feedback:
+                logger.info("📋 GeneratePlan: Enhanced instructions with regeneration context")
 
             yield _make_progress("Analyzing instructions...", "analyzing")
 

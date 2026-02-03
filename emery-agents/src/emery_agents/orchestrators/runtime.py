@@ -13,16 +13,12 @@ via Python closures when the session graph is created.
 from dataclasses import dataclass, field
 from typing import Any, List, Optional
 
+from PIL import Image as PILImage
 
-@dataclass
-class ConversationMessage:
-    """A single message from the conversation history.
+from emery_agents.services.context import ConversationMessage, format_conversation_history
 
-    Converted from protobuf HistoryMessage at the gRPC boundary.
-    """
-
-    role: str
-    content: str
+# Re-export so existing `from ..runtime import ConversationMessage` still works
+__all__ = ["ConversationMessage", "format_conversation_history", "RuntimeContext"]
 
 
 @dataclass
@@ -58,3 +54,4 @@ class RuntimeContext:
     workspace_id: Optional[str] = None
     memory_service: Optional[Any] = None
     plan_file_repository: Optional[Any] = None
+    images: List[PILImage.Image] = field(default_factory=list)

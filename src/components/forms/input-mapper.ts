@@ -20,6 +20,28 @@ import { RelationInput } from './inputs/RelationInput';
 import { ReadOnlyInput } from './inputs/ReadOnlyInput';
 
 /**
+ * Theme class overrides for form inputs rendered inside a themed context (e.g. Puck page).
+ * When provided, CSS module classes override the default shadcn/ui Tailwind styling.
+ */
+export interface InputThemeClasses {
+  fieldGroup?: string;
+  label?: string;
+  input?: string;
+  select?: string;
+  checkbox?: string;
+  error?: string;
+}
+
+/**
+ * Per-field form configuration passed from FormFieldConfig to input components.
+ * Used for field-level overrides like file upload settings.
+ */
+export interface FormFieldOptions {
+  allowMultiple?: boolean;
+  maxFiles?: number;
+}
+
+/**
  * Common props for all input components
  */
 export interface BaseInputProps {
@@ -30,6 +52,8 @@ export interface BaseInputProps {
   placeholder?: string;
   required?: boolean;
   disabled?: boolean;
+  themeClasses?: InputThemeClasses;
+  formFieldOptions?: FormFieldOptions;
 }
 
 /**

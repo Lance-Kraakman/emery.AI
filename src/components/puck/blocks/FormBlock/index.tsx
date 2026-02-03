@@ -15,14 +15,13 @@ import FormBlock, { type FormBlockProps } from "./FormBlock";
 import { getFormViewConfiguration } from "@/app/actions/views";
 import { getTables } from "@/app/actions/tables";
 import { createViewManagementField } from "../../custom-fields";
+import { FormConfigFieldRenderer } from "../../fields/FormConfigFieldRenderer";
 
 export const FormBlockConfig: ComponentConfig<FormBlockProps> = {
   label: "Form",
 
   fields: {
     // View Selection - Inline creation and editing support
-    // AIDEV-NOTE: Using custom view management field for inline form view creation.
-    // Users can create/edit form views directly from the Puck sidebar.
     viewId: createViewManagementField({
       supportedViewTypes: ['form'],
       label: 'Form View',
@@ -30,6 +29,39 @@ export const FormBlockConfig: ComponentConfig<FormBlockProps> = {
   },
 
   defaultProps: {},
+
+  /**
+   * Conditionally show form config field when a view is selected and resolved
+   */
+  resolveFields: (data, { fields }) => {
+    const viewId = data.props.viewId;
+    const formConfig = data.props._formConfig;
+    const tableFields = data.props._tableFields;
+
+    // Always show view selector
+    const baseFields: Record<string, any> = {
+      viewId: fields.viewId,
+    };
+
+    // Show form configuration field when view is selected and data resolved
+    if (viewId && formConfig && tableFields) {
+      baseFields.formConfig = {
+        type: 'custom' as const,
+        label: 'Form Configuration',
+        render: (renderProps: any) => {
+          return FormConfigFieldRenderer({
+            ...renderProps,
+            formConfig,
+            tableFields,
+            viewId,
+            field: { label: 'Form Configuration' },
+          });
+        },
+      };
+    }
+
+    return baseFields;
+  },
 
   /**
    * Resolve data on the server

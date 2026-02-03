@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import { ChevronLeft, ChevronRight, Check } from 'lucide-react';
+import type { InputThemeClasses } from './input-mapper';
 
 // Re-export types for use in other components
 export type { TableField, FormPageConfig } from './FormPage';
@@ -49,6 +50,7 @@ export interface MultiPageFormProps {
     successTitle?: string;
     successMessage?: string;
   };
+  inputThemeClasses?: InputThemeClasses;
 }
 
 export function MultiPageForm({
@@ -60,6 +62,7 @@ export function MultiPageForm({
   customButton,
   customProgress,
   customStyles = {},
+  inputThemeClasses,
 }: MultiPageFormProps) {
   // Use custom components or fallback to shadcn/ui with wrappers
   const ButtonComponent = customButton || (({ variant, ...props }: any) => (
@@ -254,6 +257,7 @@ export function MultiPageForm({
           formData={formData}
           errors={errors}
           onChange={handleFieldChange}
+          themeClasses={inputThemeClasses}
         />
 
         {/* Form-level error */}
@@ -264,16 +268,26 @@ export function MultiPageForm({
         )}
 
         {/* Navigation Buttons */}
-        <div className={customStyles.buttonGroup || "flex items-center justify-between pt-4"}>
-          <ButtonComponent
-            type="button"
-            variant="secondary"
-            onClick={handlePrevious}
-            disabled={isFirstPage || isSubmitting}
-          >
-            <ChevronLeft className="h-4 w-4 mr-1" />
-            Previous
-          </ButtonComponent>
+        <div className={customStyles.buttonGroup || cn(
+          "flex items-center pt-4",
+          sortedPages.length > 1 ? "justify-between" : "justify-end"
+        )}>
+          {/* Previous button: only for multi-page forms, hidden on first page */}
+          {sortedPages.length > 1 && (
+            isFirstPage ? (
+              <div />
+            ) : (
+              <ButtonComponent
+                type="button"
+                variant="secondary"
+                onClick={handlePrevious}
+                disabled={isSubmitting}
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                Previous
+              </ButtonComponent>
+            )
+          )}
 
           {isLastPage ? (
             <ButtonComponent

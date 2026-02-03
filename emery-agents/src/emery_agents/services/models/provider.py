@@ -174,9 +174,20 @@ class ModelProvider:
         """
         Configure DSPy global settings with the specified model.
 
-        Args:
-            model_id: Model ID to use as default LM
+        DEPRECATED: This uses dspy.settings.configure() which is a global singleton
+        that locks to the first asyncio.Task. Use get_dspy_lm() + dspy.context() instead:
+
+            lm = provider.get_dspy_lm(model_id)
+            with dspy.context(lm=lm):
+                result = module(...)
         """
+        import warnings
+        warnings.warn(
+            "configure_dspy() uses global dspy.settings.configure() which fails under "
+            "concurrent async tasks. Use get_dspy_lm() + dspy.context() instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         lm = self.get_dspy_lm(model_id)
         dspy.settings.configure(lm=lm)
         logger.info(f"Configured DSPy with model: {model_id or 'default'}")

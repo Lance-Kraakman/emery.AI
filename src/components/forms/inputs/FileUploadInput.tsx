@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Upload, X, File } from 'lucide-react';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
+import type { InputThemeClasses, FormFieldOptions } from '../input-mapper';
 
 interface FileUploadInputProps {
   field: FieldDTO;
@@ -20,6 +21,8 @@ interface FileUploadInputProps {
   label?: string;
   required?: boolean;
   disabled?: boolean;
+  themeClasses?: InputThemeClasses;
+  formFieldOptions?: FormFieldOptions;
 }
 
 export function FileUploadInput({
@@ -29,15 +32,18 @@ export function FileUploadInput({
   label,
   required,
   disabled,
+  themeClasses,
+  formFieldOptions,
 }: FileUploadInputProps) {
   const inputLabel = label || field.name;
   const isRequired = required ?? field.required ?? false;
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Extract file config from metadata
+  // Extract file config from metadata, with form-level overrides
   const allowedTypes = (field.metadata as any)?.allowedTypes as string[] | undefined;
   const maxSize = (field.metadata as any)?.maxSize as number | undefined; // in bytes
-  const multiple = (field.metadata as any)?.multiple as boolean | undefined;
+  const multiple = formFieldOptions?.allowMultiple ?? (field.metadata as any)?.multiple as boolean | undefined;
+  const maxFiles = formFieldOptions?.maxFiles as number | undefined;
 
   const files = value ? (Array.isArray(value) ? value : [value]) : [];
 
@@ -58,7 +64,14 @@ export function FileUploadInput({
       }
     }
 
-    onChange(multiple ? selectedFiles : selectedFiles[0]);
+    // Enforce maxFiles limit
+    let filesToAdd = selectedFiles;
+    if (multiple && maxFiles && selectedFiles.length > maxFiles) {
+      filesToAdd = selectedFiles.slice(0, maxFiles);
+      alert(`Maximum ${maxFiles} files allowed. Only the first ${maxFiles} were added.`);
+    }
+
+    onChange(multiple ? filesToAdd : filesToAdd[0]);
   };
 
   const removeFile = (index: number) => {
@@ -75,10 +88,10 @@ export function FileUploadInput({
   };
 
   return (
-    <div className="space-y-2">
-      <Label htmlFor={`field-${field.id}`}>
+    <div className={themeClasses?.fieldGroup || "space-y-2"}>
+      <Label htmlFor={`field-${field.id}`} className={themeClasses?.label || undefined}>
         {inputLabel}
-        {isRequired && <span className="text-destructive ml-1">*</span>}
+        {isRequired && <span className={themeClasses?.error || "text-destructive ml-1"}>*</span>}
       </Label>
 
       <div className="space-y-2">

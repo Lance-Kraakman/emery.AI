@@ -188,7 +188,7 @@ export function AgenticConfig({
               </div>
             </div>
             <Collapsible>
-              <CollapsibleTrigger className="flex items-center text-[10px] text-blue-600 hover:text-blue-800">
+              <CollapsibleTrigger className="flex items-center text-[10px] text-primary hover:text-primary/80">
                 View steps <ChevronDown className="h-3 w-3 ml-1" />
               </CollapsibleTrigger>
               <CollapsibleContent>

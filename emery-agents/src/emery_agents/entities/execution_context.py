@@ -10,12 +10,10 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any, Callable
 
 from emery_agents.entities.models.context_mapping import ResolvedContext
-from ..types import AgentId, OrganizationId, ExecutionMode
-from ..tools.tool_modes import ToolMode
+from ..types import AgentId, OrganizationId, ExecutionMode, ToolMode
 
-# Import from generated protobuf (ImageAttachment/FileAttachment are simple message types)
-from ..grpc.generated.agent_worker_pb2 import ImageAttachment, FileAttachment
-from .skill_config import SkillConfigDTO
+from .message import ImageAttachment, FileAttachment
+from .skill_config import SkillConfig
 
 
 # Constants
@@ -52,11 +50,11 @@ class ExecutionContext:
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS
 
     # Skill configuration for skill-based execution
-    skill: Optional[SkillConfigDTO] = None
+    skill: Optional[SkillConfig] = None
 
     # Available skills for delegation (skill-as-tool)
     # When set, these skills can be invoked as tools by the executing agent
-    available_skills: List[SkillConfigDTO] = field(default_factory=list)
+    available_skills: List[SkillConfig] = field(default_factory=list)
 
     # Model selection hierarchy
     agent_model: Optional[str] = None

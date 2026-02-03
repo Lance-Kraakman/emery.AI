@@ -267,9 +267,9 @@ export interface UpdateMatchConfig {
  */
 export interface WriteConfig {
   targetTableId: number;
-  rowAction: 'create' | 'update';
+  rowAction: 'create' | 'update' | 'upsert';
   fieldMappings: WriteFieldMapping[];
-  updateMatch?: UpdateMatchConfig;   // For update: which field to match
+  updateMatch?: UpdateMatchConfig;   // For update/upsert: which field to match
 }
 
 // =============================================================================
@@ -420,8 +420,9 @@ export interface FieldMapping {
 export interface TableMapping {
   order: number;                        // Execution order (1, 2, 3...)
   targetTableId: number;                // Which table to write to
-  rowAction: 'create' | 'update';       // Create or update row
+  rowAction: 'create' | 'update' | 'upsert';  // Create, update, or upsert row
   rowIdSource?: RowIdSource;            // For update mode - typed source for row ID
+  matchFieldIds?: number[];              // For upsert mode - target fields to match on (composite key)
   mappings: FieldMapping[];             // Field mappings for this table
   displayFieldId?: number;              // Field to use for relation display value
   mode?: 'single_row' | 'multi_row';    // Per-table mode (overrides config default)
@@ -512,6 +513,7 @@ export interface Skill {
   readonly content?: MessagePart[]; // Skill-level attachments (images, files, text)
   readonly model?: string | null; // Optional: Override model for this skill
   readonly agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
+  readonly allowNetwork?: boolean; // Whether bash tool has network access (for git/code skills)
   readonly executionType?: SkillExecutionType; // 'agentic' (default), 'agent', 'operation', 'tool', or 'write'
   readonly taskModelConfig?: TaskModelConfig; // Config for 'operation' execution
   readonly toolExecutionConfig?: ToolExecutionConfig; // Config for 'tool' execution
@@ -539,6 +541,7 @@ export interface CreateSkillProps {
   content?: MessagePart[];
   model?: string | null; // Optional: Override model for this skill
   agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
+  allowNetwork?: boolean; // Whether bash tool has network access (for git/code skills)
   executionType?: SkillExecutionType; // 'agentic' (default), 'agent', 'operation', 'tool', or 'write'
   taskModelConfig?: TaskModelConfig; // Config for 'operation' execution
   toolExecutionConfig?: ToolExecutionConfig; // Config for 'tool' execution
@@ -561,6 +564,7 @@ export interface UpdateSkillProps {
   content?: MessagePart[];
   model?: string | null; // Optional: Override model for this skill
   agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
+  allowNetwork?: boolean; // Whether bash tool has network access (for git/code skills)
   executionType?: SkillExecutionType; // 'agentic' (default), 'agent', 'operation', 'tool', or 'write'
   taskModelConfig?: TaskModelConfig | null; // Config for 'operation' execution (null to clear)
   toolExecutionConfig?: ToolExecutionConfig | null; // Config for 'tool' execution (null to clear)
@@ -603,21 +607,6 @@ export class SkillEntity {
     // Steps are required for agent (step-based) execution
     if (executionType === 'agent' && (!props.steps || props.steps.length === 0)) {
       throw new Error('Steps are required for agent (step-based) execution');
-    }
-
-    // Task model config is required for operation execution
-    if (executionType === 'operation' && !props.taskModelConfig) {
-      throw new Error('Task model configuration is required for operation execution');
-    }
-
-    // Tool execution config is required for tool execution
-    if (executionType === 'tool' && !props.toolExecutionConfig) {
-      throw new Error('Tool execution configuration is required for tool execution');
-    }
-
-    // Write config is required for write execution
-    if (executionType === 'write' && !props.writeConfig) {
-      throw new Error('Write configuration is required for write execution');
     }
 
     // Validate input names
@@ -745,13 +734,6 @@ export class SkillEntity {
    */
   static isAgentScoped(skill: Skill): boolean {
     return skill.agentId !== null;
-  }
-
-  /**
-   * Check if skill uses operation execution (bypasses LLM orchestration)
-   */
-  static isOperation(skill: Skill): boolean {
-    return skill.executionType === 'operation';
   }
 
   /**

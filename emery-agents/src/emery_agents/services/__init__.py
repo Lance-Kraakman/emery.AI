@@ -9,7 +9,6 @@ Submodules:
 - models/: LLM/Model management
 - analysis/: Analysis utilities (gap analyzer, token usage, embeddings)
 - http/: HTTP and external communication
-- tools/: Tool loading and capabilities
 - data/: Data processing and storage
 - skills/: Skill execution
 - agents/: Agent-related services
@@ -25,14 +24,12 @@ from .models import ModelProvider, TokenUsage
 # Context (context and configuration)
 from .context import ContextResolver, ContextSyncService, ContextSyncServiceFactory
 
-# Tools (tool loading and capabilities)
-from .tools import UnifiedToolLoader, CapabilityRegistry
-
 # Data (data processing and storage)
 from .data import ResultStorageService, ResultStorageServiceFactory, StoredResult
 
 # Agents (agent-related services)
-from .agents import AgentExecutor, AgentAPIService, AgentData, SkillData
+# AgentExecutor omitted: import directly from services.agents.executor (heavy, circular if eager)
+from .agents import AgentAPIService
 
 # Tasks (unified task execution)
 from .tasks import TaskExecutor
@@ -69,8 +66,6 @@ from ..orchestrators import create_session_graph, create_session_plan_only_graph
 __all__ = [
     "ModelProvider",
     "TokenUsage",
-    "UnifiedToolLoader",
-    "AgentExecutor",
     "ContextResolver",
     "ContextSyncService",
     "ContextSyncServiceFactory",
@@ -93,9 +88,6 @@ __all__ = [
     "TaskLedger",
     "create_ledger_from_plan",
     "AgentAPIService",
-    "AgentData",
-    "SkillData",
-    "CapabilityRegistry",
     # Orchestrators
     "create_session_graph",
     "create_session_plan_only_graph",

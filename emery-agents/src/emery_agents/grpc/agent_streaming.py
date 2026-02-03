@@ -11,7 +11,7 @@ import logging
 from pathlib import Path
 from typing import AsyncIterator, Optional, List, Dict, Any, Tuple
 
-from ..reasoning.tools.execution import SkillTool
+from emery_agents.tools.execution import SkillTool
 from ..tools.tool_modes import filter_tools_for_mode, ToolMode
 from ..services.agents.executor import AgentExecutor
 from ..services.execution.state_machine import (
@@ -22,17 +22,18 @@ from ..entities.execution_context import ExecutionContext
 from ..types import ExecutionMode
 from ..entities.models.plan import Plan, create_plan
 from ..entities.models.capability import Capability, CapabilityType
-from ..services.tools.provider import ToolProvider
+from emery_agents.tools.provider import ToolProvider
 from ..services.context.session_manager import SessionManager
 from ..services.models.provider import ModelProvider
-from ..services.tools.loader import UnifiedToolLoader
+from emery_agents.tools.loader import UnifiedToolLoader
 from ..services.skills.executor import SkillExecutorService
 from ..services.plan_service import PlanService
 # HuggingFaceInferenceClient removed - skills now executed dynamically via API
 from ..utils.error_classifier import classify_error
 from ..utils.error_messages import ErrorSeverity
-from ..utils.mention_parser import parse_agent_mention  # parse_skill_invocation removed - skills loaded via API
+from ..utils.mention_parser import parse_agent_mention, parse_skill_invocation
 from .mention_routing import handle_agent_mention_routing
+from .skill_mention_routing import handle_skill_mention_routing
 from .message_processor import (
     extract_user_api_key_from_tools,
     extract_images_from_message,
@@ -47,11 +48,15 @@ from .response_types import (
     StreamResponseDict,
 )
 from .generated import agent_worker_pb2
+from .mappers.proto_mapper import tool_configs_from_proto
 from .coordinator_streaming import CoordinatorStreamingHandler
 
 from .mappers.message_types import ChatMessage
+from ..entities.tool_config import ToolConfig
+from ..entities.message import FileAttachment, HistoryMessage
 from .agents.agent_models import ChatAgent, AgentDescriptor, get_builder_descriptors
-from ..services.tools.capability_registry import CapabilityRegistry
+from emery_agents.tools.capability_registry import CapabilityRegistry
+from emery_agents.tools.capability_bootstrap import populate_system_agents
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +97,8 @@ class AgentStreamingHandler:
         self.coordinator_handler = coordinator_handler
         # Capability registry for agent/skill discovery (replaces managed_agents_factory.capability_registry)
         self.capability_registry = capability_registry or CapabilityRegistry()
+        if not capability_registry:
+            populate_system_agents(self.capability_registry)
 
         # Token usage from last execution (for ProcessMessage to capture)
         self.last_token_usage = None
@@ -99,17 +106,17 @@ class AgentStreamingHandler:
     async def stream_response(
         self,
         conversation_messages: List['ChatMessage'],
-        tools: List['agent_worker_pb2.ToolConfig'],
+        tools: List[ToolConfig],
         domain_context: Optional['agent_worker_pb2.ChatContext'] = None,
         org_model: Optional[str] = None,
         has_images: bool = False,
         session_id: Optional[str] = None,
         user_id: Optional[str] = None,
         org_id: Optional[int] = None,
-        conversation_history: Optional[List] = None,
+        conversation_history: Optional[List[HistoryMessage]] = None,
         agent_config: Optional['agent_worker_pb2.AgentConfig'] = None,
         user_api_key: Optional[str] = None,
-        file_attachments: Optional[List['agent_worker_pb2.FileAttachment']] = None,
+        file_attachments: Optional[List[FileAttachment]] = None,
         workspace_path: Optional[Path] = None,
         workspace_id: Optional[str] = None,
         workspace_prefix: Optional[str] = None,
@@ -213,6 +220,18 @@ class AgentStreamingHandler:
                     yield event
                 return  # Agent mention handled
 
+            # === @SKILL MENTION DETECTION ===
+            skill_invocation = parse_skill_invocation(current_task)
+            if skill_invocation:
+                logger.info(f"🎯 Detected @skill mention: '{skill_invocation.skill_name}' with {len(skill_invocation.inputs)} inputs")
+                async for event in handle_skill_mention_routing(
+                    skill_invocation=skill_invocation,
+                    tool_provider=tool_provider,
+                    org_model=org_model,
+                ):
+                    yield event
+                return  # Skill mention handled
+
             # Stream agent execution with coordinator
             async for event in self._execute_with_streaming(
                 agent=agent,
@@ -251,7 +270,7 @@ class AgentStreamingHandler:
         session_id: Optional[str],
         user_id: Optional[str],
         org_id: Optional[int],
-        conversation_history: Optional[List],
+        conversation_history: Optional[List[HistoryMessage]],
         workspace_path: Optional[Path] = None,
         workspace_id: Optional[str] = None,
         workspace_prefix: Optional[str] = None,
@@ -328,7 +347,7 @@ class AgentStreamingHandler:
         org_model: Optional[str],
         agent_config: Optional['agent_worker_pb2.AgentConfig'],
         file_attachments: Optional[List],
-        conversation_history: Optional[List],
+        conversation_history: Optional[List[HistoryMessage]],
         workspace_path: Optional[Path] = None,
         user_id: Optional[str] = None,
         workspace_type: Optional[str] = None,
@@ -417,6 +436,8 @@ class AgentStreamingHandler:
                 workspace_type=workspace_type,
                 workspace_id=workspace_id,
                 runtime_skill_inputs=skill_inputs,
+                images=images,
+                has_images=len(images) > 0,
             ):
                 if isinstance(event, dict):
                     yield event  # type: ignore[misc]  # Coordinator returns compatible dicts
@@ -431,7 +452,7 @@ class AgentStreamingHandler:
         try:
             from ..reasoning.config import get_dspy_lm
             from ..reasoning.modules.executor import ExecutorModule
-            from ..reasoning.tools import create_all_tools
+            from emery_agents.tools.factories import create_all_tools
 
             import dspy
 
@@ -623,13 +644,13 @@ class AgentStreamingHandler:
 
     def _convert_tools_to_smolagents(
         self,
-        tools: List['agent_worker_pb2.ToolConfig'],
+        tools: List[ToolConfig],
         agent_config: Optional['agent_worker_pb2.AgentConfig'] = None,
         org_model: Optional[str] = None,
         org_id: Optional[int] = None,
         api_key: Optional[str] = None
     ) -> List[Any]:
-        """Convert protobuf ToolConfig objects to smolagents tools."""
+        """Convert entity ToolConfig objects to smolagents tools."""
         if not self.tool_loader:
             logger.error("❌ Tool registry not available - tools cannot be loaded")
             return []

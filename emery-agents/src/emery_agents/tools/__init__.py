@@ -1,27 +1,23 @@
-"""Tool modules for emery-agents.
-
-AIDEV-NOTE: Most tools have been migrated to reasoning/tools/.
-This module now only exports tool_modes utilities.
 """
+Tool factories, loading, and capability management.
 
-from .tool_modes import (
-    ToolMode,
-    is_read_only_tool,
-    filter_tools_for_mode,
-    get_planning_tool_restrictions,
-    get_execution_tool_permissions,
-    READ_ONLY_TOOLS,
-    MUTATION_ONLY_TOOLS,
-    MUTATION_METHODS,
-)
+All tool definitions live here:
+- crud/          CRUD tools for platform resources
+- execution/     Bash, skill execution, dynamic dispatch
+- integrations/  External integrations (Pipedream, API tools, etc.)
+- analysis/      Security reports, research, classification
+- output/        Plan/step/recovery output collectors
+- discovery.py   Discovery tools (workspace, capabilities, web search)
 
-__all__ = [
-    "ToolMode",
-    "is_read_only_tool",
-    "filter_tools_for_mode",
-    "get_planning_tool_restrictions",
-    "get_execution_tool_permissions",
-    "READ_ONLY_TOOLS",
-    "MUTATION_ONLY_TOOLS",
-    "MUTATION_METHODS",
-]
+Infrastructure:
+- factories.py          create_crud_tools(), create_all_tools()
+- loader.py             UnifiedToolLoader (metadata-driven)
+- provider.py           ToolProvider (auth-scoped tool creation)
+- capability_registry.py CapabilityRegistry (semantic capability search)
+- tool_modes.py         ToolMode filtering (read-only vs mutation)
+
+Import from submodules directly:
+    from emery_agents.tools.factories import create_all_tools
+    from emery_agents.tools.loader import UnifiedToolLoader
+    from emery_agents.tools.capability_registry import CapabilityRegistry
+"""

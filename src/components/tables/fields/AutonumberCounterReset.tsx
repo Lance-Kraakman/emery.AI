@@ -63,7 +63,7 @@ export function AutonumberCounterReset({ field, tableId }: AutonumberCounterRese
               setResetValue(currentNextValue.toString())
               setShowResetConfirm(true)
             }}
-            className="text-blue-600 hover:text-blue-700"
+            className="text-primary hover:text-primary/80"
           >
             <RotateCcw className="w-3 h-3 mr-1" />
             Reset Counter

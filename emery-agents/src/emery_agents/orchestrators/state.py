@@ -14,6 +14,7 @@ from typing import TypedDict, Annotated, List, Optional, Any, Dict
 
 from ..entities.models.plan import Plan, PlanStep
 from ..entities.models.task_ledger import TaskLedger
+from ..services.context import WorkspaceContext
 
 
 class PlanExecuteState(TypedDict, total=False):
@@ -29,12 +30,16 @@ class PlanExecuteState(TypedDict, total=False):
 
     # === Input (set once at graph invocation) ===
     task: str
+    memory_context: Optional[str]  # Relevant memories (passed separately to planner)
 
     # Session config (auth, identity) — all primitives, safe to checkpoint
     api_key: str
     org_id: str
     org_model: Optional[str]
     organization_id: Optional[int]
+
+    # Workspace context — avoids duplicate WorkspaceAPI.get_all() calls
+    workspace_context: Optional[WorkspaceContext]
 
     # Skill template generation (for GeneratePlan RPC)
     skill_inputs: Optional[List[Dict[str, Any]]]  # Input DEFINITIONS (schema)
@@ -52,6 +57,10 @@ class PlanExecuteState(TypedDict, total=False):
     # Task ledger for evaluation
     ledger: Optional[TaskLedger]
 
+    # === Reflection state (Reflexion pattern) ===
+    step_reflections: Dict[str, Dict[str, Any]]  # step_id → StepReflection.model_dump()
+    reflection_summary: str  # Rolling summary of insights, max ~1500 chars
+
     # === Execution tracking (primitives) ===
     replan_count: int
     max_replans: int
@@ -63,6 +72,11 @@ class PlanExecuteState(TypedDict, total=False):
     # === Event accumulator (append-only for UI streaming) ===
     events: Annotated[List[Any], operator.add]
 
+    # === Triage (set by triage node) ===
+    execution_mode: Optional[str]  # "direct", "plan", "respond"
+    triage_reasoning: Optional[str]
+    triage_context: Optional[str]  # Key findings from triage research
+
     # === Output ===
     response: Optional[str]  # Final answer (signals "done" to routing)
     error: Optional[str]
@@ -73,10 +87,13 @@ class PlanExecuteState(TypedDict, total=False):
 DEFAULT_STATE: Dict[str, Any] = {
     # Input
     "task": "",
+    "memory_context": None,
     "api_key": "",
     "org_id": "",
     "org_model": None,
     "organization_id": None,
+    # Workspace context
+    "workspace_context": None,
     # Skill template generation
     "skill_inputs": None,
     "skill_outputs": None,
@@ -88,6 +105,9 @@ DEFAULT_STATE: Dict[str, Any] = {
     "stored_plan": None,
     "step_outcomes": {},
     "ledger": None,
+    # Reflection state
+    "step_reflections": {},
+    "reflection_summary": "",
     # Execution tracking
     "replan_count": 0,
     "max_replans": 3,
@@ -96,6 +116,10 @@ DEFAULT_STATE: Dict[str, Any] = {
     "clarifying_questions": [],
     # Event accumulator
     "events": [],
+    # Triage
+    "execution_mode": None,
+    "triage_reasoning": None,
+    "triage_context": None,
     # Output
     "response": None,
     "error": None,

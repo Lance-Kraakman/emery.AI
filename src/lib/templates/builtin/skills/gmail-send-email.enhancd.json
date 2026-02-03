@@ -1,0 +1,42 @@
+{
+  "$format": "brain-template",
+  "$version": 1,
+  "metadata": {
+    "name": "Gmail: Send Email",
+    "description": "Send an email via Gmail. Provide recipients, subject, and body.",
+    "category": "Integrations",
+    "tags": ["gmail", "email", "send", "google"],
+    "version": "1.0.0",
+    "author": "enhancd.ai"
+  },
+  "template": {
+    "type": "skill",
+    "data": {
+      "name": "Gmail: Send Email",
+      "description": "Send an email via Gmail. Provide recipients, subject, and body.",
+      "inputs": [
+        { "name": "to", "required": true, "type": "text" },
+        { "name": "subject", "required": true, "type": "text" },
+        { "name": "body", "required": true, "type": "text" },
+        { "name": "cc", "required": false, "type": "text" },
+        { "name": "bcc", "required": false, "type": "text" }
+      ],
+      "outputs": [
+        { "name": "result", "type": "text" }
+      ],
+      "instructions": "Send an email through Gmail.\n\nProvide the recipient email address(es), subject line, and email body. Optionally include CC and BCC recipients.\n\n**Inputs:**\n- {to}: Recipient email address(es)\n- {subject}: Email subject line\n- {body}: Email body content (plain text)\n- {cc}: CC recipients (optional)\n- {bcc}: BCC recipients (optional)\n\n**Output:** {result} contains the sent message details including the message ID.",
+      "tools": [],
+      "executionType": "tool",
+      "toolExecutionConfig": {
+        "toolId": "gmail-send-email",
+        "inputMappings": [
+          { "toolParam": "to", "skillInputName": "to" },
+          { "toolParam": "subject", "skillInputName": "subject" },
+          { "toolParam": "body", "skillInputName": "body" },
+          { "toolParam": "cc", "skillInputName": "cc" },
+          { "toolParam": "bcc", "skillInputName": "bcc" }
+        ]
+      }
+    }
+  }
+}

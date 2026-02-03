@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Trash2, Bot, Sparkles, GitBranch } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -25,10 +25,9 @@ interface EditSkillViewProps {
 }
 
 /**
- * Full-page skill editor view with floating panels.
- * Left panel: name + save status
- * Right panel: config + model/delete/share when no node selected
- * Canvas fills full height. Auto-saves on changes.
+ * Full-page skill editor view with header bar and editor canvas.
+ * Header: name, save status, model selector, mode toggle, actions.
+ * Canvas fills remaining height. Auto-saves on changes.
  */
 export function EditSkillView({ agent, skill }: EditSkillViewProps) {
   const router = useRouter();
@@ -51,6 +50,24 @@ export function EditSkillView({ agent, skill }: EditSkillViewProps) {
     onDeleteRedirect: `/agents/${agent.id}`,
   });
 
+  // Container-based responsive behavior
+  const headerRef = useRef<HTMLDivElement>(null);
+  const [isNarrow, setIsNarrow] = useState(false);
+
+  useEffect(() => {
+    const updateNarrow = () => {
+      if (headerRef.current) {
+        setIsNarrow(headerRef.current.offsetWidth < 750);
+      }
+    };
+    updateNarrow();
+    const observer = new ResizeObserver(updateNarrow);
+    if (headerRef.current) {
+      observer.observe(headerRef.current);
+    }
+    return () => observer.disconnect();
+  }, []);
+
   // Handle back navigation based on returnTo param
   const handleBack = () => {
     if (returnTo?.startsWith('org-chart')) {
@@ -64,21 +81,25 @@ export function EditSkillView({ agent, skill }: EditSkillViewProps) {
   };
 
   return (
-    <div className="h-full relative">
-      {/* Floating Header - centered, fits content */}
-      <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20">
-        <div className="flex items-center gap-2 px-4 py-2 bg-background/50 backdrop-blur-sm border rounded-full shadow-sm">
+    <div className="h-full flex flex-col">
+      {/* Header Bar */}
+      <div ref={headerRef} className="shrink-0 z-20 flex items-center gap-2 px-4 py-2 bg-background/80 backdrop-blur-sm border-b overflow-hidden min-w-0">
         {/* Back button when navigated from org chart */}
         {returnTo?.startsWith('org-chart') && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleBack}
-            className="gap-1 h-8 -ml-1 shrink-0"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Org Chart
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleBack}
+                className="gap-1 h-8 -ml-1 shrink-0"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                {!isNarrow && <span>Org Chart</span>}
+              </Button>
+            </TooltipTrigger>
+            {isNarrow && <TooltipContent>Back to Org Chart</TooltipContent>}
+          </Tooltip>
         )}
 
         <Bot className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -87,10 +108,10 @@ export function EditSkillView({ agent, skill }: EditSkillViewProps) {
           value={formData.name}
           onChange={(e) => setFormData({ ...formData, name: e.target.value })}
           placeholder="Skill name..."
-          className="h-8 w-[180px] text-sm bg-transparent border-0 focus-visible:ring-1"
+          className="h-8 min-w-0 max-w-[240px] flex-1 text-sm bg-transparent border-0 focus-visible:ring-1"
         />
 
-        <SaveStatusIndicator status={saveStatus} />
+        <SaveStatusIndicator status={saveStatus} className="shrink-0" />
 
         <ModelSelector
           value={formData.model}
@@ -100,24 +121,24 @@ export function EditSkillView({ agent, skill }: EditSkillViewProps) {
           inheritLabel="Inherit"
           inheritFromModel={agent.defaultModel || 'IBM Granite 3.3 8B'}
           requiredCapabilities={['toolCalling']}
-          className="w-[180px] h-8"
+          className="w-auto max-w-[180px] h-8 shrink"
         />
 
         {/* Mode Toggle - non-destructive switching */}
-        <div className="flex items-center gap-0.5 p-0.5 bg-muted rounded-lg h-8">
+        <div className="flex items-center gap-0.5 p-0.5 bg-muted rounded-lg h-8 shrink-0">
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant={formData.executionType !== 'agent' ? 'default' : 'ghost'}
                 size="sm"
                 onClick={() => setFormData({ ...formData, executionType: 'agentic' })}
-                className="h-7 px-1.5 lg:px-2.5 gap-1.5"
+                className={`h-7 gap-1.5 ${isNarrow ? 'px-1.5' : 'px-2.5'}`}
               >
                 <Sparkles className="h-3.5 w-3.5" />
-                <span className="hidden lg:inline">Agentic</span>
+                {!isNarrow && <span>Agentic</span>}
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="bottom" className="lg:hidden">Agentic</TooltipContent>
+            {isNarrow && <TooltipContent side="bottom">Agentic</TooltipContent>}
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -125,26 +146,31 @@ export function EditSkillView({ agent, skill }: EditSkillViewProps) {
                 variant={formData.executionType === 'agent' ? 'default' : 'ghost'}
                 size="sm"
                 onClick={() => setFormData({ ...formData, executionType: 'agent' })}
-                className="h-7 px-1.5 lg:px-2.5 gap-1.5"
+                className={`h-7 gap-1.5 ${isNarrow ? 'px-1.5' : 'px-2.5'}`}
               >
                 <GitBranch className="h-3.5 w-3.5" />
-                <span className="hidden lg:inline">Workflow</span>
+                {!isNarrow && <span>Workflow</span>}
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="bottom" className="lg:hidden">Workflow</TooltipContent>
+            {isNarrow && <TooltipContent side="bottom">Workflow</TooltipContent>}
           </Tooltip>
         </div>
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleDelete}
-          disabled={isDeleting}
-          className="gap-1.5 h-8 shrink-0"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-          {isDeleting ? 'Deleting...' : 'Delete'}
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="gap-1.5 h-8 shrink-0"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              {!isNarrow && <span>{isDeleting ? 'Deleting...' : 'Delete'}</span>}
+            </Button>
+          </TooltipTrigger>
+          {isNarrow && <TooltipContent>{isDeleting ? 'Deleting...' : 'Delete'}</TooltipContent>}
+        </Tooltip>
         <ShareButton
           resourceType="skill"
           resourceId={skill.id}
@@ -153,7 +179,6 @@ export function EditSkillView({ agent, skill }: EditSkillViewProps) {
           size="sm"
         />
       </div>
-    </div>
 
       {/* Full-height Editor */}
       <SkillEditor
@@ -163,7 +188,7 @@ export function EditSkillView({ agent, skill }: EditSkillViewProps) {
         skillId={skill.id}
         organizationTier={organizationTier}
         availableSkills={availableSkills}
-        hasFloatingHeader={true}
+        hasFloatingHeader={false}
       />
 
       {/* Share Dialog */}

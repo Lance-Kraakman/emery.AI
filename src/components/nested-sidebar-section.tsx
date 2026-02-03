@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { LucideIcon, Plus, ChevronRight, ChevronDown, FileText, LayoutTemplate } from "lucide-react"
+import { LucideIcon, Plus, ChevronRight, LayoutTemplate } from "lucide-react"
 import {
   Collapsible,
   CollapsibleContent,
@@ -26,11 +26,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 import { SidebarItemActions } from "./sidebar-item-actions"
 import { InlineRename } from "./inline-rename"
 
 interface NestedSidebarSectionProps<TParent, TChild> {
   icon: LucideIcon
+  childIcon?: LucideIcon
   label: string
   parents: TParent[]
   pathname: string | null
@@ -72,6 +74,7 @@ interface NestedSidebarSectionProps<TParent, TChild> {
 
 export function NestedSidebarSection<TParent, TChild>({
   icon: Icon,
+  childIcon: ChildIcon,
   label,
   parents,
   pathname,
@@ -125,17 +128,19 @@ export function NestedSidebarSection<TParent, TChild>({
     setRenamingChildKey(null)
   }
   return (
-    <Collapsible defaultOpen={defaultOpen}>
+    <Collapsible defaultOpen={defaultOpen} className="group/section">
       <SidebarGroup className="py-0">
         <SidebarGroupLabel asChild className="text-[11px] text-sidebar-foreground/60">
           <CollapsibleTrigger>
-            <Icon className="h-4 w-4" />
+            <span className="shrink-0 flex items-center">
+              <ChevronRight className="h-3 w-3 transition-transform duration-200 group-data-[state=open]/section:rotate-90" />
+            </span>
             <span className="group-data-[collapsible=icon]:hidden">{label}</span>
           </CollapsibleTrigger>
         </SidebarGroupLabel>
         <CollapsibleContent className="group-data-[collapsible=icon]:hidden">
           <SidebarGroupContent>
-            <SidebarMenu className="gap-0.5">
+            <SidebarMenu className="gap-0 ml-1 border-l border-sidebar-border pl-2">
               {parents.map((parent) => {
                 const parentId = getParentId(parent)
                 const children = getChildren(parent)
@@ -159,24 +164,23 @@ export function NestedSidebarSection<TParent, TChild>({
                         </div>
                       ) : (
                         <div className="flex items-center w-full">
-                          <CollapsibleTrigger className="flex-1">
-                            <SidebarMenuButton asChild isActive={isParentActive(parent, pathname)} className="h-6">
-                              <div className="flex items-center justify-between w-full">
-                                <Link href={getParentHref(parent)} className="flex-1">
-                                  <span className="group-data-[collapsible=icon]:hidden">
-                                    {getParentName(parent)}
-                                  </span>
-                                </Link>
-                                <div className="flex items-center gap-1">
-                                  {isOpen ? (
-                                    <ChevronDown className="h-4 w-4 group-data-[collapsible=icon]:hidden" />
-                                  ) : (
-                                    <ChevronRight className="h-4 w-4 group-data-[collapsible=icon]:hidden" />
-                                  )}
-                                </div>
-                              </div>
-                            </SidebarMenuButton>
-                          </CollapsibleTrigger>
+                          <SidebarMenuButton asChild isActive={isParentActive(parent, pathname)} size="sm" className="flex-1">
+                            <Link
+                              href={getParentHref(parent)}
+                              onClick={(e) => { if (isOpen) e.preventDefault(); onToggle(parentId); }}
+                            >
+                              <ChevronRight
+                                className={cn(
+                                  "h-3 w-3 transition-transform duration-200",
+                                  isOpen && "rotate-90"
+                                )}
+                              />
+                              <Icon className="h-4 w-4 shrink-0" />
+                              <span className="group-data-[collapsible=icon]:hidden">
+                                {getParentName(parent)}
+                              </span>
+                            </Link>
+                          </SidebarMenuButton>
                           {hasParentActions && (
                             <SidebarItemActions
                               onRename={onRenameParent ? () => setRenamingParentId(parentId) : undefined}
@@ -190,7 +194,7 @@ export function NestedSidebarSection<TParent, TChild>({
                         </div>
                       )}
                       <CollapsibleContent className="group-data-[collapsible=icon]:hidden">
-                        <SidebarMenuSub className="gap-0.5">
+                        <SidebarMenuSub>
                           {children?.map((child) => {
                             const childKey = getChildKey(child)
                             const isRenamingChild = renamingChildKey === childKey
@@ -211,10 +215,10 @@ export function NestedSidebarSection<TParent, TChild>({
                                       asChild
                                       size="sm"
                                       isActive={isChildActive(child, parent, pathname)}
-                                      className="h-6 flex-1"
+                                      className="flex-1"
                                     >
                                       <Link href={getChildHref(child, parent)}>
-                                        <FileText className="h-3 w-3 group-data-[collapsible=icon]:hidden" />
+                                        {ChildIcon && <ChildIcon className="h-3.5 w-3.5 shrink-0" />}
                                         <span className="group-data-[collapsible=icon]:hidden">
                                           {getChildName(child)}
                                         </span>
@@ -242,7 +246,8 @@ export function NestedSidebarSection<TParent, TChild>({
                                 <DropdownMenuTrigger asChild>
                                   <Button
                                     variant="ghost"
-                                    className="w-full justify-start h-6 px-2 text-xs group-data-[collapsible=icon]:hidden"
+                                    size="xs"
+                                    className="w-full justify-start group-data-[collapsible=icon]:hidden"
                                     disabled={isCreating}
                                   >
                                     <Plus className="h-3 w-3" />
@@ -265,7 +270,8 @@ export function NestedSidebarSection<TParent, TChild>({
                             ) : (
                               <Button
                                 variant="ghost"
-                                className="w-full justify-start h-6 px-2 text-xs group-data-[collapsible=icon]:hidden"
+                                size="xs"
+                                    className="w-full justify-start group-data-[collapsible=icon]:hidden"
                                 onClick={() => onAddChild(parentId)}
                                 disabled={isCreating}
                               >
@@ -287,7 +293,8 @@ export function NestedSidebarSection<TParent, TChild>({
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
-                      className="w-full justify-start h-6 px-2 text-sm mt-0.5 group-data-[collapsible=icon]:hidden"
+                      size="xs"
+                      className="w-full justify-start mt-0.5 group-data-[collapsible=icon]:hidden"
                       disabled={isCreating}
                     >
                       <Plus className="h-4 w-4" />
@@ -308,7 +315,8 @@ export function NestedSidebarSection<TParent, TChild>({
               ) : (
                 <Button
                   variant="ghost"
-                  className="w-full justify-start h-6 px-2 text-sm mt-0.5 group-data-[collapsible=icon]:hidden"
+                  size="xs"
+                      className="w-full justify-start mt-0.5 group-data-[collapsible=icon]:hidden"
                   onClick={onAddParent}
                   disabled={isCreating}
                 >

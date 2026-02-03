@@ -113,15 +113,15 @@ class AppStack(Stack):
         # Domain and certificate configuration per environment
         domain_config = {
             "production": {
-                "domain": "braintable.app",
+                "domain": "enhancd.ai",
                 "certificate_arn": "arn:aws:acm:us-east-1:034165313651:certificate/c95eb22e-f4d8-4874-b381-f7a2cdaecc1a"
             },
             "staging": {
-                "domain": "staging.braintable.app",
+                "domain": "staging.enhancd.ai",
                 "certificate_arn": "arn:aws:acm:us-east-1:772302459598:certificate/3cb8f028-6cfc-404f-bd9c-315ee0f77a1d"
             },
             "dev": {
-                "domain": "dev.braintable.app",
+                "domain": "dev.enhancd.ai",
                 "certificate_arn": "arn:aws:acm:us-east-1:463735866328:certificate/2d76beac-68ca-4e75-8cb2-29c4e61b195c"
             },
         }

@@ -51,15 +51,15 @@ export function CategoryFilters({
             ? cn(
                 categoryColors[category],
                 'ring-1 ring-offset-1 shadow-sm',
-                category === ReferenceCategory.DOC && 'ring-blue-400',
-                category === ReferenceCategory.FILE && 'ring-green-400',
+                category === ReferenceCategory.DOC && 'ring-primary/40',
+                category === ReferenceCategory.FILE && 'ring-success/40',
                 category === ReferenceCategory.AGENT && 'ring-purple-400',
                 category === ReferenceCategory.TABLE && 'ring-orange-400',
                 category === ReferenceCategory.DATABASE && 'ring-gray-400',
                 category === ReferenceCategory.SKILL && 'ring-pink-400'
               )
             : 'text-muted-foreground bg-muted hover:bg-accent hover:text-accent-foreground',
-          isFocused && 'ring-2 ring-blue-500 ring-offset-1'
+          isFocused && 'ring-2 ring-ring ring-offset-1'
         )}
         title={categoryInfo.description}
       >

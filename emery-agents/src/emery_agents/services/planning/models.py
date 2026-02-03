@@ -19,11 +19,11 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 from emery_agents.entities.models.context_mapping import ResolvedContext
 from emery_agents.entities.models.plan import Plan, SkillInputDefinition, SkillOutputDefinition
 from emery_agents.services.protocols import Tool, ManagedAgent
-from emery_agents.services.tools import CapabilityRegistry
+from emery_agents.tools.capability_registry import CapabilityRegistry
 from emery_agents.services.context import SessionConfig, WorkspaceContext
 
 if TYPE_CHECKING:
-    from emery_agents.orchestrators.runtime import ConversationMessage
+    from emery_agents.services.context import ConversationMessage
 
 
 @dataclass(frozen=True)
@@ -61,7 +61,6 @@ class PlanGenerationRequest:
     # Available resources
     tools: List[Tool] = field(default_factory=list)
     managed_agents: List[ManagedAgent] = field(default_factory=list)
-    research_tools: Optional[List[Tool]] = None
 
     # Template generation mode (for reusable skills with {{ variable }} placeholders)
     skill_inputs: List[SkillInputDefinition] = field(default_factory=list)
@@ -80,6 +79,10 @@ class PlanGenerationRequest:
 
     # Pre-resolved workspace state (agents, tables - eliminates discovery calls)
     workspace: Optional[WorkspaceContext] = None
+
+    # Memory context (relevant memories, passed separately from task)
+    memory_context: str = ""
+
 
 
 @dataclass

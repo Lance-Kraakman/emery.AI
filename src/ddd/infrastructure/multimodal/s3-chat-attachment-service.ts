@@ -52,7 +52,7 @@ export class S3ChatAttachmentService {
    * Check if we should use encryption (real AWS S3 vs MinIO/dev)
    */
   private shouldUseEncryption(): boolean {
-    const customEndpoint = process.env.AWS_ENDPOINT_URL
+    const customEndpoint = process.env.S3_ENDPOINT_URL
     return !customEndpoint
   }
 

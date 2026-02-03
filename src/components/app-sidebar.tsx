@@ -6,8 +6,9 @@ import { usePathname } from "next/navigation"
 import {
   AppWindow,
   Bot,
+  ChevronRight,
   Database,
-  Settings,
+  Table2,
   Users,
   Workflow,
   Plug,
@@ -17,6 +18,7 @@ import {
   ScrollText,
   LayoutTemplate,
   Globe,
+  ShieldCheck,
 } from "lucide-react"
 
 import {
@@ -453,16 +455,16 @@ export function AppSidebar({
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="border-b p-4">
+      <SidebarHeader className="border-b px-2 py-2">
         <div className="flex items-center justify-between">
           {isCollapsed ? (
             <Button
               variant="ghost"
               size="icon"
               onClick={toggleSidebar}
-              className="h-12 w-12"
+              className="h-8 w-8"
             >
-              <img src="/assets/braintable/logo_logo.png" alt="BrainTable" className="h-6 w-6" />
+              <img src="/assets/enhancd/logo.svg" alt="enhancd.ai" className="h-6 w-6" />
             </Button>
           ) : (
             <EmeryOrganizationModal isCollapsed={isCollapsed} />
@@ -471,8 +473,8 @@ export function AppSidebar({
         </div>
       </SidebarHeader>
 
-      <SidebarContent>
-        {/* Organization */}
+      {/* Organization - fixed at top, not scrollable */}
+      <div className="flex-shrink-0 border-b border-sidebar-border">
         <SidebarGroup>
           <SidebarMenu>
             <SidebarMenuItem>
@@ -488,10 +490,13 @@ export function AppSidebar({
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarGroup>
+      </div>
 
+      <SidebarContent>
         {/* Apps */}
         <NestedSidebarSection<AppData, PageData>
-          icon={FileText}
+          icon={AppWindow}
+          childIcon={FileText}
           label="Apps"
           parents={apps}
           pathname={pathname}
@@ -606,6 +611,7 @@ export function AppSidebar({
         {/* Data - Databases with nested tables */}
         <NestedSidebarSection
           icon={Database}
+          childIcon={Table2}
           label="Data"
           parents={databases}
           pathname={pathname}
@@ -615,7 +621,7 @@ export function AppSidebar({
           onToggle={toggleDatabase}
           getParentId={(db) => db.id}
           getParentName={(db) => db.name}
-          getParentHref={() => `/data`}
+          getParentHref={(db) => db.tables?.[0] ? `/data/${db.tables[0].id}` : `/data`}
           isParentActive={(db, path) => {
             // Database is active if any of its tables are selected
             const tables = db.tables || []
@@ -650,116 +656,130 @@ export function AppSidebar({
           onDeleteChild={handleDeleteTable}
         />
 
-        {/* Settings */}
-        <Collapsible defaultOpen={pathname?.startsWith("/connections") || pathname?.startsWith("/organization/settings") || pathname?.startsWith("/settings") || pathname?.startsWith("/templates")}>
+      </SidebarContent>
+
+      {/* Settings - fixed at bottom, expands upward */}
+      <div className="flex-shrink-0 border-t border-sidebar-border">
+        <Collapsible defaultOpen={pathname?.startsWith("/connections") || pathname?.startsWith("/organization/settings") || pathname?.startsWith("/settings") || pathname?.startsWith("/templates")} className="group/settings">
           <SidebarGroup>
             <SidebarGroupLabel asChild>
               <CollapsibleTrigger>
-                <Settings className="h-4 w-4" />
+                <span className="shrink-0 flex items-center">
+                  <ChevronRight className="h-3 w-3 transition-transform duration-200 group-data-[state=open]/settings:rotate-90" />
+                </span>
                 <span className="group-data-[collapsible=icon]:hidden">Settings</span>
               </CollapsibleTrigger>
             </SidebarGroupLabel>
             <CollapsibleContent className="group-data-[collapsible=icon]:hidden">
               <SidebarGroupContent>
-                <SidebarMenu className="gap-0.5">
-                  <SidebarMenuItem>
-                    <SidebarMenuButton asChild isActive={pathname === "/templates"} className="h-6">
-                      <Link href="/templates">
-                        <LayoutTemplate className="h-4 w-4" />
-                        <span className="group-data-[collapsible=icon]:hidden">Templates</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton asChild isActive={pathname === "/connections"} className="h-6">
-                      <Link href="/connections">
-                        <Plug className="h-4 w-4" />
-                        <span className="group-data-[collapsible=icon]:hidden">Connections</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={pathname === "/organization/settings/permissions"}
-                      className="h-6"
-                    >
-                      <Link href="/organization/settings/permissions">
-                        <Users className="h-4 w-4" />
-                        <span className="group-data-[collapsible=icon]:hidden">Permissions</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={pathname === "/organization/settings/audit-log"}
-                      className="h-6"
-                    >
-                      <Link href="/organization/settings/audit-log">
-                        <ScrollText className="h-4 w-4" />
-                        <span className="group-data-[collapsible=icon]:hidden">Audit Log</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={pathname === "/organization/settings/published-agents"}
-                      className="h-6"
-                    >
-                      <Link href="/organization/settings/published-agents">
-                        <Globe className="h-4 w-4" />
-                        <span className="group-data-[collapsible=icon]:hidden">Published Agents</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton asChild isActive={pathname === "/settings/billing"} className="h-6">
-                      <Link href="/settings/billing">
-                        <CreditCard className="h-4 w-4" />
-                        <span className="group-data-[collapsible=icon]:hidden">Billing</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton asChild isActive={pathname === "/settings/system"} className="h-6">
-                      <Link href="/settings/system">
-                        <SlidersHorizontal className="h-4 w-4" />
-                        <span className="group-data-[collapsible=icon]:hidden">System</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                </SidebarMenu>
+                <div className="max-h-[40vh] overflow-y-auto">
+                  <SidebarMenu className="gap-0 ml-1 border-l border-sidebar-border pl-2">
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild isActive={pathname === "/templates"} size="sm">
+                        <Link href="/templates">
+                          <LayoutTemplate className="h-4 w-4" />
+                          <span className="group-data-[collapsible=icon]:hidden">Templates</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild isActive={pathname === "/connections"} size="sm">
+                        <Link href="/connections">
+                          <Plug className="h-4 w-4" />
+                          <span className="group-data-[collapsible=icon]:hidden">Connections</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={pathname === "/organization/settings/permissions"}
+                        size="sm"
+                      >
+                        <Link href="/organization/settings/permissions">
+                          <Users className="h-4 w-4" />
+                          <span className="group-data-[collapsible=icon]:hidden">Permissions</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={pathname === "/organization/settings/security"}
+                        size="sm"
+                      >
+                        <Link href="/organization/settings/security">
+                          <ShieldCheck className="h-4 w-4" />
+                          <span className="group-data-[collapsible=icon]:hidden">Security</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={pathname === "/organization/settings/audit-log"}
+                        size="sm"
+                      >
+                        <Link href="/organization/settings/audit-log">
+                          <ScrollText className="h-4 w-4" />
+                          <span className="group-data-[collapsible=icon]:hidden">Audit Log</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={pathname === "/organization/settings/published-agents"}
+                        size="sm"
+                      >
+                        <Link href="/organization/settings/published-agents">
+                          <Globe className="h-4 w-4" />
+                          <span className="group-data-[collapsible=icon]:hidden">Published Agents</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild isActive={pathname === "/settings/billing"} size="sm">
+                        <Link href="/settings/billing">
+                          <CreditCard className="h-4 w-4" />
+                          <span className="group-data-[collapsible=icon]:hidden">Billing</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild isActive={pathname === "/settings/system"} size="sm">
+                        <Link href="/settings/system">
+                          <SlidersHorizontal className="h-4 w-4" />
+                          <span className="group-data-[collapsible=icon]:hidden">System</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  </SidebarMenu>
+                </div>
               </SidebarGroupContent>
             </CollapsibleContent>
           </SidebarGroup>
         </Collapsible>
-      </SidebarContent>
+      </div>
 
-      <SidebarFooter className="border-t p-4">
+      <SidebarFooter className="border-t px-2 py-1.5">
         <Popover>
           <PopoverTrigger asChild>
-            <Button variant="ghost" className="w-full justify-start gap-4 p-2 group-data-[collapsible=icon]:justify-center">
-              <Avatar className="h-10 w-10">
+            <Button variant="ghost" className="w-full justify-start gap-2 px-1.5 py-1 h-auto group-data-[collapsible=icon]:justify-center">
+              <Avatar className="h-6 w-6">
                 <AvatarImage
                   src={sessionData?.user?.image || undefined}
                   alt={sessionData?.user?.name || "User"}
                 />
-                <AvatarFallback className="text-xs">
+                <AvatarFallback className="text-[10px]">
                   {sessionData?.user?.name?.charAt(0).toUpperCase() ||
                     sessionData?.user?.email?.charAt(0).toUpperCase() ||
                     "U"}
                 </AvatarFallback>
               </Avatar>
-              <div className="flex flex-col items-start text-left overflow-hidden min-w-0 group-data-[collapsible=icon]:hidden">
-                <span className="text-base font-semibold text-foreground">
-                  {sessionData?.user?.name || "User"}
-                </span>
-                <span className="text-sm text-muted-foreground truncate max-w-full">
-                  {sessionData?.user?.email}
-                </span>
-              </div>
+              <span className="text-xs font-medium truncate group-data-[collapsible=icon]:hidden">
+                {sessionData?.user?.name || "User"}
+              </span>
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-56 p-0" side="top" align="end">
@@ -790,7 +810,7 @@ export function AppSidebar({
               <Button
                 variant="ghost"
                 size="sm"
-                className="w-full justify-start gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                className="w-full justify-start gap-2 text-destructive hover:text-destructive/80 hover:bg-destructive/10"
                 onClick={() => signOut({ callbackUrl: "/auth/signin" })}
               >
                 <LogOut className="h-4 w-4" />

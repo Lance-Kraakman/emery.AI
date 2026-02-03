@@ -84,7 +84,7 @@ export default async function PublicPage({ params }: PublicPageProps) {
             </p>
             <a
               href={`/public/${orgSlug}/${appSlug}`}
-              className="text-blue-600 hover:text-blue-500 underline"
+              className="text-primary hover:text-primary/80 underline"
             >
               Back to app
             </a>

@@ -11,6 +11,7 @@ import React, { useState } from 'react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
+import type { InputThemeClasses } from '../input-mapper';
 
 interface BooleanInputProps {
   field: FieldDTO;
@@ -20,6 +21,7 @@ interface BooleanInputProps {
   onChange?: (value: boolean) => void;
   label?: string;
   disabled?: boolean;
+  themeClasses?: InputThemeClasses;
 }
 
 export function BooleanInput({
@@ -30,6 +32,7 @@ export function BooleanInput({
   onChange,
   label,
   disabled,
+  themeClasses,
 }: BooleanInputProps) {
   const inputLabel = label || field.name;
 
@@ -46,7 +49,7 @@ export function BooleanInput({
   };
 
   return (
-    <div className="flex items-center space-x-2">
+    <div className={themeClasses?.checkbox ? themeClasses.checkbox : "flex items-center space-x-2"}>
       {/* Hidden input for form submission */}
       {name && (
         <input type="hidden" name={name} value={currentValue ? 'true' : 'false'} />
@@ -59,7 +62,7 @@ export function BooleanInput({
       />
       <Label
         htmlFor={`field-${field.id}`}
-        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+        className={themeClasses?.label || "text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"}
       >
         {inputLabel}
       </Label>

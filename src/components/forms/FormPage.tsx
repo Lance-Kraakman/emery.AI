@@ -11,6 +11,7 @@
 import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { getInputComponentForField, getDefaultValueForField } from './input-mapper';
+import type { InputThemeClasses } from './input-mapper';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
 
 // Types matching the domain layer FormViewConfig
@@ -32,6 +33,8 @@ export interface FormPageField {
     value?: any;
     message: string;
   }>;
+  allowMultiple?: boolean;
+  maxFiles?: number;
 }
 
 // Re-export TableField type for use in other components
@@ -61,6 +64,7 @@ export interface FormPageProps {
   errors: Record<string, string>;
   onChange: (fieldName: string, value: any) => void;
   className?: string;
+  themeClasses?: InputThemeClasses;
 }
 
 export function FormPage({
@@ -70,6 +74,7 @@ export function FormPage({
   errors,
   onChange,
   className,
+  themeClasses,
 }: FormPageProps) {
   // Create a map of field IDs to table fields for quick lookup
   const tableFieldMap = useMemo(() => {
@@ -140,6 +145,11 @@ export function FormPage({
     // Get the appropriate input component for this field type
     const InputComponent = getInputComponentForField(tableField as FieldDTO);
 
+    // Build form field options for file upload overrides
+    const formFieldOptions = (fieldConfig.allowMultiple !== undefined || fieldConfig.maxFiles !== undefined)
+      ? { allowMultiple: fieldConfig.allowMultiple, maxFiles: fieldConfig.maxFiles }
+      : undefined;
+
     return (
       <div key={tableField.id} className="w-full">
         <InputComponent
@@ -149,9 +159,11 @@ export function FormPage({
           label={fieldConfig.label || tableField.name}
           placeholder={fieldConfig.placeholder}
           required={isRequired}
+          themeClasses={themeClasses}
+          formFieldOptions={formFieldOptions}
         />
         {fieldError && (
-          <p className="text-sm text-destructive mt-1">{fieldError}</p>
+          <p className={themeClasses?.error || "text-sm text-destructive mt-1"}>{fieldError}</p>
         )}
         {fieldConfig.helpText && !fieldError && (
           <p className="text-sm text-muted-foreground mt-1">{fieldConfig.helpText}</p>

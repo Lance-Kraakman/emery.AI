@@ -115,27 +115,37 @@ async def proto_parts_to_content(
                 logger.warning("Skipping image, continuing with text-only message")
 
         elif part.HasField('file'):
-            # Process file (PDF, audio, document) and extract text
+            # Process file (PDF, Word, Excel, audio) and extract content
             file_url = part.file.url
             mime_type = part.file.mime_type
             filename = part.file.filename
             logger.info(f"Processing file: {filename} ({mime_type})")
 
             try:
-                # Extract text from file
-                extracted_text = await process_file(file_url, mime_type, filename)
-                content_parts.append(TextContentPart(
-                    type="text",
-                    text=extracted_text
-                ))
-                logger.info(f"Successfully extracted text from file: {len(extracted_text)} chars")
+                result = await process_file(file_url, mime_type, filename)
+
+                # Add extracted text content
+                if result.text:
+                    content_parts.append(TextContentPart(
+                        type="text",
+                        text=result.text
+                    ))
+                    logger.info(f"Extracted text from file: {len(result.text)} chars")
+
+                # Add page images (scanned PDFs → vision model)
+                if result.images:
+                    for img in result.images:
+                        content_parts.append(ImageContentPart(
+                            type="image",
+                            image=img
+                        ))
+                    logger.info(f"Added {len(result.images)} page images from scanned file")
+
             except Exception as e:
                 logger.error(f"Failed to process file: {str(e)}")
-                logger.warning("Skipping file, continuing with message")
-                # Add error note to message
                 content_parts.append(TextContentPart(
                     type="text",
-                    text=f"[File: {filename}] (Processing failed: {str(e)})"
+                    text=f'<file_content filename="{filename}" type="error">\n(Processing failed: {str(e)})\n</file_content>'
                 ))
 
     # Always return list format (no string optimization)
@@ -163,13 +173,21 @@ def has_images(message_parts: List[agent_worker_pb2.MessagePart]) -> bool:
     """
     Check if any message part contains an image.
 
+    Detects both direct image_url parts and file parts with image mime types
+    (e.g., images uploaded as file attachments).
+
     Args:
         message_parts: List of protobuf MessagePart objects
 
     Returns:
         True if images present, False otherwise
     """
-    return any(part.HasField('image_url') for part in message_parts)
+    for part in message_parts:
+        if part.HasField('image_url'):
+            return True
+        if part.HasField('file') and part.file.mime_type.startswith('image/'):
+            return True
+    return False
 
 
 async def build_conversation_messages(

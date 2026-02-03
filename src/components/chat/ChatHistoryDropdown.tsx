@@ -41,7 +41,6 @@ import {
 import { getChatSessions, createNewChatSession, archiveChatSession, updateChatModel, updateChatTitle } from '@/app/actions/chat-history'
 import { ModelSelector } from '@/components/ai/ModelSelector'
 import type { ChatSessionDTO, ChatContextDTO } from '@/app/mappers/chat-mapper'
-import type { DomainType } from '@/ddd/domain/shared/types/domain-type'
 
 interface ChatHistoryDropdownProps {
   currentChatId?: string
@@ -49,10 +48,6 @@ interface ChatHistoryDropdownProps {
   onNewChat: () => void
   onChatHistoryUpdate?: () => void // Callback to notify parent of changes
 
-  // Context for filtering chats
-  domainType?: DomainType | 'organizations' | 'general'
-  domainId?: number
-  domainName?: string
   userId: string
   organizationId: number
   organizationTier?: 'free' | 'pro' | 'enterprise'
@@ -111,17 +106,6 @@ function ChatItem({ session, isActive, onClick, onArchive, onSettings }: ChatIte
     return date.toLocaleDateString()
   }
 
-  const getDomainIcon = () => {
-    const contextType = session.contextMetadata?.contextType
-    switch (contextType) {
-      case 'agents': return '🤖'
-      case 'tables': return '📊'
-      case 'teams': return '👥'
-      case 'files': return '📁'
-      default: return '💬'
-    }
-  }
-
   return (
     <div
       className={`group flex items-center justify-between p-2.5 rounded-lg hover:bg-muted/50 cursor-pointer text-sm transition-colors ${
@@ -130,7 +114,6 @@ function ChatItem({ session, isActive, onClick, onArchive, onSettings }: ChatIte
       onClick={() => onClick(session.id, session.model)}
     >
       <div className="flex items-center gap-2.5 min-w-0 flex-1">
-        <span className="text-base flex-shrink-0">{getDomainIcon()}</span>
         <div className="flex flex-col min-w-0 flex-1">
           <div className="font-medium truncate">{session.title}</div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -324,9 +307,6 @@ export function ChatHistoryDropdown({
   onChatSelect,
   onNewChat,
   onChatHistoryUpdate,
-  domainType,
-  domainId,
-  domainName,
   userId,
   organizationId,
   organizationTier = 'free'
@@ -344,8 +324,6 @@ export function ChatHistoryDropdown({
       setIsLoading(true)
 
       const context: ChatContextDTO = {
-        domainType: domainType === 'general' ? undefined : domainType,
-        domainId,
         organizationId,
         userId,
         limit: 20
@@ -368,7 +346,7 @@ export function ChatHistoryDropdown({
     if (isOpen) {
       loadChatSessions()
     }
-  }, [domainType, domainId, organizationId, userId, isOpen])
+  }, [organizationId, userId, isOpen])
 
   // Public method to refresh from parent
   useEffect(() => {
@@ -384,9 +362,6 @@ export function ChatHistoryDropdown({
       setIsOpen(false)
 
       const result = await createNewChatSession({
-        domainType: domainType === 'general' ? undefined : domainType,
-        domainId,
-        domainName,
         organizationId,
         userId
       })

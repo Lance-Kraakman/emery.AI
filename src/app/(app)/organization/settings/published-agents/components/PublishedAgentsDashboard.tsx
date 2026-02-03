@@ -63,17 +63,17 @@ import {
 import type { PublishedAgentDTO, PublishedAgentApiKeyDTO } from "@/ddd/domain/published-agents/types";
 
 const STATUS_COLORS = {
-  draft: 'bg-gray-500/20 text-gray-600 border-gray-500/30',
-  pending_review: 'bg-yellow-500/20 text-yellow-600 border-yellow-500/30',
-  approved: 'bg-blue-500/20 text-blue-600 border-blue-500/30',
-  published: 'bg-green-500/20 text-green-600 border-green-500/30',
-  suspended: 'bg-red-500/20 text-red-600 border-red-500/30',
+  draft: 'bg-muted text-muted-foreground border-border',
+  pending_review: 'bg-warning/20 text-warning border-warning/30',
+  approved: 'bg-primary/20 text-primary border-primary/30',
+  published: 'bg-success/20 text-success border-success/30',
+  suspended: 'bg-destructive/20 text-destructive border-destructive/30',
 };
 
 const GRADE_COLORS = {
-  A: 'bg-green-500/20 text-green-600 border-green-500/30',
-  B: 'bg-blue-500/20 text-blue-600 border-blue-500/30',
-  C: 'bg-yellow-500/20 text-yellow-600 border-yellow-500/30',
+  A: 'bg-success/20 text-success border-success/30',
+  B: 'bg-primary/20 text-primary border-primary/30',
+  C: 'bg-warning/20 text-warning border-warning/30',
 };
 
 export function PublishedAgentsDashboard() {
@@ -570,7 +570,7 @@ export function PublishedAgentsDashboard() {
                       size="sm"
                       variant="ghost"
                       onClick={() => handleRevokeKey(key.id)}
-                      className="text-red-600 hover:text-red-700"
+                      className="text-destructive hover:text-destructive/80"
                     >
                       <Trash2 className="w-4 h-4" />
                     </Button>

@@ -1,0 +1,35 @@
+{
+  "$format": "brain-template",
+  "$version": 1,
+  "metadata": {
+    "name": "Google Sheets Assistant",
+    "description": "Manage Google Sheets: add rows, update data, find rows by value, read ranges, create spreadsheets, and list worksheets.",
+    "category": "Integrations",
+    "tags": ["google-sheets", "spreadsheet", "data", "rows", "google"],
+    "version": "1.0.0",
+    "author": "enhancd.ai"
+  },
+  "template": {
+    "type": "skill",
+    "data": {
+      "name": "Google Sheets Assistant",
+      "description": "Manage Google Sheets: add rows, update data, find rows by value, read ranges, create spreadsheets, and list worksheets.",
+      "inputs": [
+        { "name": "request", "required": true, "type": "text" }
+      ],
+      "outputs": [
+        { "name": "result", "type": "text" }
+      ],
+      "instructions": "You are a Google Sheets assistant. Given a request about spreadsheet data, use the available tools to fulfill it.\n\n1. **Adding a row**: Use google_sheets-add-single-row with sheetId (spreadsheet ID), worksheetId (worksheet/tab ID), and hasHeaders=true (to enable column name mapping). Optionally set rowIndex to insert at a specific position.\n2. **Updating a row**: Use google_sheets-update-row with sheetId, worksheetId, hasHeaders=true, and row (row number to update).\n3. **Finding a row**: Use google_sheets-find-row with sheetId, worksheetId, column (column letter like \"A\", \"B\"), and value (search term). Set exportRow=true to return full row data.\n4. **Reading a range**: Use google_sheets-get-values-in-range with sheetId, worksheetId, and range (A1 notation like \"A1:E5\"). Omit range to get all data.\n5. **Creating a spreadsheet**: Use google_sheets-create-spreadsheet with title. Optionally specify drive or folderId.\n6. **Listing worksheets**: Use google_sheets-list-worksheets with sheetId to see all tabs in a spreadsheet.\n\nAlways identify the correct spreadsheet and worksheet before operating on data.\nReport the data found or changes made clearly.\n\n**Output:** Set {result} to a summary of what was done:\n{result} = [your summary here]",
+      "tools": [
+        { "name": "google_sheets-add-single-row", "config": {} },
+        { "name": "google_sheets-update-row", "config": {} },
+        { "name": "google_sheets-find-row", "config": {} },
+        { "name": "google_sheets-get-values-in-range", "config": {} },
+        { "name": "google_sheets-create-spreadsheet", "config": {} },
+        { "name": "google_sheets-list-worksheets", "config": {} }
+      ],
+      "executionType": "agentic"
+    }
+  }
+}

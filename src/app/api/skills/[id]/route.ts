@@ -92,6 +92,13 @@ export async function PUT(
       };
     }
 
+    // Normalize tools: convert string entries to {name: string} objects
+    if (Array.isArray(body.tools)) {
+      body.tools = body.tools.map((t: any) =>
+        typeof t === 'string' ? { name: t } : t
+      );
+    }
+
     // Update skill
     const result = await skillService.updateSkill(skillId, body);
 

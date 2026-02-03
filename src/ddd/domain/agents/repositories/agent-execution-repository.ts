@@ -40,9 +40,10 @@ export interface ExecutionSkill {
   // Optional config for 'write' execution type
   writeConfig?: {
     targetTableId: number;
-    rowAction: 'create' | 'update';
+    rowAction: 'create' | 'update' | 'upsert';
     fieldMappings: Array<{ skillInputName: string; targetFieldId: number }>;
     updateMatch?: { skillInputName: string; targetFieldId: number };
+    matchFieldIds?: number[];
   };
   // Optional config for 'read' execution type
   readConfig?: {
@@ -99,9 +100,10 @@ export interface ExecutionSkill {
     };
     writeConfig?: {
       targetTableId: number;
-      rowAction: 'create' | 'update';
+      rowAction: 'create' | 'update' | 'upsert';
       fieldMappings: Array<{ skillInputName: string; targetFieldId: number }>;
       updateMatch?: { skillInputName: string; targetFieldId: number };
+      matchFieldIds?: number[];
     };
     readConfig?: {
       mode: 'single_row' | 'query';

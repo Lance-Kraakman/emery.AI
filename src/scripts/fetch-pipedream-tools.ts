@@ -11,7 +11,7 @@
 import { pipedreamClient } from '@/ddd/infrastructure/external/pipedream/client';
 import fs from 'fs';
 import path from 'path';
-import { EMERY_BACKEND_TOOLS } from './emery-backend-tools';
+import { ENHANCD_BACKEND_TOOLS } from './enhancd-backend-tools';
 
 export interface SimplifiedToolMetadata {
   id: string;
@@ -342,7 +342,7 @@ async function generateUnifiedMetadata(
   const unifiedMetadata = {
     app_icons: Object.fromEntries(appIconMapping), // Pipedream CDN icon URLs
     pipedream_tools: toolMetadata,
-    emery_tools: EMERY_BACKEND_TOOLS
+    enhancd_tools: ENHANCD_BACKEND_TOOLS
   };
 
   // Backend unified JSON output (for Python workers and seeds)
@@ -359,8 +359,8 @@ async function generateUnifiedMetadata(
   
   // Print summary
   const totalPipedreamTools = totalActions + totalMcpTools;
-  const totalEmeryTools = Object.keys(EMERY_BACKEND_TOOLS).length;
-  const totalAllTools = totalPipedreamTools + totalEmeryTools;
+  const totalEnhancdTools = Object.keys(ENHANCD_BACKEND_TOOLS).length;
+  const totalAllTools = totalPipedreamTools + totalEnhancdTools;
   const totalAppIcons = appIconMapping.size;
 
   console.log('\n' + '='.repeat(70));
@@ -371,7 +371,7 @@ async function generateUnifiedMetadata(
   console.log(`📦 Pipedream action tools: ${totalActions}`);
   console.log(`🔧 Pipedream MCP tools: ${totalMcpTools}`);
   console.log(`🎯 Total Pipedream tools: ${totalPipedreamTools}`);
-  console.log(`⚙️  Emery backend tools: ${totalEmeryTools}`);
+  console.log(`⚙️  enhancd.ai backend tools: ${totalEnhancdTools}`);
   console.log(`🎯 TOTAL UNIFIED TOOLS: ${totalAllTools}`);
   console.log(`📁 Unified output: ${backendOutputPath}`);
 
@@ -381,13 +381,13 @@ async function generateUnifiedMetadata(
   }
 
   console.log('\n✨ Unified tool metadata generation complete!');
-  console.log(`🎉 Single source file contains both Pipedream and Emery tools`);
+  console.log(`🎉 Single source file contains both Pipedream and enhancd.ai tools`);
   console.log(`📈 Ready for frontend seeding and backend tool loading`);
 
   // Show example tools by type
   const pipedreamActionTools = Object.keys(toolMetadata).filter(id => toolMetadata[id].type === 'action').slice(0, 3);
   const pipedreamMcpTools = Object.keys(toolMetadata).filter(id => toolMetadata[id].type === 'mcp').slice(0, 3);
-  const emeryTools = Object.keys(EMERY_BACKEND_TOOLS).slice(0, 3);
+  const enhancdTools = Object.keys(ENHANCD_BACKEND_TOOLS).slice(0, 3);
 
   if (pipedreamActionTools.length > 0) {
     console.log('\n📝 Example Pipedream action tools:');
@@ -405,10 +405,10 @@ async function generateUnifiedMetadata(
     });
   }
 
-  if (emeryTools.length > 0) {
-    console.log('\n⚙️  Example Emery backend tools:');
-    emeryTools.forEach(toolId => {
-      const tool = EMERY_BACKEND_TOOLS[toolId];
+  if (enhancdTools.length > 0) {
+    console.log('\n⚙️  Example enhancd.ai backend tools:');
+    enhancdTools.forEach(toolId => {
+      const tool = ENHANCD_BACKEND_TOOLS[toolId];
       console.log(`  - ${toolId}: ${tool.name} (${Object.keys(tool.inputs).length} inputs)`);
     });
   }

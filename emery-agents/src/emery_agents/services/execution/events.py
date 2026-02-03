@@ -294,6 +294,15 @@ class AwaitingClarificationEvent:
 
 
 @dataclass
+class ReflectionCompletedEvent:
+    """Event emitted when step reflection completes (Reflexion pattern)."""
+    step_id: str
+    quality_score: float  # 0.0-1.0
+    was_suboptimal: bool
+    pattern_learned: str
+
+
+@dataclass
 class PlanningStartedEvent:
     """Event emitted when planning begins."""
     goal: str

@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { LucideIcon, Plus, LayoutTemplate } from "lucide-react"
+import { LucideIcon, Plus, LayoutTemplate, ChevronRight } from "lucide-react"
 import {
   Collapsible,
   CollapsibleContent,
@@ -15,8 +15,12 @@ import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
+  SidebarMenuSub,
+  SidebarMenuSubItem,
+  SidebarMenuSubButton,
 } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -103,6 +107,20 @@ export function GroupedSidebarSection<T>({
   const groupedItems = items.filter(item => !isUngroupedItem(item))
   const uniqueGroupKeys = Array.from(new Set(groupedItems.map(getGroupKey)))
 
+  // Track open/close state for each agent group (default all open)
+  const [openGroups, setOpenGroups] = React.useState<Set<string | number | null>>(() => {
+    return new Set(uniqueGroupKeys)
+  })
+
+  const toggleGroup = (key: string | number | null) => {
+    setOpenGroups(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
   // Helper function to render an item with actions
   const renderItem = (item: T, className = "") => {
     const itemId = getItemId(item)
@@ -124,9 +142,11 @@ export function GroupedSidebarSection<T>({
               <SidebarMenuButton
                 asChild
                 isActive={isItemActive(item, pathname)}
-                className={`h-6 flex-1 ${className}`}
+                size="sm"
+                className={`flex-1 ${className}`}
               >
                 <Link href={getItemHref(item)}>
+                  <Icon className="h-4 w-4 shrink-0" />
                   <span className="group-data-[collapsible=icon]:hidden">
                     {getItemName(item)}
                   </span>
@@ -148,32 +168,95 @@ export function GroupedSidebarSection<T>({
   }
 
   return (
-    <Collapsible defaultOpen={defaultOpen}>
+    <Collapsible defaultOpen={defaultOpen} className="group/section">
       <SidebarGroup className="py-0">
         <SidebarGroupLabel asChild className="text-[11px] text-sidebar-foreground/60">
           <CollapsibleTrigger>
-            <Icon className="h-4 w-4" />
+            <span className="shrink-0 flex items-center">
+              <ChevronRight className="h-3 w-3 transition-transform duration-200 group-data-[state=open]/section:rotate-90" />
+            </span>
             <span className="group-data-[collapsible=icon]:hidden">{label}</span>
           </CollapsibleTrigger>
         </SidebarGroupLabel>
         <CollapsibleContent className="group-data-[collapsible=icon]:hidden">
           <SidebarGroupContent>
-            <SidebarMenu className="gap-0.5">
+            <SidebarMenu className="gap-0 ml-1 border-l border-sidebar-border pl-2">
               {/* Ungrouped items (top level) */}
               {ungroupedItems.map((item) => renderItem(item))}
 
-              {/* Grouped items */}
+              {/* Grouped items - collapsible folders */}
               {uniqueGroupKeys.map((groupKey) => {
                 const itemsInGroup = groupedItems.filter(item => getGroupKey(item) === groupKey)
                 const groupName = getGroupName(itemsInGroup[0]) || `Group ${groupKey}`
+                const isGroupOpen = openGroups.has(groupKey)
 
                 return (
-                  <div key={`group-${groupKey}`} className="mt-2">
-                    <div className="px-2 py-1 text-xs text-muted-foreground font-medium">
-                      {groupName}
-                    </div>
-                    {itemsInGroup.map(item => renderItem(item, "pl-4"))}
-                  </div>
+                  <Collapsible
+                    key={`group-${groupKey}`}
+                    open={isGroupOpen}
+                    onOpenChange={() => toggleGroup(groupKey)}
+                  >
+                    <SidebarMenuItem>
+                      <CollapsibleTrigger asChild>
+                        <SidebarMenuButton size="sm" className="flex-1">
+                          <ChevronRight
+                            className={cn(
+                              "h-3 w-3 transition-transform duration-200",
+                              isGroupOpen && "rotate-90"
+                            )}
+                          />
+                          <span className="text-xs font-medium truncate">
+                            {groupName}
+                          </span>
+                        </SidebarMenuButton>
+                      </CollapsibleTrigger>
+                    </SidebarMenuItem>
+                    <CollapsibleContent>
+                      <SidebarMenuSub>
+                        {itemsInGroup.map((item) => {
+                          const itemId = getItemId(item)
+                          const isRenaming = renamingItemId === itemId
+
+                          return (
+                            <SidebarMenuSubItem key={itemId} className="group">
+                              {isRenaming ? (
+                                <div className="flex-1 px-2">
+                                  <InlineRename
+                                    value={getItemName(item)}
+                                    onSave={(newName) => handleRename(item, newName)}
+                                    onCancel={() => setRenamingItemId(null)}
+                                  />
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-1 w-full">
+                                  <SidebarMenuSubButton
+                                    asChild
+                                    size="sm"
+                                    isActive={isItemActive(item, pathname)}
+                                    className="flex-1"
+                                  >
+                                    <Link href={getItemHref(item)}>
+                                      <Icon className="h-3.5 w-3.5 shrink-0" />
+                                      <span>{getItemName(item)}</span>
+                                    </Link>
+                                  </SidebarMenuSubButton>
+                                  {hasActions && (
+                                    <SidebarItemActions
+                                      className="opacity-0 group-hover:opacity-100"
+                                      onRename={onRename ? () => setRenamingItemId(itemId) : undefined}
+                                      onDuplicate={onDuplicate ? () => onDuplicate(item) : undefined}
+                                      onShare={onShare ? () => onShare(item) : undefined}
+                                      onDelete={onDelete ? () => onDelete(item) : undefined}
+                                    />
+                                  )}
+                                </div>
+                              )}
+                            </SidebarMenuSubItem>
+                          )
+                        })}
+                      </SidebarMenuSub>
+                    </CollapsibleContent>
+                  </Collapsible>
                 )
               })}
 
@@ -183,7 +266,8 @@ export function GroupedSidebarSection<T>({
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
-                      className="w-full justify-start h-6 px-2 text-sm mt-0.5 group-data-[collapsible=icon]:hidden"
+                      size="xs"
+                      className="w-full justify-start mt-0.5 group-data-[collapsible=icon]:hidden"
                       disabled={isCreating}
                     >
                       <Plus className="h-4 w-4" />
@@ -204,7 +288,8 @@ export function GroupedSidebarSection<T>({
               ) : (
                 <Button
                   variant="ghost"
-                  className="w-full justify-start h-6 px-2 text-sm mt-0.5 group-data-[collapsible=icon]:hidden"
+                  size="xs"
+                      className="w-full justify-start mt-0.5 group-data-[collapsible=icon]:hidden"
                   onClick={onAdd}
                   disabled={isCreating}
                 >

@@ -81,7 +81,7 @@ export const AgentContainerNode = memo(function AgentContainerNode({
         {/* Header */}
         <div
           className={cn(
-            'flex items-center gap-3 px-4 py-3 rounded-t-xl border-b',
+            'flex items-center gap-3 px-4 py-2 rounded-t-xl border-b',
             config.headerBg,
             config.border
           )}

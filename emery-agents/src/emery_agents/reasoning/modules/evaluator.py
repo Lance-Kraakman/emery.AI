@@ -16,7 +16,9 @@ from emery_agents.reasoning.signatures.evaluation import (
     EvaluateStep,
     GoalEvaluation,
     RecoveryAction,
+    ReflectOnExecution,
     StepEvaluation,
+    StepReflection,
     SynthesizeAnswer,
 )
 from emery_agents.reasoning.utils import StepOutcome
@@ -34,6 +36,7 @@ class EvaluatorModule(dspy.Module):  # type: ignore[misc]
         self.step_evaluator = dspy.ChainOfThought(EvaluateStep)
         self.recovery_analyzer = dspy.ChainOfThought(AnalyzeRecovery)
         self.synthesizer = dspy.ChainOfThought(SynthesizeAnswer)
+        self.reflector = dspy.ChainOfThought(ReflectOnExecution)
 
     @staticmethod
     def _format_tool_evidence(outcomes: list[StepOutcome]) -> str:
@@ -146,6 +149,35 @@ class EvaluatorModule(dspy.Module):  # type: ignore[misc]
             curated_context=curated_context or "No additional context.",
         )
         return result.answer  # type: ignore[no-any-return]
+
+    def reflect_on_step(
+        self,
+        step_description: str,
+        step_result: str,
+        tool_evidence: str,
+        plan_goal: str,
+        previous_reflections: str = "",
+    ) -> StepReflection:
+        """Reflect on a completed step to extract insights for future steps.
+
+        Args:
+            step_description: What the step was supposed to do
+            step_result: What the step produced (truncated to 500 chars)
+            tool_evidence: Raw tool call outcomes (truncated to 800 chars)
+            plan_goal: The overall plan goal
+            previous_reflections: Rolling summary from prior steps
+
+        Returns:
+            StepReflection with quality assessment and actionable insights
+        """
+        result = self.reflector(
+            step_description=step_description,
+            step_result=step_result[:500],
+            tool_evidence=tool_evidence[:800],
+            plan_goal=plan_goal,
+            previous_reflections=previous_reflections or "No previous reflections.",
+        )
+        return result.reflection  # type: ignore[no-any-return]
 
     def forward(
         self,

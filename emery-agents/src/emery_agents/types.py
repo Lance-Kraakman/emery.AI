@@ -41,7 +41,7 @@ class WorkerStatus(Enum):
 
 
 AgentId = int
-OrganizationId = str
+OrganizationId = int
 TaskId = str
 UserId = str
 OwnerId = str
@@ -49,6 +49,12 @@ DatabaseId = int
 RoleId = int
 SkillId = int
 CapabilityId = int
+
+
+class ToolMode(Enum):
+    """Execution mode for tool access."""
+    PLANNING = "planning"   # Read-only tools only
+    EXECUTION = "execution"  # All tools available
 
 
 class ExecutionMode(Enum):

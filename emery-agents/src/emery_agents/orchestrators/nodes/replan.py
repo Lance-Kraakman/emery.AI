@@ -16,6 +16,7 @@ is the single decision point after each step.
 """
 
 import asyncio
+import dataclasses
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -37,6 +38,7 @@ from ...services.execution.events import (
     AutoFixStartedEvent,
     AutoFixCompletedEvent,
     RecoveryPlanProposedEvent,
+    ReflectionCompletedEvent,
     AwaitingClarificationEvent,
 )
 from ...reasoning.modules.evaluator import EvaluatorModule
@@ -73,10 +75,30 @@ async def replan_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[
     if error:
         return await _handle_step_failure(state, runtime, events)
 
-    # Case 2: More pending steps → continue executing
+    # Reflect on the last completed step (Reflexion pattern)
+    step_reflections = dict(state.get("step_reflections", {}))
+    reflection_summary = state.get("reflection_summary", "")
+
+    last_completed = _get_last_completed_step(plan)
+    if last_completed:
+        reflection_dict = await _reflect_on_step(last_completed, plan, state, events)
+        if reflection_dict is not None:
+            step_reflections[last_completed.step_id] = reflection_dict
+            reflection_summary = _update_reflection_summary(
+                reflection_summary, last_completed.step_id, reflection_dict,
+            )
+
+    # Case 2: More pending steps → enrich next step with reflections, continue
     pending = plan.get_pending_steps()
     if pending:
-        return {"error": None, "events": events}
+        plan = _enrich_next_step_with_reflections(plan, reflection_summary)
+        return {
+            "plan": plan,
+            "step_reflections": step_reflections,
+            "reflection_summary": reflection_summary,
+            "error": None,
+            "events": events,
+        }
 
     # Case 3: All steps done → evaluate goal and decide
     evaluation = await _evaluate_progress(plan, org_model, events, outcomes)
@@ -92,6 +114,132 @@ async def replan_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[
 
     # Not done — replan to generate new steps
     return await _do_replan(state, runtime, error, replan_count, events)
+
+
+# ---------------------------------------------------------------------------
+# Reflection helpers (Reflexion pattern)
+# ---------------------------------------------------------------------------
+
+
+def _get_last_completed_step(plan: Plan) -> Optional[PlanStep]:
+    """Return the most recently completed step, or None."""
+    completed = [s for s in plan.steps if s.status == PlanStepStatus.COMPLETED.value]
+    return completed[-1] if completed else None
+
+
+async def _reflect_on_step(
+    step: PlanStep,
+    plan: Plan,
+    state: PlanExecuteState,
+    events: List[Any],
+) -> Optional[Dict[str, Any]]:
+    """Reflect on a completed step and return the reflection dict.
+
+    Returns None if the step was already reflected on (deduplication for LangGraph resume).
+    """
+    existing_reflections = state.get("step_reflections", {})
+    if step.step_id in existing_reflections:
+        return None  # Already reflected — skip (handles LangGraph resume)
+
+    org_model = state.get("org_model")
+    raw_outcomes = state.get("step_outcomes", {})
+
+    # Build tool evidence from step outcome
+    tool_evidence = ""
+    outcome_dict = raw_outcomes.get(step.step_id)
+    if outcome_dict:
+        outcome = StepOutcome.from_dict(outcome_dict)
+        evidence = outcome.format_evidence()
+        if evidence:
+            tool_evidence = evidence
+
+    try:
+        lm = get_dspy_lm(org_model=org_model)
+        evaluator = EvaluatorModule()
+
+        with dspy.context(lm=lm):
+            reflection = await asyncio.to_thread(
+                evaluator.reflect_on_step,
+                step_description=step.description,
+                step_result=step.result or "(no output)",
+                tool_evidence=tool_evidence,
+                plan_goal=plan.goal,
+                previous_reflections=state.get("reflection_summary", ""),
+            )
+
+        reflection_dict = reflection.model_dump()
+
+        events.append(ReflectionCompletedEvent(
+            step_id=step.step_id,
+            quality_score=reflection.quality_score,
+            was_suboptimal=reflection.was_suboptimal,
+            pattern_learned=reflection.pattern_learned,
+        ))
+
+        return reflection_dict
+
+    except Exception as e:
+        logger.warning(f"Reflection failed for step {step.step_id}: {e}")
+        return None
+
+
+def _update_reflection_summary(
+    current_summary: str,
+    step_id: str,
+    reflection_dict: Dict[str, Any],
+) -> str:
+    """Append a new insight to the rolling summary, truncating oldest if over 1500 chars."""
+    pattern = reflection_dict.get("pattern_learned", "")
+    improvement = reflection_dict.get("what_could_improve", "")
+
+    insight = ""
+    if pattern:
+        insight = f"[{step_id}] {pattern}"
+    elif improvement:
+        insight = f"[{step_id}] {improvement}"
+
+    if not insight:
+        return current_summary
+
+    if current_summary:
+        updated = f"{current_summary}\n{insight}"
+    else:
+        updated = insight
+
+    # Truncate oldest lines if over 1500 chars
+    while len(updated) > 1500:
+        newline_idx = updated.find("\n")
+        if newline_idx == -1:
+            updated = updated[-1500:]
+            break
+        updated = updated[newline_idx + 1:]
+
+    return updated
+
+
+def _enrich_next_step_with_reflections(
+    plan: Plan,
+    reflection_summary: str,
+) -> Plan:
+    """Append rolling reflection summary to the next pending step's description."""
+    if not reflection_summary:
+        return plan
+
+    pending = plan.get_pending_steps()
+    if not pending:
+        return plan
+
+    next_step = pending[0]
+    # Avoid double-appending if already enriched
+    if "[INSIGHTS FROM PREVIOUS STEPS]" in next_step.description:
+        return plan
+
+    enriched_desc = (
+        f"{next_step.description}\n\n"
+        f"[INSIGHTS FROM PREVIOUS STEPS]\n{reflection_summary}"
+    )
+    updated_step = dataclasses.replace(next_step, description=enriched_desc)
+    return plan.update_step(next_step.step_id, updated_step)
 
 
 # ---------------------------------------------------------------------------

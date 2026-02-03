@@ -270,6 +270,12 @@ export function useChildDataBlock({
   const parentContextRef = useRef(parentContext);
   parentContextRef.current = parentContext;
 
+  // Store stateContext in ref for the same reason — StateContext value may
+  // not be referentially stable, and we use subscription + refetchTrigger
+  // to react to state changes instead of depending on the object identity.
+  const stateContextRef = useRef(stateContext);
+  stateContextRef.current = stateContext;
+
   // Extract stable parent row ID for memoization
   // This is a primitive value that changes when parent row changes
   const parentRowId = parentContext?.parentStack?.[0]?.rowData?.id;
@@ -316,14 +322,15 @@ export function useChildDataBlock({
 
     // Add dynamic sort from state (overrides static if set)
     // Note: dynamicField is now just a key name (flat namespace)
-    if (sortConfig.dynamicField && stateContext) {
-      const dynamicFieldValue = stateContext.getValue(sortConfig.dynamicField);
+    const stateCtx = stateContextRef.current;
+    if (sortConfig.dynamicField && stateCtx) {
+      const dynamicFieldValue = stateCtx.getValue(sortConfig.dynamicField);
 
       if (dynamicFieldValue && typeof dynamicFieldValue === 'string') {
         // Get dynamic direction
         let direction: 'asc' | 'desc' = 'asc';
         if (sortConfig.dynamicDirection) {
-          const dirValue = stateContext.getValue(sortConfig.dynamicDirection);
+          const dirValue = stateCtx.getValue(sortConfig.dynamicDirection);
           if (dirValue === 'desc' || dirValue === 'descending') {
             direction = 'desc';
           }
@@ -338,7 +345,8 @@ export function useChildDataBlock({
     }
 
     return conditions;
-  }, [sortConfig, stateContext]);
+    // stateContext accessed via ref — reactivity comes from refetchTrigger (subscription)
+  }, [sortConfig, refetchTrigger]);
 
   // State for client-fetched data
   const [data, setData] = useState<{
@@ -408,8 +416,9 @@ export function useChildDataBlock({
         }
 
         // Resolve {{state.key}} variables (flat namespace)
-        if (valueStr.includes('{{state.') && stateContext) {
-          const resolved = resolveStateVariables(valueStr, stateContext.getValue);
+        const stateCtx = stateContextRef.current;
+        if (valueStr.includes('{{state.') && stateCtx) {
+          const resolved = resolveStateVariables(valueStr, stateCtx.getValue);
           // Check if variable was resolved
           if (resolved.includes('{{state.')) {
             console.warn(`[useChildDataBlock] Could not resolve state: ${condition.value}`);
@@ -431,13 +440,23 @@ export function useChildDataBlock({
         operator: condition.operator || 'eq',
         value: resolvedValue,
       });
+
+      // Diagnostic: log each resolved filter's details
+      console.log('[useChildDataBlock] Filter resolved:', {
+        field: condition.field,
+        operator: condition.operator || 'eq',
+        originalValue: condition.value,
+        resolvedValue,
+        parentRowId,
+      });
     }
 
     console.log('[useChildDataBlock] Resolved filters:', filters.length, 'for parentRowId:', parentRowId);
     return filters.length > 0 ? filters : null;
     // Depend on parentRowId (primitive) instead of parentContext (object)
     // This ensures different parent rows get different filters without causing infinite loops
-  }, [needsClientFetch, parentRowId, filterConfig, stateContext, refetchTrigger]);
+    // stateContext is accessed via ref — reactivity comes from refetchTrigger (subscription)
+  }, [needsClientFetch, parentRowId, filterConfig, refetchTrigger]);
 
   // Fetch data when filters are resolved
   useEffect(() => {
@@ -466,7 +485,13 @@ export function useChildDataBlock({
         if (cancelled) return;
 
         if (result) {
-          console.log('[useChildDataBlock] Fetch complete for parentRowId:', parentRowId, 'rows:', result.rows.length, 'first row id:', result.rows[0]?.id);
+          console.log('[useChildDataBlock] Fetch complete:', {
+            parentRowId,
+            rowCount: result.rows.length,
+            totalCount: result.totalCount,
+            firstRowId: result.rows[0]?.id,
+            filtersSent: JSON.stringify(resolvedFilters),
+          });
           setData({
             rows: result.rows,
             totalCount: result.totalCount,

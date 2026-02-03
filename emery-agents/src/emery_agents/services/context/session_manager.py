@@ -243,7 +243,7 @@ class SessionManager:
 
         Args:
             agent: ChatAgent to restore memory into
-            conversation_history: List of HistoryMessage protobuf objects
+            conversation_history: List of HistoryMessage entity objects
 
         Returns:
             Number of messages restored
@@ -276,20 +276,20 @@ class SessionManager:
 
     def _extract_text_from_content_parts(self, content_parts: List[Any]) -> str:
         """
-        Extract text content from protobuf MessagePart array.
+        Extract text content from entity MessagePart list.
 
         Args:
-            content_parts: List of MessagePart protobuf objects
+            content_parts: List of entity MessagePart objects (TextPart, ImagePart, FilePart)
 
         Returns:
             Combined text string
         """
-        text_parts = []
+        from ...entities.message import TextPart
 
+        text_parts = []
         for part in content_parts:
-            if part.HasField('text'):
-                text_parts.append(part.text.text)
-            # TODO: Handle images in future - for now just extract text
+            if isinstance(part, TextPart):
+                text_parts.append(part.text)
 
         return " ".join(text_parts).strip() if text_parts else ""
 
@@ -300,36 +300,29 @@ class SessionManager:
         """
         Extract file attachments from conversation history content_parts.
 
-        Used during cold-path session restoration to make files from previous
-        messages available to skills.
-
         NOTE: URLs may be expired for old chats (presigned URLs last 1 hour).
         Next.js should regenerate URLs before sending history for best results.
 
         Args:
-            conversation_history: List of HistoryMessage protobuf objects
+            conversation_history: List of entity HistoryMessage objects
 
         Returns:
-            List of FileAttachment protobuf objects
+            List of entity FileAttachment objects
         """
-        from ...grpc.generated import agent_worker_pb2
+        from ...entities.message import FileAttachment, FilePart
 
         attachments = []
         seen_urls = set()  # Avoid duplicates
 
         for msg in conversation_history:
-            if not hasattr(msg, 'content_parts'):
-                continue
-
             for part in msg.content_parts:
-                if part.HasField('file'):
-                    url = part.file.url
+                if isinstance(part, FilePart):
+                    url = part.url
                     if url and url not in seen_urls:
-                        attachment = agent_worker_pb2.FileAttachment(
+                        attachments.append(FileAttachment(
                             url=url,
-                            mime_type=part.file.mime_type if hasattr(part.file, 'mime_type') else ''
-                        )
-                        attachments.append(attachment)
+                            mime_type=part.mime_type,
+                        ))
                         seen_urls.add(url)
 
         if attachments:
@@ -418,7 +411,7 @@ class SessionManager:
 
         Args:
             session_id: Session identifier
-            attachments: List of FileAttachment protobuf objects
+            attachments: List of FileAttachment entity objects
         """
         if session_id not in self.metadata:
             logger.warning(f"Cannot add attachments - session {session_id} not found")
@@ -444,7 +437,7 @@ class SessionManager:
             session_id: Session identifier
 
         Returns:
-            List of FileAttachment protobuf objects
+            List of FileAttachment entity objects
         """
         if session_id in self.metadata:
             return self.metadata[session_id].attachments

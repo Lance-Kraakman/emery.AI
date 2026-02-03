@@ -21,7 +21,7 @@ interface SkillToolDropdownProps {
  */
 export function SkillToolDropdown({ onSelectTool, disabled }: SkillToolDropdownProps) {
   const [isClient, setIsClient] = useState(false);
-  const [filtersExpanded, setFiltersExpanded] = useState(false);
+  const [filtersExpanded, setFiltersExpanded] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
 
@@ -138,7 +138,7 @@ export function SkillToolDropdown({ onSelectTool, disabled }: SkillToolDropdownP
         {hasActiveFilters && (
           <button
             onClick={clearAllFilters}
-            className="text-[10px] text-red-500 hover:text-red-400"
+            className="text-[10px] text-destructive hover:text-destructive/80"
           >
             Clear all
           </button>
@@ -163,8 +163,6 @@ export function SkillToolDropdown({ onSelectTool, disabled }: SkillToolDropdownP
           onRequiresConnectionChange={setRequiresConnection}
           showReferenceTools={false} // Hidden - not applicable for skill editor
           onShowReferenceToolsChange={() => {}} // No-op - not used
-          hasActiveFilters={hasActiveFilters}
-          onClearAll={clearAllFilters}
         />
       )}
 

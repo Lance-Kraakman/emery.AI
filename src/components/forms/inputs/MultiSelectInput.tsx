@@ -21,6 +21,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
 import type { SelectOption } from '@/ddd/domain/tables/value-objects/table-field';
+import type { InputThemeClasses } from '../input-mapper';
 
 interface MultiSelectInputProps {
   field: FieldDTO;
@@ -32,6 +33,7 @@ interface MultiSelectInputProps {
   placeholder?: string;
   required?: boolean;
   disabled?: boolean;
+  themeClasses?: InputThemeClasses;
 }
 
 export function MultiSelectInput({
@@ -44,6 +46,7 @@ export function MultiSelectInput({
   placeholder,
   required,
   disabled,
+  themeClasses,
 }: MultiSelectInputProps) {
   const inputLabel = label || field.name;
   const isRequired = required ?? field.required ?? false;
@@ -93,14 +96,14 @@ export function MultiSelectInput({
   };
 
   return (
-    <div className="space-y-2">
+    <div className={themeClasses?.fieldGroup || "space-y-2"}>
       {/* Hidden input for form submission - stores JSON array of IDs */}
       {name && (
         <input type="hidden" name={name} value={JSON.stringify(currentValue)} />
       )}
-      <Label htmlFor={`field-${field.id}`}>
+      <Label htmlFor={`field-${field.id}`} className={themeClasses?.label || undefined}>
         {inputLabel}
-        {isRequired && <span className="text-destructive ml-1">*</span>}
+        {isRequired && <span className={themeClasses?.error || "text-destructive ml-1"}>*</span>}
         {maxSelections && (
           <span className="text-xs text-muted-foreground ml-2">
             (Max {maxSelections})

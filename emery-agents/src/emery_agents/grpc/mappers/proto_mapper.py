@@ -11,6 +11,11 @@ from typing import List, Dict, Any, Optional, TypedDict
 from ..generated import agent_worker_pb2
 from ...entities.task import TaskRequest, TriggerData, SkillInputValue
 from ...entities.agent import AgentConfig
+from ...entities.tool_config import ToolConfig
+from ...entities.message import (
+    TextPart, ImagePart, FilePart, MessagePart,
+    ImageAttachment, FileAttachment, HistoryMessage, TokenUsage,
+)
 from ...types import TaskStatus, WorkerStatus, InstructionConfig
 from ...entities.models.context_mapping import ResolvedContext
 
@@ -120,6 +125,7 @@ class ProtoMapper:
             timeout_seconds=proto.timeout_seconds,
             name=proto.name,
             skill_name=skill_name,
+            skill_id=proto.skill_id or None,
             instruction_config=instruction_config,
             organization_model=proto.organization_model or None,
             agent_model=proto.agent_model or None,
@@ -187,3 +193,100 @@ class ProtoMapper:
             success=response.success,
             message=response.message
         )
+
+
+# =========================================================================
+# Standalone converter functions (used at gRPC boundary)
+# =========================================================================
+
+def tool_config_from_proto(proto: agent_worker_pb2.ToolConfig) -> ToolConfig:
+    """Convert protobuf ToolConfig to entity ToolConfig."""
+    return ToolConfig(
+        name=proto.name,
+        version=proto.version,
+        config=dict(proto.config),
+    )
+
+
+def tool_configs_from_proto(protos: List[agent_worker_pb2.ToolConfig]) -> List[ToolConfig]:
+    """Convert list of protobuf ToolConfigs to entity ToolConfigs."""
+    return [tool_config_from_proto(p) for p in protos]
+
+
+def message_part_from_proto(proto: agent_worker_pb2.MessagePart) -> Optional[MessagePart]:
+    """Convert protobuf MessagePart to entity MessagePart."""
+    if proto.HasField('text'):
+        return TextPart(text=proto.text.text)
+    elif proto.HasField('image_url'):
+        return ImagePart(url=proto.image_url.url)
+    elif proto.HasField('file'):
+        return FilePart(
+            url=proto.file.url,
+            mime_type=proto.file.mime_type,
+            filename=proto.file.filename,
+            size=proto.file.size,
+        )
+    return None
+
+
+def message_parts_from_proto(protos: List[agent_worker_pb2.MessagePart]) -> List[MessagePart]:
+    """Convert list of protobuf MessageParts to entity MessageParts."""
+    result = []
+    for p in protos:
+        entity = message_part_from_proto(p)
+        if entity is not None:
+            result.append(entity)
+    return result
+
+
+def file_attachments_from_proto(
+    message_parts: List[agent_worker_pb2.MessagePart],
+) -> List[FileAttachment]:
+    """Extract FileAttachment entities from protobuf MessageParts."""
+    attachments = []
+    for part in message_parts:
+        if part.HasField('file'):
+            attachments.append(FileAttachment(
+                url=part.file.url,
+                mime_type=part.file.mime_type,
+                filename=part.file.filename,
+            ))
+    return attachments
+
+
+def image_attachments_from_proto(
+    message_parts: List[agent_worker_pb2.MessagePart],
+) -> List[ImageAttachment]:
+    """Extract ImageAttachment entities from protobuf MessageParts."""
+    attachments = []
+    for part in message_parts:
+        if part.HasField('image_url') and part.image_url.url:
+            attachments.append(ImageAttachment(url=part.image_url.url))
+    return attachments
+
+
+def token_usage_to_proto(tu: Optional[Any]) -> Optional[agent_worker_pb2.TokenUsage]:
+    """Convert entity TokenUsage (or compatible) to protobuf TokenUsage."""
+    if not tu:
+        return None
+    return agent_worker_pb2.TokenUsage(
+        model_name=getattr(tu, 'model_name', ''),
+        input_tokens=getattr(tu, 'input_tokens', 0),
+        output_tokens=getattr(tu, 'output_tokens', 0),
+        total_tokens=getattr(tu, 'total_tokens', 0),
+        cost_usd=getattr(tu, 'cost_usd', 0.0),
+    )
+
+
+def history_messages_from_proto(
+    protos: List[agent_worker_pb2.HistoryMessage],
+) -> List[HistoryMessage]:
+    """Convert proto HistoryMessage list to entity HistoryMessage list."""
+    return [
+        HistoryMessage(
+            role=msg.role,
+            content_parts=message_parts_from_proto(list(msg.content_parts)),
+            timestamp=msg.timestamp,
+        )
+        for msg in protos
+    ]

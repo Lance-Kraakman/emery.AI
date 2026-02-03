@@ -38,19 +38,28 @@ export function useToolSearch(options: UseToolSearchOptions) {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [offset, setOffset] = useState(0);
 
+  // Debounce search query to avoid firing on every keystroke
+  const [debouncedQuery, setDebouncedQuery] = useState(query);
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      setDebouncedQuery(query);
+    }, 300);
+    return () => clearTimeout(timeoutId);
+  }, [query]);
+
   // Initial search query (resets on filter change)
   const {
     data: initialSearchResult,
     isLoading,
     error
   } = useQuery({
-    queryKey: ['search-all-tools-initial', query, selectedCategories, selectedApps, connectedOnly, requiresConnection, showReferenceTools, toolCategories],
+    queryKey: ['search-all-tools-initial', debouncedQuery, selectedCategories, selectedApps, connectedOnly, requiresConnection, showReferenceTools, toolCategories],
     queryFn: async () => {
       const categories = selectedCategories.length > 0 ? selectedCategories : undefined;
       const appIds = selectedApps.length > 0 ? selectedApps : undefined;
 
       const result = await searchAllTools({
-        query,
+        query: debouncedQuery,
         categories,
         appIds,
         connectedOnly,

@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { LucideIcon, Plus, LayoutTemplate } from "lucide-react"
+import { LucideIcon, Plus, LayoutTemplate, ChevronRight } from "lucide-react"
 import {
   Collapsible,
   CollapsibleContent,
@@ -79,17 +79,19 @@ export function SidebarSection<T>({
   }
 
   return (
-    <Collapsible defaultOpen={defaultOpen}>
+    <Collapsible defaultOpen={defaultOpen} className="group/section">
       <SidebarGroup className="py-0">
         <SidebarGroupLabel asChild className="text-[11px] text-sidebar-foreground/60">
           <CollapsibleTrigger>
-            <Icon className="h-4 w-4" />
+            <span className="shrink-0 flex items-center">
+              <ChevronRight className="h-3 w-3 transition-transform duration-200 group-data-[state=open]/section:rotate-90" />
+            </span>
             <span className="group-data-[collapsible=icon]:hidden">{label}</span>
           </CollapsibleTrigger>
         </SidebarGroupLabel>
         <CollapsibleContent className="group-data-[collapsible=icon]:hidden">
           <SidebarGroupContent>
-            <SidebarMenu className="gap-0.5">
+            <SidebarMenu className="gap-0 ml-1 border-l border-sidebar-border pl-2">
               {items.map((item) => {
                 const itemKey = getItemKey(item)
                 const isRenaming = renamingItemKey === itemKey
@@ -107,8 +109,9 @@ export function SidebarSection<T>({
                         </div>
                       ) : (
                         <>
-                          <SidebarMenuButton asChild isActive={isItemActive(item, pathname)} className="h-6 flex-1">
+                          <SidebarMenuButton asChild isActive={isItemActive(item, pathname)} size="sm" className="flex-1">
                             <Link href={getItemHref(item)}>
+                              <Icon className="h-4 w-4 shrink-0" />
                               <span className="group-data-[collapsible=icon]:hidden">
                                 {getItemName(item)}
                               </span>
@@ -133,7 +136,8 @@ export function SidebarSection<T>({
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
-                      className="w-full justify-start h-6 px-2 text-sm mt-0.5 group-data-[collapsible=icon]:hidden"
+                      size="xs"
+                      className="w-full justify-start mt-0.5 group-data-[collapsible=icon]:hidden"
                       disabled={isCreating}
                     >
                       <Plus className="h-4 w-4" />
@@ -154,7 +158,8 @@ export function SidebarSection<T>({
               ) : (
                 <Button
                   variant="ghost"
-                  className="w-full justify-start h-6 px-2 text-sm mt-0.5 group-data-[collapsible=icon]:hidden"
+                  size="xs"
+                      className="w-full justify-start mt-0.5 group-data-[collapsible=icon]:hidden"
                   onClick={onAdd}
                   disabled={isCreating}
                 >

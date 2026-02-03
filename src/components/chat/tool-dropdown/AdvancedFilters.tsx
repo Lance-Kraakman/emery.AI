@@ -27,9 +27,6 @@ interface AdvancedFiltersProps {
   showReferenceTools: boolean;
   onShowReferenceToolsChange: (value: boolean) => void;
 
-  // Clear all
-  hasActiveFilters: boolean;
-  onClearAll: () => void;
 }
 
 /**
@@ -51,8 +48,6 @@ export function AdvancedFilters({
   onRequiresConnectionChange,
   showReferenceTools,
   onShowReferenceToolsChange,
-  hasActiveFilters,
-  onClearAll,
 }: AdvancedFiltersProps) {
   const toggleApp = (appId: string) => {
     onSelectApps(
@@ -187,21 +182,6 @@ export function AdvancedFilters({
             />
             Show reference tools
           </label>
-
-          {/* Clear All Filters Button */}
-          {hasActiveFilters && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onClearAll();
-              }}
-              className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/20 px-2 py-1 rounded transition-colors ml-auto"
-              title="Clear all filters"
-            >
-              <X className="w-3 h-3" />
-              Clear all
-            </button>
-          )}
         </div>
       </div>
     </div>

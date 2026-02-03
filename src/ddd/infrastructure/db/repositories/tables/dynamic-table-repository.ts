@@ -429,6 +429,9 @@ export class DynamicTableRepository implements IDynamicTableRepository {
 
       // CRITICAL FIX: Update existing fields with new metadata/config
       // This ensures select field options and other metadata changes are persisted
+      // Track which fields actually changed for selective Delta Lake sync
+      const changedFields: TableField[] = [];
+
       for (const field of fieldsToUpdate) {
         const existingField = existingFieldMap.get(field.id.value)!;
 
@@ -445,6 +448,18 @@ export class DynamicTableRepository implements IDynamicTableRepository {
           };
         }
 
+        // Check if anything actually changed before updating
+        const hasChanged =
+          existingField.name !== field.name ||
+          existingField.type !== field.type ||
+          existingField.required !== (field.required ?? false) ||
+          existingField.orderIndex !== field.orderIndex ||
+          JSON.stringify(existingField.fieldConfig) !== JSON.stringify(fieldConfig);
+
+        if (!hasChanged) {
+          continue; // Skip unchanged fields entirely
+        }
+
         logger.debug('Updating field', { name: field.name, type: field.type });
 
         await this.db.update(fields)
@@ -457,6 +472,12 @@ export class DynamicTableRepository implements IDynamicTableRepository {
             fieldConfig
           })
           .where(eq(fields.id, existingField.id));
+
+        changedFields.push(field);
+      }
+
+      if (changedFields.length > 0) {
+        logger.debug('Fields actually changed', { count: changedFields.length, names: changedFields.map(f => f.name) });
       }
 
       // Delete removed fields from PostgreSQL
@@ -476,8 +497,8 @@ export class DynamicTableRepository implements IDynamicTableRepository {
           }
         }
 
-        // Update existing fields in Delta Lake
-        for (const field of fieldsToUpdate) {
+        // Update only fields that actually changed in Delta Lake
+        for (const field of changedFields) {
           const updateResult = await this.datalake.updateField(fullTable, field);
           if (!updateResult.success) {
             console.warn(`[TableRepo] Failed to update field ${field.name} in Delta Lake: ${updateResult.error}`);

@@ -15,9 +15,6 @@ from typing import List, Optional, Dict, Any
 from enum import Enum
 import json
 
-from emery_agents.grpc.generated.agent_worker_pb2 import StoredPlan as StoredPlanProto
-from emery_agents.grpc.generated.agent_worker_pb2 import StoredPlanStep as StoredPlanStepProto
-from emery_agents.grpc.generated.agent_worker_pb2 import StoredSubPlan as StoredSubPlanProto
 
 
 # --- Skill Definition Models (used in plan generation templates) ---
@@ -107,20 +104,6 @@ class SubPlan:
             steps=[PlanStep.from_dict(s) for s in data.get("steps", [])],
             context_gathered=data.get("contextGathered", data.get("context_gathered", {})),
             planning_observations=data.get("planningObservations", data.get("planning_observations")),
-        )
-
-    @classmethod
-    def from_stored_proto(cls, proto: "StoredSubPlanProto") -> "SubPlan":
-        """Create SubPlan from StoredSubPlan proto message.
-
-        Used when hydrating stored plans from agentic step configs.
-        """
-        return cls(
-            agent_name=proto.agent_name or "",
-            goal=proto.goal or "",
-            steps=[PlanStep.from_stored_proto(s) for s in proto.steps],
-            context_gathered={},  # Not stored in proto
-            planning_observations=proto.planning_observations or None,
         )
 
     def with_steps(self, steps: List["PlanStep"]) -> "SubPlan":
@@ -216,42 +199,6 @@ class PlanStep:
             phase_name=data.get("phaseName", data.get("phase_name")),
             phase_order=data.get("phaseOrder", data.get("phase_order")),
             replan_after=data.get("replanAfter", data.get("replan_after", False)),
-        )
-
-    @classmethod
-    def from_stored_proto(cls, proto: "StoredPlanStepProto") -> "PlanStep":
-        """Create PlanStep from StoredPlanStep proto message.
-
-        Used when hydrating stored plans from agentic step configs.
-        Proto parameters are stored as string map - parse JSON values.
-        """
-        # Parse parameters: proto stores as Map[str, str], parse JSON values
-        parameters: Optional[Dict[str, Any]] = None
-        if proto.parameters:
-            parameters = {}
-            for key, value in proto.parameters.items():
-                try:
-                    parameters[key] = json.loads(value)
-                except (json.JSONDecodeError, TypeError):
-                    parameters[key] = value
-
-        return cls(
-            step_id=proto.step_id or "",
-            description=proto.description or "",
-            tool_call=proto.tool_call or None,
-            parameters=parameters,
-            context_tables=list(proto.context_tables),
-            status=PlanStepStatus.PENDING.value,  # Fresh execution
-            result=None,  # No result yet
-            error=None,  # No error yet
-            sub_plan=SubPlan.from_stored_proto(proto.sub_plan) if proto.sub_plan.agent_name else None,
-            target_agent=proto.target_agent or None,
-            prompt_template=proto.prompt_template or None,
-            required_context=list(proto.required_context) if proto.required_context else [],
-            connection_required=proto.connection_required if hasattr(proto, 'connection_required') and proto.connection_required else None,
-            phase_name=proto.phase_name if hasattr(proto, 'phase_name') and proto.phase_name else None,
-            phase_order=proto.phase_order if hasattr(proto, 'phase_order') and proto.phase_order else None,
-            replan_after=proto.replan_after if hasattr(proto, 'replan_after') else False,
         )
 
     def mark_in_progress(self) -> "PlanStep":
@@ -495,46 +442,6 @@ class Plan:
             version=data.get("version", 1),
             context=data.get("context"),
             analysis=data.get("analysis"),
-        )
-
-    @classmethod
-    def from_stored_proto(cls, proto: "StoredPlanProto") -> "Plan":
-        """Create Plan from StoredPlan proto message.
-
-        Used when executing agentic steps with pre-approved plans.
-        Sets status to APPROVED since stored plans are pre-approved.
-
-        Args:
-            proto: StoredPlan proto message from AgenticStepConfig.plan
-
-        Returns:
-            Plan ready for execution (status=APPROVED)
-        """
-        generated_at = None
-        if proto.generated_at:
-            try:
-                generated_at = datetime.fromisoformat(proto.generated_at.replace("Z", "+00:00"))
-            except ValueError:
-                pass  # Invalid timestamp, leave as None
-
-        approved_at = None
-        if proto.approved_at:
-            try:
-                approved_at = datetime.fromisoformat(proto.approved_at.replace("Z", "+00:00"))
-            except ValueError:
-                pass  # Invalid timestamp, leave as None
-
-        return cls(
-            id=proto.id or "",
-            goal=proto.goal or "",
-            basic_instructions=proto.basic_instructions or "",
-            context=proto.context or None,
-            analysis=proto.analysis or None,
-            steps=[PlanStep.from_stored_proto(s) for s in proto.steps],
-            status=PlanStatus.APPROVED.value,  # Pre-approved for execution
-            generated_at=generated_at,
-            approved_at=approved_at or datetime.now(timezone.utc),  # Set now if not provided
-            version=proto.version or 1,
         )
 
     def approve(self) -> "Plan":

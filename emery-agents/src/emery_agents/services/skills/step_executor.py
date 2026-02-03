@@ -8,6 +8,12 @@ import time
 from dataclasses import dataclass, asdict, field
 from typing import Any, AsyncIterator, Callable, Dict, List, Literal, Optional, Set
 
+import dspy
+
+from ...utils import run_async_in_thread
+from ...entities.tool_config import ToolConfig
+
+
 from tenacity import (
     AsyncRetrying,
     stop_after_attempt,
@@ -17,23 +23,36 @@ from tenacity import (
     RetryError
 )
 
-from ...grpc.generated import agent_worker_pb2
-from ...entities.skill_config import SkillConfigDTO
+from ...entities.skill_config import (
+    SkillConfig, SkillStep,
+    ErrorConfig, RetryConfig, StepOutput, LoopConfig,
+    ReadConfig, WriteConfig, ToolExecutionConfig,
+    AgenticStepConfig, InputDef, OutputDef,
+    RowIdSource, QueryFilter,
+)
 from ...reasoning.modules.extractor import OutputExtractorModule
 from ...types import SkillExecutionResult
 from ...utils.error_classifier import classify_error
 from ..agents.factory import AgentFactory, AgentConfig
 from ..execution.plan_step_executor import PlanStepExecutor
 from ...entities.models.plan import Plan
-from ..tools.loader import UnifiedToolLoader
+from emery_agents.tools.loader import UnifiedToolLoader
+from simpleeval import simple_eval
 
 logger = logging.getLogger(__name__)
 
 
-# Simple condition pattern: "value operator value"
-_CONDITION_PATTERN = re.compile(
-    r'^(.+?)\s*(>=|<=|==|!=|>|<)\s*(.+)$'
-)
+# Regex to convert {{var}} template references to bare variable names
+_TEMPLATE_VAR = re.compile(r'\{\{(\w+)\}\}')
+# Regex to convert ! to 'not' (negative lookahead avoids replacing !=)
+_NEGATE = re.compile(r'!(?!=)')
+# Built-in names for common literals (simpleeval uses Python syntax)
+_BUILTIN_NAMES: Dict[str, Any] = {
+    'true': True, 'false': False,
+    'null': None, 'none': None,
+    'True': True, 'False': False,
+    'None': None,
+}
 
 
 def _flatten_json(obj: Any, prefix: str = '', max_depth: int = 5) -> Dict[str, Any]:
@@ -89,6 +108,7 @@ class StepProgress:
     name: str  # Display name
     status: Literal["pending", "running", "completed", "failed", "skipped"]
     result: Optional[str] = None
+    captured_data: Optional[Dict[str, Any]] = None  # Structured per-output data (None for text results)
     error: Optional[str] = None
     continued_after_error: bool = False
     retries_attempted: int = 0
@@ -102,104 +122,6 @@ class StepError:
     step_name: str
     timestamp: float
     retries_attempted: int = 0
-
-
-@dataclass
-class ErrorConfig:
-    """Error handling configuration for a step."""
-    continue_on_error: bool = False
-    error_output_var: str = "__error__"
-
-
-@dataclass
-class RetryConfig:
-    """Retry configuration for error recovery."""
-    max_attempts: int = 3
-    backoff_ms: int = 1000
-    backoff_type: Literal["fixed", "exponential", "linear"] = "exponential"
-
-
-@dataclass
-class StepOutput:
-    """Step output routing - determines which steps to execute based on outcome."""
-    type: Literal["success", "error", "condition", "default"]
-    condition: str = ""
-    next_steps: List[str] = field(default_factory=list)
-
-
-@dataclass
-class LoopConfig:
-    """Loop configuration for iteration support."""
-    type: Literal["for_each", "while", "until"]
-    items_var: str = ""          # For for_each: variable containing array
-    current_item_var: str = "item"  # Variable name for current item
-    condition: str = ""          # For while/until: condition expression
-    max_iterations: int = 100    # Safety limit
-
-
-@dataclass
-class ReadConfig:
-    """Read configuration for direct table read steps."""
-    mode: str = "single_row"
-    source_table_id: int = 0
-    row_id_source: Optional[Any] = None  # Proto RowIdSource
-    query_filters: List[Any] = field(default_factory=list)  # Proto QueryFilter
-    query_limit: int = 100
-    field_mappings: List[Any] = field(default_factory=list)  # Proto ReadFieldMapping
-
-
-@dataclass
-class WriteConfig:
-    """Write configuration for direct table write steps."""
-    target_table_id: int = 0
-    row_action: str = "create"
-    field_mappings: List[Any] = field(default_factory=list)
-    update_match: Optional[Any] = None
-
-
-@dataclass
-class ToolExecutionConfig:
-    """Tool execution configuration for direct tool call steps."""
-    tool_id: str = ""
-    input_mappings: List[Any] = field(default_factory=list)
-    output_table_id: Optional[int] = None  # Table to store flattened outputs
-
-
-@dataclass
-class TaskModelConfig:
-    """Task model configuration for direct inference steps."""
-    model_id: str = ""
-    task_type: str = ""
-    parameters: Dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class AgenticConfig:
-    """Agentic execution configuration with stored plan.
-
-    Used for agentic steps that execute via PlanStepExecutor.
-    Requires a stored plan - no fallback to DSPy ReAct.
-    """
-    instructions: str = ""
-    tools: List[str] = field(default_factory=list)
-    agent_type: str = ""
-    model: str = ""
-    plan: Optional[Plan] = None
-
-
-@dataclass
-class InputDef:
-    """Input definition for a step."""
-    name: str
-    required: bool = False
-    type: str = "text"
-
-
-@dataclass
-class OutputDef:
-    """Output definition for a step."""
-    name: str
-    type: str = "text"
 
 
 @dataclass
@@ -224,133 +146,38 @@ class Step:
     read_config: Optional[ReadConfig] = None
     write_config: Optional[WriteConfig] = None
     tool_execution_config: Optional[ToolExecutionConfig] = None
-    task_model_config: Optional[TaskModelConfig] = None
-    agentic_config: Optional[AgenticConfig] = None  # For agentic steps with stored plan
+    agentic_config: Optional[AgenticStepConfig] = None  # For agentic steps with stored plan
     # UI state
     is_disabled: bool = False
 
     @classmethod
-    def from_proto(cls, proto: 'agent_worker_pb2.SkillStep') -> 'Step':
-        """Convert proto SkillStep to internal Step."""
-        # Parse error config
-        error_config = None
-        if proto.error_config and proto.error_config.continue_on_error:
-            error_config = ErrorConfig(
-                continue_on_error=proto.error_config.continue_on_error,
-                error_output_var=proto.error_config.error_output_var or "__error__"
-            )
+    def from_dto(cls, dto: 'SkillStep') -> 'Step':
+        """Convert SkillStep to internal Step.
 
-        # Parse retry config
-        retry_config = None
-        if proto.retry_config and proto.retry_config.max_attempts > 0:
-            retry_config = RetryConfig(
-                max_attempts=proto.retry_config.max_attempts,
-                backoff_ms=proto.retry_config.backoff_ms or 1000,
-                backoff_type=proto.retry_config.backoff_type or "exponential"
-            )
-
-        # Parse step outputs
-        step_outputs = []
-        for output in proto.step_outputs:
-            step_outputs.append(StepOutput(
-                type=output.type or "default",
-                condition=output.condition or "",
-                next_steps=list(output.next_steps)
-            ))
-
-        # Parse input/output defs
-        input_defs = [
-            InputDef(name=d.name, required=d.required, type=d.type or "text")
-            for d in proto.input_defs
-        ]
-        output_defs = [
-            OutputDef(name=d.name, type=d.type or "text")
-            for d in proto.output_defs
-        ]
-
-        # Parse loop config
-        loop_config = None
-        if proto.loop_config and proto.loop_config.type:
-            loop_config = LoopConfig(
-                type=proto.loop_config.type,
-                items_var=proto.loop_config.items_var or "",
-                current_item_var=proto.loop_config.current_item_var or "item",
-                condition=proto.loop_config.condition or "",
-                max_iterations=proto.loop_config.max_iterations or 100
-            )
-
-        # Parse step-level execution configs
-        read_config = None
-        if proto.HasField('read_config') and proto.read_config.source_table_id:
-            read_config = ReadConfig(
-                mode=proto.read_config.mode or "single_row",
-                source_table_id=proto.read_config.source_table_id,
-                row_id_source=proto.read_config.row_id_source if proto.read_config.HasField('row_id_source') else None,
-                query_filters=list(proto.read_config.query_filters),
-                query_limit=proto.read_config.query_limit or 100,
-                field_mappings=list(proto.read_config.field_mappings)
-            )
-
-        write_config = None
-        if proto.HasField('write_config') and proto.write_config.target_table_id:
-            write_config = WriteConfig(
-                target_table_id=proto.write_config.target_table_id,
-                row_action=proto.write_config.row_action or "create",
-                field_mappings=list(proto.write_config.field_mappings),
-                update_match=proto.write_config.update_match if proto.write_config.HasField('update_match') else None
-            )
-
-        tool_execution_config = None
-        if proto.HasField('tool_execution_config') and proto.tool_execution_config.tool_id:
-            tool_execution_config = ToolExecutionConfig(
-                tool_id=proto.tool_execution_config.tool_id,
-                input_mappings=list(proto.tool_execution_config.input_mappings),
-                output_table_id=proto.tool_execution_config.output_table_id if proto.tool_execution_config.HasField('output_table_id') else None
-            )
-
-        task_model_config = None
-        if proto.HasField('task_model_config') and proto.task_model_config.model_id:
-            task_model_config = TaskModelConfig(
-                model_id=proto.task_model_config.model_id,
-                task_type=proto.task_model_config.task_type or "",
-                parameters=dict(proto.task_model_config.parameters)
-            )
-
-        # Parse agentic_config (for agentic steps with stored plans)
-        agentic_config = None
-        if proto.HasField('agentic_config'):
-            ac = proto.agentic_config
-            plan = Plan.from_stored_proto(ac.plan) if ac.HasField('plan') and ac.plan.id else None
-            agentic_config = AgenticConfig(
-                instructions=ac.instructions or "",
-                tools=list(ac.tools) if ac.tools else [],
-                agent_type=ac.agent_type or "",
-                model=ac.model or "",
-                plan=plan,
-            )
-
+        Straightforward field copy since DTO and Step share the same
+        config types from entities.skill_config.
+        """
         return cls(
-            id=proto.id,
-            name=proto.name,
-            instruction=proto.instruction or "",
-            skill_id=proto.skill_id,
-            tools=list(proto.tools),
-            inputs=dict(proto.inputs),
-            outputs=dict(proto.outputs),
-            condition=proto.condition or "",
-            input_defs=input_defs,
-            output_defs=output_defs,
-            error_config=error_config,
-            retry_config=retry_config,
-            step_outputs=step_outputs,
-            parallel_group=proto.parallel_group or "",
-            loop_config=loop_config,
-            read_config=read_config,
-            write_config=write_config,
-            tool_execution_config=tool_execution_config,
-            task_model_config=task_model_config,
-            agentic_config=agentic_config,
-            is_disabled=proto.is_disabled
+            id=dto.id,
+            name=dto.name,
+            instruction=dto.instruction,
+            skill_id=dto.skill_id,
+            tools=list(dto.tools),
+            inputs=dict(dto.inputs),
+            outputs=dict(dto.outputs),
+            condition=dto.condition,
+            input_defs=list(dto.input_defs),
+            output_defs=list(dto.output_defs),
+            error_config=dto.error_config,
+            retry_config=dto.retry_config,
+            step_outputs=list(dto.step_outputs),
+            parallel_group=dto.parallel_group,
+            loop_config=dto.loop_config,
+            read_config=dto.read_config,
+            write_config=dto.write_config,
+            tool_execution_config=dto.tool_execution_config,
+            agentic_config=dto.agentic_config,
+            is_disabled=dto.is_disabled,
         )
 
 
@@ -412,8 +239,8 @@ class StepExecutorService:
 
     async def execute_steps(
         self,
-        steps: List['agent_worker_pb2.SkillStep'],
-        available_skills: Dict[int, SkillConfigDTO],
+        steps: List[SkillStep],
+        available_skills: Dict[int, SkillConfig],
         initial_inputs: Dict[str, Any],
         org_model: Optional[str] = None,
         api_key: Optional[str] = None,
@@ -423,7 +250,7 @@ class StepExecutorService:
         """Execute steps as a DAG workflow.
 
         Args:
-            steps: List of SkillStep proto messages
+            steps: List of SkillStep objects
             available_skills: Map of skill_id to SkillConfig for delegation
             initial_inputs: Initial inputs to seed the step_context
             org_model: Organization default model
@@ -434,13 +261,9 @@ class StepExecutorService:
         Yields:
             StepProgress updates as each step executes
         """
-        # Convert proto steps to internal Step objects
-        internal_steps = [Step.from_proto(s) for s in steps]
-        # AIDEV-NOTE: Changed from name-based to ID-based routing for stability.
-        # Names can be renamed by users; IDs are immutable UUIDs.
+        # Convert DTO steps to internal Step objects
+        internal_steps = [Step.from_dto(s) for s in steps]
         step_by_id: Dict[str, Step] = {s.id: s for s in internal_steps}
-        # Keep name→id map for backward compatibility (old data may have names in next_steps)
-        name_to_id: Dict[str, str] = {s.name: s.id for s in internal_steps}
 
         # Initialize execution state (uses IDs for tracking)
         step_context: Dict[str, Any] = dict(initial_inputs)
@@ -477,7 +300,6 @@ class StepExecutorService:
                     internal_steps=internal_steps,
                     pending_steps=pending_steps,
                     executed_steps=executed_steps,
-                    name_to_id=name_to_id
                 ):
                     yield progress
                 step_counter += len(batch)
@@ -501,7 +323,7 @@ class StepExecutorService:
                     )
                     self._queue_next_steps(
                         step, internal_steps, pending_steps, executed_steps,
-                        "success", step_context, name_to_id
+                        "success", step_context
                     )
                     continue
 
@@ -528,7 +350,7 @@ class StepExecutorService:
                         )
                         self._queue_next_steps(
                             step, internal_steps, pending_steps, executed_steps,
-                            "success", step_context, name_to_id
+                            "success", step_context
                         )
                         continue
 
@@ -550,7 +372,8 @@ class StepExecutorService:
                     # Capture outputs
                     self._capture_outputs(step, result, step_context)
 
-                    result_str = str(result)[:500] if result else "No result"
+                    result_str = str(result) if result else "No result"
+                    captured_data = self._build_captured_data(step, result)
                     logger.info(f"✅ Step {step_name}: completed")
 
                     yield StepProgress(
@@ -560,6 +383,7 @@ class StepExecutorService:
                         name=step_name,
                         status="completed",
                         result=result_str,
+                        captured_data=captured_data,
                         retries_attempted=retries_attempted
                     )
 
@@ -616,7 +440,7 @@ class StepExecutorService:
                 # Queue next steps based on outputs
                 self._queue_next_steps(
                     step, internal_steps, pending_steps, executed_steps,
-                    execution_status, step_context, name_to_id
+                    execution_status, step_context
                 )
 
         logger.info(f"🏁 DAG execution complete: {step_counter} steps executed")
@@ -669,7 +493,7 @@ class StepExecutorService:
         step_counter: int,
         total_steps: int,
         step_context: Dict[str, Any],
-        available_skills: Dict[int, SkillConfigDTO],
+        available_skills: Dict[int, SkillConfig],
         execution_stack: Set[int],
         org_model: Optional[str],
         api_key: Optional[str],
@@ -677,7 +501,6 @@ class StepExecutorService:
         internal_steps: List[Step],
         pending_steps: List[str],  # List of step IDs
         executed_steps: Set[str],  # Set of step IDs
-        name_to_id: Optional[Dict[str, str]] = None  # For backward compatibility
     ) -> AsyncIterator[StepProgress]:
         """Execute a batch of steps in parallel using asyncio.gather."""
         # Mark all as executed (by ID)
@@ -700,7 +523,7 @@ class StepExecutorService:
                 )
                 self._queue_next_steps(
                     step, internal_steps, pending_steps, executed_steps,
-                    "success", step_context, name_to_id
+                    "success", step_context
                 )
                 skipped_count += 1
             else:
@@ -766,7 +589,8 @@ class StepExecutorService:
             if error is None:
                 # Success
                 self._capture_outputs(step, result, step_context)
-                result_str = str(result)[:500] if result else "No result"
+                result_str = str(result) if result else "No result"
+                captured_data = self._build_captured_data(step, result)
                 logger.info(f"✅ Step {step.name}: completed (parallel)")
 
                 yield StepProgress(
@@ -776,12 +600,13 @@ class StepExecutorService:
                     name=step.name,
                     status="completed",
                     result=result_str,
+                    captured_data=captured_data,
                     retries_attempted=retries
                 )
 
                 self._queue_next_steps(
                     step, internal_steps, pending_steps, executed_steps,
-                    "success", step_context, name_to_id
+                    "success", step_context
                 )
             else:
                 # Error
@@ -816,7 +641,7 @@ class StepExecutorService:
                     )
                     self._queue_next_steps(
                         step, internal_steps, pending_steps, executed_steps,
-                        "error", step_context, name_to_id
+                        "error", step_context
                     )
                 else:
                     yield StepProgress(
@@ -838,21 +663,13 @@ class StepExecutorService:
         executed_steps: Set[str],  # Set of step IDs
         execution_status: Literal["success", "error"],
         context: Dict[str, Any],
-        name_to_id: Optional[Dict[str, str]] = None  # For backward compatibility
     ) -> None:
-        """Determine and queue next steps based on outputs or sequential order.
-
-        AIDEV-NOTE: Changed from name-based to ID-based routing.
-        next_steps from step_outputs now contain IDs, not names.
-        name_to_id map is used for backward compatibility with old data.
-        """
-        # next_step_ids could be IDs (new format) or names (old format)
-        next_step_ids_or_names: List[str] = []
+        """Determine and queue next steps based on outputs or sequential order."""
+        next_step_ids: List[str] = []
         id_set = {s.id for s in all_steps}
 
         if current_step.step_outputs:
-            # Use output-based routing
-            next_step_ids_or_names = self._get_next_steps_from_outputs(
+            next_step_ids = self._get_next_steps_from_outputs(
                 current_step, execution_status, context
             )
         else:
@@ -862,23 +679,15 @@ class StepExecutorService:
                     i for i, s in enumerate(all_steps) if s.id == current_step.id
                 )
                 if current_idx + 1 < len(all_steps):
-                    next_step_ids_or_names = [all_steps[current_idx + 1].id]
+                    next_step_ids = [all_steps[current_idx + 1].id]
             except StopIteration:
-                # Current step ID not found in all_steps - may indicate plan/step mismatch
                 logger.debug(
                     f"Step {current_step.id} not found in all_steps "
                     f"(available: {[s.id for s in all_steps]})"
                 )
 
-        # Add to pending (avoid duplicates and already executed)
-        # Handle both new format (IDs) and old format (names) for backward compatibility
-        for id_or_name in next_step_ids_or_names:
-            # Convert name to ID if needed (backward compatibility)
-            step_id = id_or_name if id_or_name in id_set else (
-                name_to_id.get(id_or_name) if name_to_id else None
-            )
-
-            if step_id and step_id not in executed_steps and step_id not in pending_steps:
+        for step_id in next_step_ids:
+            if step_id in id_set and step_id not in executed_steps and step_id not in pending_steps:
                 pending_steps.append(step_id)
                 logger.debug(f"📍 Queued next step: {step_id}")
 
@@ -888,9 +697,15 @@ class StepExecutorService:
         execution_status: Literal["success", "error"],
         context: Dict[str, Any]
     ) -> List[str]:
-        """Determine next steps based on step outputs and execution status."""
+        """Determine next steps based on step outputs and execution status.
+
+        Condition outputs use short-circuit evaluation (if/elif/else semantics):
+        the first matching condition routes, remaining conditions are skipped.
+        The 'default' output acts as the else branch.
+        """
         next_steps: List[str] = []
         default_steps: List[str] = []
+        condition_matched = False
 
         for output in step.step_outputs:
             if output.type == "success" and execution_status == "success":
@@ -902,9 +717,13 @@ class StepExecutorService:
                 logger.debug(f"📍 Error output: routing to {output.next_steps}")
 
             elif output.type == "condition" and output.condition:
-                if self._evaluate_condition(output.condition, context):
-                    next_steps.extend(output.next_steps)
-                    logger.debug(f"📍 Condition '{output.condition}' matched: routing to {output.next_steps}")
+                if not condition_matched:
+                    if self._evaluate_condition(output.condition, context):
+                        next_steps.extend(output.next_steps)
+                        condition_matched = True
+                        logger.debug(f"📍 Condition '{output.condition}' matched: routing to {output.next_steps}")
+                    else:
+                        logger.debug(f"📍 Condition '{output.condition}' not matched, checking next")
 
             elif output.type == "default":
                 default_steps.extend(output.next_steps)
@@ -920,7 +739,7 @@ class StepExecutorService:
         self,
         step: Step,
         step_context: Dict[str, Any],
-        available_skills: Dict[int, SkillConfigDTO],
+        available_skills: Dict[int, SkillConfig],
         execution_stack: Set[int],
         org_model: Optional[str],
         api_key: Optional[str],
@@ -968,10 +787,6 @@ class StepExecutorService:
                 return await self._execute_tool_step(
                     step, step_inputs, api_key, organization_id
                 )
-            elif step.task_model_config:
-                return await self._execute_operation_step(
-                    step, step_inputs, api_key, organization_id
-                )
             elif step.agentic_config:
                 return await self._execute_agentic_step(
                     step, step_inputs, step_context, org_model,
@@ -1010,7 +825,7 @@ class StepExecutorService:
         self,
         step: Step,
         step_context: Dict[str, Any],
-        available_skills: Dict[int, SkillConfigDTO],
+        available_skills: Dict[int, SkillConfig],
         execution_stack: Set[int],
         org_model: Optional[str],
         api_key: Optional[str],
@@ -1182,7 +997,7 @@ class StepExecutorService:
         self,
         step: Step,
         step_inputs: Dict[str, Any],
-        available_skills: Dict[int, SkillConfigDTO],
+        available_skills: Dict[int, SkillConfig],
         org_model: Optional[str],
         api_key: Optional[str],
         organization_id: Optional[int],
@@ -1243,7 +1058,6 @@ class StepExecutorService:
         step_tools = []
         if step.tools:
             try:
-                from ..grpc.generated.agent_worker_pb2 import ToolConfig
                 tool_configs = [ToolConfig(name=name) for name in step.tools]
                 step_tools = self.tool_loader.load_tools_from_configs(
                     tool_configs=tool_configs,
@@ -1276,7 +1090,8 @@ class StepExecutorService:
         )
 
         sub_agent = self.agent_factory.create_agent(agent_config)
-        result = sub_agent.run(task=task, stream=False, reset=True)
+        with dspy.context(lm=sub_agent._lm):
+            result = sub_agent.run(task=task, stream=False, reset=True)
 
         # Extract outputs using DSPy module if step has output_defs
         if step.output_defs:
@@ -1378,8 +1193,8 @@ class StepExecutorService:
         organization_id: Optional[int]
     ) -> Dict[str, Any]:
         """Execute a direct table write step (no LLM)."""
-        import os
-        import httpx
+        import asyncio
+        from emery_agents.api import RowAPI
 
         write_config = step.write_config
         if not write_config or not write_config.target_table_id:
@@ -1389,6 +1204,8 @@ class StepExecutorService:
         row_action = write_config.row_action or "create"
 
         logger.info(f"📝 Step {step.name}: table write -> table {table_id} ({row_action})")
+        logger.info(f"📝 Write step_inputs keys: {list(step_inputs.keys())}")
+        logger.info(f"📝 Write step_inputs: {step_inputs}")
 
         # Build field values from mappings
         field_values = {}
@@ -1397,50 +1214,33 @@ class StepExecutorService:
             field_id = str(mapping.target_field_id)
             if skill_input in step_inputs:
                 field_values[field_id] = step_inputs[skill_input]
-
-        nextjs_base = os.getenv("NEXTJS_BASE_URL", "http://localhost:3000")
-        base_url = f"{nextjs_base}/api"
-
-        headers = {"Content-Type": "application/json"}
-        if api_key:
-            headers["Authorization"] = f"Bearer {api_key}"
-        if organization_id:
-            headers["X-Organization-ID"] = str(organization_id)
-
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            if row_action == "create":
-                response = await client.post(
-                    f"{base_url}/rows",
-                    headers=headers,
-                    json={"tableId": table_id, "data": field_values}
-                )
-            elif row_action == "update":
-                if not write_config.update_match:
-                    raise ValueError("Write step update mode requires update_match")
-                match_input = write_config.update_match.skill_input_name
-                match_field_id = str(write_config.update_match.target_field_id)
-                if match_input not in step_inputs:
-                    raise ValueError(f"Update match input '{match_input}' not in step inputs")
-                match_value = step_inputs[match_input]
-                response = await client.put(
-                    f"{base_url}/rows",
-                    headers=headers,
-                    json={
-                        "tableId": table_id,
-                        "matchField": match_field_id,
-                        "matchValue": match_value,
-                        "data": field_values
-                    }
-                )
             else:
-                raise ValueError(f"Unknown row_action: {row_action}")
+                logger.warning(f"📝 Write mapping: '{skill_input}' not in step_inputs, skipping field {field_id}")
 
-            if response.status_code >= 400:
-                raise ValueError(f"Table write failed: {response.text[:500]}")
+        logger.info(f"📝 Write step field_values ({len(field_values)} fields): {field_values}")
 
-            result = response.json()
-            logger.info(f"✅ Step {step.name}: write complete")
-            return result
+        row_api = RowAPI(api_key=api_key or "", org_id=str(organization_id or 0))
+
+        if row_action == "create":
+            result = await asyncio.to_thread(row_api.create_row, table_id, field_values)
+        elif row_action == "update":
+            if not write_config.update_match:
+                raise ValueError("Write step update mode requires update_match")
+            match_input = write_config.update_match.skill_input_name
+            if match_input not in step_inputs:
+                raise ValueError(f"Update match input '{match_input}' not in step inputs")
+            result = await asyncio.to_thread(
+                row_api.update_row, table_id, step_inputs[match_input], field_values
+            )
+        elif row_action == "upsert":
+            result = await asyncio.to_thread(
+                row_api.upsert_row, table_id, field_values, write_config.match_field_ids
+            )
+        else:
+            raise ValueError(f"Unknown row_action: {row_action}")
+
+        logger.info(f"✅ Step {step.name}: write complete")
+        return result
 
     async def _execute_tool_step(
         self,
@@ -1472,11 +1272,10 @@ class StepExecutorService:
                 tool_inputs[mapping.tool_param] = mapping.static_value
 
         # Load the specific Pipedream tool
-        from ..grpc.generated.agent_worker_pb2 import ToolConfig as ProtoToolConfig
-        proto_tool_config = ProtoToolConfig(name=tool_id, tool_type="pipedream", config={})
+        tool_config = ToolConfig(name=tool_id, config={})
 
         tools = self.tool_loader.load_tools_from_configs(
-            tool_configs=[proto_tool_config],
+            tool_configs=[tool_config],
             api_key=api_key,
             api_key_mode="user"
         )
@@ -1505,51 +1304,6 @@ class StepExecutorService:
 
         return result_dict
 
-    async def _execute_operation_step(
-        self,
-        step: Step,
-        step_inputs: Dict[str, Any],
-        api_key: Optional[str],
-        organization_id: Optional[int]
-    ) -> Any:
-        """Execute a direct inference step (no LLM orchestration)."""
-        from ..infrastructure.clients import HuggingFaceInferenceClient, TaskResult
-        from ..utils import run_async_in_thread
-
-        task_config = step.task_model_config
-        if not task_config or not task_config.model_id:
-            raise ValueError(f"Operation step '{step.name}' missing model_id")
-
-        model_id = task_config.model_id
-        task_type = task_config.task_type
-        parameters = task_config.parameters
-
-        logger.info(f"🚀 Step {step.name}: direct inference -> {model_id} ({task_type})")
-
-        client = HuggingFaceInferenceClient()
-
-        if not client.supports_task_type(task_type):
-            raise ValueError(f"Task type '{task_type}' not supported")
-
-        # Execute inference (sync wrapper for async client)
-        result: TaskResult = run_async_in_thread(
-            client.execute_task(
-                model_id=model_id,
-                task_type=task_type,
-                inputs=step_inputs,
-                parameters=parameters
-            )
-        )
-
-        logger.info(f"✅ Step {step.name}: inference complete")
-
-        if result.is_text:
-            return {"result": str(result.data)}
-        elif result.is_structured:
-            return result.data
-        else:
-            return {"result": f"Binary result: {len(result.data)} bytes"}
-
     async def _execute_agentic_step(
         self,
         step: Step,
@@ -1575,6 +1329,18 @@ class StepExecutorService:
                 f"No fallback execution available."
             )
 
+        # Load Pipedream tools from agentic config so the LLM can call them
+        extra_tools = []
+        if agentic_config.tools and self.tool_loader:
+            from emery_agents.entities.skill_config import StepToolConfig
+            tool_configs = [StepToolConfig(name=t) for t in agentic_config.tools]
+            extra_tools = self.tool_loader.load_tools_from_configs(
+                tool_configs=tool_configs,
+                api_key=api_key,
+                api_key_mode="user",
+            )
+            logger.info(f"🔧 Loaded {len(extra_tools)} Pipedream tools for step {step.name}")
+
         logger.info(f"📋 Step {step.name}: executing with stored plan")
         # _execute_with_plan is sync (PlanStepExecutor.execute is sync)
         return self._execute_with_plan(
@@ -1583,6 +1349,7 @@ class StepExecutorService:
             org_model=agentic_config.model or org_model,
             api_key=api_key,
             organization_id=organization_id,
+            extra_tools=extra_tools,
         )
 
     def _execute_with_plan(
@@ -1592,6 +1359,7 @@ class StepExecutorService:
         org_model: Optional[str],
         api_key: Optional[str],
         organization_id: Optional[int],
+        extra_tools: Optional[list] = None,
     ) -> str:
         """Execute a stored plan using PlanStepExecutor.
 
@@ -1601,6 +1369,7 @@ class StepExecutorService:
             org_model: Organization default model
             api_key: API key for authenticated calls
             organization_id: Organization ID for RLS context
+            extra_tools: Additional tools (e.g., Pipedream) to make available to the LLM
 
         Returns:
             Combined results from all plan steps
@@ -1610,6 +1379,7 @@ class StepExecutorService:
             org_id=str(organization_id) if organization_id else "",
             org_model=org_model,
             skill_inputs=skill_inputs,
+            extra_tools=extra_tools,
         )
 
         results = []
@@ -1625,7 +1395,7 @@ class StepExecutorService:
 
     def _resolve_row_id_source(
         self,
-        row_id_source: Any,
+        row_id_source: Optional[RowIdSource],
         step_inputs: Dict[str, Any]
     ) -> Optional[str]:
         """Resolve row ID from source configuration."""
@@ -1646,7 +1416,7 @@ class StepExecutorService:
 
     def _build_query_filters(
         self,
-        query_filters: List[Any],
+        query_filters: List[QueryFilter],
         step_inputs: Dict[str, Any]
     ) -> List[Dict[str, Any]]:
         """Build query filters from config."""
@@ -1656,7 +1426,9 @@ class StepExecutorService:
             operator = qf.operator
 
             value_source = qf.value_source
-            if value_source.type == "static":
+            if value_source is None:
+                value = ""
+            elif value_source.type == "static":
                 value = value_source.static_id
             elif value_source.type == "skill_input":
                 value = step_inputs.get(value_source.skill_input, "")
@@ -1684,7 +1456,10 @@ class StepExecutorService:
                 if var_name in context:
                     resolved[param_name] = context[var_name]
                 else:
-                    logger.warning(f"Variable '{var_name}' not found in step context")
+                    raise ValueError(
+                        f"Required input '{var_name}' not found in step context. "
+                        f"Available: {list(context.keys())}"
+                    )
             else:
                 resolved[param_name] = source
         return resolved
@@ -1714,6 +1489,28 @@ class StepExecutorService:
 
         logger.debug(f"📤 Captured outputs: {list(output_mappings.values())}")
 
+    def _build_captured_data(self, step: Step, result: Any) -> Optional[Dict[str, Any]]:
+        """Build structured output dict keyed by output name.
+
+        Returns None if result is not a dict (text results need extraction instead).
+        Used by execute_steps_sync() to build structured captured_outputs for
+        map_node_outputs_to_skill_outputs().
+        """
+        if not isinstance(result, dict):
+            return None
+
+        output_mappings = step.outputs
+        if not output_mappings and step.output_defs:
+            output_mappings = {d.name: d.name for d in step.output_defs}
+        if not output_mappings:
+            return None
+
+        data = {}
+        for output_name in output_mappings:
+            if output_name in result:
+                data[output_name] = result[output_name]
+        return data if data else None
+
     def _inject_context(self, instruction: str, context: Dict[str, Any]) -> str:
         """Replace {{var}} placeholders in instruction with compact JSON."""
         result = instruction
@@ -1729,62 +1526,31 @@ class StepExecutorService:
         return result
 
     def _evaluate_condition(self, condition: str, context: Dict[str, Any]) -> bool:
-        """Safely evaluate simple conditions like '{{count}} > 0'."""
-        expr = self._inject_context(condition, context)
+        """Evaluate condition expressions safely using simpleeval.
 
-        match = _CONDITION_PATTERN.match(expr.strip())
-        if not match:
-            logger.debug(f"Condition '{expr}' - treating as truthy check")
-            return bool(expr.strip())
+        Supports comparisons (==, !=, >, <, >=, <=), boolean operators
+        (&&/and, ||/or, !/not), parenthesized grouping, and {{var}} references.
 
-        left_str, op, right_str = match.groups()
-        left = self._parse_value(left_str.strip())
-        right = self._parse_value(right_str.strip())
+        Examples:
+            '{{count}} > 0'
+            '{{a}} > 5 && {{b}} < 10'
+            '{{status}} == "active" || {{status}} == "pending"'
+            '!({{done}} == true)'
+            '({{a}} > 5 || {{b}} < 3) && {{c}} == "yes"'
+        """
+        # Convert {{var}} → var (resolved via names dict)
+        expr = _TEMPLATE_VAR.sub(r'\1', condition)
+        # Convert JS-style operators to Python: && → and, || → or, ! → not
+        expr = expr.replace('&&', ' and ').replace('||', ' or ')
+        expr = _NEGATE.sub(' not ', expr)
 
+        names = {**_BUILTIN_NAMES, **context}
         try:
-            if op == '>':
-                return left > right
-            elif op == '<':
-                return left < right
-            elif op == '>=':
-                return left >= right
-            elif op == '<=':
-                return left <= right
-            elif op == '==':
-                return left == right
-            elif op == '!=':
-                return left != right
+            result = simple_eval(expr.strip(), names=names)
+            return bool(result)
         except Exception as e:
-            logger.warning(f"Condition comparison failed '{condition}': {e}")
+            logger.warning(f"Condition evaluation failed '{condition}': {e}")
             return False
-
-        return False
-
-    def _parse_value(self, value_str: str) -> Any:
-        """Parse a string value into appropriate Python type."""
-        try:
-            return int(value_str)
-        except ValueError:
-            pass
-
-        try:
-            return float(value_str)
-        except ValueError:
-            pass
-
-        lower = value_str.lower()
-        if lower == 'true':
-            return True
-        if lower == 'false':
-            return False
-        if lower in ('none', 'null'):
-            return None
-
-        if (value_str.startswith('"') and value_str.endswith('"')) or \
-           (value_str.startswith("'") and value_str.endswith("'")):
-            return value_str[1:-1]
-
-        return value_str
 
 
 # =============================================================================
@@ -1793,15 +1559,14 @@ class StepExecutorService:
 
 def execute_steps_sync(
     step_executor: StepExecutorService,
-    steps: List['agent_worker_pb2.SkillStep'],
-    available_skills: Dict[int, SkillConfigDTO],
+    steps: List[SkillStep],
+    available_skills: Dict[int, SkillConfig],
     initial_inputs: Dict[str, Any],
     org_model: Optional[str] = None,
     api_key: Optional[str] = None,
     organization_id: Optional[int] = None
 ) -> SkillExecutionResult:
     """Synchronous wrapper for step execution."""
-    from ..utils import run_async_in_thread
 
     async def collect_results():
         results = []
@@ -1825,8 +1590,11 @@ def execute_steps_sync(
 
     captured = {}
     for progress in results:
-        if progress.status == "completed" and progress.result:
-            captured[progress.id] = progress.result  # Key by ID for output source mapping
+        if progress.status == "completed":
+            if progress.captured_data:
+                captured[progress.id] = progress.captured_data  # Structured: {output_name: value}
+            elif progress.result:
+                captured[progress.id] = progress.result  # Fallback: raw string
 
     return SkillExecutionResult(
         result=final_result or "Steps completed",

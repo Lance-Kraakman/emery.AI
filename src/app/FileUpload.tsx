@@ -154,7 +154,7 @@ export default function FileUpload({ value, onChange, organizationId, tableId, f
                 </button>
                 <button
                   onClick={() => removeFile(file.id)}
-                  className="p-1 text-gray-400 hover:text-red-600"
+                  className="p-1 text-gray-400 hover:text-destructive"
                   title="Remove"
                 >
                   <X size={16} />

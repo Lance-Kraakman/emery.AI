@@ -1,0 +1,30 @@
+{
+  "$format": "brain-template",
+  "$version": 1,
+  "metadata": {
+    "name": "LinkedIn: Get My Profile",
+    "description": "Retrieve the LinkedIn profile of the currently authenticated member.",
+    "category": "Integrations",
+    "tags": ["linkedin", "profile"],
+    "version": "1.0.0",
+    "author": "enhancd.ai"
+  },
+  "template": {
+    "type": "skill",
+    "data": {
+      "name": "LinkedIn: Get My Profile",
+      "description": "Retrieve the LinkedIn profile of the currently authenticated member.",
+      "inputs": [],
+      "outputs": [
+        { "name": "result", "type": "text" }
+      ],
+      "instructions": "Retrieve the LinkedIn profile of the currently authenticated user.\n\nNo inputs required — returns profile information for the connected LinkedIn account.\n\n**Output:** {result} contains profile details including name, headline, and profile URL.",
+      "tools": [],
+      "executionType": "tool",
+      "toolExecutionConfig": {
+        "toolId": "linkedin-get-current-member-profile",
+        "inputMappings": []
+      }
+    }
+  }
+}

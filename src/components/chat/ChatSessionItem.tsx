@@ -67,68 +67,34 @@ export function ChatSessionItem({ session, isActive, onClick, onArchive }: ChatS
     }
   }
 
-  const getDomainIcon = () => {
-    const contextType = session.contextMetadata?.contextType
-    switch (contextType) {
-      case 'agents':
-        return '🤖'
-      case 'tables':
-        return '📊'
-      case 'teams':
-        return '👥'
-      case 'files':
-        return '📁'
-      default:
-        return '💬'
-    }
-  }
-
-  const getDomainLabel = () => {
-    const metadata = session.contextMetadata
-    if (metadata?.domainSchema?.name) {
-      return `${metadata.contextType}: ${metadata.domainSchema.name}`
-    }
-    return metadata?.contextType || 'General'
-  }
-
   return (
     <div
       className={`group relative flex flex-col p-3 cursor-pointer transition-colors duration-200 border-b border-border/30 last:border-b-0 ${
-        isActive 
-          ? 'bg-accent/20 border-l-2 border-l-accent' 
+        isActive
+          ? 'bg-accent/20 border-l-2 border-l-accent'
           : 'hover:bg-muted/50'
       }`}
       onClick={() => onClick(session.id)}
     >
       {/* Main content */}
       <div className="flex items-start gap-2 min-w-0">
-        {/* Domain icon */}
-        <div className="flex-shrink-0 text-lg mt-0.5">
-          {getDomainIcon()}
-        </div>
-        
         {/* Chat info */}
         <div className="flex-1 min-w-0">
           {/* Title */}
           <div className="font-medium text-sm text-foreground truncate mb-1">
             {session.title}
           </div>
-          
-          {/* Domain context */}
-          <div className="text-xs text-muted-foreground mb-1">
-            {getDomainLabel()}
-          </div>
-          
+
           {/* Metadata row */}
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
             <div className="flex items-center gap-1">
               <MessageSquare className="h-3 w-3" />
               {session.messageCount}
             </div>
-            
+
             <div className="flex items-center gap-1">
               <Calendar className="h-3 w-3" />
-              {session.lastMessageAt 
+              {session.lastMessageAt
                 ? formatDate(new Date(session.lastMessageAt))
                 : formatDate(new Date(session.createdAt))
               }

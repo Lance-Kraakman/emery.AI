@@ -10,12 +10,23 @@ from .task import Task, TaskConfig, TaskInstructions
 from .execution_context import ExecutionContext
 from .task import SkillInputValue, SkillOutputValue, RowMappingContext
 from .skill_config import (
-    SkillConfigDTO,
+    SkillConfig,
     InputDefinition,
     OutputDefinition,
-    OutputSourceDTO,
-    ToolConfigDTO,
-    SkillStepDTO,
+    OutputSource,
+    StepToolConfig,
+    SkillStep,
+)
+from .workspace import (
+    WorkspaceField,
+    WorkspacePage,
+    WorkspaceApp,
+    WorkspaceAgent,
+    WorkspaceSkill,
+    WorkspaceTable,
+    WorkspaceDatabase,
+    WorkspaceView,
+    WorkspaceData,
 )
 
 __all__ = [
@@ -29,10 +40,20 @@ __all__ = [
     "SkillOutputValue",
     "RowMappingContext",
     # Skill config DTO
-    "SkillConfigDTO",
+    "SkillConfig",
     "InputDefinition",
     "OutputDefinition",
-    "OutputSourceDTO",
-    "ToolConfigDTO",
-    "SkillStepDTO",
+    "OutputSource",
+    "StepToolConfig",
+    "SkillStep",
+    # Workspace resource entities
+    "WorkspaceField",
+    "WorkspacePage",
+    "WorkspaceApp",
+    "WorkspaceAgent",
+    "WorkspaceSkill",
+    "WorkspaceTable",
+    "WorkspaceDatabase",
+    "WorkspaceView",
+    "WorkspaceData",
 ]

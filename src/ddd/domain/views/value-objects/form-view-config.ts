@@ -42,6 +42,8 @@ export interface FormFieldConfig {
   visible?: boolean;                                    // Default visibility state (default: true)
   conditionalVisibility?: ConditionalVisibility;       // Show/hide based on other field
   validationRules?: ValidationRule[];                  // Type-specific validation rules
+  allowMultiple?: boolean;                             // Override field metadata's multiple setting (file/document fields)
+  maxFiles?: number;                                   // Max file count when allowMultiple is true (file/document fields)
 }
 
 /**

@@ -28,7 +28,7 @@ export function SyncModeSelector({
       className={cn(
         'block w-full rounded-md border border-gray-200 px-2 py-1 text-xs',
         'bg-white text-gray-700',
-        'focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50',
+        'focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring',
         disabled && 'opacity-50 cursor-not-allowed'
       )}
     >

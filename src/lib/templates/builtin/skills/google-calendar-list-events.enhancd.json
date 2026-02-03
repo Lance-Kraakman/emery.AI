@@ -1,0 +1,38 @@
+{
+  "$format": "brain-template",
+  "$version": 1,
+  "metadata": {
+    "name": "Google Calendar: List Events",
+    "description": "List events from Google Calendar, optionally filtered by date range and max results.",
+    "category": "Integrations",
+    "tags": ["google-calendar", "events", "list", "upcoming"],
+    "version": "1.0.0",
+    "author": "enhancd.ai"
+  },
+  "template": {
+    "type": "skill",
+    "data": {
+      "name": "Google Calendar: List Events",
+      "description": "List events from Google Calendar, optionally filtered by date range and max results.",
+      "inputs": [
+        { "name": "start_date", "required": false, "type": "text" },
+        { "name": "end_date", "required": false, "type": "text" },
+        { "name": "max_results", "required": false, "type": "number" }
+      ],
+      "outputs": [
+        { "name": "result", "type": "text" }
+      ],
+      "instructions": "List events from Google Calendar within a date range.\n\nRetrieve upcoming events, optionally filtered by date range and limited in count.\n\n**Inputs:**\n- {start_date}: Lower bound in RFC3339 format (optional)\n- {end_date}: Upper bound in RFC3339 format (optional)\n- {max_results}: Maximum number of events to return (optional)\n\n**Output:** {result} contains the list of calendar events.",
+      "tools": [],
+      "executionType": "tool",
+      "toolExecutionConfig": {
+        "toolId": "google_calendar-list-events",
+        "inputMappings": [
+          { "toolParam": "timeMin", "skillInputName": "start_date" },
+          { "toolParam": "timeMax", "skillInputName": "end_date" },
+          { "toolParam": "maxResults", "skillInputName": "max_results" }
+        ]
+      }
+    }
+  }
+}

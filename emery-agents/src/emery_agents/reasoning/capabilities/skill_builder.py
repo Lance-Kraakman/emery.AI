@@ -37,4 +37,15 @@ Ensure you have:
 - **Outputs**: Data captured after skill execution
 - **Instructions**: Natural language description of what the skill does
 - **Persona**: Optional personality/style for the skill's execution
+
+### External Integrations (Gmail, Slack, GitHub, etc.)
+
+When a skill uses a third-party service:
+1. Call search_external(service="<name>") during planning to find the exact action
+2. Include the tool name in the step description (e.g., "using gmail_send_email")
+3. Set connection_required to the app slug (e.g., "gmail")
+
+Example step descriptions:
+- "Create skill 'send_gmail_email' using gmail_send_email integration. Inputs: to (text), subject (text), body (text). connection_required: gmail"
+- "Create skill 'post_to_slack' using slack_send_message integration. Inputs: channel (text), message (text). connection_required: slack"
 """

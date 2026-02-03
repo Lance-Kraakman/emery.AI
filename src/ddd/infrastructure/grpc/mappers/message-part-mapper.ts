@@ -105,10 +105,22 @@ export function messageWithAttachmentsToProtoParts(
 
   if (attachments) {
     attachments.forEach(att => {
-      if (att.type === 'image' && att.url) {
+      if (!att.url) return;
+      if (att.type === 'image') {
         parts.push(
           MessagePart.fromPartial({
             imageUrl: ImageUrlPart.fromPartial({ url: att.url })
+          })
+        );
+      } else {
+        parts.push(
+          MessagePart.fromPartial({
+            file: FilePart.fromPartial({
+              url: att.url,
+              mimeType: att.mimeType || 'application/octet-stream',
+              filename: '',
+              size: 0
+            })
           })
         );
       }

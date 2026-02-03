@@ -25,6 +25,7 @@ export interface CreateSkillCommand {
   tools: ToolConfig[];
   model?: string | null; // Optional: Override model for this skill
   agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
+  allowNetwork?: boolean; // Whether bash tool has network access (for git/code skills)
   executionType?: SkillExecutionType; // 'agentic' (default), 'agent', 'operation', 'tool', 'write', or 'read'
   taskModelConfig?: TaskModelConfig; // Config for 'operation' execution
   toolExecutionConfig?: ToolExecutionConfig; // Config for 'tool' execution
@@ -46,6 +47,7 @@ export interface UpdateSkillCommand {
   tools?: ToolConfig[];
   model?: string | null; // Optional: Override model for this skill
   agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
+  allowNetwork?: boolean; // Whether bash tool has network access (for git/code skills)
   content?: MessagePart[]; // Skill-level attachments
   executionType?: SkillExecutionType; // 'agentic' (default), 'agent', 'operation', 'tool', 'write', or 'read'
   taskModelConfig?: TaskModelConfig | null; // Config for 'operation' execution
@@ -100,6 +102,7 @@ export class SkillApplicationService {
         tools: command.tools,
         model: command.model,
         agentType: command.agentType,
+        allowNetwork: command.allowNetwork,
         executionType: command.executionType,
         taskModelConfig: command.taskModelConfig,
         toolExecutionConfig: command.toolExecutionConfig,

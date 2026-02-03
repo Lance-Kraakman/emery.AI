@@ -1,5 +1,6 @@
 import { pgTable, text, uuid, serial, bigserial, bigint, integer, timestamp, boolean, primaryKey, jsonb, unique, customType, pgPolicy, pgRole, index, doublePrecision, numeric } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+import { randomBytes, randomUUID } from 'crypto';
 
 // AIDEV-NOTE: Import organizational analysis types for type-safe schema
 import type { OrganizationAnalysisCapabilities } from '@/ddd/domain/organizations/entities/organization';
@@ -821,8 +822,8 @@ export const agents = pgTable("agents", {
   databaseId: text("database_id"),
   status: text("status").default("active"),
   organizationId: integer("organization_id").notNull().references(() => organizations.id),
-  apiKey: text("api_key").unique(), // For API authentication
-  webhookToken: text("webhook_token").unique(), // For webhook authentication (Pipedream, etc.)
+  apiKey: text("api_key").unique().$defaultFn(() => `key_${randomBytes(16).toString('hex')}`), // For API authentication
+  webhookToken: text("webhook_token").unique().$defaultFn(() => randomUUID()), // For webhook authentication (Pipedream, etc.)
   lastUsedAt: timestamp("last_used_at"), // Track API key usage
 
   // Model configuration
@@ -1029,6 +1030,10 @@ export const skills = pgTable("skills", {
   // code_agent: Python code execution, better for complex multi-step reasoning
   agentType: text("agent_type"),
 
+  // Whether the bash tool should have network access for this skill
+  // Enables git, curl, wget in the bwrap sandbox (default: false for security)
+  allowNetwork: boolean("allow_network").default(false).notNull(),
+
   // Execution type determines how the skill is executed:
   // - 'agentic': LLM orchestration with flat instructions (default, current behavior)
   // - 'agent': Step-based DAG execution with structured steps[]
@@ -1202,7 +1207,7 @@ export const tasks = pgTable("tasks", {
   organizationId: integer("organization_id").notNull().references(() => organizations.id), // Organization for RLS
   name: text("name").notNull(),
   instructions: jsonb("instructions").notNull(), // Task instructions with tools: {task: string, images?: ImageAttachment[], tools?: ToolConfig[], metadata?: Record<string, any>}
-  skillId: integer("skill_id").references(() => skills.id), // Optional skill to execute instead of raw instructions
+  skillId: integer("skill_id").references(() => skills.id, { onDelete: 'set null' }), // Optional skill to execute instead of raw instructions
   triggerContext: jsonb("trigger_context"), // What triggered this task: {type: 'DATABASE_EVENT' | 'CALENDAR' | 'WEBHOOK' | 'MANUAL', scheduleName?: string, tableChange?: TableChangeEvent}
   status: text("status").notNull().default("pending"), // pending, in_progress, completed, failed, cancelled, timeout
   result: jsonb("result"), // Final output data

@@ -10,15 +10,10 @@ Context and configuration management for agent execution.
 """
 
 from .models import (
-    DatabaseInfo,
-    TableInfo,
-    PageInfo,
-    AppInfo,
-    AgentInfo,
-    SkillInfo,
-    ViewInfo,
+    ConversationMessage,
     SessionConfig,
     WorkspaceContext,
+    format_conversation_history,
 )
 from .resolver import ContextResolver
 from .sync import ContextSyncService, ContextSyncServiceFactory
@@ -30,22 +25,13 @@ from .manager import (
 
 
 __all__ = [
-    # Models
-    "DatabaseInfo",
-    "TableInfo",
-    "PageInfo",
-    "AppInfo",
-    "AgentInfo",
-    "SkillInfo",
-    "ViewInfo",
+    "ConversationMessage",
     "SessionConfig",
     "WorkspaceContext",
-    # Resolver
+    "format_conversation_history",
     "ContextResolver",
-    # Sync
     "ContextSyncService",
     "ContextSyncServiceFactory",
-    # Manager
     "set_current_context",
     "get_current_context",
     "execution_scope",

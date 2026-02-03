@@ -26,16 +26,18 @@ from emery_agents.reasoning.signatures.planning import (
 
 class PlannerModule(dspy.Module):  # type: ignore[misc]
     """
-    DSPy module for creating execution plans.
+    DSPy module for creating execution plans using ReAct.
 
-    This module implements the Think Before Asking pattern:
-    1. Classify intent (greeting, question, vague, clear actionable)
-    2. Check for delegation phrases (user wants us to decide)
-    3. Analyze the task to understand complexity
-    4. Create a plan or ask clarifying questions
-    5. Validate the output
+    Two LLM calls:
+    1. AnalyzeTask — understand intent, approach, external services
+    2. ReAct(CreatePlan) — generate plan with discovery tool access
 
-    Critical logic is in Python (testable, maintainable), not in prompt strings.
+    Each input field to the planner has one clear purpose:
+    - request: what the user wants
+    - workspace_context: what already exists
+    - capability_guidance: routing table + matched capability instructions
+    - proven_strategies: what worked before (ACE)
+    - task_analysis: pre-analyzed intent, approach, external service hints
     """
 
     # Phrases that indicate user wants us to propose defaults
@@ -52,21 +54,19 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         "common",
     ]
 
-    # Simple greetings that need clarification
-    GREETINGS = ["hey", "hi", "hello", "good morning", "good afternoon", "good evening"]
-
     def __init__(self, discovery_tools: list[Any] | None = None) -> None:
         """
         Initialize the planner module.
 
         Args:
-            discovery_tools: List of tools available during planning phase
-                           (read-only discovery tools)
+            discovery_tools: dspy.Tool instances for dynamic discovery during planning
+                           (e.g., system_research, search_capabilities, search_external).
+                           ReAct with no tools behaves like ChainOfThought.
         """
         super().__init__()
         self.analyzer = dspy.ChainOfThought(AnalyzeTask)
-        self.planner = dspy.ChainOfThought(CreatePlan)
         self.discovery_tools = discovery_tools or []
+        self.planner = dspy.ReAct(CreatePlan, tools=self.discovery_tools, max_iters=5)
 
     def forward(
         self,
@@ -75,6 +75,7 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         capability_guidance: str,
         proven_strategies: str,
         conversation_history: str = "",
+        memory_context: str = "",
     ) -> PlanOrQuestionsOutput:
         """
         Generate a plan or clarifying questions for a user request.
@@ -82,148 +83,86 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         Args:
             request: The user's goal or task description
             workspace_context: JSON string of existing workspace resources
-            capability_guidance: Domain-specific instructions from capability registry
+            capability_guidance: Routing table + matched capability instructions
             proven_strategies: ACE patterns for similar goals
             conversation_history: Formatted previous messages for context continuity
+            memory_context: Relevant memories from previous interactions
 
         Returns:
             PlanOrQuestionsOutput with either a plan or clarifying questions
         """
-        # Step 1: Classify intent (Python logic, not LLM-dependent)
-        intent = self._classify_intent(request)
-
-        # Handle greetings with a clarifying question
-        if intent == "greeting":
-            return PlanOrQuestionsOutput(
-                questions=[
-                    ClarifyingQuestionOutput(
-                        question="What would you like help with today?",
-                        question_type=QuestionType.TEXT,
-                        options=None,
-                        reason="Need to understand your goal before creating a plan",
-                    )
-                ]
-            )
-
-        # Step 2: Check for delegation phrases
-        # If user says "whatever you think" etc., we should propose defaults
-        # rather than asking open-ended questions
         has_delegation = self._has_delegation_phrase(request)
 
-        # Step 3: Analyze the task to understand intent and complexity
+        # Step 1: Analyze the task — intent, approach, external services
         analysis = self.analyzer(
             request=request,
             context=workspace_context,
         )
 
-        # Get tool names for the planner
-        tool_names = [getattr(t, "name", str(t)) for t in self.discovery_tools]
+        # Step 2: Format enriched task_analysis for the planner
+        external_services = analysis.external_services or []
+        external_hint = ""
+        if external_services:
+            services_str = ", ".join(external_services)
+            external_hint = f"\nExternal services: {services_str} (call search_external to discover actions)"
 
-        # Step 4: Build effective guidance with Think Before Asking
-        has_workspace = bool(workspace_context and workspace_context != "{}")
-        think_first = self._build_think_before_asking_guidance(
-            has_delegation=has_delegation,
-            has_workspace_context=has_workspace,
+        task_analysis = (
+            f"Intent: {analysis.intent}\n"
+            f"Domain: {analysis.domain}\n"
+            f"Entities: {', '.join(analysis.entities)}\n"
+            f"Approach: {analysis.approach}"
+            f"{external_hint}"
         )
-        effective_guidance = f"{think_first}\n\n{capability_guidance}"
 
+        if has_delegation:
+            task_analysis += "\nUser delegated decisions — propose sensible defaults, do not ask questions."
+
+        # Step 3: Call planner with clean, separated fields
+        # capability_guidance is passed directly — no approach or behavioral rules prepended
         result = self.planner(
             request=request,
             workspace_context=workspace_context,
-            available_tools=tool_names,
-            capability_guidance=effective_guidance,
+            capability_guidance=capability_guidance,
             proven_strategies=proven_strategies,
             conversation_history=conversation_history,
+            memory_context=memory_context,
+            task_analysis=task_analysis,
         )
 
-        # Step 5: Validate output
         plan_result = result.result
-        self._validate_result(plan_result)
+        self._ensure_valid_output(plan_result)
 
         return plan_result  # type: ignore[no-any-return]
 
-    def _classify_intent(self, request: str) -> str:
-        """
-        Classify the request intent.
-
-        Returns:
-            - 'greeting': Simple greeting, need to ask what they want
-            - 'question': User is asking a question (informational)
-            - 'actionable': User wants something done
-        """
-        normalized = request.lower().strip().rstrip("!?.")
-
-        # Check for simple greetings
-        if normalized in self.GREETINGS:
-            return "greeting"
-
-        # Check for questions about capabilities (informational, not actionable)
-        question_patterns = ["what can you do", "how do you work", "what are you"]
-        if any(pattern in normalized for pattern in question_patterns):
-            return "question"
-
-        # Default: assume actionable request
-        return "actionable"
-
     def _has_delegation_phrase(self, request: str) -> bool:
-        """
-        Check if the request contains phrases indicating user wants us to decide.
-
-        This implements the "Think Before Asking" pattern - if the user says
-        "whatever you think" or "standard approach", we should propose defaults
-        rather than asking clarifying questions.
-        """
+        """Check if the request contains phrases indicating user wants us to decide."""
         normalized = request.lower()
         return any(phrase in normalized for phrase in self.DELEGATION_PHRASES)
 
-    def _build_think_before_asking_guidance(
-        self,
-        has_delegation: bool,
-        has_workspace_context: bool,
-    ) -> str:
+    def _ensure_valid_output(self, result: PlanOrQuestionsOutput) -> None:
         """
-        Build Think Before Asking guidance based on context.
+        Ensure the planner returned a valid output.
 
-        This keeps critical logic in Python (testable) rather than in prompts.
+        If neither plan nor questions were produced (e.g., ReAct extraction
+        failed), fall back to asking a clarifying question instead of crashing.
         """
-        lines = [
-            "THINK BEFORE ASKING:",
-            "1. Check workspace_context — it shows existing databases, tables (with field schemas), and apps",
-            "2. For existing resources: use what's there, don't ask the user what exists",
-            "3. For new resources: SUGGEST sensible defaults based on domain knowledge",
-            "   Example: user says 'Create gangs table' → suggest: name (text), description (text), founding_date (date), is_active (boolean)",
-            "   Present suggestions in the plan for user approval — they can modify before approving",
-            "4. Only ask when truly ambiguous: security decisions, business rules, destructive operations",
-            "",
-            "NEVER ask about: what resources exist, table schemas, field names, resource IDs",
-            "SUGGEST (in plan) instead of ask: field names, data types, reasonable defaults",
-            "ASK only for: security, business rules, destructive ops, genuine user preference",
-        ]
+        if result.plan is not None:
+            if len(result.plan.steps) == 0:
+                raise ValueError("Plan must have at least one step")
+            return
 
-        if has_delegation:
-            lines.insert(0, "USER DELEGATED - propose defaults, do NOT ask questions.\n")
+        if result.questions is not None and len(result.questions) > 0:
+            return
 
-        if not has_workspace_context:
-            lines.append(
-                "\nWorkspace context is empty - the executor can discover resources at runtime."
+        # Neither plan nor questions — fall back to clarification
+        result.questions = [
+            ClarifyingQuestionOutput(
+                question="What would you like help with?",
+                question_type=QuestionType.TEXT,
+                options=None,
+                reason="Need more detail to create an actionable plan",
             )
-
-        return "\n".join(lines)
-
-    def _validate_result(self, result: PlanOrQuestionsOutput) -> None:
-        """
-        Validate the planner output.
-
-        Raises:
-            ValueError: If the output is invalid
-        """
-        # Must have either plan or questions
-        if result.plan is None and result.questions is None:
-            raise ValueError("Planner must return either a plan or clarifying questions")
-
-        # If plan exists, it must have at least one step
-        if result.plan is not None and len(result.plan.steps) == 0:
-            raise ValueError("Plan must have at least one step")
+        ]
 
 
 class SimplePlannerModule(dspy.Module):  # type: ignore[misc]
@@ -265,14 +204,9 @@ class SimplePlannerModule(dspy.Module):  # type: ignore[misc]
         Returns:
             PlanOrQuestionsOutput with either a plan or clarifying questions
         """
-        tool_names = [
-            getattr(t, "name", str(t)) for t in self.discovery_tools
-        ]
-
         result = self.planner(
             request=request,
             workspace_context=workspace_context,
-            available_tools=tool_names,
             capability_guidance=capability_guidance,
             proven_strategies=proven_strategies,
             conversation_history=conversation_history,
@@ -285,8 +219,7 @@ class SkillTemplatePlannerModule(PlannerModule):
     """DSPy module for creating skill templates with {{ variable }} placeholders.
 
     Extends PlannerModule to inherit shared logic:
-    - _classify_intent(), _has_delegation_phrase()
-    - _build_think_before_asking_guidance()
+    - _has_delegation_phrase()
     - Discovery tools handling
     """
 
