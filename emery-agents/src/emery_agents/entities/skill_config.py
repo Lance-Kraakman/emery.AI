@@ -598,6 +598,7 @@ class SkillConfig:
             outputs=outputs,
             tools=tools,
             steps=steps,
+            allow_network=data.get("allowNetwork", data.get("allow_network", False)),
         )
 
     def is_workflow(self) -> bool:

@@ -109,6 +109,7 @@ export interface SkillDTO {
   content?: MessagePart[]; // Skill-level attachments with pre-signed URLs
   model?: string | null; // Optional: Override model for this skill
   agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
+  allowNetwork?: boolean; // Whether bash tool has network access (for git/code skills)
   executionType?: SkillExecutionType; // 'agentic' (default), 'agent', 'operation', 'tool', or 'write'
   taskModelConfig?: TaskModelConfigDTO; // Config for 'operation' execution
   toolExecutionConfig?: ToolExecutionConfig; // Config for 'tool' execution
@@ -147,6 +148,7 @@ export class SkillMapper {
       content: skill.content,
       model: skill.model ?? null,
       agentType: skill.agentType ?? null,
+      allowNetwork: skill.allowNetwork ?? false,
       executionType: skill.executionType,
       taskModelConfig: skill.taskModelConfig,
       toolExecutionConfig: skill.toolExecutionConfig,

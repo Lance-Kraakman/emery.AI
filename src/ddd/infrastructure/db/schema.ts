@@ -1030,6 +1030,10 @@ export const skills = pgTable("skills", {
   // code_agent: Python code execution, better for complex multi-step reasoning
   agentType: text("agent_type"),
 
+  // Whether the bash tool should have network access for this skill
+  // Enables git, curl, wget in the bwrap sandbox (default: false for security)
+  allowNetwork: boolean("allow_network").default(false).notNull(),
+
   // Execution type determines how the skill is executed:
   // - 'agentic': LLM orchestration with flat instructions (default, current behavior)
   // - 'agent': Step-based DAG execution with structured steps[]

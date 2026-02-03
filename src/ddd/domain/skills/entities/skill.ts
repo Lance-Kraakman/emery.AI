@@ -513,6 +513,7 @@ export interface Skill {
   readonly content?: MessagePart[]; // Skill-level attachments (images, files, text)
   readonly model?: string | null; // Optional: Override model for this skill
   readonly agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
+  readonly allowNetwork?: boolean; // Whether bash tool has network access (for git/code skills)
   readonly executionType?: SkillExecutionType; // 'agentic' (default), 'agent', 'operation', 'tool', or 'write'
   readonly taskModelConfig?: TaskModelConfig; // Config for 'operation' execution
   readonly toolExecutionConfig?: ToolExecutionConfig; // Config for 'tool' execution
@@ -540,6 +541,7 @@ export interface CreateSkillProps {
   content?: MessagePart[];
   model?: string | null; // Optional: Override model for this skill
   agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
+  allowNetwork?: boolean; // Whether bash tool has network access (for git/code skills)
   executionType?: SkillExecutionType; // 'agentic' (default), 'agent', 'operation', 'tool', or 'write'
   taskModelConfig?: TaskModelConfig; // Config for 'operation' execution
   toolExecutionConfig?: ToolExecutionConfig; // Config for 'tool' execution
@@ -562,6 +564,7 @@ export interface UpdateSkillProps {
   content?: MessagePart[];
   model?: string | null; // Optional: Override model for this skill
   agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
+  allowNetwork?: boolean; // Whether bash tool has network access (for git/code skills)
   executionType?: SkillExecutionType; // 'agentic' (default), 'agent', 'operation', 'tool', or 'write'
   taskModelConfig?: TaskModelConfig | null; // Config for 'operation' execution (null to clear)
   toolExecutionConfig?: ToolExecutionConfig | null; // Config for 'tool' execution (null to clear)

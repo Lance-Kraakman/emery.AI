@@ -910,13 +910,14 @@ class AgentExecutor:
         # Add bash tool if workspace_path is available (filesystem-based execution)
         if context.workspace_path:
             from pathlib import Path
+            allow_net = getattr(context, 'allow_network', False)
             bash_tool = create_bash_tool(
                 workspace_path=Path(context.workspace_path),
-                allow_network=False,  # Network disabled by default for security
+                allow_network=allow_net,
                 timeout=300,
             )
             tools.append(bash_tool)
-            logger.info(f"Added bash tool with workspace: {context.workspace_path}")
+            logger.info(f"Added bash tool with workspace: {context.workspace_path}, network={'enabled' if allow_net else 'disabled'}")
 
         # Create DSPy executor module using AgentFactory
         agent_config = AgentConfig(
@@ -966,13 +967,14 @@ class AgentExecutor:
         # Add bash tool if workspace_path is available (filesystem-based execution)
         if context.workspace_path:
             from pathlib import Path
+            allow_net = skill.allow_network if skill else False
             bash_tool = create_bash_tool(
                 workspace_path=Path(context.workspace_path),
-                allow_network=False,  # Network disabled by default for security
+                allow_network=allow_net,
                 timeout=300,
             )
             tools.append(bash_tool)
-            logger.info(f"Added bash tool with workspace: {context.workspace_path}")
+            logger.info(f"Added bash tool with workspace: {context.workspace_path}, network={'enabled' if allow_net else 'disabled'}")
 
         # Load available skills as SkillTools for delegation
         if context.available_skills:

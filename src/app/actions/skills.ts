@@ -49,6 +49,7 @@ export async function createSkill(command: {
   tools?: ToolConfigDTO[];
   model?: string | null;
   agentType?: string | null;
+  allowNetwork?: boolean;
   executionType?: SkillExecutionType;
   taskModelConfig?: { modelId: string; taskType: string; parameters?: Record<string, any> };
   toolExecutionConfig?: ToolExecutionConfig;
@@ -180,6 +181,7 @@ export async function createOrganizationSkill(command: {
   tools?: ToolConfigDTO[];
   model?: string | null;
   agentType?: string | null;
+  allowNetwork?: boolean;
   executionType?: SkillExecutionType;
   taskModelConfig?: { modelId: string; taskType: string; parameters?: Record<string, any> };
   toolExecutionConfig?: ToolExecutionConfig;
@@ -243,6 +245,7 @@ export async function createOrganizationSkill(command: {
       tools: command.tools || [],
       model: command.model,
       agentType: command.agentType,
+      allowNetwork: command.allowNetwork,
       executionType: command.executionType,
       taskModelConfig: command.taskModelConfig,
       toolExecutionConfig: command.toolExecutionConfig,
@@ -310,6 +313,7 @@ export async function updateSkill(
     tools?: ToolConfigDTO[];
     model?: string | null;
     agentType?: string | null; // "tool_calling" (default) or "code_agent"
+    allowNetwork?: boolean; // Whether bash tool has network access (for git/code skills)
     executionType?: SkillExecutionType;
     taskModelConfig?: { modelId: string; taskType: string; parameters?: Record<string, any> } | null;
     toolExecutionConfig?: ToolExecutionConfig | null;
@@ -535,6 +539,7 @@ export async function duplicateSkill(skillId: number): Promise<Result<SkillDTO>>
       tools: originalSkill.tools,
       model: originalSkill.model,
       agentType: originalSkill.agentType,
+      allowNetwork: originalSkill.allowNetwork,
       executionType: originalSkill.executionType,
       taskModelConfig: originalSkill.taskModelConfig,
       toolExecutionConfig: originalSkill.toolExecutionConfig,

@@ -83,6 +83,7 @@ export class DrizzleSkillRepository implements ISkillRepository {
         content: props.content || null,
         model: props.model ?? null,
         agentType: props.agentType ?? null,
+        allowNetwork: props.allowNetwork ?? false,
         executionType: props.executionType || 'agentic',
         taskModelConfig: props.taskModelConfig || null,
         toolExecutionConfig: props.toolExecutionConfig || null,
@@ -133,6 +134,9 @@ export class DrizzleSkillRepository implements ISkillRepository {
     }
     if (updates.agentType !== undefined) {
       updateData.agentType = updates.agentType;
+    }
+    if (updates.allowNetwork !== undefined) {
+      updateData.allowNetwork = updates.allowNetwork;
     }
     if (updates.executionType !== undefined) {
       updateData.executionType = updates.executionType;
@@ -252,6 +256,7 @@ export class DrizzleSkillRepository implements ISkillRepository {
       content: record.content || undefined,
       model: record.model ?? null,
       agentType: record.agentType ?? null,
+      allowNetwork: record.allowNetwork ?? false,
       executionType: record.executionType || 'agentic',
       taskModelConfig: record.taskModelConfig || undefined,
       toolExecutionConfig: record.toolExecutionConfig || undefined,
