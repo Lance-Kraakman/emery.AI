@@ -1,15 +1,15 @@
 /**
  * TierCard Component
  *
- * Displays a pricing tier with features, pricing, and action button
+ * Compact pricing tier card showing plan name, price, and key stats
  */
 'use client';
 
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Check, Sparkles } from 'lucide-react';
-import { getTierColor, formatCurrency } from '@/lib/billing/utils';
+import { Sparkles, Coins, Users, HardDrive } from 'lucide-react';
+import { formatCurrency } from '@/lib/billing/utils';
 import { getTierConfig, type TierName } from '@/ddd/infrastructure/external/stripe/config';
 
 export interface TierCardProps {
@@ -29,7 +29,7 @@ export function TierCard({
 }: TierCardProps) {
   const config = getTierConfig(tier);
   const isCurrentTier = currentTier === tier;
-  const isDowngrade = currentTier && getTierOrder(tier) < getTierOrder(currentTier);
+  const isUpgrade = currentTier && getTierOrder(tier) > getTierOrder(currentTier);
 
   return (
     <Card
@@ -38,76 +38,88 @@ export function TierCard({
       } ${isCurrentTier ? 'border-primary' : ''}`}
     >
       {highlighted && (
-        <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-          <Badge className="gap-1 bg-primary">
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+          <Badge className="gap-1 bg-primary text-xs px-2 py-0.5">
             <Sparkles className="h-3 w-3" />
             Popular
           </Badge>
         </div>
       )}
 
-      <CardHeader className="pb-4">
+      <CardHeader className="pb-2 pt-4 px-3">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-2xl">{config.displayName}</CardTitle>
+          <CardTitle className="text-lg">{config.displayName}</CardTitle>
           {isCurrentTier && (
-            <Badge variant="outline" className="ml-2">
-              Current Plan
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+              Current
             </Badge>
           )}
         </div>
 
-        <CardDescription className="mt-2">
-          <div className="text-3xl font-bold">
-            {config.basePrice === 0 ? (
-              'Free'
-            ) : (
-              <>
-                {formatCurrency(config.basePrice)}
-                <span className="text-base font-normal text-muted-foreground">/month</span>
-              </>
-            )}
-          </div>
-        </CardDescription>
+        <div className="mt-1">
+          {config.isCustomPricing ? (
+            <div className="text-xl font-bold">Custom</div>
+          ) : config.basePrice === 0 ? (
+            <div className="text-xl font-bold">Free</div>
+          ) : (
+            <div className="text-xl font-bold">
+              {formatCurrency(config.basePrice)}
+              <span className="text-xs font-normal text-muted-foreground">/mo</span>
+            </div>
+          )}
+        </div>
       </CardHeader>
 
-      <CardContent className="flex-1">
-        <ul className="space-y-2 text-sm">
-          {config.features.map((feature, index) => (
-            <li key={index} className="flex items-start gap-2">
-              <Check className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
-              <span>{feature}</span>
-            </li>
-          ))}
-        </ul>
-
-        {config.limitations && config.limitations.length > 0 && (
-          <div className="mt-4 pt-4 border-t">
-            <p className="text-xs text-muted-foreground mb-2">Limitations:</p>
-            <ul className="space-y-1 text-xs text-muted-foreground">
-              {config.limitations.map((limitation, index) => (
-                <li key={index}>• {limitation}</li>
-              ))}
-            </ul>
+      <CardContent className="flex-1 px-3 pb-2">
+        <div className="space-y-1.5 text-xs text-muted-foreground">
+          <div className="flex items-center gap-1.5">
+            <Coins className="h-3 w-3 flex-shrink-0" />
+            <span>
+              {config.isCustomPricing
+                ? 'Custom credits'
+                : `${config.creditsPerMonth.toLocaleString()} credits/mo`}
+            </span>
           </div>
-        )}
+          <div className="flex items-center gap-1.5">
+            <Users className="h-3 w-3 flex-shrink-0" />
+            <span>
+              {config.isCustomPricing
+                ? 'Unlimited'
+                : config.maxTeamMembers
+                  ? `${config.maxTeamMembers} members`
+                  : 'Unlimited members'}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <HardDrive className="h-3 w-3 flex-shrink-0" />
+            <span>
+              {config.isCustomPricing
+                ? 'Custom storage'
+                : `${config.storageQuotaGB}GB storage`}
+            </span>
+          </div>
+        </div>
       </CardContent>
 
-      <CardFooter>
+      <CardFooter className="px-3 pb-3 pt-0">
         {onSelect && (
           <Button
-            className="w-full"
+            className="w-full h-8 text-xs"
             onClick={() => onSelect(tier)}
             disabled={loading || isCurrentTier}
-            variant={highlighted ? 'default' : 'outline'}
+            variant={isCurrentTier ? 'outline' : highlighted ? 'default' : 'outline'}
+            size="sm"
           >
             {loading ? (
               'Processing...'
             ) : isCurrentTier ? (
               'Current Plan'
-            ) : isDowngrade ? (
-              'Downgrade'
-            ) : (
+            ) : tier === 'enterprise' ? (
+              'Contact Sales'
+            ) : isUpgrade ? (
               'Upgrade'
+            ) : (
+              'Select'
             )}
           </Button>
         )}
@@ -142,7 +154,7 @@ export function TierGrid({ currentTier, onSelectTier, loading }: TierGridProps) 
   const tiers: TierName[] = ['free', 'pro', 'max', 'enterprise'];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
       {tiers.map((tier) => (
         <TierCard
           key={tier}
@@ -150,7 +162,7 @@ export function TierGrid({ currentTier, onSelectTier, loading }: TierGridProps) 
           currentTier={currentTier}
           onSelect={onSelectTier}
           loading={loading}
-          highlighted={tier === 'pro'} // Highlight Pro tier as recommended
+          highlighted={tier === 'max'}
         />
       ))}
     </div>

@@ -18,11 +18,16 @@ import { CreditBreakdownTabs } from '@/components/billing/CreditBreakdownTabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Separator } from '@/components/ui/separator';
-import { Badge } from '@/components/ui/badge';
-import { ExternalLink, AlertCircle, CreditCard, TrendingUp, Sparkles, X } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { TrendingUp, Sparkles, X, Mail } from 'lucide-react';
 import { toast } from 'sonner';
-import { createCheckoutSession, createPortalSession, setSpendingLimit } from '@/app/actions/billing';
+import { createCheckoutSession, createPaymentMethodPortalSession, setSpendingLimit } from '@/app/actions/billing';
 import type { TierName } from '@/ddd/infrastructure/external/stripe/config';
 import type { StorageUsage } from '@/components/billing/StorageUsageCard';
 import type { CreditUsage } from '@/components/billing/CreditUsageCard';
@@ -50,6 +55,7 @@ export function BillingSettingsClient({
   const [loadingAction, setLoadingAction] = useState(false);
   const [selectedTab, setSelectedTab] = useState('overview');
   const [showWelcome, setShowWelcome] = useState(false);
+  const [showEnterpriseDialog, setShowEnterpriseDialog] = useState(false);
 
   // Check for welcome query param and session storage
   useEffect(() => {
@@ -85,7 +91,6 @@ export function BillingSettingsClient({
     billingStatus?.subscriptionStatus === 'trialing';
 
   // Prepare overview data
-  // Note: billingStatus returns periodStart/periodEnd (not currentPeriodStart/currentPeriodEnd)
   const overview: BillingOverview = {
     tier,
     subscriptionStatus: billingStatus?.subscriptionStatus || null,
@@ -97,7 +102,6 @@ export function BillingSettingsClient({
   };
 
   // Prepare credit usage data
-  // Note: billingStatus returns usedCredits/allowanceCredits, map to CreditUsage interface
   const creditUsage: CreditUsage | null = billingStatus ? {
     creditsUsed: billingStatus.usedCredits || 0,
     monthlyAllowance: billingStatus.allowanceCredits || 0,
@@ -112,13 +116,12 @@ export function BillingSettingsClient({
    */
   const handleSelectTier = async (selectedTier: TierName) => {
     if (selectedTier === 'free') {
-      toast.info('To downgrade to Free tier, please cancel your subscription from the billing portal');
+      toast.info('To downgrade to Free tier, please contact support');
       return;
     }
 
     if (selectedTier === 'enterprise') {
-      toast.info('For Enterprise pricing, please contact our sales team');
-      // TODO: Add contact sales link or modal
+      setShowEnterpriseDialog(true);
       return;
     }
 
@@ -141,23 +144,22 @@ export function BillingSettingsClient({
   };
 
   /**
-   * Open Stripe Customer Portal for subscription management
+   * Open Stripe Portal for payment method update only
    */
-  const handleManageSubscription = async () => {
+  const handleUpdatePaymentMethod = async () => {
     try {
       setLoadingAction(true);
 
-      const result = await createPortalSession();
+      const result = await createPaymentMethodPortalSession();
 
       if (!result.success || !result.portalUrl) {
-        throw new Error(result.error || 'Failed to open billing portal');
+        throw new Error(result.error || 'Failed to open payment method update');
       }
 
-      // Redirect to Stripe Portal
       window.location.href = result.portalUrl;
     } catch (error) {
-      console.error('Error opening billing portal:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to open billing portal');
+      console.error('Error opening payment method update:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to open payment method update');
       setLoadingAction(false);
     }
   };
@@ -172,8 +174,6 @@ export function BillingSettingsClient({
       if (!result.success) {
         throw new Error(result.error || 'Failed to update spending limit');
       }
-
-      // Success toast is handled by the SpendingLimitControl component
     } catch (error) {
       throw error; // Re-throw so component can handle it
     }
@@ -188,10 +188,10 @@ export function BillingSettingsClient({
           <AlertDescription className="pr-8">
             <div className="flex flex-col gap-2">
               <div className="text-base font-semibold text-green-900 dark:text-green-100">
-                🎉 Welcome! Your workspace is ready on the Free plan
+                Welcome! Your workspace is ready on the Free plan
               </div>
               <div className="text-sm text-green-800 dark:text-green-200">
-                <strong>Free Plan includes:</strong> 1GB storage • 3 team members • Basic features
+                <strong>Free Plan includes:</strong> 1GB storage, 3 team members, 1,000 credits/month
               </div>
               <div className="flex gap-3 mt-1">
                 <Button
@@ -199,7 +199,7 @@ export function BillingSettingsClient({
                   className="bg-green-600 hover:bg-green-700 text-white"
                   size="sm"
                 >
-                  Explore Pro Plans
+                  Explore Plans
                 </Button>
                 <Button
                   onClick={handleStartBuilding}
@@ -227,35 +227,34 @@ export function BillingSettingsClient({
         <Alert className="border-blue-500 bg-blue-50 dark:bg-blue-950">
           <TrendingUp className="h-4 w-4 text-blue-600" />
           <AlertDescription className="text-blue-800 dark:text-blue-200">
-            You're on the Free tier. Upgrade to Pro for unlimited team members, 10GB storage, and unlimited connectors.
+            You&apos;re on the Free tier. Upgrade to Pro for unlimited team members, 10GB storage, and unlimited connectors.
             <Button
               variant="link"
               className="p-0 h-auto ml-2 text-blue-600 dark:text-blue-400"
-              onClick={() => handleSelectTier('pro')}
+              onClick={() => setSelectedTab('plans')}
             >
-              Upgrade now →
+              View plans →
             </Button>
           </AlertDescription>
         </Alert>
       )}
 
-      {/* Main Content Tabs */}
+      {/* Main Content Tabs - 3 tabs */}
       <Tabs value={selectedTab} onValueChange={setSelectedTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="usage">Usage & Limits</TabsTrigger>
-          <TabsTrigger value="plans">Plans & Pricing</TabsTrigger>
+          <TabsTrigger value="plans">Plans</TabsTrigger>
           <TabsTrigger value="invoices">Invoices</TabsTrigger>
         </TabsList>
 
-        {/* Overview Tab */}
+        {/* Overview Tab (merged Overview + Usage & Limits) */}
         <TabsContent value="overview" className="space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* Billing Overview */}
             <BillingOverviewCard
               overview={overview}
-              onManageSubscription={handleManageSubscription}
-              onManagePaymentMethod={handleManageSubscription}
+              onUpdatePaymentMethod={hasActiveSubscription ? handleUpdatePaymentMethod : undefined}
+              onNavigateToPlans={() => setSelectedTab('plans')}
               loadingAction={loadingAction}
             />
 
@@ -264,67 +263,26 @@ export function BillingSettingsClient({
               <StorageUsageCard
                 usage={storageUsage}
                 tierName={tier}
-                onUpgrade={() => handleSelectTier('pro')}
+                onUpgrade={() => setSelectedTab('plans')}
               />
             )}
           </div>
 
-          {/* Credit Usage */}
-          {creditUsage && hasActiveSubscription && (
-            <CreditUsageCard
-              usage={creditUsage}
-              tierName={tier}
-              showOverage={true}
-              hidePeriod={tier === 'free'}
-            />
-          )}
-
-          {/* Spending Limit Control */}
-          {hasActiveSubscription && (
-            <SpendingLimitControl
-              currentLimit={billingStatus?.spendingLimitUsd ? parseFloat(billingStatus.spendingLimitUsd) : null}
-              onSave={handleSaveSpendingLimit}
-            />
-          )}
-
-          {/* Quick Actions */}
-          <div className="flex items-center gap-4 pt-4">
-            <Button
-              variant="outline"
-              onClick={handleManageSubscription}
-              disabled={loadingAction}
-            >
-              <CreditCard className="h-4 w-4 mr-2" />
-              Manage Billing
-            </Button>
-            {!hasActiveSubscription && tier === 'free' && (
-              <Button onClick={() => handleSelectTier('pro')} disabled={loadingAction}>
-                Upgrade to Pro
-              </Button>
-            )}
-          </div>
-        </TabsContent>
-
-        {/* Usage & Limits Tab */}
-        <TabsContent value="usage" className="space-y-4">
-          {/* Two-column grid: Credit (LHS) + Storage (RHS) */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* LEFT: Credit Usage & Breakdown */}
-            <div className="space-y-4">
-              {creditUsage && (
-                <CreditUsageCard
-                  usage={creditUsage}
-                  tierName={tier}
-                  showOverage={true}
-                  hidePeriod={tier === 'free'}
-                />
-              )}
+          {/* Credit Usage + Breakdown */}
+          {creditUsage && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <CreditUsageCard
+                usage={creditUsage}
+                tierName={tier}
+                showOverage={true}
+                hidePeriod={tier === 'free'}
+              />
 
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base">Usage Breakdown</CardTitle>
                   <CardDescription className="text-xs">
-                    View credit usage by different dimensions
+                    Credit usage by model
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -335,20 +293,9 @@ export function BillingSettingsClient({
                 </CardContent>
               </Card>
             </div>
+          )}
 
-            {/* RIGHT: Storage Usage */}
-            <div>
-              {storageUsage && (
-                <StorageUsageCard
-                  usage={storageUsage}
-                  tierName={tier}
-                  onUpgrade={() => handleSelectTier('pro')}
-                />
-              )}
-            </div>
-          </div>
-
-          {/* Full-width: Spending Limit */}
+          {/* Spending Limit Control */}
           {hasActiveSubscription && (
             <SpendingLimitControl
               currentLimit={billingStatus?.spendingLimitUsd ? parseFloat(billingStatus.spendingLimitUsd) : null}
@@ -357,12 +304,12 @@ export function BillingSettingsClient({
           )}
         </TabsContent>
 
-        {/* Plans & Pricing Tab */}
+        {/* Plans Tab */}
         <TabsContent value="plans" className="space-y-4">
           <div>
             <h3 className="text-lg font-semibold mb-1">Choose Your Plan</h3>
             <p className="text-muted-foreground text-sm mb-4">
-              Select the plan that best fits your needs. All plans include core features with increasing limits.
+              Select the plan that best fits your needs.
             </p>
           </div>
 
@@ -372,18 +319,18 @@ export function BillingSettingsClient({
             loading={loadingAction}
           />
 
-          <Separator />
-
-          <div className="space-y-4 text-sm text-muted-foreground">
-            <h4 className="font-medium text-foreground">Billing Information</h4>
-            <ul className="space-y-2 ml-4">
-              <li>• All plans are billed monthly</li>
-              <li>• Overage charges apply at $0.0025 per credit beyond monthly allowance</li>
-              <li>• You can upgrade or downgrade at any time</li>
-              <li>• Changes take effect at the start of the next billing period</li>
-              <li>• Storage quotas are enforced in real-time</li>
-            </ul>
-          </div>
+          {/* Subtle downgrade link */}
+          {hasActiveSubscription && tier !== 'free' && (
+            <p className="text-xs text-muted-foreground text-center pt-2">
+              Need to change your plan?{' '}
+              <button
+                className="underline hover:text-foreground"
+                onClick={() => toast.info('To downgrade or cancel, please contact support at support@enhancd.ai')}
+              >
+                Contact support
+              </button>
+            </p>
+          )}
         </TabsContent>
 
         {/* Invoices Tab */}
@@ -396,21 +343,47 @@ export function BillingSettingsClient({
                 : 'No invoices yet. Upgrade to a paid plan to view billing history.'
             }
           />
-
-          {hasActiveSubscription && (
-            <div className="flex justify-end">
-              <Button
-                variant="outline"
-                onClick={handleManageSubscription}
-                disabled={loadingAction}
-              >
-                <ExternalLink className="h-4 w-4 mr-2" />
-                View All in Billing Portal
-              </Button>
-            </div>
-          )}
         </TabsContent>
       </Tabs>
+
+      {/* Enterprise Contact Dialog */}
+      <Dialog open={showEnterpriseDialog} onOpenChange={setShowEnterpriseDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Enterprise Plan</DialogTitle>
+            <DialogDescription>
+              Get custom pricing, dedicated support, and advanced features tailored to your organization.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2 text-sm text-muted-foreground">
+              <p>Enterprise includes:</p>
+              <ul className="space-y-1 ml-4">
+                <li>- Custom credit allowance</li>
+                <li>- Dedicated account manager</li>
+                <li>- Custom storage quota</li>
+                <li>- SLA guarantees</li>
+                <li>- On-premise deployment options</li>
+                <li>- Custom contracts & payment terms</li>
+              </ul>
+            </div>
+            <div className="flex flex-col gap-2">
+              <Button
+                className="w-full"
+                onClick={() => {
+                  window.location.href = 'mailto:sales@enhancd.ai?subject=Enterprise%20Plan%20Inquiry';
+                }}
+              >
+                <Mail className="h-4 w-4 mr-2" />
+                Contact Sales
+              </Button>
+              <p className="text-xs text-muted-foreground text-center">
+                sales@enhancd.ai
+              </p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
