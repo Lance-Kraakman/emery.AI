@@ -243,8 +243,8 @@ class StepExecutorService:
         available_skills: Dict[int, SkillConfig],
         initial_inputs: Dict[str, Any],
         org_model: Optional[str] = None,
-        api_key: Optional[str] = None,
-        organization_id: Optional[int] = None,
+        api_key: str = "",
+        organization_id: int = 0,
         _execution_stack: Optional[Set[int]] = None
     ) -> AsyncIterator[StepProgress]:
         """Execute steps as a DAG workflow.
@@ -496,8 +496,8 @@ class StepExecutorService:
         available_skills: Dict[int, SkillConfig],
         execution_stack: Set[int],
         org_model: Optional[str],
-        api_key: Optional[str],
-        organization_id: Optional[int],
+        api_key: str,
+        organization_id: int,
         internal_steps: List[Step],
         pending_steps: List[str],  # List of step IDs
         executed_steps: Set[str],  # Set of step IDs
@@ -742,8 +742,8 @@ class StepExecutorService:
         available_skills: Dict[int, SkillConfig],
         execution_stack: Set[int],
         org_model: Optional[str],
-        api_key: Optional[str],
-        organization_id: Optional[int]
+        api_key: str,
+        organization_id: int
     ) -> tuple[Any, int]:
         """Execute a single step with optional retry and loop support.
 
@@ -828,8 +828,8 @@ class StepExecutorService:
         available_skills: Dict[int, SkillConfig],
         execution_stack: Set[int],
         org_model: Optional[str],
-        api_key: Optional[str],
-        organization_id: Optional[int]
+        api_key: str,
+        organization_id: int
     ) -> tuple[Any, int]:
         """Execute a step with loop iteration.
 
@@ -999,8 +999,8 @@ class StepExecutorService:
         step_inputs: Dict[str, Any],
         available_skills: Dict[int, SkillConfig],
         org_model: Optional[str],
-        api_key: Optional[str],
-        organization_id: Optional[int],
+        api_key: str,
+        organization_id: int,
         execution_stack: Set[int]
     ) -> Any:
         """Execute a step that references another skill."""
@@ -1112,8 +1112,8 @@ class StepExecutorService:
         self,
         step: Step,
         step_inputs: Dict[str, Any],
-        api_key: Optional[str],
-        organization_id: Optional[int]
+        api_key: str,
+        organization_id: int
     ) -> Dict[str, Any]:
         """Execute a direct table read step (no LLM)."""
         import os
@@ -1189,8 +1189,8 @@ class StepExecutorService:
         self,
         step: Step,
         step_inputs: Dict[str, Any],
-        api_key: Optional[str],
-        organization_id: Optional[int]
+        api_key: str,
+        organization_id: int
     ) -> Dict[str, Any]:
         """Execute a direct table write step (no LLM)."""
         import asyncio
@@ -1219,7 +1219,7 @@ class StepExecutorService:
 
         logger.info(f"📝 Write step field_values ({len(field_values)} fields): {field_values}")
 
-        row_api = RowAPI(api_key=api_key or "", org_id=str(organization_id or 0))
+        row_api = RowAPI(api_key=api_key, org_id=str(organization_id))
 
         if row_action == "create":
             result = await asyncio.to_thread(row_api.create_row, table_id, field_values)
@@ -1246,8 +1246,8 @@ class StepExecutorService:
         self,
         step: Step,
         step_inputs: Dict[str, Any],
-        api_key: Optional[str],
-        organization_id: Optional[int]
+        api_key: str,
+        organization_id: int
     ) -> Any:
         """Execute a direct tool call step (no LLM).
 
@@ -1310,8 +1310,8 @@ class StepExecutorService:
         step_inputs: Dict[str, Any],
         step_context: Dict[str, Any],
         org_model: Optional[str],
-        api_key: Optional[str],
-        organization_id: Optional[int],
+        api_key: str,
+        organization_id: int,
     ) -> Any:
         """Execute an agentic step with stored plan.
 
@@ -1329,17 +1329,16 @@ class StepExecutorService:
                 f"No fallback execution available."
             )
 
-        # Load Pipedream tools from agentic config so the LLM can call them
-        extra_tools = []
+        # Load configured skill tools so the LLM can call them
+        extra_tools: List[Any] = []
         if agentic_config.tools and self.tool_loader:
-            from emery_agents.entities.skill_config import StepToolConfig
-            tool_configs = [StepToolConfig(name=t) for t in agentic_config.tools]
+            tool_configs = [ToolConfig(name=t) for t in agentic_config.tools]
             extra_tools = self.tool_loader.load_tools_from_configs(
                 tool_configs=tool_configs,
                 api_key=api_key,
                 api_key_mode="user",
             )
-            logger.info(f"🔧 Loaded {len(extra_tools)} Pipedream tools for step {step.name}")
+            logger.info(f"🔧 Loaded {len(extra_tools)} skill tools for step {step.name}")
 
         logger.info(f"📋 Step {step.name}: executing with stored plan")
         # _execute_with_plan is sync (PlanStepExecutor.execute is sync)
@@ -1357,9 +1356,9 @@ class StepExecutorService:
         plan: Plan,
         skill_inputs: Dict[str, Any],
         org_model: Optional[str],
-        api_key: Optional[str],
-        organization_id: Optional[int],
-        extra_tools: Optional[list] = None,
+        api_key: str,
+        organization_id: int,
+        extra_tools: Optional[List[Any]] = None,
     ) -> str:
         """Execute a stored plan using PlanStepExecutor.
 
@@ -1375,8 +1374,8 @@ class StepExecutorService:
             Combined results from all plan steps
         """
         executor = PlanStepExecutor(
-            api_key=api_key or "",
-            org_id=str(organization_id) if organization_id else "",
+            api_key=api_key,
+            org_id=str(organization_id),
             org_model=org_model,
             skill_inputs=skill_inputs,
             extra_tools=extra_tools,
@@ -1563,8 +1562,8 @@ def execute_steps_sync(
     available_skills: Dict[int, SkillConfig],
     initial_inputs: Dict[str, Any],
     org_model: Optional[str] = None,
-    api_key: Optional[str] = None,
-    organization_id: Optional[int] = None
+    api_key: str = "",
+    organization_id: int = 0
 ) -> SkillExecutionResult:
     """Synchronous wrapper for step execution."""
 
