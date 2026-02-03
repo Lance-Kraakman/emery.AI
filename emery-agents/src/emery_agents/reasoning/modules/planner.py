@@ -76,6 +76,7 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         proven_strategies: str,
         conversation_history: str = "",
         memory_context: str = "",
+        triage_analysis: dict[str, Any] | None = None,
     ) -> PlanOrQuestionsOutput:
         """
         Generate a plan or clarifying questions for a user request.
@@ -87,52 +88,99 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
             proven_strategies: ACE patterns for similar goals
             conversation_history: Formatted previous messages for context continuity
             memory_context: Relevant memories from previous interactions
+            triage_analysis: Pre-computed analysis from triage node (intent, entities,
+                           approach, external_services). If provided, skips AnalyzeTask call.
 
         Returns:
             PlanOrQuestionsOutput with either a plan or clarifying questions
         """
         has_delegation = self._has_delegation_phrase(request)
 
-        # Step 1: Analyze the task — intent, approach, external services
-        analysis = self.analyzer(
-            request=request,
-            context=workspace_context,
+        # Use pre-computed triage analysis if available, otherwise run AnalyzeTask
+        if triage_analysis and triage_analysis.get("intent"):
+            analysis_data = triage_analysis
+        else:
+            # Fallback: run separate AnalyzeTask (e.g., SimplePlannerModule path)
+            analysis = self.analyzer(
+                request=request,
+                context=workspace_context,
+            )
+            analysis_data = {
+                "intent": analysis.intent,
+                "domain": str(analysis.domain),
+                "entities": analysis.entities or [],
+                "approach": analysis.approach,
+                "external_services": analysis.external_services or [],
+            }
+
+        # Build combined planning_context from analysis + auxiliary fields
+        planning_context = self._build_planning_context(
+            analysis_data=analysis_data,
+            proven_strategies=proven_strategies,
+            memory_context=memory_context,
+            has_delegation=has_delegation,
         )
 
-        # Step 2: Format enriched task_analysis for the planner
-        external_services = analysis.external_services or []
-        external_hint = ""
-        if external_services:
-            services_str = ", ".join(external_services)
-            external_hint = f"\nExternal services: {services_str} (call search_external to discover actions)"
-
-        task_analysis = (
-            f"Intent: {analysis.intent}\n"
-            f"Domain: {analysis.domain}\n"
-            f"Entities: {', '.join(analysis.entities)}\n"
-            f"Approach: {analysis.approach}"
-            f"{external_hint}"
-        )
-
-        if has_delegation:
-            task_analysis += "\nUser delegated decisions — propose sensible defaults, do not ask questions."
-
-        # Step 3: Call planner with clean, separated fields
-        # capability_guidance is passed directly — no approach or behavioral rules prepended
+        # Call planner with consolidated fields
         result = self.planner(
             request=request,
             workspace_context=workspace_context,
             capability_guidance=capability_guidance,
-            proven_strategies=proven_strategies,
+            planning_context=planning_context,
             conversation_history=conversation_history,
-            memory_context=memory_context,
-            task_analysis=task_analysis,
         )
 
         plan_result = result.result
         self._ensure_valid_output(plan_result)
 
         return plan_result  # type: ignore[no-any-return]
+
+    @staticmethod
+    def _build_planning_context(
+        analysis_data: dict[str, Any],
+        proven_strategies: str,
+        memory_context: str,
+        has_delegation: bool,
+    ) -> str:
+        """Build merged planning_context from task analysis and auxiliary fields.
+
+        Combines task analysis, proven strategies, memory context, and delegation
+        hints into a single labeled string. Empty sections are omitted to reduce noise.
+        """
+        sections: list[str] = []
+
+        # Task analysis (always present)
+        external_services = analysis_data.get("external_services", [])
+        external_hint = ""
+        if external_services:
+            services_str = ", ".join(external_services)
+            external_hint = f"\nExternal services: {services_str} (call search_external to discover actions)"
+
+        entities = analysis_data.get("entities", [])
+        entities_str = ", ".join(entities) if entities else ""
+
+        sections.append(
+            f"## Task Analysis\n"
+            f"Intent: {analysis_data.get('intent', '')}\n"
+            f"Domain: {analysis_data.get('domain', '')}\n"
+            f"Entities: {entities_str}\n"
+            f"Approach: {analysis_data.get('approach', '')}"
+            f"{external_hint}"
+        )
+
+        # Proven strategies (only if non-empty)
+        if proven_strategies and proven_strategies.strip():
+            sections.append(f"## Proven Strategies\n{proven_strategies}")
+
+        # Memory context (only if non-empty)
+        if memory_context and memory_context.strip():
+            sections.append(f"## Background Memory\n{memory_context}")
+
+        # Delegation hint
+        if has_delegation:
+            sections.append("## Delegation\nUser delegated decisions — propose sensible defaults, do not ask questions.")
+
+        return "\n\n".join(sections)
 
     def _has_delegation_phrase(self, request: str) -> bool:
         """Check if the request contains phrases indicating user wants us to decide."""
@@ -190,6 +238,7 @@ class SimplePlannerModule(dspy.Module):  # type: ignore[misc]
         capability_guidance: str = "",
         proven_strategies: str = "",
         conversation_history: str = "",
+        memory_context: str = "",
     ) -> PlanOrQuestionsOutput:
         """
         Generate a plan directly without pre-analysis.
@@ -200,15 +249,24 @@ class SimplePlannerModule(dspy.Module):  # type: ignore[misc]
             capability_guidance: Domain-specific instructions
             proven_strategies: ACE patterns for similar goals
             conversation_history: Formatted previous messages for context continuity
+            memory_context: Background memories from previous interactions
 
         Returns:
             PlanOrQuestionsOutput with either a plan or clarifying questions
         """
+        # Build planning_context from available fields (no AnalyzeTask here)
+        sections: list[str] = []
+        if proven_strategies and proven_strategies.strip():
+            sections.append(f"## Proven Strategies\n{proven_strategies}")
+        if memory_context and memory_context.strip():
+            sections.append(f"## Background Memory\n{memory_context}")
+        planning_context = "\n\n".join(sections) if sections else ""
+
         result = self.planner(
             request=request,
             workspace_context=workspace_context,
             capability_guidance=capability_guidance,
-            proven_strategies=proven_strategies,
+            planning_context=planning_context,
             conversation_history=conversation_history,
         )
 

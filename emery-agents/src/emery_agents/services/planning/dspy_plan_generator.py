@@ -139,6 +139,7 @@ class DSPyPlanGenerator:
                     proven_strategies=strategy_guidance,
                     conversation_history=conversation_history,
                     memory_context=request.memory_context,
+                    triage_analysis=request.triage_analysis,
                 )
         except Exception as e:
             logger.error(f"DSPy planning failed: {e}")
@@ -213,24 +214,63 @@ class DSPyPlanGenerator:
         self,
         workspace: Optional[WorkspaceContext],
     ) -> str:
-        """Format workspace context as JSON string for DSPy signature.
+        """Format workspace context as slim summary for DSPy signature.
 
-        Includes a _summary header so the planner can quickly understand
-        workspace size without parsing all resources.
+        Produces names + field names only — NOT full field schemas (types, constraints).
+        The planner should use system_research(resource_type='tables', query='<name>',
+        include_details=True) to look up field types when needed.
+
+        Field names are included because the template planner (ChainOfThought, no tools)
+        cannot call system_research. Names alone are enough for most planning decisions.
         """
         if not workspace:
-            return json.dumps({"_summary": "Empty workspace - no existing resources"})
+            return json.dumps({"_summary": "Empty workspace — no existing resources", "resources": []})
 
-        context = workspace.to_template_context()
+        resources: list[dict[str, Any]] = []
 
-        # Add summary header for quick planner orientation
+        def _table_entry(t: Any) -> dict[str, Any]:
+            entry: dict[str, Any] = {"name": t.name, "id": str(t.id), "field_count": t.field_count}
+            if t.fields:
+                entry["fields"] = [f.name for f in t.fields]
+            return entry
+
+        for db in workspace.existing_databases:
+            tables = []
+            for t in (workspace.existing_tables or []):
+                if t.database_id == db.id:
+                    tables.append(_table_entry(t))
+            resources.append({"type": "database", "name": db.name, "id": str(db.id), "tables": tables})
+
+        # Include tables not in any database (edge case)
+        db_ids = {db.id for db in workspace.existing_databases}
+        for t in (workspace.existing_tables or []):
+            if t.database_id not in db_ids:
+                resources.append({"type": "table", **_table_entry(t)})
+
+        for app in workspace.existing_apps:
+            page_names = [p.name for p in app.pages]
+            resources.append({"type": "app", "name": app.name, "id": str(app.id), "pages": page_names})
+
+        for agent in workspace.existing_agents:
+            resources.append({"type": "agent", "name": agent.name, "id": str(agent.id)})
+
+        for skill in workspace.existing_skills:
+            resources.append({
+                "type": "skill", "name": skill.name, "id": str(skill.id),
+                "agent_id": str(skill.agent_id) if skill.agent_id else None,
+            })
+
+        for view in workspace.existing_views:
+            resources.append({
+                "type": "view", "name": view.name, "id": str(view.id),
+                "view_type": view.view_type,
+            })
+
         summary = workspace.resource_summary()
-        context["_summary"] = (
-            f"Workspace contains: {summary}. "
-            "Resources shown below are filtered by relevance to the task."
-        )
-
-        return json.dumps(context, indent=2, default=str)
+        return json.dumps({
+            "_summary": f"{summary}. Use system_research for field details.",
+            "resources": resources,
+        }, indent=2, default=str)
 
     def _get_capability_guidance(
         self,
@@ -238,9 +278,12 @@ class DSPyPlanGenerator:
     ) -> str:
         """Get capability planning guidance for the planner using semantic search.
 
-        Uses multi-factor matching: semantic search (top 5) filtered to enabled,
+        Uses multi-factor matching: semantic search (top 3) filtered to enabled,
         with the routing header always included. Falls back to all guidance if
         no registry is available.
+
+        Matched capability guidance includes tool mappings and step description
+        templates — these are the primary instructions for writing executor-ready steps.
         """
         from emery_agents.reasoning.capabilities import (
             CAPABILITY_ROUTING_HEADER,
@@ -256,10 +299,10 @@ class DSPyPlanGenerator:
         org_id = request.config.org_id if request.config else None
 
         try:
-            # Semantic search: top 5 candidates for broader coverage
+            # Semantic search: top 3 most relevant capabilities
             matched = request.capability_registry.search(
                 query=request.basic_instructions,
-                limit=5,
+                limit=3,
             )
 
             # Filter to enabled only
@@ -281,8 +324,8 @@ class DSPyPlanGenerator:
                     f"Matched {len(matched)} capabilities for guidance: "
                     f"{[c.id for c in matched]}"
                 )
-                # Always include routing header + matched guidance
-                return CAPABILITY_ROUTING_HEADER + "\n\n" + "\n\n".join(guidance_parts)
+                # Capability guidance first (step templates + tool mappings), routing header second
+                return "\n\n".join(guidance_parts) + "\n\n" + CAPABILITY_ROUTING_HEADER
 
         except Exception as e:
             logger.warning(f"Capability search failed, using all guidance: {e}")

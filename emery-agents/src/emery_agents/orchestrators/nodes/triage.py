@@ -94,6 +94,14 @@ async def triage_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[
         context_notes = getattr(result, "context_notes", "")
         response_text = getattr(result, "response", "")
 
+        # Extract analysis fields (combined triage + analysis in single call)
+        triage_analysis = {
+            "intent": getattr(result, "intent", ""),
+            "entities": getattr(result, "entities", []),
+            "approach": getattr(result, "approach", ""),
+            "external_services": getattr(result, "external_services", []),
+        }
+
         # Validate execution_mode
         if execution_mode not in VALID_MODES:
             logger.warning(
@@ -118,6 +126,7 @@ async def triage_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[
                 "execution_mode": execution_mode,
                 "triage_reasoning": reasoning,
                 "triage_context": context_notes,
+                "triage_analysis": triage_analysis,
                 "response": final_response,
                 "success": True,
                 "events": events,
@@ -127,6 +136,7 @@ async def triage_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[
             "execution_mode": execution_mode,
             "triage_reasoning": reasoning,
             "triage_context": context_notes,
+            "triage_analysis": triage_analysis,
             "events": events,
         }
 

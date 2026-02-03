@@ -55,6 +55,10 @@ def route_after_plan(state: PlanExecuteState) -> str:
     if error:
         return "end"
 
+    # Auto-approved low-risk plans skip approval and go straight to execution
+    if state.get("auto_approved"):
+        return "execute_step"
+
     awaiting = state.get("awaiting_input")
     if awaiting in ("approval", "clarification"):
         return "await_approval"
@@ -239,9 +243,10 @@ def create_session_graph(
     # === Autonomous → execute ===
     graph.add_edge("setup_autonomous", "execute_step")
 
-    # === Plan → approve ===
+    # === Plan → approve or auto-execute ===
     graph.add_conditional_edges("generate_plan", route_after_plan, {
         "await_approval": "await_approval",
+        "execute_step": "execute_step",
         "end": END,
     })
 

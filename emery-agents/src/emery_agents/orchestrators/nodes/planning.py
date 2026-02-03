@@ -18,6 +18,7 @@ from ...services.context import (
 from ...entities.workspace import WorkspaceTable
 from ...services.execution.events import (
     PlanCreatedEvent,
+    PlanApprovedEvent,
     PlanningStartedEvent,
     AwaitingClarificationEvent,
     ErrorEvent,
@@ -189,6 +190,28 @@ def _filter_relevant_context(
         return workspace
 
 
+_DESTRUCTIVE_KEYWORDS = {"delete", "remove", "destroy", "drop"}
+
+
+def _is_low_risk_plan(plan: Plan) -> bool:
+    """Check if a plan is low-risk (additive only, no external OAuth, no destructive ops).
+
+    Low-risk plans can be auto-approved to skip the human approval step.
+    Returns True only for purely additive plans with no external service dependencies.
+    """
+    for step in plan.steps:
+        # External OAuth integrations need user approval
+        if step.connection_required:
+            return False
+
+        # Destructive operations need approval
+        desc_lower = step.description.lower()
+        if any(kw in desc_lower for kw in _DESTRUCTIVE_KEYWORDS):
+            return False
+
+    return True
+
+
 async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[str, Any]:
     """
     Generate a plan using PlanService.
@@ -211,6 +234,7 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
     org_id = state.get("org_id")
     org_model = state.get("org_model")
     memory_context = state.get("memory_context") or ""
+    triage_analysis = state.get("triage_analysis")
 
     events: List[Any] = []
 
@@ -282,6 +306,7 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
             skill_outputs=skill_output_defs,
             is_template_generation=is_template_generation,
             memory_context=memory_context,
+            triage_analysis=triage_analysis,
         )
     except Exception as e:
         logger.error(f"Plan generation failed: {e}")
@@ -319,7 +344,6 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
     )
     ledger.record_plan_created({"plan_id": plan.id, "step_count": len(plan.steps)})
 
-    logger.info(f"Plan {plan.id} created with {len(plan.steps)} steps, awaiting approval")
     events.append(PlanCreatedEvent(plan_id=plan.id, plan=plan))
 
     # Save plan to filesystem
@@ -329,6 +353,21 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
         except Exception as e:
             logger.warning(f"Failed to save plan to filesystem: {e}")
 
+    # Auto-approve low-risk plans (additive only, no external OAuth, no deletions)
+    if _is_low_risk_plan(plan):
+        logger.info(f"Plan {plan.id} auto-approved (low-risk, {len(plan.steps)} steps)")
+        approved_plan = plan.approve().start_execution()
+        ledger.record_plan_approved()
+        events.append(PlanApprovedEvent(plan_id=plan.id))
+        return {
+            "plan": approved_plan,
+            "ledger": ledger,
+            "auto_approved": True,
+            "awaiting_input": None,
+            "events": events,
+        }
+
+    logger.info(f"Plan {plan.id} created with {len(plan.steps)} steps, awaiting approval")
     return {
         "plan": plan,
         "ledger": ledger,

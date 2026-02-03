@@ -83,6 +83,10 @@ class PlanGenerationRequest:
     # Memory context (relevant memories, passed separately from task)
     memory_context: str = ""
 
+    # Pre-computed triage analysis (intent, entities, approach, external_services)
+    # Avoids duplicate AnalyzeTask call in PlannerModule
+    triage_analysis: Optional[Dict[str, Any]] = None
+
 
 
 @dataclass

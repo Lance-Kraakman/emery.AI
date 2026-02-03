@@ -10,31 +10,19 @@ PLANNING_GUIDANCE = """
 **Choose when**: User wants to automate tasks, create workflows, or schedule actions.
 **Examples**: "send weekly report", "automate follow-ups", "notify me when..."
 
-### What skill_builder Creates
+### Tools Used by This Capability
+The executor uses: **skill_crud**.
+- skill_crud: Create/list/get/update/delete skills
+Set tool_call="skill_crud".
 
-- Skills with defined inputs and outputs
-- Skill instructions (what the skill does)
-- Input/output mappings to tables
-
-### Before Creating a Skill
-
+### Important
 Plan steps should BUILD the skill definition, NOT execute what the skill does.
-Ensure you have:
-- Skill name and purpose
-- Required inputs (what data the skill needs)
-- Expected outputs (what data the skill produces)
-- Instructions for how the skill should behave
-
-### Step Format Examples
-
-- "Create skill 'send_welcome_email' with inputs: recipient_email (text), recipient_name (text). Output: email_sent (boolean)"
-- "Create skill 'generate_report' with inputs: date_range (text), report_type (text). Output: report_content (text)"
-- "Update skill 'process_order' to add output: tracking_number (text)"
+To execute an existing skill, use skill_executor instead.
 
 ### Skill Components
 
-- **Inputs**: Data required to run the skill
-- **Outputs**: Data captured after skill execution
+- **Inputs**: Data required to run the skill (name, type, required flag)
+- **Outputs**: Data captured after skill execution (name, type)
 - **Instructions**: Natural language description of what the skill does
 - **Persona**: Optional personality/style for the skill's execution
 
@@ -45,7 +33,26 @@ When a skill uses a third-party service:
 2. Include the tool name in the step description (e.g., "using gmail_send_email")
 3. Set connection_required to the app slug (e.g., "gmail")
 
-Example step descriptions:
-- "Create skill 'send_gmail_email' using gmail_send_email integration. Inputs: to (text), subject (text), body (text). connection_required: gmail"
-- "Create skill 'post_to_slack' using slack_send_message integration. Inputs: channel (text), message (text). connection_required: slack"
+### What the Executor Needs in the Step Description
+The plan step executor receives ONLY the description text and tools. It does NOT see the plan goal,
+capability guidance, or workspace context. Write the description as a COMPLETE instruction.
+
+REQUIRED in every skill_builder step description:
+1. **SKILL NAME**: Exact name in quotes
+2. **INPUTS**: Each input with name, type, and whether required
+3. **OUTPUTS**: Each output with name and type
+4. **INSTRUCTIONS**: What the skill should do (natural language)
+5. **CONNECTION**: If external integration, include tool name and connection_required slug
+6. **OUTCOME**: What the executor should verify
+
+**Step description templates:**
+
+Create skill:
+"Create skill '[name]' with inputs: [input_name] ([type], required), [input_name] ([type], optional). Outputs: [output_name] ([type]). Instructions: '[what the skill does]'. Verify: skill exists with [N] inputs and [N] outputs."
+
+Create skill with external integration:
+"Create skill '[name]' using [tool_name] integration. Inputs: [input_name] ([type], required). Outputs: [output_name] ([type]). Instructions: '[what the skill does]'. connection_required: [slug]. Verify: skill exists with connection."
+
+BAD: "Create a skill that sends emails"
+GOOD: "Create skill 'send_welcome_email' using gmail_send_email integration. Inputs: recipient_email (email, required), recipient_name (text, required). Outputs: email_sent (boolean). Instructions: 'Send a welcome email to the recipient introducing our services.' connection_required: gmail. Verify: skill exists with 2 inputs, 1 output, and gmail connection."
 """

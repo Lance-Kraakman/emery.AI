@@ -84,6 +84,7 @@ class PlanService:
         config: Optional[SessionConfig] = None,
         workspace: Optional[WorkspaceContext] = None,
         memory_context: str = "",
+        triage_analysis: Optional[dict] = None,
     ) -> PlanGenerationResult:
         """Generate plan using DSPy PlannerModule. Returns plan or clarifying questions."""
         # Build request dataclass (includes all config for plan generation)
@@ -103,6 +104,7 @@ class PlanService:
             config=config,
             workspace=workspace,
             memory_context=memory_context,
+            triage_analysis=triage_analysis,
         )
 
         # Delegate to generator (uses capability-based discovery)

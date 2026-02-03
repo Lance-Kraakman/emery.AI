@@ -76,6 +76,10 @@ class PlanExecuteState(TypedDict, total=False):
     execution_mode: Optional[str]  # "direct", "plan", "respond"
     triage_reasoning: Optional[str]
     triage_context: Optional[str]  # Key findings from triage research
+    triage_analysis: Optional[Dict[str, Any]]  # Combined analysis: intent, entities, approach, external_services
+
+    # === Auto-approval ===
+    auto_approved: Optional[bool]  # True if plan was auto-approved (low-risk, additive only)
 
     # === Output ===
     response: Optional[str]  # Final answer (signals "done" to routing)
@@ -120,6 +124,9 @@ DEFAULT_STATE: Dict[str, Any] = {
     "execution_mode": None,
     "triage_reasoning": None,
     "triage_context": None,
+    "triage_analysis": None,
+    # Auto-approval
+    "auto_approved": None,
     # Output
     "response": None,
     "error": None,
