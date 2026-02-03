@@ -188,7 +188,7 @@ export async function createRow(data: CreateRowCommand, revalidateUrl?: string, 
 /**
  * Create multiple rows in a table (batch operation)
  */
-export async function createRows(data: { tableId: number; rows: Record<string, any>[] }, revalidateUrl?: string): Promise<Result> {
+export async function createRows(data: { tableId: number; rows: Record<string, any>[] }, revalidateUrl?: string, actorOverride?: ActorOverride): Promise<Result> {
   try {
     const session = await requirePermission("table:manage");
     const { tableId, rows: rowsData } = data;
@@ -255,11 +255,12 @@ export async function createRows(data: { tableId: number; rows: Record<string, a
         organizationId: table.organizationId.value,
         tableId,
         tableName: table.name,
-        actor: {
+        actor: actorOverride?.actor ?? {
           type: 'user',
           id: session.user.id,
           name: session.user.name || undefined,
         },
+        triggerMetadata: actorOverride?.triggerMetadata,
       };
 
       for (const createdRow of result.data) {
@@ -479,7 +480,8 @@ export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: stri
 export async function updateRowsData(
   tableId: number,
   updates: Array<{ rowId: string; data: Record<string, any> }>,
-  revalidateUrl?: string
+  revalidateUrl?: string,
+  actorOverride?: ActorOverride,
 ): Promise<Result> {
   try {
     const session = await requirePermission("table:manage");
@@ -572,11 +574,12 @@ export async function updateRowsData(
         organizationId: table.organizationId.value,
         tableId,
         tableName: table.name,
-        actor: {
+        actor: actorOverride?.actor ?? {
           type: 'user',
           id: session.user.id,
           name: session.user.name || undefined,
         },
+        triggerMetadata: actorOverride?.triggerMetadata,
       };
 
       // Log each row update

@@ -7,6 +7,7 @@
 
 import { NextRequest } from 'next/server';
 import { withAuthenticatedRoute } from '@/lib/api/base';
+import { logAgentMutation } from '@/lib/api/agent-context';
 import { getViewApplicationService } from '@/ddd/application/di/getters';
 import { ViewMapper } from '@/app/mappers/view-mapper';
 import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
@@ -107,6 +108,13 @@ export async function POST(request: NextRequest): Promise<Response> {
     if (!result.success || !result.data) {
       return { success: false, error: result.error || 'Failed to create view', status: 400 };
     }
+
+    logAgentMutation(request, user, {
+      action: 'create',
+      resourceType: 'view',
+      resourceId: String(result.data.id.value),
+      resourceName: body.name,
+    });
 
     return {
       success: true,

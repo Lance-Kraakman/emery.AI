@@ -9,7 +9,7 @@
  */
 
 import { getAuditApplicationService } from '@/ddd/application/di/container';
-import type { OrganizationId } from '@/ddd/domain/shared/value-objects';
+import { OrganizationId } from '@/ddd/domain/shared/value-objects';
 
 // ============================================================================
 // Types
@@ -24,8 +24,10 @@ export interface AuditActor {
   name?: string;
 }
 
+export type AuditTriggerType = 'manual' | 'webhook' | 'database_event' | 'calendar' | 'public_api';
+
 export interface TriggerMetadata {
-  triggerType?: string;        // 'manual' | 'webhook' | 'database_event' | 'calendar' | 'public_api'
+  triggerType?: AuditTriggerType;
   triggeredByUserId?: string;
   triggeredByUserName?: string;
   taskId?: string;
@@ -96,7 +98,7 @@ export function logRowCreate(
 
   // Log to row_history table
   auditService.logRowChange(
-    { value: context.organizationId } as OrganizationId,
+    OrganizationId.fromNumber(context.organizationId),
     context.tableId,
     data.rowId,
     'INSERT',
@@ -110,7 +112,7 @@ export function logRowCreate(
 
   // Log to audit_events table
   auditService.logEvent(
-    { value: context.organizationId } as OrganizationId,
+    OrganizationId.fromNumber(context.organizationId),
     {
       eventType: 'database',
       eventCategory: 'row_crud',
@@ -148,7 +150,7 @@ export function logRowUpdate(
 
   // Log to row_history table
   auditService.logRowChange(
-    { value: context.organizationId } as OrganizationId,
+    OrganizationId.fromNumber(context.organizationId),
     context.tableId,
     data.rowId,
     'UPDATE',
@@ -163,7 +165,7 @@ export function logRowUpdate(
 
   // Log to audit_events table
   auditService.logEvent(
-    { value: context.organizationId } as OrganizationId,
+    OrganizationId.fromNumber(context.organizationId),
     {
       eventType: 'database',
       eventCategory: 'row_crud',
@@ -195,7 +197,7 @@ export function logRowDelete(
 
   // Log to row_history table
   auditService.logRowChange(
-    { value: context.organizationId } as OrganizationId,
+    OrganizationId.fromNumber(context.organizationId),
     context.tableId,
     data.rowId,
     'DELETE',
@@ -209,7 +211,7 @@ export function logRowDelete(
 
   // Log to audit_events table
   auditService.logEvent(
-    { value: context.organizationId } as OrganizationId,
+    OrganizationId.fromNumber(context.organizationId),
     {
       eventType: 'database',
       eventCategory: 'row_crud',

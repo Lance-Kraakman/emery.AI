@@ -27,7 +27,7 @@ def create_table_crud(api_key: str, org_id: str, extra_headers: dict[str, str] |
     Returns:
         dspy.Tool wrapping the table_crud function
     """
-    api = TableAPI(api_key, org_id)
+    api = TableAPI(api_key, org_id, extra_headers=extra_headers)
 
     def table_crud(
         method: str,

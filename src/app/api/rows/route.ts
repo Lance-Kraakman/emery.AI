@@ -5,7 +5,7 @@
 import { NextRequest } from "next/server";
 import { withAuthenticatedRoute, parseJsonBody, requireParam, parseIntParam, parseOptionalIntParam } from '@/lib/api/base';
 import { createRow, updateRowData, deleteRowData, getRowsDSG } from '@/app/actions/rows';
-import { extractAgentContext } from '@/lib/api/agent-context';
+import { extractActorOverride } from '@/lib/api/agent-context';
 
 /**
  * POST /api/rows - Create a new row
@@ -21,11 +21,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     requireParam(tableId, 'tableId');
     requireParam(data, 'data');
 
-    const agentCtx = extractAgentContext(request, user);
-    const actorOverride = agentCtx.isAgentRequest
-      ? { actor: agentCtx.actor, triggerMetadata: agentCtx.triggerMetadata }
-      : undefined;
-
+    const actorOverride = extractActorOverride(request, user);
     const result = await createRow({ tableId, data, dataKeyType }, undefined, actorOverride);
 
     if (!result.success) {
@@ -80,11 +76,7 @@ export async function PUT(request: NextRequest): Promise<Response> {
     requireParam(rowId, 'rowId');
     requireParam(data, 'data');
 
-    const agentCtx = extractAgentContext(request, user);
-    const actorOverride = agentCtx.isAgentRequest
-      ? { actor: agentCtx.actor, triggerMetadata: agentCtx.triggerMetadata }
-      : undefined;
-
+    const actorOverride = extractActorOverride(request, user);
     const result = await updateRowData({ tableId, rowId, data, dataKeyType }, undefined, actorOverride);
 
     if (!result.success) {
@@ -110,12 +102,7 @@ export async function DELETE(request: NextRequest): Promise<Response> {
     }
 
     const tableId = parseIntParam(tableIdStr, 'tableId');
-
-    const agentCtx = extractAgentContext(request, user);
-    const actorOverride = agentCtx.isAgentRequest
-      ? { actor: agentCtx.actor, triggerMetadata: agentCtx.triggerMetadata }
-      : undefined;
-
+    const actorOverride = extractActorOverride(request, user);
     const result = await deleteRowData(tableId, rowId, undefined, actorOverride);
 
     if (!result.success) {

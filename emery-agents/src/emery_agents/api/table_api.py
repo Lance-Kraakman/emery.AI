@@ -35,9 +35,10 @@ class TableAPI:
         table = api.get(456)
     """
 
-    def __init__(self, api_key: str, org_id: str):
+    def __init__(self, api_key: str, org_id: str, extra_headers: dict[str, str] | None = None):
         self._api_key = api_key
         self._org_id = org_id
+        self._extra_headers = extra_headers
 
     def list(
         self,
@@ -68,6 +69,7 @@ class TableAPI:
             data=None,
             auth_token=self._api_key,
             org_id=self._org_id,
+            extra_headers=self._extra_headers,
         )
 
         if result.startswith("ERROR"):
@@ -107,6 +109,7 @@ class TableAPI:
             data=None,
             auth_token=self._api_key,
             org_id=self._org_id,
+            extra_headers=self._extra_headers,
         )
 
         if result.startswith("ERROR"):
@@ -154,6 +157,7 @@ class TableAPI:
             },
             auth_token=self._api_key,
             org_id=self._org_id,
+            extra_headers=self._extra_headers,
         )
 
         if result.startswith("ERROR"):
@@ -192,6 +196,7 @@ class TableAPI:
             data=data,
             auth_token=self._api_key,
             org_id=self._org_id,
+            extra_headers=self._extra_headers,
         )
 
         if result.startswith("ERROR"):
@@ -228,6 +233,7 @@ class TableAPI:
             data=None,
             auth_token=self._api_key,
             org_id=self._org_id,
+            extra_headers=self._extra_headers,
         )
 
         return not result.startswith("ERROR")

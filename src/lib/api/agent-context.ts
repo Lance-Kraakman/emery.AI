@@ -1,5 +1,13 @@
-import type { AuditActor, TriggerMetadata } from '@/app/actions/audit-helpers';
+import type { AuditActor, AuditTriggerType, TriggerMetadata } from '@/app/actions/audit-helpers';
+import { OrganizationId } from '@/ddd/domain/shared/value-objects';
+import { getAuditApplicationService } from '@/ddd/application/di/container';
 import type { NextRequest } from 'next/server';
+
+const VALID_TRIGGER_TYPES = new Set<AuditTriggerType>(['manual', 'webhook', 'database_event', 'calendar', 'public_api']);
+
+function parseAuditTriggerType(value: string): AuditTriggerType | undefined {
+  return VALID_TRIGGER_TYPES.has(value as AuditTriggerType) ? (value as AuditTriggerType) : undefined;
+}
 
 export interface AgentRequestContext {
   isAgentRequest: boolean;
@@ -45,7 +53,7 @@ export function extractAgentContext(
     const taskId = request.headers.get('X-Task-ID');
     const taskName = request.headers.get('X-Task-Name');
 
-    if (triggerType) triggerMetadata.triggerType = triggerType;
+    if (triggerType) triggerMetadata.triggerType = parseAuditTriggerType(triggerType);
     if (triggeredByUserId) triggerMetadata.triggeredByUserId = triggeredByUserId;
     if (triggeredByUserName) triggerMetadata.triggeredByUserName = triggeredByUserName;
     if (taskId) triggerMetadata.taskId = taskId;
@@ -69,4 +77,57 @@ export function extractAgentContext(
       name: fallbackUser.name || undefined,
     },
   };
+}
+
+/**
+ * Extract actor override from request headers (convenience wrapper).
+ *
+ * Returns an ActorOverride if the request is from an agent, or undefined
+ * for regular user requests. Eliminates repeated ternary patterns in routes.
+ */
+export function extractActorOverride(
+  request: NextRequest,
+  fallbackUser: { id: string; name?: string | null }
+): { actor: AuditActor; triggerMetadata?: TriggerMetadata } | undefined {
+  const ctx = extractAgentContext(request, fallbackUser);
+  if (!ctx.isAgentRequest) return undefined;
+  return { actor: ctx.actor, triggerMetadata: ctx.triggerMetadata };
+}
+
+/**
+ * Log an audit event for agent-initiated mutations on non-row resources.
+ *
+ * Call this in API routes that don't have per-entity audit logging in their
+ * server actions. Only logs if the request is from an agent (no-op for users).
+ */
+export function logAgentMutation(
+  request: NextRequest,
+  user: { id: string; name?: string | null; organizationId?: number | null },
+  params: {
+    action: 'create' | 'update' | 'delete';
+    resourceType: string;
+    resourceId?: string;
+    resourceName?: string;
+  },
+): void {
+  if (!user.organizationId) return;
+
+  const ctx = extractAgentContext(request, user);
+  if (!ctx.isAgentRequest) return;
+
+  const auditService = getAuditApplicationService();
+  auditService.logEvent(OrganizationId.fromNumber(user.organizationId), {
+    eventType: 'database',
+    eventCategory: `${params.resourceType}_crud`,
+    eventAction: params.action,
+    actorType: ctx.actor.type,
+    actorId: ctx.actor.id,
+    actorName: ctx.actor.name,
+    resourceType: params.resourceType,
+    resourceId: params.resourceId,
+    resourceName: params.resourceName,
+    eventData: {},
+    metadata: ctx.triggerMetadata ? { ...ctx.triggerMetadata } : undefined,
+    success: true,
+  });
 }

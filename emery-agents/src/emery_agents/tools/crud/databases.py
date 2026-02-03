@@ -27,7 +27,7 @@ def create_database_crud(api_key: str, org_id: str, extra_headers: dict[str, str
     Returns:
         dspy.Tool wrapping the database_crud function
     """
-    api = DatabaseAPI(api_key, org_id)
+    api = DatabaseAPI(api_key, org_id, extra_headers=extra_headers)
 
     def database_crud(
         method: str,
