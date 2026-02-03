@@ -9,7 +9,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BillingOverviewCard } from '@/components/billing/BillingOverviewCard';
-import { TierGrid } from '@/components/billing/TierCard';
+import { TierCard, TierGrid } from '@/components/billing/TierCard';
 import { StorageUsageCard } from '@/components/billing/StorageUsageCard';
 import { CreditUsageCard } from '@/components/billing/CreditUsageCard';
 import { SpendingLimitControl } from '@/components/billing/SpendingLimitControl';
@@ -25,7 +25,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { TrendingUp, Sparkles, X, Mail } from 'lucide-react';
+import { TrendingUp, Sparkles, X, Mail, ArrowUpRight, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'sonner';
 import { createCheckoutSession, createPaymentMethodPortalSession, setSpendingLimit } from '@/app/actions/billing';
 import type { TierName } from '@/ddd/infrastructure/external/stripe/config';
@@ -56,6 +56,7 @@ export function BillingSettingsClient({
   const [selectedTab, setSelectedTab] = useState('overview');
   const [showWelcome, setShowWelcome] = useState(false);
   const [showEnterpriseDialog, setShowEnterpriseDialog] = useState(false);
+  const [showAllPlans, setShowAllPlans] = useState(false);
 
   // Check for welcome query param and session storage
   useEffect(() => {
@@ -306,30 +307,93 @@ export function BillingSettingsClient({
 
         {/* Plans Tab */}
         <TabsContent value="plans" className="space-y-4">
-          <div>
-            <h3 className="text-lg font-semibold mb-1">Choose Your Plan</h3>
-            <p className="text-muted-foreground text-sm mb-4">
-              Select the plan that best fits your needs.
-            </p>
-          </div>
+          {!showAllPlans ? (
+            <>
+              {/* Default: Show current plan centered */}
+              <div className="text-center">
+                <h3 className="text-lg font-semibold mb-1">Your Plan</h3>
+                <p className="text-muted-foreground text-sm mb-4">
+                  {tier === 'enterprise' ? 'Enterprise plan with custom terms' : `You're on the ${tier.charAt(0).toUpperCase() + tier.slice(1)} plan`}
+                </p>
+              </div>
 
-          <TierGrid
-            currentTier={tier}
-            onSelectTier={handleSelectTier}
-            loading={loadingAction}
-          />
+              <div className="max-w-sm mx-auto">
+                <TierCard
+                  tier={tier}
+                  currentTier={tier}
+                  variant="featured"
+                  highlighted
+                />
+              </div>
 
-          {/* Subtle downgrade link */}
-          {hasActiveSubscription && tier !== 'free' && (
-            <p className="text-xs text-muted-foreground text-center pt-2">
-              Need to change your plan?{' '}
-              <button
-                className="underline hover:text-foreground"
-                onClick={() => toast.info('To downgrade or cancel, please contact support at support@enhancd.ai')}
-              >
-                Contact support
-              </button>
-            </p>
+              {/* Upgrade button if not on enterprise */}
+              {tier !== 'enterprise' && (
+                <div className="flex justify-center">
+                  <Button
+                    onClick={() => {
+                      const nextTier: Record<string, TierName> = { free: 'pro', pro: 'max', max: 'enterprise' };
+                      const next = nextTier[tier];
+                      if (next) handleSelectTier(next);
+                    }}
+                    disabled={loadingAction}
+                  >
+                    <ArrowUpRight className="h-4 w-4 mr-2" />
+                    Upgrade to {tier === 'free' ? 'Pro' : tier === 'pro' ? 'Max' : 'Enterprise'}
+                  </Button>
+                </div>
+              )}
+
+              {/* Link to expand all plans */}
+              <div className="text-center pt-2">
+                <button
+                  className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+                  onClick={() => setShowAllPlans(true)}
+                >
+                  Need to change your plan? View all plans
+                  <ChevronDown className="h-3 w-3" />
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Expanded: Show all 4 plans */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold mb-1">All Plans</h3>
+                  <p className="text-muted-foreground text-sm">
+                    Compare plans and choose what fits your needs.
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowAllPlans(false)}
+                  className="text-xs"
+                >
+                  <ChevronUp className="h-3 w-3 mr-1" />
+                  Back
+                </Button>
+              </div>
+
+              <TierGrid
+                currentTier={tier}
+                onSelectTier={handleSelectTier}
+                loading={loadingAction}
+              />
+
+              {/* Subtle downgrade link */}
+              {hasActiveSubscription && tier !== 'free' && (
+                <p className="text-xs text-muted-foreground text-center pt-2">
+                  Need to downgrade or cancel?{' '}
+                  <button
+                    className="underline hover:text-foreground"
+                    onClick={() => toast.info('To downgrade or cancel, please contact support at support@enhancd.ai')}
+                  >
+                    Contact support
+                  </button>
+                </p>
+              )}
+            </>
           )}
         </TabsContent>
 

@@ -71,7 +71,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, TierConfig> = {
     creditsPerMonth: 50000, // ~$50 worth of usage
     features: [
       '50,000 credits per month',
-      'Unlimited team members',
+      'Up to 3 team members',
       '10GB storage',
       'Unlimited connectors',
       'API access',
@@ -80,7 +80,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, TierConfig> = {
     stripePriceIdYearly: process.env.STRIPE_PRO_PRICE_ID_YEARLY || null,
     stripeProductId: process.env.STRIPE_PRO_PRODUCT_ID || null,
     isCustomPricing: false,
-    maxTeamMembers: null,
+    maxTeamMembers: 3,
     storageQuotaGB: 10,
     connectorsAllowed: true,
   },
@@ -105,7 +105,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, TierConfig> = {
     stripePriceIdYearly: process.env.STRIPE_MAX_PRICE_ID_YEARLY || null,
     stripeProductId: process.env.STRIPE_MAX_PRODUCT_ID || null,
     isCustomPricing: false,
-    maxTeamMembers: null,
+    maxTeamMembers: 10,
     storageQuotaGB: 30,
     connectorsAllowed: true,
   },
