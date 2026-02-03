@@ -17,7 +17,9 @@ from ...reasoning.signatures.planning import TriageTask
 from ...tools.discovery import create_discovery_tools
 from ...services.execution.events import ErrorEvent, FinalSynthesisEvent, ExecutionCompletedEvent
 from ..state import PlanExecuteState
-from ..runtime import RuntimeContext, format_conversation_history
+from ...services.memory import create_memory_crud
+from ...tools.output import create_conversation_history_tool
+from ..runtime import RuntimeContext
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +52,6 @@ async def triage_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[
     # Build context for triage
     workspace = state.get("workspace_context")
     workspace_summary = workspace.resource_summary() if workspace else ""
-    conversation_str = format_conversation_history(runtime.conversation_history)
     memory_context = state.get("memory_context", "") or ""
 
     # Create discovery tools for ReAct triage
@@ -59,6 +60,12 @@ async def triage_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[
         discovery_tools = create_discovery_tools(
             api_key, org_id, runtime.capability_registry
         )
+
+    # Add memory_crud tool so triage can search_memories for deeper context
+    discovery_tools.append(create_memory_crud(runtime.memory_service))  # type: ignore[arg-type]
+
+    # Add conversation history tool for current session context
+    discovery_tools.append(create_conversation_history_tool(runtime.conversation_history or []))
 
     # Create ReAct module with discovery tools for informed routing
     react = dspy.ReAct(
@@ -73,7 +80,6 @@ async def triage_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[
             result = react(
                 task=task,
                 workspace_context=workspace_summary,
-                conversation_history=conversation_str,
                 memory_context=memory_context,
             )
 

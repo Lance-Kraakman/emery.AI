@@ -13,6 +13,7 @@ from .ask_question import (
     QuestionCollector,
     create_ask_question_tool,
 )
+from .conversation_history import create_conversation_history_tool
 from .plan_output import (
     CapturedPlan,
     NormalizedStepData,
@@ -43,4 +44,6 @@ __all__ = [
     "RecoveryCollector",
     "RecoveryResult",
     "create_recovery_output_tool",
+    # Conversation History
+    "create_conversation_history_tool",
 ]
