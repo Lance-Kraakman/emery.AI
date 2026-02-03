@@ -512,11 +512,12 @@ export class RowSerializer {
     // AIDEV-NOTE: Arrow IPC returns timestamps as numbers (milliseconds since epoch)
     // The gRPC mapper expects Date objects for date_value fields
     // Without this conversion, timestamps get sent as numberValue instead of dateValue
+    // Some Arrow implementations may return BigInt for high-precision timestamps
     if (
       (field.type === 'date' || field.type === 'last-updated' || field.type === 'created-at') &&
-      typeof value === 'number'
+      (typeof value === 'number' || typeof value === 'bigint')
     ) {
-      return new Date(value);
+      return new Date(Number(value));
     }
 
     // Non-null values: pass through as-is

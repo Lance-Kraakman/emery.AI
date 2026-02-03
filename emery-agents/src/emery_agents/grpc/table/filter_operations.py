@@ -60,6 +60,10 @@ def extract_filter_values_list(filter_values: List[table_service_pb2.RowDataValu
             values_list.append(val.number_value)
         elif val.HasField('boolean_value'):
             values_list.append(val.boolean_value)
+        elif val.HasField('date_value'):
+            values_list.append(val.date_value)
+        elif val.HasField('json_value'):
+            values_list.append(val.json_value)
     return values_list
 
 

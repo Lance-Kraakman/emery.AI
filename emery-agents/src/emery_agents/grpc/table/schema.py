@@ -91,7 +91,10 @@ def arrow_to_polars_type(arrow_type: pa.DataType) -> pl.DataType:
     elif pat.is_boolean(arrow_type):
         return pl.Boolean()
     elif pat.is_timestamp(arrow_type):
-        return pl.Datetime()
+        # Preserve time unit from Arrow schema (ms, us, ns, s)
+        # Delta Lake uses timestamp('ms'); defaulting to pl.Datetime() uses 'us' which
+        # causes precision mismatch → wrong values when JS reads Arrow IPC
+        return pl.Datetime(time_unit=arrow_type.unit)
     elif pat.is_list(arrow_type) or pat.is_fixed_size_list(arrow_type):
         return pl.List(pl.Float32())
     else:

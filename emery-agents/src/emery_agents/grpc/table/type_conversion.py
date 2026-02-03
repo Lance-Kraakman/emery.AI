@@ -6,6 +6,7 @@ This module has no dependencies on other table modules to avoid circular imports
 """
 
 import logging
+from datetime import datetime, timezone
 from typing import Any
 import pyarrow as pa
 import pyarrow.types as pat
@@ -54,8 +55,16 @@ def cast_value_to_column_type(value: Any, column_type: pa.DataType) -> Any:
         # Timestamp types
         elif pat.is_timestamp(column_type):
             if isinstance(value, (int, float)):
-                return value  # Assume Unix timestamp
-            return str(value)  # Convert to string for parsing
+                return value  # Unix timestamp
+            elif isinstance(value, str):
+                try:
+                    dt = datetime.fromisoformat(value.replace('Z', '+00:00'))
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    return dt
+                except ValueError:
+                    return value
+            return value
 
         # List types (embeddings)
         elif pat.is_list(column_type) or pat.is_fixed_size_list(column_type):

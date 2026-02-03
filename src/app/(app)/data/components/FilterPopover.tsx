@@ -67,7 +67,7 @@ export function FilterPopover({ trigger, fields, activeFilters, onAddFilter, onR
       } else if (fieldType === 'boolean') {
         processedValue = newValue === 'true'
       } else if (fieldType === 'date') {
-        processedValue = newValue
+        processedValue = new Date(newValue + 'T00:00:00Z')
       }
     } else {
       processedValue = null
