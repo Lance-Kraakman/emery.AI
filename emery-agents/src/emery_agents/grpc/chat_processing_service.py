@@ -500,6 +500,14 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
                 await self.session_manager.remove_plan_session(session_id)
 
+            # Append previous plan + user feedback for regeneration
+            if previous_plan_json:
+                task_instructions = f"{task_instructions}\n\nPrevious plan (revise based on feedback):\n{previous_plan_json}"
+            if user_feedback:
+                task_instructions = f"{task_instructions}\n\nUser feedback on previous plan:\n{user_feedback}"
+            if previous_plan_json or user_feedback:
+                logger.info("📋 GeneratePlan: Enhanced instructions with regeneration context")
+
             yield _make_progress("Analyzing instructions...", "analyzing")
 
             yield _make_progress("Creating plan...", "planning")

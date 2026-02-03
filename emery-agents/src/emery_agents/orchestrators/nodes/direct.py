@@ -27,7 +27,8 @@ from ...tools.factories import create_all_tools
 from ...tools.output import QuestionCollector, create_ask_question_tool
 from ...services.memory import create_memory_crud
 from ..state import PlanExecuteState
-from ..runtime import RuntimeContext, format_conversation_history
+from ..runtime import RuntimeContext
+from ...services.context import format_conversation_history
 
 logger = logging.getLogger(__name__)
 

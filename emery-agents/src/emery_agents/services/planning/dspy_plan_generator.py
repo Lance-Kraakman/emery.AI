@@ -32,13 +32,11 @@ from emery_agents.reasoning.signatures.planning import (
     SkillTemplatePlanOutput,
 )
 from emery_agents.entities.models.plan import Plan, PlanStep, create_plan, create_step
-from emery_agents.services.context import WorkspaceContext
+from emery_agents.services.context import WorkspaceContext, format_conversation_history
 from emery_agents.services.protocols import ModelProviderProtocol, Tool
 
-from emery_agents.orchestrators.runtime import format_conversation_history
-
 if TYPE_CHECKING:
-    from emery_agents.orchestrators.runtime import ConversationMessage
+    from emery_agents.services.context import ConversationMessage
 
 from .models import PlanGenerationRequest, PlanGenerationResult
 

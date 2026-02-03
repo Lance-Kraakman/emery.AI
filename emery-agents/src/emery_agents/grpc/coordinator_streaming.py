@@ -25,7 +25,7 @@ from .coordinator_event_converter import convert_coordinator_event
 from .approval_handler import is_approval_response
 from .response_types import create_error_response
 from ..orchestrators import create_session_graph, RuntimeContext
-from ..orchestrators.runtime import ConversationMessage
+from ..services.context import ConversationMessage
 from ..orchestrators.state import DEFAULT_STATE
 from ..services.memory import MemoryService
 from ..services.context import WorkspaceContext

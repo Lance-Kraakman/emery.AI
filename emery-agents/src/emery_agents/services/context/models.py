@@ -1,13 +1,15 @@
 """
-Session Config and Workspace Context
+Session Config, Workspace Context, and Conversation Models
 
-Provides two focused dataclasses for context management:
+Provides focused dataclasses for context management:
 1. SessionConfig - Auth and identity (immutable, set at session start)
 2. WorkspaceContext - Workspace resources for planner awareness
+3. ConversationMessage - Single message from conversation history
 
 This separates concerns:
 - Config: Who is making the request (org, auth)
 - Context: What resources exist (databases, tables, apps, agents, skills)
+- Conversation: What was said in the current/past sessions
 
 WorkspaceContext gives the planner visibility into existing resources to avoid
 creating duplicates. CapabilityRegistry handles runtime capability routing.
@@ -25,6 +27,38 @@ from emery_agents.entities.workspace import (
     WorkspaceSkill,
     WorkspaceView,
 )
+
+
+@dataclass
+class ConversationMessage:
+    """A single message from the conversation history.
+
+    Converted from protobuf HistoryMessage at the gRPC boundary.
+    """
+
+    role: str
+    content: str
+
+
+def format_conversation_history(
+    history: Optional[List["ConversationMessage"]],
+    max_messages: int = 10,
+    max_content_length: int = 500,
+) -> str:
+    """Format recent conversation history as a string for prompt injection.
+
+    Returns last N messages as "role: content" lines, truncated per message.
+    Used by triage, direct execution, and planning nodes.
+    """
+    if not history:
+        return ""
+    recent = history[-max_messages:]
+    parts = []
+    for msg in recent:
+        if msg.content:
+            content = msg.content[:max_content_length]
+            parts.append(f"{msg.role}: {content}")
+    return "\n".join(parts)
 
 
 @dataclass(frozen=True)

@@ -13,37 +13,10 @@ via Python closures when the session graph is created.
 from dataclasses import dataclass, field
 from typing import Any, List, Optional
 
+from emery_agents.services.context import ConversationMessage, format_conversation_history
 
-@dataclass
-class ConversationMessage:
-    """A single message from the conversation history.
-
-    Converted from protobuf HistoryMessage at the gRPC boundary.
-    """
-
-    role: str
-    content: str
-
-
-def format_conversation_history(
-    history: Optional[List[ConversationMessage]],
-    max_messages: int = 10,
-    max_content_length: int = 500,
-) -> str:
-    """Format recent conversation history as a string for prompt injection.
-
-    Returns last N messages as "role: content" lines, truncated per message.
-    Used by triage, direct execution, and planning nodes.
-    """
-    if not history:
-        return ""
-    recent = history[-max_messages:]
-    parts = []
-    for msg in recent:
-        if msg.content:
-            content = msg.content[:max_content_length]
-            parts.append(f"{msg.role}: {content}")
-    return "\n".join(parts)
+# Re-export so existing `from ..runtime import ConversationMessage` still works
+__all__ = ["ConversationMessage", "format_conversation_history", "RuntimeContext"]
 
 
 @dataclass

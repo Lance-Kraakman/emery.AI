@@ -23,7 +23,7 @@ from emery_agents.tools.capability_registry import CapabilityRegistry
 from emery_agents.services.context import SessionConfig, WorkspaceContext
 
 if TYPE_CHECKING:
-    from emery_agents.orchestrators.runtime import ConversationMessage
+    from emery_agents.services.context import ConversationMessage
 
 
 @dataclass(frozen=True)

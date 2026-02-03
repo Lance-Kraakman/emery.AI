@@ -10,8 +10,10 @@ Context and configuration management for agent execution.
 """
 
 from .models import (
+    ConversationMessage,
     SessionConfig,
     WorkspaceContext,
+    format_conversation_history,
 )
 from .resolver import ContextResolver
 from .sync import ContextSyncService, ContextSyncServiceFactory
@@ -23,8 +25,10 @@ from .manager import (
 
 
 __all__ = [
+    "ConversationMessage",
     "SessionConfig",
     "WorkspaceContext",
+    "format_conversation_history",
     "ContextResolver",
     "ContextSyncService",
     "ContextSyncServiceFactory",
