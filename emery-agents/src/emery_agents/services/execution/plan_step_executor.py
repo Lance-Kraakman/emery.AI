@@ -154,7 +154,7 @@ class PlanStepExecutor:
         self.org_id = org_id
         self.org_model = org_model
         self.max_steps = max_steps
-        self.skill_inputs = skill_inputs or {}
+        self.skill_inputs = skill_inputs if skill_inputs is not None else {}
         self.capability_registry = capability_registry
 
         # Create DSPy tools with auth captured (includes CRUD + discovery tools)
