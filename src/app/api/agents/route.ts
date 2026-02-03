@@ -122,8 +122,8 @@ export async function GET(request: NextRequest): Promise<Response> {
       });
     }
 
-    // Get all agents for owner
-    const userAgents = await agentApplicationService.getAgentsByOwner(userId);
+    // Get all agents for current organization
+    const userAgents = await agentApplicationService.getAgents({ organizationId: organizationId! });
 
     return Response.json({
       success: true,

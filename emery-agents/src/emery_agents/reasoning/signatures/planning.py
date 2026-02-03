@@ -498,6 +498,10 @@ class TriageTask(dspy.Signature):  # type: ignore[misc]
         desc="Key findings from any research tools called (resource IDs, capability matches, etc.). "
              "Passed to the next node to avoid duplicate lookups. Empty string if no research done."
     )
+    response: str = dspy.OutputField(
+        desc="When execution_mode is 'respond': the complete, natural answer to give the user. "
+             "When execution_mode is 'direct' or 'plan': empty string."
+    )
 
 
 class GapItemOutput(BaseModel):

@@ -86,6 +86,7 @@ async def triage_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[
         execution_mode = getattr(result, "execution_mode", "plan").strip().lower()
         reasoning = getattr(result, "reasoning", "")
         context_notes = getattr(result, "context_notes", "")
+        response_text = getattr(result, "response", "")
 
         # Validate execution_mode
         if execution_mode not in VALID_MODES:
@@ -98,7 +99,7 @@ async def triage_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[
 
         # For "respond" mode, generate the response inline
         if execution_mode == "respond":
-            final_response = context_notes or reasoning
+            final_response = response_text or context_notes or reasoning
             events.append(FinalSynthesisEvent(
                 plan_id="triage",
                 synthesis=final_response,

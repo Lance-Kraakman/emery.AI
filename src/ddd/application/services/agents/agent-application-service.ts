@@ -347,9 +347,11 @@ export class AgentApplicationService {
       const orgId = OrganizationId.fromNumber(organizationId);
       const agents = await this.agentRepository.findByOrganization(orgId);
 
-      // Case-insensitive name match
-      const nameLower = name.toLowerCase();
-      const found = agents.find(agent => agent.name.toLowerCase() === nameLower);
+      // Case-insensitive match, normalize hyphens/underscores to spaces
+      // so @agent:email-analyzer matches "Email Analyzer"
+      const normalize = (s: string) => s.toLowerCase().replace(/[-_]/g, ' ');
+      const nameNorm = normalize(name);
+      const found = agents.find(agent => normalize(agent.name) === nameNorm);
 
       if (!found) {
         return {
