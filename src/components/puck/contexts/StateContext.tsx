@@ -22,6 +22,7 @@ import React, {
   useCallback,
   useRef,
   useEffect,
+  useMemo,
   type ReactNode,
 } from 'react';
 import {
@@ -369,7 +370,7 @@ export function StateProvider({ children, pageState }: StateProviderProps) {
     return key in state.values;
   }, [state.values]);
 
-  const contextValue: StateContextValue = {
+  const contextValue: StateContextValue = useMemo(() => ({
     getValue,
     setValue,
     setValueWithUrlSync,
@@ -379,7 +380,8 @@ export function StateProvider({ children, pageState }: StateProviderProps) {
     getAllValues,
     getConfig,
     hasKey,
-  };
+  }), [getValue, setValue, setValueWithUrlSync, toggleValue, resetState,
+       subscribe, getAllValues, getConfig, hasKey]);
 
   return (
     <StateContext.Provider value={contextValue}>

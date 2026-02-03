@@ -605,12 +605,16 @@ export default function DataBlock({
   // Use rows from pagination hook
   const { displayedRows, currentPage, totalPages, isLoading, hasMore, fetchPage, loadMore } = pagination;
 
-  // Merge local updates into displayed rows for optimistic UI
-  // For each displayed row, use the local version if it exists (was edited)
-  const mergedDisplayedRows = displayedRows.map(row => {
-    const localRow = localRows.find(r => r.id === row.id);
-    return localRow ?? row;
-  });
+  // When client-side fetching is active (needsClientFetch), use localRows exclusively
+  // because displayedRows comes from pagination (initialized with server _rows
+  // which were fetched WITHOUT {{rowData.x}} filters - wrong data for nested DataBlocks).
+  // When not client-fetching, merge local edits into displayed rows for optimistic UI.
+  const mergedDisplayedRows = childData.needsClientFetch
+    ? localRows
+    : displayedRows.map(row => {
+        const localRow = localRows.find(r => r.id === row.id);
+        return localRow ?? row;
+      });
 
   // Container styles for grid/flex layout
   const containerStyle: React.CSSProperties = {
@@ -773,6 +777,10 @@ export default function DataBlock({
 
   // Render pagination controls
   const renderPaginationControls = () => {
+    // No server-side pagination when using client-fetched data
+    // (pagination hook has unfiltered server data with wrong totals)
+    if (childData.needsClientFetch) return null;
+
     if (paginationStyle === 'pages' && totalPages > 1) {
       return (
         <div className={styles.pagination}>

@@ -776,12 +776,22 @@ export async function executeView(
 
         const fieldId = fieldNameToIdMap.get(filter.field);
         if (fieldId === undefined) {
-          console.warn(`Field "${filter.field}" not found, skipping filter`);
+          console.warn(`Field "${filter.field}" not found, skipping filter. Available: ${[...fieldNameToIdMap.keys()].join(', ')}`);
           continue;
         }
 
         // Clear value for no-value operators
         const filterValue = noValueOperators.includes(domainOperator) ? undefined : substitutedValue;
+
+        // Diagnostic: log filter mapping details
+        console.log('[executeView] Filter mapped:', {
+          fieldName: filter.field,
+          fieldId,
+          uiOperator: filter.operator,
+          domainOperator,
+          rawValue: filter.value,
+          filterValue,
+        });
 
         runtimeFilters.push(
           FilterConfig.create({
