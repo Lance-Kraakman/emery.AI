@@ -2,7 +2,6 @@ import {
   PutObjectCommand,
   GetObjectCommand,
   DeleteObjectCommand,
-  HeadObjectCommand,
   ListObjectsV2Command,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -14,15 +13,11 @@ import { s3Client, BUCKET_NAME } from '@/lib/s3/client';
 import {
   getOrgPrefixes,
   getTaskAttachmentPrefix,
+  getWorkspacePrefix,
   getDatabaseFileKey,
-  getAgentWorkspaceKey,
-  getUserWorkspaceKey,
   extractOrgIdFromKey,
   type StorageCategory,
 } from '@/lib/s3/path-registry';
-import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
-import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
-import { OrganizationId } from '@/ddd/domain/shared/value-objects';
 
 // Cache for storage breakdown results to reduce expensive ListObjectsV2 calls
 // TTL: 1 hour (3600000 ms)
@@ -41,11 +36,7 @@ export class S3FileStorageRepository implements IFileStorageRepository {
   private readonly bucketName: string;
   private readonly s3: typeof s3Client;
 
-  constructor(
-    bucketName?: string,
-    private readonly agentRepository?: IAgentRepository,
-    private readonly organizationRepository?: IOrganizationRepository,
-  ) {
+  constructor(bucketName?: string) {
     this.bucketName = bucketName || BUCKET_NAME;
     this.s3 = s3Client;
   }
@@ -335,13 +326,14 @@ export class S3FileStorageRepository implements IFileStorageRepository {
     };
 
     try {
-      // Scan all org-scoped prefixes
+      // Scan all org-scoped prefixes (including workspaces)
       const prefixes = getOrgPrefixes(organizationId);
       const prefixEntries: Array<{ prefix: string; category: StorageCategory }> = [
         { prefix: prefixes.database, category: 'database' },
         { prefix: prefixes.chat, category: 'chat' },
         { prefix: prefixes.skill, category: 'skill' },
         { prefix: getTaskAttachmentPrefix(organizationId), category: 'database' },
+        { prefix: getWorkspacePrefix(organizationId), category: 'workspace' },
       ];
 
       for (const { prefix, category } of prefixEntries) {
@@ -375,19 +367,15 @@ export class S3FileStorageRepository implements IFileStorageRepository {
                 case 'skill':
                   breakdown.skillStorageBytes += size;
                   break;
+                case 'workspace':
+                  breakdown.workspaceStorageBytes += size;
+                  break;
               }
             }
           }
 
           continuationToken = response.NextContinuationToken;
         } while (continuationToken);
-      }
-
-      // Scan workspace storage (requires agent/org repository for attribution)
-      if (this.agentRepository && this.organizationRepository) {
-        const workspaceBytes = await this.scanWorkspaceStorage(organizationId);
-        breakdown.workspaceStorageBytes = workspaceBytes;
-        breakdown.totalBytes += workspaceBytes;
       }
 
       // Cache the result
@@ -403,52 +391,4 @@ export class S3FileStorageRepository implements IFileStorageRepository {
     }
   }
 
-  /**
-   * Scan workspace storage for an organization by looking up its agents and members.
-   * Uses HeadObject (O(1) per key) rather than LIST to keep it efficient.
-   */
-  private async scanWorkspaceStorage(organizationId: number): Promise<number> {
-    let totalBytes = 0;
-
-    try {
-      // Get agent workspace sizes
-      const orgId = OrganizationId.fromNumber(organizationId);
-      const agents = await this.agentRepository!.findByOrganization(orgId);
-
-      for (const agent of agents) {
-        const key = getAgentWorkspaceKey(agent.id.value);
-        const size = await this.getObjectSize(key);
-        if (size > 0) totalBytes += size;
-      }
-
-      // Get user workspace sizes
-      const members = await this.organizationRepository!.getMembers(orgId);
-
-      for (const member of members) {
-        const key = getUserWorkspaceKey(member.userId.value);
-        const size = await this.getObjectSize(key);
-        if (size > 0) totalBytes += size;
-      }
-    } catch (error) {
-      // Non-fatal: workspace scanning is best-effort
-      console.warn(`Failed to scan workspace storage for org ${organizationId}:`, error);
-    }
-
-    return totalBytes;
-  }
-
-  /**
-   * Get the size of an S3 object using HeadObject. Returns 0 if not found.
-   */
-  private async getObjectSize(key: string): Promise<number> {
-    try {
-      const response = await this.s3.send(
-        new HeadObjectCommand({ Bucket: this.bucketName, Key: key })
-      );
-      return response.ContentLength ?? 0;
-    } catch {
-      // Object does not exist — not an error
-      return 0;
-    }
-  }
 }

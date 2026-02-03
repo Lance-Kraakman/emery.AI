@@ -119,8 +119,8 @@ class AgentStreamingHandler:
         file_attachments: Optional[List[FileAttachment]] = None,
         workspace_path: Optional[Path] = None,
         workspace_id: Optional[str] = None,
-        workspace_prefix: Optional[str] = None,
         workspace_type: Optional[str] = None,
+        workspace_org_id: Optional[int] = None,
         extra_headers: Optional[Dict[str, str]] = None,
     ) -> AsyncIterator[StreamResponseDict]:
         """
@@ -185,7 +185,8 @@ class AgentStreamingHandler:
                     conversation_history=conversation_history,
                     workspace_path=workspace_path,
                     workspace_id=workspace_id,
-                    workspace_prefix=workspace_prefix,
+                    workspace_type=workspace_type,
+                    workspace_org_id=workspace_org_id,
                 )
 
             logger.info(f"🤖 Using ToolCallingAgent with {len(smolagents_tools)} tools")
@@ -274,7 +275,8 @@ class AgentStreamingHandler:
         conversation_history: Optional[List[HistoryMessage]],
         workspace_path: Optional[Path] = None,
         workspace_id: Optional[str] = None,
-        workspace_prefix: Optional[str] = None,
+        workspace_type: Optional[str] = None,
+        workspace_org_id: Optional[int] = None,
     ) -> ChatAgent:
         """Create new agent and restore from history (COLD PATH).
 
@@ -319,7 +321,8 @@ class AgentStreamingHandler:
                 history_message_count=len(conversation_history) if conversation_history else 0,
                 workspace_path=workspace_path,
                 workspace_id=workspace_id,
-                workspace_prefix=workspace_prefix,
+                workspace_type=workspace_type,
+                workspace_org_id=workspace_org_id,
             )
 
             if file_attachments:

@@ -62,7 +62,6 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
         if s3_bucket:
             self.workspace_sync: Optional[WorkspaceSync] = WorkspaceSync(
                 bucket=s3_bucket,
-                prefix="workspaces/agents",
             )
             logger.info(f"WorkspaceSync initialized with bucket: {s3_bucket}")
         else:
@@ -95,7 +94,9 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
         workspace_id = str(task_data.agent_id) if task_data.agent_id else "org"
         if self.workspace_sync and task_data.agent_id:
             try:
-                workspace_path = self.workspace_sync.download(workspace_id)
+                workspace_path = self.workspace_sync.download(
+                    task_data.organization_id, "agents", workspace_id
+                )
                 logger.info(f"📁 [TASK-{task_data.task_id[:8]}] Workspace downloaded to {workspace_path}")
 
                 # Prepare task history directory
@@ -190,7 +191,9 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
             # Upload workspace back to S3 and cleanup
             if self.workspace_sync and workspace_path and task_data.agent_id:
                 try:
-                    self.workspace_sync.upload(workspace_id)
+                    self.workspace_sync.upload(
+                        task_data.organization_id, "agents", workspace_id
+                    )
                     logger.info(f"📤 [TASK-{task_data.task_id[:8]}] Workspace uploaded to S3")
                     self.workspace_sync.cleanup(workspace_id)
                 except Exception as e:

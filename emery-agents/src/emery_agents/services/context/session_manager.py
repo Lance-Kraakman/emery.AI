@@ -39,7 +39,8 @@ class SessionMetadata:
     # Workspace tracking for filesystem-based agent execution
     workspace_path: Optional[Path] = None  # Local path to extracted workspace
     workspace_id: Optional[str] = None  # ID for S3 (user_id or agent_id)
-    workspace_prefix: Optional[str] = None  # S3 prefix ("workspaces/users" or "workspaces/agents")
+    workspace_type: Optional[str] = None  # "agents" or "users"
+    workspace_org_id: Optional[int] = None  # Organization ID for org-scoped S3 keys
 
 
 class SessionManager:
@@ -129,9 +130,9 @@ class SessionManager:
         for session_id, reason in sessions_to_remove:
             # Upload workspace to S3 before removing session
             meta = self.metadata.get(session_id)
-            if meta and self.workspace_sync and meta.workspace_id and meta.workspace_prefix:
+            if meta and self.workspace_sync and meta.workspace_id and meta.workspace_type and meta.workspace_org_id:
                 try:
-                    self.workspace_sync.upload(meta.workspace_id, prefix=meta.workspace_prefix)
+                    self.workspace_sync.upload(meta.workspace_org_id, meta.workspace_type, meta.workspace_id)
                     self.workspace_sync.cleanup(meta.workspace_id)
                     logger.info(f"📤 Uploaded workspace for session {session_id} before cleanup")
                 except Exception as e:
@@ -188,7 +189,8 @@ class SessionManager:
         history_message_count: int = 0,
         workspace_path: Optional[Path] = None,
         workspace_id: Optional[str] = None,
-        workspace_prefix: Optional[str] = None,
+        workspace_type: Optional[str] = None,
+        workspace_org_id: Optional[int] = None,
     ):
         """
         Register new agent in session manager.
@@ -202,7 +204,8 @@ class SessionManager:
             history_message_count: Number of messages restored from history
             workspace_path: Local path to extracted workspace
             workspace_id: ID for S3 (user_id or agent_id)
-            workspace_prefix: S3 prefix ("workspaces/users" or "workspaces/agents")
+            workspace_type: "agents" or "users"
+            workspace_org_id: Organization ID for org-scoped S3 keys
         """
         self.agents[session_id] = agent
         self.metadata[session_id] = SessionMetadata(
@@ -216,7 +219,8 @@ class SessionManager:
             history_message_count=history_message_count,
             workspace_path=workspace_path,
             workspace_id=workspace_id,
-            workspace_prefix=workspace_prefix,
+            workspace_type=workspace_type,
+            workspace_org_id=workspace_org_id,
         )
 
         logger.info(

@@ -61,7 +61,8 @@ export async function GET(
     }
 
     // Check workspace exists in S3
-    const exists = await WorkspaceS3Service.exists(agentId);
+    const orgId = agent.organizationId.value;
+    const exists = await WorkspaceS3Service.exists(orgId, agentId);
     if (!exists) {
       return Response.json(
         { success: false, error: 'No workspace found for this agent. Run a task first to create one.' },
@@ -70,7 +71,7 @@ export async function GET(
     }
 
     // Stream the archive from S3
-    const { body, contentLength, lastModified } = await WorkspaceS3Service.downloadArchive(agentId);
+    const { body, contentLength, lastModified } = await WorkspaceS3Service.downloadArchive(orgId, agentId);
     const filename = `${slugify(agent.name)}-workspace.tar.gz`;
 
     const headers: Record<string, string> = {

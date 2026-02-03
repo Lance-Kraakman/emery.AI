@@ -14,10 +14,8 @@ import type { ITokenUsageRepository } from '@/ddd/domain/billing/repositories/to
 import type { IInvoiceRepository } from '@/ddd/domain/billing/repositories/invoice-repository';
 import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
 import type { IFileStorageRepository } from '@/ddd/domain/tables/repositories/file-storage-repository';
-import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
 import { DrizzleTokenUsageRepository } from '@/ddd/infrastructure/db/repositories/billing/drizzle-token-usage-repository';
 import { DrizzleInvoiceRepository } from '@/ddd/infrastructure/db/repositories/billing/drizzle-invoice-repository';
-import { S3FileStorageRepository } from '@/ddd/infrastructure/storage/repositories/s3-file-storage-repository';
 import { TokenUsageApplicationService } from '@/ddd/application/services/billing/token-usage-application-service';
 import { CreditUsageApplicationService } from '@/ddd/application/services/billing/credit-usage-application-service';
 import { InvoiceApplicationService } from '@/ddd/application/services/billing/invoice-application-service';
@@ -38,17 +36,10 @@ export interface BillingDependencies {
   db: ContextAwareDbClient;
   organizationRepository: IOrganizationRepository;
   fileStorageRepository: IFileStorageRepository;
-  agentRepository?: IAgentRepository;
 }
 
 export function registerBillingServices(deps: BillingDependencies): BillingServices {
-  const { db, organizationRepository, fileStorageRepository, agentRepository } = deps;
-
-  // Create a workspace-aware storage repository for recalculation service.
-  // This uses agent + org repos to attribute workspace archives to organizations.
-  const recalculationStorageRepo: IFileStorageRepository = agentRepository
-    ? new S3FileStorageRepository(undefined, agentRepository, organizationRepository)
-    : fileStorageRepository;
+  const { db, organizationRepository, fileStorageRepository } = deps;
 
   // Register repositories
   const tokenUsageRepository = new DrizzleTokenUsageRepository(db);
@@ -68,7 +59,7 @@ export function registerBillingServices(deps: BillingDependencies): BillingServi
     organizationRepository
   );
   const storageRecalculationApplicationService = new StorageRecalculationApplicationService(
-    recalculationStorageRepo,
+    fileStorageRepository,
     organizationRepository
   );
 

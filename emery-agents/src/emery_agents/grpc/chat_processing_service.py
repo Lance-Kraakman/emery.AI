@@ -56,10 +56,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         # Initialize workspace sync for persistent filesystem
         s3_bucket = os.getenv("S3_BUCKET_NAME")
         if s3_bucket:
-            self.workspace_sync = WorkspaceSync(
-                bucket=s3_bucket,
-                prefix="workspaces"  # Base prefix, type (users/agents) added per request
-            )
+            self.workspace_sync = WorkspaceSync(bucket=s3_bucket)
             logger.info(f"✅ WorkspaceSync initialized with bucket: {s3_bucket}")
         else:
             self.workspace_sync = None
@@ -142,6 +139,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         user_id: str,
         agent_id: int | None,
         task_id: str | None,
+        user_name: str | None = None,
+        agent_name: str | None = None,
     ) -> dict[str, str] | None:
         """
         Build HTTP headers for audit trail in chat-initiated executions.
@@ -159,6 +158,10 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             "X-Trigger-Type": "manual",
             "X-Triggered-By-User-Id": user_id,
         }
+        if user_name:
+            headers["X-Triggered-By-User-Name"] = user_name
+        if agent_name:
+            headers["X-Agent-Name"] = agent_name
         if task_id:
             headers["X-Task-ID"] = task_id
         return headers
@@ -166,15 +169,15 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
     def _get_workspace_id(
         self,
         request: agent_worker_pb2.ProcessMessageRequest
-    ) -> Tuple[str, str, str]:
+    ) -> Tuple[str, str, int]:
         """
         Determine workspace type and ID from skill's agent ownership.
 
         Returns:
-            Tuple of (workspace_type, workspace_id, s3_prefix)
+            Tuple of (workspace_type, workspace_id, organization_id)
             - workspace_type: "agents" or "users"
             - workspace_id: agent_id or user_id
-            - s3_prefix: full S3 prefix path
+            - organization_id: org that owns this workspace
         """
         # Resolve agentId from skill being invoked
         agent_id = self._resolve_agent_id(request)
@@ -187,8 +190,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             workspace_type = "users"
             workspace_id = request.user_id
 
-        s3_prefix = f"workspaces/{workspace_type}"
-        return workspace_type, workspace_id, s3_prefix
+        organization_id = int(request.organization_id)
+        return workspace_type, workspace_id, organization_id
 
     async def ProcessMessage(
         self,
@@ -246,12 +249,12 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         workspace_path: Optional[Path] = None
         workspace_type: Optional[str] = None
         workspace_id: Optional[str] = None
-        workspace_prefix: Optional[str] = None
+        workspace_org_id: Optional[int] = None
 
         if self.workspace_sync:
             try:
-                workspace_type, workspace_id, workspace_prefix = self._get_workspace_id(request)
-                workspace_path = self.workspace_sync.download(workspace_id, prefix=workspace_prefix)
+                workspace_type, workspace_id, workspace_org_id = self._get_workspace_id(request)
+                workspace_path = self.workspace_sync.download(workspace_org_id, workspace_type, workspace_id)
                 logger.info(f"📁 Workspace downloaded: {workspace_path} (type={workspace_type}, id={workspace_id})")
             except Exception as e:
                 logger.error(f"Failed to download workspace: {e}")
@@ -319,7 +322,12 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     logger.warning("⚠️ No user API key provided - managed agents may fail auth")
 
             # Build audit headers for chat-initiated tool calls
-            chat_audit_headers = self._build_chat_audit_headers(user_id, agent_id, task_id)
+            user_name = request.user_name if request.user_name else None
+            agent_name = agent_config.name if agent_config and agent_config.name else None
+            chat_audit_headers = self._build_chat_audit_headers(
+                user_id, agent_id, task_id,
+                user_name=user_name, agent_name=agent_name
+            )
 
             async for response_dict in self._agent_handler.stream_response(
                 conversation_messages,
@@ -336,8 +344,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 file_attachments=file_attachments,  # File attachments for skill context injection
                 workspace_path=workspace_path,  # Workspace filesystem path
                 workspace_id=workspace_id,  # Workspace ID for S3 (user_id or agent_id)
-                workspace_prefix=workspace_prefix,  # S3 prefix ("workspaces/users" or "workspaces/agents")
                 workspace_type=workspace_type,  # "agents" or "users" — determines memory PII filtering
+                workspace_org_id=workspace_org_id,  # Organization ID for org-scoped S3 keys
                 extra_headers=chat_audit_headers,  # Audit trail headers for CRUD tool calls
             ):
                 # Check for cancellation
@@ -374,9 +382,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                         break
 
             # Upload workspace after message processing (crash-safe persistence)
-            if self.workspace_sync and workspace_path and workspace_id and workspace_prefix:
+            if self.workspace_sync and workspace_path and workspace_id and workspace_org_id and workspace_type:
                 try:
-                    self.workspace_sync.upload(workspace_id, prefix=workspace_prefix)
+                    self.workspace_sync.upload(workspace_org_id, workspace_type, workspace_id)
                     logger.info(f"📤 Workspace uploaded: {workspace_id}")
                 except Exception as e:
                     logger.error(f"Failed to upload workspace: {e}")
@@ -391,7 +399,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
             completion_metadata = {
                 'content_length': str(len(total_content)),
-                'agent_id': str(agent_id) if agent_id else 'none'
+                'agent_id': str(agent_id) if agent_id else 'none',
+                'agent_name': agent_config.name if agent_config and agent_config.name else '',
             }
 
             if current_plan_data:
