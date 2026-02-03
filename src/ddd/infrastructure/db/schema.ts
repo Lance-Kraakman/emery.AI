@@ -1,5 +1,6 @@
 import { pgTable, text, uuid, serial, bigserial, bigint, integer, timestamp, boolean, primaryKey, jsonb, unique, customType, pgPolicy, pgRole, index, doublePrecision, numeric } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+import { randomBytes, randomUUID } from 'crypto';
 
 // AIDEV-NOTE: Import organizational analysis types for type-safe schema
 import type { OrganizationAnalysisCapabilities } from '@/ddd/domain/organizations/entities/organization';
@@ -821,8 +822,8 @@ export const agents = pgTable("agents", {
   databaseId: text("database_id"),
   status: text("status").default("active"),
   organizationId: integer("organization_id").notNull().references(() => organizations.id),
-  apiKey: text("api_key").unique(), // For API authentication
-  webhookToken: text("webhook_token").unique(), // For webhook authentication (Pipedream, etc.)
+  apiKey: text("api_key").unique().$defaultFn(() => `key_${randomBytes(16).toString('hex')}`), // For API authentication
+  webhookToken: text("webhook_token").unique().$defaultFn(() => randomUUID()), // For webhook authentication (Pipedream, etc.)
   lastUsedAt: timestamp("last_used_at"), // Track API key usage
 
   // Model configuration
