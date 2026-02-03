@@ -1,0 +1,1 @@
+ALTER TABLE "skills" ADD COLUMN "allow_network" boolean DEFAULT false NOT NULL;

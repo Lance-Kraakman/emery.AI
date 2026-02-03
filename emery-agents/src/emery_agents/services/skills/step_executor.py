@@ -1329,6 +1329,18 @@ class StepExecutorService:
                 f"No fallback execution available."
             )
 
+        # Load Pipedream tools from agentic config so the LLM can call them
+        extra_tools = []
+        if agentic_config.tools and self.tool_loader:
+            from emery_agents.entities.skill_config import StepToolConfig
+            tool_configs = [StepToolConfig(name=t) for t in agentic_config.tools]
+            extra_tools = self.tool_loader.load_tools_from_configs(
+                tool_configs=tool_configs,
+                api_key=api_key,
+                api_key_mode="user",
+            )
+            logger.info(f"🔧 Loaded {len(extra_tools)} Pipedream tools for step {step.name}")
+
         logger.info(f"📋 Step {step.name}: executing with stored plan")
         # _execute_with_plan is sync (PlanStepExecutor.execute is sync)
         return self._execute_with_plan(
@@ -1337,6 +1349,7 @@ class StepExecutorService:
             org_model=agentic_config.model or org_model,
             api_key=api_key,
             organization_id=organization_id,
+            extra_tools=extra_tools,
         )
 
     def _execute_with_plan(
@@ -1346,6 +1359,7 @@ class StepExecutorService:
         org_model: Optional[str],
         api_key: Optional[str],
         organization_id: Optional[int],
+        extra_tools: Optional[list] = None,
     ) -> str:
         """Execute a stored plan using PlanStepExecutor.
 
@@ -1355,6 +1369,7 @@ class StepExecutorService:
             org_model: Organization default model
             api_key: API key for authenticated calls
             organization_id: Organization ID for RLS context
+            extra_tools: Additional tools (e.g., Pipedream) to make available to the LLM
 
         Returns:
             Combined results from all plan steps
@@ -1364,6 +1379,7 @@ class StepExecutorService:
             org_id=str(organization_id) if organization_id else "",
             org_model=org_model,
             skill_inputs=skill_inputs,
+            extra_tools=extra_tools,
         )
 
         results = []

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Settings, Zap, Calendar, Link2, Plus, ChevronRight, ClipboardList, Edit2, Trash2, MoreHorizontal, Globe } from 'lucide-react';
+import { Settings, Zap, Calendar, Link2, Plus, ChevronRight, ClipboardList, Edit2, Trash2, MoreHorizontal, Globe, Download } from 'lucide-react';
 import type { AgentDTO } from '@/app/dtos/agent.dto';
 import type { SkillDTO } from '@/app/mappers/skill-mapper';
 import type { ConnectionDTO } from '@/app/mappers/connection-mapper';
@@ -42,6 +42,7 @@ export function CompactAgentHeader({
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [publishWizardOpen, setPublishWizardOpen] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null);
   const [overflowOpen, setOverflowOpen] = useState(false);
   const [isCompact, setIsCompact] = useState(false);
@@ -91,6 +92,32 @@ export function CompactAgentHeader({
   const handleSkillClick = (skillId: number) => {
     setSkillsOpen(false);
     router.push(`/agents/${agent.id}/skills/${skillId}`);
+  };
+
+  const handleDownloadWorkspace = async () => {
+    try {
+      setDownloading(true);
+      const response = await fetch(`/api/agents/${agent.id}/workspace/download`);
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        console.error('Workspace download failed:', data?.error || response.statusText);
+        return;
+      }
+      const blob = await response.blob();
+      const slug = agent.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${slug}-workspace.tar.gz`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading workspace:', error);
+    } finally {
+      setDownloading(false);
+    }
   };
 
   const handleAddSchedule = () => {
@@ -208,6 +235,14 @@ export function CompactAgentHeader({
               >
                 <Link2 className="h-4 w-4" />
                 Connections ({connections.length})
+              </button>
+              <button
+                onClick={() => { setOverflowOpen(false); handleDownloadWorkspace(); }}
+                disabled={downloading}
+                className="flex items-center gap-2 w-full px-3 py-2 text-sm rounded-md hover:bg-accent transition-colors text-left disabled:opacity-50"
+              >
+                <Download className="h-4 w-4" />
+                Download Workspace
               </button>
             </PopoverContent>
           </Popover>
@@ -376,6 +411,16 @@ export function CompactAgentHeader({
             </button>
           </>
         )}
+
+        {/* Download Workspace Button - Always visible */}
+        <button
+          onClick={handleDownloadWorkspace}
+          disabled={downloading}
+          className="p-2 border rounded-md hover:bg-accent transition-colors disabled:opacity-50"
+          title="Download agent workspace"
+        >
+          <Download className={`h-4 w-4 ${downloading ? 'animate-pulse' : ''}`} />
+        </button>
 
         {/* Share Button - Always visible */}
         <ShareButton
