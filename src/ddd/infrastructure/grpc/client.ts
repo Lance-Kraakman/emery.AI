@@ -4,6 +4,7 @@
 
 import * as grpc from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
+import { getGrpcClientCredentials } from '@/lib/security/grpc-tls';
 import path from 'path';
 
 // Load protobuf definition
@@ -85,7 +86,7 @@ export class AgentWorkerClient {
     console.log(`[GRPC-CLIENT] Creating new client for address: ${workerAddress}`);
     this.client = new AgentWorkerService(
       workerAddress,
-      grpc.credentials.createInsecure(), // AIDEV-TODO: Add TLS in production
+      getGrpcClientCredentials(),
       {
         // gRPC keepalive settings for better connection performance
         'grpc.keepalive_time_ms': 30000, // Send keepalive ping every 30s

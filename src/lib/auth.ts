@@ -57,9 +57,11 @@ export async function getUserIdFromRequest(_request: Request): Promise<string | 
 }
 
 export const authOptions = {
+  // Cast required: encryptedText customType columns in accounts table change the
+  // TypeScript inference, but the runtime types (text columns) are fully compatible.
   adapter: DrizzleAdapter(db, {
     usersTable: users,
-    accountsTable: accounts,
+    accountsTable: accounts as any,
     sessionsTable: sessions,
     verificationTokensTable: verificationTokens,
   }),

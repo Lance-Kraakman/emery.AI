@@ -7,6 +7,7 @@
  */
 
 import * as grpc from '@grpc/grpc-js';
+import { getGrpcClientCredentials } from '@/lib/security/grpc-tls';
 import {
   TableServiceClient,
   CreateTableRequest,
@@ -57,7 +58,7 @@ export class GrpcTableClient {
     
     this.client = new TableServiceClient(
       this.config.address,
-      grpc.credentials.createInsecure(),
+      getGrpcClientCredentials(),
       {
         'grpc.max_receive_message_length': 4 * 1024 * 1024, // 4MB
         'grpc.max_send_message_length': 4 * 1024 * 1024, // 4MB

@@ -9,6 +9,7 @@
  */
 
 import * as grpc from '@grpc/grpc-js';
+import { getGrpcClientCredentials } from '@/lib/security/grpc-tls';
 import * as protoLoader from '@grpc/proto-loader';
 import path from 'path';
 import type { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
@@ -100,7 +101,7 @@ export class ChatProcessingClient {
 
     this.client = new ChatProcessingService(
       this.address,
-      grpc.credentials.createInsecure(), // AIDEV-TODO: Add TLS in production
+      getGrpcClientCredentials(),
       {
         // gRPC keepalive settings for better connection performance
         'grpc.keepalive_time_ms': 30000, // Send keepalive ping every 30s

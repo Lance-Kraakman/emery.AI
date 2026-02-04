@@ -16,6 +16,7 @@ from ..services.tasks import TaskExecutor
 from ..services.tasks.task_executor import TaskData
 from ..infrastructure.workspace_sync import WorkspaceSync
 import concurrent.futures
+from .tls import get_server_credentials
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -288,9 +289,13 @@ async def serve_chat_server(port: int):
     register_chat_services(server)
     
     listen_addr = f'[::]:{port}'
-    server.add_insecure_port(listen_addr)
-    
-    logger.info(f"Chat gRPC server starting on {listen_addr}")
+    credentials = get_server_credentials()
+    if credentials:
+        server.add_secure_port(listen_addr, credentials)
+        logger.info(f"Chat gRPC server starting on {listen_addr} (mTLS)")
+    else:
+        server.add_insecure_port(listen_addr)
+        logger.warning(f"Chat gRPC server starting on {listen_addr} (INSECURE - dev only)")
     logger.info("Chat server services available:")
     logger.info("  - AgentWorker: Agent execution and task management")
     logger.info("  - ChatProcessingService: AI chat processing (RAG + LLM streaming)")
@@ -326,9 +331,13 @@ async def serve_table_server(port: int):
     register_table_services(server)
     
     listen_addr = f'[::]:{port}'
-    server.add_insecure_port(listen_addr)
-    
-    logger.info(f"Table gRPC server starting on {listen_addr}")
+    credentials = get_server_credentials()
+    if credentials:
+        server.add_secure_port(listen_addr, credentials)
+        logger.info(f"Table gRPC server starting on {listen_addr} (mTLS)")
+    else:
+        server.add_insecure_port(listen_addr)
+        logger.warning(f"Table gRPC server starting on {listen_addr} (INSECURE - dev only)")
     logger.info("Table server services available:")
     logger.info("  - TableService: Delta Lake table operations (CRUD + bulk insert)")
     logger.info("  - AgentWorker: NOT available (use chat port)")

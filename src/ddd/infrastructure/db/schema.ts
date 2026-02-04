@@ -1,6 +1,15 @@
 import { pgTable, text, uuid, serial, bigserial, bigint, integer, timestamp, boolean, primaryKey, jsonb, unique, customType, pgPolicy, pgRole, index, doublePrecision, numeric } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { randomUUID } from 'crypto';
+import { encrypt, decrypt } from '@/lib/security/encryption';
+
+// AES-256-GCM encrypted text column — transparent encrypt on write, decrypt on read.
+// Underlying Postgres type remains text (no migration needed).
+const encryptedText = customType<{ data: string; driverData: string }>({
+  dataType() { return 'text'; },
+  toDriver(value: string): string { return encrypt(value) ?? value; },
+  fromDriver(value: string): string { return decrypt(value) ?? value; },
+});
 
 // AIDEV-NOTE: Import organizational analysis types for type-safe schema
 import type { OrganizationAnalysisCapabilities } from '@/ddd/domain/organizations/entities/organization';
@@ -1309,12 +1318,12 @@ export const accounts = pgTable("accounts", {
   type: text("type").notNull(),
   provider: text("provider").notNull(),
   providerAccountId: text("provider_account_id").notNull(),
-  refresh_token: text("refresh_token"),
-  access_token: text("access_token"),
+  refresh_token: encryptedText("refresh_token"),
+  access_token: encryptedText("access_token"),
   expires_at: integer("expires_at"),
   token_type: text("token_type"),
   scope: text("scope"),
-  id_token: text("id_token"),
+  id_token: encryptedText("id_token"),
   session_state: text("session_state"),
 }, (table) => ({
   compoundKey: primaryKey({

@@ -106,9 +106,24 @@ New shared utilities:
 
 ---
 
-## Phase 7: OAuth Token Encryption
+## Phase 7: OAuth Token Encryption [COMPLETE]
 
-- [ ] C-04: AES-256-GCM encryption for OAuth tokens in `accounts` table (KMS integration)
+- [x] C-04: AES-256-GCM encryption for OAuth tokens in `accounts` table
+  - `encryptedText` Drizzle custom column type — transparent encrypt on write, decrypt on read
+  - Applied to `access_token`, `refresh_token`, `id_token` columns
+  - No DB migration needed (underlying column type stays `text`)
+  - Dev mode: passthrough when `ENCRYPTION_KEY` not set
+  - Production: throws if `ENCRYPTION_KEY` missing
+  - One-time migration script: `src/scripts/encrypt-tokens.ts` (idempotent)
+
+New shared utilities:
+- `src/lib/security/encryption.ts` — `encrypt()`, `decrypt()`, `isEncrypted()`
+
+Deployment steps:
+- [ ] Generate key: `openssl rand -base64 32`
+- [ ] Store in AWS Secrets Manager (`ENCRYPTION_KEY`)
+- [ ] Deploy CDK (key already in `data_stack.py` secrets map)
+- [ ] Run `pnpm db:encrypt-tokens` to encrypt existing plaintext tokens
 
 ---
 
@@ -119,12 +134,26 @@ New shared utilities:
 
 ---
 
-## Phase 9: mTLS for gRPC
+## Phase 9: mTLS for gRPC [COMPLETE]
 
-- [ ] Replace `createInsecure()` with TLS credentials in all 3 Node.js clients
-- [ ] Replace `add_insecure_port()` with `add_secure_port()` in both Python servers
-- [ ] Add cert generation to infrastructure/deployment
-- [ ] Fail if cert env vars missing (no toggle)
+- [x] Replace `createInsecure()` with `getGrpcClientCredentials()` in all 3 Node.js clients
+  - `src/ddd/infrastructure/grpc/client.ts` (AgentWorkerClient)
+  - `src/ddd/infrastructure/grpc/chat-processing-client.ts` (ChatProcessingClient)
+  - `src/ddd/infrastructure/db/repositories/tables/table-grpc-client.ts` (TableServiceClient)
+- [x] Replace `add_insecure_port()` with conditional `add_secure_port()` in both Python servers
+  - `emery-agents/src/emery_agents/grpc/server.py` (chat port 50051 + table port 50052)
+- [x] Add cert generation script: `scripts/generate-grpc-certs.sh`
+- [x] Fail if cert env vars missing in production (dev falls back to insecure)
+
+New shared utilities:
+- `src/lib/security/grpc-tls.ts` — `getGrpcClientCredentials()` (Node.js client mTLS)
+- `emery-agents/src/emery_agents/grpc/tls.py` — `get_server_credentials()` (Python server mTLS)
+
+Deployment steps:
+- [ ] Generate production certs (CA + server + client)
+- [ ] Store in AWS Secrets Manager (`GRPC_CA_CERT`, `GRPC_SERVER_CERT`, `GRPC_SERVER_KEY`, `GRPC_CLIENT_CERT`, `GRPC_CLIENT_KEY`)
+- [ ] Deploy CDK (certs already in `data_stack.py` secrets map)
+- [ ] Verify ECS tasks start with mTLS (check logs for "mTLS" confirmation)
 
 ---
 
