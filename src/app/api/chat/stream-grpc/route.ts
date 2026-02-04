@@ -28,7 +28,7 @@ import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 
 // Import existing chat services (DIContainer now auto-initializes)
-import { getChatApplicationService, getDynamicTableRepository, getAgentRepository, getToolConfigurationApplicationService, getUserRepository, getOrganizationRepository, getStorageQuotaApplicationService } from '@/ddd/application/di/container';
+import { getChatApplicationService, getDynamicTableRepository, getAgentRepository, getToolConfigurationApplicationService, getUserRepository, getOrganizationRepository, getStorageQuotaApplicationService, getAuditApplicationService } from '@/ddd/application/di/container';
 import { TokenUsageApplicationService } from '@/ddd/application/services/billing/token-usage-application-service';
 import { getTokenUsageRepository } from '@/ddd/application/di/getters';
 import type { CreateChatDTO, SendMessageDTO, UpdateMessageDTO, ExecutionStep, ExecutionStepMetadata } from '@/app/dtos/chat.dto';
@@ -97,9 +97,7 @@ export async function POST(req: NextRequest) {
     console.log('[CHAT-GRPC-API] Session status:', {
       hasSession: !!session,
       hasUser: !!session?.user,
-      userId: session?.user?.id,
-      userEmail: session?.user?.email,
-      currentOrganizationId: session?.user?.currentOrganizationId
+      hasOrganization: !!session?.user?.currentOrganizationId
     });
     
     // SECURITY: Require authenticated session - no bypass
@@ -173,7 +171,7 @@ export async function POST(req: NextRequest) {
       requestModel = body.model;
       tools = body.tools || [];
 
-      console.log('[CHAT-GRPC-API] [DEBUG] Received tools from frontend:', JSON.stringify(tools, null, 2));
+      console.log('[CHAT-GRPC-API] [DEBUG] Received tools from frontend:', tools.map((t: any) => t.name));
     }
 
     const latestMessage = getMessageContent(messages[messages.length - 1]);
@@ -560,6 +558,7 @@ export async function POST(req: NextRequest) {
       tools: enrichedRegularTools, // DDD-enriched tools with user API key authentication
       defaultModel: defaultModel, // Organization's default AI model
       userApiKey: userApiKey || undefined, // User API key for managed agents and skill_crud
+      userName: session.user.name || session.user.email || '', // User display name for audit trail
     };
 
     console.log('[CHAT-GRPC-API] Processing options:', {
@@ -901,6 +900,42 @@ export async function POST(req: NextRequest) {
                     // Don't fail the request if token recording fails
                   });
                 }
+
+                // Log chat execution audit event
+                const completionMeta = response.complete.metadata || {};
+                const agentIdFromExecution = completionMeta.agent_id && completionMeta.agent_id !== 'none' ? completionMeta.agent_id : null;
+                const agentNameFromExecution = completionMeta.agent_name || null;
+
+                const auditService = getAuditApplicationService();
+                auditService.logEvent(OrganizationId.fromNumber(organizationId), {
+                  eventType: 'agent',
+                  eventCategory: 'chat_execution',
+                  eventAction: 'complete',
+                  actorType: agentIdFromExecution ? 'agent' : 'user',
+                  actorId: agentIdFromExecution || userId,
+                  actorName: agentIdFromExecution
+                    ? (agentNameFromExecution || undefined)
+                    : (session!.user.name || session!.user.email || undefined),
+                  resourceType: 'chat',
+                  resourceId: currentChatId || 'unknown',
+                  eventData: {
+                    messageId,
+                    model: defaultModel,
+                    ...(response.complete.tokenUsage && {
+                      inputTokens: response.complete.tokenUsage.inputTokens,
+                      outputTokens: response.complete.tokenUsage.outputTokens,
+                    }),
+                  },
+                  metadata: agentIdFromExecution ? {
+                    triggeredByUserId: userId,
+                    triggeredByUserName: session!.user.name || session!.user.email || undefined,
+                    triggerType: 'manual' as const,
+                    agentId: agentIdFromExecution,
+                    agentName: agentNameFromExecution || undefined,
+                  } : undefined,
+                  durationMs: Date.now() - startTime,
+                  success: true,
+                });
 
                 // Send completion event with execution steps metadata to frontend
                 const completionEvent = processCompletion(
