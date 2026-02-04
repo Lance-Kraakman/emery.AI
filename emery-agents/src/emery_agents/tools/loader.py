@@ -255,11 +255,11 @@ class UnifiedToolLoader:
         if not api_key:
             raise ValueError(f"API key required for Pipedream tool '{tool_config.name}'")
 
-        # Create a new ToolConfig with the API key in the config
+        # Create a new ToolConfig with the API key and mode in the config
         enhanced_config = ToolConfig(
             name=tool_config.name,
             version=tool_config.version,
-            config={**tool_config.config, "api_key": api_key}
+            config={**tool_config.config, "api_key": api_key, "api_key_mode": api_key_mode}
         )
 
         # Create Pipedream tool with enhanced config containing API key

@@ -660,9 +660,9 @@ export function EmeryChat() {
           title="Expand chat"
         >
           <img
-            src="/assets/enhancd/logo.svg"
+            src="/assets/enhancd/logo2.svg"
             alt="enhancd.ai"
-            className="h-6 w-6"
+            className="h-8 w-8"
           />
         </button>
 

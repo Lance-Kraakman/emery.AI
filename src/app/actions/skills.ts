@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { getSkillApplicationService, getAgentApplicationService, getStorageQuotaApplicationService, getAuditApplicationService } from '@/ddd/application/di/container';
 import { getOrganizationRepository, getUserRepository } from '@/ddd/application/di/getters';
 import { UserId } from '@/ddd/domain/shared/value-objects/user-id';
-import { assignApiKeyToUser } from '@/lib/auth/user-api-keys';
+import { ensureFreshUserApiKey } from '@/lib/auth/user-api-keys';
 import { OrganizationId } from '@/ddd/domain/shared/value-objects';
 import { SkillMapper } from '@/app/mappers/skill-mapper';
 import { AgentId } from '@/ddd/domain/shared/value-objects/agent-id';
@@ -1359,22 +1359,12 @@ export async function generateSkillPlan(
       await requireResourcePermission("skills:manage", "skill", skillId);
     }
 
-    // Get user API key for managed agents (same pattern as chat route)
-    // AIDEV-NOTE: User API key is stored in users table, not session
+    // Get user API key for managed agents (always generates fresh key, hash stored)
     let userApiKey = '';
     try {
-      const userRepository = getUserRepository();
-      const user = await userRepository.findById(UserId.fromString(session.user.id));
-
-      if (user && user.apiKey) {
-        userApiKey = user.apiKey.value;
-      } else {
-        // Generate API key if none exists
-        userApiKey = await assignApiKeyToUser(session.user.id);
-      }
+      userApiKey = await ensureFreshUserApiKey(session.user.id);
     } catch (error) {
-      console.error('[generateSkillPlan] Error fetching user API key:', error);
-      // Continue without API key - context tools will fail but plan generation might still work
+      console.error('[generateSkillPlan] Error generating user API key:', error);
     }
 
     // Get organization default model (same pattern as agent-task-application-service)

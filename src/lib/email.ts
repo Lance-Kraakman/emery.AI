@@ -4,15 +4,23 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function sendVerificationRequestEmail({ identifier: email, url }: { identifier: string; url: string; }) {
   const { host } = new URL(url);
+  console.log(`[EMAIL] Sending verification email to ${email} for ${host}`);
   try {
-    await resend.emails.send({
+    const { data, error } = await resend.emails.send({
       from: 'welcome@enhancd.ai',
       to: email,
       subject: `Sign in to ${host}`,
       html: `<p>Click the link below to sign in to your account.</p><p><a href="${url}">Sign in</a></p>`,
     });
+
+    if (error) {
+      console.error('[EMAIL] Resend API error:', error);
+      throw new Error(`Failed to send verification email: ${error.message}`);
+    }
+
+    console.log(`[EMAIL] Verification email sent successfully to ${email}, id: ${data?.id}`);
   } catch (error) {
-    console.error('Error sending verification email:', error);
+    console.error('[EMAIL] Error sending verification email:', error);
     throw new Error("Failed to send verification email.");
   }
 }

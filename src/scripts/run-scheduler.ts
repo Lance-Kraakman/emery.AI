@@ -39,6 +39,21 @@ const logWarn = (emoji: string, message: string) => {
   console.warn(`[${new Date().toISOString()}] ${emoji} ${message}`);
 };
 
+/** Format byte count as human-readable string */
+const formatBytes = (bytes: number): string => {
+  if (bytes === 0) return '0B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return `${(bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0)}${units[i]}`;
+};
+
+/** Format byte difference with +/- prefix */
+const formatDiff = (bytes: number): string => {
+  if (bytes === 0) return '0B';
+  const prefix = bytes > 0 ? '+' : '';
+  return `${prefix}${formatBytes(Math.abs(bytes))}`;
+};
+
 /**
  * Event-Driven Scheduler
  * Listens to PostgreSQL events and orchestrates task execution
@@ -71,9 +86,11 @@ class EventDrivenScheduler {
       this.startFallbackTimer();
       log('⏰', 'Fallback timer started (5 minute intervals)');
 
-      // 3. Start hourly storage recalculation
+      // 3. Start storage recalculation (run once immediately, then on cron)
       this.startStorageRecalculationCron();
-      log('💾', 'Storage recalculation cron started (hourly)');
+      const recalcInterval = parseInt(process.env.STORAGE_RECALC_INTERVAL_MINUTES || '5', 10);
+      log('💾', `Storage recalculation cron started (every ${recalcInterval} min)`);
+      this.runStorageRecalculation();
 
       // 4. Clean up orphaned tasks from previous runs
       await this.cleanupOrphanedTasks();
@@ -311,40 +328,56 @@ class EventDrivenScheduler {
   }
 
   /**
-   * Start hourly storage recalculation cron job
-   * Runs every hour at minute 0 to validate storage counters against actual S3 usage
+   * Start storage recalculation cron job
+   * Validates storage counters against actual S3 usage at a configurable interval.
+   * Default: every 5 minutes. Override via STORAGE_RECALC_INTERVAL_MINUTES env var.
    */
   private startStorageRecalculationCron(): void {
-    // Run every hour at minute 0: '0 * * * *'
-    this.storageRecalculationCron = cron.schedule('0 * * * *', async () => {
-      if (this.isShuttingDown) return;
+    const intervalMinutes = parseInt(process.env.STORAGE_RECALC_INTERVAL_MINUTES || '5', 10);
+    const cronExpression = `*/${intervalMinutes} * * * *`;
 
-      try {
-        log('💾', 'Starting hourly storage recalculation...');
-
-        const result = await this.storageRecalculationService.recalculateAllOrganizations();
-
-        if (result.success && result.data) {
-          const { successCount, errorCount, discrepanciesFound, totalBytesRecalculated } = result.data;
-
-          log('✅', `Storage recalculation complete: ${successCount} organizations processed, ${errorCount} errors, ${discrepanciesFound} discrepancies found, ${(totalBytesRecalculated / (1024 * 1024 * 1024)).toFixed(2)} GB total`);
-
-          // Log errors if any
-          if (result.data.errors.length > 0) {
-            logError('⚠️', `Storage recalculation had ${result.data.errors.length} errors:`, result.data.errors);
-          }
-
-          // Log top discrepancies
-          if (discrepanciesFound > 0) {
-            logWarn('⚠️', `Found ${discrepanciesFound} organizations with storage drift`);
-          }
-        } else {
-          logError('❌', 'Storage recalculation failed:', result.error);
-        }
-      } catch (error) {
-        logError('❌', 'Error in storage recalculation cron:', error);
-      }
+    this.storageRecalculationCron = cron.schedule(cronExpression, () => {
+      if (!this.isShuttingDown) this.runStorageRecalculation();
     });
+  }
+
+  private async runStorageRecalculation(): Promise<void> {
+    try {
+      log('💾', 'Starting storage recalculation...');
+
+      const result = await this.storageRecalculationService.recalculateAllOrganizations();
+
+      if (result.success && result.data) {
+        const { successCount, errorCount, discrepanciesFound, totalBytesRecalculated, results } = result.data;
+
+        log('✅', `Storage recalculation complete: ${successCount} organizations processed, ${errorCount} errors, ${discrepanciesFound} discrepancies found, ${formatBytes(totalBytesRecalculated)} total`);
+
+        if (result.data.errors.length > 0) {
+          logError('⚠️', `Storage recalculation had ${result.data.errors.length} errors:`, result.data.errors);
+        }
+
+        if (discrepanciesFound > 0) {
+          const drifted = results
+            .filter(r => r.hadDiscrepancy && r.discrepancy)
+            .sort((a, b) => Math.abs(b.difference) - Math.abs(a.difference));
+
+          for (const r of drifted) {
+            const d = r.discrepancy!;
+            logWarn('⚠️', `Storage drift for "${r.organizationName}" (id=${r.organizationId}):\n` +
+              `  database:  tracked=${formatBytes(d.tracked.databaseBytes)}  actual=${formatBytes(d.actual.databaseBytes)}  (${formatDiff(d.difference.databaseBytes)})\n` +
+              `  chat:      tracked=${formatBytes(d.tracked.chatBytes)}  actual=${formatBytes(d.actual.chatBytes)}  (${formatDiff(d.difference.chatBytes)})\n` +
+              `  skill:     tracked=${formatBytes(d.tracked.skillBytes)}  actual=${formatBytes(d.actual.skillBytes)}  (${formatDiff(d.difference.skillBytes)})\n` +
+              `  workspace: tracked=${formatBytes(d.tracked.workspaceBytes)}  actual=${formatBytes(d.actual.workspaceBytes)}  (${formatDiff(d.difference.workspaceBytes)})\n` +
+              `  total:     tracked=${formatBytes(d.tracked.totalBytes)}  actual=${formatBytes(d.actual.totalBytes)}  (${formatDiff(d.difference.totalBytes)}, ${d.percentageDrift.toFixed(1)}% drift)`
+            );
+          }
+        }
+      } else {
+        logError('❌', 'Storage recalculation failed:', result.error);
+      }
+    } catch (error) {
+      logError('❌', 'Error in storage recalculation:', error);
+    }
   }
 
   async shutdown(): Promise<void> {

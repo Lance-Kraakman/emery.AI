@@ -92,6 +92,7 @@ export function NewSkillView({ agent, templateId }: NewSkillViewProps) {
         outputs: formData.outputs,
         steps: formData.steps,
         model: formData.model,
+        allowNetwork: formData.agentType === 'code_agent',
       });
 
       if (!result.success || !result.data) {

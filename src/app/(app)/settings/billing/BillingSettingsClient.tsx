@@ -326,19 +326,28 @@ export function BillingSettingsClient({
                 />
               </div>
 
-              {/* Upgrade button if not on enterprise */}
-              {tier !== 'enterprise' && (
+              {/* Upgrade button - upsell logic */}
+              {tier === 'free' && (
                 <div className="flex justify-center">
-                  <Button
-                    onClick={() => {
-                      const nextTier: Record<string, TierName> = { free: 'pro', pro: 'max', max: 'enterprise' };
-                      const next = nextTier[tier];
-                      if (next) handleSelectTier(next);
-                    }}
-                    disabled={loadingAction}
-                  >
+                  <Button onClick={() => setShowAllPlans(true)}>
                     <ArrowUpRight className="h-4 w-4 mr-2" />
-                    Upgrade to {tier === 'free' ? 'Pro' : tier === 'pro' ? 'Max' : 'Enterprise'}
+                    Upgrade
+                  </Button>
+                </div>
+              )}
+              {tier === 'pro' && (
+                <div className="flex justify-center">
+                  <Button onClick={() => handleSelectTier('max')} disabled={loadingAction}>
+                    <ArrowUpRight className="h-4 w-4 mr-2" />
+                    Upgrade to Max
+                  </Button>
+                </div>
+              )}
+              {tier === 'max' && (
+                <div className="flex justify-center">
+                  <Button onClick={() => handleSelectTier('enterprise')} disabled={loadingAction}>
+                    <ArrowUpRight className="h-4 w-4 mr-2" />
+                    Upgrade to Enterprise
                   </Button>
                 </div>
               )}

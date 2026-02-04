@@ -24,6 +24,7 @@ from emery_agents.reasoning.modules.interruptible import (
     wrap_interruptible,
 )
 from emery_agents.reasoning.modules.extractor import OutputExtractorModule
+from emery_agents.reasoning.modules.input_extractor import InputExtractorModule
 from emery_agents.reasoning.modules.classifier import TaskClassifierModule
 
 __all__ = [
@@ -41,5 +42,6 @@ __all__ = [
     "InterruptRequested",
     "wrap_interruptible",
     "OutputExtractorModule",
+    "InputExtractorModule",
     "TaskClassifierModule",
 ]

@@ -157,6 +157,7 @@ export function useSkillEditor({ skill, agentId, onDeleteRedirect }: UseSkillEdi
           instructions: dataToSave.instructions,
           tools: dataToSave.tools,
           agentType: dataToSave.agentType,
+          allowNetwork: dataToSave.agentType === 'code_agent',
         });
 
         if (result.success) {
@@ -240,6 +241,7 @@ export function useSkillEditor({ skill, agentId, onDeleteRedirect }: UseSkillEdi
         instructions: currentFormData.instructions,
         tools: currentFormData.tools,
         agentType: currentFormData.agentType,
+        allowNetwork: currentFormData.agentType === 'code_agent',
       });
 
       if (!result.success) {

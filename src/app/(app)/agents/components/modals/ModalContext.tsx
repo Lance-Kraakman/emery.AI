@@ -7,7 +7,8 @@ export type ModalType =
   | 'trigger-config'
   | 'tools-servers'
   | 'activity-details'
-  | 'authorized-connections';
+  | 'authorized-connections'
+  | 'agent-api-keys';
 
 interface ModalState {
   type: ModalType | null;

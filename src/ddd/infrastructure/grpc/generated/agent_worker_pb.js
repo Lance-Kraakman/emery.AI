@@ -1456,7 +1456,8 @@ proto.emery.agents.TaskRequest.toObject = function(includeInstance, msg) {
     skillId: jspb.Message.getFieldWithDefault(msg, 15, 0),
     triggerType: jspb.Message.getFieldWithDefault(msg, 16, ""),
     triggeredByUserId: jspb.Message.getFieldWithDefault(msg, 17, ""),
-    triggeredByUserName: jspb.Message.getFieldWithDefault(msg, 18, "")
+    triggeredByUserName: jspb.Message.getFieldWithDefault(msg, 18, ""),
+    userApiKey: jspb.Message.getFieldWithDefault(msg, 19, "")
   };
 
   if (includeInstance) {
@@ -1569,6 +1570,10 @@ proto.emery.agents.TaskRequest.deserializeBinaryFromReader = function(msg, reade
     case 18:
       var value = /** @type {string} */ (reader.readString());
       msg.setTriggeredByUserName(value);
+      break;
+    case 19:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setUserApiKey(value);
       break;
     default:
       reader.skipField();
@@ -1727,6 +1732,13 @@ proto.emery.agents.TaskRequest.serializeBinaryToWriter = function(message, write
   if (f.length > 0) {
     writer.writeString(
       18,
+      f
+    );
+  }
+  f = message.getUserApiKey();
+  if (f.length > 0) {
+    writer.writeString(
+      19,
       f
     );
   }
@@ -2168,6 +2180,24 @@ proto.emery.agents.TaskRequest.prototype.getTriggeredByUserName = function() {
  */
 proto.emery.agents.TaskRequest.prototype.setTriggeredByUserName = function(value) {
   return jspb.Message.setProto3StringField(this, 18, value);
+};
+
+
+/**
+ * optional string user_api_key = 19;
+ * @return {string}
+ */
+proto.emery.agents.TaskRequest.prototype.getUserApiKey = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 19, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.emery.agents.TaskRequest} returns this
+ */
+proto.emery.agents.TaskRequest.prototype.setUserApiKey = function(value) {
+  return jspb.Message.setProto3StringField(this, 19, value);
 };
 
 
@@ -14244,7 +14274,8 @@ proto.emery.agents.ProcessMessageRequest.toObject = function(includeInstance, ms
     messageId: jspb.Message.getFieldWithDefault(msg, 8, ""),
     sessionId: jspb.Message.getFieldWithDefault(msg, 9, ""),
     userApiKey: jspb.Message.getFieldWithDefault(msg, 10, ""),
-    taskId: jspb.Message.getFieldWithDefault(msg, 20, "")
+    taskId: jspb.Message.getFieldWithDefault(msg, 20, ""),
+    userName: jspb.Message.getFieldWithDefault(msg, 21, "")
   };
 
   if (includeInstance) {
@@ -14323,6 +14354,10 @@ proto.emery.agents.ProcessMessageRequest.deserializeBinaryFromReader = function(
     case 20:
       var value = /** @type {string} */ (reader.readString());
       msg.setTaskId(value);
+      break;
+    case 21:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setUserName(value);
       break;
     default:
       reader.skipField();
@@ -14423,6 +14458,13 @@ proto.emery.agents.ProcessMessageRequest.serializeBinaryToWriter = function(mess
   if (f.length > 0) {
     writer.writeString(
       20,
+      f
+    );
+  }
+  f = message.getUserName();
+  if (f.length > 0) {
+    writer.writeString(
+      21,
       f
     );
   }
@@ -14665,6 +14707,24 @@ proto.emery.agents.ProcessMessageRequest.prototype.getTaskId = function() {
  */
 proto.emery.agents.ProcessMessageRequest.prototype.setTaskId = function(value) {
   return jspb.Message.setProto3StringField(this, 20, value);
+};
+
+
+/**
+ * optional string user_name = 21;
+ * @return {string}
+ */
+proto.emery.agents.ProcessMessageRequest.prototype.getUserName = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 21, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.emery.agents.ProcessMessageRequest} returns this
+ */
+proto.emery.agents.ProcessMessageRequest.prototype.setUserName = function(value) {
+  return jspb.Message.setProto3StringField(this, 21, value);
 };
 
 

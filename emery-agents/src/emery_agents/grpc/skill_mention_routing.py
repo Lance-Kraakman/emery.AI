@@ -21,10 +21,14 @@ import asyncio
 import logging
 from typing import AsyncIterator, Optional
 
+import dspy
+
 from ..utils.mention_parser import SkillInvocation
 from emery_agents.tools.provider import ToolProvider
 from emery_agents.api import SkillAPIService
 from emery_agents.tools.integrations.dynamic_skill import DynamicSkillTool
+from emery_agents.reasoning.config import get_dspy_lm
+from emery_agents.reasoning.modules.input_extractor import InputExtractorModule
 from .response_types import StreamResponseDict, create_error_response
 
 logger = logging.getLogger(__name__)
@@ -120,6 +124,25 @@ async def handle_skill_mention_routing(
         )
 
         inputs = skill_invocation.inputs or {}
+
+        # If no inputs were parsed but user text exists, use LLM to extract inputs
+        if not inputs and skill_invocation.cleaned_task and tool.inputs:
+            logger.info(
+                f"[SKILL-ROUTING] No parsed inputs, extracting from user text "
+                f"via LLM for {len(tool.inputs)} input fields"
+            )
+            input_schema = [
+                {"name": name, "type": meta.get("type", "string"), "description": meta.get("description", "")}
+                for name, meta in tool.inputs.items()
+            ]
+            extractor = InputExtractorModule(skill_inputs=input_schema)
+            lm = get_dspy_lm(org_model=org_model)
+            with dspy.context(lm=lm):
+                inputs = await asyncio.to_thread(
+                    extractor.extract, user_text=skill_invocation.cleaned_task
+                )
+            logger.info(f"[SKILL-ROUTING] Extracted inputs: {list(inputs.keys())}")
+
         logger.info(
             f"[SKILL-ROUTING] Executing skill {skill_data.id} "
             f"with inputs: {list(inputs.keys())}"

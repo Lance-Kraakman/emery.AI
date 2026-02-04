@@ -45,6 +45,7 @@ export interface ChatProcessingOptions {
   defaultModel?: string | null;  // Organization's default AI model
   userApiKey?: string;           // User API key for managed agents (skill_builder, etc.)
   taskId?: string;               // Task tracking ID (if set, execution is task-tracked with DB record)
+  userName?: string;             // User display name for audit trail
 }
 
 export interface StreamingChatResponse {
@@ -191,7 +192,8 @@ export class ChatProcessingClient {
       messageId: actualMessageId, // Add message ID for cancellation tracking
       sessionId: actualSessionId, // Session ID for stateful agent persistence
       userApiKey: options.userApiKey || '', // User API key for managed agents (skill_builder, etc.)
-      taskId: options.taskId || '' // Task tracking (empty = not task-tracked)
+      taskId: options.taskId || '', // Task tracking (empty = not task-tracked)
+      userName: options.userName || '' // User display name for audit trail
     };
 
     // Context removed - agentId is resolved from skill.agent_id in Python

@@ -465,7 +465,7 @@ export function AppSidebar({
               onClick={toggleSidebar}
               className="h-8 w-8"
             >
-              <img src="/assets/enhancd/logo.svg" alt="enhancd.ai" className="h-6 w-6" />
+              <img src="/assets/enhancd/logo2.svg" alt="enhancd.ai" className="h-8 w-8" />
             </Button>
           ) : (
             <EmeryOrganizationModal isCollapsed={isCollapsed} />

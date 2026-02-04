@@ -2,11 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import crypto from 'crypto';
 import { z } from 'zod';
-import { AgentId } from '@/ddd/domain/shared/value-objects';
+import { AgentId, ApiKey } from '@/ddd/domain/shared/value-objects';
 import { getAgentRepository, getAgentTaskApplicationService } from '@/ddd/application/di/container';
 import { withSystemContext } from '@/ddd/infrastructure/db/system-context';
 import { WebhookTriggerConfig, TriggerConfigFromJSON } from '@/ddd/domain/scheduling/value-objects/trigger-config';
-import { timingSafeEqual } from '@/lib/security/timing-safe';
 
 // AIDEV-NOTE: Webhook API endpoint for triggering agent tasks via external HTTP calls
 // Provides multi-layer security: API key + HMAC signature + origin validation
@@ -60,8 +59,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
     
-    // Validate API key (timing-safe to prevent timing attacks)
-    if (!timingSafeEqual(agent.apiKey?.value, apiKey)) {
+    // Validate API key: hash incoming plaintext and compare with stored hash
+    const incomingHash = ApiKey.hash(apiKey);
+    const currentKeyMatch = agent.apiKey?.value === incomingHash;
+    const graceKeyMatch = agent.previousApiKeyHash
+      && agent.previousApiKeyExpiresAt
+      && agent.previousApiKeyExpiresAt >= new Date()
+      && agent.previousApiKeyHash === incomingHash;
+
+    if (!currentKeyMatch && !graceKeyMatch) {
       return NextResponse.json(
         { error: 'Invalid API key' },
         { status: 401 }

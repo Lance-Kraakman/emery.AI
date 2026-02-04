@@ -43,7 +43,7 @@ interface UnifiedToolMetadata {
 
 interface UnifiedMetadataFile {
   pipedream_tools: Record<string, UnifiedToolMetadata>;
-  emery_tools: Record<string, UnifiedToolMetadata>;
+  enhancd_tools: Record<string, UnifiedToolMetadata>;
 }
 
 interface ToolData {
@@ -75,12 +75,12 @@ async function loadUnifiedMetadata(): Promise<UnifiedMetadataFile> {
     throw new Error(`Invalid unified metadata in ${jsonPath}`);
   }
 
-  if (!unifiedMetadata.pipedream_tools || !unifiedMetadata.emery_tools) {
-    throw new Error(`Missing required sections in unified metadata: pipedream_tools and emery_tools`);
+  if (!unifiedMetadata.pipedream_tools || !unifiedMetadata.enhancd_tools) {
+    throw new Error(`Missing required sections in unified metadata: pipedream_tools and enhancd_tools`);
   }
 
   const pipedreamCount = Object.keys(unifiedMetadata.pipedream_tools).length;
-  const emeryCount = Object.keys(unifiedMetadata.emery_tools).length;
+  const emeryCount = Object.keys(unifiedMetadata.enhancd_tools).length;
   console.log(`Loaded ${pipedreamCount} Pipedream tools and ${emeryCount} Emery tools from unified JSON`);
 
   return unifiedMetadata;
@@ -187,7 +187,7 @@ async function seedTools(): Promise<void> {
     const unifiedMetadata = await loadUnifiedMetadata();
 
     // Process Emery backend tools
-    const emeryToolsData = Object.values(unifiedMetadata.emery_tools).map(convertEmeryToolToDatabase);
+    const emeryToolsData = Object.values(unifiedMetadata.enhancd_tools).map(convertEmeryToolToDatabase);
     console.log(`📦 Processing ${emeryToolsData.length} Emery backend tools...`);
 
     // Insert Emery tools

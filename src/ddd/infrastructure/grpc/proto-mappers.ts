@@ -191,6 +191,7 @@ export function createTaskRequest(params: {
   triggerType?: string;
   triggeredByUserId?: string;
   triggeredByUserName?: string;
+  userApiKey?: string; // API key for tool auth (agent key for scheduled tasks)
 }): TaskRequest {
   // Build typed skill inputs for TriggerData
   const skillInputValues: SkillInputValue[] = (params.skillInputs || []).map(input => {
@@ -250,6 +251,7 @@ export function createTaskRequest(params: {
     triggerType: params.triggerType || '',
     triggeredByUserId: params.triggeredByUserId || '',
     triggeredByUserName: params.triggeredByUserName || '',
+    userApiKey: params.userApiKey || '',
   };
 
   // Debug logging for model selection

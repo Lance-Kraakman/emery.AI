@@ -35,7 +35,7 @@ import type { CreateChatDTO, SendMessageDTO, UpdateMessageDTO, ExecutionStep, Ex
 import type { EnrichToolsWithUserApiKeyCommand } from '@/ddd/application/services/tools/tool-configuration-application-service';
 
 // Import user API key utilities
-import { assignApiKeyToUser } from '@/lib/auth/user-api-keys';
+import { ensureFreshUserApiKey } from '@/lib/auth/user-api-keys';
 
 // Import shared chat utilities
 import { getMessageContent } from '@/lib/chat/message-helpers';
@@ -484,23 +484,13 @@ export async function POST(req: NextRequest) {
 
     // 5.1 Always fetch user API key for managed agents (skill_builder, etc.)
     // This is needed even when there are no tools configured
+    // Always generates a fresh key (hash stored, plaintext returned for injection)
     let userApiKey: string | null = null;
     if (userId) {
       try {
-        console.log('[CHAT-GRPC-API] Fetching user API key for managed agents');
-        const userRepository = getUserRepository();
-        const user = await userRepository.findById(UserId.fromString(userId));
-
-        if (user && user.apiKey) {
-          userApiKey = user.apiKey.value;
-          console.log('[CHAT-GRPC-API] Found existing user API key');
-        } else {
-          console.log('[CHAT-GRPC-API] No user API key found, generating new one');
-          userApiKey = await assignApiKeyToUser(userId);
-          console.log('[CHAT-GRPC-API] Generated new user API key');
-        }
+        userApiKey = await ensureFreshUserApiKey(userId);
       } catch (error) {
-        console.error('[CHAT-GRPC-API] Error fetching user API key:', error);
+        console.error('[CHAT-GRPC-API] Error generating user API key:', error);
       }
     }
 

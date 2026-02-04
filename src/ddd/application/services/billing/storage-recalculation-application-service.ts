@@ -14,6 +14,7 @@ import type { IOrganizationRepository } from '@/ddd/domain/organizations/reposit
 import { OrganizationId } from '@/ddd/domain/shared/value-objects';
 import type { Result } from '@/ddd/domain/shared/result';
 import { ResultHelpers } from '@/ddd/domain/shared/result';
+import { invalidateOrgStorageCache } from '@/ddd/infrastructure/storage/repositories/s3-file-storage-repository';
 import { createDebugLogger } from '@/lib/utils/debug-logger';
 
 const logger = createDebugLogger('StorageRecalculation');
@@ -99,6 +100,9 @@ export class StorageRecalculationApplicationService {
         `Recalculating storage for organization ${organizationId} (${organization.name.value})`
       );
       logger.debug(`Tracked storage: ${trackedTotal} bytes`);
+
+      // Invalidate cache to ensure we get fresh S3 data
+      invalidateOrgStorageCache(organizationId);
 
       // Scan actual S3 storage
       const actualBreakdown = await this.fileStorageRepository.getOrganizationStorageBreakdown(

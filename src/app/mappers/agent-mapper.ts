@@ -23,7 +23,8 @@ export interface AgentDTO {
   status: string;
   organizationId: number;
   ownerId: string; // Used for OAuth resolution via proxy
-  apiKey?: string | null;
+  apiKeyPrefix?: string | null; // First 12 chars of API key (hash stored, never exposed)
+  hasApiKey?: boolean; // Whether agent has an API key configured
   defaultModel?: string | null; // AI model override for this agent
   avatarConfig?: AvatarConfig | null; // Avatar configuration with icon + color
   createdAt?: string | null; // ISO string for serialization
@@ -44,7 +45,8 @@ export class AgentMapper {
       status: agent.status.value,
       organizationId: agent.organizationId.value,
       ownerId: agent.ownerId.value,
-      apiKey: agent.apiKey?.value || null,
+      apiKeyPrefix: agent.apiKeyPrefix || null,
+      hasApiKey: !!agent.apiKey,
       defaultModel: agent.defaultModel || null,
       avatarConfig: agent.avatarConfig || null,
       // Convert Date objects to ISO strings for server component serialization

@@ -9,7 +9,6 @@
  */
 
 import { createDebugLogger } from '@/lib/utils/debug-logger';
-import { UserId, OrganizationId } from '@/ddd/domain/shared/value-objects';
 
 const logger = createDebugLogger('ToolConfig');
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
@@ -17,18 +16,6 @@ import { IToolConfigurationService } from '@/ddd/domain/tools/services/tool-conf
 import { IToolRegistryService } from '@/ddd/domain/tools/services/tool-registry';
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
 import type { Result } from '@/ddd/domain/shared/result';
-
-export interface EnrichToolsCommand {
-  tools: ToolConfig[];
-  userId: UserId;
-  organizationId: OrganizationId;
-}
-
-export interface EnrichToolsResult {
-  enrichedTools: ToolConfig[];
-  agentFound: boolean;
-  agentApiKeyProvided: boolean;
-}
 
 export interface EnrichToolsWithUserApiKeyCommand {
   tools: ToolConfig[];
@@ -40,15 +27,7 @@ export interface EnrichToolsWithUserApiKeyResult {
   userApiKeyProvided: boolean;
 }
 
-export interface EnrichToolsWithAgentApiKeyCommand {
-  tools: ToolConfig[];
-  agentApiKey: string;
-}
 
-export interface EnrichToolsWithAgentApiKeyResult {
-  enrichedTools: ToolConfig[];
-  agentApiKeyProvided: boolean;
-}
 
 export class ToolConfigurationApplicationService {
   constructor(
@@ -56,76 +35,6 @@ export class ToolConfigurationApplicationService {
     private readonly toolConfigurationService: IToolConfigurationService,
     private readonly toolRegistryService: IToolRegistryService
   ) {}
-
-  /**
-   * Enrich tool configurations with user authentication
-   *
-   * Use Case: User wants to execute tools that require authentication.
-   * This service finds the user's active agent and enriches tools with the agent's API key.
-   *
-   * @param command - Command containing tools to enrich and user context
-   * @returns Result with enriched tools and metadata about agent lookup
-   */
-  async enrichToolsWithUserAuth(command: EnrichToolsCommand): Promise<Result<EnrichToolsResult>> {
-    try {
-      // 1. Validate input
-      if (!command.tools || command.tools.length === 0) {
-        return {
-          success: true,
-          data: {
-            enrichedTools: [],
-            agentFound: false,
-            agentApiKeyProvided: false
-          }
-        };
-      }
-
-      // 2. Find user's active agents using repository pattern
-      const userAgents = await this.agentRepository.findByOwner(
-        command.userId,
-        command.organizationId
-      );
-
-      logger.debug(`Found ${userAgents.length} agents`, { userId: command.userId.value });
-      userAgents.forEach((agent, index) => {
-        logger.debug(`Agent ${index}`, {
-          id: agent.id.value,
-          name: agent.name,
-          status: agent.status.value,
-          hasApiKey: !!agent.apiKey
-        });
-      });
-
-      // 3. Find the first active agent with an API key
-      const activeAgent = userAgents.find(agent =>
-        agent.status.isActive() && agent.apiKey
-      );
-
-      logger.debug(`Active agent with API key: ${activeAgent ? `found (${activeAgent.name})` : 'none found'}`);
-
-      // 4. Use domain service to enrich tools with authentication
-      const enrichedTools = this.toolConfigurationService.enrichWithAuthentication(
-        command.tools,
-        activeAgent?.apiKey?.value || ''
-      );
-
-      return {
-        success: true,
-        data: {
-          enrichedTools,
-          agentFound: !!activeAgent,
-          agentApiKeyProvided: !!activeAgent?.apiKey
-        }
-      };
-
-    } catch (error) {
-      logger.error('Failed to enrich tools:', error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to enrich tools with authentication'
-      };
-    }
-  }
 
   /**
    * Validate that tools have proper authentication for execution
@@ -276,74 +185,4 @@ export class ToolConfigurationApplicationService {
     }
   }
 
-  /**
-   * Enrich tool configurations with agent API key
-   *
-   * Use Case: Agent wants to execute tools using the agent's own API key (not user's).
-   * This service enriches tools with the agent's API key for OAuth proxy access in agent mode.
-   * The OAuth proxy will use the agent owner's credentials instead of user credentials.
-   *
-   * @param command - Command containing tools to enrich and agent API key
-   * @returns Result with enriched tools using agent API key
-   */
-  async enrichToolsWithAgentApiKey(command: EnrichToolsWithAgentApiKeyCommand): Promise<Result<EnrichToolsWithAgentApiKeyResult>> {
-    try {
-      // 1. Validate input
-      if (!command.tools || command.tools.length === 0) {
-        return {
-          success: true,
-          data: {
-            enrichedTools: [],
-            agentApiKeyProvided: false
-          }
-        };
-      }
-
-      if (!command.agentApiKey) {
-        logger.debug('No agent API key provided');
-        return {
-          success: true,
-          data: {
-            enrichedTools: command.tools, // Return original tools without enrichment
-            agentApiKeyProvided: false
-          }
-        };
-      }
-
-      logger.debug(`Enriching ${command.tools.length} tools with agent API key (mode: agent)`);
-
-      // 2. Enrich tools with agent API key and agent mode
-      const enrichedTools = command.tools.map(tool => {
-        const config = tool.config as any;
-
-        // If tool already has authentication, preserve it
-        if (config.api_key || config.oauth_token) {
-          return tool;
-        }
-
-        // Add API key with agent mode for OAuth proxy
-        return tool.withConfig({
-          api_key: command.agentApiKey,
-          api_key_mode: 'agent'  // KEY DIFFERENCE: Agent mode uses agent owner's credentials
-        });
-      });
-
-      logger.debug(`Successfully enriched ${enrichedTools.length} tools with agent API key`);
-
-      return {
-        success: true,
-        data: {
-          enrichedTools,
-          agentApiKeyProvided: true
-        }
-      };
-
-    } catch (error) {
-      logger.error('Failed to enrich tools with agent API key:', error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to enrich tools with agent API key'
-      };
-    }
-  }
 }
