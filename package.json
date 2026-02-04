@@ -21,6 +21,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
+    "db:encrypt-tokens": "tsx src/scripts/encrypt-tokens.ts",
     "test:agent-api": "node src/scripts/test-agent-execution-api.js",
     "grpc:generate": "pnpm run grpc:generate:js && pnpm run grpc:generate:python && pnpm run grpc:generate:ts",
     "grpc:generate:js": "/Users/lancekraakman/.nvm/versions/node/v22.13.0/bin/grpc_tools_node_protoc --js_out=import_style=commonjs,binary:src/ddd/infrastructure/grpc/generated --grpc_out=grpc_js:src/ddd/infrastructure/grpc/generated --plugin=protoc-gen-grpc=/Users/lancekraakman/.nvm/versions/node/v22.13.0/bin/grpc_tools_node_protoc_plugin -I proto proto/agent_worker.proto proto/table_service.proto",
