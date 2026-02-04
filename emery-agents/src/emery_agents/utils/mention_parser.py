@@ -1,10 +1,10 @@
 """
-Mention Parser - Detect @agent:name and @skill:name mentions in messages.
+Mention Parser - Detect @agent:name, @skill:name, and @tool:name mentions in messages.
 
-AIDEV-NOTE: Parses @agent:name and @skill:name patterns from user messages
-to enable direct routing to user-defined agents and skills.
+Parses mention patterns from user messages to enable direct routing
+to user-defined agents, skills, and external tools.
 
-Pattern: @agent:agent-name or @skill:skill-name
+Patterns: @agent:name, @skill:name, @tool:name
 - Case-insensitive match
 - Supports hyphens and underscores in names
 - Returns cleaned text with mention removed
@@ -276,3 +276,69 @@ def has_skill_mention(text: str) -> bool:
         True if a @skill:name mention is found, False otherwise
     """
     return SKILL_MENTION_PATTERN.search(text) is not None
+
+
+# ============================================================================
+# TOOL MENTION PARSING
+# ============================================================================
+
+# Pattern matches @tool:name where name contains alphanumerics, hyphens, or underscores
+TOOL_MENTION_PATTERN = re.compile(r'@tool:([a-zA-Z0-9_-]+)', re.IGNORECASE)
+
+
+def parse_tool_mention(text: str) -> Tuple[str, Optional[str]]:
+    """
+    Parse @tool:name mention from text.
+
+    Args:
+        text: The message text to parse
+
+    Returns:
+        Tuple of (cleaned_text, tool_name):
+        - cleaned_text: Original text with @tool:name removed
+        - tool_name: The extracted tool name, or None if no mention found
+
+    Examples:
+        >>> parse_tool_mention("@tool:gmail-create-draft send email to John")
+        ('send email to John', 'gmail-create-draft')
+
+        >>> parse_tool_mention("Hello world")
+        ('Hello world', None)
+    """
+    match = TOOL_MENTION_PATTERN.search(text)
+    if match:
+        tool_name = match.group(1)
+        cleaned_text = TOOL_MENTION_PATTERN.sub('', text).strip()
+        cleaned_text = ' '.join(cleaned_text.split())
+        return (cleaned_text, tool_name)
+    return (text, None)
+
+
+def has_tool_mention(text: str) -> bool:
+    """
+    Check if text contains a @tool:name mention.
+
+    Args:
+        text: The message text to check
+
+    Returns:
+        True if a @tool:name mention is found, False otherwise
+    """
+    return TOOL_MENTION_PATTERN.search(text) is not None
+
+
+# ============================================================================
+# MULTI-MENTION DETECTION
+# ============================================================================
+
+def count_all_mentions(text: str) -> int:
+    """Count total @agent + @skill + @tool mentions in text.
+
+    Used to detect multi-mention messages that should go through the full
+    coordinator pipeline (triage → plan → execute) instead of single-mention shortcut.
+    """
+    return (
+        len(AGENT_MENTION_PATTERN.findall(text))
+        + len(SKILL_MENTION_PATTERN.findall(text))
+        + len(TOOL_MENTION_PATTERN.findall(text))
+    )

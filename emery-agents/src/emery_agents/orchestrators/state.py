@@ -81,6 +81,11 @@ class PlanExecuteState(TypedDict, total=False):
     triage_context: Optional[str]  # Key findings from triage research
     triage_analysis: Optional[Dict[str, Any]]  # Combined analysis: intent, entities, approach, external_services
 
+    # === Mention routing (set when @skill/@agent/@tool detected) ===
+    pre_selected_skill: Optional[str]
+    pre_selected_agent: Optional[str]
+    pre_selected_tool: Optional[str]
+
     # === Auto-approval ===
     auto_approved: Optional[bool]  # True if plan was auto-approved (low-risk, additive only)
 
@@ -130,6 +135,10 @@ DEFAULT_STATE: Dict[str, Any] = {
     "triage_reasoning": None,
     "triage_context": None,
     "triage_analysis": None,
+    # Mention routing
+    "pre_selected_skill": None,
+    "pre_selected_agent": None,
+    "pre_selected_tool": None,
     # Auto-approval
     "auto_approved": None,
     # Output

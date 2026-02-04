@@ -31,9 +31,12 @@ from ..services.plan_service import PlanService
 # HuggingFaceInferenceClient removed - skills now executed dynamically via API
 from ..utils.error_classifier import classify_error
 from ..utils.error_messages import ErrorSeverity
-from ..utils.mention_parser import parse_agent_mention, parse_skill_invocation
-from .mention_routing import handle_agent_mention_routing
-from .skill_mention_routing import handle_skill_mention_routing
+from ..utils.mention_parser import (
+    parse_agent_mention,
+    parse_skill_invocation,
+    parse_tool_mention,
+    count_all_mentions,
+)
 from .message_processor import (
     extract_user_api_key_from_tools,
     extract_images_from_message,
@@ -200,35 +203,29 @@ class AgentStreamingHandler:
             logger.info(f"💬 Current task: {len(current_task)} chars")
             logger.info(f"🧠 Agent memory: {len(agent.memory.steps)} steps")
 
-            # === @AGENT MENTION DETECTION ===
-            cleaned_task, agent_mention = parse_agent_mention(current_task)
-            if agent_mention:
-                logger.info(f"🎯 Detected @agent mention: '{agent_mention}'")
-                async for event in handle_agent_mention_routing(
-                    agent_mention=agent_mention,
-                    task=cleaned_task,
-                    tool_provider=tool_provider,
-                    skill_executor_service=self.skill_executor_service,
-                    org_model=org_model,
-                    images=images,
-                ):
-                    yield event
-                return  # Agent mention handled
+            # === @AGENT / @SKILL / @TOOL MENTION DETECTION ===
+            # Single mention → skip triage, plan focused on the specified resource
+            # Multiple mentions → normal pipeline (triage → plan → execute)
+            pre_selected_skill: Optional[str] = None
+            pre_selected_agent: Optional[str] = None
+            pre_selected_tool: Optional[str] = None
 
-            # === @SKILL MENTION DETECTION ===
-            skill_invocation = parse_skill_invocation(current_task)
-            if skill_invocation:
-                logger.info(f"🎯 Detected @skill mention: '{skill_invocation.skill_name}' with {len(skill_invocation.inputs)} inputs")
-                async for event in handle_skill_mention_routing(
-                    skill_invocation=skill_invocation,
-                    tool_provider=tool_provider,
-                    org_model=org_model,
-                    original_message=current_task,
-                ):
-                    yield event
-                return  # Skill mention handled
+            mention_count = count_all_mentions(current_task)
+            if mention_count == 1:
+                _, agent_mention = parse_agent_mention(current_task)
+                skill_invocation = parse_skill_invocation(current_task) if not agent_mention else None
+                _, tool_mention = parse_tool_mention(current_task) if not agent_mention and not skill_invocation else (current_task, None)
 
-            # Stream agent execution with coordinator
+                pre_selected_agent = agent_mention
+                pre_selected_skill = skill_invocation.skill_name if skill_invocation else None
+                pre_selected_tool = tool_mention
+
+                mention_name = agent_mention or pre_selected_skill or tool_mention
+                logger.info(f"Single @mention detected: '{mention_name}' — routing to planner")
+            elif mention_count > 1:
+                logger.info(f"Multiple @mentions detected ({mention_count}) — routing to full pipeline")
+
+            # Stream agent execution with coordinator (handles both mentions and normal flow)
             async for event in self._execute_with_streaming(
                 agent=agent,
                 smolagents_tools=smolagents_tools,
@@ -244,6 +241,9 @@ class AgentStreamingHandler:
                 user_id=user_id,
                 workspace_type=workspace_type,
                 workspace_id=workspace_id,
+                pre_selected_skill=pre_selected_skill,
+                pre_selected_agent=pre_selected_agent,
+                pre_selected_tool=pre_selected_tool,
             ):
                 yield event
 
@@ -350,6 +350,9 @@ class AgentStreamingHandler:
         user_id: Optional[str] = None,
         workspace_type: Optional[str] = None,
         workspace_id: Optional[str] = None,
+        pre_selected_skill: Optional[str] = None,
+        pre_selected_agent: Optional[str] = None,
+        pre_selected_tool: Optional[str] = None,
     ) -> AsyncIterator[StreamResponseDict]:
         """Execute agent with streaming and coordinator integration."""
         step_index = 0
@@ -436,6 +439,9 @@ class AgentStreamingHandler:
                 runtime_skill_inputs=skill_inputs,
                 images=images,
                 has_images=len(images) > 0,
+                pre_selected_skill=pre_selected_skill,
+                pre_selected_agent=pre_selected_agent,
+                pre_selected_tool=pre_selected_tool,
             ):
                 if isinstance(event, dict):
                     yield event  # type: ignore[misc]  # Coordinator returns compatible dicts

@@ -234,6 +234,45 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
     triage_analysis = state.get("triage_analysis")
     configured_tools = state.get("configured_tools")
 
+    # === @mention hint enrichment (when triage was skipped) ===
+    pre_selected_skill = state.get("pre_selected_skill")
+    pre_selected_agent = state.get("pre_selected_agent")
+    pre_selected_tool = state.get("pre_selected_tool")
+
+    enriched_task = task
+    if pre_selected_skill:
+        enriched_task = (
+            f"{task}\n\n"
+            f"[USER DIRECTIVE: The user explicitly selected the '{pre_selected_skill}' skill via @skill mention. "
+            f"Build a focused plan that uses this skill. Look up the skill by name using discovery tools, "
+            f"then create a plan step that executes it with inputs extracted from the user's message and conversation context.]"
+        )
+    elif pre_selected_agent:
+        enriched_task = (
+            f"{task}\n\n"
+            f"[USER DIRECTIVE: The user explicitly selected the '{pre_selected_agent}' agent via @agent mention. "
+            f"Build a focused plan that delegates to this agent. Use agent_crud(method='execute') to run the agent, "
+            f"passing the user's task as input.]"
+        )
+    elif pre_selected_tool:
+        enriched_task = (
+            f"{task}\n\n"
+            f"[USER DIRECTIVE: The user explicitly selected the '{pre_selected_tool}' external tool via @tool mention. "
+            f"Build a focused plan that uses this specific tool. Extract the required inputs from the user's message "
+            f"and conversation context.]"
+        )
+
+    # Construct synthetic triage_analysis when triage was skipped (@mention path)
+    if (pre_selected_skill or pre_selected_agent or pre_selected_tool) and not triage_analysis:
+        mention_name = pre_selected_skill or pre_selected_agent or pre_selected_tool
+        mention_type = "skill" if pre_selected_skill else ("agent" if pre_selected_agent else "tool")
+        triage_analysis = {
+            "intent": f"Execute {mention_type} '{mention_name}' as requested by user",
+            "entities": [mention_name],
+            "approach": "step-by-step",
+            "external_services": [],
+        }
+
     events: List[Any] = []
 
     logger.info("Creating plan (planner handles clarification if needed)")
@@ -291,8 +330,8 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
 
     try:
         result = await plan_service.generate_plan(
-            basic_instructions=task,
-            goal=task,
+            basic_instructions=enriched_task,
+            goal=enriched_task,
             tools=planning_tools,
             managed_agents=managed_agents,
             conversation_history=conversation_history,
@@ -351,7 +390,8 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
             logger.warning(f"Failed to save plan to filesystem: {e}")
 
     # Auto-approve low-risk plans (additive only, no external OAuth, no deletions)
-    if _is_low_risk_plan(plan):
+    # Skip auto-approve for template generation — the GeneratePlan RPC expects PlanCreatedEvent
+    if _is_low_risk_plan(plan) and not is_template_generation:
         logger.info(f"Plan {plan.id} auto-approved (low-risk, {len(plan.steps)} steps)")
         approved_plan = plan.approve().start_execution()
         ledger.record_plan_approved()
