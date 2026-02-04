@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
+import { requireAdmin, isErrorResponse } from '@/lib/admin/require-admin';
 import { stripe } from '@/ddd/infrastructure/external/stripe/client';
 import { db } from '@/ddd/infrastructure/db/client';
 import { organizations } from '@/ddd/infrastructure/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 
 /**
  * Admin API for Enterprise Customer Provisioning
@@ -16,30 +16,13 @@ import { eq } from 'drizzle-orm';
  */
 
 /**
- * Check if user is a superuser/admin
- * SECURITY: Case-insensitive email comparison
- */
-async function isAdmin(userEmail: string | null | undefined): Promise<boolean> {
-  if (!userEmail) return false;
-
-  const adminEmails = process.env.ADMIN_EMAILS?.split(',').map(email => email.trim().toLowerCase()) || [];
-  return adminEmails.includes(userEmail.toLowerCase());
-}
-
-/**
  * GET /api/admin/enterprises
  * List all organizations with billing data
  */
 export async function GET(req: Request) {
   try {
-    const session = await auth();
-
-    if (!session?.user?.email || !await isAdmin(session.user.email)) {
-      return NextResponse.json(
-        { error: 'Unauthorized - Admin access required' },
-        { status: 403 }
-      );
-    }
+    const adminOrError = await requireAdmin();
+    if (isErrorResponse(adminOrError)) return adminOrError;
 
     // Fetch all organizations with billing data
     const orgs = await db.query.organizations.findMany({
@@ -59,7 +42,7 @@ export async function GET(req: Request) {
         currentPeriodEnd: true,
         createdAt: true,
       },
-      orderBy: (orgs: any, { desc }: any) => [desc(orgs.createdAt)],
+      orderBy: [desc(organizations.createdAt)],
     });
 
     return NextResponse.json({
@@ -88,14 +71,8 @@ export async function GET(req: Request) {
  */
 export async function POST(req: Request) {
   try {
-    const session = await auth();
-
-    if (!session?.user?.email || !await isAdmin(session.user.email)) {
-      return NextResponse.json(
-        { error: 'Unauthorized - Admin access required' },
-        { status: 403 }
-      );
-    }
+    const adminOrError = await requireAdmin();
+    if (isErrorResponse(adminOrError)) return adminOrError;
 
     const body = await req.json();
     const { organizationId, monthlyPriceUsd, creditsAllowance } = body;
