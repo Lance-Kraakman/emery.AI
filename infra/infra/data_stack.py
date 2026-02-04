@@ -277,6 +277,16 @@ class DataStack(Stack):
             enforce_ssl=True,
             versioned=True, # Good practice for production
             removal_policy=RemovalPolicy.RETAIN,  # Protect bucket from accidental deletion
+            # COST-OPT: Expire non-current versions after 90 days to reduce storage costs.
+            # Current (latest) versions are NEVER deleted by this rule.
+            # Non-current versions are previous versions created by overwrites/deletes.
+            lifecycle_rules=[
+                s3.LifecycleRule(
+                    id="expire-noncurrent-versions",
+                    noncurrent_version_expiration=Duration.days(90),
+                    enabled=True,
+                ),
+            ],
         )
 
         # ========== OUTPUTS ==========
