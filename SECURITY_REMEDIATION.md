@@ -37,15 +37,23 @@ Code quality follow-up:
   - `/api/tables/[id]` — `table:view` (GET), `table:manage` (PUT, DELETE) — **resource-specific** via `hasResourcePermission`
   - `/api/databases` — `database:create` (POST), `database:view` (GET)
   - `/api/databases/[id]` — `database:view` (GET), `database:manage` (PUT, DELETE) — **resource-specific** via `hasResourcePermission`
-  - `/api/fields` — `table:manage` (POST, DELETE), `table:view` (GET) + **added missing auth to GET**
-  - `/api/files/[fileId]` — `table:view` (GET), `table:manage` (PUT, DELETE)
+  - `/api/fields` — `table:manage` (POST, DELETE), `table:view` (GET) + **added missing auth to GET** — **resource-specific** via `hasResourcePermission` with `tables` + tableId
+  - `/api/files/[fileId]` — `table:view` (GET), `table:manage` (PUT, DELETE) — **resource-specific** via `hasResourcePermission` with `tables` + tableId
   - `/api/agents/[id]` — `agents:view` (GET), `agents:manage` (PUT, DELETE) — **resource-specific** via `hasResourcePermission`
-  - `/api/tasks` — `tasks:view` (GET), `tasks:create` (POST)
+  - `/api/tasks` — `tasks:view` (GET org-level), `tasks:create` (POST) — **resource-specific** via `hasResourcePermission` with `agent` + agentId
   - `/api/rows` — already covered by server action `requirePermission("table:manage")` delegation
 - [x] H-02: Replace client-provided `organizationId` with `user.organizationId` from session in `/api/tables` POST
 
 New shared utilities:
 - `hasResourcePermission()` in `src/lib/auth.ts` — resource-specific permission check backed by PostgreSQL `user_has_permission()` function (supports `all`, `specific`, `owned`, `team` scopes)
+
+Follow-up TODOs:
+- [ ] Audit system scheduler for backdoors — review `src/scripts/run-scheduler.ts` and scheduling code for privilege escalation or bypass paths
+- [x] Revisit resource-specific permissions — verified `user_has_permission()` PostgreSQL function: global permissions (`resource_type IS NULL`) pass unconditionally, resource-specific scoping only activates for custom roles with explicit `resourceType`/`resourceScope`. System roles seeded with NULL resource_type are backwards-compatible.
+- [x] Analyze org-level routes for resource-specific upgrade — upgraded all routes:
+  - `/api/fields` — `hasResourcePermission(..., 'tables', tableId)` for all 3 methods
+  - `/api/files/[fileId]` — `hasResourcePermission(..., 'tables', tableId)` for all 3 methods
+  - `/api/tasks` POST — `hasResourcePermission(..., 'agent', agentId)`; GET stays org-level (lists all org tasks)
 
 ---
 
