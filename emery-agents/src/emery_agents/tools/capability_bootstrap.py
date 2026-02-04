@@ -218,7 +218,7 @@ def populate_external_tools(
             name=tool.name,
             type=CapabilityType.TOOL,
             domain=domain,
-            description=tool.desc or "",
+            description=getattr(tool, 'description', '') or "",
             actions=["execute"],
             entities=[],
         )

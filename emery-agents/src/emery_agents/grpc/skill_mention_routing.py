@@ -29,6 +29,7 @@ from emery_agents.api import SkillAPIService
 from emery_agents.tools.integrations.dynamic_skill import DynamicSkillTool
 from emery_agents.reasoning.config import get_dspy_lm
 from emery_agents.reasoning.modules.input_extractor import InputExtractorModule
+from emery_agents.services.analysis.llm_usage import record_from_lm
 from .response_types import StreamResponseDict, create_error_response
 
 logger = logging.getLogger(__name__)
@@ -47,6 +48,7 @@ async def handle_skill_mention_routing(
     skill_invocation: SkillInvocation,
     tool_provider: ToolProvider,
     org_model: Optional[str] = None,
+    original_message: str = "",
 ) -> AsyncIterator[StreamResponseDict]:
     """
     Handle @skill:name mention routing to user-defined skills.
@@ -58,6 +60,7 @@ async def handle_skill_mention_routing(
         skill_invocation: Parsed skill invocation with name, inputs, cleaned_task
         tool_provider: ToolProvider for API credentials
         org_model: Organization model override (unused for skill execution)
+        original_message: Full original user message for LLM input inference
 
     Yields:
         StreamResponseDict events (step_progress, content_chunk, error)
@@ -125,11 +128,14 @@ async def handle_skill_mention_routing(
 
         inputs = skill_invocation.inputs or {}
 
-        # If no inputs were parsed but user text exists, use LLM to extract inputs
-        if not inputs and skill_invocation.cleaned_task and tool.inputs:
+        # Always use LLM to extract inputs from original user message.
+        # The LLM sees the full message + skill's input schema to infer all values.
+        # Parsed key:value inputs override LLM-extracted values as a convenience.
+        user_text = original_message or skill_invocation.cleaned_task
+        if user_text and tool.inputs:
             logger.info(
-                f"[SKILL-ROUTING] No parsed inputs, extracting from user text "
-                f"via LLM for {len(tool.inputs)} input fields"
+                f"[SKILL-ROUTING] Extracting inputs via LLM from original message "
+                f"({len(user_text)} chars) for {len(tool.inputs)} input fields"
             )
             input_schema = [
                 {"name": name, "type": meta.get("type", "string"), "description": meta.get("description", "")}
@@ -138,10 +144,11 @@ async def handle_skill_mention_routing(
             extractor = InputExtractorModule(skill_inputs=input_schema)
             lm = get_dspy_lm(org_model=org_model)
             with dspy.context(lm=lm):
-                inputs = await asyncio.to_thread(
-                    extractor.extract, user_text=skill_invocation.cleaned_task
-                )
-            logger.info(f"[SKILL-ROUTING] Extracted inputs: {list(inputs.keys())}")
+                extracted = await asyncio.to_thread(extractor.extract, user_text=user_text)
+            record_from_lm(lm)
+            # Merge: parsed key:value inputs take priority over LLM-extracted
+            inputs = {**extracted, **inputs}
+            logger.info(f"[SKILL-ROUTING] Merged inputs: {list(inputs.keys())}")
 
         logger.info(
             f"[SKILL-ROUTING] Executing skill {skill_data.id} "

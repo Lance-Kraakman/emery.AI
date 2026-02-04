@@ -223,6 +223,7 @@ class AgentStreamingHandler:
                     skill_invocation=skill_invocation,
                     tool_provider=tool_provider,
                     org_model=org_model,
+                    original_message=current_task,
                 ):
                     yield event
                 return  # Skill mention handled

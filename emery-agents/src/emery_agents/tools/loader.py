@@ -114,16 +114,22 @@ class UnifiedToolLoader:
             return {"pipedream_tools": {}, "emery_tools": {}}
 
     def _build_tool_lookup(self) -> Dict[str, Dict[str, Any]]:
-        """Build a lookup table of tool ID to tool configuration."""
+        """Build a lookup table of tool ID to tool configuration.
+
+        Keys are normalized to underscore format for consistent lookup.
+        Original tool IDs (with dashes) are preserved in the value's 'id' field.
+        """
         lookup = {}
 
-        # Add Pipedream tools
+        # Add Pipedream tools (normalize keys: dashes → underscores)
         for tool_id, tool_config in self.unified_metadata.get("pipedream_tools", {}).items():
-            lookup[tool_id] = {**tool_config, "source": "pipedream"}
+            key = tool_id.replace("-", "_")
+            lookup[key] = {**tool_config, "source": "pipedream"}
 
-        # Add Emery tools
+        # Add Emery tools (normalize keys: dashes → underscores)
         for tool_id, tool_config in self.unified_metadata.get("emery_tools", {}).items():
-            lookup[tool_id] = {**tool_config, "source": "emery"}
+            key = tool_id.replace("-", "_")
+            lookup[key] = {**tool_config, "source": "emery"}
 
         return lookup
 
@@ -229,17 +235,12 @@ class UnifiedToolLoader:
             org_id_str = str(organization_id) if organization_id else ""
             return crud_factory(api_key, org_id_str)
 
-        # Regular tool loading (existing logic)
-        # Convert tool name from hyphen to underscore format for lookup (frontend uses hyphens, backend uses underscores)
+        # Regular tool loading — normalize name to underscore format (matching _build_tool_lookup keys)
         tool_name_lookup = tool_config.name.replace("-", "_")
 
-        # Look up tool in unified metadata
         unified_tool = self.get_tool_config(tool_name_lookup)
         if not unified_tool:
-            # Try original name if hyphen version not found
-            unified_tool = self.get_tool_config(tool_config.name)
-            if not unified_tool:
-                raise ValueError(f"Tool '{tool_config.name}' (also tried '{tool_name_lookup}') not found in unified metadata")
+            raise ValueError(f"Tool '{tool_config.name}' (also tried '{tool_name_lookup}') not found in unified metadata")
 
         source = unified_tool["source"]
 
@@ -255,11 +256,17 @@ class UnifiedToolLoader:
         if not api_key:
             raise ValueError(f"API key required for Pipedream tool '{tool_config.name}'")
 
-        # Create a new ToolConfig with the API key and mode in the config
+        # Build config with API key; only include api_key_mode if explicitly
+        # set in the original config — otherwise PipedreamTool auto-detects
+        # from the key prefix (key_ → agent, user_ → user).
+        config_dict = {**(tool_config.config or {}), "api_key": api_key}
+        if tool_config.config and "api_key_mode" in tool_config.config:
+            config_dict["api_key_mode"] = tool_config.config["api_key_mode"]
+
         enhanced_config = ToolConfig(
             name=tool_config.name,
             version=tool_config.version,
-            config={**tool_config.config, "api_key": api_key, "api_key_mode": api_key_mode}
+            config=config_dict
         )
 
         # Create Pipedream tool with enhanced config containing API key

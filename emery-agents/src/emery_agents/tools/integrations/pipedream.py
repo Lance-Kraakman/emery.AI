@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 _http_thread_pool = ThreadPoolExecutor(max_workers=10, thread_name_prefix="pipedream-http")
 
 # Load metadata once from unified_metadata.json
-METADATA_PATH = Path(__file__).parent.parent.parent.parent / "execution" / "tools" / "unified_metadata.json"
+METADATA_PATH = Path(__file__).parent.parent.parent / "execution" / "tools" / "unified_metadata.json"
 try:
     with open(METADATA_PATH) as f:
         _unified = json.load(f)

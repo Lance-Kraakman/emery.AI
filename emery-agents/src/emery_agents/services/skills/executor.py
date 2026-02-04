@@ -517,7 +517,9 @@ class SkillExecutorService:
                         skill_config, runtime_inputs, org_model,
                         capture_outputs, attachments=attachments,
                         return_message_parts=return_message_parts,
-                        progress_callback=progress_callback
+                        progress_callback=progress_callback,
+                        api_key=api_key,
+                        organization_id=organization_id,
                     )
         except Exception as e:
             error_msg = f"Skill execution error: {str(e)}"
@@ -595,7 +597,9 @@ class SkillExecutorService:
         capture_outputs: bool,
         attachments: Optional[List[Any]],
         return_message_parts: bool,
-        progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None
+        progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+        api_key: str = "",
+        organization_id: int = 0,
     ) -> Union[str, SkillExecutionResult]:
         """Execute skill via LLM agent orchestration.
 
@@ -609,7 +613,7 @@ class SkillExecutorService:
         if skill_config.tools:
             skill_tools = self.tool_loader.load_tools_from_configs(
                 tool_configs=list(skill_config.tools),
-                api_key=None,
+                api_key=api_key,
                 api_key_mode="user"
             )
             logger.info(f"🔧 Loaded {len(skill_tools)} tools for skill {skill_config.name}")
