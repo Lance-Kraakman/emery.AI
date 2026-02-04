@@ -8,10 +8,11 @@ Env vars:
 - GRPC_CA_CERT: PEM-encoded CA certificate (for client cert verification)
 - GRPC_SERVER_CERT: PEM-encoded server certificate
 - GRPC_SERVER_KEY: PEM-encoded server private key
+- GRPC_INSECURE: set to "true" to skip TLS (for dev/integration)
 
 Behavior:
-- Production: requires all 3 env vars, raises on missing
-- Development: returns None (caller uses insecure port)
+- Default: requires all 3 cert env vars, raises on missing
+- GRPC_INSECURE=true: returns None (caller uses insecure port)
 - Partial config (some set, some not): always raises
 """
 
@@ -35,20 +36,17 @@ def get_server_credentials() -> Optional[grpc.ServerCredentials]:
     server_cert = os.getenv("GRPC_SERVER_CERT")
     server_key = os.getenv("GRPC_SERVER_KEY")
 
-    is_dev = os.getenv("NODE_ENV", "") == "development" or os.getenv(
-        "ENVIRONMENT", ""
-    ) == "development"
-
     # No certs configured
     if not ca_cert and not server_cert and not server_key:
-        if is_dev:
+        if os.getenv("GRPC_INSECURE", "") == "true":
             logger.warning(
-                "No gRPC TLS certs configured. Running INSECURE (development only)."
+                "No gRPC TLS certs configured. Running INSECURE (GRPC_INSECURE=true)."
             )
             return None
         raise RuntimeError(
-            "gRPC TLS credentials required in production. "
-            "Set GRPC_CA_CERT, GRPC_SERVER_CERT, GRPC_SERVER_KEY env vars."
+            "gRPC TLS credentials required. "
+            "Set GRPC_CA_CERT, GRPC_SERVER_CERT, GRPC_SERVER_KEY env vars "
+            "or set GRPC_INSECURE=true for development/integration environments."
         )
 
     # Partial config is always an error

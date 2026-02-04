@@ -230,16 +230,16 @@ async function setupS3(): Promise<void> {
         forcePathStyle: true,
       });
 
-      console.log(`   🔍 Attempt ${attempt}/${maxRetries}: Checking if emery-files bucket exists...`);
+      console.log(`   🔍 Attempt ${attempt}/${maxRetries}: Checking if enhancd-files bucket exists...`);
       
       try {
-        await s3Client.send(new HeadBucketCommand({ Bucket: 'emery-files' }));
-        console.log('   ✅ emery-files bucket exists and is accessible');
+        await s3Client.send(new HeadBucketCommand({ Bucket: 'enhancd-files' }));
+        console.log('   ✅ enhancd-files bucket exists and is accessible');
       } catch (bucketError: any) {
         if (bucketError.name === 'NotFound') {
           console.log('   🪣 Bucket does not exist, creating it...');
-          await s3Client.send(new CreateBucketCommand({ Bucket: 'emery-files' }));
-          console.log('   ✅ emery-files bucket created successfully');
+          await s3Client.send(new CreateBucketCommand({ Bucket: 'enhancd-files' }));
+          console.log('   ✅ enhancd-files bucket created successfully');
         } else {
           throw bucketError;
         }
@@ -248,7 +248,7 @@ async function setupS3(): Promise<void> {
       // Test basic list operation
       console.log('   🔍 Testing bucket list operation...');
       await s3Client.send(new ListObjectsV2Command({ 
-        Bucket: 'emery-files',
+        Bucket: 'enhancd-files',
         MaxKeys: 1
       }));
       console.log('   ✅ S3 connectivity verification passed');
@@ -274,7 +274,7 @@ async function setupS3(): Promise<void> {
 function showStatus(): void {
   console.log('\n📊 Integration Test Infrastructure Status:');
   console.log('   🗄️  Database:  postgresql://localhost:5436/emery_integration_test');
-  console.log('   🪣  S3 (MinIO): http://localhost:9005 (emery-files bucket)');
+  console.log('   🪣  S3 (MinIO): http://localhost:9005 (enhancd-files bucket)');
   console.log('   🌐  App Server: http://localhost:3002');
   console.log('   🤖  gRPC Agent: localhost:50053');
   console.log('   📊 gRPC Table: localhost:50054');

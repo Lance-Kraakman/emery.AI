@@ -10,7 +10,7 @@ const s3Client = new S3Client({
   forcePathStyle: process.env.S3_FORCE_PATH_STYLE === 'true',
 });
 
-export const BUCKET_NAME = process.env.S3_BUCKET_NAME || 'emery-files';
+export const BUCKET_NAME = process.env.S3_BUCKET_NAME || 'enhancd-files';
 
 // Ensure bucket exists - create if it doesn't
 export async function ensureBucketExists(): Promise<void> {

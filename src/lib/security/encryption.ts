@@ -6,8 +6,11 @@
  *
  * Key management:
  * - ENCRYPTION_KEY env var: base64-encoded 32-byte key
- * - Dev mode (NODE_ENV=development without key): passthrough, no encryption
- * - Production without key: throws immediately
+ * - ENCRYPTION_PASSTHROUGH=true without key: passthrough, no encryption (for dev/integration)
+ * - Default without key: throws immediately
+ *
+ * NOTE: Uses ENCRYPTION_PASSTHROUGH instead of NODE_ENV because Next.js inlines
+ * NODE_ENV at build time — runtime overrides via docker-compose have no effect.
  *
  * Storage format: base64(iv):base64(authTag):base64(ciphertext)
  * - 12-byte random IV (GCM standard)
@@ -23,26 +26,19 @@ const AUTH_TAG_LENGTH = 16;
 const SEPARATOR = ':';
 
 let _key: Buffer | null = null;
-let _devMode: boolean | null = null;
-
-function isDevMode(): boolean {
-  if (_devMode === null) {
-    _devMode = process.env.NODE_ENV === 'development';
-  }
-  return _devMode;
-}
 
 function getKey(): Buffer {
   if (_key) return _key;
 
   const raw = process.env.ENCRYPTION_KEY;
   if (!raw) {
-    if (isDevMode()) {
+    if (process.env.ENCRYPTION_PASSTHROUGH === 'true') {
       return Buffer.alloc(0); // sentinel for passthrough
     }
     throw new Error(
-      'ENCRYPTION_KEY environment variable is required in production. ' +
-      'Generate with: openssl rand -base64 32'
+      'ENCRYPTION_KEY environment variable is required. ' +
+      'Generate with: openssl rand -base64 32 ' +
+      'or set ENCRYPTION_PASSTHROUGH=true for development/integration environments.'
     );
   }
 
@@ -56,7 +52,7 @@ function getKey(): Buffer {
 }
 
 function isPassthrough(): boolean {
-  return isDevMode() && !process.env.ENCRYPTION_KEY;
+  return process.env.ENCRYPTION_PASSTHROUGH === 'true' && !process.env.ENCRYPTION_KEY;
 }
 
 /**

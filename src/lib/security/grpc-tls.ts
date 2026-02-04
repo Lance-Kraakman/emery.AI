@@ -10,14 +10,15 @@
  * - GRPC_CLIENT_KEY: PEM-encoded client private key
  *
  * Behavior:
- * - Production: requires all 3 env vars, throws on missing
- * - Development: falls back to insecure if no env vars set
+ * - Default: requires all 3 env vars, throws on missing
+ * - GRPC_INSECURE=true: falls back to insecure (for dev/integration)
  * - Partial config (some set, some not): always throws
+ *
+ * NOTE: Uses GRPC_INSECURE instead of NODE_ENV because Next.js inlines
+ * NODE_ENV at build time — runtime overrides via docker-compose have no effect.
  */
 
 import * as grpc from '@grpc/grpc-js';
-
-const isDev = process.env.NODE_ENV === 'development';
 
 /**
  * Get gRPC client credentials for connecting to Python gRPC servers.
@@ -30,12 +31,12 @@ export function getGrpcClientCredentials(): grpc.ChannelCredentials {
 
   // No certs configured
   if (!caCert && !clientCert && !clientKey) {
-    if (isDev) {
+    if (process.env.GRPC_INSECURE === 'true') {
       return grpc.credentials.createInsecure();
     }
     throw new Error(
-      'gRPC TLS credentials required in production. ' +
-      'Set GRPC_CA_CERT, GRPC_CLIENT_CERT, GRPC_CLIENT_KEY env vars.'
+      'gRPC TLS credentials required. Set GRPC_CA_CERT, GRPC_CLIENT_CERT, GRPC_CLIENT_KEY ' +
+      'or set GRPC_INSECURE=true for development/integration environments.'
     );
   }
 

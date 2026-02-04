@@ -32,11 +32,13 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:integration_test_password@postgres-integration:5432/emery_integration_test
       NODE_ENV: production
+      GRPC_INSECURE: "true"                                                                                                                                                            
+      ENCRYPTION_PASSTHROUGH: "true" 
       # Override WORKER_ADDRESS for internal container network
       WORKER_ADDRESS: agent-chat-integration:50051
       GRPC_TOOLS_ADDRESS: agent-table-integration:50052    # Table operations (internal network)
       AWS_REGION: us-east-1
-      S3_BUCKET_NAME: emery-files
+      S3_BUCKET_NAME: enhancd-files
       S3_FORCE_PATH_STYLE: true
       S3_ENDPOINT_URL: http://minio-integration:9000
       AWS_ACCESS_KEY_ID: minioadmin
@@ -87,7 +89,7 @@ services:
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
-      MINIO_DEFAULT_BUCKETS: emery-files
+      MINIO_DEFAULT_BUCKETS: enhancd-files
     command: server /data --console-address ":9001"
     volumes:
       - integration_minio_data:/data
@@ -111,13 +113,14 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:integration_test_password@postgres-integration:5432/emery_integration_test
       PYTHONPATH: /usr/src/app/src
+      GRPC_INSECURE: "true"
       WORKER_ADDRESS: agent-chat-integration:50051        # Chat service (internal network)
       USE_PIPEDREAM_TOOLS: true
       AWS_ENDPOINT_URL: http://minio-integration:9000
       AWS_ACCESS_KEY_ID: minioadmin
       AWS_SECRET_ACCESS_KEY: minioadmin
       AWS_REGION: us-east-1
-      S3_BUCKET_NAME: emery-files
+      S3_BUCKET_NAME: enhancd-files
       NEXTJS_BASE_URL: http://app-integration:3000
       EMERY_DEBUG_PROMPTS: "1"
     depends_on:
@@ -146,12 +149,13 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:integration_test_password@postgres-integration:5432/emery_integration_test
       PYTHONPATH: /usr/src/app/src
+      GRPC_INSECURE: "true"
       GRPC_TOOLS_ADDRESS: agent-table-integration:50052    # Table service (internal network)
       AWS_ENDPOINT_URL: http://minio-integration:9000
       AWS_ACCESS_KEY_ID: minioadmin
       AWS_SECRET_ACCESS_KEY: minioadmin
       AWS_REGION: us-east-1
-      S3_BUCKET_NAME: emery-files
+      S3_BUCKET_NAME: enhancd-files
       AWS_ALLOW_HTTP: "true"
       AWS_S3_ALLOW_UNSAFE_RENAME: "true"
       REDIS_URL: redis://redis-integration:6379
@@ -183,6 +187,8 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:integration_test_password@postgres-integration:5432/emery_integration_test
       NODE_ENV: production
+      GRPC_INSECURE: "true"                                                                                                                                                        
+      ENCRYPTION_PASSTHROUGH: "true" 
       # Override WORKER_ADDRESS for internal container network to reach agent
       WORKER_ADDRESS: agent-chat-integration:50051
       # MinIO S3 configuration for integration tests (internal container network)
@@ -191,7 +197,7 @@ services:
       AWS_SECRET_ACCESS_KEY: minioadmin
       S3_ENDPOINT_URL: http://minio-integration:9000
       AWS_REGION: us-east-1
-      S3_BUCKET_NAME: emery-files
+      S3_BUCKET_NAME: enhancd-files
       S3_FORCE_PATH_STYLE: true
     command: "scheduler"
     depends_on:
