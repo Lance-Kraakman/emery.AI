@@ -31,10 +31,7 @@ export function ToolsSection({
     if (buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
       const gap = 8;
-
-      // Position dropdown above the button
-      const bottom = window.innerHeight - rect.top + gap;
-      const maxHeight = rect.top - gap - 20;
+      const minHeight = 300;
 
       let left = rect.left;
       const dropdownWidth = 440;
@@ -47,7 +44,24 @@ export function ToolsSection({
         left = 16;
       }
 
-      setDropdownPosition({ bottom, left, maxHeight });
+      const spaceAbove = rect.top - gap - 20;
+      const spaceBelow = window.innerHeight - rect.bottom - gap - 20;
+
+      if (spaceAbove >= minHeight) {
+        // Position above the button
+        setDropdownPosition({
+          bottom: window.innerHeight - rect.top + gap,
+          left,
+          maxHeight: spaceAbove,
+        });
+      } else {
+        // Position below the button
+        setDropdownPosition({
+          top: rect.bottom + gap,
+          left,
+          maxHeight: spaceBelow,
+        });
+      }
       setShowDropdown(true);
     }
   };

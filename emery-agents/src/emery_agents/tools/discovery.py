@@ -210,12 +210,14 @@ def create_external_search_tool() -> dspy.Tool:
         func=search_external,
         name="search_external",
         desc=(
-            "Search available external integrations (Slack, GitHub, Google, etc.). "
-            "List integrations by service name or get details for a specific integration."
+            "Search pre-built tool actions for external services (Gmail, Slack, GitHub, Google Sheets, etc.). "
+            "ALWAYS call this FIRST when the task involves any third-party service. "
+            "Returns exact tool names like gmail_create_draft, slack_send_message, google_sheets_add_row. "
+            "Use service parameter to list all available tools for a service."
         ),
         arg_desc={
-            "service": "Filter by service (e.g., 'slack', 'github'). Empty for all services with integration counts.",
-            "integration_name": "Get details for specific integration. Empty to list.",
+            "service": "Service name to search (e.g., 'gmail', 'slack', 'google_sheets'). Returns list of available tool actions.",
+            "integration_name": "Get full details (inputs, outputs, description) for a specific tool (e.g., 'gmail_create_draft').",
         },
     )
 
@@ -254,9 +256,9 @@ def create_web_search_tool() -> dspy.Tool:
         func=web_search,
         name="web_search",
         desc=(
-            "Search the web for external information (READ-ONLY research tool). "
-            "Use for: researching businesses, finding examples, understanding industry practices, "
-            "gathering requirements. "
+            "Search the web for general information (READ-ONLY research tool). "
+            "Use for: researching businesses, understanding industry practices, gathering requirements. "
+            "NOT for discovering platform tools — use search_external for that. "
             "DO NOT use results as direct implementation — use Emery capability tools "
             "(schema_builder, app_builder, etc.) to build based on research findings."
         ),
