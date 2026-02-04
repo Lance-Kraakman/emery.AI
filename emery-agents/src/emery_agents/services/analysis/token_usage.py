@@ -14,6 +14,7 @@ from ...reasoning.modules.step_tracker import TrackedStep, TokenUsage as DSPyTok
 from ..models.provider import TokenUsage
 from ..models.registry import calculate_token_cost
 from .embedding_usage import get_embedding_usage
+from .llm_usage import get_llm_usage
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +140,37 @@ class TokenUsageExtractor:
             input_tokens=total_tokens,
             output_tokens=0,
             total_tokens=total_tokens,
+            cost_usd=cost,
+            model_name=model_name,
+        )
+
+    @staticmethod
+    def extract_llm_usage() -> Optional[TokenUsage]:
+        """
+        Extract accumulated LLM usage for the current request.
+
+        Returns a TokenUsage object representing all LLM API calls
+        made during this request. The tracker is scoped per async context
+        via contextvars.
+
+        Returns:
+            TokenUsage if any LLM calls were made, None otherwise
+        """
+        input_tokens, output_tokens, model_name = get_llm_usage()
+        if input_tokens == 0 and output_tokens == 0:
+            return None
+
+        cost = calculate_token_cost(model_name, input_tokens, output_tokens)
+
+        logger.info(
+            f"Extracted LLM usage: {input_tokens} input + {output_tokens} output tokens, "
+            f"model={model_name}, cost=${cost:.6f}"
+        )
+
+        return TokenUsage(
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            total_tokens=input_tokens + output_tokens,
             cost_usd=cost,
             model_name=model_name,
         )

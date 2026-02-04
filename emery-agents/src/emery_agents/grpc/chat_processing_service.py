@@ -34,7 +34,7 @@ from .response_converter import convert_response_to_proto
 from .agents.agent_models import get_builder_descriptors
 from emery_agents.tools.capability_registry import CapabilityRegistry
 from ..services.analysis.token_usage import TokenUsageExtractor
-from emery_agents.tools.capability_bootstrap import populate_system_agents
+from emery_agents.tools.capability_bootstrap import populate_system_agents, populate_integration_services
 from ..services.tasks import TaskExecutor
 from ..services.tasks.task_executor import TaskData
 from ..services.agents.executor import AgentExecutor
@@ -80,6 +80,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             # CapabilityRegistry replaces ManagedAgentsFactory.capability_registry
             self.capability_registry = CapabilityRegistry()
             populate_system_agents(self.capability_registry)
+            populate_integration_services(self.capability_registry)
 
             self.skill_executor_service = SkillExecutorService(
                 tool_loader=self.tool_loader,
@@ -390,10 +391,10 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     logger.error(f"Failed to upload workspace: {e}")
 
             processing_time = int((time.time() - start_time) * 1000)
-            handler_token_usage = self._agent_handler.last_token_usage
-            # Merge embedding usage (capability discovery, planning) into total
+            # Extract accumulated LLM + embedding usage for this request
+            llm_usage = TokenUsageExtractor.extract_llm_usage()
             embedding_usage = TokenUsageExtractor.extract_embedding_usage()
-            handler_token_usage = TokenUsageExtractor.merge_usage(handler_token_usage, embedding_usage)
+            handler_token_usage = TokenUsageExtractor.merge_usage(llm_usage, embedding_usage)
             token_usage_proto = token_usage_to_proto(handler_token_usage)
             model_used = getattr(handler_token_usage, 'model_name', '') if handler_token_usage else ''
 

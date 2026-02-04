@@ -112,6 +112,7 @@ Execution State:
         try:
             # Resolve LM: explicit > org_model > global
             from emery_agents.reasoning.config import get_dspy_lm
+            from emery_agents.services.analysis.llm_usage import record_from_lm
 
             lm = self.lm
             if not lm and org_model:
@@ -124,6 +125,7 @@ Execution State:
                         error_message=error_message,
                         context=context,
                     )
+                record_from_lm(lm)
             else:
                 result = self._module(
                     failed_step=failed_step.description,

@@ -13,6 +13,7 @@ from typing import Any, Dict, List
 import dspy
 
 from ...reasoning.config import get_dspy_lm
+from ...services.analysis.llm_usage import record_from_lm
 from ...reasoning.signatures.planning import TriageTask
 from ...tools.discovery import create_discovery_tools
 from ...services.execution.events import ErrorEvent, FinalSynthesisEvent, ExecutionCompletedEvent
@@ -90,6 +91,7 @@ async def triage_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[
                 memory_context=memory_context,
                 image_context=image_context,
             )
+        record_from_lm(lm)
 
         execution_mode = getattr(result, "execution_mode", "plan").strip().lower()
         reasoning = getattr(result, "reasoning", "")

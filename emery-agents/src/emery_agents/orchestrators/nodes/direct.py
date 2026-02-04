@@ -16,6 +16,7 @@ import dspy
 from dspy.adapters.types.image import Image as DspyImage
 
 from ...reasoning.config import get_dspy_lm
+from ...services.analysis.llm_usage import record_from_lm
 from ...reasoning.modules.executor import DirectExecutorModule, direct_execution_reward
 from ...reasoning.utils import extract_dspy_result
 from ...services.execution.events import (
@@ -129,6 +130,7 @@ async def direct_execute_node(state: PlanExecuteState, runtime: RuntimeContext) 
                 context=json.dumps(execution_context),
                 images=dspy_images,
             )
+        record_from_lm(lm)
 
         result_str = extract_dspy_result(result)
 

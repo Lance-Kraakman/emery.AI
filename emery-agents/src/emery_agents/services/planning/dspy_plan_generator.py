@@ -29,6 +29,7 @@ from emery_agents.reasoning.capabilities import (
     get_planning_guidance,
 )
 from emery_agents.reasoning.config import get_dspy_lm
+from emery_agents.services.analysis.llm_usage import record_from_lm
 from emery_agents.reasoning.modules.planner import PlannerModule, SkillTemplatePlannerModule
 from emery_agents.reasoning.signatures.planning import (
     ClarifyingQuestionOutput,
@@ -145,6 +146,7 @@ class DSPyPlanGenerator:
                     triage_analysis=request.triage_analysis,
                     configured_tools=request.configured_tools_json,
                 )
+            record_from_lm(lm)
         except Exception as e:
             logger.error(f"DSPy planning failed: {e}")
             raise
@@ -208,6 +210,7 @@ class DSPyPlanGenerator:
                     skill_outputs=skill_outputs,
                     configured_tools=request.configured_tools_json,
                 )
+            record_from_lm(lm)
         except Exception as e:
             logger.error(f"DSPy template planning failed: {e}")
             raise

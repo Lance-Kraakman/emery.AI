@@ -27,6 +27,7 @@ import dspy
 
 from ...ace import StepResult
 from ...reasoning.config import get_dspy_lm
+from ...services.analysis.llm_usage import record_from_lm
 from ...reasoning.modules.executor import ExecutorModule, SimpleExecutorModule
 from ...reasoning.utils import extract_dspy_result, build_step_outcome, StepOutcome
 from emery_agents.tools.factories import create_all_tools
@@ -393,6 +394,7 @@ class PlanStepExecutor:
                     step_description=prompt,
                     context=json.dumps(context),
                 )
+            record_from_lm(lm)
 
             result_str = extract_dspy_result(result)
             outcome = build_step_outcome(result_str, executor.last_trajectory)
@@ -486,6 +488,7 @@ class PlanStepExecutor:
                     step_description=task,
                     context=json.dumps(context),
                 )
+            record_from_lm(lm)
 
             result_str = extract_dspy_result(result)
 

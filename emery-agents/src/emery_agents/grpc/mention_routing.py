@@ -28,6 +28,7 @@ import dspy
 
 from emery_agents.tools.provider import ToolProvider
 from ..reasoning.config import get_dspy_lm
+from ..services.analysis.llm_usage import record_from_lm
 from ..services.skills.executor import SkillExecutorService
 from emery_agents.api import AgentAPIService
 from ..agents.agent_executor_agent import create_agent_executor
@@ -40,7 +41,9 @@ logger = logging.getLogger(__name__)
 def _run_agent_executor(executor: Any, task: str, context: str, lm: Any) -> str:
     """Run DSPy ExecutorModule in a synchronous context with LM configured."""
     with dspy.context(lm=lm):
-        return executor(step_description=task, context=context)
+        result = executor(step_description=task, context=context)
+    record_from_lm(lm)
+    return result
 
 
 async def _stream_text_chunks(text: str, chunk_size: int = 8) -> AsyncIterator[str]:

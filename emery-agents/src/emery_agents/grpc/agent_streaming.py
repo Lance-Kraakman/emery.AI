@@ -56,7 +56,6 @@ from ..entities.tool_config import ToolConfig
 from ..entities.message import FileAttachment, HistoryMessage
 from .agents.agent_models import ChatAgent, AgentDescriptor, get_builder_descriptors
 from emery_agents.tools.capability_registry import CapabilityRegistry
-from emery_agents.tools.capability_bootstrap import populate_system_agents
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +86,7 @@ class AgentStreamingHandler:
         tool_loader: Optional['UnifiedToolLoader'],
         plan_service: 'PlanService',
         coordinator_handler: 'CoordinatorStreamingHandler',
-        capability_registry: Optional[CapabilityRegistry] = None,
+        capability_registry: CapabilityRegistry,
     ):
         self.session_manager = session_manager
         self.model_provider = model_provider
@@ -95,13 +94,7 @@ class AgentStreamingHandler:
         self.tool_loader = tool_loader
         self.plan_service = plan_service
         self.coordinator_handler = coordinator_handler
-        # Capability registry for agent/skill discovery (replaces managed_agents_factory.capability_registry)
-        self.capability_registry = capability_registry or CapabilityRegistry()
-        if not capability_registry:
-            populate_system_agents(self.capability_registry)
-
-        # Token usage from last execution (for ProcessMessage to capture)
-        self.last_token_usage = None
+        self.capability_registry = capability_registry
 
     async def stream_response(
         self,
@@ -457,6 +450,7 @@ class AgentStreamingHandler:
             from ..reasoning.config import get_dspy_lm
             from ..reasoning.modules.executor import ExecutorModule
             from emery_agents.tools.factories import create_all_tools
+            from ..services.analysis.llm_usage import record_from_lm
 
             import dspy
 
@@ -486,6 +480,7 @@ class AgentStreamingHandler:
                     step_description=current_task,
                     context=json.dumps(execution_context),
                 )
+            record_from_lm(lm)
 
             result_str = str(result)
             logger.info(f"✅ DSPy execution completed: {len(result_str)} chars")

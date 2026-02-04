@@ -43,6 +43,7 @@ from ...services.execution.events import (
 )
 from ...reasoning.modules.evaluator import EvaluatorModule
 from ...reasoning.config import get_dspy_lm
+from ...services.analysis.llm_usage import record_from_lm
 from ...reasoning.utils import StepOutcome
 from ..state import PlanExecuteState
 from ..runtime import RuntimeContext
@@ -196,6 +197,7 @@ async def _reflect_on_step(
                 plan_goal=plan.goal,
                 previous_reflections=state.get("reflection_summary", ""),
             )
+        record_from_lm(lm)
 
         reflection_dict = reflection.model_dump()
 
@@ -448,6 +450,7 @@ async def _evaluate_progress(
                 step_results,
                 outcomes_list,
             )
+        record_from_lm(lm)
 
         evaluation = EvaluationResult(
             goal_achieved=result.achieved,
@@ -580,6 +583,7 @@ async def _synthesize_answer(
                 formatted_results,
                 "",  # No curated context (ACE removed)
             )
+        record_from_lm(lm)
         return str(result)
     except Exception as e:
         logger.error(f"Synthesis failed: {e}")
