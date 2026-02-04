@@ -39,7 +39,9 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-md space-y-8">
+
         <div className="text-center">
+          <img src="/assets/enhancd/logo2.svg" alt="" className="h-24 w-24 mx-auto" />
           <h1 className="text-4xl font-bold tracking-tight">
             <span className="bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">Enhanced.AI</span>
           </h1>
