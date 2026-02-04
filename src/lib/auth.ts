@@ -217,14 +217,9 @@ export const authOptions = {
         console.warn('Invalid URL in redirect:', url);
       }
 
-      // Default redirect: check if it's a public app context or platform
-      // If URL is from public app route, keep them there
-      // Otherwise, send to platform dashboard
-      if (url.includes('/public/')) {
-        return url;
-      }
-
       // Default to platform dashboard
+      // Note: /public/ app URLs are already handled above — relative URLs at line 211,
+      // same-origin absolute URLs at line 215. No special /public/ case needed.
       return `${baseUrl}/mission-control/dashboard`;
     },
   },

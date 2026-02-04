@@ -84,7 +84,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     console.error('Error creating agent:', error);
     return Response.json({
       success: false,
-      error: error instanceof Error ? error.message : 'Internal server error'
+      error: 'Failed to create agent'
     }, { status: 500 });
   }
 }

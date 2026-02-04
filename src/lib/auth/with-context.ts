@@ -38,7 +38,7 @@ export async function withAuthContext<T>(
       console.log("✅ withAuthContext() - RLS context set for org:", session.user.currentOrganizationId);
     }
   } else {
-    console.warn("⚠️ withAuthContext() - Cannot set RLS context - missing user ID or organization ID");
+    throw new Error('Cannot execute operation: RLS context required but user/org missing from session');
   }
   
   try {

@@ -152,20 +152,31 @@ class SessionManager:
             self.locks[session_id] = asyncio.Lock()
         return self.locks[session_id]
 
-    def get_agent(self, session_id: str) -> Optional['ChatAgent']:
+    def get_agent(self, session_id: str, organization_id: Optional[int] = None) -> Optional['ChatAgent']:
         """
         Get existing agent for session if in memory.
 
         Args:
             session_id: Unique session identifier
+            organization_id: Organization ID for isolation validation.
+                If provided, the stored session's org must match.
 
         Returns:
-            ChatAgent if session exists, None otherwise
+            ChatAgent if session exists and org matches, None otherwise
         """
         logger.info(f"🔍 [SESSION-MANAGER] Looking up session: {session_id}")
-        logger.info(f"🔍 [SESSION-MANAGER] Active sessions: {list(self.agents.keys())}")
 
         if session_id in self.agents:
+            # SECURITY: Validate organization isolation
+            if organization_id is not None:
+                stored_org = self.metadata[session_id].organization_id
+                if stored_org != organization_id:
+                    logger.error(
+                        f"🚨 [SESSION-MANAGER] Org mismatch for session {session_id}: "
+                        f"stored={stored_org}, requested={organization_id}"
+                    )
+                    return None
+
             # Update activity timestamp
             self.metadata[session_id].last_activity = datetime.now()
             self.metadata[session_id].message_count += 1

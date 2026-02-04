@@ -6,6 +6,7 @@ import { AgentId } from '@/ddd/domain/shared/value-objects';
 import { getAgentRepository, getAgentTaskApplicationService } from '@/ddd/application/di/container';
 import { withSystemContext } from '@/ddd/infrastructure/db/system-context';
 import { WebhookTriggerConfig, TriggerConfigFromJSON } from '@/ddd/domain/scheduling/value-objects/trigger-config';
+import { timingSafeEqual } from '@/lib/security/timing-safe';
 
 // AIDEV-NOTE: Webhook API endpoint for triggering agent tasks via external HTTP calls
 // Provides multi-layer security: API key + HMAC signature + origin validation
@@ -59,8 +60,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
     
-    // Validate API key
-    if (!agent.apiKey || agent.apiKey.value !== apiKey) {
+    // Validate API key (timing-safe to prevent timing attacks)
+    if (!timingSafeEqual(agent.apiKey?.value, apiKey)) {
       return NextResponse.json(
         { error: 'Invalid API key' },
         { status: 401 }

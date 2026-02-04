@@ -155,7 +155,7 @@ class AgentStreamingHandler:
             # Create centralized tool provider (with audit headers if available)
             tool_provider = ToolProvider(effective_api_key or "", org_id or 0, extra_headers=extra_headers)
 
-            agent = self.session_manager.get_agent(session_id) if session_id else None
+            agent = self.session_manager.get_agent(session_id, organization_id=org_id) if session_id else None
 
             if agent:
                 # HOT PATH: Agent exists in memory

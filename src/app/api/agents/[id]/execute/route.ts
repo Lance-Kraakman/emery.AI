@@ -12,6 +12,7 @@ import type { TaskInstructions } from '@/ddd/domain/tasks/entities/task';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 import { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import crypto from 'crypto';
+import { validateOutboundUrl } from '@/lib/security/url-validator';
 
 export interface AgentExecuteRequest {
   instructions: string; // Main instruction text
@@ -78,6 +79,17 @@ export async function POST(
       }, { status: 400 });
     }
 
+    // SECURITY: Validate webhook URL before executing any task (SSRF protection)
+    if (webhook_url) {
+      const urlError = validateOutboundUrl(webhook_url);
+      if (urlError) {
+        return Response.json({
+          success: false,
+          error: `Invalid webhook_url: ${urlError}`
+        }, { status: 400 });
+      }
+    }
+
     // Convert tools to ToolConfig instances
     const toolConfigs = tools?.map(tool =>
       ToolConfig.create(tool.name, tool.config || {})
@@ -123,7 +135,7 @@ export async function POST(
       execution_id: taskResult.data!.executionResult.executionId
     };
 
-    // If webhook URL provided, send result asynchronously
+    // If webhook URL provided, send result asynchronously (URL already validated above)
     if (webhook_url && result.success) {
       // Fire and forget webhook - don't wait for it
       setImmediate(async () => {

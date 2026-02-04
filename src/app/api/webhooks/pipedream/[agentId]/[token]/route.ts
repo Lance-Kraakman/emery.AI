@@ -3,6 +3,7 @@ import { AgentId } from '@/ddd/domain/shared/value-objects';
 import { getAgentRepository, getAgentTaskApplicationService } from '@/ddd/application/di/container';
 import { withSystemContext } from '@/ddd/infrastructure/db/system-context';
 import { PipedreamEventTriggerConfig, TriggerConfigFromJSON } from '@/ddd/domain/scheduling/value-objects/trigger-config';
+import { timingSafeEqual } from '@/lib/security/timing-safe';
 
 /**
  * Pipedream Event Source Webhook Receiver
@@ -45,7 +46,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     // SECURITY: Validate webhook token
-    if (!agent.webhookToken || agent.webhookToken !== token) {
+    if (!timingSafeEqual(agent.webhookToken, token)) {
       console.error('[PipedreamWebhook] Invalid webhook token for agent:', agentIdParam);
       return NextResponse.json(
         { error: 'Unauthorized: Invalid webhook token' },
@@ -248,7 +249,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     // SECURITY: Validate webhook token
-    if (!agent.webhookToken || agent.webhookToken !== token) {
+    if (!timingSafeEqual(agent.webhookToken, token)) {
       return NextResponse.json(
         { error: 'Unauthorized: Invalid webhook token' },
         { status: 401 }

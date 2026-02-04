@@ -12,6 +12,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
+import { isPrivateUrl } from '@/lib/security/url-validator';
 
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB limit for external images
 const ALLOWED_MIME_TYPES = [
@@ -25,46 +26,48 @@ const ALLOWED_MIME_TYPES = [
 ];
 
 /**
- * Check if a URL points to a private/internal IP address
+ * Validate a fetch response contains a valid image and return it.
  */
-function isPrivateUrl(url: string): boolean {
-  try {
-    const parsedUrl = new URL(url);
-    const hostname = parsedUrl.hostname;
-
-    // Block localhost
-    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') {
-      return true;
-    }
-
-    // Block private IP ranges
-    const privateRanges = [
-      /^10\./,
-      /^172\.(1[6-9]|2[0-9]|3[0-1])\./,
-      /^192\.168\./,
-      /^169\.254\./, // Link-local
-      /^0\./, // Current network
-      /^100\.(6[4-9]|[7-9][0-9]|1[0-1][0-9]|12[0-7])\./, // Carrier-grade NAT
-    ];
-
-    for (const range of privateRanges) {
-      if (range.test(hostname)) {
-        return true;
-      }
-    }
-
-    // Block internal hostnames (no dots or ends with .local, .internal, etc.)
-    if (!hostname.includes('.') ||
-        hostname.endsWith('.local') ||
-        hostname.endsWith('.internal') ||
-        hostname.endsWith('.localhost')) {
-      return true;
-    }
-
-    return false;
-  } catch {
-    return true; // Invalid URL, block it
+async function validateAndReturnImage(response: Response): Promise<NextResponse> {
+  if (!response.ok) {
+    return NextResponse.json(
+      { error: `Failed to fetch image: ${response.status} ${response.statusText}` },
+      { status: 502 }
+    );
   }
+
+  const contentType = response.headers.get('content-type')?.split(';')[0].trim();
+  if (!contentType || !ALLOWED_MIME_TYPES.includes(contentType)) {
+    return NextResponse.json(
+      { error: `Invalid content type: ${contentType}. Only images are allowed.` },
+      { status: 400 }
+    );
+  }
+
+  const contentLength = response.headers.get('content-length');
+  if (contentLength && parseInt(contentLength) > MAX_IMAGE_SIZE) {
+    return NextResponse.json(
+      { error: `Image too large. Maximum size is ${MAX_IMAGE_SIZE / 1024 / 1024}MB.` },
+      { status: 413 }
+    );
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  if (arrayBuffer.byteLength > MAX_IMAGE_SIZE) {
+    return NextResponse.json(
+      { error: `Image too large. Maximum size is ${MAX_IMAGE_SIZE / 1024 / 1024}MB.` },
+      { status: 413 }
+    );
+  }
+
+  return new NextResponse(arrayBuffer, {
+    status: 200,
+    headers: {
+      'Content-Type': contentType,
+      'Content-Length': arrayBuffer.byteLength.toString(),
+      'Cache-Control': 'private, max-age=3600',
+    },
+  });
 }
 
 export async function GET(request: NextRequest) {
@@ -115,60 +118,43 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch the external image
+    // SECURITY: Use 'manual' redirect to prevent redirect-to-internal-URL attacks.
+    // If the response is a redirect, validate the target before following.
     const response = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (compatible; EmeryBot/1.0)',
         'Accept': 'image/*',
       },
-      // Don't follow too many redirects
-      redirect: 'follow',
+      redirect: 'manual',
     });
 
-    if (!response.ok) {
-      return NextResponse.json(
-        { error: `Failed to fetch image: ${response.status} ${response.statusText}` },
-        { status: 502 }
-      );
+    // Handle redirects safely — validate target URL before following
+    if ([301, 302, 303, 307, 308].includes(response.status)) {
+      const location = response.headers.get('location');
+      if (!location) {
+        return NextResponse.json(
+          { error: 'Redirect with no location header' },
+          { status: 502 }
+        );
+      }
+      const redirectUrl = new URL(location, url).toString();
+      if (isPrivateUrl(redirectUrl)) {
+        return NextResponse.json(
+          { error: 'Cannot follow redirect to private/internal URL' },
+          { status: 403 }
+        );
+      }
+      const redirectResponse = await fetch(redirectUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; EmeryBot/1.0)',
+          'Accept': 'image/*',
+        },
+        redirect: 'manual',
+      });
+      return validateAndReturnImage(redirectResponse);
     }
 
-    // Validate content type
-    const contentType = response.headers.get('content-type')?.split(';')[0].trim();
-    if (!contentType || !ALLOWED_MIME_TYPES.includes(contentType)) {
-      return NextResponse.json(
-        { error: `Invalid content type: ${contentType}. Only images are allowed.` },
-        { status: 400 }
-      );
-    }
-
-    // Check content length if available
-    const contentLength = response.headers.get('content-length');
-    if (contentLength && parseInt(contentLength) > MAX_IMAGE_SIZE) {
-      return NextResponse.json(
-        { error: `Image too large. Maximum size is ${MAX_IMAGE_SIZE / 1024 / 1024}MB.` },
-        { status: 413 }
-      );
-    }
-
-    // Read the image data
-    const arrayBuffer = await response.arrayBuffer();
-
-    // Double-check size after reading
-    if (arrayBuffer.byteLength > MAX_IMAGE_SIZE) {
-      return NextResponse.json(
-        { error: `Image too large. Maximum size is ${MAX_IMAGE_SIZE / 1024 / 1024}MB.` },
-        { status: 413 }
-      );
-    }
-
-    // Return the image
-    return new NextResponse(arrayBuffer, {
-      status: 200,
-      headers: {
-        'Content-Type': contentType,
-        'Content-Length': arrayBuffer.byteLength.toString(),
-        'Cache-Control': 'private, max-age=3600', // Cache for 1 hour
-      },
-    });
+    return validateAndReturnImage(response);
   } catch (error) {
     console.error('Error fetching external image:', error);
     return NextResponse.json(
