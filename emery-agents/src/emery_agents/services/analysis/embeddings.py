@@ -78,6 +78,18 @@ def _embed_gemini(text: str) -> tuple[float, ...]:
     return tuple(float(x) for x in values)
 
 
+def _embed_gemini_batch(texts: list[str]) -> list[tuple[float, ...]]:
+    """Embed multiple texts in one synchronous Gemini API call (max 100 per call)."""
+    from google.genai import types
+
+    result = _gemini_client.models.embed_content(
+        model=GEMINI_MODEL,
+        contents=texts,
+        config=types.EmbedContentConfig(output_dimensionality=GEMINI_DIMENSIONS),
+    )
+    return [tuple(float(x) for x in emb.values) for emb in result.embeddings]
+
+
 def _embed_huggingface(text: str) -> tuple[float, ...]:
     """Get embedding from HuggingFace Inference API (fallback)."""
     result = _hf_client.feature_extraction(text=text, model=HF_MODEL)
@@ -122,6 +134,45 @@ def get_embedding(text: str) -> tuple[float, ...]:
 
     logger.debug(f"Generated embedding: {len(embedding)} dims for '{text[:50]}...' (provider={provider})")
     return embedding
+
+
+def get_embeddings_batch(texts: list[str], batch_size: int = 100) -> list[tuple[float, ...]]:
+    """Compute embeddings for multiple texts, chunked for API limits.
+
+    Uses Gemini multi-text embed_content (synchronous, up to 100 per call)
+    or HuggingFace fallback (sequential per text).
+
+    Args:
+        texts: List of texts to embed
+        batch_size: Max texts per API call (default 100, Gemini limit)
+
+    Returns:
+        List of embedding tuples, same order as input texts
+    """
+    import time as _time
+
+    provider = _init_provider()
+    total = len(texts)
+    num_batches = (total - 1) // batch_size + 1 if total else 0
+    results: list[tuple[float, ...]] = []
+    start = _time.monotonic()
+
+    for batch_idx, i in enumerate(range(0, total, batch_size), 1):
+        chunk = texts[i:i + batch_size]
+        if provider == "gemini":
+            results.extend(_embed_gemini_batch(chunk))
+        else:
+            results.extend(_embed_huggingface(t) for t in chunk)
+
+        elapsed = _time.monotonic() - start
+        logger.info(
+            f"Embedding progress: {len(results)}/{total} texts "
+            f"(batch {batch_idx}/{num_batches}, {elapsed:.1f}s elapsed)"
+        )
+
+    elapsed = _time.monotonic() - start
+    logger.info(f"Batch embedded {total} texts in {num_batches} API calls, {elapsed:.1f}s (provider={provider})")
+    return results
 
 
 def cosine_similarity(a: tuple[float, ...], b: tuple[float, ...]) -> float:

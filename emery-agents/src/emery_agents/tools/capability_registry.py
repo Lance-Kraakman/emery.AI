@@ -8,12 +8,12 @@ Two-tier capability access:
 - Enabled: Capabilities the org has enabled (system agents, org skills, connected integrations)
 - Available: All other capabilities (marketplace, unconnected integrations)
 
-Uses semantic search (HuggingFace embeddings) for accurate capability matching.
+Uses semantic search (Gemini embeddings) for accurate capability matching.
 """
 
 import logging
 from typing import Optional
-from emery_agents.services.analysis import get_embedding, cosine_similarity
+from emery_agents.services.analysis import get_embedding, get_embeddings_batch, cosine_similarity
 from emery_agents.entities.models.capability import Capability, CapabilityType
 
 logger = logging.getLogger(__name__)
@@ -187,60 +187,17 @@ class CapabilityRegistry:
             self._embeddings[cap.id] = get_embedding(cap_text)
         return self._embeddings[cap.id]
 
-    @staticmethod
-    def _keyword_score(text: str, keywords: list[str]) -> int:
-        """Count how many query keywords appear in capability text."""
-        text_lower = text.lower()
-        return sum(1 for kw in keywords if kw in text_lower)
-
-    def _prefilter_integrations(
-        self,
-        query: str,
-        candidates: list[Capability],
-        limit: int,
-    ) -> list[Capability]:
-        """Narrow large candidate sets with keyword matching before embedding.
-
-        Avoids computing embeddings for 3K+ integration services on every search.
-        System agents and user skills always pass through; only integration:*
-        candidates are keyword-filtered.
-
-        Returns narrowed candidate list (still needs semantic ranking).
-        """
-        non_integrations = [c for c in candidates if not c.id.startswith("integration:")]
-        integrations = [c for c in candidates if c.id.startswith("integration:")]
-
-        if not integrations:
-            return candidates
-
-        keywords = query.lower().split()
-        scored = [
-            (self._keyword_score(self._capability_text(c), keywords), c)
-            for c in integrations
-        ]
-        scored.sort(key=lambda x: x[0], reverse=True)
-
-        # Keep keyword matches (min limit*5 candidates for good semantic ranking)
-        top = [c for score, c in scored[:max(limit * 5, 50)] if score > 0]
-
-        logger.info(
-            f"Pre-filtered {len(integrations)} integrations to {len(top)} "
-            f"keyword matches (+ {len(non_integrations)} system/skill)"
-        )
-        return non_integrations + top
-
     def _semantic_search(
         self,
         query: str,
         candidates: list[Capability],
         limit: int,
     ) -> list[Capability]:
-        """
-        Perform semantic search on a list of capabilities.
+        """Perform semantic search on a list of capabilities.
 
-        For large candidate sets (100+), applies keyword pre-filtering to avoid
-        computing embeddings for thousands of integration services. Embeddings
-        are cached in the registry after first computation.
+        Embeddings are expected to be pre-computed at startup (via S3 cache
+        or batch API). Dynamic capabilities (user skills) are computed
+        on-demand via _get_embedding().
 
         Args:
             query: Search query string
@@ -253,10 +210,6 @@ class CapabilityRegistry:
         """
         if not candidates:
             return []
-
-        # Pre-filter large candidate sets to avoid 3K+ embedding API calls
-        if len(candidates) > 100:
-            candidates = self._prefilter_integrations(query, candidates, limit)
 
         try:
             query_embedding = get_embedding(query)
@@ -277,6 +230,61 @@ class CapabilityRegistry:
             logger.warning(f"Semantic search failed: {e}")
             return []
 
+    # --- Embedding pre-computation ---
+
+    def load_embeddings(self, embeddings: dict[str, tuple[float, ...]]) -> int:
+        """Bulk-load pre-computed embeddings into the registry.
+
+        Only loads embeddings for capabilities that exist in the registry.
+        Used to load S3-cached integration embeddings at startup.
+
+        Returns:
+            Number of embeddings loaded
+        """
+        loaded = 0
+        for cap_id, emb in embeddings.items():
+            if cap_id in self._capabilities:
+                self._embeddings[cap_id] = emb
+                loaded += 1
+        return loaded
+
+    def export_embeddings(self, prefix: str) -> dict[str, tuple[float, ...]]:
+        """Export cached embeddings matching prefix for external storage.
+
+        Used to save computed embeddings to S3 after a cache miss.
+        """
+        return {
+            cap_id: emb
+            for cap_id, emb in self._embeddings.items()
+            if cap_id.startswith(prefix)
+        }
+
+    def precompute_embeddings(self, prefix: str = "integration:") -> int:
+        """Compute embeddings for capabilities matching prefix via batch API.
+
+        Used as fallback when S3 cache is missing. Computes all embeddings
+        for the prefix in bulk using multi-text embed_content calls.
+
+        Returns:
+            Number of embeddings computed
+        """
+        caps = [
+            c for c in self._capabilities.values()
+            if c.id.startswith(prefix) and c.id not in self._embeddings
+        ]
+
+        if not caps:
+            return 0
+
+        texts = [self._capability_text(c) for c in caps]
+        embeddings = get_embeddings_batch(texts)
+
+        for cap, emb in zip(caps, embeddings):
+            self._embeddings[cap.id] = emb
+
+        logger.info(f"Pre-computed {len(caps)} embeddings for '{prefix}*' capabilities")
+        return len(caps)
+
     def search(
         self,
         query: str,
@@ -288,7 +296,7 @@ class CapabilityRegistry:
         """
         Search capabilities using semantic similarity.
 
-        Uses HuggingFace embeddings to find capabilities that match the query
+        Uses Gemini embeddings to find capabilities that match the query
         semantically (not just keyword matching). This handles synonyms
         and related concepts.
 

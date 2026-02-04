@@ -135,6 +135,32 @@ def record_from_lm(lm: object) -> None:
             total_input += usage.get('prompt_tokens', 0) or 0
             total_output += usage.get('completion_tokens', 0) or 0
 
+    if total_input == 0 and total_output == 0 and history:
+        # Diagnostic logging for missing usage
+        logger.warning(f"⚠️ No token usage found for model {model_name}. Inspecting history entry...")
+        try:
+            first_entry = history[0]
+            logger.info(f"Entry keys: {list(first_entry.keys())}")
+            
+            # Inspect 'usage' field
+            usage_data = first_entry.get('usage')
+            logger.info(f"Usage field: {usage_data} (type: {type(usage_data)})")
+            
+            # Inspect raw response if available
+            response = first_entry.get('response')
+            if response:
+                logger.info(f"Response object type: {type(response)}")
+                # Try to dump response to see structure
+                if hasattr(response, 'model_dump'):
+                    logger.info(f"Response dump: {response.model_dump()}")
+                elif hasattr(response, '__dict__'):
+                    logger.info(f"Response dict: {response.__dict__}")
+                else:
+                    logger.info(f"Response dir: {dir(response)}")
+                    
+        except Exception as e:
+            logger.error(f"Failed to inspect history entry: {e}")
+
     if total_input > 0 or total_output > 0:
         tracker.record(model_name, total_input, total_output)
         logger.info(

@@ -34,6 +34,8 @@ from .response_converter import convert_response_to_proto
 from .agents.agent_models import get_builder_descriptors
 from emery_agents.tools.capability_registry import CapabilityRegistry
 from ..services.analysis.token_usage import TokenUsageExtractor
+from emery_agents.entities.models.capability import CapabilityType
+from emery_agents.services.analysis.embedding_cache import load_embedding_cache, save_embedding_cache
 from emery_agents.tools.capability_bootstrap import populate_system_agents, populate_integration_services
 from ..services.tasks import TaskExecutor
 from ..services.tasks.task_executor import TaskData
@@ -81,6 +83,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             self.capability_registry = CapabilityRegistry()
             populate_system_agents(self.capability_registry)
             populate_integration_services(self.capability_registry)
+            self._precompute_embeddings()
 
             self.skill_executor_service = SkillExecutorService(
                 tool_loader=self.tool_loader,
@@ -166,6 +169,50 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         if task_id:
             headers["X-Task-ID"] = task_id
         return headers
+
+    def _precompute_embeddings(self) -> None:
+        """Pre-compute capability embeddings at startup.
+
+        Integration embeddings (3K+ static services): loaded from S3 cache.
+        On cache miss: computed via multi-text embed_content, then uploaded to S3.
+        Agent embeddings (11): always computed fresh (1 API call).
+        """
+        start = time.monotonic()
+        s3_bucket = os.getenv("S3_BUCKET_NAME")
+        integration_caps = self.capability_registry.by_type(CapabilityType.TOOL)
+
+        # Integration embeddings: try S3 cache first
+        loaded_from_cache = False
+        if s3_bucket and integration_caps:
+            try:
+                cached = load_embedding_cache(s3_bucket, integration_caps)
+                if cached:
+                    count = self.capability_registry.load_embeddings(cached)
+                    logger.info(f"Loaded {count} integration embeddings from S3 cache")
+                    loaded_from_cache = True
+            except Exception as e:
+                logger.warning(f"Failed to load embedding cache: {e}")
+
+        # Cache miss: compute via batch API, then upload to S3
+        if not loaded_from_cache and integration_caps:
+            logger.info(f"Computing {len(integration_caps)} integration embeddings (first startup)...")
+            count = self.capability_registry.precompute_embeddings("integration:")
+            logger.info(f"Computed {count} integration embeddings via API")
+            if s3_bucket and count > 0:
+                try:
+                    embeddings = self.capability_registry.export_embeddings("integration:")
+                    save_embedding_cache(s3_bucket, integration_caps, embeddings)
+                    logger.info("Uploaded integration embeddings to S3 cache")
+                except Exception as e:
+                    logger.warning(f"Failed to save embedding cache: {e}")
+
+        # Agent embeddings: always compute (11 agents, 1 API call)
+        agent_count = self.capability_registry.precompute_embeddings("agent:")
+        if agent_count:
+            logger.info(f"Computed {agent_count} agent embeddings")
+
+        elapsed = time.monotonic() - start
+        logger.info(f"Embedding pre-computation complete in {elapsed:.1f}s")
 
     def _get_workspace_id(
         self,
