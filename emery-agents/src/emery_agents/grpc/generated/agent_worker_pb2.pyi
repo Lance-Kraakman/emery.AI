@@ -851,7 +851,7 @@ class ProcessingComplete(_message.Message):
     def __init__(self, model_used: _Optional[str] = ..., total_tokens: _Optional[int] = ..., processing_time_ms: _Optional[int] = ..., metadata: _Optional[_Mapping[str, str]] = ..., token_usage: _Optional[_Union[TokenUsage, _Mapping]] = ...) -> None: ...
 
 class ProcessingError(_message.Message):
-    __slots__ = ("error_code", "error_message", "error_details", "hint", "can_retry", "auto_retry", "session_reset")
+    __slots__ = ("error_code", "error_message", "error_details", "hint", "can_retry", "auto_retry", "session_reset", "token_usage")
     class ErrorDetailsEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -866,6 +866,7 @@ class ProcessingError(_message.Message):
     CAN_RETRY_FIELD_NUMBER: _ClassVar[int]
     AUTO_RETRY_FIELD_NUMBER: _ClassVar[int]
     SESSION_RESET_FIELD_NUMBER: _ClassVar[int]
+    TOKEN_USAGE_FIELD_NUMBER: _ClassVar[int]
     error_code: str
     error_message: str
     error_details: _containers.ScalarMap[str, str]
@@ -873,7 +874,8 @@ class ProcessingError(_message.Message):
     can_retry: bool
     auto_retry: bool
     session_reset: bool
-    def __init__(self, error_code: _Optional[str] = ..., error_message: _Optional[str] = ..., error_details: _Optional[_Mapping[str, str]] = ..., hint: _Optional[str] = ..., can_retry: bool = ..., auto_retry: bool = ..., session_reset: bool = ...) -> None: ...
+    token_usage: TokenUsage
+    def __init__(self, error_code: _Optional[str] = ..., error_message: _Optional[str] = ..., error_details: _Optional[_Mapping[str, str]] = ..., hint: _Optional[str] = ..., can_retry: bool = ..., auto_retry: bool = ..., session_reset: bool = ..., token_usage: _Optional[_Union[TokenUsage, _Mapping]] = ...) -> None: ...
 
 class StepProgress(_message.Message):
     __slots__ = ("step_type", "step_name", "content", "metadata", "step_index")

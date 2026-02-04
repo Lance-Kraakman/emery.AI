@@ -475,6 +475,12 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         except Exception as e:
             logger.exception(f"❌ Message processing failed: {e}")
             
+            # Extract partial usage up to failure
+            llm_usage = TokenUsageExtractor.extract_llm_usage()
+            embedding_usage = TokenUsageExtractor.extract_embedding_usage()
+            handler_token_usage = TokenUsageExtractor.merge_usage(llm_usage, embedding_usage)
+            token_usage_proto = token_usage_to_proto(handler_token_usage)
+            
             # Send error response
             error_response = agent_worker_pb2.ProcessMessageResponse(
                 error=agent_worker_pb2.ProcessingError(
@@ -484,7 +490,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                         'user_id': user_id,
                         'organization_id': str(org_id),
                         'processing_time_ms': str(int((time.time() - start_time) * 1000))
-                    }
+                    },
+                    token_usage=token_usage_proto
                 ),
                 timestamp=int(time.time() * 1000)
             )

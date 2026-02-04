@@ -1094,6 +1094,8 @@ export interface ProcessingError {
   autoRetry: boolean;
   /** Was session reset due to this error? */
   sessionReset: boolean;
+  /** Token usage incurred before error */
+  tokenUsage: TokenUsage | undefined;
 }
 
 export interface ProcessingError_ErrorDetailsEntry {
@@ -8777,6 +8779,7 @@ function createBaseProcessingError(): ProcessingError {
     canRetry: false,
     autoRetry: false,
     sessionReset: false,
+    tokenUsage: undefined,
   };
 }
 
@@ -8802,6 +8805,9 @@ export const ProcessingError: MessageFns<ProcessingError> = {
     }
     if (message.sessionReset !== false) {
       writer.uint32(56).bool(message.sessionReset);
+    }
+    if (message.tokenUsage !== undefined) {
+      TokenUsage.encode(message.tokenUsage, writer.uint32(66).fork()).join();
     }
     return writer;
   },
@@ -8872,6 +8878,14 @@ export const ProcessingError: MessageFns<ProcessingError> = {
           message.sessionReset = reader.bool();
           continue;
         }
+        case 8: {
+          if (tag !== 66) {
+            break;
+          }
+
+          message.tokenUsage = TokenUsage.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -8895,6 +8909,7 @@ export const ProcessingError: MessageFns<ProcessingError> = {
       canRetry: isSet(object.canRetry) ? globalThis.Boolean(object.canRetry) : false,
       autoRetry: isSet(object.autoRetry) ? globalThis.Boolean(object.autoRetry) : false,
       sessionReset: isSet(object.sessionReset) ? globalThis.Boolean(object.sessionReset) : false,
+      tokenUsage: isSet(object.tokenUsage) ? TokenUsage.fromJSON(object.tokenUsage) : undefined,
     };
   },
 
@@ -8927,6 +8942,9 @@ export const ProcessingError: MessageFns<ProcessingError> = {
     if (message.sessionReset !== false) {
       obj.sessionReset = message.sessionReset;
     }
+    if (message.tokenUsage !== undefined) {
+      obj.tokenUsage = TokenUsage.toJSON(message.tokenUsage);
+    }
     return obj;
   },
 
@@ -8950,6 +8968,9 @@ export const ProcessingError: MessageFns<ProcessingError> = {
     message.canRetry = object.canRetry ?? false;
     message.autoRetry = object.autoRetry ?? false;
     message.sessionReset = object.sessionReset ?? false;
+    message.tokenUsage = (object.tokenUsage !== undefined && object.tokenUsage !== null)
+      ? TokenUsage.fromPartial(object.tokenUsage)
+      : undefined;
     return message;
   },
 };

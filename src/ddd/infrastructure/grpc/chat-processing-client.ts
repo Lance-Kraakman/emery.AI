@@ -54,7 +54,15 @@ export interface StreamingChatResponse {
   content?: string;
   sequence?: number;
   complete?: ProcessingComplete;
-  error?: ProcessingError;
+  error?: ProcessingError & {
+    tokenUsage?: {
+      inputTokens: number;
+      outputTokens: number;
+      totalTokens: number;
+      modelName: string;
+      costUsd: number;
+    };
+  };
   stepProgress?: StepProgress;
   awaitingInput?: AwaitingInput;  // HITL: Plan approval or question
   taskId?: string;  // Task ID from response (for logging/tracking)
@@ -265,7 +273,17 @@ export class ChatProcessingClient {
         } else if (response.error) {
           streamingResponse = {
             type: 'error',
-            error: response.error,
+            error: {
+              ...response.error,
+              // Map proto TokenUsage to simple object if present
+              tokenUsage: response.error.tokenUsage ? {
+                inputTokens: response.error.tokenUsage.inputTokens,
+                outputTokens: response.error.tokenUsage.outputTokens,
+                totalTokens: response.error.tokenUsage.totalTokens,
+                modelName: response.error.tokenUsage.modelName,
+                costUsd: response.error.tokenUsage.costUsd
+              } : undefined
+            },
             taskId,
             timestamp: response.timestamp
           };
@@ -350,7 +368,8 @@ export class ChatProcessingClient {
             hint: getHint(error.code),
             canRetry: error.code !== grpc.status.CANCELLED,
             autoRetry: false,
-            sessionReset: error.code === grpc.status.UNAVAILABLE  // Fatal if service unavailable
+            sessionReset: error.code === grpc.status.UNAVAILABLE,  // Fatal if service unavailable
+            tokenUsage: undefined
           },
           timestamp: Date.now()
         });

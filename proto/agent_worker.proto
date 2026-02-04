@@ -645,6 +645,7 @@ message ProcessingError {
   bool can_retry = 5;                // Can user retry this operation?
   bool auto_retry = 6;               // Was this error auto-retried?
   bool session_reset = 7;            // Was session reset due to this error?
+  TokenUsage token_usage = 8;        // Token usage incurred before error
 }
 
 // Real-time step execution progress (for stream=True agent execution)

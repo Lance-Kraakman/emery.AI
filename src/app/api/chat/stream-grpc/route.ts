@@ -931,7 +931,14 @@ export async function POST(req: NextRequest) {
                 const completionEvent = processCompletion(
                   response.complete.modelUsed,
                   response.complete.totalTokens,
-                  collectedSteps
+                  collectedSteps,
+                  response.complete.tokenUsage ? {
+                    inputTokens: response.complete.tokenUsage.inputTokens,
+                    outputTokens: response.complete.tokenUsage.outputTokens,
+                    totalTokens: response.complete.tokenUsage.totalTokens,
+                    modelName: response.complete.tokenUsage.modelName,
+                    costUsd: response.complete.tokenUsage.costUsd
+                  } : undefined
                 );
 
                 try {
@@ -1056,6 +1063,27 @@ export async function POST(req: NextRequest) {
                   sessionReset: response.error.sessionReset,
                   timestamp: new Date().toISOString()
                 });
+
+                // Record partial token usage if available (even on error)
+                if (response.error.tokenUsage) {
+                  const tokenUsage = response.error.tokenUsage;
+                  console.log('[CHAT-GRPC-API] Recording partial token usage from error:', tokenUsage);
+                  tokenUsageService.recordTokenUsage({
+                    organizationId: organizationId,
+                    userId: userId,
+                    entityType: 'chat' as const,
+                    entityId: currentChatId,
+                    modelName: tokenUsage.modelName,
+                    inputTokens: tokenUsage.inputTokens,
+                    outputTokens: tokenUsage.outputTokens,
+                    processingTimeMs: Date.now() - startTime,
+                    metadata: {
+                      chatContext: 'streaming_error'
+                    }
+                  }).catch((error) => {
+                    console.error('[CHAT-GRPC-API] Failed to record partial token usage:', error);
+                  });
+                }
 
                 // Update message with error status if we have a placeholder
                 if (assistantMessageId && currentChatId) {
