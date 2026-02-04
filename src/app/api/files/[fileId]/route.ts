@@ -15,6 +15,7 @@
 
 import { NextRequest } from 'next/server';
 import { withAuthenticatedRoute, parseIntParam, parseJsonBody } from '@/lib/api/base';
+import { hasPermission } from '@/lib/auth';
 import { getFileApplicationService, getTableApplicationService, getRowApplicationService } from '@/ddd/application/di/container';
 import { TableId, FieldId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import { RowId, Row } from '@/ddd/domain/tables/value-objects/row';
@@ -34,6 +35,10 @@ export async function GET(
   { params }: { params: Promise<{ fileId: string }> }
 ): Promise<Response> {
   return withAuthenticatedRoute(request, async (user) => {
+    if (!user.organizationId || !await hasPermission(user.id, 'table:view', user.organizationId)) {
+      return { success: false, error: 'Permission denied', status: 403 };
+    }
+
     const { fileId } = await params;
     const searchParams = request.nextUrl.searchParams;
 
@@ -46,14 +51,6 @@ export async function GET(
       return {
         success: false,
         error: 'Missing required query params: tableId, rowId, fieldId',
-        status: 400
-      };
-    }
-
-    if (!user.organizationId) {
-      return {
-        success: false,
-        error: 'Organization ID required',
         status: 400
       };
     }
@@ -143,6 +140,10 @@ export async function DELETE(
   { params }: { params: Promise<{ fileId: string }> }
 ): Promise<Response> {
   return withAuthenticatedRoute(request, async (user) => {
+    if (!user.organizationId || !await hasPermission(user.id, 'table:manage', user.organizationId)) {
+      return { success: false, error: 'Permission denied', status: 403 };
+    }
+
     const { fileId } = await params;
     const searchParams = request.nextUrl.searchParams;
 
@@ -155,14 +156,6 @@ export async function DELETE(
       return {
         success: false,
         error: 'Missing required query params: tableId, rowId, fieldId',
-        status: 400
-      };
-    }
-
-    if (!user.organizationId) {
-      return {
-        success: false,
-        error: 'Organization ID required',
         status: 400
       };
     }
@@ -215,6 +208,10 @@ export async function PUT(
   { params }: { params: Promise<{ fileId: string }> }
 ): Promise<Response> {
   return withAuthenticatedRoute(request, async (user) => {
+    if (!user.organizationId || !await hasPermission(user.id, 'table:manage', user.organizationId)) {
+      return { success: false, error: 'Permission denied', status: 403 };
+    }
+
     const { fileId } = await params;
     const searchParams = request.nextUrl.searchParams;
 
@@ -227,14 +224,6 @@ export async function PUT(
       return {
         success: false,
         error: 'Missing required query params: tableId, rowId, fieldId',
-        status: 400
-      };
-    }
-
-    if (!user.organizationId) {
-      return {
-        success: false,
-        error: 'Organization ID required',
         status: 400
       };
     }

@@ -30,10 +30,22 @@ Code quality follow-up:
 
 ---
 
-## Phase 3: RBAC Permission Checks on Data Routes
+## Phase 3: RBAC Permission Checks on Data Routes [COMPLETE]
 
-- [ ] H-01: Add `requirePermission()` to `/api/rows`, `/api/tables`, `/api/databases`, `/api/fields`, `/api/files/[fileId]`, `/api/agents/[id]`, `/api/tasks`
-- [ ] H-02: Validate `organizationId` from session, not client parameter
+- [x] H-01: Add `hasPermission()` checks to API routes using existing RBAC infrastructure:
+  - `/api/tables` — `table:create` (POST), `table:view` (GET)
+  - `/api/tables/[id]` — `table:view` (GET), `table:manage` (PUT, DELETE) — **resource-specific** via `hasResourcePermission`
+  - `/api/databases` — `database:create` (POST), `database:view` (GET)
+  - `/api/databases/[id]` — `database:view` (GET), `database:manage` (PUT, DELETE) — **resource-specific** via `hasResourcePermission`
+  - `/api/fields` — `table:manage` (POST, DELETE), `table:view` (GET) + **added missing auth to GET**
+  - `/api/files/[fileId]` — `table:view` (GET), `table:manage` (PUT, DELETE)
+  - `/api/agents/[id]` — `agents:view` (GET), `agents:manage` (PUT, DELETE) — **resource-specific** via `hasResourcePermission`
+  - `/api/tasks` — `tasks:view` (GET), `tasks:create` (POST)
+  - `/api/rows` — already covered by server action `requirePermission("table:manage")` delegation
+- [x] H-02: Replace client-provided `organizationId` with `user.organizationId` from session in `/api/tables` POST
+
+New shared utilities:
+- `hasResourcePermission()` in `src/lib/auth.ts` — resource-specific permission check backed by PostgreSQL `user_has_permission()` function (supports `all`, `specific`, `owned`, `team` scopes)
 
 ---
 

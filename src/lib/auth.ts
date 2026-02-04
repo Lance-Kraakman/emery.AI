@@ -281,10 +281,30 @@ export async function hasPermission(userId: string, permission: PermissionCheck,
     const userIdVO = UserId.fromString(userId);
     const orgIdVO = OrganizationId.fromNumber(organizationId);
     const permissionVO = typeof permission === 'string' ? Permission.fromString(permission) : permission;
-    
+
     return await rbac.hasPermission(userIdVO, permissionVO, orgIdVO);
   } catch (error) {
     console.error("Error checking permission:", error);
+    return false;
+  }
+}
+
+export async function hasResourcePermission(
+  userId: string,
+  permission: PermissionCheck,
+  organizationId: number,
+  resourceType: string,
+  resourceId?: number
+): Promise<boolean> {
+  try {
+    const rbac = getRBACRepository();
+    const userIdVO = UserId.fromString(userId);
+    const orgIdVO = OrganizationId.fromNumber(organizationId);
+    const permissionVO = typeof permission === 'string' ? Permission.fromString(permission) : permission;
+
+    return await rbac.hasResourcePermission(userIdVO, permissionVO, orgIdVO, resourceType, resourceId);
+  } catch (error) {
+    console.error("Error checking resource permission:", error);
     return false;
   }
 }

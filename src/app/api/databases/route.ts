@@ -4,6 +4,7 @@
 
 import { NextRequest } from 'next/server';
 import { withAuthenticatedRoute, parseJsonBody } from '@/lib/api/base';
+import { hasPermission } from '@/lib/auth';
 import { logAgentMutation } from '@/lib/api/agent-context';
 import { getDatabaseApplicationService } from '@/ddd/application/di/container';
 
@@ -12,8 +13,8 @@ import { getDatabaseApplicationService } from '@/ddd/application/di/container';
  */
 export async function GET(request: NextRequest): Promise<Response> {
   return withAuthenticatedRoute(request, async (user) => {
-    if (!user.organizationId) {
-      return { success: false, error: 'Organization ID required', status: 400 };
+    if (!user.organizationId || !await hasPermission(user.id, 'database:view', user.organizationId)) {
+      return { success: false, error: 'Permission denied', status: 403 };
     }
 
     const databaseService = getDatabaseApplicationService();
@@ -30,8 +31,8 @@ export async function GET(request: NextRequest): Promise<Response> {
  */
 export async function POST(request: NextRequest): Promise<Response> {
   return withAuthenticatedRoute(request, async (user) => {
-    if (!user.organizationId) {
-      return { success: false, error: 'Organization ID required', status: 400 };
+    if (!user.organizationId || !await hasPermission(user.id, 'database:create', user.organizationId)) {
+      return { success: false, error: 'Permission denied', status: 403 };
     }
 
     const body = await parseJsonBody(request);
