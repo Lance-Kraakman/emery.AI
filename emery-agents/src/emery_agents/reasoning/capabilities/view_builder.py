@@ -10,11 +10,6 @@ PLANNING_GUIDANCE = """
 **Choose when**: User wants different ways to visualize or filter table data.
 **Examples**: "create a filtered view", "show only active customers", "make a kanban board"
 
-### Tools Used by This Capability
-The executor uses: **view_crud**.
-- view_crud: Create/list/get/update/delete views on a table
-Set tool_call="view_crud".
-
 ### View Types
 
 - **Grid**: Spreadsheet display, multiple records — specify columns to show

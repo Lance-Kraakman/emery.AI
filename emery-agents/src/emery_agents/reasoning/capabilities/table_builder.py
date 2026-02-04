@@ -10,13 +10,6 @@ PLANNING_GUIDANCE = """
 **Choose when**: User needs quick modifications to existing tables.
 **Examples**: "add a field to my table", "rename a column", "remove old fields"
 
-### Tools Used by This Capability
-The executor uses: **table_crud**, **field_crud**, **row_crud**.
-- table_crud: Modify table properties (rename, update)
-- field_crud: Add/modify/remove fields on a table
-- row_crud: Create/update/delete records in a table
-Set tool_call to the relevant tool (e.g., tool_call="field_crud" for adding fields, tool_call="row_crud" for adding records).
-
 ### When to Use table_builder vs schema_builder
 
 - **table_builder**: Single table changes, quick field additions, record operations

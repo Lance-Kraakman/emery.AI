@@ -10,11 +10,6 @@ PLANNING_GUIDANCE = """
 **Choose when**: User needs rich-text documents, templates, or content.
 **Examples**: "create a proposal", "draft a contract", "write meeting notes"
 
-### Tools Used by This Capability
-The executor uses: **document_crud**.
-- document_crud: Create/list/get/update/delete documents
-Set tool_call="document_crud".
-
 ### Document Features
 
 - Rich text formatting (bold, italic, lists)

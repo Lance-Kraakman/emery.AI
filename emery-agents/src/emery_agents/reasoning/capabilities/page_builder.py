@@ -10,11 +10,6 @@ PLANNING_GUIDANCE = """
 **Choose when**: User needs to add or modify pages within an existing app.
 **Examples**: "add a dashboard page", "create a contact form page"
 
-### Tools Used by This Capability
-The executor uses: **page_crud**.
-- page_crud: Create/list/get/update/delete pages within an app
-Set tool_call="page_crud".
-
 ### Key Block Types (Puck Blocks)
 
 - **Hero**: Header sections with title/subtitle

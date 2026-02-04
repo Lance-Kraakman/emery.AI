@@ -10,11 +10,6 @@ PLANNING_GUIDANCE = """
 **Choose when**: User wants to automate tasks, create workflows, or schedule actions.
 **Examples**: "send weekly report", "automate follow-ups", "notify me when..."
 
-### Tools Used by This Capability
-The executor uses: **skill_crud**.
-- skill_crud: Create/list/get/update/delete skills
-Set tool_call="skill_crud".
-
 ### Important
 Plan steps should BUILD the skill definition, NOT execute what the skill does.
 To execute an existing skill, use skill_executor instead.

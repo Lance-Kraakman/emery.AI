@@ -10,12 +10,6 @@ PLANNING_GUIDANCE = """
 **Choose when**: User wants to create or configure AI agents with specific capabilities.
 **Examples**: "create a sales assistant", "set up a support agent", "build a custom agent"
 
-### Tools Used by This Capability
-The executor uses: **agent_crud**, **skill_crud**.
-- agent_crud: Create/list/get/update/delete agents, manage agent-skill associations and data access
-- skill_crud: List/get skills to attach to agent (if skills need to be discovered first)
-Set tool_call="agent_crud" for agent operations.
-
 ### Agent Components
 
 - **Name**: Identifier for the agent

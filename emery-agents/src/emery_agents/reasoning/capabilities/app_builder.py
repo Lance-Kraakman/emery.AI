@@ -10,12 +10,6 @@ PLANNING_GUIDANCE = """
 **Choose when**: User wants a visual interface, dashboard, or UI for their data.
 **Examples**: "create a client portal", "build a dashboard", "make an inventory app"
 
-### Tools Used by This Capability
-The executor uses these tools: **app_crud**, **page_crud**.
-- app_crud: Create/list/get/update/delete apps
-- page_crud: Create/list/get/update/delete pages within an app
-Set tool_call="app_crud" for app creation, tool_call="page_crud" for adding pages to an existing app.
-
 ### What app_builder Creates
 
 - Apps (containers for pages)

@@ -59,12 +59,14 @@ async def triage_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[
     if runtime.images:
         image_context = f"{len(runtime.images)} image(s) uploaded by the user, available for visual analysis in direct/plan execution."
 
-    # Create discovery tools for ReAct triage
+    # Create discovery tools for ReAct triage (exclude web_search and workspace_overview —
+    # triage only needs system_research, search_capabilities, search_external for routing)
     discovery_tools: list[dspy.Tool] = []
     if api_key and org_id:
         discovery_tools = create_discovery_tools(
             api_key, org_id, runtime.capability_registry
         )
+        discovery_tools = [t for t in discovery_tools if t.name not in ("web_search", "workspace_overview")]
 
     # Add memory_crud tool so triage can search_memories for deeper context
     discovery_tools.append(create_memory_crud(runtime.memory_service))  # type: ignore[arg-type]

@@ -10,13 +10,6 @@ PLANNING_GUIDANCE = """
 **Choose when**: User needs database tables, fields, or data structure.
 **Examples**: "create a contacts table", "add fields for tracking", "set up a CRM"
 
-### Tools Used by This Capability
-The executor uses these tools: **table_crud**, **field_crud**, **database_crud**.
-- table_crud: Create/list/get/update/delete tables
-- field_crud: Create/list/get/update/delete fields on a table
-- database_crud: Create/list/get/update/delete databases
-Set tool_call to the primary tool (e.g., tool_call="table_crud" for table creation, tool_call="field_crud" for adding fields to an existing table).
-
 ### Emery Field Types (CRITICAL - Not SQL)
 
 | Type | Use For | Example |

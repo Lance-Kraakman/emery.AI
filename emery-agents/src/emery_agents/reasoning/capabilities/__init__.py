@@ -28,7 +28,10 @@ from . import (
 CAPABILITY_ROUTING_HEADER = """
 ## Capability Routing — Quick Reference
 
-| User Intent | target_agent | Capability |
+>>> YOUR CALLABLE PLANNING TOOLS: system_research, search_external, search_capabilities, web_search, finish
+>>> NOTHING ELSE IS CALLABLE. The "route_to" column below is for plan step ROUTING ONLY — NOT tool calls.
+
+| User Intent | route_to (NOT a tool!) | Step Capability |
 |---|---|---|
 | Create/modify tables, fields, data schema | schema_builder | agent:schema_builder |
 | Build apps, dashboards, portals, UI | app_builder | agent:app_builder |
@@ -42,19 +45,15 @@ CAPABILITY_ROUTING_HEADER = """
 | Send/receive via external service (email, chat, API) | skill_builder | Use search_external to find tool |
 
 SKILL EXECUTION: When user asks to "run", "execute", or "trigger" an existing skill,
-use skill_executor (NOT skill_builder). Check workspace_context for the skill ID.
+route to skill_executor (NOT skill_builder). Check workspace_context for the skill ID.
 
-MULTI-CAPABILITY TASKS: Use multiple target_agents across steps.
+MULTI-CAPABILITY TASKS: Use multiple route_to values across steps.
 Example: "Build a CRM" → schema_builder (tables) → app_builder (UI) → view_builder (data views).
 Order: always create data (schema) before UI (app/page/view).
 
 EXTERNAL INTEGRATIONS: For tasks involving Gmail, Slack, GitHub, Google Sheets, etc.,
 ALWAYS call search_external(service="<name>") to discover available actions first.
 Include the specific tool name in the plan step and set connection_required.
-
-IMPORTANT: target_agent values (schema_builder, skill_builder, etc.) are NOT callable tools.
-They are routing labels for plan steps. Do NOT call them as tools.
-Your available tools during planning are ONLY: system_research, search_capabilities, search_external.
 """.strip()
 
 # Mapping from capability ID to planning guidance

@@ -110,9 +110,15 @@ Execution State:
 """
 
         try:
-            # Use provided LM or global settings
-            if self.lm:
-                with dspy.context(lm=self.lm):
+            # Resolve LM: explicit > org_model > global
+            from emery_agents.reasoning.config import get_dspy_lm
+
+            lm = self.lm
+            if not lm and org_model:
+                lm = get_dspy_lm(org_model=org_model)
+
+            if lm:
+                with dspy.context(lm=lm):
                     result = self._module(
                         failed_step=failed_step.description,
                         error_message=error_message,
