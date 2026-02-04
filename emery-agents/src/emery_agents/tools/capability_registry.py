@@ -187,6 +187,48 @@ class CapabilityRegistry:
             self._embeddings[cap.id] = get_embedding(cap_text)
         return self._embeddings[cap.id]
 
+    @staticmethod
+    def _keyword_score(text: str, keywords: list[str]) -> int:
+        """Count how many query keywords appear in capability text."""
+        text_lower = text.lower()
+        return sum(1 for kw in keywords if kw in text_lower)
+
+    def _prefilter_integrations(
+        self,
+        query: str,
+        candidates: list[Capability],
+        limit: int,
+    ) -> list[Capability]:
+        """Narrow large candidate sets with keyword matching before embedding.
+
+        Avoids computing embeddings for 3K+ integration services on every search.
+        System agents and user skills always pass through; only integration:*
+        candidates are keyword-filtered.
+
+        Returns narrowed candidate list (still needs semantic ranking).
+        """
+        non_integrations = [c for c in candidates if not c.id.startswith("integration:")]
+        integrations = [c for c in candidates if c.id.startswith("integration:")]
+
+        if not integrations:
+            return candidates
+
+        keywords = query.lower().split()
+        scored = [
+            (self._keyword_score(self._capability_text(c), keywords), c)
+            for c in integrations
+        ]
+        scored.sort(key=lambda x: x[0], reverse=True)
+
+        # Keep keyword matches (min limit*5 candidates for good semantic ranking)
+        top = [c for score, c in scored[:max(limit * 5, 50)] if score > 0]
+
+        logger.info(
+            f"Pre-filtered {len(integrations)} integrations to {len(top)} "
+            f"keyword matches (+ {len(non_integrations)} system/skill)"
+        )
+        return non_integrations + top
+
     def _semantic_search(
         self,
         query: str,
@@ -196,9 +238,9 @@ class CapabilityRegistry:
         """
         Perform semantic search on a list of capabilities.
 
-        Uses embeddings to find capabilities that match the query semantically.
-        Capability embeddings are cached in the registry (no eviction) to handle
-        large numbers of registered capabilities (3K+ integration services).
+        For large candidate sets (100+), applies keyword pre-filtering to avoid
+        computing embeddings for thousands of integration services. Embeddings
+        are cached in the registry after first computation.
 
         Args:
             query: Search query string
@@ -211,6 +253,10 @@ class CapabilityRegistry:
         """
         if not candidates:
             return []
+
+        # Pre-filter large candidate sets to avoid 3K+ embedding API calls
+        if len(candidates) > 100:
+            candidates = self._prefilter_integrations(query, candidates, limit)
 
         try:
             query_embedding = get_embedding(query)
