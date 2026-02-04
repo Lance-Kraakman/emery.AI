@@ -180,11 +180,17 @@ export const authOptions = {
     },
     async signIn({ user, account, profile }: any) {
       try {
-        // Check if user already exists
+        // For email provider, user.id may be the email address (not a UUID)
+        // when the user doesn't exist yet. Always use email for lookup.
+        const userEmail = user.email;
+        if (!userEmail) {
+          return true; // Allow sign-in to proceed, adapter will handle user creation
+        }
+
         const existingUser = await db
           .select()
           .from(users)
-          .where(eq(users.id, user.id))
+          .where(eq(users.email, userEmail))
           .limit(1);
 
         const userExists = existingUser.length > 0;
@@ -199,7 +205,6 @@ export const authOptions = {
         }
 
         // For new users, they will be created by the adapter automatically
-        // We'll set isAppOnlyUser in a separate callback or during first session
         return true;
       } catch (error) {
         console.error('Error in signIn callback:', error);
