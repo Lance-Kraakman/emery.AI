@@ -1,5 +1,19 @@
 #!/usr/bin/env tsx
 
+/**
+ * SECURITY BOUNDARY: System Scheduler
+ *
+ * This process runs with system-level privileges (cross-org access via withSystemContext).
+ * It loads agents and automations from ALL organizations to evaluate trigger schedules.
+ *
+ * Security considerations:
+ * - Must be deployed in a trusted environment, not exposed to user input
+ * - The cross-org findAll() pattern is intentional — scheduler needs visibility across all orgs
+ * - Each automation execution is scoped to its own org via withSystemContext()
+ * - RLS context isolation (AsyncLocalStorage) prevents cross-contamination between orgs
+ * - If this process is compromised, all org data is at risk — treat as high-privilege
+ */
+
 import {
   getTaskRepository,
   getTaskQueueService,

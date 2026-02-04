@@ -484,6 +484,13 @@
       "when": 1770171246963,
       "tag": "0068_sad_giant_girl",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1770177230530,
+      "tag": "0069_fix-rls-fallback-and-security-definer",
+      "breakpoints": true
     }
   ]
 }

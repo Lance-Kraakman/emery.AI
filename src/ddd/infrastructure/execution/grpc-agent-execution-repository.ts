@@ -72,15 +72,17 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
         }
       }
 
+      // Resolve numeric org ID once for use in context mappings and API key generation
+      const orgId = typeof targetOrganizationId === 'number'
+        ? targetOrganizationId
+        : targetOrganizationId.value;
+
       // 5b. Resolve context table mappings for this execution
       // AIDEV-NOTE: Context tables define which dynamic tables are available to the agent
       // with specific access permissions (read/write/readwrite)
       let resolvedContext: ResolvedContextData | undefined;
       try {
         const contextMappingService = getContextMappingApplicationService();
-        const orgId = typeof targetOrganizationId === 'number'
-          ? targetOrganizationId
-          : targetOrganizationId.value;
 
         const resolved = await contextMappingService.resolveContextForExecution(
           orgId,
@@ -104,7 +106,7 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
       }
 
       // 6. Generate fresh agent API key (plaintext for tool auth, hash stored in DB)
-      const agentApiKey = await ensureFreshAgentApiKey(agent.id.value);
+      const agentApiKey = await ensureFreshAgentApiKey(agent.id.value, orgId);
 
       // 7. Create proto task request
       // Use skill-based execution if skill is provided, otherwise instruction-based

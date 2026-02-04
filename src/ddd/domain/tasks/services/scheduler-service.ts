@@ -187,15 +187,9 @@ export class SchedulerService implements ISchedulerService {
 
       return null;
     } catch (error) {
-      console.warn('Failed to calculate next execution for trigger:', error);
-
-      // Fallback: execute in 1 hour if RRule parsing fails
-      const nextTime = new Date(baseTime);
-      nextTime.setHours(nextTime.getHours() + 1);
-      nextTime.setMinutes(0);
-      nextTime.setSeconds(0);
-      nextTime.setMilliseconds(0);
-      return nextTime;
+      // Skip automation with invalid RRule instead of silently executing on fallback schedule
+      console.error('[SCHEDULER] Invalid RRule for trigger, skipping automation:', error);
+      return null;
     }
   }
 }

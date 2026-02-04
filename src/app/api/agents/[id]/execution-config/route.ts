@@ -60,7 +60,8 @@ export async function POST(
     const agentDTO = AgentMapper.toDTO(agent);
 
     // Generate fresh agent API key (plaintext for tool auth, hash stored in DB)
-    const agentApiKey = await ensureFreshAgentApiKey(agent.id.value);
+    // Defense-in-depth: verify agent belongs to caller's org
+    const agentApiKey = await ensureFreshAgentApiKey(agent.id.value, user.organizationId ?? undefined);
 
     return {
       success: true,

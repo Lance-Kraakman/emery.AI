@@ -48,7 +48,7 @@ New shared utilities:
 - `hasResourcePermission()` in `src/lib/auth.ts` — resource-specific permission check backed by PostgreSQL `user_has_permission()` function (supports `all`, `specific`, `owned`, `team` scopes)
 
 Follow-up TODOs:
-- [ ] Audit system scheduler for backdoors — review `src/scripts/run-scheduler.ts` and scheduling code for privilege escalation or bypass paths
+- [x] Audit system scheduler for backdoors — **No backdoors found.** 12 findings (2 HIGH, 5 MEDIUM, 4 LOW, 1 INFO). See Phase 11.
 - [x] Revisit resource-specific permissions — verified `user_has_permission()` PostgreSQL function: global permissions (`resource_type IS NULL`) pass unconditionally, resource-specific scoping only activates for custom roles with explicit `resourceType`/`resourceScope`. System roles seeded with NULL resource_type are backwards-compatible.
 - [x] Analyze org-level routes for resource-specific upgrade — upgraded all routes:
   - `/api/fields` — `hasResourcePermission(..., 'tables', tableId)` for all 3 methods
@@ -81,11 +81,28 @@ New shared utilities:
 
 ---
 
-## Phase 6: API Key Hashing (DB Migration)
+## Phase 6: API Key Hashing (DB Migration) [COMPLETE]
 
-- [ ] C-02: Hash user API keys (SHA-256, show once)
-- [ ] C-03: Hash agent API keys (SHA-256, show once)
-- [ ] H-09: Add key rotation grace period
+- [x] C-02: Hash user API keys (SHA-256, show once) — `ensureFreshUserApiKey()` generates plaintext, stores hash
+- [x] C-03: Hash agent API keys (SHA-256, show once) — `ensureFreshAgentApiKey()` generates plaintext, stores hash
+- [x] H-09: Add key rotation grace period — 24h `previousApiKeyHash` for both users and agents
+
+DB migration (`0068_sad_giant_girl.sql`):
+- Added `apiKeyHash`, `apiKeyPrefix`, `previousApiKeyHash`, `previousApiKeyExpiresAt` to users + agents tables
+- `findByApiKey()` checks both current and grace-period hashes
+
+Credential flow fixes (post-hashing):
+- [x] Fix double-hash bug in `grpc-agent-execution-repository.ts` — `agent.apiKey?.value` returned hash, now uses `ensureFreshAgentApiKey()`
+- [x] Add `user_api_key` field to TaskRequest proto (field 19) — carries agent key to Python ToolProvider for scheduled tasks
+- [x] Fix skill execution-config endpoint returning hash — now calls `ensureFreshAgentApiKey()`
+- [x] Fix agent execution-config endpoint missing `agentApiKey` — now returns fresh key for @agent mention routing
+- [x] Fix PipedreamTool `api_key_mode` auto-detection from key prefix (`key_` → agent, `user_` → user)
+- [x] Fix loader not injecting `api_key_mode` into enhanced tool config
+- [x] Remove dead `enrichToolsWithUserAuth()` code
+
+New shared utilities:
+- `src/lib/auth/agent-api-keys.ts` — `ensureFreshAgentApiKey(agentId)` (mirrors user variant)
+- `src/lib/auth/user-api-keys.ts` — `ensureFreshUserApiKey(userId)`
 
 ---
 
@@ -122,3 +139,39 @@ New shared utilities:
 New shared utilities:
 - `src/lib/security/timing-safe.ts` — `timingSafeEqual()` (SHA-256 hash normalization for constant-time comparison)
 - `src/lib/auth/sign-out.ts` — `secureSignOut()` (localStorage.clear + signOut)
+
+---
+
+## Phase 11: Scheduler Security Audit [COMPLETE]
+
+Audit of `src/scripts/run-scheduler.ts` and scheduling code for privilege escalation or bypass paths.
+
+**Verdict: No backdoors found.** 12 findings identified (2 HIGH, 5 MEDIUM, 4 LOW, 1 INFO).
+
+### HIGH — Fixed
+
+- [x] H-1: RLS `get_current_organization_id()` defaulted to Org 1 when session var unset (fail-open). Fixed: returns `NULL` (fail-closed, matches no rows). Migration `0069_fix-rls-fallback-and-security-definer.sql`.
+- [x] H-2: Context manager used global mutable singleton — not async-safe, concurrent scheduler iterations could overwrite each other's org context. Fixed: replaced with `AsyncLocalStorage` in `context-manager.ts`.
+
+### MEDIUM — Fixed
+
+- [x] M-1: `ensureFreshAgentApiKey` bypassed RLS with no org verification. Added `expectedOrgId` parameter for defense-in-depth. Updated all 3 callers (execution repo, skill/agent execution-config endpoints).
+- [x] M-2: Hardcoded system user UUID in `system-context.ts`. Now reads from `SYSTEM_USER_ID` env var with fallback to seeded value.
+- [x] M-3: Malformed RRule silently fell back to 1h execution schedule. Now returns `null` (skips automation) and logs error.
+- [x] M-4: `notify_new_task()` trigger used `SECURITY DEFINER` unnecessarily — `pg_notify()` doesn't need elevated privileges. Removed in migration `0069`.
+- [x] M-5: Scheduler loads all agents cross-org by design. Documented security boundary in `run-scheduler.ts` header comment.
+
+### LOW — Documented (not fixed)
+
+| # | Finding | File |
+|---|---------|------|
+| L-1 | Webhook GET leaks config without auth | `api/webhooks/[agentId]/route.ts` |
+| L-2 | Unvalidated JSON.parse on LISTEN payload | `run-scheduler.ts` |
+| L-3 | Template injection surface (prompt injection) | `instruction-template-service.ts` |
+| L-4 | Storage recalc `INTERVAL_MINUTES` unbounded | `storage-recalculation-application-service.ts` |
+
+### INFO
+
+| # | Finding | File |
+|---|---------|------|
+| I-1 | SSL disabled for DB connections | `db/client.ts`, `client-parser.ts` |

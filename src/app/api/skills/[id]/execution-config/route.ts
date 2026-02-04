@@ -76,7 +76,8 @@ export async function POST(
       }
 
       // Generate fresh agent API key (plaintext for tool auth, hash stored in DB)
-      agentApiKey = await ensureFreshAgentApiKey(agent.id.value);
+      // Defense-in-depth: verify agent belongs to caller's org
+      agentApiKey = await ensureFreshAgentApiKey(agent.id.value, user.organizationId ?? undefined);
     }
 
     return {

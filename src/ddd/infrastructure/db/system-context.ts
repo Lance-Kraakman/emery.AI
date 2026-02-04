@@ -9,8 +9,10 @@
 import { contextManager } from './context-manager';
 import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 
-// System user created in drizzle/seeds/system-users.ts
-export const SYSTEM_USER_ID_VALUE = "bdd640fb-0667-4ad1-9c80-317fa3b1799d";
+// System user created in drizzle migration 0004.
+// Override via SYSTEM_USER_ID env var to avoid hardcoded well-known UUID in app code.
+// Fallback matches the seeded value in 0004_auto-users-assignments.sql.
+export const SYSTEM_USER_ID_VALUE = process.env.SYSTEM_USER_ID ?? "bdd640fb-0667-4ad1-9c80-317fa3b1799d";
 const SYSTEM_USER_ID = UserId.fromString(SYSTEM_USER_ID_VALUE);
 
 /**

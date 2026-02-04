@@ -22,16 +22,30 @@ const GRACE_PERIOD_MS = 24 * 60 * 60 * 1000; // 24 hours
  * Ensure a fresh agent API key exists and return the plaintext.
  * Generates a new key each time, moving the old hash to grace period.
  * Used by execution paths that need a valid plaintext agent key for OAuth proxy auth.
+ *
+ * @param agentId - The agent to generate a key for
+ * @param expectedOrgId - Optional org ID for defense-in-depth verification.
+ *   When provided, verifies the agent belongs to this org before rotating keys.
+ *   Prevents cross-tenant key rotation if caller passes wrong agent ID.
  */
-export async function ensureFreshAgentApiKey(agentId: number): Promise<string> {
+export async function ensureFreshAgentApiKey(agentId: number, expectedOrgId?: number): Promise<string> {
   const { plaintext, hash, prefix } = ApiKey.generateWithHash(); // key_xxx format
 
-  // Get current hash to move to grace period
+  // Get current hash to move to grace period (+ org ID for verification)
   const [currentAgent] = await db
-    .select({ apiKeyHash: agents.apiKeyHash })
+    .select({ apiKeyHash: agents.apiKeyHash, organizationId: agents.organizationId })
     .from(agents)
     .where(eq(agents.id, agentId))
     .limit(1);
+
+  if (!currentAgent) {
+    throw new Error(`Agent ${agentId} not found`);
+  }
+
+  // Defense-in-depth: verify agent belongs to expected org
+  if (expectedOrgId !== undefined && currentAgent.organizationId !== expectedOrgId) {
+    throw new Error(`Agent ${agentId} does not belong to organization ${expectedOrgId}`);
+  }
 
   const previousHash = currentAgent?.apiKeyHash || null;
 
