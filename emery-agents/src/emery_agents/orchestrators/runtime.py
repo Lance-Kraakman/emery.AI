@@ -10,12 +10,17 @@ must NOT be in checkpointed state. Instead, they live here and are bound to grap
 via Python closures when the session graph is created.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from PIL import Image as PILImage
 
 from emery_agents.services.context import ConversationMessage, format_conversation_history
+
+if TYPE_CHECKING:
+    from emery_agents.tools.capability_registry import CapabilityRegistry
 
 # Re-export so existing `from ..runtime import ConversationMessage` still works
 __all__ = ["ConversationMessage", "format_conversation_history", "RuntimeContext"]
@@ -47,7 +52,7 @@ class RuntimeContext:
     api_key: str = ""
     org_id: str = ""
     org_model: Optional[str] = None
-    capability_registry: Optional[Any] = None
+    capability_registry: Optional[CapabilityRegistry] = None
     conversation_history: Optional[List[ConversationMessage]] = None
     user_id: Optional[str] = None
     workspace_type: Optional[str] = None

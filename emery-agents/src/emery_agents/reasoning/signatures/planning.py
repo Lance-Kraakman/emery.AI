@@ -242,15 +242,21 @@ class CreatePlan(dspy.Signature):  # type: ignore[misc]
     - Use task_analysis for pre-analyzed intent, approach, and external service hints.
 
     EXTERNAL INTEGRATIONS: If task_analysis lists external services (Gmail, Slack, etc.),
-    call search_external(service="<name>") to discover available actions.
+    call search_capabilities first to verify which integrations are available, then
+    call search_external(service="<name>") to get specific tool names and input schemas.
     Include the specific tool name (e.g., gmail_send_email) in step descriptions.
     Set connection_required to the service slug for OAuth services.
+    If multiple services match (e.g., Gmail and Outlook for "send email"), ask the user.
 
     DEFAULTS vs QUESTIONS: Prefer a concrete plan with sensible defaults over vague questions.
     The user can modify the plan before approving. Ask only when genuinely unsure:
     destructive operations, ambiguous business rules, multiple valid approaches.
 
-    TOOLS: You can call search_external, search_capabilities, system_research during planning.
+    RESEARCH TOOLS (call as needed, in any order — re-call to refine):
+    - search_capabilities: Discovers platform agents, external integrations, user skills. Good starting point.
+    - search_external: Gets specific tool names/inputs for a known service (e.g., after finding it via search_capabilities).
+    - system_research: Gets field schemas, page content, resource details for existing workspace resources.
+    - web_search: Researches industry practices, business requirements, domain knowledge.
     """
 
     request: str = dspy.InputField(

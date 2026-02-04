@@ -172,16 +172,16 @@ def create_capability_search_tool(registry: "CapabilityRegistry") -> dspy.Tool:
         func=search_capabilities,
         name="search_capabilities",
         desc=(
-            "WHEN TO USE: Search for PLATFORM CAPABILITIES — what the system can do, "
-            "not what the user has already built. Use when you need to find the right "
-            "agent/capability to delegate a task to.\n"
-            "WHAT IT RETURNS: Ranked list of capabilities with id, name, description, "
-            "actions, and entities. The id maps to target_agent in plan steps.\n"
-            "NOTE: For existing user resources (tables, apps), use workspace_overview instead."
+            "Search for capabilities — platform features (schema_builder, app_builder, etc.), "
+            "external integrations (Gmail, Slack, GitHub, etc.), and user-created skills.\n"
+            "WHAT IT RETURNS: Ranked list of capabilities with id, name, type (agent/tool/skill), "
+            "description, actions, and entities. The id maps to target_agent in plan steps.\n"
+            "For integration details, call search_external(service='<name>') to get specific "
+            "tool names and input schemas."
         ),
         arg_desc={
             "query": "Natural language description of what you need to do "
-                     "(e.g., 'create database tables', 'build a dashboard app', 'generate PDF reports')",
+                     "(e.g., 'create database tables', 'send email', 'build a dashboard app')",
             "limit": "Max results to return (default: 5)",
         },
     )
@@ -210,13 +210,13 @@ def create_external_search_tool() -> dspy.Tool:
         func=search_external,
         name="search_external",
         desc=(
-            "Search pre-built tool actions for external services (Gmail, Slack, GitHub, Google Sheets, etc.). "
-            "ALWAYS call this FIRST when the task involves any third-party service. "
-            "Returns exact tool names like gmail_create_draft, slack_send_message, google_sheets_add_row. "
+            "Get detailed tool actions for a specific external service. "
+            "Call AFTER search_capabilities identifies the service. "
+            "Returns exact tool names (gmail_send_email, slack_post_message) with input schemas. "
             "Use service parameter to list all available tools for a service."
         ),
         arg_desc={
-            "service": "Service name to search (e.g., 'gmail', 'slack', 'google_sheets'). Returns list of available tool actions.",
+            "service": "Service name to get tools for (e.g., 'gmail', 'slack', 'google_sheets'). Returns list of available tool actions.",
             "integration_name": "Get full details (inputs, outputs, description) for a specific tool (e.g., 'gmail_create_draft').",
         },
     )

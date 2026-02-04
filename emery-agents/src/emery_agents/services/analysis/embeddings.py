@@ -93,7 +93,7 @@ def _embed_huggingface(text: str) -> tuple[float, ...]:
     return tuple(float(x) for x in embedding)
 
 
-@lru_cache(maxsize=1000)
+@lru_cache(maxsize=5000)
 def get_embedding(text: str) -> tuple[float, ...]:
     """
     Get embedding for text (cached).

@@ -16,8 +16,12 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import dspy
+
 from .capability_registry import CapabilityRegistry
+from .integrations.pipedream import PIPEDREAM_METADATA
 from ..entities.models.capability import Capability, CapabilityType
+from ..entities.workspace import WorkspaceSkill
 from ..grpc.agents.agent_descriptors import get_builder_descriptors
 
 logger = logging.getLogger(__name__)
@@ -104,9 +108,48 @@ def populate_system_agents(registry: CapabilityRegistry) -> int:
     return count
 
 
+def populate_integration_services(registry: CapabilityRegistry) -> int:
+    """Register all Pipedream services as integration-level capabilities.
+
+    Groups 13K+ tools into ~3K service-level entries (one per service).
+    Called once at startup alongside populate_system_agents().
+
+    Embeddings are computed lazily on first search (cached in registry).
+    """
+    by_service: dict[str, list[dict[str, Any]]] = {}
+    for tool_id, meta in PIPEDREAM_METADATA.items():
+        app = meta.get("app", "")
+        if app:
+            by_service.setdefault(app, []).append({"id": tool_id, **meta})
+
+    count = 0
+    for service, tools in by_service.items():
+        tool_descs = [
+            t.get("description", "")[:80]
+            for t in tools[:5]
+            if t.get("description")
+        ]
+        summary = f"{service} integration ({len(tools)} actions): {'; '.join(tool_descs)}"
+
+        capability = Capability(
+            id=f"integration:{service}",
+            name=service,
+            type=CapabilityType.TOOL,
+            domain=service,
+            description=summary,
+            actions=[t["id"] for t in tools[:10]],
+            entities=[service],
+        )
+        registry.register(capability)
+        count += 1
+
+    logger.info(f"Registered {count} integration service capabilities")
+    return count
+
+
 def populate_user_skills(
     registry: CapabilityRegistry,
-    skills: list[Any],
+    skills: list[WorkspaceSkill],
     org_id: str,
 ) -> int:
     """Register user-defined skills as capabilities.
@@ -124,19 +167,15 @@ def populate_user_skills(
 
     count = 0
     for skill in skills:
-        skill_id = getattr(skill, "id", None)
-        skill_name = getattr(skill, "name", "")
-        skill_desc = getattr(skill, "description", "") or skill_name
-
-        if not skill_id or not skill_name:
+        if not skill.id or not skill.name:
             continue
 
         capability = Capability(
-            id=f"skill:{skill_id}",
-            name=skill_name,
+            id=f"skill:{skill.id}",
+            name=skill.name,
             type=CapabilityType.SKILL,
             domain="user",
-            description=skill_desc,
+            description=skill.description or skill.name,
             actions=["execute"],
             entities=[],
         )
@@ -150,7 +189,7 @@ def populate_user_skills(
 
 def populate_external_tools(
     registry: CapabilityRegistry,
-    external_tools: list[Any],
+    external_tools: list[dspy.Tool],
     org_id: str,
 ) -> int:
     """Register external tools (Pipedream, dynamic skills) as capabilities.
@@ -163,26 +202,23 @@ def populate_external_tools(
         external_tools: dspy.Tool instances from gRPC
         org_id: Organization ID string for per-org enabling
     """
-    # Clear stale tool registrations
-    registry.clear_by_type(CapabilityType.TOOL)
+    # Clear stale per-request tool registrations (preserves integration: services)
+    registry.clear_by_id_prefix("tool:")
 
     count = 0
     for tool in external_tools:
-        tool_name = getattr(tool, "name", None)
-        tool_desc = getattr(tool, "desc", "") or getattr(tool, "description", "")
-
-        if not tool_name:
+        if not tool.name:
             continue
 
         # Derive domain from tool name (e.g., "gmail_send_email" → "gmail")
-        domain = tool_name.split("_")[0] if "_" in tool_name else "external"
+        domain = tool.name.split("_")[0] if "_" in tool.name else "external"
 
         capability = Capability(
-            id=f"tool:{tool_name}",
-            name=tool_name,
+            id=f"tool:{tool.name}",
+            name=tool.name,
             type=CapabilityType.TOOL,
             domain=domain,
-            description=tool_desc,
+            description=tool.desc or "",
             actions=["execute"],
             entities=[],
         )

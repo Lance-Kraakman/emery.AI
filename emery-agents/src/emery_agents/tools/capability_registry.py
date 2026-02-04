@@ -52,6 +52,7 @@ class CapabilityRegistry:
     def __init__(self) -> None:
         self._capabilities: dict[str, Capability] = {}
         self._enabled: dict[str, set[str]] = {}  # org_id -> set of capability_ids
+        self._embeddings: dict[str, tuple[float, ...]] = {}  # cap_id -> embedding vector
 
     def register(self, capability: Capability) -> None:
         """Register a capability in the registry."""
@@ -61,7 +62,7 @@ class CapabilityRegistry:
         """Remove a capability from the registry. Returns True if found."""
         if capability_id in self._capabilities:
             del self._capabilities[capability_id]
-            # Clean up any enabled references to this capability
+            self._embeddings.pop(capability_id, None)
             for enabled_set in self._enabled.values():
                 enabled_set.discard(capability_id)
             return True
@@ -174,6 +175,18 @@ class CapabilityRegistry:
             c for c in self._capabilities.values() if c.domain.lower() == domain_lower
         ]
 
+    @staticmethod
+    def _capability_text(cap: Capability) -> str:
+        """Build searchable text from capability metadata."""
+        return f"{cap.name} {cap.description} {' '.join(cap.actions)} {' '.join(cap.entities)}"
+
+    def _get_embedding(self, cap: Capability) -> tuple[float, ...]:
+        """Get embedding for capability, using registry cache if available."""
+        if cap.id not in self._embeddings:
+            cap_text = self._capability_text(cap)
+            self._embeddings[cap.id] = get_embedding(cap_text)
+        return self._embeddings[cap.id]
+
     def _semantic_search(
         self,
         query: str,
@@ -183,8 +196,9 @@ class CapabilityRegistry:
         """
         Perform semantic search on a list of capabilities.
 
-        Uses HuggingFace embeddings to find capabilities that match the query
-        semantically (not just keyword matching).
+        Uses embeddings to find capabilities that match the query semantically.
+        Capability embeddings are cached in the registry (no eviction) to handle
+        large numbers of registered capabilities (3K+ integration services).
 
         Args:
             query: Search query string
@@ -199,23 +213,18 @@ class CapabilityRegistry:
             return []
 
         try:
-
             query_embedding = get_embedding(query)
 
-            # Score each capability by similarity
             scored: list[tuple[float, Capability]] = []
             for cap in candidates:
-                # Build searchable text from capability metadata
-                cap_text = f"{cap.name} {cap.description} {' '.join(cap.actions)} {' '.join(cap.entities)}"
-                cap_embedding = get_embedding(cap_text)
+                cap_embedding = self._get_embedding(cap)
                 score = cosine_similarity(query_embedding, cap_embedding)
                 scored.append((score, cap))
 
-            # Sort by score descending
             scored.sort(key=lambda x: x[0], reverse=True)
 
             results = [cap for _, cap in scored[:limit]]
-            logger.debug(f"Semantic search '{query}' → {len(results)} results")
+            logger.debug(f"Semantic search '{query}' -> {len(results)} results")
             return results
 
         except Exception as e:
@@ -265,6 +274,7 @@ class CapabilityRegistry:
         """Remove all capabilities and enabled tracking from the registry."""
         self._capabilities.clear()
         self._enabled.clear()
+        self._embeddings.clear()
 
     def clear_by_type(self, capability_type: CapabilityType) -> int:
         """Remove all capabilities of a given type.
@@ -281,7 +291,27 @@ class CapabilityRegistry:
         ]
         for cap_id in to_remove:
             del self._capabilities[cap_id]
-            # Clean up enabled references
+            self._embeddings.pop(cap_id, None)
+            for enabled_set in self._enabled.values():
+                enabled_set.discard(cap_id)
+        return len(to_remove)
+
+    def clear_by_id_prefix(self, prefix: str) -> int:
+        """Remove all capabilities whose ID starts with prefix.
+
+        More targeted than clear_by_type — preserves integration services
+        when clearing per-request tool registrations.
+
+        Returns:
+            Number of capabilities removed
+        """
+        to_remove = [
+            cap_id for cap_id in self._capabilities
+            if cap_id.startswith(prefix)
+        ]
+        for cap_id in to_remove:
+            del self._capabilities[cap_id]
+            self._embeddings.pop(cap_id, None)
             for enabled_set in self._enabled.values():
                 enabled_set.discard(cap_id)
         return len(to_remove)
