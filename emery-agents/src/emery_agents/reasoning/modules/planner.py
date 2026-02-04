@@ -207,15 +207,12 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         if result.questions is not None and len(result.questions) > 0:
             return
 
-        # Neither plan nor questions — fall back to clarification
-        result.questions = [
-            ClarifyingQuestionOutput(
-                question="What would you like help with?",
-                question_type=QuestionType.TEXT,
-                options=None,
-                reason="Need more detail to create an actionable plan",
-            )
-        ]
+        # Neither plan nor questions — ReAct likely failed (invalid tool call, etc.)
+        raise ValueError(
+            "Planner produced neither a plan nor clarifying questions. "
+            "This usually means the ReAct trajectory failed (e.g., LLM tried to call "
+            "a non-existent tool). Check logs for DSPy ReAct errors."
+        )
 
 
 class SkillTemplatePlannerModule(PlannerModule):

@@ -343,8 +343,6 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
     )
     ledger.record_plan_created({"plan_id": plan.id, "step_count": len(plan.steps)})
 
-    events.append(PlanCreatedEvent(plan_id=plan.id, plan=plan))
-
     # Save plan to filesystem
     if runtime.plan_file_repository and plan:
         try:
@@ -357,6 +355,7 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
         logger.info(f"Plan {plan.id} auto-approved (low-risk, {len(plan.steps)} steps)")
         approved_plan = plan.approve().start_execution()
         ledger.record_plan_approved()
+        # Skip PlanCreatedEvent for auto-approved plans — it triggers approval UI flicker
         events.append(PlanApprovedEvent(plan_id=plan.id))
         return {
             "plan": approved_plan,
@@ -366,6 +365,8 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
             "events": events,
         }
 
+    # Non-auto-approved: emit PlanCreatedEvent so frontend shows approval UI
+    events.append(PlanCreatedEvent(plan_id=plan.id, plan=plan))
     logger.info(f"Plan {plan.id} created with {len(plan.steps)} steps, awaiting approval")
     return {
         "plan": plan,

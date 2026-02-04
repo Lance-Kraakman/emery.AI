@@ -20,10 +20,14 @@ Usage:
 """
 
 import asyncio
+import json
 import logging
 from typing import Any, AsyncIterator, List, Optional
 
+import dspy
+
 from emery_agents.tools.provider import ToolProvider
+from ..reasoning.config import get_dspy_lm
 from ..services.skills.executor import SkillExecutorService
 from emery_agents.api import AgentAPIService
 from ..agents.agent_executor_agent import create_agent_executor
@@ -31,6 +35,12 @@ from emery_agents.tools.execution.dynamic_execution import fetch_agent_execution
 from .response_types import StreamResponseDict, create_error_response
 
 logger = logging.getLogger(__name__)
+
+
+def _run_agent_executor(executor: Any, task: str, context: str, lm: Any) -> str:
+    """Run DSPy ExecutorModule in a synchronous context with LM configured."""
+    with dspy.context(lm=lm):
+        return executor(step_description=task, context=context)
 
 
 async def _stream_text_chunks(text: str, chunk_size: int = 8) -> AsyncIterator[str]:
@@ -146,14 +156,17 @@ async def handle_agent_mention_routing(
     try:
         # Run the agent in a thread pool to avoid blocking async loop
         # DSPy ExecutorModule is synchronous, so we run in executor
+        lm = get_dspy_lm(org_model=org_model)
+        execution_context = json.dumps({
+            "task": task,
+            "agent_name": agent_data.name,
+            "agent_description": agent_data.description or "",
+        })
+
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
             None,
-            lambda: agent_executor.run(
-                task=task,
-                images=images if images else None,
-                reset=True  # Fresh execution for each mention
-            )
+            lambda: _run_agent_executor(agent_executor, task, execution_context, lm),
         )
 
         # Stream the result progressively
