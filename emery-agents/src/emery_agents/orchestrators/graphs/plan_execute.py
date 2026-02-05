@@ -14,6 +14,9 @@ Graph architecture (7 nodes):
   - await_approval: Human-in-the-loop (approval, clarification, recovery)
   - execute_step: Executes one plan step
   - replan: Evaluates progress, handles failures, replans, or synthesizes final answer
+
+@mentions (pre_selected_skill/agent/tool) skip triage and route directly to generate_plan,
+which creates a focused plan biased toward the specified resource.
 """
 
 import logging
@@ -42,10 +45,16 @@ logger = logging.getLogger(__name__)
 
 
 def route_entry(state: PlanExecuteState) -> str:
-    """Route at graph entry — handle autonomous vs interactive mode."""
+    """Route at graph entry — handle autonomous, mention, or interactive mode."""
     stored_plan = state.get("stored_plan")
     if stored_plan:
         return "autonomous"
+    if (
+        state.get("pre_selected_skill")
+        or state.get("pre_selected_agent")
+        or state.get("pre_selected_tool")
+    ):
+        return "mention"  # Skip triage, go straight to planning
     return "interactive"
 
 
@@ -54,6 +63,10 @@ def route_after_plan(state: PlanExecuteState) -> str:
     error = state.get("error")
     if error:
         return "end"
+
+    # Auto-approved low-risk plans skip approval and go straight to execution
+    if state.get("auto_approved"):
+        return "execute_step"
 
     awaiting = state.get("awaiting_input")
     if awaiting in ("approval", "clarification"):
@@ -216,9 +229,10 @@ def create_session_graph(
     graph.add_node("execute_step", _execute_step)
     graph.add_node("replan", _replan)
 
-    # === Entry point: triage or autonomous ===
+    # === Entry point: triage, autonomous, or @mention (skip triage → plan) ===
     graph.set_conditional_entry_point(route_entry, {
         "autonomous": "setup_autonomous",
+        "mention": "generate_plan",
         "interactive": "triage",
     })
 
@@ -239,9 +253,10 @@ def create_session_graph(
     # === Autonomous → execute ===
     graph.add_edge("setup_autonomous", "execute_step")
 
-    # === Plan → approve ===
+    # === Plan → approve or auto-execute ===
     graph.add_conditional_edges("generate_plan", route_after_plan, {
         "await_approval": "await_approval",
+        "execute_step": "execute_step",
         "end": END,
     })
 
@@ -306,6 +321,7 @@ def create_session_plan_only_graph(
     # Otherwise terminate (plan created or error).
     graph.add_conditional_edges("generate_plan", route_after_plan, {
         "await_approval": "await_approval",
+        "execute_step": END,  # Auto-approved plans just end in plan-only mode
         "end": END,
     })
 

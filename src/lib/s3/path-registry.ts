@@ -12,7 +12,7 @@
  *   chat-attachments/{orgId}/{chatId}/{msgId}/{uuid}.{ext}
  *   skill-attachments/{orgId}/{skillId}/{uuid}.{ext}
  *   task-attachments/{orgId}/{agentId}/{uuid}.{ext}
- *   workspaces/
+ *   workspaces/{orgId}/
  *     agents/{agentId}.tar.gz
  *     users/{userId}.tar.gz
  */
@@ -36,8 +36,7 @@ export interface OrgStoragePrefixes {
 // Prefix constants (shared with Python via convention — see workspace_sync.py)
 // ---------------------------------------------------------------------------
 
-export const WORKSPACE_AGENTS_PREFIX = 'workspaces/agents';
-export const WORKSPACE_USERS_PREFIX = 'workspaces/users';
+export const WORKSPACES_PREFIX = 'workspaces';
 export const CHAT_ATTACHMENTS_PREFIX = 'chat-attachments';
 export const SKILL_ATTACHMENTS_PREFIX = 'skill-attachments';
 export const TASK_ATTACHMENTS_PREFIX = 'task-attachments';
@@ -122,14 +121,19 @@ export function getTaskAttachmentKey(
   return `${TASK_ATTACHMENTS_PREFIX}/${organizationId}/${agentId}/${fileId}.${sanitizedExt}`;
 }
 
-/** workspaces/agents/{agentId}.tar.gz */
-export function getAgentWorkspaceKey(agentId: number): string {
-  return `${WORKSPACE_AGENTS_PREFIX}/${agentId}.tar.gz`;
+/** workspaces/{orgId}/ — prefix for ListObjectsV2 scanning */
+export function getWorkspacePrefix(organizationId: number): string {
+  return `${WORKSPACES_PREFIX}/${organizationId}/`;
 }
 
-/** workspaces/users/{userId}.tar.gz */
-export function getUserWorkspaceKey(userId: string): string {
-  return `${WORKSPACE_USERS_PREFIX}/${userId}.tar.gz`;
+/** workspaces/{orgId}/agents/{agentId}.tar.gz */
+export function getAgentWorkspaceKey(organizationId: number, agentId: number): string {
+  return `${WORKSPACES_PREFIX}/${organizationId}/agents/${agentId}.tar.gz`;
+}
+
+/** workspaces/{orgId}/users/{userId}.tar.gz */
+export function getUserWorkspaceKey(organizationId: number, userId: string): string {
+  return `${WORKSPACES_PREFIX}/${organizationId}/users/${userId}.tar.gz`;
 }
 
 // ---------------------------------------------------------------------------
@@ -157,8 +161,13 @@ export function categorizeS3Key(key: string): StorageCategory {
 /**
  * Extract the organization ID from an S3 key when the key encodes it directly.
  *
- * Returns `null` for workspace keys (workspaces/agents/{agentId}.tar.gz)
- * because those require a DB lookup to resolve the owning organization.
+ * All key patterns now include the org ID:
+ *   org_{id}/...                       → database
+ *   chat-attachments/{id}/...          → chat
+ *   skill-attachments/{id}/...         → skill
+ *   task-attachments/{id}/...          → database
+ *   workspaces/{id}/agents/...         → workspace
+ *   workspaces/{id}/users/...          → workspace
  */
 export function extractOrgIdFromKey(key: string): number | null {
   // chat-attachments/{orgId}/...
@@ -173,10 +182,13 @@ export function extractOrgIdFromKey(key: string): number | null {
   const taskMatch = key.match(new RegExp(`^${TASK_ATTACHMENTS_PREFIX}/(\\d+)/`));
   if (taskMatch) return parseInt(taskMatch[1], 10);
 
+  // workspaces/{orgId}/...
+  const wsMatch = key.match(new RegExp(`^${WORKSPACES_PREFIX}/(\\d+)/`));
+  if (wsMatch) return parseInt(wsMatch[1], 10);
+
   // org_{orgId}/...
   const orgMatch = key.match(/^org_(\d+)\//);
   if (orgMatch) return parseInt(orgMatch[1], 10);
 
-  // workspaces/ — no org ID in the key
   return null;
 }

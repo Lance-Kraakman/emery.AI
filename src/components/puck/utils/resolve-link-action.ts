@@ -5,7 +5,8 @@
  * that can be used in button/link components.
  */
 
-import { signIn, signOut } from 'next-auth/react';
+import { signIn } from 'next-auth/react';
+import { secureSignOut } from '@/lib/auth/sign-out';
 import type { LinkActionConfig } from '../custom-fields/link-action-field';
 import type { PageDTO } from '@/app/mappers/puck-page-mapper';
 
@@ -162,9 +163,7 @@ export function resolveLinkAction(
           return;
         }
 
-        signOut({
-          callbackUrl: config.redirectAfter || '/',
-        });
+        secureSignOut(config.redirectAfter || '/');
       };
 
       return {

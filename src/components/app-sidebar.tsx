@@ -41,7 +41,8 @@ import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { LogOut } from "lucide-react"
-import { signOut, useSession } from "next-auth/react"
+import { useSession } from "next-auth/react"
+import { secureSignOut } from "@/lib/auth/sign-out"
 import { EmeryOrganizationModal } from "./EmeryOrganizationModal"
 import { SidebarSection } from "./sidebar-section"
 import { NestedSidebarSection } from "./nested-sidebar-section"
@@ -464,7 +465,7 @@ export function AppSidebar({
               onClick={toggleSidebar}
               className="h-8 w-8"
             >
-              <img src="/assets/enhancd/logo.svg" alt="enhancd.ai" className="h-6 w-6" />
+              <img src="/assets/enhancd/logo2.svg" alt="enhancd.ai" className="h-8 w-8" />
             </Button>
           ) : (
             <EmeryOrganizationModal isCollapsed={isCollapsed} />
@@ -811,7 +812,7 @@ export function AppSidebar({
                 variant="ghost"
                 size="sm"
                 className="w-full justify-start gap-2 text-destructive hover:text-destructive/80 hover:bg-destructive/10"
-                onClick={() => signOut({ callbackUrl: "/auth/signin" })}
+                onClick={() => secureSignOut("/auth/signin")}
               >
                 <LogOut className="h-4 w-4" />
                 Sign Out

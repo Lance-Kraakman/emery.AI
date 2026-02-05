@@ -65,6 +65,7 @@ class TaskRequest:
     trigger_type: Optional[str] = None           # 'manual' | 'webhook' | 'database_event' | 'calendar' | 'public_api'
     triggered_by_user_id: Optional[str] = None   # Root-cause user ID
     triggered_by_user_name: Optional[str] = None # Root-cause user display name
+    user_api_key: Optional[str] = None  # API key for tool auth (agent key for agent tasks, rotated per-task)
 
 
 @dataclass

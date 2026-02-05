@@ -13,6 +13,7 @@ from typing import Any, Dict, List
 import dspy
 
 from ...reasoning.config import get_dspy_lm
+from ...services.analysis.llm_usage import record_from_lm
 from ...reasoning.signatures.planning import TriageTask
 from ...tools.discovery import create_discovery_tools
 from ...services.execution.events import ErrorEvent, FinalSynthesisEvent, ExecutionCompletedEvent
@@ -59,12 +60,14 @@ async def triage_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[
     if runtime.images:
         image_context = f"{len(runtime.images)} image(s) uploaded by the user, available for visual analysis in direct/plan execution."
 
-    # Create discovery tools for ReAct triage
+    # Create discovery tools for ReAct triage (exclude web_search and workspace_overview —
+    # triage only needs system_research, search_capabilities, search_external for routing)
     discovery_tools: list[dspy.Tool] = []
     if api_key and org_id:
         discovery_tools = create_discovery_tools(
             api_key, org_id, runtime.capability_registry
         )
+        discovery_tools = [t for t in discovery_tools if t.name not in ("web_search", "workspace_overview")]
 
     # Add memory_crud tool so triage can search_memories for deeper context
     discovery_tools.append(create_memory_crud(runtime.memory_service))  # type: ignore[arg-type]
@@ -88,11 +91,20 @@ async def triage_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[
                 memory_context=memory_context,
                 image_context=image_context,
             )
+        record_from_lm(lm)
 
         execution_mode = getattr(result, "execution_mode", "plan").strip().lower()
         reasoning = getattr(result, "reasoning", "")
         context_notes = getattr(result, "context_notes", "")
         response_text = getattr(result, "response", "")
+
+        # Extract analysis fields (combined triage + analysis in single call)
+        triage_analysis = {
+            "intent": getattr(result, "intent", ""),
+            "entities": getattr(result, "entities", []),
+            "approach": getattr(result, "approach", ""),
+            "external_services": getattr(result, "external_services", []),
+        }
 
         # Validate execution_mode
         if execution_mode not in VALID_MODES:
@@ -118,6 +130,7 @@ async def triage_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[
                 "execution_mode": execution_mode,
                 "triage_reasoning": reasoning,
                 "triage_context": context_notes,
+                "triage_analysis": triage_analysis,
                 "response": final_response,
                 "success": True,
                 "events": events,
@@ -127,6 +140,7 @@ async def triage_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[
             "execution_mode": execution_mode,
             "triage_reasoning": reasoning,
             "triage_context": context_notes,
+            "triage_analysis": triage_analysis,
             "events": events,
         }
 

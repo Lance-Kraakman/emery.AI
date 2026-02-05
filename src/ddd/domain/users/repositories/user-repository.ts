@@ -25,8 +25,8 @@ export interface IUserRepository {
   update(id: UserId, data: UpdateUserData): Promise<User>;
   delete(id: UserId): Promise<void>;
   
-  // API Key management
-  generateApiKey(userId: UserId): Promise<ApiKey>;
+  // API Key management (SHA-256 hashed storage)
+  generateApiKey(userId: UserId): Promise<{ apiKey: ApiKey; plaintext: string }>;
   findByApiKey(apiKey: ApiKey): Promise<User | null>;
   revokeApiKey(userId: UserId): Promise<void>;
   

@@ -6,7 +6,7 @@ import type { Agent } from '@/ddd/domain/agents/entities/agent';
 import { AgentFactory } from '@/ddd/domain/agents/entities/agent';
 import { DrizzleBaseRepository } from '../base/drizzle-base-repository';
 import { agents } from '@/ddd/infrastructure/db/schema';
-import { eq, and, isNotNull, sql, ne } from 'drizzle-orm';
+import { eq, and, or, gte, isNotNull, sql, ne } from 'drizzle-orm';
 import type { InferSelectModel } from 'drizzle-orm';
 import { AgentId, OrganizationId, UserId, AgentStatus, ApiKey } from '@/ddd/domain/shared/value-objects';
 import type { DbClient } from '@/ddd/infrastructure/db/client';
@@ -159,10 +159,21 @@ export class DrizzleAgentRepository
 
   async findByApiKey(apiKey: ApiKey): Promise<Agent | null> {
     try {
+      const hash = ApiKey.hash(apiKey.value);
+      const now = new Date();
+
       const [record] = await this.db
         .select()
         .from(agents)
-        .where(eq(agents.apiKey, apiKey.value))
+        .where(
+          or(
+            eq(agents.apiKeyHash, hash),
+            and(
+              eq(agents.previousApiKeyHash, hash),
+              gte(agents.previousApiKeyExpiresAt, now)
+            )
+          )
+        )
         .limit(1);
 
       if (!record) {

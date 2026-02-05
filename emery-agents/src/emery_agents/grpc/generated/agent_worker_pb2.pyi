@@ -47,7 +47,7 @@ STEP_REASONING: StepType
 STEP_FINAL: StepType
 
 class TaskRequest(_message.Message):
-    __slots__ = ("task_id", "agent_id", "skill_name", "instruction_config", "agent_config", "trigger_data", "organization_id", "owner_id", "timeout_seconds", "name", "agent_model", "organization_model", "input_content", "resolved_context", "skill_id", "trigger_type", "triggered_by_user_id", "triggered_by_user_name")
+    __slots__ = ("task_id", "agent_id", "skill_name", "instruction_config", "agent_config", "trigger_data", "organization_id", "owner_id", "timeout_seconds", "name", "agent_model", "organization_model", "input_content", "resolved_context", "skill_id", "trigger_type", "triggered_by_user_id", "triggered_by_user_name", "user_api_key")
     TASK_ID_FIELD_NUMBER: _ClassVar[int]
     AGENT_ID_FIELD_NUMBER: _ClassVar[int]
     SKILL_NAME_FIELD_NUMBER: _ClassVar[int]
@@ -66,6 +66,7 @@ class TaskRequest(_message.Message):
     TRIGGER_TYPE_FIELD_NUMBER: _ClassVar[int]
     TRIGGERED_BY_USER_ID_FIELD_NUMBER: _ClassVar[int]
     TRIGGERED_BY_USER_NAME_FIELD_NUMBER: _ClassVar[int]
+    USER_API_KEY_FIELD_NUMBER: _ClassVar[int]
     task_id: str
     agent_id: int
     skill_name: str
@@ -84,7 +85,8 @@ class TaskRequest(_message.Message):
     trigger_type: str
     triggered_by_user_id: str
     triggered_by_user_name: str
-    def __init__(self, task_id: _Optional[str] = ..., agent_id: _Optional[int] = ..., skill_name: _Optional[str] = ..., instruction_config: _Optional[_Union[InstructionConfig, _Mapping]] = ..., agent_config: _Optional[_Union[AgentConfig, _Mapping]] = ..., trigger_data: _Optional[_Union[TriggerData, _Mapping]] = ..., organization_id: _Optional[str] = ..., owner_id: _Optional[str] = ..., timeout_seconds: _Optional[int] = ..., name: _Optional[str] = ..., agent_model: _Optional[str] = ..., organization_model: _Optional[str] = ..., input_content: _Optional[_Iterable[_Union[MessagePart, _Mapping]]] = ..., resolved_context: _Optional[_Union[ResolvedContextProto, _Mapping]] = ..., skill_id: _Optional[int] = ..., trigger_type: _Optional[str] = ..., triggered_by_user_id: _Optional[str] = ..., triggered_by_user_name: _Optional[str] = ...) -> None: ...
+    user_api_key: str
+    def __init__(self, task_id: _Optional[str] = ..., agent_id: _Optional[int] = ..., skill_name: _Optional[str] = ..., instruction_config: _Optional[_Union[InstructionConfig, _Mapping]] = ..., agent_config: _Optional[_Union[AgentConfig, _Mapping]] = ..., trigger_data: _Optional[_Union[TriggerData, _Mapping]] = ..., organization_id: _Optional[str] = ..., owner_id: _Optional[str] = ..., timeout_seconds: _Optional[int] = ..., name: _Optional[str] = ..., agent_model: _Optional[str] = ..., organization_model: _Optional[str] = ..., input_content: _Optional[_Iterable[_Union[MessagePart, _Mapping]]] = ..., resolved_context: _Optional[_Union[ResolvedContextProto, _Mapping]] = ..., skill_id: _Optional[int] = ..., trigger_type: _Optional[str] = ..., triggered_by_user_id: _Optional[str] = ..., triggered_by_user_name: _Optional[str] = ..., user_api_key: _Optional[str] = ...) -> None: ...
 
 class TaskProgress(_message.Message):
     __slots__ = ("task_id", "status", "output_json", "error_message", "timestamp_ms", "progress_percent", "token_usage")
@@ -704,7 +706,7 @@ class ClarificationAnswer(_message.Message):
     def __init__(self, question_id: _Optional[str] = ..., answer: _Optional[str] = ...) -> None: ...
 
 class ProcessMessageRequest(_message.Message):
-    __slots__ = ("message_parts", "user_id", "organization_id", "conversation_history", "agent_config", "model", "message_id", "session_id", "user_api_key", "task_id")
+    __slots__ = ("message_parts", "user_id", "organization_id", "conversation_history", "agent_config", "model", "message_id", "session_id", "user_api_key", "task_id", "user_name")
     MESSAGE_PARTS_FIELD_NUMBER: _ClassVar[int]
     USER_ID_FIELD_NUMBER: _ClassVar[int]
     ORGANIZATION_ID_FIELD_NUMBER: _ClassVar[int]
@@ -715,6 +717,7 @@ class ProcessMessageRequest(_message.Message):
     SESSION_ID_FIELD_NUMBER: _ClassVar[int]
     USER_API_KEY_FIELD_NUMBER: _ClassVar[int]
     TASK_ID_FIELD_NUMBER: _ClassVar[int]
+    USER_NAME_FIELD_NUMBER: _ClassVar[int]
     message_parts: _containers.RepeatedCompositeFieldContainer[MessagePart]
     user_id: str
     organization_id: int
@@ -725,7 +728,8 @@ class ProcessMessageRequest(_message.Message):
     session_id: str
     user_api_key: str
     task_id: str
-    def __init__(self, message_parts: _Optional[_Iterable[_Union[MessagePart, _Mapping]]] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[int] = ..., conversation_history: _Optional[_Iterable[_Union[HistoryMessage, _Mapping]]] = ..., agent_config: _Optional[_Union[AgentConfig, _Mapping]] = ..., model: _Optional[str] = ..., message_id: _Optional[str] = ..., session_id: _Optional[str] = ..., user_api_key: _Optional[str] = ..., task_id: _Optional[str] = ...) -> None: ...
+    user_name: str
+    def __init__(self, message_parts: _Optional[_Iterable[_Union[MessagePart, _Mapping]]] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[int] = ..., conversation_history: _Optional[_Iterable[_Union[HistoryMessage, _Mapping]]] = ..., agent_config: _Optional[_Union[AgentConfig, _Mapping]] = ..., model: _Optional[str] = ..., message_id: _Optional[str] = ..., session_id: _Optional[str] = ..., user_api_key: _Optional[str] = ..., task_id: _Optional[str] = ..., user_name: _Optional[str] = ...) -> None: ...
 
 class ProcessMessageResponse(_message.Message):
     __slots__ = ("content_chunk", "complete", "error", "step_progress", "awaiting_input", "timestamp", "task_id", "task_progress")
@@ -847,7 +851,7 @@ class ProcessingComplete(_message.Message):
     def __init__(self, model_used: _Optional[str] = ..., total_tokens: _Optional[int] = ..., processing_time_ms: _Optional[int] = ..., metadata: _Optional[_Mapping[str, str]] = ..., token_usage: _Optional[_Union[TokenUsage, _Mapping]] = ...) -> None: ...
 
 class ProcessingError(_message.Message):
-    __slots__ = ("error_code", "error_message", "error_details", "hint", "can_retry", "auto_retry", "session_reset")
+    __slots__ = ("error_code", "error_message", "error_details", "hint", "can_retry", "auto_retry", "session_reset", "token_usage")
     class ErrorDetailsEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -862,6 +866,7 @@ class ProcessingError(_message.Message):
     CAN_RETRY_FIELD_NUMBER: _ClassVar[int]
     AUTO_RETRY_FIELD_NUMBER: _ClassVar[int]
     SESSION_RESET_FIELD_NUMBER: _ClassVar[int]
+    TOKEN_USAGE_FIELD_NUMBER: _ClassVar[int]
     error_code: str
     error_message: str
     error_details: _containers.ScalarMap[str, str]
@@ -869,7 +874,8 @@ class ProcessingError(_message.Message):
     can_retry: bool
     auto_retry: bool
     session_reset: bool
-    def __init__(self, error_code: _Optional[str] = ..., error_message: _Optional[str] = ..., error_details: _Optional[_Mapping[str, str]] = ..., hint: _Optional[str] = ..., can_retry: bool = ..., auto_retry: bool = ..., session_reset: bool = ...) -> None: ...
+    token_usage: TokenUsage
+    def __init__(self, error_code: _Optional[str] = ..., error_message: _Optional[str] = ..., error_details: _Optional[_Mapping[str, str]] = ..., hint: _Optional[str] = ..., can_retry: bool = ..., auto_retry: bool = ..., session_reset: bool = ..., token_usage: _Optional[_Union[TokenUsage, _Mapping]] = ...) -> None: ...
 
 class StepProgress(_message.Message):
     __slots__ = ("step_type", "step_name", "content", "metadata", "step_index")

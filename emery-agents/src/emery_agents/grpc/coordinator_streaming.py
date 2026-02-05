@@ -126,6 +126,9 @@ class CoordinatorStreamingHandler:
         runtime_skill_inputs: Optional[Dict[str, str]] = None,
         images: Optional[List[Image.Image]] = None,
         has_images: bool = False,
+        pre_selected_skill: Optional[str] = None,
+        pre_selected_agent: Optional[str] = None,
+        pre_selected_tool: Optional[str] = None,
     ) -> AsyncIterator[Any]:
         """
         Main entry point for coordinator-driven execution.
@@ -227,7 +230,7 @@ class CoordinatorStreamingHandler:
             populate_external_tools(capability_registry, tools, org_id_str)
         capability_registry.enable_all_system_agents(org_id_str)
 
-        # === INVOKE GRAPH (triage → direct/plan/respond) ===
+        # === INVOKE GRAPH (triage → direct/plan/respond, or @mention → plan) ===
         async for event in self.stream_with_graph(
             context=context,
             runtime=runtime,
@@ -238,6 +241,9 @@ class CoordinatorStreamingHandler:
             runtime_skill_inputs=runtime_skill_inputs,
             memory_context=memory_context_str,
             workspace_context=workspace,
+            pre_selected_skill=pre_selected_skill,
+            pre_selected_agent=pre_selected_agent,
+            pre_selected_tool=pre_selected_tool,
         ):
             yield event
 
@@ -252,6 +258,9 @@ class CoordinatorStreamingHandler:
         runtime_skill_inputs: Optional[Dict[str, str]] = None,
         memory_context: str = "",
         workspace_context: Optional[WorkspaceContext] = None,
+        pre_selected_skill: Optional[str] = None,
+        pre_selected_agent: Optional[str] = None,
+        pre_selected_tool: Optional[str] = None,
     ) -> AsyncIterator[Any]:
         """
         LangGraph-based execution path.
@@ -274,6 +283,9 @@ class CoordinatorStreamingHandler:
             "stored_plan": stored_plan,
             "runtime_skill_inputs": runtime_skill_inputs,
             "workspace_context": workspace_context,
+            "pre_selected_skill": pre_selected_skill,
+            "pre_selected_agent": pre_selected_agent,
+            "pre_selected_tool": pre_selected_tool,
         }
 
         # Get or create session graph (uses cached instance for thread_id)

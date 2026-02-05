@@ -20,6 +20,7 @@ import { getSkillApplicationService, getAgentApplicationService } from '@/ddd/ap
 import { SkillMapper } from '@/app/mappers/skill-mapper';
 import { AgentId } from '@/ddd/domain/shared/value-objects/agent-id';
 import { requirePermission } from '@/app/actions/permissions';
+import { ensureFreshAgentApiKey } from '@/lib/auth/agent-api-keys';
 
 /**
  * POST /api/skills/[id]/execute
@@ -74,8 +75,9 @@ export async function POST(
         };
       }
 
-      // Include agent's API key for credential resolution
-      agentApiKey = agent.apiKey?.value || null;
+      // Generate fresh agent API key (plaintext for tool auth, hash stored in DB)
+      // Defense-in-depth: verify agent belongs to caller's org
+      agentApiKey = await ensureFreshAgentApiKey(agent.id.value, user.organizationId ?? undefined);
     }
 
     return {

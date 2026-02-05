@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest } from '@/lib/auth/test-auth';
+import { hasResourcePermission } from '@/lib/auth';
 import { logAgentMutation } from '@/lib/api/agent-context';
 import { getTableApplicationService } from "@/ddd/application/di/container";
 import type { FieldType } from '@/ddd/domain/tables/value-objects/table-field';
@@ -20,13 +21,12 @@ export async function POST(request: NextRequest) {
   try {
     // Authenticate the request
     const authResult = await authenticateRequest(request);
-    if (!authResult.success) {
+    if (!authResult.success || !authResult.user) {
       return NextResponse.json(
         { error: authResult.error || 'Authentication required' },
         { status: 401 }
       );
     }
-
     const { tableId, name, type, required = false, relatedTableId, metadata } = await request.json();
 
     if (!tableId || !name || !type) {
@@ -34,6 +34,10 @@ export async function POST(request: NextRequest) {
         { error: "tableId, name, and type are required" },
         { status: 400 }
       );
+    }
+
+    if (!authResult.user.organizationId || !await hasResourcePermission(authResult.user.id, 'table:manage', authResult.user.organizationId, 'tables', parseInt(tableId))) {
+      return NextResponse.json({ error: 'Permission denied' }, { status: 403 });
     }
 
 
@@ -79,6 +83,10 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
+    const authResult = await authenticateRequest(request);
+    if (!authResult.success || !authResult.user) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
     const { searchParams } = new URL(request.url);
     const tableId = searchParams.get("tableId");
 
@@ -87,6 +95,10 @@ export async function GET(request: NextRequest) {
         { error: "tableId is required" },
         { status: 400 }
       );
+    }
+
+    if (!authResult.user.organizationId || !await hasResourcePermission(authResult.user.id, 'table:view', authResult.user.organizationId, 'tables', parseInt(tableId))) {
+      return NextResponse.json({ error: 'Permission denied' }, { status: 403 });
     }
 
     // Use TableApplicationService for field listing
@@ -109,13 +121,12 @@ export async function GET(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const authResult = await authenticateRequest(request);
-    if (!authResult.success) {
+    if (!authResult.success || !authResult.user) {
       return NextResponse.json(
         { error: authResult.error || 'Authentication required' },
         { status: 401 }
       );
     }
-
     const { searchParams } = new URL(request.url);
     const tableId = searchParams.get("tableId");
     const fieldName = searchParams.get("fieldName");
@@ -125,6 +136,10 @@ export async function DELETE(request: NextRequest) {
         { error: "Table ID and field name are required" },
         { status: 400 }
       );
+    }
+
+    if (!authResult.user.organizationId || !await hasResourcePermission(authResult.user.id, 'table:manage', authResult.user.organizationId, 'tables', parseInt(tableId))) {
+      return NextResponse.json({ error: 'Permission denied' }, { status: 403 });
     }
 
     const tableApplicationService = getTableApplicationService();

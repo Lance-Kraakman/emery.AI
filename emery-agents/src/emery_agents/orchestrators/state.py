@@ -72,10 +72,22 @@ class PlanExecuteState(TypedDict, total=False):
     # === Event accumulator (append-only for UI streaming) ===
     events: Annotated[List[Any], operator.add]
 
+    # === Configured tools (from skill UI) ===
+    configured_tools: Optional[List[Dict[str, Any]]]
+
     # === Triage (set by triage node) ===
     execution_mode: Optional[str]  # "direct", "plan", "respond"
     triage_reasoning: Optional[str]
     triage_context: Optional[str]  # Key findings from triage research
+    triage_analysis: Optional[Dict[str, Any]]  # Combined analysis: intent, entities, approach, external_services
+
+    # === Mention routing (set when @skill/@agent/@tool detected) ===
+    pre_selected_skill: Optional[str]
+    pre_selected_agent: Optional[str]
+    pre_selected_tool: Optional[str]
+
+    # === Auto-approval ===
+    auto_approved: Optional[bool]  # True if plan was auto-approved (low-risk, additive only)
 
     # === Output ===
     response: Optional[str]  # Final answer (signals "done" to routing)
@@ -116,10 +128,19 @@ DEFAULT_STATE: Dict[str, Any] = {
     "clarifying_questions": [],
     # Event accumulator
     "events": [],
+    # Configured tools
+    "configured_tools": None,
     # Triage
     "execution_mode": None,
     "triage_reasoning": None,
     "triage_context": None,
+    "triage_analysis": None,
+    # Mention routing
+    "pre_selected_skill": None,
+    "pre_selected_agent": None,
+    "pre_selected_tool": None,
+    # Auto-approval
+    "auto_approved": None,
     # Output
     "response": None,
     "error": None,

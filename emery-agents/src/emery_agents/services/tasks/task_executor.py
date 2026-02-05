@@ -91,6 +91,9 @@ class TaskData:
     # Workspace
     workspace_path: Optional[Path] = None
 
+    # API key for tool auth (passed via proto, agent key for agent tasks)
+    user_api_key: Optional[str] = None
+
     # Original TaskRequest (for full context building via AgentExecutor)
     # Used for background tasks where we need full proto context
     _task_request: Optional[TaskRequest] = None
@@ -324,6 +327,18 @@ class TaskExecutor:
         - Org-level task (agent_id is None): Use invoking user's credentials
         - Agent task (agent_id is set): Use agent's stored credentials
         """
+        # If user_api_key was passed via proto (fresh agent key from TS), use it directly
+        if task_data.user_api_key:
+            logger.info(
+                f"[TASK-{task_data.task_id[:8]}] Using user_api_key from proto "
+                f"(prefix={task_data.user_api_key[:8]}...)"
+            )
+            return ResolvedCredentials(
+                api_key=task_data.user_api_key,
+                organization_id=task_data.organization_id,
+                source="agent" if task_data.agent_id else "user",
+            )
+
         if task_data.agent_id is None:
             # Org-level task - use user credentials
             logger.debug(f"[TASK-{task_data.task_id[:8]}] Org-level task, using user credentials")
@@ -559,6 +574,7 @@ class TaskExecutor:
             trigger_type="automation",
             agent_model=task_request.agent_model,
             org_model=task_request.organization_model,
+            user_api_key=task_request.user_api_key,
             # Store original request for full context building
             _task_request=task_request,
         )

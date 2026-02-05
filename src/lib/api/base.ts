@@ -43,10 +43,8 @@ export function handleApiError(error: unknown, context?: string): Response {
   const contextStr = context ? `[${context}] ` : '';
   console.error(`${contextStr}API Error:`, error);
 
-  const message = error instanceof Error ? error.message : 'Internal server error';
-
   return Response.json(
-    { success: false, error: message },
+    { success: false, error: 'Internal server error' },
     { status: 500 }
   );
 }

@@ -1,6 +1,7 @@
 'use client'
 
-import { useSession, signOut } from "next-auth/react"
+import { useSession } from "next-auth/react"
+import { secureSignOut } from "@/lib/auth/sign-out"
 import React, { useState } from "react"
 
 export default function UserMenu() {
@@ -47,7 +48,7 @@ export default function UserMenu() {
               Profile Settings
             </a>
             <button
-              onClick={() => signOut({ callbackUrl: "/" })}
+              onClick={() => secureSignOut("/")}
               className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
             >
               Sign Out

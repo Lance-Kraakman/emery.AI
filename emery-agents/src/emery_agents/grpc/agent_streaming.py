@@ -31,9 +31,12 @@ from ..services.plan_service import PlanService
 # HuggingFaceInferenceClient removed - skills now executed dynamically via API
 from ..utils.error_classifier import classify_error
 from ..utils.error_messages import ErrorSeverity
-from ..utils.mention_parser import parse_agent_mention, parse_skill_invocation
-from .mention_routing import handle_agent_mention_routing
-from .skill_mention_routing import handle_skill_mention_routing
+from ..utils.mention_parser import (
+    parse_agent_mention,
+    parse_skill_invocation,
+    parse_tool_mention,
+    count_all_mentions,
+)
 from .message_processor import (
     extract_user_api_key_from_tools,
     extract_images_from_message,
@@ -56,7 +59,6 @@ from ..entities.tool_config import ToolConfig
 from ..entities.message import FileAttachment, HistoryMessage
 from .agents.agent_models import ChatAgent, AgentDescriptor, get_builder_descriptors
 from emery_agents.tools.capability_registry import CapabilityRegistry
-from emery_agents.tools.capability_bootstrap import populate_system_agents
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +89,7 @@ class AgentStreamingHandler:
         tool_loader: Optional['UnifiedToolLoader'],
         plan_service: 'PlanService',
         coordinator_handler: 'CoordinatorStreamingHandler',
-        capability_registry: Optional[CapabilityRegistry] = None,
+        capability_registry: CapabilityRegistry,
     ):
         self.session_manager = session_manager
         self.model_provider = model_provider
@@ -95,13 +97,7 @@ class AgentStreamingHandler:
         self.tool_loader = tool_loader
         self.plan_service = plan_service
         self.coordinator_handler = coordinator_handler
-        # Capability registry for agent/skill discovery (replaces managed_agents_factory.capability_registry)
-        self.capability_registry = capability_registry or CapabilityRegistry()
-        if not capability_registry:
-            populate_system_agents(self.capability_registry)
-
-        # Token usage from last execution (for ProcessMessage to capture)
-        self.last_token_usage = None
+        self.capability_registry = capability_registry
 
     async def stream_response(
         self,
@@ -119,8 +115,8 @@ class AgentStreamingHandler:
         file_attachments: Optional[List[FileAttachment]] = None,
         workspace_path: Optional[Path] = None,
         workspace_id: Optional[str] = None,
-        workspace_prefix: Optional[str] = None,
         workspace_type: Optional[str] = None,
+        workspace_org_id: Optional[int] = None,
         extra_headers: Optional[Dict[str, str]] = None,
     ) -> AsyncIterator[StreamResponseDict]:
         """
@@ -155,7 +151,7 @@ class AgentStreamingHandler:
             # Create centralized tool provider (with audit headers if available)
             tool_provider = ToolProvider(effective_api_key or "", org_id or 0, extra_headers=extra_headers)
 
-            agent = self.session_manager.get_agent(session_id) if session_id else None
+            agent = self.session_manager.get_agent(session_id, organization_id=org_id) if session_id else None
 
             if agent:
                 # HOT PATH: Agent exists in memory
@@ -185,7 +181,8 @@ class AgentStreamingHandler:
                     conversation_history=conversation_history,
                     workspace_path=workspace_path,
                     workspace_id=workspace_id,
-                    workspace_prefix=workspace_prefix,
+                    workspace_type=workspace_type,
+                    workspace_org_id=workspace_org_id,
                 )
 
             logger.info(f"🤖 Using ToolCallingAgent with {len(smolagents_tools)} tools")
@@ -206,34 +203,29 @@ class AgentStreamingHandler:
             logger.info(f"💬 Current task: {len(current_task)} chars")
             logger.info(f"🧠 Agent memory: {len(agent.memory.steps)} steps")
 
-            # === @AGENT MENTION DETECTION ===
-            cleaned_task, agent_mention = parse_agent_mention(current_task)
-            if agent_mention:
-                logger.info(f"🎯 Detected @agent mention: '{agent_mention}'")
-                async for event in handle_agent_mention_routing(
-                    agent_mention=agent_mention,
-                    task=cleaned_task,
-                    tool_provider=tool_provider,
-                    skill_executor_service=self.skill_executor_service,
-                    org_model=org_model,
-                    images=images,
-                ):
-                    yield event
-                return  # Agent mention handled
+            # === @AGENT / @SKILL / @TOOL MENTION DETECTION ===
+            # Single mention → skip triage, plan focused on the specified resource
+            # Multiple mentions → normal pipeline (triage → plan → execute)
+            pre_selected_skill: Optional[str] = None
+            pre_selected_agent: Optional[str] = None
+            pre_selected_tool: Optional[str] = None
 
-            # === @SKILL MENTION DETECTION ===
-            skill_invocation = parse_skill_invocation(current_task)
-            if skill_invocation:
-                logger.info(f"🎯 Detected @skill mention: '{skill_invocation.skill_name}' with {len(skill_invocation.inputs)} inputs")
-                async for event in handle_skill_mention_routing(
-                    skill_invocation=skill_invocation,
-                    tool_provider=tool_provider,
-                    org_model=org_model,
-                ):
-                    yield event
-                return  # Skill mention handled
+            mention_count = count_all_mentions(current_task)
+            if mention_count == 1:
+                _, agent_mention = parse_agent_mention(current_task)
+                skill_invocation = parse_skill_invocation(current_task) if not agent_mention else None
+                _, tool_mention = parse_tool_mention(current_task) if not agent_mention and not skill_invocation else (current_task, None)
 
-            # Stream agent execution with coordinator
+                pre_selected_agent = agent_mention
+                pre_selected_skill = skill_invocation.skill_name if skill_invocation else None
+                pre_selected_tool = tool_mention
+
+                mention_name = agent_mention or pre_selected_skill or tool_mention
+                logger.info(f"Single @mention detected: '{mention_name}' — routing to planner")
+            elif mention_count > 1:
+                logger.info(f"Multiple @mentions detected ({mention_count}) — routing to full pipeline")
+
+            # Stream agent execution with coordinator (handles both mentions and normal flow)
             async for event in self._execute_with_streaming(
                 agent=agent,
                 smolagents_tools=smolagents_tools,
@@ -249,6 +241,9 @@ class AgentStreamingHandler:
                 user_id=user_id,
                 workspace_type=workspace_type,
                 workspace_id=workspace_id,
+                pre_selected_skill=pre_selected_skill,
+                pre_selected_agent=pre_selected_agent,
+                pre_selected_tool=pre_selected_tool,
             ):
                 yield event
 
@@ -274,7 +269,8 @@ class AgentStreamingHandler:
         conversation_history: Optional[List[HistoryMessage]],
         workspace_path: Optional[Path] = None,
         workspace_id: Optional[str] = None,
-        workspace_prefix: Optional[str] = None,
+        workspace_type: Optional[str] = None,
+        workspace_org_id: Optional[int] = None,
     ) -> ChatAgent:
         """Create new agent and restore from history (COLD PATH).
 
@@ -319,7 +315,8 @@ class AgentStreamingHandler:
                 history_message_count=len(conversation_history) if conversation_history else 0,
                 workspace_path=workspace_path,
                 workspace_id=workspace_id,
-                workspace_prefix=workspace_prefix,
+                workspace_type=workspace_type,
+                workspace_org_id=workspace_org_id,
             )
 
             if file_attachments:
@@ -353,6 +350,9 @@ class AgentStreamingHandler:
         user_id: Optional[str] = None,
         workspace_type: Optional[str] = None,
         workspace_id: Optional[str] = None,
+        pre_selected_skill: Optional[str] = None,
+        pre_selected_agent: Optional[str] = None,
+        pre_selected_tool: Optional[str] = None,
     ) -> AsyncIterator[StreamResponseDict]:
         """Execute agent with streaming and coordinator integration."""
         step_index = 0
@@ -439,6 +439,9 @@ class AgentStreamingHandler:
                 runtime_skill_inputs=skill_inputs,
                 images=images,
                 has_images=len(images) > 0,
+                pre_selected_skill=pre_selected_skill,
+                pre_selected_agent=pre_selected_agent,
+                pre_selected_tool=pre_selected_tool,
             ):
                 if isinstance(event, dict):
                     yield event  # type: ignore[misc]  # Coordinator returns compatible dicts
@@ -454,6 +457,7 @@ class AgentStreamingHandler:
             from ..reasoning.config import get_dspy_lm
             from ..reasoning.modules.executor import ExecutorModule
             from emery_agents.tools.factories import create_all_tools
+            from ..services.analysis.llm_usage import record_from_lm
 
             import dspy
 
@@ -483,6 +487,7 @@ class AgentStreamingHandler:
                     step_description=current_task,
                     context=json.dumps(execution_context),
                 )
+            record_from_lm(lm)
 
             result_str = str(result)
             logger.info(f"✅ DSPy execution completed: {len(result_str)} chars")

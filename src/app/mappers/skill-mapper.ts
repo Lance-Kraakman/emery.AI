@@ -28,6 +28,7 @@ export type { InputDefinition, OutputDefinition, TableReference, FieldSource, Ro
 export interface ToolConfigDTO {
   name: string;
   config?: Record<string, any>;
+  iconUrl?: string;
 }
 
 /**

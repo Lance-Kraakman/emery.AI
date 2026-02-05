@@ -27,6 +27,7 @@ import dspy
 
 from ...ace import StepResult
 from ...reasoning.config import get_dspy_lm
+from ...services.analysis.llm_usage import record_from_lm
 from ...reasoning.modules.executor import ExecutorModule, SimpleExecutorModule
 from ...reasoning.utils import extract_dspy_result, build_step_outcome, StepOutcome
 from emery_agents.tools.factories import create_all_tools
@@ -92,6 +93,15 @@ def _build_step_prompt(
             "This step executes an existing skill. Use `skill_crud(method='execute', skill_id=<ID>, data={inputs})`.",
             "If you don't have the skill_id yet, call `skill_crud(method='list')` first.",
             "Do NOT replicate the skill's logic — just execute it by ID.",
+        ])
+
+    # Tool directive — when the plan specifies a tool, the executor MUST use it
+    if current_step.tool_call:
+        parts.extend([
+            "",
+            "## Required Tool",
+            f"You MUST use the `{current_step.tool_call}` tool to complete this step.",
+            "Do NOT use alternative tools or skip the tool call.",
         ])
 
     # Step scope constraint — prevent LLM from executing beyond this step
@@ -384,6 +394,7 @@ class PlanStepExecutor:
                     step_description=prompt,
                     context=json.dumps(context),
                 )
+            record_from_lm(lm)
 
             result_str = extract_dspy_result(result)
             outcome = build_step_outcome(result_str, executor.last_trajectory)
@@ -477,6 +488,7 @@ class PlanStepExecutor:
                     step_description=task,
                     context=json.dumps(context),
                 )
+            record_from_lm(lm)
 
             result_str = extract_dspy_result(result)
 

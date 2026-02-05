@@ -57,9 +57,11 @@ export async function getUserIdFromRequest(_request: Request): Promise<string | 
 }
 
 export const authOptions = {
+  // Cast required: encryptedText customType columns in accounts table change the
+  // TypeScript inference, but the runtime types (text columns) are fully compatible.
   adapter: DrizzleAdapter(db, {
     usersTable: users,
-    accountsTable: accounts,
+    accountsTable: accounts as any,
     sessionsTable: sessions,
     verificationTokensTable: verificationTokens,
   }),
@@ -180,11 +182,17 @@ export const authOptions = {
     },
     async signIn({ user, account, profile }: any) {
       try {
-        // Check if user already exists
+        // For email provider, user.id may be the email address (not a UUID)
+        // when the user doesn't exist yet. Always use email for lookup.
+        const userEmail = user.email;
+        if (!userEmail) {
+          return true; // Allow sign-in to proceed, adapter will handle user creation
+        }
+
         const existingUser = await db
           .select()
           .from(users)
-          .where(eq(users.id, user.id))
+          .where(eq(users.email, userEmail))
           .limit(1);
 
         const userExists = existingUser.length > 0;
@@ -199,7 +207,6 @@ export const authOptions = {
         }
 
         // For new users, they will be created by the adapter automatically
-        // We'll set isAppOnlyUser in a separate callback or during first session
         return true;
       } catch (error) {
         console.error('Error in signIn callback:', error);
@@ -217,14 +224,9 @@ export const authOptions = {
         console.warn('Invalid URL in redirect:', url);
       }
 
-      // Default redirect: check if it's a public app context or platform
-      // If URL is from public app route, keep them there
-      // Otherwise, send to platform dashboard
-      if (url.includes('/public/')) {
-        return url;
-      }
-
       // Default to platform dashboard
+      // Note: /public/ app URLs are already handled above — relative URLs at line 211,
+      // same-origin absolute URLs at line 215. No special /public/ case needed.
       return `${baseUrl}/mission-control/dashboard`;
     },
   },
@@ -286,10 +288,30 @@ export async function hasPermission(userId: string, permission: PermissionCheck,
     const userIdVO = UserId.fromString(userId);
     const orgIdVO = OrganizationId.fromNumber(organizationId);
     const permissionVO = typeof permission === 'string' ? Permission.fromString(permission) : permission;
-    
+
     return await rbac.hasPermission(userIdVO, permissionVO, orgIdVO);
   } catch (error) {
     console.error("Error checking permission:", error);
+    return false;
+  }
+}
+
+export async function hasResourcePermission(
+  userId: string,
+  permission: PermissionCheck,
+  organizationId: number,
+  resourceType: string,
+  resourceId?: number
+): Promise<boolean> {
+  try {
+    const rbac = getRBACRepository();
+    const userIdVO = UserId.fromString(userId);
+    const orgIdVO = OrganizationId.fromNumber(organizationId);
+    const permissionVO = typeof permission === 'string' ? Permission.fromString(permission) : permission;
+
+    return await rbac.hasResourcePermission(userIdVO, permissionVO, orgIdVO, resourceType, resourceId);
+  } catch (error) {
+    console.error("Error checking resource permission:", error);
     return false;
   }
 }

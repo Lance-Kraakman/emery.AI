@@ -256,6 +256,14 @@ class DataStack(Stack):
             # Modal for sandboxed CodeAgent execution
             "MODAL_TOKEN_ID": ecs.Secret.from_secrets_manager(self.app_secrets_object, "MODAL_TOKEN_ID"),
             "MODAL_TOKEN_SECRET": ecs.Secret.from_secrets_manager(self.app_secrets_object, "MODAL_TOKEN_SECRET"),
+            # AES-256-GCM encryption key for OAuth tokens at rest
+            "ENCRYPTION_KEY": ecs.Secret.from_secrets_manager(self.app_secrets_object, "ENCRYPTION_KEY"),
+            # mTLS certificates for gRPC service-to-service communication
+            "GRPC_CA_CERT": ecs.Secret.from_secrets_manager(self.app_secrets_object, "GRPC_CA_CERT"),
+            "GRPC_SERVER_CERT": ecs.Secret.from_secrets_manager(self.app_secrets_object, "GRPC_SERVER_CERT"),
+            "GRPC_SERVER_KEY": ecs.Secret.from_secrets_manager(self.app_secrets_object, "GRPC_SERVER_KEY"),
+            "GRPC_CLIENT_CERT": ecs.Secret.from_secrets_manager(self.app_secrets_object, "GRPC_CLIENT_CERT"),
+            "GRPC_CLIENT_KEY": ecs.Secret.from_secrets_manager(self.app_secrets_object, "GRPC_CLIENT_KEY"),
         }
 
         # ========== CLOUD MAP ==========
@@ -277,6 +285,16 @@ class DataStack(Stack):
             enforce_ssl=True,
             versioned=True, # Good practice for production
             removal_policy=RemovalPolicy.RETAIN,  # Protect bucket from accidental deletion
+            # COST-OPT: Expire non-current versions after 90 days to reduce storage costs.
+            # Current (latest) versions are NEVER deleted by this rule.
+            # Non-current versions are previous versions created by overwrites/deletes.
+            lifecycle_rules=[
+                s3.LifecycleRule(
+                    id="expire-noncurrent-versions",
+                    noncurrent_version_expiration=Duration.days(90),
+                    enabled=True,
+                ),
+            ],
         )
 
         # ========== OUTPUTS ==========

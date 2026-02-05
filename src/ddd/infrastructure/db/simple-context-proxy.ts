@@ -16,79 +16,55 @@ import { withRLSContext } from './rls-context';
 import type { DbClient } from './client';
 import { db } from './client';
 
+interface QueryStep {
+  method: string;
+  args: any[];
+}
+
+/**
+ * Replay recorded query-building steps on a transaction client.
+ * Throws if no steps were recorded — this prevents RLS bypass via empty query chains.
+ */
+function replayQuerySteps(tx: any, steps: QueryStep[]): any {
+  if (steps.length === 0) {
+    throw new Error('RLS context required but no query steps recorded - query blocked');
+  }
+  let query = tx;
+  for (const step of steps) {
+    query = query[step.method](...step.args);
+  }
+  return query;
+}
+
 /**
  * Simple approach: Store query info and rebuild on transaction client
  * This captures the query-building chain and replays it on the transaction
  */
-function createQueryBuilderProxy(queryBuilder: any, originalDb: DbClient, context: { organizationId: any; userId?: any }, initialSteps: Array<{ method: string; args: any[] }> = []): any {
-  // Store the query building steps - start with any initial steps
-  const querySteps: Array<{ method: string; args: any[] }> = [...initialSteps];
-  
+function createQueryBuilderProxy(queryBuilder: any, originalDb: DbClient, context: { organizationId: any; userId?: any }, initialSteps: QueryStep[] = []): any {
+  const querySteps: QueryStep[] = [...initialSteps];
+
   return new Proxy(queryBuilder, {
     get(target, prop, receiver) {
       const originalMethod = Reflect.get(target, prop, receiver);
-      
+
       // Handle Promise methods - this is where execution happens
       if (prop === 'then' && typeof originalMethod === 'function') {
         return function(resolve?: any, reject?: any) {
-          // Execute with RLS context
           return withRLSContext(
             originalDb,
             context.organizationId,
-            async (tx) => {
-              // CRITICAL FIX: Execute the query using the transaction client with RLS context
-              // Rebuild the query chain on the transaction client using stored querySteps
-              try {
-                if (querySteps.length === 0) {
-                  console.warn('⚠️ RLS Context Warning: No query steps recorded, executing original query');
-                  return await target;
-                }
-                
-                // Rebuild the query chain on the transaction client
-                let query = tx;
-                for (const step of querySteps) {
-                  query = (query as any)[step.method](...step.args);
-                }
-                
-                return await query;
-              } catch (error) {
-                // Fallback: if rebuilding fails, execute original query with warning
-                console.warn('⚠️ RLS Context Error: Query rebuilding failed, falling back to original query:', error);
-                console.warn('Query steps were:', querySteps);
-                return await target;
-              }
-            },
+            async (tx) => await replayQuerySteps(tx, querySteps),
             context.userId
           ).then(resolve, reject);
         };
       }
-      
+
       if (prop === 'catch' && typeof originalMethod === 'function') {
         return function(reject?: any) {
           return withRLSContext(
             originalDb,
             context.organizationId,
-            async (tx) => {
-              // CRITICAL FIX: Same query rebuilding logic as 'then' method
-              try {
-                if (querySteps.length === 0) {
-                  console.warn('⚠️ RLS Context Warning: No query steps recorded in catch, executing original query');
-                  return await target;
-                }
-                
-                // Rebuild the query chain on the transaction client
-                let query = tx;
-                for (const step of querySteps) {
-                  query = (query as any)[step.method](...step.args);
-                }
-                
-                return await query;
-              } catch (error) {
-                console.warn('⚠️ RLS Context Error: Query rebuilding failed in catch, falling back to original query:', error);
-                console.warn('Query steps were:', querySteps);
-                return await target;
-              }
-            },
+            async (tx) => await replayQuerySteps(tx, querySteps),
             context.userId
           ).catch(reject);
         };

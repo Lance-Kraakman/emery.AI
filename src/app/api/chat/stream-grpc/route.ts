@@ -28,14 +28,14 @@ import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 
 // Import existing chat services (DIContainer now auto-initializes)
-import { getChatApplicationService, getDynamicTableRepository, getAgentRepository, getToolConfigurationApplicationService, getUserRepository, getOrganizationRepository, getStorageQuotaApplicationService } from '@/ddd/application/di/container';
+import { getChatApplicationService, getDynamicTableRepository, getAgentRepository, getToolConfigurationApplicationService, getUserRepository, getOrganizationRepository, getStorageQuotaApplicationService, getAuditApplicationService } from '@/ddd/application/di/container';
 import { TokenUsageApplicationService } from '@/ddd/application/services/billing/token-usage-application-service';
 import { getTokenUsageRepository } from '@/ddd/application/di/getters';
 import type { CreateChatDTO, SendMessageDTO, UpdateMessageDTO, ExecutionStep, ExecutionStepMetadata } from '@/app/dtos/chat.dto';
 import type { EnrichToolsWithUserApiKeyCommand } from '@/ddd/application/services/tools/tool-configuration-application-service';
 
 // Import user API key utilities
-import { assignApiKeyToUser } from '@/lib/auth/user-api-keys';
+import { ensureFreshUserApiKey } from '@/lib/auth/user-api-keys';
 
 // Import shared chat utilities
 import { getMessageContent } from '@/lib/chat/message-helpers';
@@ -97,9 +97,7 @@ export async function POST(req: NextRequest) {
     console.log('[CHAT-GRPC-API] Session status:', {
       hasSession: !!session,
       hasUser: !!session?.user,
-      userId: session?.user?.id,
-      userEmail: session?.user?.email,
-      currentOrganizationId: session?.user?.currentOrganizationId
+      hasOrganization: !!session?.user?.currentOrganizationId
     });
     
     // SECURITY: Require authenticated session - no bypass
@@ -173,7 +171,7 @@ export async function POST(req: NextRequest) {
       requestModel = body.model;
       tools = body.tools || [];
 
-      console.log('[CHAT-GRPC-API] [DEBUG] Received tools from frontend:', JSON.stringify(tools, null, 2));
+      console.log('[CHAT-GRPC-API] [DEBUG] Received tools from frontend:', tools.map((t: any) => t.name));
     }
 
     const latestMessage = getMessageContent(messages[messages.length - 1]);
@@ -486,23 +484,13 @@ export async function POST(req: NextRequest) {
 
     // 5.1 Always fetch user API key for managed agents (skill_builder, etc.)
     // This is needed even when there are no tools configured
+    // Always generates a fresh key (hash stored, plaintext returned for injection)
     let userApiKey: string | null = null;
     if (userId) {
       try {
-        console.log('[CHAT-GRPC-API] Fetching user API key for managed agents');
-        const userRepository = getUserRepository();
-        const user = await userRepository.findById(UserId.fromString(userId));
-
-        if (user && user.apiKey) {
-          userApiKey = user.apiKey.value;
-          console.log('[CHAT-GRPC-API] Found existing user API key');
-        } else {
-          console.log('[CHAT-GRPC-API] No user API key found, generating new one');
-          userApiKey = await assignApiKeyToUser(userId);
-          console.log('[CHAT-GRPC-API] Generated new user API key');
-        }
+        userApiKey = await ensureFreshUserApiKey(userId);
       } catch (error) {
-        console.error('[CHAT-GRPC-API] Error fetching user API key:', error);
+        console.error('[CHAT-GRPC-API] Error generating user API key:', error);
       }
     }
 
@@ -560,6 +548,7 @@ export async function POST(req: NextRequest) {
       tools: enrichedRegularTools, // DDD-enriched tools with user API key authentication
       defaultModel: defaultModel, // Organization's default AI model
       userApiKey: userApiKey || undefined, // User API key for managed agents and skill_crud
+      userName: session.user.name || session.user.email || '', // User display name for audit trail
     };
 
     console.log('[CHAT-GRPC-API] Processing options:', {
@@ -902,11 +891,54 @@ export async function POST(req: NextRequest) {
                   });
                 }
 
+                // Log chat execution audit event
+                const completionMeta = response.complete.metadata || {};
+                const agentIdFromExecution = completionMeta.agent_id && completionMeta.agent_id !== 'none' ? completionMeta.agent_id : null;
+                const agentNameFromExecution = completionMeta.agent_name || null;
+
+                const auditService = getAuditApplicationService();
+                auditService.logEvent(OrganizationId.fromNumber(organizationId), {
+                  eventType: 'agent',
+                  eventCategory: 'chat_execution',
+                  eventAction: 'complete',
+                  actorType: agentIdFromExecution ? 'agent' : 'user',
+                  actorId: agentIdFromExecution || userId,
+                  actorName: agentIdFromExecution
+                    ? (agentNameFromExecution || undefined)
+                    : (session!.user.name || session!.user.email || undefined),
+                  resourceType: 'chat',
+                  resourceId: currentChatId || 'unknown',
+                  eventData: {
+                    messageId,
+                    model: defaultModel,
+                    ...(response.complete.tokenUsage && {
+                      inputTokens: response.complete.tokenUsage.inputTokens,
+                      outputTokens: response.complete.tokenUsage.outputTokens,
+                    }),
+                  },
+                  metadata: agentIdFromExecution ? {
+                    triggeredByUserId: userId,
+                    triggeredByUserName: session!.user.name || session!.user.email || undefined,
+                    triggerType: 'manual' as const,
+                    agentId: agentIdFromExecution,
+                    agentName: agentNameFromExecution || undefined,
+                  } : undefined,
+                  durationMs: Date.now() - startTime,
+                  success: true,
+                });
+
                 // Send completion event with execution steps metadata to frontend
                 const completionEvent = processCompletion(
                   response.complete.modelUsed,
                   response.complete.totalTokens,
-                  collectedSteps
+                  collectedSteps,
+                  response.complete.tokenUsage ? {
+                    inputTokens: response.complete.tokenUsage.inputTokens,
+                    outputTokens: response.complete.tokenUsage.outputTokens,
+                    totalTokens: response.complete.tokenUsage.totalTokens,
+                    modelName: response.complete.tokenUsage.modelName,
+                    costUsd: response.complete.tokenUsage.costUsd
+                  } : undefined
                 );
 
                 try {
@@ -1031,6 +1063,27 @@ export async function POST(req: NextRequest) {
                   sessionReset: response.error.sessionReset,
                   timestamp: new Date().toISOString()
                 });
+
+                // Record partial token usage if available (even on error)
+                if (response.error.tokenUsage) {
+                  const tokenUsage = response.error.tokenUsage;
+                  console.log('[CHAT-GRPC-API] Recording partial token usage from error:', tokenUsage);
+                  tokenUsageService.recordTokenUsage({
+                    organizationId: organizationId,
+                    userId: userId,
+                    entityType: 'chat' as const,
+                    entityId: currentChatId,
+                    modelName: tokenUsage.modelName,
+                    inputTokens: tokenUsage.inputTokens,
+                    outputTokens: tokenUsage.outputTokens,
+                    processingTimeMs: Date.now() - startTime,
+                    metadata: {
+                      chatContext: 'streaming_error'
+                    }
+                  }).catch((error) => {
+                    console.error('[CHAT-GRPC-API] Failed to record partial token usage:', error);
+                  });
+                }
 
                 // Update message with error status if we have a placeholder
                 if (assistantMessageId && currentChatId) {

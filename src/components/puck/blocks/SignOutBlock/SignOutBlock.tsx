@@ -1,7 +1,8 @@
 "use client";
 
 import React from "react";
-import { signOut, useSession } from "next-auth/react";
+import { useSession } from "next-auth/react";
+import { secureSignOut } from "@/lib/auth/sign-out";
 import { usePublicAppAuth } from "@/components/providers/PublicAppAuthProvider";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -104,8 +105,8 @@ export function SignOutBlock({
     ? resolvedAction.href
     : (typeof window !== 'undefined' ? window.location.pathname : '/');
 
-  const handleSignOut = async () => {
-    await signOut({ callbackUrl });
+  const handleSignOut = () => {
+    secureSignOut(callbackUrl);
   };
 
   return (

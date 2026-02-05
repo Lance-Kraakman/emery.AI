@@ -548,7 +548,7 @@ function WorkflowCanvasInner({
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         snapToGrid
-        snapGrid={[16, 16]}
+        snapGrid={[20, 20]}
         fitView
         selectionOnDrag
         selectionMode={SelectionMode.Partial}

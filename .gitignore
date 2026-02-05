@@ -80,3 +80,6 @@ dmypy.json
 *.patch
 # Security scan reports
 security/reports/
+
+# Generated gRPC TLS certificates (dev)
+certs/

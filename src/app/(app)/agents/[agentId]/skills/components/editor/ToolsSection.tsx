@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, X, FileText, File, Database, Users } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
 import { ToolDropdown } from '@/components/chat/ToolDropdown';
+import { ToolChip } from './ToolChip';
 import type { ToolDTO } from '@/app/mappers/tool-mapper';
 import type { ToolConfigDTO } from '@/app/mappers/skill-mapper';
 import { ToolCategory } from '@/ddd/domain/tools/value-objects/tool-metadata';
@@ -12,13 +12,11 @@ import { ToolCategory } from '@/ddd/domain/tools/value-objects/tool-metadata';
 interface ToolsSectionProps {
   tools: ToolConfigDTO[];
   onToolsChange: (tools: ToolConfigDTO[]) => void;
-  stepIndex: number;
 }
 
 export function ToolsSection({
   tools,
   onToolsChange,
-  stepIndex
 }: ToolsSectionProps) {
   const [showDropdown, setShowDropdown] = useState(false);
   const [dropdownPosition, setDropdownPosition] = useState<{
@@ -33,10 +31,7 @@ export function ToolsSection({
     if (buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
       const gap = 8;
-
-      // Position dropdown above the button
-      const bottom = window.innerHeight - rect.top + gap;
-      const maxHeight = rect.top - gap - 20;
+      const minHeight = 300;
 
       let left = rect.left;
       const dropdownWidth = 440;
@@ -49,20 +44,45 @@ export function ToolsSection({
         left = 16;
       }
 
-      setDropdownPosition({ bottom, left, maxHeight });
+      const spaceAbove = rect.top - gap - 20;
+      const spaceBelow = window.innerHeight - rect.bottom - gap - 20;
+
+      if (spaceAbove >= minHeight) {
+        // Position above the button
+        setDropdownPosition({
+          bottom: window.innerHeight - rect.top + gap,
+          left,
+          maxHeight: spaceAbove,
+        });
+      } else {
+        // Position below the button
+        setDropdownPosition({
+          top: rect.bottom + gap,
+          left,
+          maxHeight: spaceBelow,
+        });
+      }
       setShowDropdown(true);
     }
   };
 
   const handleToolSelect = (tool: ToolDTO) => {
-    // Convert ToolDTO to ToolConfigDTO with reference-style config
+    // Check for duplicates
+    const toolRef = getToolReference(tool);
+    if (tools.some((t) => t.name === toolRef)) {
+      setShowDropdown(false);
+      return;
+    }
+
     const toolConfig: ToolConfigDTO = {
-      name: getToolReference(tool),
+      name: toolRef,
       config: {
         displayName: tool.displayName,
         category: tool.category,
-        type: tool.type
-      }
+        type: tool.type,
+      },
+      // icon is enriched by ToolDropdown from appTypes.iconUrl
+      iconUrl: tool.icon || undefined,
     };
 
     onToolsChange([...tools, toolConfig]);
@@ -94,25 +114,6 @@ export function ToolsSection({
     }
   };
 
-  // Get icon based on tool reference
-  const getToolIcon = (toolName: string) => {
-    if (toolName.startsWith('@doc:')) {
-      return <FileText className="h-3.5 w-3.5 text-blue-600" />;
-    } else if (toolName.startsWith('@file:')) {
-      return <File className="h-3.5 w-3.5 text-green-600" />;
-    } else if (toolName.startsWith('@agent:')) {
-      return <Users className="h-3.5 w-3.5 text-orange-600" />;
-    } else if (toolName.startsWith('@table:') || toolName.startsWith('@database:')) {
-      return <Database className="h-3.5 w-3.5 text-purple-600" />;
-    }
-    return <Plus className="h-3.5 w-3.5 text-gray-600" />;
-  };
-
-  // Get display name from tool config
-  const getDisplayName = (tool: ToolConfigDTO): string => {
-    return tool.config?.displayName || tool.name;
-  };
-
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -135,20 +136,14 @@ export function ToolsSection({
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
-      {/* Selected Tools */}
+      {/* Selected Tools — rendered with ToolChip */}
       {tools.map((tool, index) => (
         <div key={index} className="relative flex items-center group">
-          <div
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs
-              transition-colors duration-150 flex-shrink-0 max-w-xs
-              border-border bg-background hover:bg-muted/50"
-            title={getDisplayName(tool)}
-          >
-            {getToolIcon(tool.name)}
-            <span className="truncate font-medium">
-              {getDisplayName(tool)}
-            </span>
-          </div>
+          <ToolChip
+            toolName={tool.name}
+            displayName={tool.config?.displayName}
+            iconUrl={tool.iconUrl}
+          />
 
           {/* Remove button */}
           <button

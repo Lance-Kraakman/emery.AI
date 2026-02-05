@@ -9,6 +9,7 @@
  */
 
 import * as grpc from '@grpc/grpc-js';
+import { getGrpcClientCredentials } from '@/lib/security/grpc-tls';
 import * as protoLoader from '@grpc/proto-loader';
 import path from 'path';
 import type { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
@@ -45,6 +46,7 @@ export interface ChatProcessingOptions {
   defaultModel?: string | null;  // Organization's default AI model
   userApiKey?: string;           // User API key for managed agents (skill_builder, etc.)
   taskId?: string;               // Task tracking ID (if set, execution is task-tracked with DB record)
+  userName?: string;             // User display name for audit trail
 }
 
 export interface StreamingChatResponse {
@@ -52,7 +54,15 @@ export interface StreamingChatResponse {
   content?: string;
   sequence?: number;
   complete?: ProcessingComplete;
-  error?: ProcessingError;
+  error?: ProcessingError & {
+    tokenUsage?: {
+      inputTokens: number;
+      outputTokens: number;
+      totalTokens: number;
+      modelName: string;
+      costUsd: number;
+    };
+  };
   stepProgress?: StepProgress;
   awaitingInput?: AwaitingInput;  // HITL: Plan approval or question
   taskId?: string;  // Task ID from response (for logging/tracking)
@@ -99,7 +109,7 @@ export class ChatProcessingClient {
 
     this.client = new ChatProcessingService(
       this.address,
-      grpc.credentials.createInsecure(), // AIDEV-TODO: Add TLS in production
+      getGrpcClientCredentials(),
       {
         // gRPC keepalive settings for better connection performance
         'grpc.keepalive_time_ms': 30000, // Send keepalive ping every 30s
@@ -191,7 +201,8 @@ export class ChatProcessingClient {
       messageId: actualMessageId, // Add message ID for cancellation tracking
       sessionId: actualSessionId, // Session ID for stateful agent persistence
       userApiKey: options.userApiKey || '', // User API key for managed agents (skill_builder, etc.)
-      taskId: options.taskId || '' // Task tracking (empty = not task-tracked)
+      taskId: options.taskId || '', // Task tracking (empty = not task-tracked)
+      userName: options.userName || '' // User display name for audit trail
     };
 
     // Context removed - agentId is resolved from skill.agent_id in Python
@@ -262,7 +273,17 @@ export class ChatProcessingClient {
         } else if (response.error) {
           streamingResponse = {
             type: 'error',
-            error: response.error,
+            error: {
+              ...response.error,
+              // Map proto TokenUsage to simple object if present
+              tokenUsage: response.error.tokenUsage ? {
+                inputTokens: response.error.tokenUsage.inputTokens,
+                outputTokens: response.error.tokenUsage.outputTokens,
+                totalTokens: response.error.tokenUsage.totalTokens,
+                modelName: response.error.tokenUsage.modelName,
+                costUsd: response.error.tokenUsage.costUsd
+              } : undefined
+            },
             taskId,
             timestamp: response.timestamp
           };
@@ -347,7 +368,8 @@ export class ChatProcessingClient {
             hint: getHint(error.code),
             canRetry: error.code !== grpc.status.CANCELLED,
             autoRetry: false,
-            sessionReset: error.code === grpc.status.UNAVAILABLE  // Fatal if service unavailable
+            sessionReset: error.code === grpc.status.UNAVAILABLE,  // Fatal if service unavailable
+            tokenUsage: undefined
           },
           timestamp: Date.now()
         });

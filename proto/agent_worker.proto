@@ -37,6 +37,7 @@ message TaskRequest {
   string trigger_type = 16;             // 'manual' | 'webhook' | 'database_event' | 'calendar' | 'public_api'
   string triggered_by_user_id = 17;     // Root-cause user ID who initiated the trigger chain
   string triggered_by_user_name = 18;   // Display name of the triggering user
+  string user_api_key = 19;              // API key for tool auth (agent key for agent tasks, rotated per-task)
 }
 
 // AIDEV-NOTE: Simplified for single-instruction execution (removed step_id and step_type)
@@ -539,6 +540,8 @@ message ProcessMessageRequest {
   // Task tracking (optional - if set, execution is task-based with DB record)
   // AIDEV-NOTE: When present, skill/agent execution is tracked via Task infrastructure
   string task_id = 20;
+
+  string user_name = 21;           // User display name for audit trail
 }
 
 // Streaming response from AI processing
@@ -642,6 +645,7 @@ message ProcessingError {
   bool can_retry = 5;                // Can user retry this operation?
   bool auto_retry = 6;               // Was this error auto-retried?
   bool session_reset = 7;            // Was session reset due to this error?
+  TokenUsage token_usage = 8;        // Token usage incurred before error
 }
 
 // Real-time step execution progress (for stream=True agent execution)

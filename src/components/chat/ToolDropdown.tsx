@@ -7,7 +7,7 @@
  * Uses custom hooks and sub-components for better organization.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { ChevronDown, ChevronUp, X } from 'lucide-react';
 import type { ToolDTO } from '@/app/mappers/tool-mapper';
 import { getToolInsertTextWithParameters } from './tool-dropdown/utils';
@@ -73,6 +73,27 @@ export function ToolDropdown({
     isClient,
   });
 
+  // Build app icon lookup map for enriching selected tools
+  const appIconMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const app of appFilter.availableApps || []) {
+      if (app.icon) map.set(app.id, app.icon);
+    }
+    return map;
+  }, [appFilter.availableApps]);
+
+  // Enrich selected tool with app icon URL from availableApps
+  const enrichedOnSelect = useCallback((tool: ToolDTO) => {
+    const appId = tool.requiredApps?.[0];
+    const appIcon = appId ? appIconMap.get(appId) : undefined;
+    // Attach app icon URL to the tool's icon field if not already a URL
+    if (appIcon && (!tool.icon || !tool.icon.startsWith('/'))) {
+      onSelect({ ...tool, icon: appIcon });
+    } else {
+      onSelect(tool);
+    }
+  }, [onSelect, appIconMap]);
+
   // Reset selected index when search results change
   useEffect(() => {
     setSelectedIndex(0);
@@ -87,7 +108,7 @@ export function ToolDropdown({
         e.preventDefault();
         if (search.allTools[selectedIndex]) {
           const selectedTool = search.allTools[selectedIndex];
-          onSelect({ ...selectedTool, insertText: getToolInsertTextWithParameters(selectedTool) });
+          enrichedOnSelect({ ...selectedTool, insertText: getToolInsertTextWithParameters(selectedTool) });
         } else {
           onClose();
         }
@@ -129,7 +150,7 @@ export function ToolDropdown({
         e.preventDefault();
         if (search.allTools[selectedIndex]) {
           const selectedTool = search.allTools[selectedIndex];
-          onSelect({ ...selectedTool, insertText: getToolInsertTextWithParameters(selectedTool) });
+          enrichedOnSelect({ ...selectedTool, insertText: getToolInsertTextWithParameters(selectedTool) });
         }
         break;
 
@@ -143,7 +164,7 @@ export function ToolDropdown({
         }
         break;
     }
-  }, [isOpen, selectedIndex, search.allTools, onSelect, onClose, isInCategoryMode]);
+  }, [isOpen, selectedIndex, search.allTools, enrichedOnSelect, onClose, isInCategoryMode]);
 
   // Attach keyboard listener
   useEffect(() => {
@@ -238,7 +259,7 @@ export function ToolDropdown({
         isLoadingMore={search.isLoadingMore}
         error={search.error}
         onLoadMore={search.loadMoreTools}
-        onSelectTool={onSelect}
+        onSelectTool={enrichedOnSelect}
         query={query}
         availableApps={appFilter.availableApps || []}
       />
@@ -258,7 +279,7 @@ export function ToolDropdown({
         ...(position?.top !== undefined ? { top: position.top } : {}),
         ...(position?.bottom !== undefined ? { bottom: position.bottom } : {}),
         left: position?.left || 0,
-        height: position?.maxHeight ? `${position.maxHeight}px` : '600px',
+        maxHeight: position?.maxHeight ? `${position.maxHeight}px` : '600px',
       }}
       data-tool-dropdown
       aria-label="Toolbox"

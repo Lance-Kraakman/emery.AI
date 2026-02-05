@@ -108,12 +108,11 @@ export class DIContainer {
     this.registerServices('database', databaseServices);
 
     // Phase 4.5: Register billing services (token usage, invoices, storage)
-    // Depends on: organization repository, file storage repository, agent repository (for workspace storage)
+    // Depends on: organization repository, file storage repository
     const billingServices = registerBillingServices({
       db,
       organizationRepository: coreServices.organizationRepository,
       fileStorageRepository: databaseServices.fileStorageRepository,
-      agentRepository: agentServices.agentRepository,
     });
     this.registerServices('billing', billingServices);
 

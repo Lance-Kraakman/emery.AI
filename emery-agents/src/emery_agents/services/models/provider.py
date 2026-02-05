@@ -146,10 +146,9 @@ class ModelProvider:
             gemini_api_key = os.environ.get("GEMINI_API_KEY")
             if not gemini_api_key:
                 raise EnvironmentError("GEMINI_API_KEY required for Gemini models")
-            logger.info(f"Creating DSPy LM for Gemini: {gemini_model_id}")
+            logger.info(f"Creating DSPy LM for Gemini (native): {gemini_model_id}")
             return dspy.LM(
-                f"openai/{gemini_model_id}",
-                api_base="https://generativelanguage.googleapis.com/v1beta/openai/",
+                f"gemini/{gemini_model_id}",
                 api_key=gemini_api_key,
             )
 

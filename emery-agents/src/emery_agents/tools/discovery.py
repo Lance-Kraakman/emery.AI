@@ -172,16 +172,16 @@ def create_capability_search_tool(registry: "CapabilityRegistry") -> dspy.Tool:
         func=search_capabilities,
         name="search_capabilities",
         desc=(
-            "WHEN TO USE: Search for PLATFORM CAPABILITIES — what the system can do, "
-            "not what the user has already built. Use when you need to find the right "
-            "agent/capability to delegate a task to.\n"
-            "WHAT IT RETURNS: Ranked list of capabilities with id, name, description, "
-            "actions, and entities. The id maps to target_agent in plan steps.\n"
-            "NOTE: For existing user resources (tables, apps), use workspace_overview instead."
+            "Search for capabilities — platform features (schema_builder, app_builder, etc.), "
+            "external integrations (Gmail, Slack, GitHub, etc.), and user-created skills.\n"
+            "WHAT IT RETURNS: Ranked list of capabilities with id, name, type (agent/tool/skill), "
+            "description, actions, and entities. The id maps to target_agent in plan steps.\n"
+            "For integration details, call search_external(service='<name>') to get specific "
+            "tool names and input schemas."
         ),
         arg_desc={
             "query": "Natural language description of what you need to do "
-                     "(e.g., 'create database tables', 'build a dashboard app', 'generate PDF reports')",
+                     "(e.g., 'create database tables', 'send email', 'build a dashboard app')",
             "limit": "Max results to return (default: 5)",
         },
     )
@@ -210,12 +210,14 @@ def create_external_search_tool() -> dspy.Tool:
         func=search_external,
         name="search_external",
         desc=(
-            "Search available external integrations (Slack, GitHub, Google, etc.). "
-            "List integrations by service name or get details for a specific integration."
+            "Get detailed tool actions for a specific external service. "
+            "Call AFTER search_capabilities identifies the service. "
+            "Returns exact tool names (gmail_send_email, slack_post_message) with input schemas. "
+            "Use service parameter to list all available tools for a service."
         ),
         arg_desc={
-            "service": "Filter by service (e.g., 'slack', 'github'). Empty for all services with integration counts.",
-            "integration_name": "Get details for specific integration. Empty to list.",
+            "service": "Service name to get tools for (e.g., 'gmail', 'slack', 'google_sheets'). Returns list of available tool actions.",
+            "integration_name": "Get full details (inputs, outputs, description) for a specific tool (e.g., 'gmail_create_draft').",
         },
     )
 
@@ -254,9 +256,9 @@ def create_web_search_tool() -> dspy.Tool:
         func=web_search,
         name="web_search",
         desc=(
-            "Search the web for external information (READ-ONLY research tool). "
-            "Use for: researching businesses, finding examples, understanding industry practices, "
-            "gathering requirements. "
+            "Search the web for general information (READ-ONLY research tool). "
+            "Use for: researching businesses, understanding industry practices, gathering requirements. "
+            "NOT for discovering platform tools — use search_external for that. "
             "DO NOT use results as direct implementation — use Emery capability tools "
             "(schema_builder, app_builder, etc.) to build based on research findings."
         ),

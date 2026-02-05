@@ -11,6 +11,7 @@
 
 import { NextRequest } from 'next/server';
 import { withAuthenticatedRoute, parseIntParam, parseJsonBody } from '@/lib/api/base';
+import { hasResourcePermission } from '@/lib/auth';
 import { logAgentMutation } from '@/lib/api/agent-context';
 import { getDatabaseApplicationService } from '@/ddd/application/di/container';
 import { DatabaseId, OrganizationId } from '@/ddd/domain/shared/value-objects';
@@ -27,6 +28,11 @@ export async function GET(
   return withAuthenticatedRoute(request, async (user) => {
     const { id } = await params;
     const databaseId = parseIntParam(id, 'database id');
+
+    if (!user.organizationId || !await hasResourcePermission(user.id, 'database:view', user.organizationId, 'databases', databaseId)) {
+      return { success: false, error: 'Permission denied', status: 403 };
+    }
+
     const databaseService = getDatabaseApplicationService();
 
     const database = await databaseService.getDatabase(DatabaseId.fromNumber(databaseId));
@@ -67,6 +73,11 @@ export async function PUT(
   return withAuthenticatedRoute(request, async (user) => {
     const { id } = await params;
     const databaseId = parseIntParam(id, 'database id');
+
+    if (!user.organizationId || !await hasResourcePermission(user.id, 'database:manage', user.organizationId, 'databases', databaseId)) {
+      return { success: false, error: 'Permission denied', status: 403 };
+    }
+
     const body = await parseJsonBody(request);
 
     if (!body) {
@@ -118,12 +129,13 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ): Promise<Response> {
   return withAuthenticatedRoute(request, async (user) => {
-    if (!user.organizationId) {
-      return { success: false, error: 'Organization ID required', status: 400 };
-    }
-
     const { id } = await params;
     const databaseId = parseIntParam(id, 'database id');
+
+    if (!user.organizationId || !await hasResourcePermission(user.id, 'database:manage', user.organizationId, 'databases', databaseId)) {
+      return { success: false, error: 'Permission denied', status: 403 };
+    }
+
     const databaseService = getDatabaseApplicationService();
 
     // Verify database exists before attempting deletion

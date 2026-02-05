@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
+import { hasPermission, hasResourcePermission } from '@/lib/auth';
 import { getAgentTaskApplicationService } from '@/ddd/application/di/container';
 import { TokenUsageApplicationService } from '@/ddd/application/services/billing/token-usage-application-service';
 import { getTokenUsageRepository, getOrganizationRepository } from '@/ddd/application/di/getters';
@@ -15,10 +16,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (!authResult.success || !authResult.user) {
       return NextResponse.json({ error: authResult.error || 'Unauthorized' }, { status: 401 });
     }
+    if (!authResult.user.organizationId || !await hasPermission(authResult.user.id, 'tasks:view', authResult.user.organizationId)) {
+      return NextResponse.json({ error: 'Permission denied' }, { status: 403 });
+    }
 
     // Use AgentTaskApplicationService for task listing (service returns DTOs)
     const agentTaskApplicationService = getAgentTaskApplicationService();
-    const organizationId = authResult.user.organizationId || 1;
+    const organizationId = authResult.user.organizationId;
     const tasks = await agentTaskApplicationService.getTasksForOrganization(organizationId);
 
     return NextResponse.json({
@@ -42,7 +46,6 @@ export async function POST(request: NextRequest) {
     if (!authResult.success || !authResult.user) {
       return NextResponse.json({ error: authResult.error || 'Unauthorized' }, { status: 401 });
     }
-
     const body = await request.json();
     const { agentId, name, instructions } = body;
 
@@ -52,6 +55,10 @@ export async function POST(request: NextRequest) {
         success: false,
         error: 'Missing required fields: agentId, name, instructions'
       }, { status: 400 });
+    }
+
+    if (!authResult.user.organizationId || !await hasResourcePermission(authResult.user.id, 'tasks:create', authResult.user.organizationId, 'agent', parseInt(agentId))) {
+      return NextResponse.json({ error: 'Permission denied' }, { status: 403 });
     }
 
     // Check token quota before creating task

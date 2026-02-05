@@ -91,7 +91,7 @@ class Capability:
                 f"Capability ID must have type prefix (e.g., 'agent:name'), got: {self.id}"
             )
         prefix = self.id.split(":")[0]
-        valid_prefixes = {"agent", "skill", "tool"}
+        valid_prefixes = {"agent", "skill", "tool", "integration"}
         if prefix not in valid_prefixes:
             raise ValueError(
                 f"Capability ID prefix must be one of {valid_prefixes}, got: {prefix}"

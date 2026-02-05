@@ -10,28 +10,31 @@ PLANNING_GUIDANCE = """
 **Choose when**: User needs rich-text documents, templates, or content.
 **Examples**: "create a proposal", "draft a contract", "write meeting notes"
 
-### What document_builder Creates
-
-- Documents with structured content (headings, paragraphs, lists)
-- Documents linked to table records
-
-### Before Creating a Document
-
-Ensure you have:
-- Document title/purpose
-- Target table and field where document is stored
-- Content structure (sections, formatting needs)
-
-### Step Format Examples
-
-- "Create document 'Project Proposal' in 'proposals' table, field 'content'"
-- "Update document in record ID 42, 'notes' field with meeting summary"
-- "Create document template for 'Client Onboarding' with sections: Introduction, Services, Next Steps"
-
 ### Document Features
 
 - Rich text formatting (bold, italic, lists)
 - Headings and sections
 - Tables and embedded content
 - Linked to table records via field
+
+### What the Executor Needs in the Step Description
+The plan step executor receives ONLY the description text and tools. It does NOT see the plan goal,
+capability guidance, or workspace context. Write the description as a COMPLETE instruction.
+
+REQUIRED in every document_builder step description:
+1. **DOCUMENT TITLE**: Exact title in quotes
+2. **LOCATION**: Target table name and field where document is stored (or standalone)
+3. **CONTENT STRUCTURE**: Sections, headings, what each section contains
+4. **OUTCOME**: What the executor should verify
+
+**Step description templates:**
+
+Create document linked to table:
+"Create document '[title]' in table '[table_name]', field '[field_name]'. Sections: [Section1] ([content description]), [Section2] ([content description]). Verify: document exists with [N] sections."
+
+Create standalone document:
+"Create document '[title]' with sections: [Section1], [Section2], [Section3]. Verify: document exists."
+
+BAD: "Create a proposal document"
+GOOD: "Create document 'Project Proposal' in table 'proposals', field 'content'. Sections: Introduction (project overview), Scope (deliverables and timeline), Pricing (cost breakdown). Verify: document exists with 3 sections."
 """

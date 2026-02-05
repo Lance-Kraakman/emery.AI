@@ -11,6 +11,7 @@
 
 import { NextRequest } from 'next/server';
 import { withAuthenticatedRoute, parseIntParam, parseJsonBody } from '@/lib/api/base';
+import { hasResourcePermission } from '@/lib/auth';
 import { logAgentMutation } from '@/lib/api/agent-context';
 import { getTableApplicationService } from '@/ddd/application/di/container';
 import { TableId } from '@/ddd/domain/shared/value-objects';
@@ -29,6 +30,11 @@ export async function GET(
   return withAuthenticatedRoute(request, async (user) => {
     const { id } = await params;
     const tableId = parseIntParam(id, 'table id');
+
+    if (!user.organizationId || !await hasResourcePermission(user.id, 'table:view', user.organizationId, 'tables', tableId)) {
+      return { success: false, error: 'Permission denied', status: 403 };
+    }
+
     const tableService = getTableApplicationService();
 
     const table = await tableService.getTable(TableId.fromNumber(tableId));
@@ -69,6 +75,11 @@ export async function PUT(
   return withAuthenticatedRoute(request, async (user) => {
     const { id } = await params;
     const tableId = parseIntParam(id, 'table id');
+
+    if (!user.organizationId || !await hasResourcePermission(user.id, 'table:manage', user.organizationId, 'tables', tableId)) {
+      return { success: false, error: 'Permission denied', status: 403 };
+    }
+
     const body = await parseJsonBody(request);
 
     if (!body) {
@@ -135,6 +146,11 @@ export async function DELETE(
   return withAuthenticatedRoute(request, async (user) => {
     const { id } = await params;
     const tableId = parseIntParam(id, 'table id');
+
+    if (!user.organizationId || !await hasResourcePermission(user.id, 'table:manage', user.organizationId, 'tables', tableId)) {
+      return { success: false, error: 'Permission denied', status: 403 };
+    }
+
     const tableService = getTableApplicationService();
 
     const table = await tableService.getTable(TableId.fromNumber(tableId));

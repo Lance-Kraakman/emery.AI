@@ -6,6 +6,7 @@ import { BasicInfoModal } from './BasicInfoModal';
 import { TriggerConfigModal } from './TriggerConfigModal';
 import { ActivityDetailsModal } from './ActivityDetailsModal';
 import { AuthorizedConnectionsModal } from './AuthorizedConnectionsModal';
+import { AgentApiKeysModal } from './AgentApiKeysModal';
 
 interface ModalManagerProps {
   onUpdate?: () => void;
@@ -54,6 +55,16 @@ export function ModalManager({ onUpdate }: ModalManagerProps) {
     case 'authorized-connections':
       return (
         <AuthorizedConnectionsModal
+          isOpen={true}
+          onClose={closeModal}
+          agent={modalState.data?.agent}
+          onUpdate={onUpdate}
+        />
+      );
+
+    case 'agent-api-keys':
+      return (
+        <AgentApiKeysModal
           isOpen={true}
           onClose={closeModal}
           agent={modalState.data?.agent}

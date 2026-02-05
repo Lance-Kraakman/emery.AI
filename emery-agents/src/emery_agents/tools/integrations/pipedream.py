@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 _http_thread_pool = ThreadPoolExecutor(max_workers=10, thread_name_prefix="pipedream-http")
 
 # Load metadata once from unified_metadata.json
-METADATA_PATH = Path(__file__).parent.parent.parent.parent / "execution" / "tools" / "unified_metadata.json"
+METADATA_PATH = Path(__file__).parent.parent.parent / "execution" / "tools" / "unified_metadata.json"
 try:
     with open(METADATA_PATH) as f:
         _unified = json.load(f)
@@ -72,7 +72,14 @@ class PipedreamTool:
         self.base_url = config.config.get("base_url") or os.getenv(
             "NEXTJS_BASE_URL", "http://localhost:3000"
         )
-        self.api_key_mode = config.config.get("api_key_mode", "user")
+        # Determine api_key_mode: explicit config > auto-detect from key prefix > default "user"
+        configured_mode = config.config.get("api_key_mode")
+        if configured_mode:
+            self.api_key_mode = configured_mode
+        elif isinstance(api_key, str) and api_key.startswith("key_"):
+            self.api_key_mode = "agent"
+        else:
+            self.api_key_mode = "user"
 
     def __call__(self, **kwargs: Any) -> dict[str, Any]:
         """Make the tool callable for DSPy ReAct."""

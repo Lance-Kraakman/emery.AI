@@ -14,6 +14,7 @@ import { AgentId, UserId, OrganizationId, TaskStatus, ApiKey } from '@/ddd/domai
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 import { TokenUsageApplicationService } from '@/ddd/application/services/billing/token-usage-application-service';
 import { getTokenUsageRepository, getOrganizationRepository, getContextMappingApplicationService } from '@/ddd/application/di/getters';
+import { ensureFreshAgentApiKey } from '@/lib/auth/agent-api-keys';
 import type { ContextMapping } from '@/ddd/domain/context/entities/context-mapping';
 
 export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
@@ -71,15 +72,17 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
         }
       }
 
+      // Resolve numeric org ID once for use in context mappings and API key generation
+      const orgId = typeof targetOrganizationId === 'number'
+        ? targetOrganizationId
+        : targetOrganizationId.value;
+
       // 5b. Resolve context table mappings for this execution
       // AIDEV-NOTE: Context tables define which dynamic tables are available to the agent
       // with specific access permissions (read/write/readwrite)
       let resolvedContext: ResolvedContextData | undefined;
       try {
         const contextMappingService = getContextMappingApplicationService();
-        const orgId = typeof targetOrganizationId === 'number'
-          ? targetOrganizationId
-          : targetOrganizationId.value;
 
         const resolved = await contextMappingService.resolveContextForExecution(
           orgId,
@@ -102,7 +105,10 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
         // Context tables are optional - continue execution without them
       }
 
-      // 6. Create proto task request
+      // 6. Generate fresh agent API key (plaintext for tool auth, hash stored in DB)
+      const agentApiKey = await ensureFreshAgentApiKey(agent.id.value, orgId);
+
+      // 7. Create proto task request
       // Use skill-based execution if skill is provided, otherwise instruction-based
       const taskRequest = createTaskRequest({
         taskId: executionId,
@@ -115,7 +121,7 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
             task: instructions,
             tools: this.enrichTools((tools || []).map(tool =>
               tool instanceof ToolConfig ? tool : ToolConfig.fromPlain(tool)
-            ), agent.apiKey?.value)
+            ), agentApiKey)
           }
         }),
         agent: enrichedAgent,
@@ -132,6 +138,7 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
         triggerType: request.triggerType,
         triggeredByUserId: request.triggeredByUserId,
         triggeredByUserName: request.triggeredByUserName,
+        userApiKey: agentApiKey, // Fresh agent key for Python ToolProvider
       });
 
 

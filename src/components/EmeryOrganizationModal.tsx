@@ -143,11 +143,11 @@ export function EmeryOrganizationModal({ isCollapsed }: { isCollapsed?: boolean 
         <DialogTrigger asChild>
           {isCollapsed ? (
             <Button variant="ghost" size="icon" className="h-8 w-8">
-              <img src="/assets/enhancd/logo.svg" alt="enhancd.ai" className="h-5 w-5" />
+              <img src="/assets/enhancd/logo2.svg" alt="enhancd.ai" className="h-8 w-8" />
             </Button>
           ) : (
             <Button variant="ghost" className="w-full justify-start h-8 px-2 gap-2">
-              <img src="/assets/enhancd/logo.svg" alt="enhancd.ai" className="h-5 w-5 shrink-0" />
+              <img src="/assets/enhancd/logo2.svg" alt="enhancd.ai" className="h-8 w-8 shrink-0" />
               <span className="truncate text-xs font-medium">{currentOrg.name}</span>
             </Button>
           )}

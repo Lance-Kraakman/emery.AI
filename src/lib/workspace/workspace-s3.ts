@@ -4,9 +4,7 @@
  * Agent workspaces are stored as tar.gz archives in S3 by the Python
  * WorkspaceSync service. This module reads them for download/inspection.
  *
- * S3 key pattern: workspaces/agents/{agentId}.tar.gz
- * NOTE: This does NOT follow the org_{id}/... pattern used by file storage.
- *       Access is validated via agent ownership, not S3 key prefix.
+ * S3 key pattern: workspaces/{orgId}/agents/{agentId}.tar.gz
  */
 
 import { GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
@@ -19,19 +17,19 @@ export class WorkspaceS3Service {
    * Get S3 key for an agent's workspace archive.
    * Uses the shared path registry for consistency.
    */
-  static getWorkspaceKey(agentId: number): string {
-    return getAgentWorkspaceKey(agentId);
+  static getWorkspaceKey(organizationId: number, agentId: number): string {
+    return getAgentWorkspaceKey(organizationId, agentId);
   }
 
   /**
    * Check if an agent workspace exists in S3.
    */
-  static async exists(agentId: number): Promise<boolean> {
+  static async exists(organizationId: number, agentId: number): Promise<boolean> {
     try {
       await s3Client.send(
         new HeadObjectCommand({
           Bucket: BUCKET_NAME,
-          Key: this.getWorkspaceKey(agentId),
+          Key: this.getWorkspaceKey(organizationId, agentId),
         })
       );
       return true;
@@ -49,7 +47,7 @@ export class WorkspaceS3Service {
    * @returns Object with body stream, content length, and last modified date
    * @throws Error if workspace does not exist
    */
-  static async downloadArchive(agentId: number): Promise<{
+  static async downloadArchive(organizationId: number, agentId: number): Promise<{
     body: Readable;
     contentLength: number;
     lastModified?: Date;
@@ -57,7 +55,7 @@ export class WorkspaceS3Service {
     const response = await s3Client.send(
       new GetObjectCommand({
         Bucket: BUCKET_NAME,
-        Key: this.getWorkspaceKey(agentId),
+        Key: this.getWorkspaceKey(organizationId, agentId),
       })
     );
 

@@ -56,7 +56,7 @@ class DynamicSkillTool:
 
         # DSPy tool properties
         skill_name = self._skill_metadata.get("name", f"skill_{skill_id}")
-        self.name = f"skill_{skill_name.replace(' ', '_').replace('-', '_').lower()}"
+        self.name = f"skill_{skill_name.replace(':', '').replace(' ', '_').replace('-', '_').lower()}"
         self.description = self._skill_metadata.get("description", f"Execute skill {skill_id}")
         self.inputs = self._build_inputs_schema()
         self.output_type = "string"

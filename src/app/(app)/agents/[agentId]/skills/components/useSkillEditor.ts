@@ -117,17 +117,31 @@ export function useSkillEditor({ skill, agentId, onDeleteRedirect }: UseSkillEdi
 
       try {
         // Build steps with plan stored in first agentic step's config
-        const stepsWithPlan = dataToSave.plan && dataToSave.steps?.[0]?.agenticConfig
-          ? [
-              {
-                ...dataToSave.steps[0],
-                agenticConfig: {
-                  ...dataToSave.steps[0].agenticConfig,
-                  plan: dataToSave.plan,
-                },
-              },
-              ...dataToSave.steps.slice(1),
-            ]
+        const stepsWithPlan = dataToSave.plan
+          ? (dataToSave.steps?.[0]?.agenticConfig
+              ? [
+                  {
+                    ...dataToSave.steps[0],
+                    agenticConfig: {
+                      ...dataToSave.steps[0].agenticConfig,
+                      plan: dataToSave.plan,
+                    },
+                  },
+                  ...dataToSave.steps.slice(1),
+                ]
+              : [
+                  {
+                    id: crypto.randomUUID(),
+                    name: 'main',
+                    nodeType: 'agentic' as const,
+                    agenticConfig: {
+                      instructions: dataToSave.instructions || '',
+                      tools: dataToSave.tools || [],
+                      agentType: (dataToSave.agentType || 'tool_calling') as 'tool_calling' | 'code_agent',
+                      plan: dataToSave.plan,
+                    },
+                  },
+                ])
           : dataToSave.steps;
 
         const result = await updateSkill(skill.id, {
@@ -143,6 +157,7 @@ export function useSkillEditor({ skill, agentId, onDeleteRedirect }: UseSkillEdi
           instructions: dataToSave.instructions,
           tools: dataToSave.tools,
           agentType: dataToSave.agentType,
+          allowNetwork: dataToSave.agentType === 'code_agent',
         });
 
         if (result.success) {
@@ -186,17 +201,31 @@ export function useSkillEditor({ skill, agentId, onDeleteRedirect }: UseSkillEdi
 
     try {
       // Build steps with plan stored in first agentic step's config
-      const stepsWithPlan = currentFormData.plan && currentFormData.steps?.[0]?.agenticConfig
-        ? [
-            {
-              ...currentFormData.steps[0],
-              agenticConfig: {
-                ...currentFormData.steps[0].agenticConfig,
-                plan: currentFormData.plan,
-              },
-            },
-            ...currentFormData.steps.slice(1),
-          ]
+      const stepsWithPlan = currentFormData.plan
+        ? (currentFormData.steps?.[0]?.agenticConfig
+            ? [
+                {
+                  ...currentFormData.steps[0],
+                  agenticConfig: {
+                    ...currentFormData.steps[0].agenticConfig,
+                    plan: currentFormData.plan,
+                  },
+                },
+                ...currentFormData.steps.slice(1),
+              ]
+            : [
+                {
+                  id: crypto.randomUUID(),
+                  name: 'main',
+                  nodeType: 'agentic' as const,
+                  agenticConfig: {
+                    instructions: currentFormData.instructions || '',
+                    tools: currentFormData.tools || [],
+                    agentType: (currentFormData.agentType || 'tool_calling') as 'tool_calling' | 'code_agent',
+                    plan: currentFormData.plan,
+                  },
+                },
+              ])
         : currentFormData.steps;
 
       const result = await updateSkill(skill.id, {
@@ -212,6 +241,7 @@ export function useSkillEditor({ skill, agentId, onDeleteRedirect }: UseSkillEdi
         instructions: currentFormData.instructions,
         tools: currentFormData.tools,
         agentType: currentFormData.agentType,
+        allowNetwork: currentFormData.agentType === 'code_agent',
       });
 
       if (!result.success) {

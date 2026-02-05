@@ -29,8 +29,8 @@ import glob
 class AppStack(Stack):
     """
     Application Stack - Contains frequently-changing application resources:
-    - ECS Cluster and Services (frontend, scheduler, agent-chat, agent-table)
-    - Load Balancers (ALB for frontend, NLBs for agents)
+    - ECS Cluster and Services (frontend, scheduler, agents [merged chat+table])
+    - Load Balancers (ALB for frontend only - agents use Cloud Map service discovery)
     - CloudFront distribution
     - Auto-scaling configurations
     """
@@ -39,24 +39,24 @@ class AppStack(Stack):
         """Generate hash of migration files to force migration trigger on schema changes"""
         migration_path = "../drizzle"
         hash_input = ""
-        
+
         try:
             if os.path.exists(migration_path):
                 for file_path in sorted(glob.glob(f"{migration_path}/*.sql")):
                     with open(file_path, 'r') as f:
                         hash_input += f.read()
-            
+
             # Also include the schema file to detect changes
             schema_path = "../lib/db/schema.ts"
             if os.path.exists(schema_path):
                 with open(schema_path, 'r') as f:
                     hash_input += f.read()
-                    
+
         except Exception as e:
             print(f"Warning: Could not read migration files for hashing: {e}")
             # Fallback to current timestamp to ensure migrations run
             hash_input = str(time.time())
-        
+
         return hashlib.md5(hash_input.encode()).hexdigest()[:8]
 
     def _get_frontend_image(self) -> ecs.ContainerImage:
@@ -122,7 +122,7 @@ class AppStack(Stack):
             },
             "dev": {
                 "domain": "dev.enhancd.ai",
-                "certificate_arn": "arn:aws:acm:us-east-1:463735866328:certificate/2d76beac-68ca-4e75-8cb2-29c4e61b195c"
+                "certificate_arn": "arn:aws:acm:us-east-1:463735866328:certificate/80e6353a-04d0-43c7-a246-c8a3aab67077"
             },
         }
 
@@ -130,25 +130,22 @@ class AppStack(Stack):
         certificate_arn = domain_config.get(env_name, {}).get("certificate_arn")
 
         # ========== ENVIRONMENT-SPECIFIC RESOURCE SIZING ==========
-        # Configure resources based on environment needs
         sizing_config = {
             "production": {
                 "frontend_min_capacity": 2,   # HA for paying users
-                "chat_cpu": 512,              # 0.5 vCPU - LLM calls are I/O bound
-                "chat_memory": 1024,          # 1 GB sufficient for chat
             },
             "staging": {
                 "frontend_min_capacity": 1,
-                "chat_cpu": 512,
-                "chat_memory": 1024,
             },
             "dev": {
                 "frontend_min_capacity": 1,   # Single task for dev
-                "chat_cpu": 512,
-                "chat_memory": 1024,
             }
         }
         sizing = sizing_config.get(env_name, sizing_config["dev"])
+
+        # COST-OPT: CloudWatch log retention - 60 days prod, 30 days dev/staging
+        # Previously infinite (AWS default), now bounded to reduce storage costs
+        log_retention = logs.RetentionDays.TWO_MONTHS if env_name == "production" else logs.RetentionDays.ONE_MONTH
 
         # Import the ACM certificate (created in us-east-1 for CloudFront)
         certificate = None
@@ -160,10 +157,12 @@ class AppStack(Stack):
 
         # ========== ECS CLUSTER ==========
         # Create an ECS cluster in the VPC from data stack
+        # COST-OPT: enable_fargate_capacity_providers allows Fargate Spot for scheduler
         cluster = ecs.Cluster(
             self, f"{prefix}EmeryCluster",
             vpc=data_stack.vpc,
-            cluster_name=f"{prefix}EmeryCluster"
+            cluster_name=f"{prefix}EmeryCluster",
+            enable_fargate_capacity_providers=True,
         )
 
         # Define the Docker image for the frontend, scheduler, and migration
@@ -175,12 +174,13 @@ class AppStack(Stack):
 
 
         # Create custom task definition with init container for migrations
+        # COST-OPT: ARM64 (Graviton) ~20% cheaper per vCPU-hour than x86
         frontend_task_definition = ecs.FargateTaskDefinition(
             self, f"{prefix}FrontendTaskDef",
             cpu=512,
             memory_limit_mib=1024,
             runtime_platform=ecs.RuntimePlatform(
-                cpu_architecture=ecs.CpuArchitecture.X86_64,
+                cpu_architecture=ecs.CpuArchitecture.ARM64,
                 operating_system_family=ecs.OperatingSystemFamily.LINUX
             ),
         )
@@ -199,6 +199,7 @@ class AppStack(Stack):
             },
             logging=ecs.LogDrivers.aws_logs(
                 stream_prefix=f"{prefix}-Migration-Init",
+                log_retention=log_retention,
             ),
             essential=False  # If this fails, don't start the main container
         )
@@ -217,6 +218,7 @@ class AppStack(Stack):
             },
             logging=ecs.LogDrivers.aws_logs(
                 stream_prefix=f"{prefix}-Frontend",
+                log_retention=log_retention,
             ),
             essential=True
         )
@@ -283,7 +285,7 @@ class AppStack(Stack):
                 "minimumHealthyPercent": 50,
                 "maximumPercent": 200
             }
-        
+
         # AIDEV-NOTE: Add ECR permissions to task execution role for pulling images
         frontend_service.task_definition.execution_role.add_managed_policy(
             iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AmazonECSTaskExecutionRolePolicy")
@@ -294,7 +296,7 @@ class AppStack(Stack):
                 effect=iam.Effect.ALLOW,
                 actions=[
                     "ecr:GetAuthorizationToken",
-                    "ecr:BatchCheckLayerAvailability", 
+                    "ecr:BatchCheckLayerAvailability",
                     "ecr:GetDownloadUrlForLayer",
                     "ecr:BatchGetImage"
                 ],
@@ -429,7 +431,7 @@ class AppStack(Stack):
             web_acl_id=self.waf_acl_arn,
             comment=f"CloudFront distribution for {prefix} Emery application",
             enabled=True,
-            price_class=cloudfront.PriceClass.PRICE_CLASS_ALL  # All edge locations including APAC (Sydney)
+            price_class=cloudfront.PriceClass.PRICE_CLASS_ALL  # Keep ALL for APAC (NZ/AU) edge coverage
         )
 
         # Output the CloudFront URL for easy access
@@ -449,7 +451,7 @@ class AppStack(Stack):
 
         # Also output the direct ALB URL for comparison
         CfnOutput(
-            self, f"{prefix}DirectALBURL", 
+            self, f"{prefix}DirectALBURL",
             value=f"http://{frontend_service.load_balancer.load_balancer_dns_name}",
             description="Direct Application Load Balancer URL"
         )
@@ -460,12 +462,13 @@ class AppStack(Stack):
 
         # AIDEV-NOTE: Scheduler task definition without migration init container
         # Migrations are handled exclusively by the frontend service to prevent race conditions
+        # COST-OPT: ARM64 (Graviton) ~20% cheaper per vCPU-hour than x86
         scheduler_task_definition = ecs.FargateTaskDefinition(
             self, f"{prefix}SchedulerTaskDef",
             cpu=512,
             memory_limit_mib=1024,
             runtime_platform=ecs.RuntimePlatform(
-                cpu_architecture=ecs.CpuArchitecture.X86_64,
+                cpu_architecture=ecs.CpuArchitecture.ARM64,
                 operating_system_family=ecs.OperatingSystemFamily.LINUX
             ),
         )
@@ -480,14 +483,18 @@ class AppStack(Stack):
             },
             logging=ecs.LogDrivers.aws_logs(
                 stream_prefix=f"{prefix}-Scheduler",
+                log_retention=log_retention,
             ),
             essential=True
         )
-        
+
         # AIDEV-NOTE: ECS health checks should be configured in container definition, not added afterwards
         # For scheduler, we rely on ECS service health monitoring instead of custom health checks
 
         # Create the Fargate service for the scheduler
+        # COST-OPT: Fargate Spot saves ~70% on compute for non-critical background work.
+        # Scheduler uses PostgreSQL LISTEN/NOTIFY which auto-reconnects on Spot interruption.
+        # If Spot capacity is unavailable, tasks fall back to regular Fargate.
         scheduler_service = ecs.FargateService(
             self, f"{prefix}SchedulerService",
             cluster=cluster,
@@ -497,6 +504,17 @@ class AppStack(Stack):
             vpc_subnets=ec2.SubnetSelection(
                 subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS
             ),
+            capacity_provider_strategies=[
+                ecs.CapacityProviderStrategy(
+                    capacity_provider="FARGATE_SPOT",
+                    weight=1,  # Prefer Spot
+                ),
+                ecs.CapacityProviderStrategy(
+                    capacity_provider="FARGATE",
+                    weight=0,  # Fallback only when Spot unavailable
+                    base=0,
+                ),
+            ],
         )
 
         # Grant database access to scheduler service
@@ -516,7 +534,7 @@ class AppStack(Stack):
                 effect=iam.Effect.ALLOW,
                 actions=[
                     "ecr:GetAuthorizationToken",
-                    "ecr:BatchCheckLayerAvailability", 
+                    "ecr:BatchCheckLayerAvailability",
                     "ecr:GetDownloadUrlForLayer",
                     "ecr:BatchGetImage"
                 ],
@@ -550,83 +568,115 @@ class AppStack(Stack):
             scale_out_cooldown=Duration.seconds(90)   # Slower scale-out OK for background work
         )
 
-        # AIDEV-NOTE: Add WORKER_ADDRESS to scheduler after agent service is created
-        # This will be done after agent_service definition below
+        # ========== MERGED AGENT SERVICE (Chat port 50051 + Table port 50052) ==========
+        # COST-OPT: Single ECS task with two containers replaces two NetworkLoadBalancedFargateServices.
+        # Saves 2 NLBs (~$32-40/month). Preserves process isolation to prevent circular dependency
+        # deadlocks between chat and table services via separate containers.
+        # Uses Cloud Map service discovery (agent.emery.local) instead of NLB for internal routing.
 
-        # AIDEV-NOTE: Dual-port gRPC architecture to prevent circular dependency deadlocks
-        # Chat service (port 50051): AgentWorker + ChatProcessingService
-        # Table service (port 50052): TableService only
+        agent_image = self._get_agent_image()
 
-        # ========== CHAT SERVICE (Port 50051) ==========
-        agent_chat_service = ecs_patterns.NetworkLoadBalancedFargateService(
-            self, f"{prefix}AgentChatService",
-            cluster=cluster,
-            service_name=f"{prefix}-Agent-Chat",
-            cpu=sizing["chat_cpu"],  # Environment-specific - LLM calls are I/O bound
-            memory_limit_mib=sizing["chat_memory"],  # Environment-specific
-            desired_count=1,  # Start with 1 task, scale up as needed
-            task_image_options=ecs_patterns.NetworkLoadBalancedTaskImageOptions(
-                image=self._get_agent_image(),
-                container_port=50051,
-                environment={
-                    "GRPC_CHAT_MAX_WORKERS": "20",
-                },
-                secrets={
-                    "DATABASE_URL": ecs.Secret.from_secrets_manager(data_stack.db_instance.secret),
-                    **data_stack.app_secrets_map
-                }
-            ),
+        # COST-OPT: ARM64 (Graviton) ~20% cheaper per vCPU-hour than x86
+        agent_task_definition = ecs.FargateTaskDefinition(
+            self, f"{prefix}AgentTaskDef",
+            cpu=1024,       # 1 vCPU shared across both containers
+            memory_limit_mib=2048,  # 2 GB shared across both containers
             runtime_platform=ecs.RuntimePlatform(
-                cpu_architecture=ecs.CpuArchitecture.X86_64,
+                cpu_architecture=ecs.CpuArchitecture.ARM64,
                 operating_system_family=ecs.OperatingSystemFamily.LINUX
             ),
-            public_load_balancer=False,
-            health_check_grace_period=Duration.seconds(600),  # Increased from 300s to allow for large image download
+        )
+
+        # Chat container (port 50051): AgentWorker + ChatProcessingService
+        chat_container = agent_task_definition.add_container(
+            f"{prefix}AgentChatContainer",
+            image=agent_image,
+            command=["python", "-m", "emery_agents.grpc.server", "--mode=chat", "--port=50051"],
+            port_mappings=[ecs.PortMapping(container_port=50051)],
+            environment={
+                "GRPC_CHAT_MAX_WORKERS": "20",
+            },
+            secrets={
+                "DATABASE_URL": ecs.Secret.from_secrets_manager(data_stack.db_instance.secret),
+                **data_stack.app_secrets_map
+            },
+            logging=ecs.LogDrivers.aws_logs(
+                stream_prefix=f"{prefix}-Agent-Chat",
+                log_retention=log_retention,
+            ),
+            essential=True,  # Task restarts if chat container fails
+        )
+
+        # Table container (port 50052): TableService only
+        table_container = agent_task_definition.add_container(
+            f"{prefix}AgentTableContainer",
+            image=agent_image,
+            command=["python", "-m", "emery_agents.grpc.server", "--mode=table", "--port=50052"],
+            port_mappings=[ecs.PortMapping(container_port=50052)],
+            environment={
+                "GRPC_TABLE_MAX_WORKERS": "15",
+            },
+            secrets={
+                "DATABASE_URL": ecs.Secret.from_secrets_manager(data_stack.db_instance.secret),
+                **data_stack.app_secrets_map
+            },
+            logging=ecs.LogDrivers.aws_logs(
+                stream_prefix=f"{prefix}-Agent-Table",
+                log_retention=log_retention,
+            ),
+            essential=True,  # Task restarts if table container fails
+        )
+
+        # Create FargateService with Cloud Map discovery (no NLB needed)
+        agent_service = ecs.FargateService(
+            self, f"{prefix}AgentService",
+            cluster=cluster,
+            service_name=f"{prefix}-Agent",
+            task_definition=agent_task_definition,
+            desired_count=1,
+            vpc_subnets=ec2.SubnetSelection(
+                subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS
+            ),
             cloud_map_options=ecs.CloudMapOptions(
-                name="agent-chat",
+                name="agent",  # Registers as agent.emery.local
                 cloud_map_namespace=data_stack.namespace,
                 dns_record_type=servicediscovery.DnsRecordType.A,
                 dns_ttl=Duration.seconds(60)
             ),
         )
 
-        # Grant database access to chat service
-        agent_chat_service.service.connections.allow_to(
+        # Grant database access to merged agent service
+        agent_service.connections.allow_to(
             data_stack.db_instance,
             ec2.Port.tcp(5432),
-            "Allow agent chat service to access database"
+            "Allow merged agent service to access database"
         )
 
-        # Allow NLB health checks and traffic on gRPC port - VPC CIDR only
-        # SECURITY: Restrict to VPC internal traffic only (fixes 0.0.0.0/0 exposure)
-        agent_chat_service.service.connections.allow_from(
+        # Allow inbound gRPC traffic from VPC CIDR on both ports
+        # SECURITY: Restrict to VPC internal traffic only
+        agent_service.connections.allow_from(
             ec2.Peer.ipv4(data_stack.vpc.vpc_cidr_block),
             ec2.Port.tcp(50051),
-            "Allow internal gRPC traffic from VPC only"
+            "Allow internal gRPC chat traffic from VPC only"
+        )
+        agent_service.connections.allow_from(
+            ec2.Peer.ipv4(data_stack.vpc.vpc_cidr_block),
+            ec2.Port.tcp(50052),
+            "Allow internal gRPC table traffic from VPC only"
         )
 
-        # Set custom command for chat service container
-        cfn_chat_task_def = agent_chat_service.task_definition.node.default_child
-        cfn_chat_task_def.add_property_override(
-            "ContainerDefinitions.0.Command",
-            ["python", "-m", "emery_agents.grpc.server", "--mode=chat", "--port=50051"]
+        # Grant Redis access for table container's write buffer
+        agent_service.connections.allow_to(
+            ec2.Connections(security_groups=[data_stack.redis_sg]),
+            ec2.Port.tcp(6379),
+            "Allow agent service to access ElastiCache Redis"
         )
 
-        # Configure TCP health check for chat service
-        agent_chat_service.target_group.configure_health_check(
-            protocol=elbv2.Protocol.TCP,
-            port="50051",  # Port as string (CDK requirement)
-            interval=Duration.seconds(30),
-            timeout=Duration.seconds(10),
-            healthy_threshold_count=3,  # Increased from 2 for more lenient checks
-            unhealthy_threshold_count=3,  # Increased from 2 to avoid premature task kills
-        )
-
-        # Add ECR permissions for chat service
-        agent_chat_service.task_definition.execution_role.add_managed_policy(
+        # Add ECR permissions for agent service
+        agent_task_definition.execution_role.add_managed_policy(
             iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AmazonECSTaskExecutionRolePolicy")
         )
-        agent_chat_service.task_definition.execution_role.add_to_policy(
+        agent_task_definition.execution_role.add_to_policy(
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
                 actions=[
@@ -639,136 +689,37 @@ class AppStack(Stack):
             )
         )
 
-        # Configure deployment settings for chat service
-        cfn_chat_service = agent_chat_service.service.node.default_child
-        cfn_chat_service.deployment_configuration = {
+        # Configure deployment settings for agent service
+        cfn_agent_service = agent_service.node.default_child
+        cfn_agent_service.deployment_configuration = {
             "minimumHealthyPercent": 100,  # Keep existing task running during deployment
             "maximumPercent": 200  # Allow new task to start before old one stops
         }
 
-        # Configure auto-scaling for chat service
-        chat_scaling = agent_chat_service.service.auto_scale_task_count(
+        # Configure auto-scaling for merged agent service
+        agent_scaling = agent_service.auto_scale_task_count(
             min_capacity=1,  # Start with 1 task
-            max_capacity=10  # Scale up to 10 for heavy AI workload
+            max_capacity=10  # Scale up to 10 for heavy AI + table workload
         )
-        chat_scaling.scale_on_cpu_utilization(
-            "ChatCpuScaling",
+        agent_scaling.scale_on_cpu_utilization(
+            "AgentCpuScaling",
             target_utilization_percent=70,
             scale_in_cooldown=Duration.seconds(180),
             scale_out_cooldown=Duration.seconds(60)
         )
 
-        # ========== TABLE SERVICE (Port 50052) ==========
-        agent_table_service = ecs_patterns.NetworkLoadBalancedFargateService(
-            self, f"{prefix}AgentTableService",
-            cluster=cluster,
-            service_name=f"{prefix}-Agent-Table",
-            cpu=1024,  # 1 vCPU for table operations
-            memory_limit_mib=2048,  # 2 GB for Delta Lake operations
-            desired_count=1,  # Start with 1 task
-            task_image_options=ecs_patterns.NetworkLoadBalancedTaskImageOptions(
-                image=self._get_agent_image(),
-                container_port=50052,
-                environment={
-                    "GRPC_TABLE_MAX_WORKERS": "15",
-                },
-                secrets={
-                    "DATABASE_URL": ecs.Secret.from_secrets_manager(data_stack.db_instance.secret),
-                    **data_stack.app_secrets_map
-                }
-            ),
-            runtime_platform=ecs.RuntimePlatform(
-                cpu_architecture=ecs.CpuArchitecture.X86_64,
-                operating_system_family=ecs.OperatingSystemFamily.LINUX
-            ),
-            public_load_balancer=False,
-            health_check_grace_period=Duration.seconds(600),  # Increased from 300s to allow for large image download
-            cloud_map_options=ecs.CloudMapOptions(
-                name="agent-table",
-                cloud_map_namespace=data_stack.namespace,
-                dns_record_type=servicediscovery.DnsRecordType.A,
-                dns_ttl=Duration.seconds(60)
-            ),
-        )
+        # ========== SERVICE ADDRESS CONFIGURATION ==========
+        # Cloud Map DNS: agent.emery.local resolves to merged agent task IPs
+        # Chat on port 50051, Table on port 50052 (same host, different ports)
 
-        # Grant database access to table service
-        agent_table_service.service.connections.allow_to(
-            data_stack.db_instance,
-            ec2.Port.tcp(5432),
-            "Allow agent table service to access database"
-        )
-
-        # Allow NLB health checks and traffic on gRPC port - VPC CIDR only
-        # SECURITY: Restrict to VPC internal traffic only (fixes 0.0.0.0/0 exposure)
-        agent_table_service.service.connections.allow_from(
-            ec2.Peer.ipv4(data_stack.vpc.vpc_cidr_block),
-            ec2.Port.tcp(50052),
-            "Allow internal gRPC traffic from VPC only"
-        )
-
-        # Set custom command for table service container
-        cfn_table_task_def = agent_table_service.task_definition.node.default_child
-        cfn_table_task_def.add_property_override(
-            "ContainerDefinitions.0.Command",
-            ["python", "-m", "emery_agents.grpc.server", "--mode=table", "--port=50052"]
-        )
-
-        # Configure TCP health check for table service
-        agent_table_service.target_group.configure_health_check(
-            protocol=elbv2.Protocol.TCP,
-            port="50052",  # Port as string (CDK requirement)
-            interval=Duration.seconds(30),
-            timeout=Duration.seconds(10),
-            healthy_threshold_count=3,  # Increased from 2 for more lenient checks
-            unhealthy_threshold_count=3,  # Increased from 2 to avoid premature task kills
-        )
-
-        # Add ECR permissions for table service
-        agent_table_service.task_definition.execution_role.add_managed_policy(
-            iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AmazonECSTaskExecutionRolePolicy")
-        )
-        agent_table_service.task_definition.execution_role.add_to_policy(
-            iam.PolicyStatement(
-                effect=iam.Effect.ALLOW,
-                actions=[
-                    "ecr:GetAuthorizationToken",
-                    "ecr:BatchCheckLayerAvailability",
-                    "ecr:GetDownloadUrlForLayer",
-                    "ecr:BatchGetImage"
-                ],
-                resources=["*"]
-            )
-        )
-
-        # Configure deployment settings for table service
-        cfn_table_service = agent_table_service.service.node.default_child
-        cfn_table_service.deployment_configuration = {
-            "minimumHealthyPercent": 100,  # Keep existing task running during deployment
-            "maximumPercent": 200  # Allow new task to start before old one stops
-        }
-
-        # Configure auto-scaling for table service
-        table_scaling = agent_table_service.service.auto_scale_task_count(
-            min_capacity=1,  # Start with 1 task
-            max_capacity=5  # Scale up to 5 for table operations
-        )
-        table_scaling.scale_on_cpu_utilization(
-            "TableCpuScaling",
-            target_utilization_percent=75,
-            scale_in_cooldown=Duration.seconds(180),
-            scale_out_cooldown=Duration.seconds(90)
-        )
-
-        # Update environment variables to use Cloud Map DNS for dual-port architecture
-        # Chat service on port 50051, Table service on port 50052
         if frontend_service.task_definition.default_container:
             frontend_service.task_definition.default_container.add_environment(
                 "WORKER_ADDRESS",
-                "agent-chat.emery.local:50051"
+                "agent.emery.local:50051"  # Merged agent service
             )
             frontend_service.task_definition.default_container.add_environment(
                 "GRPC_TOOLS_ADDRESS",
-                "agent-table.emery.local:50052"
+                "agent.emery.local:50052"  # Same task, different port
             )
 
             # Also inject the frontend's own public URL for NextAuth (use custom domain if available)
@@ -778,16 +729,14 @@ class AppStack(Stack):
                 nextauth_url
             )
 
-
-
-        # Update scheduler environment variables for dual-port architecture
+        # Update scheduler environment variables for merged agent service
         scheduler_container.add_environment(
             "WORKER_ADDRESS",
-            "agent-chat.emery.local:50051"
+            "agent.emery.local:50051"
         )
         scheduler_container.add_environment(
             "GRPC_TOOLS_ADDRESS",
-            "agent-table.emery.local:50052"
+            "agent.emery.local:50052"
         )
         # Add AWS S3 configuration to override MinIO defaults
         aws_endpoint_url = f"https://s3.{aws_region}.amazonaws.com"
@@ -803,11 +752,10 @@ class AppStack(Stack):
         # ========== S3 BUCKET PERMISSIONS ==========
         # Grant all services read/write access to the S3 bucket from data stack
         data_stack.storage_bucket.grant_read_write(frontend_service.task_definition.task_role)
-        data_stack.storage_bucket.grant_read_write(agent_chat_service.task_definition.task_role)
-        data_stack.storage_bucket.grant_read_write(agent_table_service.task_definition.task_role)
+        data_stack.storage_bucket.grant_read_write(agent_task_definition.task_role)  # Single grant for merged agent
         data_stack.storage_bucket.grant_read_write(scheduler_task_definition.task_role)
 
-        # Inject the bucket name as an environment variable into both services
+        # Inject the bucket name as an environment variable into services
         if frontend_service.task_definition.default_container:
             frontend_service.task_definition.default_container.add_environment(
                 "S3_BUCKET_NAME",
@@ -823,45 +771,22 @@ class AppStack(Stack):
                 "AWS_REGION",
                 "ap-southeast-2"  # AWS region for deployment
             )
-        
-        # Add S3 and AWS configuration to chat service
-        if agent_chat_service.task_definition.default_container:
-            agent_chat_service.task_definition.default_container.add_environment(
-                "S3_BUCKET_NAME",
-                data_stack.storage_bucket.bucket_name
-            )
-            agent_aws_endpoint_url = f"https://s3.{aws_region}.amazonaws.com"
-            agent_chat_service.task_definition.default_container.add_environment(
-                "AWS_ENDPOINT_URL",
-                agent_aws_endpoint_url
-            )
-            agent_chat_service.task_definition.default_container.add_environment(
-                "AWS_REGION",
-                aws_region
-            )
-            # Add NextJS base URL for agent callbacks to API routes
-            # Use internal ALB URL to bypass CloudFront/WAF (faster, avoids rate limits)
-            internal_nextjs_url = f"http://{frontend_service.load_balancer.load_balancer_dns_name}"
-            agent_chat_service.task_definition.default_container.add_environment(
-                "NEXTJS_BASE_URL",
-                internal_nextjs_url
-            )
 
-        # Add S3 and AWS configuration to table service
-        if agent_table_service.task_definition.default_container:
-            agent_table_service.task_definition.default_container.add_environment(
-                "S3_BUCKET_NAME",
-                data_stack.storage_bucket.bucket_name
-            )
-            agent_table_aws_endpoint_url = f"https://s3.{aws_region}.amazonaws.com"
-            agent_table_service.task_definition.default_container.add_environment(
-                "AWS_ENDPOINT_URL",
-                agent_table_aws_endpoint_url
-            )
-            agent_table_service.task_definition.default_container.add_environment(
-                "AWS_REGION",
-                aws_region
-            )
+        # Add S3, AWS, and callback config to chat container
+        chat_container.add_environment("S3_BUCKET_NAME", data_stack.storage_bucket.bucket_name)
+        chat_container.add_environment("AWS_ENDPOINT_URL", f"https://s3.{aws_region}.amazonaws.com")
+        chat_container.add_environment("AWS_REGION", aws_region)
+        # Use internal ALB URL to bypass CloudFront/WAF (faster, avoids rate limits)
+        internal_nextjs_url = f"http://{frontend_service.load_balancer.load_balancer_dns_name}"
+        chat_container.add_environment("NEXTJS_BASE_URL", internal_nextjs_url)
+
+        # Add S3, AWS, and Redis config to table container
+        # NOTE: REDIS_URL was previously missing from table service, causing the write buffer
+        # to silently degrade to direct writes. Now enabled for proper buffered writes.
+        table_container.add_environment("S3_BUCKET_NAME", data_stack.storage_bucket.bucket_name)
+        table_container.add_environment("AWS_ENDPOINT_URL", f"https://s3.{aws_region}.amazonaws.com")
+        table_container.add_environment("AWS_REGION", aws_region)
+        table_container.add_environment("REDIS_URL", data_stack.redis_endpoint)
 
         # Add S3 and AWS configuration to scheduler service
         scheduler_container.add_environment(

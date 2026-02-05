@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Settings, Zap, Calendar, Link2, Plus, ChevronRight, ClipboardList, Edit2, Trash2, MoreHorizontal, Globe, Download } from 'lucide-react';
+import { Settings, Zap, Calendar, Link2, Plus, ChevronRight, ClipboardList, Edit2, Trash2, MoreHorizontal, Globe, Download, Key } from 'lucide-react';
 import type { AgentDTO } from '@/app/dtos/agent.dto';
 import type { SkillDTO } from '@/app/mappers/skill-mapper';
 import type { ConnectionDTO } from '@/app/mappers/connection-mapper';
@@ -449,6 +449,13 @@ export function CompactAgentHeader({
               >
                 <Settings className="h-4 w-4" />
                 Agent Settings
+              </button>
+              <button
+                onClick={() => openModal('agent-api-keys', { agent })}
+                className="flex items-center gap-2 w-full px-3 py-2 text-sm rounded-md hover:bg-accent transition-colors text-left"
+              >
+                <Key className="h-4 w-4" />
+                API Keys
               </button>
               <button
                 onClick={() => setPublishWizardOpen(true)}

@@ -56,7 +56,6 @@ class PlanService:
 
         # Initialize DSPy generator
         self._generator: DSPyPlanGenerator = DSPyPlanGenerator(
-            model_provider=model_provider,
             discovery_tools=discovery_tools,
         )
         logger.info("📋 PlanService initialized with DSPy generator (smolagents disabled)")
@@ -84,6 +83,8 @@ class PlanService:
         config: Optional[SessionConfig] = None,
         workspace: Optional[WorkspaceContext] = None,
         memory_context: str = "",
+        triage_analysis: Optional[dict] = None,
+        configured_tools: Optional[list] = None,
     ) -> PlanGenerationResult:
         """Generate plan using DSPy PlannerModule. Returns plan or clarifying questions."""
         # Build request dataclass (includes all config for plan generation)
@@ -103,6 +104,8 @@ class PlanService:
             config=config,
             workspace=workspace,
             memory_context=memory_context,
+            triage_analysis=triage_analysis,
+            configured_tools=configured_tools,
         )
 
         # Delegate to generator (uses capability-based discovery)

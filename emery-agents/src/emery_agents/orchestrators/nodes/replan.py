@@ -43,6 +43,7 @@ from ...services.execution.events import (
 )
 from ...reasoning.modules.evaluator import EvaluatorModule
 from ...reasoning.config import get_dspy_lm
+from ...services.analysis.llm_usage import record_from_lm
 from ...reasoning.utils import StepOutcome
 from ..state import PlanExecuteState
 from ..runtime import RuntimeContext
@@ -80,13 +81,15 @@ async def replan_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[
     reflection_summary = state.get("reflection_summary", "")
 
     last_completed = _get_last_completed_step(plan)
-    if last_completed:
+    if last_completed and _should_reflect(last_completed, plan):
         reflection_dict = await _reflect_on_step(last_completed, plan, state, events)
         if reflection_dict is not None:
             step_reflections[last_completed.step_id] = reflection_dict
             reflection_summary = _update_reflection_summary(
                 reflection_summary, last_completed.step_id, reflection_dict,
             )
+    elif last_completed:
+        logger.debug(f"Skipping reflection for step {last_completed.step_id} (simple success)")
 
     # Case 2: More pending steps → enrich next step with reflections, continue
     pending = plan.get_pending_steps()
@@ -125,6 +128,34 @@ def _get_last_completed_step(plan: Plan) -> Optional[PlanStep]:
     """Return the most recently completed step, or None."""
     completed = [s for s in plan.steps if s.status == PlanStepStatus.COMPLETED.value]
     return completed[-1] if completed else None
+
+
+def _should_reflect(step: PlanStep, plan: Plan) -> bool:
+    """Decide whether reflection is worthwhile for this step.
+
+    Skip reflection for simple successful steps in short plans — the LLM call
+    adds latency without meaningful benefit when the step clearly succeeded.
+
+    Reflect when:
+    - Plan has > 5 steps (complex plan where cross-step insights matter)
+    - Step result is missing or very short (may be incomplete)
+    - Step has a replan_after flag (planner marked it as needing review)
+    """
+    # Always reflect on complex plans — insights help later steps
+    if len(plan.steps) > 5:
+        return True
+
+    # Reflect if result is missing or very short — may be incomplete
+    result = (step.result or "").strip()
+    if len(result) < 20:
+        return True
+
+    # Reflect if planner flagged this step for review
+    if step.replan_after:
+        return True
+
+    # Simple successful step in short plan — skip reflection
+    return False
 
 
 async def _reflect_on_step(
@@ -166,6 +197,7 @@ async def _reflect_on_step(
                 plan_goal=plan.goal,
                 previous_reflections=state.get("reflection_summary", ""),
             )
+        record_from_lm(lm)
 
         reflection_dict = reflection.model_dump()
 
@@ -418,6 +450,7 @@ async def _evaluate_progress(
                 step_results,
                 outcomes_list,
             )
+        record_from_lm(lm)
 
         evaluation = EvaluationResult(
             goal_achieved=result.achieved,
@@ -550,6 +583,7 @@ async def _synthesize_answer(
                 formatted_results,
                 "",  # No curated context (ACE removed)
             )
+        record_from_lm(lm)
         return str(result)
     except Exception as e:
         logger.error(f"Synthesis failed: {e}")

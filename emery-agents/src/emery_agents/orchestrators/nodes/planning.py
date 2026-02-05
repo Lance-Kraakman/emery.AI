@@ -18,10 +18,12 @@ from ...services.context import (
 from ...entities.workspace import WorkspaceTable
 from ...services.execution.events import (
     PlanCreatedEvent,
+    PlanApprovedEvent,
     PlanningStartedEvent,
     AwaitingClarificationEvent,
     ErrorEvent,
 )
+from ...services.analysis.embeddings import get_embedding, cosine_similarity
 from ...tools.tool_modes import ToolMode, filter_tools_for_mode
 from emery_agents.api import WorkspaceAPI
 from emery_agents.tools.discovery import create_discovery_tools
@@ -97,8 +99,6 @@ def _score_resource(
     Uses the same embedding infrastructure as CapabilityRegistry.search().
     Embeddings are LRU-cached (1000 entries) so repeated resource names are free.
     """
-    from ...services.analysis.embeddings import get_embedding, cosine_similarity
-
     resource_text = f"{name} {description}".strip()
     if not resource_text:
         return 0.0
@@ -140,8 +140,6 @@ def _filter_relevant_context(
     Embeddings are LRU-cached, so after the first call resource embeddings are free.
     If no resource scores above the threshold, returns full context unchanged.
     """
-    from ...services.analysis.embeddings import get_embedding
-
     if not task.strip():
         return workspace
 
@@ -189,6 +187,28 @@ def _filter_relevant_context(
         return workspace
 
 
+_DESTRUCTIVE_KEYWORDS = {"delete", "remove", "destroy", "drop", "truncate", "clear", "wipe", "purge"}
+
+
+def _is_low_risk_plan(plan: Plan) -> bool:
+    """Check if a plan is low-risk (additive only, no external OAuth, no destructive ops).
+
+    Low-risk plans can be auto-approved to skip the human approval step.
+    Returns True only for purely additive plans with no external service dependencies.
+    """
+    for step in plan.steps:
+        # External OAuth integrations need user approval
+        if step.connection_required:
+            return False
+
+        # Destructive operations need approval
+        desc_lower = step.description.lower()
+        if any(kw in desc_lower for kw in _DESTRUCTIVE_KEYWORDS):
+            return False
+
+    return True
+
+
 async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[str, Any]:
     """
     Generate a plan using PlanService.
@@ -211,6 +231,47 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
     org_id = state.get("org_id")
     org_model = state.get("org_model")
     memory_context = state.get("memory_context") or ""
+    triage_analysis = state.get("triage_analysis")
+    configured_tools = state.get("configured_tools")
+
+    # === @mention hint enrichment (when triage was skipped) ===
+    pre_selected_skill = state.get("pre_selected_skill")
+    pre_selected_agent = state.get("pre_selected_agent")
+    pre_selected_tool = state.get("pre_selected_tool")
+
+    enriched_task = task
+    if pre_selected_skill:
+        enriched_task = (
+            f"{task}\n\n"
+            f"[USER DIRECTIVE: The user explicitly selected the '{pre_selected_skill}' skill via @skill mention. "
+            f"Build a focused plan that uses this skill. Look up the skill by name using discovery tools, "
+            f"then create a plan step that executes it with inputs extracted from the user's message and conversation context.]"
+        )
+    elif pre_selected_agent:
+        enriched_task = (
+            f"{task}\n\n"
+            f"[USER DIRECTIVE: The user explicitly selected the '{pre_selected_agent}' agent via @agent mention. "
+            f"Build a focused plan that delegates to this agent. Use agent_crud(method='execute') to run the agent, "
+            f"passing the user's task as input.]"
+        )
+    elif pre_selected_tool:
+        enriched_task = (
+            f"{task}\n\n"
+            f"[USER DIRECTIVE: The user explicitly selected the '{pre_selected_tool}' external tool via @tool mention. "
+            f"Build a focused plan that uses this specific tool. Extract the required inputs from the user's message "
+            f"and conversation context.]"
+        )
+
+    # Construct synthetic triage_analysis when triage was skipped (@mention path)
+    if (pre_selected_skill or pre_selected_agent or pre_selected_tool) and not triage_analysis:
+        mention_name = pre_selected_skill or pre_selected_agent or pre_selected_tool
+        mention_type = "skill" if pre_selected_skill else ("agent" if pre_selected_agent else "tool")
+        triage_analysis = {
+            "intent": f"Execute {mention_type} '{mention_name}' as requested by user",
+            "entities": [mention_name],
+            "approach": "step-by-step",
+            "external_services": [],
+        }
 
     events: List[Any] = []
 
@@ -269,8 +330,8 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
 
     try:
         result = await plan_service.generate_plan(
-            basic_instructions=task,
-            goal=task,
+            basic_instructions=enriched_task,
+            goal=enriched_task,
             tools=planning_tools,
             managed_agents=managed_agents,
             conversation_history=conversation_history,
@@ -282,6 +343,8 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
             skill_outputs=skill_output_defs,
             is_template_generation=is_template_generation,
             memory_context=memory_context,
+            triage_analysis=triage_analysis,
+            configured_tools=configured_tools,
         )
     except Exception as e:
         logger.error(f"Plan generation failed: {e}")
@@ -319,9 +382,6 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
     )
     ledger.record_plan_created({"plan_id": plan.id, "step_count": len(plan.steps)})
 
-    logger.info(f"Plan {plan.id} created with {len(plan.steps)} steps, awaiting approval")
-    events.append(PlanCreatedEvent(plan_id=plan.id, plan=plan))
-
     # Save plan to filesystem
     if runtime.plan_file_repository and plan:
         try:
@@ -329,6 +389,25 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
         except Exception as e:
             logger.warning(f"Failed to save plan to filesystem: {e}")
 
+    # Auto-approve low-risk plans (additive only, no external OAuth, no deletions)
+    # Skip auto-approve for template generation — the GeneratePlan RPC expects PlanCreatedEvent
+    if _is_low_risk_plan(plan) and not is_template_generation:
+        logger.info(f"Plan {plan.id} auto-approved (low-risk, {len(plan.steps)} steps)")
+        approved_plan = plan.approve().start_execution()
+        ledger.record_plan_approved()
+        # Skip PlanCreatedEvent for auto-approved plans — it triggers approval UI flicker
+        events.append(PlanApprovedEvent(plan_id=plan.id))
+        return {
+            "plan": approved_plan,
+            "ledger": ledger,
+            "auto_approved": True,
+            "awaiting_input": None,
+            "events": events,
+        }
+
+    # Non-auto-approved: emit PlanCreatedEvent so frontend shows approval UI
+    events.append(PlanCreatedEvent(plan_id=plan.id, plan=plan))
+    logger.info(f"Plan {plan.id} created with {len(plan.steps)} steps, awaiting approval")
     return {
         "plan": plan,
         "ledger": ledger,

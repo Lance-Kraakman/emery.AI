@@ -22,6 +22,7 @@ import {
   FileText,
   AlertCircle,
 } from 'lucide-react'
+import DOMPurify from 'dompurify'
 import type { FileArtifact } from '../types/chat-artifacts'
 import { getFileDisplayInfo } from '../types/chat-artifacts'
 import { getFileExtension } from '@/ddd/domain/tables/value-objects/file-viewer-types'
@@ -180,7 +181,7 @@ export function OfficeViewer({
       >
         <div
           className="prose prose-sm max-w-none"
-          dangerouslySetInnerHTML={{ __html: htmlContent }}
+          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(htmlContent) }}
         />
       </div>
     )

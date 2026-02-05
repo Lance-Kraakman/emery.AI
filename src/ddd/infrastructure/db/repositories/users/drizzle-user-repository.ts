@@ -1,9 +1,8 @@
 // AIDEV-NOTE: Drizzle implementation of IUserRepository - handles user authentication and management
 // User business operations with organization relationships and role management
 
-import { eq, and, ne, sql } from 'drizzle-orm';
+import { eq, and, ne, or, gte, sql } from 'drizzle-orm';
 import type { InferSelectModel } from 'drizzle-orm';
-import { randomBytes } from 'crypto';
 
 import { users, userOrganizations, organizations } from '@/ddd/infrastructure/db/schema';
 import type { IUserRepository } from '@/ddd/domain/users/repositories/user-repository';
@@ -54,7 +53,8 @@ export class DrizzleUserRepository
       image: data.image,
       currentOrganizationId: data.currentOrganizationId?.value || null,
       // organizationRole removed in RBAC system
-      apiKey: data.apiKey?.value || null
+      apiKeyHash: data.apiKeyHash || null,
+      apiKeyPrefix: data.apiKeyPrefix || null
     };
 
     const [newUser] = await this.db
@@ -113,13 +113,22 @@ export class DrizzleUserRepository
     throw new Error('Role updates not yet implemented for RBAC system. Use role management through user_roles table.');
   }
 
-  // API Key management
-  async generateApiKey(userId: UserId): Promise<ApiKey> {
-    const apiKey = ApiKey.generate();
+  // API Key management (SHA-256 hashed)
+  async generateApiKey(userId: UserId): Promise<{ apiKey: ApiKey, plaintext: string }> {
+    const { plaintext, hash, prefix } = ApiKey.generateUserKeyWithHash();
+
+    // Move current key to grace period
+    const currentUser = await this.findById(userId);
+    const previousHash = currentUser?.apiKey?.value || null;
 
     const [updatedUser] = await this.db
       .update(users)
-      .set({ apiKey: apiKey.value })
+      .set({
+        apiKeyHash: hash,
+        apiKeyPrefix: prefix,
+        previousApiKeyHash: previousHash,
+        previousApiKeyExpiresAt: previousHash ? new Date(Date.now() + 24 * 3600000) : null,
+      })
       .where(eq(users.id, userId.value))
       .returning();
 
@@ -127,14 +136,25 @@ export class DrizzleUserRepository
       throw new Error(`User with id ${userId.value} not found`);
     }
 
-    return apiKey;
+    return { apiKey: ApiKey.fromString(hash), plaintext };
   }
 
   async findByApiKey(apiKey: ApiKey): Promise<User | null> {
+    const hash = ApiKey.hash(apiKey.value);
+    const now = new Date();
+
     const result = await this.db
       .select()
       .from(users)
-      .where(eq(users.apiKey, apiKey.value))
+      .where(
+        or(
+          eq(users.apiKeyHash, hash),
+          and(
+            eq(users.previousApiKeyHash, hash),
+            gte(users.previousApiKeyExpiresAt, now)
+          )
+        )
+      )
       .limit(1);
 
     return result[0] ? this.fromPersistence(result[0]) : null;
@@ -143,7 +163,12 @@ export class DrizzleUserRepository
   async revokeApiKey(userId: UserId): Promise<void> {
     const [updatedUser] = await this.db
       .update(users)
-      .set({ apiKey: null })
+      .set({
+        apiKeyHash: null,
+        apiKeyPrefix: null,
+        previousApiKeyHash: null,
+        previousApiKeyExpiresAt: null,
+      })
       .where(eq(users.id, userId.value))
       .returning();
 
@@ -380,11 +405,14 @@ export class DrizzleUserRepository
       image: data.image,
       currentOrganizationId: data.currentOrganizationId ? OrganizationId.fromNumber(data.currentOrganizationId) : null,
       // organizationRole removed in RBAC system
-      apiKey: data.apiKey ? ApiKey.fromString(data.apiKey) : null,
+      apiKey: data.apiKeyHash ? ApiKey.fromString(data.apiKeyHash) : null,
+      apiKeyPrefix: data.apiKeyPrefix || null,
+      previousApiKeyHash: data.previousApiKeyHash || null,
+      previousApiKeyExpiresAt: data.previousApiKeyExpiresAt || null,
       createdAt: data.createdAt
     };
   }
-  
+
   // AIDEV-NOTE: Base repository interface - maps domain objects to database primitives
   protected toPersistence(user: User): any {
     return {
@@ -394,7 +422,10 @@ export class DrizzleUserRepository
       emailVerified: user.emailVerified,
       image: user.image,
       currentOrganizationId: user.currentOrganizationId?.value || null,
-      apiKey: user.apiKey?.value || null,
+      apiKeyHash: user.apiKey?.value || null,
+      apiKeyPrefix: user.apiKeyPrefix || null,
+      previousApiKeyHash: user.previousApiKeyHash || null,
+      previousApiKeyExpiresAt: user.previousApiKeyExpiresAt || null,
       createdAt: user.createdAt
     };
   }

@@ -1,66 +1,71 @@
-import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
+/**
+ * Async-safe RLS context management using Node.js AsyncLocalStorage.
+ *
+ * H-2 fix: The previous implementation used a global mutable singleton,
+ * which was NOT async-safe. Concurrent async operations (e.g. the scheduler
+ * processing automations from different orgs) could overwrite each other's
+ * context, causing cross-tenant data leakage.
+ *
+ * AsyncLocalStorage provides per-async-chain context isolation — each
+ * call to withContext() gets its own context that cannot be overwritten
+ * by concurrent operations.
+ */
 
-// AIDEV-NOTE: Simplified context management for RLS policies
-// Single function handles both organization-only and full user+organization context
-// Organization context is required, user context is optional for audit/user-specific operations
+import { AsyncLocalStorage } from 'async_hooks';
+import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 
 interface ContextData {
   organizationId: OrganizationId;
   userId?: UserId; // Optional - for audit trails and user-specific operations
 }
 
-class ContextManager {
-  private context: ContextData | null = null;
+const asyncLocalStorage = new AsyncLocalStorage<ContextData>();
 
+class ContextManager {
   /**
-   * Set RLS context for database operations
-   * @param organizationId - Required organization context for RLS policies
-   * @param userId - Optional user context for audit trails and user-specific operations
+   * Set RLS context for the current async execution chain.
+   * Uses AsyncLocalStorage.enterWith() for backwards compatibility with
+   * code that uses setContext()/clearContext() instead of withContext().
    */
   setContext(organizationId: OrganizationId, userId?: UserId): void {
-    this.context = { organizationId, userId };
+    asyncLocalStorage.enterWith({ organizationId, userId });
   }
 
   /**
-   * Get current context (for debugging and internal use)
+   * Get current context from the async-local store.
    */
   getContext(): ContextData | null {
-    return this.context;
+    return asyncLocalStorage.getStore() ?? null;
   }
 
   /**
-   * Clear RLS context - subsequent operations will use normal database client
+   * Clear RLS context for the current async execution chain.
    */
   clearContext(): void {
-    this.context = null;
+    // enterWith(undefined) exits the store for this async chain
+    asyncLocalStorage.enterWith(undefined as any);
   }
 
   /**
-   * Check if context is currently set
+   * Check if context is currently set in this async chain.
    */
   hasContext(): boolean {
-    return this.context !== null;
+    return asyncLocalStorage.getStore() != null;
   }
 
   /**
-   * Execute operation with temporary context
-   * Useful for one-off operations that need specific context
+   * Execute operation with scoped context (preferred API).
+   * Context is automatically isolated to this async chain and cleaned up
+   * when the operation completes — no risk of cross-contamination.
    */
   async withContext<T>(
     organizationId: OrganizationId,
     operation: () => Promise<T>,
     userId?: UserId
   ): Promise<T> {
-    const previousContext = this.context;
-    this.setContext(organizationId, userId);
-    
-    try {
-      return await operation();
-    } finally {
-      this.context = previousContext;
-    }
+    return asyncLocalStorage.run({ organizationId, userId }, operation);
   }
 }
 
-// Singleton instance for global context management
+// Singleton instance — safe because state is in AsyncLocalStorage, not the object
 export const contextManager = new ContextManager();

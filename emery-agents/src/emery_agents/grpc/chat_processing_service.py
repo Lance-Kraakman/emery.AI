@@ -34,7 +34,9 @@ from .response_converter import convert_response_to_proto
 from .agents.agent_models import get_builder_descriptors
 from emery_agents.tools.capability_registry import CapabilityRegistry
 from ..services.analysis.token_usage import TokenUsageExtractor
-from emery_agents.tools.capability_bootstrap import populate_system_agents
+from emery_agents.entities.models.capability import CapabilityType
+from emery_agents.services.analysis.embedding_cache import load_embedding_cache, save_embedding_cache
+from emery_agents.tools.capability_bootstrap import populate_system_agents, populate_integration_services
 from ..services.tasks import TaskExecutor
 from ..services.tasks.task_executor import TaskData
 from ..services.agents.executor import AgentExecutor
@@ -56,10 +58,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         # Initialize workspace sync for persistent filesystem
         s3_bucket = os.getenv("S3_BUCKET_NAME")
         if s3_bucket:
-            self.workspace_sync = WorkspaceSync(
-                bucket=s3_bucket,
-                prefix="workspaces"  # Base prefix, type (users/agents) added per request
-            )
+            self.workspace_sync = WorkspaceSync(bucket=s3_bucket)
             logger.info(f"✅ WorkspaceSync initialized with bucket: {s3_bucket}")
         else:
             self.workspace_sync = None
@@ -83,6 +82,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             # CapabilityRegistry replaces ManagedAgentsFactory.capability_registry
             self.capability_registry = CapabilityRegistry()
             populate_system_agents(self.capability_registry)
+            populate_integration_services(self.capability_registry)
+            self._precompute_embeddings()
 
             self.skill_executor_service = SkillExecutorService(
                 tool_loader=self.tool_loader,
@@ -142,6 +143,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         user_id: str,
         agent_id: int | None,
         task_id: str | None,
+        user_name: str | None = None,
+        agent_name: str | None = None,
     ) -> dict[str, str] | None:
         """
         Build HTTP headers for audit trail in chat-initiated executions.
@@ -159,22 +162,70 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             "X-Trigger-Type": "manual",
             "X-Triggered-By-User-Id": user_id,
         }
+        if user_name:
+            headers["X-Triggered-By-User-Name"] = user_name
+        if agent_name:
+            headers["X-Agent-Name"] = agent_name
         if task_id:
             headers["X-Task-ID"] = task_id
         return headers
 
+    def _precompute_embeddings(self) -> None:
+        """Pre-compute capability embeddings at startup.
+
+        Integration embeddings (3K+ static services): loaded from S3 cache.
+        On cache miss: computed via multi-text embed_content, then uploaded to S3.
+        Agent embeddings (11): always computed fresh (1 API call).
+        """
+        start = time.monotonic()
+        s3_bucket = os.getenv("S3_BUCKET_NAME")
+        integration_caps = self.capability_registry.by_type(CapabilityType.TOOL)
+
+        # Integration embeddings: try S3 cache first
+        loaded_from_cache = False
+        if s3_bucket and integration_caps:
+            try:
+                cached = load_embedding_cache(s3_bucket, integration_caps)
+                if cached:
+                    count = self.capability_registry.load_embeddings(cached)
+                    logger.info(f"Loaded {count} integration embeddings from S3 cache")
+                    loaded_from_cache = True
+            except Exception as e:
+                logger.warning(f"Failed to load embedding cache: {e}")
+
+        # Cache miss: compute via batch API, then upload to S3
+        if not loaded_from_cache and integration_caps:
+            logger.info(f"Computing {len(integration_caps)} integration embeddings (first startup)...")
+            count = self.capability_registry.precompute_embeddings("integration:")
+            logger.info(f"Computed {count} integration embeddings via API")
+            if s3_bucket and count > 0:
+                try:
+                    embeddings = self.capability_registry.export_embeddings("integration:")
+                    save_embedding_cache(s3_bucket, integration_caps, embeddings)
+                    logger.info("Uploaded integration embeddings to S3 cache")
+                except Exception as e:
+                    logger.warning(f"Failed to save embedding cache: {e}")
+
+        # Agent embeddings: always compute (11 agents, 1 API call)
+        agent_count = self.capability_registry.precompute_embeddings("agent:")
+        if agent_count:
+            logger.info(f"Computed {agent_count} agent embeddings")
+
+        elapsed = time.monotonic() - start
+        logger.info(f"Embedding pre-computation complete in {elapsed:.1f}s")
+
     def _get_workspace_id(
         self,
         request: agent_worker_pb2.ProcessMessageRequest
-    ) -> Tuple[str, str, str]:
+    ) -> Tuple[str, str, int]:
         """
         Determine workspace type and ID from skill's agent ownership.
 
         Returns:
-            Tuple of (workspace_type, workspace_id, s3_prefix)
+            Tuple of (workspace_type, workspace_id, organization_id)
             - workspace_type: "agents" or "users"
             - workspace_id: agent_id or user_id
-            - s3_prefix: full S3 prefix path
+            - organization_id: org that owns this workspace
         """
         # Resolve agentId from skill being invoked
         agent_id = self._resolve_agent_id(request)
@@ -187,8 +238,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             workspace_type = "users"
             workspace_id = request.user_id
 
-        s3_prefix = f"workspaces/{workspace_type}"
-        return workspace_type, workspace_id, s3_prefix
+        organization_id = int(request.organization_id)
+        return workspace_type, workspace_id, organization_id
 
     async def ProcessMessage(
         self,
@@ -246,12 +297,12 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         workspace_path: Optional[Path] = None
         workspace_type: Optional[str] = None
         workspace_id: Optional[str] = None
-        workspace_prefix: Optional[str] = None
+        workspace_org_id: Optional[int] = None
 
         if self.workspace_sync:
             try:
-                workspace_type, workspace_id, workspace_prefix = self._get_workspace_id(request)
-                workspace_path = self.workspace_sync.download(workspace_id, prefix=workspace_prefix)
+                workspace_type, workspace_id, workspace_org_id = self._get_workspace_id(request)
+                workspace_path = self.workspace_sync.download(workspace_org_id, workspace_type, workspace_id)
                 logger.info(f"📁 Workspace downloaded: {workspace_path} (type={workspace_type}, id={workspace_id})")
             except Exception as e:
                 logger.error(f"Failed to download workspace: {e}")
@@ -319,7 +370,12 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     logger.warning("⚠️ No user API key provided - managed agents may fail auth")
 
             # Build audit headers for chat-initiated tool calls
-            chat_audit_headers = self._build_chat_audit_headers(user_id, agent_id, task_id)
+            user_name = request.user_name if request.user_name else None
+            agent_name = agent_config.name if agent_config and agent_config.name else None
+            chat_audit_headers = self._build_chat_audit_headers(
+                user_id, agent_id, task_id,
+                user_name=user_name, agent_name=agent_name
+            )
 
             async for response_dict in self._agent_handler.stream_response(
                 conversation_messages,
@@ -336,8 +392,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 file_attachments=file_attachments,  # File attachments for skill context injection
                 workspace_path=workspace_path,  # Workspace filesystem path
                 workspace_id=workspace_id,  # Workspace ID for S3 (user_id or agent_id)
-                workspace_prefix=workspace_prefix,  # S3 prefix ("workspaces/users" or "workspaces/agents")
                 workspace_type=workspace_type,  # "agents" or "users" — determines memory PII filtering
+                workspace_org_id=workspace_org_id,  # Organization ID for org-scoped S3 keys
                 extra_headers=chat_audit_headers,  # Audit trail headers for CRUD tool calls
             ):
                 # Check for cancellation
@@ -374,24 +430,25 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                         break
 
             # Upload workspace after message processing (crash-safe persistence)
-            if self.workspace_sync and workspace_path and workspace_id and workspace_prefix:
+            if self.workspace_sync and workspace_path and workspace_id and workspace_org_id and workspace_type:
                 try:
-                    self.workspace_sync.upload(workspace_id, prefix=workspace_prefix)
+                    self.workspace_sync.upload(workspace_org_id, workspace_type, workspace_id)
                     logger.info(f"📤 Workspace uploaded: {workspace_id}")
                 except Exception as e:
                     logger.error(f"Failed to upload workspace: {e}")
 
             processing_time = int((time.time() - start_time) * 1000)
-            handler_token_usage = self._agent_handler.last_token_usage
-            # Merge embedding usage (capability discovery, planning) into total
+            # Extract accumulated LLM + embedding usage for this request
+            llm_usage = TokenUsageExtractor.extract_llm_usage()
             embedding_usage = TokenUsageExtractor.extract_embedding_usage()
-            handler_token_usage = TokenUsageExtractor.merge_usage(handler_token_usage, embedding_usage)
+            handler_token_usage = TokenUsageExtractor.merge_usage(llm_usage, embedding_usage)
             token_usage_proto = token_usage_to_proto(handler_token_usage)
             model_used = getattr(handler_token_usage, 'model_name', '') if handler_token_usage else ''
 
             completion_metadata = {
                 'content_length': str(len(total_content)),
-                'agent_id': str(agent_id) if agent_id else 'none'
+                'agent_id': str(agent_id) if agent_id else 'none',
+                'agent_name': agent_config.name if agent_config and agent_config.name else '',
             }
 
             if current_plan_data:
@@ -418,6 +475,12 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         except Exception as e:
             logger.exception(f"❌ Message processing failed: {e}")
             
+            # Extract partial usage up to failure
+            llm_usage = TokenUsageExtractor.extract_llm_usage()
+            embedding_usage = TokenUsageExtractor.extract_embedding_usage()
+            handler_token_usage = TokenUsageExtractor.merge_usage(llm_usage, embedding_usage)
+            token_usage_proto = token_usage_to_proto(handler_token_usage)
+            
             # Send error response
             error_response = agent_worker_pb2.ProcessMessageResponse(
                 error=agent_worker_pb2.ProcessingError(
@@ -427,7 +490,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                         'user_id': user_id,
                         'organization_id': str(org_id),
                         'processing_time_ms': str(int((time.time() - start_time) * 1000))
-                    }
+                    },
+                    token_usage=token_usage_proto
                 ),
                 timestamp=int(time.time() * 1000)
             )
@@ -517,6 +581,17 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             user_feedback = request.user_feedback or None
             task_instructions = request.instructions
 
+            # Extract configured tools appendix from instructions
+            configured_tools: List[Dict[str, Any]] = []
+            if "---CONFIGURED_TOOLS---" in task_instructions:
+                parts = task_instructions.split("---CONFIGURED_TOOLS---", 1)
+                task_instructions = parts[0].strip()
+                try:
+                    configured_tools = json.loads(parts[1].strip())
+                    logger.info(f"📋 GeneratePlan: Extracted {len(configured_tools)} configured tools")
+                except json.JSONDecodeError:
+                    logger.warning("📋 GeneratePlan: Failed to parse configured tools JSON")
+
             if request.session_id and request.answers:
                 logger.info(f"📋 GeneratePlan: Resuming session {session_id} with {len(request.answers)} answers")
                 yield _make_progress("Resuming with your answers...", "resuming")
@@ -572,6 +647,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     for o in skill_outputs
                 ] if skill_outputs else None,
                 "is_template_generation": bool(skill_inputs),
+                "configured_tools": configured_tools if configured_tools else None,
             }
 
             result = await generate_plan_node(cast(PlanExecuteState, plan_state), runtime)

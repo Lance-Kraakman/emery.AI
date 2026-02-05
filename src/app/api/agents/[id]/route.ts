@@ -12,6 +12,7 @@
 
 import { NextRequest } from 'next/server';
 import { withAuthenticatedRoute, parseIntParam, parseJsonBody } from '@/lib/api/base';
+import { hasResourcePermission } from '@/lib/auth';
 import { logAgentMutation } from '@/lib/api/agent-context';
 import { getAgentApplicationService } from '@/ddd/application/di/container';
 import { AgentId } from '@/ddd/domain/shared/value-objects';
@@ -28,6 +29,11 @@ export async function GET(
   return withAuthenticatedRoute(request, async (user) => {
     const { id } = await params;
     const agentId = parseIntParam(id, 'agent id');
+
+    if (!user.organizationId || !await hasResourcePermission(user.id, 'agents:view', user.organizationId, 'agents', agentId)) {
+      return { success: false, error: 'Permission denied', status: 403 };
+    }
+
     const agentService = getAgentApplicationService();
 
     const agent = await agentService.getAgent(AgentId.fromNumber(agentId));
@@ -73,6 +79,11 @@ export async function PUT(
   return withAuthenticatedRoute(request, async (user) => {
     const { id } = await params;
     const agentId = parseIntParam(id, 'agent id');
+
+    if (!user.organizationId || !await hasResourcePermission(user.id, 'agents:manage', user.organizationId, 'agents', agentId)) {
+      return { success: false, error: 'Permission denied', status: 403 };
+    }
+
     const body = await parseJsonBody(request);
 
     if (!body) {
@@ -127,6 +138,11 @@ export async function DELETE(
   return withAuthenticatedRoute(request, async (user) => {
     const { id } = await params;
     const agentId = parseIntParam(id, 'agent id');
+
+    if (!user.organizationId || !await hasResourcePermission(user.id, 'agents:manage', user.organizationId, 'agents', agentId)) {
+      return { success: false, error: 'Permission denied', status: 403 };
+    }
+
     const agentService = getAgentApplicationService();
 
     // Verify agent exists before attempting deletion

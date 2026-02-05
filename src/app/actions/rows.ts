@@ -147,7 +147,7 @@ export async function createRow(data: CreateRowCommand, revalidateUrl?: string, 
         actor: actorOverride?.actor ?? {
           type: 'user',
           id: session.user.id,
-          name: session.user.name || undefined,
+          name: session.user.name || session.user.email || undefined,
         },
         triggerMetadata: actorOverride?.triggerMetadata,
       };
@@ -258,7 +258,7 @@ export async function createRows(data: { tableId: number; rows: Record<string, a
         actor: actorOverride?.actor ?? {
           type: 'user',
           id: session.user.id,
-          name: session.user.name || undefined,
+          name: session.user.name || session.user.email || undefined,
         },
         triggerMetadata: actorOverride?.triggerMetadata,
       };
@@ -439,7 +439,7 @@ export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: stri
         actor: actorOverride?.actor ?? {
           type: 'user',
           id: session.user.id,
-          name: session.user.name || undefined,
+          name: session.user.name || session.user.email || undefined,
         },
         triggerMetadata: actorOverride?.triggerMetadata,
       };
@@ -577,7 +577,7 @@ export async function updateRowsData(
         actor: actorOverride?.actor ?? {
           type: 'user',
           id: session.user.id,
-          name: session.user.name || undefined,
+          name: session.user.name || session.user.email || undefined,
         },
         triggerMetadata: actorOverride?.triggerMetadata,
       };
@@ -706,7 +706,7 @@ export async function deleteRowData(tableId: number, rowId: string, revalidateUr
         actor: actorOverride?.actor ?? {
           type: 'user',
           id: session.user.id,
-          name: session.user.name || undefined,
+          name: session.user.name || session.user.email || undefined,
         },
         triggerMetadata: actorOverride?.triggerMetadata,
       };

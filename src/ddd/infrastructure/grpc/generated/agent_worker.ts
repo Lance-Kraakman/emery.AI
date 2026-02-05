@@ -230,6 +230,8 @@ export interface TaskRequest {
   triggeredByUserId: string;
   /** Display name of the triggering user */
   triggeredByUserName: string;
+  /** API key for tool auth (agent key for agent tasks, rotated per-task) */
+  userApiKey: string;
 }
 
 /**
@@ -938,6 +940,8 @@ export interface ProcessMessageRequest {
    * AIDEV-NOTE: When present, skill/agent execution is tracked via Task infrastructure
    */
   taskId: string;
+  /** User display name for audit trail */
+  userName: string;
 }
 
 /** Streaming response from AI processing */
@@ -1090,6 +1094,8 @@ export interface ProcessingError {
   autoRetry: boolean;
   /** Was session reset due to this error? */
   sessionReset: boolean;
+  /** Token usage incurred before error */
+  tokenUsage: TokenUsage | undefined;
 }
 
 export interface ProcessingError_ErrorDetailsEntry {
@@ -1188,6 +1194,7 @@ function createBaseTaskRequest(): TaskRequest {
     triggerType: "",
     triggeredByUserId: "",
     triggeredByUserName: "",
+    userApiKey: "",
   };
 }
 
@@ -1246,6 +1253,9 @@ export const TaskRequest: MessageFns<TaskRequest> = {
     }
     if (message.triggeredByUserName !== "") {
       writer.uint32(146).string(message.triggeredByUserName);
+    }
+    if (message.userApiKey !== "") {
+      writer.uint32(154).string(message.userApiKey);
     }
     return writer;
   },
@@ -1401,6 +1411,14 @@ export const TaskRequest: MessageFns<TaskRequest> = {
           message.triggeredByUserName = reader.string();
           continue;
         }
+        case 19: {
+          if (tag !== 154) {
+            break;
+          }
+
+          message.userApiKey = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1436,6 +1454,7 @@ export const TaskRequest: MessageFns<TaskRequest> = {
       triggerType: isSet(object.triggerType) ? globalThis.String(object.triggerType) : "",
       triggeredByUserId: isSet(object.triggeredByUserId) ? globalThis.String(object.triggeredByUserId) : "",
       triggeredByUserName: isSet(object.triggeredByUserName) ? globalThis.String(object.triggeredByUserName) : "",
+      userApiKey: isSet(object.userApiKey) ? globalThis.String(object.userApiKey) : "",
     };
   },
 
@@ -1495,6 +1514,9 @@ export const TaskRequest: MessageFns<TaskRequest> = {
     if (message.triggeredByUserName !== "") {
       obj.triggeredByUserName = message.triggeredByUserName;
     }
+    if (message.userApiKey !== "") {
+      obj.userApiKey = message.userApiKey;
+    }
     return obj;
   },
 
@@ -1529,6 +1551,7 @@ export const TaskRequest: MessageFns<TaskRequest> = {
     message.triggerType = object.triggerType ?? "";
     message.triggeredByUserId = object.triggeredByUserId ?? "";
     message.triggeredByUserName = object.triggeredByUserName ?? "";
+    message.userApiKey = object.userApiKey ?? "";
     return message;
   },
 };
@@ -7383,6 +7406,7 @@ function createBaseProcessMessageRequest(): ProcessMessageRequest {
     sessionId: "",
     userApiKey: "",
     taskId: "",
+    userName: "",
   };
 }
 
@@ -7417,6 +7441,9 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
     }
     if (message.taskId !== "") {
       writer.uint32(162).string(message.taskId);
+    }
+    if (message.userName !== "") {
+      writer.uint32(170).string(message.userName);
     }
     return writer;
   },
@@ -7508,6 +7535,14 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
           message.taskId = reader.string();
           continue;
         }
+        case 21: {
+          if (tag !== 170) {
+            break;
+          }
+
+          message.userName = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -7533,6 +7568,7 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
       sessionId: isSet(object.sessionId) ? globalThis.String(object.sessionId) : "",
       userApiKey: isSet(object.userApiKey) ? globalThis.String(object.userApiKey) : "",
       taskId: isSet(object.taskId) ? globalThis.String(object.taskId) : "",
+      userName: isSet(object.userName) ? globalThis.String(object.userName) : "",
     };
   },
 
@@ -7568,6 +7604,9 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
     if (message.taskId !== "") {
       obj.taskId = message.taskId;
     }
+    if (message.userName !== "") {
+      obj.userName = message.userName;
+    }
     return obj;
   },
 
@@ -7588,6 +7627,7 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
     message.sessionId = object.sessionId ?? "";
     message.userApiKey = object.userApiKey ?? "";
     message.taskId = object.taskId ?? "";
+    message.userName = object.userName ?? "";
     return message;
   },
 };
@@ -8739,6 +8779,7 @@ function createBaseProcessingError(): ProcessingError {
     canRetry: false,
     autoRetry: false,
     sessionReset: false,
+    tokenUsage: undefined,
   };
 }
 
@@ -8764,6 +8805,9 @@ export const ProcessingError: MessageFns<ProcessingError> = {
     }
     if (message.sessionReset !== false) {
       writer.uint32(56).bool(message.sessionReset);
+    }
+    if (message.tokenUsage !== undefined) {
+      TokenUsage.encode(message.tokenUsage, writer.uint32(66).fork()).join();
     }
     return writer;
   },
@@ -8834,6 +8878,14 @@ export const ProcessingError: MessageFns<ProcessingError> = {
           message.sessionReset = reader.bool();
           continue;
         }
+        case 8: {
+          if (tag !== 66) {
+            break;
+          }
+
+          message.tokenUsage = TokenUsage.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -8857,6 +8909,7 @@ export const ProcessingError: MessageFns<ProcessingError> = {
       canRetry: isSet(object.canRetry) ? globalThis.Boolean(object.canRetry) : false,
       autoRetry: isSet(object.autoRetry) ? globalThis.Boolean(object.autoRetry) : false,
       sessionReset: isSet(object.sessionReset) ? globalThis.Boolean(object.sessionReset) : false,
+      tokenUsage: isSet(object.tokenUsage) ? TokenUsage.fromJSON(object.tokenUsage) : undefined,
     };
   },
 
@@ -8889,6 +8942,9 @@ export const ProcessingError: MessageFns<ProcessingError> = {
     if (message.sessionReset !== false) {
       obj.sessionReset = message.sessionReset;
     }
+    if (message.tokenUsage !== undefined) {
+      obj.tokenUsage = TokenUsage.toJSON(message.tokenUsage);
+    }
     return obj;
   },
 
@@ -8912,6 +8968,9 @@ export const ProcessingError: MessageFns<ProcessingError> = {
     message.canRetry = object.canRetry ?? false;
     message.autoRetry = object.autoRetry ?? false;
     message.sessionReset = object.sessionReset ?? false;
+    message.tokenUsage = (object.tokenUsage !== undefined && object.tokenUsage !== null)
+      ? TokenUsage.fromPartial(object.tokenUsage)
+      : undefined;
     return message;
   },
 };

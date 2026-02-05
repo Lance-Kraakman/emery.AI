@@ -15,6 +15,7 @@
 
 import { NextRequest } from 'next/server';
 import { withAuthenticatedRoute, parseIntParam, parseJsonBody } from '@/lib/api/base';
+import { hasResourcePermission } from '@/lib/auth';
 import { getFileApplicationService, getTableApplicationService, getRowApplicationService } from '@/ddd/application/di/container';
 import { TableId, FieldId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import { RowId, Row } from '@/ddd/domain/tables/value-objects/row';
@@ -50,15 +51,13 @@ export async function GET(
       };
     }
 
-    if (!user.organizationId) {
-      return {
-        success: false,
-        error: 'Organization ID required',
-        status: 400
-      };
+    const tableIdNum = parseIntParam(tableIdParam, 'tableId');
+
+    if (!user.organizationId || !await hasResourcePermission(user.id, 'table:view', user.organizationId, 'tables', tableIdNum)) {
+      return { success: false, error: 'Permission denied', status: 403 };
     }
 
-    const tableId = TableId.fromNumber(parseIntParam(tableIdParam, 'tableId'));
+    const tableId = TableId.fromNumber(tableIdNum);
     const fieldId = FieldId.fromNumber(parseIntParam(fieldIdParam, 'fieldId'));
     const rowId = RowId.fromString(rowIdParam);
     const organizationId = OrganizationId.fromNumber(user.organizationId);
@@ -159,15 +158,13 @@ export async function DELETE(
       };
     }
 
-    if (!user.organizationId) {
-      return {
-        success: false,
-        error: 'Organization ID required',
-        status: 400
-      };
+    const tableIdNum = parseIntParam(tableIdParam, 'tableId');
+
+    if (!user.organizationId || !await hasResourcePermission(user.id, 'table:manage', user.organizationId, 'tables', tableIdNum)) {
+      return { success: false, error: 'Permission denied', status: 403 };
     }
 
-    const tableId = TableId.fromNumber(parseIntParam(tableIdParam, 'tableId'));
+    const tableId = TableId.fromNumber(tableIdNum);
     const fieldId = FieldId.fromNumber(parseIntParam(fieldIdParam, 'fieldId'));
     const organizationId = OrganizationId.fromNumber(user.organizationId);
 
@@ -231,12 +228,10 @@ export async function PUT(
       };
     }
 
-    if (!user.organizationId) {
-      return {
-        success: false,
-        error: 'Organization ID required',
-        status: 400
-      };
+    const tableIdNum = parseIntParam(tableIdParam, 'tableId');
+
+    if (!user.organizationId || !await hasResourcePermission(user.id, 'table:manage', user.organizationId, 'tables', tableIdNum)) {
+      return { success: false, error: 'Permission denied', status: 403 };
     }
 
     const body = await parseJsonBody(request);
@@ -247,8 +242,6 @@ export async function PUT(
         status: 400
       };
     }
-
-    const tableIdNum = parseIntParam(tableIdParam, 'tableId');
     const tableId = TableId.fromNumber(tableIdNum);
     const rowId = RowId.fromString(rowIdParam);
 

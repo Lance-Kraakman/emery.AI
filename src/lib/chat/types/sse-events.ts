@@ -29,6 +29,13 @@ export interface MessageCompleteEvent {
     executionSteps: ExecutionStep[]
     modelUsed: string
     totalTokens: number
+    tokenUsage?: {
+      inputTokens: number
+      outputTokens: number
+      totalTokens: number
+      modelName: string
+      costUsd?: number
+    }
   }
 }
 

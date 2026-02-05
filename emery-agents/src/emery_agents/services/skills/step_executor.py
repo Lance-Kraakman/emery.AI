@@ -1447,7 +1447,12 @@ class StepExecutorService:
         input_mappings: Dict[str, str],
         context: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Resolve input mappings from step_context."""
+        """Resolve input mappings from step_context.
+
+        Missing template variables are skipped with a warning instead of
+        raising, so that agentic steps can still run with partial inputs
+        (the LLM resolves the rest from context).
+        """
         resolved = {}
         for param_name, source in input_mappings.items():
             if source.startswith("{{") and source.endswith("}}"):
@@ -1455,9 +1460,9 @@ class StepExecutorService:
                 if var_name in context:
                     resolved[param_name] = context[var_name]
                 else:
-                    raise ValueError(
-                        f"Required input '{var_name}' not found in step context. "
-                        f"Available: {list(context.keys())}"
+                    logger.warning(
+                        f"Input '{var_name}' not found in step context "
+                        f"(available: {list(context.keys())}). Skipping."
                     )
             else:
                 resolved[param_name] = source

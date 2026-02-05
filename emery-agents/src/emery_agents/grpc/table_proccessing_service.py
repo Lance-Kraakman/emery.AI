@@ -110,9 +110,9 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             path: Relative path like 'org_1/db_1/table_1/'
 
         Returns:
-            Full S3 URI like 's3://emery-files/org_1/db_1/table_1/'
+            Full S3 URI like 's3://enhancd-files/org_1/db_1/table_1/'
         """
-        bucket = os.getenv("S3_BUCKET_NAME", "emery-files")
+        bucket = os.getenv("S3_BUCKET_NAME", "enhancd-files")
         # Remove leading/trailing slashes for consistency
         clean_path = path.strip('/')
         return f"s3://{bucket}/{clean_path}"

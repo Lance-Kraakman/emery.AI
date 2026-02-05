@@ -25,6 +25,8 @@ import {
 } from '@/components/ui/tooltip';
 import { UnifiedChatInput } from '@/components/shared/UnifiedChatInput';
 import { OutputDefinitionsSection } from '../editor/OutputDefinitionsSection';
+import { PlanStepCard } from '../editor/PlanStepCard';
+import { ToolChip } from '../editor/ToolChip';
 import { useSkillAttachments, workflowVariablesToChatVariables } from '../hooks';
 import type { ConfigWithVariables, AgenticNodeData } from './types';
 
@@ -118,12 +120,12 @@ export function AgenticConfig({
           <Label className="text-xs">Tools ({data.tools.length})</Label>
           <div className="flex flex-wrap gap-1">
             {data.tools.map((tool, idx) => (
-              <span
+              <ToolChip
                 key={idx}
-                className="text-[10px] px-1.5 py-0.5 rounded bg-violet-100 dark:bg-violet-900 text-violet-700 dark:text-violet-300"
-              >
-                {tool.name}
-              </span>
+                toolName={tool.name}
+                displayName={tool.config?.displayName}
+                iconUrl={tool.iconUrl}
+              />
             ))}
           </div>
         </div>
@@ -192,13 +194,17 @@ export function AgenticConfig({
                 View steps <ChevronDown className="h-3 w-3 ml-1" />
               </CollapsibleTrigger>
               <CollapsibleContent>
-                <ul className="text-[10px] space-y-1 mt-1">
+                <div className="space-y-1 mt-1">
                   {data.plan.steps?.map((step, i) => (
-                    <li key={step.stepId} className="pl-2 border-l border-muted-foreground/30">
-                      {i + 1}. {step.description}
-                    </li>
+                    <PlanStepCard
+                      key={step.stepId}
+                      step={step}
+                      stepNumber={i + 1}
+                      tools={data.tools}
+                      compact
+                    />
                   ))}
-                </ul>
+                </div>
               </CollapsibleContent>
             </Collapsible>
 

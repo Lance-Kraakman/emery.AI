@@ -1,6 +1,15 @@
 import { pgTable, text, uuid, serial, bigserial, bigint, integer, timestamp, boolean, primaryKey, jsonb, unique, customType, pgPolicy, pgRole, index, doublePrecision, numeric } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
-import { randomBytes, randomUUID } from 'crypto';
+import { randomUUID } from 'crypto';
+import { encrypt, decrypt } from '@/lib/security/encryption';
+
+// AES-256-GCM encrypted text column — transparent encrypt on write, decrypt on read.
+// Underlying Postgres type remains text (no migration needed).
+const encryptedText = customType<{ data: string; driverData: string }>({
+  dataType() { return 'text'; },
+  toDriver(value: string): string { return encrypt(value) ?? value; },
+  fromDriver(value: string): string { return decrypt(value) ?? value; },
+});
 
 // AIDEV-NOTE: Import organizational analysis types for type-safe schema
 import type { OrganizationAnalysisCapabilities } from '@/ddd/domain/organizations/entities/organization';
@@ -616,7 +625,10 @@ export const users = pgTable("users", {
   currentOrganizationId: integer("current_organization_id").references(() => organizations.id),
   jobTitle: text("job_title"),
   teams: text("teams").array(),
-  apiKey: text("api_key").unique(), // User API key for management APIs
+  apiKeyHash: text("api_key_hash").unique(),
+  apiKeyPrefix: text("api_key_prefix"),
+  previousApiKeyHash: text("previous_api_key_hash"),
+  previousApiKeyExpiresAt: timestamp("previous_api_key_expires_at"),
   createdAt: timestamp("created_at").defaultNow(),
 
   // Published app authentication fields
@@ -823,7 +835,10 @@ export const agents = pgTable("agents", {
   databaseId: text("database_id"),
   status: text("status").default("active"),
   organizationId: integer("organization_id").notNull().references(() => organizations.id),
-  apiKey: text("api_key").unique().$defaultFn(() => `key_${randomBytes(16).toString('hex')}`), // For API authentication
+  apiKeyHash: text("api_key_hash").unique(),
+  apiKeyPrefix: text("api_key_prefix"),
+  previousApiKeyHash: text("previous_api_key_hash"),
+  previousApiKeyExpiresAt: timestamp("previous_api_key_expires_at"),
   webhookToken: text("webhook_token").unique().$defaultFn(() => randomUUID()), // For webhook authentication (Pipedream, etc.)
   lastUsedAt: timestamp("last_used_at"), // Track API key usage
 
@@ -1303,12 +1318,12 @@ export const accounts = pgTable("accounts", {
   type: text("type").notNull(),
   provider: text("provider").notNull(),
   providerAccountId: text("provider_account_id").notNull(),
-  refresh_token: text("refresh_token"),
-  access_token: text("access_token"),
+  refresh_token: encryptedText("refresh_token"),
+  access_token: encryptedText("access_token"),
   expires_at: integer("expires_at"),
   token_type: text("token_type"),
   scope: text("scope"),
-  id_token: text("id_token"),
+  id_token: encryptedText("id_token"),
   session_state: text("session_state"),
 }, (table) => ({
   compoundKey: primaryKey({

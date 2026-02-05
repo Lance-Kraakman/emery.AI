@@ -20,6 +20,7 @@ import { getAgentApplicationService } from '@/ddd/application/di/container';
 import { AgentMapper } from '@/app/mappers/agent-mapper';
 import { AgentId } from '@/ddd/domain/shared/value-objects/agent-id';
 import { requirePermission } from '@/app/actions/permissions';
+import { ensureFreshAgentApiKey } from '@/lib/auth/agent-api-keys';
 
 /**
  * POST /api/agents/[id]/execution-config
@@ -58,13 +59,16 @@ export async function POST(
     // Convert domain entity to DTO for API response
     const agentDTO = AgentMapper.toDTO(agent);
 
+    // Generate fresh agent API key (plaintext for tool auth, hash stored in DB)
+    // Defense-in-depth: verify agent belongs to caller's org
+    const agentApiKey = await ensureFreshAgentApiKey(agent.id.value, user.organizationId ?? undefined);
+
     return {
       success: true,
       data: {
         agent: agentDTO,
-        // Credential info for Python execution
         agentId: agentDTO.id,
-        agentApiKey: agentDTO.apiKey,
+        agentApiKey: agentApiKey,
       }
     };
   });

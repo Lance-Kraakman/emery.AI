@@ -4,6 +4,7 @@
 
 import { NextRequest } from 'next/server';
 import { withAuthenticatedRoute, parseJsonBody, requireParam } from '@/lib/api/base';
+import { hasPermission } from '@/lib/auth';
 import { logAgentMutation } from '@/lib/api/agent-context';
 import { getTableApplicationService } from "@/ddd/application/di/container";
 import { DatabaseId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
@@ -15,13 +16,17 @@ import { TableMapper } from '@/app/mappers/table-mapper';
  */
 export async function POST(request: NextRequest): Promise<Response> {
   return withAuthenticatedRoute(request, async (user) => {
+    if (!user.organizationId || !await hasPermission(user.id, 'table:create', user.organizationId)) {
+      return { success: false, error: 'Permission denied', status: 403 };
+    }
+
     const body = await parseJsonBody(request);
 
     if (!body) {
       return { success: false, error: 'Invalid request body', status: 400 };
     }
 
-    const { name, description, organizationId, databaseId, metadata } = body;
+    const { name, description, databaseId, metadata } = body;
     requireParam(name, 'name');
     requireParam(databaseId, 'databaseId');
 
@@ -29,9 +34,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     const command: CreateTableCommand = {
       name,
       databaseId: DatabaseId.fromNumber(databaseId),
-      organizationId: OrganizationId.fromNumber(
-        organizationId ? parseInt(organizationId) : user.organizationId || 1
-      ),
+      organizationId: OrganizationId.fromNumber(user.organizationId),
       ownerId: UserId.fromString(user.id),
       description,
       metadata: metadata || {}
@@ -63,8 +66,8 @@ export async function POST(request: NextRequest): Promise<Response> {
  */
 export async function GET(request: NextRequest): Promise<Response> {
   return withAuthenticatedRoute(request, async (user) => {
-    if (!user.organizationId) {
-      return { success: false, error: 'User has no current organization', status: 400 };
+    if (!user.organizationId || !await hasPermission(user.id, 'table:view', user.organizationId)) {
+      return { success: false, error: 'Permission denied', status: 403 };
     }
 
     const tableApplicationService = getTableApplicationService();

@@ -548,7 +548,37 @@ export async function duplicateAgent(agentId: number, revalidateUrl?: string): P
 // Pipedream Source Deployment
 // =============================================================================
 
-export interface DeployPipedreamSourceInput {
+/**
+ * Regenerate API key for an agent.
+ * Returns the plaintext key (shown once) and prefix.
+ */
+export async function regenerateAgentApiKey(agentId: number): Promise<Result<{ apiKey: string, prefix: string }>> {
+  return withAuthContext(async () => {
+    try {
+      await requireResourcePermission("agents:manage", "agent", agentId);
+
+      const agentService = getAgentApplicationService();
+      const result = await agentService.regenerateApiKey(agentId);
+
+      if (!result.success) {
+        return { success: false, error: result.error };
+      }
+
+      return {
+        success: true,
+        data: { apiKey: result.data!.apiKey, prefix: result.data!.prefix }
+      };
+    } catch (error) {
+      console.error('[AgentActions] Failed to regenerate API key:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to regenerate API key'
+      };
+    }
+  });
+}
+
+interface DeployPipedreamSourceInput {
   agentId: number;
   triggerId: string;      // Tool ID from tools table (e.g., "gmail-new-email-received")
   connectionId: string;   // User's OAuth connection ID (e.g., "apn_QPhBxVA")

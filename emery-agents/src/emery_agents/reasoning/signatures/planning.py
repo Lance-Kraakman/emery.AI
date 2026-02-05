@@ -61,8 +61,22 @@ class PlanStepOutput(BaseModel):
 
     step_id: str = Field(description="Unique identifier (e.g., 'step_1_create_table')")
     description: str = Field(
-        description="What this step does and why, written as an instruction to the executor. "
-                    "Include specific resource names and field details when known."
+        description=(
+            "A COMPLETE, self-contained instruction for the plan step executor. "
+            "The executor sees ONLY this text and has tools — it does NOT see the plan goal, "
+            "workspace context, or capability guidance. Include ALL information needed to execute.\n\n"
+            "REQUIRED:\n"
+            "1. SPECIFIC resource names (exact table/app/skill name in quotes, not 'the table')\n"
+            "2. SPECIFIC values (field names, types, option values, not 'appropriate fields')\n"
+            "3. SPECIFIC actions (Create/Add/Update/Delete, not 'set up' or 'configure')\n"
+            "4. SUCCESS criteria (what should exist after this step completes)\n\n"
+            "If a step requires looking something up first, write that INTO the description "
+            "(e.g., \"Look up the 'contacts' table schema, then add a 'phone' (phone) field\").\n\n"
+            "BAD: 'Set up the contacts table with relevant fields'\n"
+            "GOOD: 'Create table \"contacts\" with fields: full_name (text), email (email), "
+            "phone (phone), status (single-select: Active, Inactive, Lead). "
+            "Verify: table exists with 4 fields.'"
+        )
     )
     tool_call: Optional[str] = Field(
         default=None,
@@ -166,9 +180,12 @@ class PlanOutput(BaseModel):
                     "which capabilities, and any trade-offs considered"
     )
     steps: list[PlanStepOutput] = Field(
-        description="Ordered steps. One step per distinct action — "
-                    "do NOT combine multiple actions into one step. "
-                    "Include specific tool names and resource details in each step description."
+        description=(
+            "Ordered steps. Each step is a COMPLETE, self-contained executor instruction. "
+            "The plan step executor sees ONLY the step description — not the plan goal or context. "
+            "Include all resource names, field types, and values in each step. "
+            "One step per distinct action — do NOT combine multiple actions into one step."
+        )
     )
 
 
@@ -209,49 +226,68 @@ class PlanOrQuestionsOutput(BaseModel):
 class CreatePlan(dspy.Signature):  # type: ignore[misc]
     """Create an execution plan or ask clarifying questions.
 
-    One step per distinct action. Never combine multiple actions into one step.
-    Check workspace_context for existing resources before asking about them.
-    Use capability_guidance to understand what the system can do.
-    Use task_analysis for pre-analyzed intent, approach, and external service hints.
+    STEP QUALITY RULES:
+    - Each step description must be a COMPLETE executor instruction (see PlanStepOutput.description).
+    - The plan step executor cannot see the plan goal, workspace context, or capability guidance.
+      It only has the step description + tools. Write accordingly.
+    - Include concrete names, values, and types — never use vague references like "the table" or "appropriate fields".
+    - Use capability_guidance step format examples and templates as models for step descriptions.
+    - If a step requires looking something up first, write that INTO the description
+      (e.g., "Look up the 'contacts' table schema, then add a 'phone' (phone) field").
+    - One step per distinct action. Never combine multiple actions into one step.
+
+    PLANNING PROCESS:
+    - Check workspace_context for existing resources before creating new ones.
+    - Use capability_guidance to understand what the system can do and which tools each capability uses.
+    - Use task_analysis for pre-analyzed intent, approach, and external service hints.
 
     EXTERNAL INTEGRATIONS: If task_analysis lists external services (Gmail, Slack, etc.),
-    call search_external(service="<name>") to discover available actions.
+    call search_capabilities first to verify which integrations are available, then
+    call search_external(service="<name>") to get specific tool names and input schemas.
     Include the specific tool name (e.g., gmail_send_email) in step descriptions.
     Set connection_required to the service slug for OAuth services.
+    If multiple services match (e.g., Gmail and Outlook for "send email"), ask the user.
 
     DEFAULTS vs QUESTIONS: Prefer a concrete plan with sensible defaults over vague questions.
     The user can modify the plan before approving. Ask only when genuinely unsure:
     destructive operations, ambiguous business rules, multiple valid approaches.
 
-    TOOLS: You can call search_external, search_capabilities, system_research during planning.
+    RESEARCH TOOLS (call as needed, in any order — re-call to refine):
+    - search_capabilities: Discovers platform agents, external integrations, user skills. Good starting point.
+    - search_external: Gets specific tool names/inputs for a known service (e.g., after finding it via search_capabilities).
+    - system_research: Gets field schemas, page content, resource details for existing workspace resources.
+    - web_search: Researches industry practices, business requirements, domain knowledge.
     """
 
     request: str = dspy.InputField(
         desc="The user's goal in natural language. May reference existing resources by name."
     )
     workspace_context: str = dspy.InputField(
-        desc="JSON of existing workspace resources (databases, tables with field schemas, "
-             "apps, agents, skills, views). Check this BEFORE asking about existing resources."
+        desc="Summary of existing workspace resources (databases, tables with field counts, "
+             "apps, agents, skills). Check this BEFORE creating resources that may already exist. "
+             "For detailed field schemas, use system_research(resource_type='tables', query='<name>', include_details=True). "
+             "Do NOT guess field names or types — look them up if needed."
     )
     capability_guidance: str = dspy.InputField(
         desc="Routing table and instructions for system capabilities. "
-             "Shows what the system can do and when to use each capability."
+             "Shows what the system can do, when to use each capability, "
+             "which tools each capability uses, and step description templates. "
+             "Use the step description templates to write executor-ready step descriptions."
     )
-    proven_strategies: str = dspy.InputField(
-        desc="Patterns from past successful executions of similar goals. "
-             "Reuse proven step sequences when applicable. Empty string if none."
+    planning_context: str = dspy.InputField(
+        desc="Combined context for planning: task analysis (intent, domain, entities, approach), "
+             "proven strategies from past executions, background memories, and delegation hints. "
+             "Each section is labeled. Empty sections are omitted."
     )
     conversation_history: str = dspy.InputField(
         desc="Previous messages in this chat session for follow-up context."
     )
-    memory_context: str = dspy.InputField(
-        desc="Background context from previous interactions. "
-             "Use for continuity but the current request is in the 'request' field. "
-             "Empty string if none."
-    )
-    task_analysis: str = dspy.InputField(
-        desc="Pre-analysis: intent, domain, entities, approach, and external services detected. "
-             "Use to guide planning decisions and tool discovery."
+    configured_tools: str = dspy.InputField(
+        desc="JSON list of tools explicitly configured for this skill. "
+             "When tools are listed here, you MUST use them in the plan steps. "
+             "Include the exact tool name in the step's tool_call field. "
+             "You may also discover additional tools via search_external if needed. "
+             "Empty string if no tools are configured."
     )
 
     result: PlanOrQuestionsOutput = dspy.OutputField()
@@ -295,7 +331,6 @@ class CreateSkillTemplate(dspy.Signature):  # type: ignore[misc]
     workspace_context: str = dspy.InputField(
         desc="JSON of existing databases, tables, apps - check FIRST before asking"
     )
-    available_tools: list[str] = dspy.InputField(desc="Discovery tools available")
     capability_guidance: str = dspy.InputField(
         desc="Capability planning guidance - when to use each capability"
     )
@@ -308,6 +343,12 @@ class CreateSkillTemplate(dspy.Signature):  # type: ignore[misc]
     )
     skill_outputs: list[SkillOutputSpec] = dspy.InputField(
         desc="Expected outputs to be extracted post-execution"
+    )
+    configured_tools: str = dspy.InputField(
+        desc="JSON list of tools explicitly configured for this skill. "
+             "When tools are listed here, you MUST use them in the plan steps. "
+             "Include the exact tool name in the step's tool_call field. "
+             "Empty string if no tools are configured."
     )
 
     result: SkillTemplatePlanOutput = dspy.OutputField()
@@ -444,9 +485,12 @@ class ClassifyTask(dspy.Signature):  # type: ignore[misc]
 
 
 class TriageTask(dspy.Signature):  # type: ignore[misc]
-    """Analyze the user's task and determine the best execution approach.
+    """Analyze the user's task, extract intent/entities, and determine the best execution approach.
 
     You have access to discovery tools — use them to research before deciding.
+
+    ALWAYS output intent, entities, approach, and external_services — these are used
+    by the planner if the task is routed to "plan" mode. This avoids a separate analysis step.
 
     ROUTING RULES:
 
@@ -513,6 +557,24 @@ class TriageTask(dspy.Signature):  # type: ignore[misc]
     response: str = dspy.OutputField(
         desc="When execution_mode is 'respond': the complete, natural answer to give the user. "
              "When execution_mode is 'direct' or 'plan': empty string."
+    )
+    # Task analysis fields — populated during triage to avoid a separate AnalyzeTask call
+    intent: str = dspy.OutputField(
+        desc="One-sentence summary of the user's goal. Start with a verb "
+             "(e.g., 'Create a contacts table with name, email, and phone fields'). "
+             "Always populated regardless of execution_mode."
+    )
+    entities: list[str] = dspy.OutputField(
+        desc="Concrete nouns from the request: resource names, field names, service names. "
+             "Resolve references using workspace_context (e.g., 'the table' → actual table name)."
+    )
+    approach: str = dspy.OutputField(
+        desc="Reasoning approach: 'analytical', 'systems-thinking', 'step-by-step', or 'creative'. "
+             "Guides how the planner structures the plan."
+    )
+    external_services: list[str] = dspy.OutputField(
+        desc="Third-party services mentioned (e.g., ['gmail', 'slack']). "
+             "Empty list if none. The planner will call search_external for each."
     )
 
 

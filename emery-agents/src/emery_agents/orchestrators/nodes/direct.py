@@ -16,6 +16,7 @@ import dspy
 from dspy.adapters.types.image import Image as DspyImage
 
 from ...reasoning.config import get_dspy_lm
+from ...services.analysis.llm_usage import record_from_lm
 from ...reasoning.modules.executor import DirectExecutorModule, direct_execution_reward
 from ...reasoning.utils import extract_dspy_result
 from ...services.execution.events import (
@@ -25,6 +26,7 @@ from ...services.execution.events import (
     ErrorEvent,
 )
 from ...tools.factories import create_all_tools
+from ...tools.profiles import select_tools_for_task
 from ...tools.output import QuestionCollector, create_ask_question_tool
 from ...services.memory import create_memory_crud
 from ..state import PlanExecuteState
@@ -73,6 +75,10 @@ async def direct_execute_node(state: PlanExecuteState, runtime: RuntimeContext) 
     # Add memory CRUD if available
     if runtime.memory_service:
         tools.append(create_memory_crud(runtime.memory_service))
+
+    # Filter tools based on triage analysis (reduces tool surface for better selection)
+    triage_analysis = state.get("triage_analysis")
+    tools = select_tools_for_task(tools, triage_analysis)
 
     # Add ask_question tool for clarification
     question_collector = QuestionCollector()
@@ -124,6 +130,7 @@ async def direct_execute_node(state: PlanExecuteState, runtime: RuntimeContext) 
                 context=json.dumps(execution_context),
                 images=dspy_images,
             )
+        record_from_lm(lm)
 
         result_str = extract_dspy_result(result)
 

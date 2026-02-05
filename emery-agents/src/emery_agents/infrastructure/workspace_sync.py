@@ -63,7 +63,6 @@ class WorkspaceSync:
     def __init__(
         self,
         bucket: str,
-        prefix: str = "workspaces/agents",
         local_base: Optional[Path] = None,
     ):
         """
@@ -71,18 +70,16 @@ class WorkspaceSync:
 
         Args:
             bucket: S3 bucket name for workspace storage
-            prefix: S3 key prefix for workspace archives
             local_base: Local directory for extracted workspaces (default: /tmp/workspace)
         """
         self.bucket = bucket
-        self.prefix = prefix
         self.local_base = local_base or Path("/tmp/workspace")
         self.s3 = boto3.client("s3")
         self._executor = BwrapExecutor(base_path=self.local_base)
         self._shell_cache: dict[str, WorkspaceShell] = {}
 
         logger.info(
-            f"WorkspaceSync initialized: bucket={bucket}, prefix={prefix}, local={self.local_base}"
+            f"WorkspaceSync initialized: bucket={bucket}, local={self.local_base}"
         )
 
     def _get_shell(self, workspace_id: str) -> WorkspaceShell:
@@ -95,15 +92,21 @@ class WorkspaceSync:
             self._shell_cache[workspace_id] = self._executor.get_shell_for_id(workspace_id)
         return self._shell_cache[workspace_id]
 
-    def _s3_key(self, workspace_id: str, prefix: Optional[str] = None) -> str:
-        """Generate S3 key for workspace.
+    def _s3_key(self, organization_id: int, workspace_type: str, workspace_id: str) -> str:
+        """Generate org-scoped S3 key for workspace.
+
+        Key pattern: workspaces/{org_id}/{workspace_type}/{workspace_id}.tar.gz
+
+        Args:
+            organization_id: Organization that owns this workspace
+            workspace_type: "agents" or "users"
+            workspace_id: Agent ID or user ID
 
         Validates workspace_id via BwrapExecutor's validation.
         """
         # Validate via executor (raises ValueError if invalid)
         self._executor._validate_workspace_id(workspace_id)
-        actual_prefix = prefix or self.prefix
-        return f"{actual_prefix}/{workspace_id}.tar.gz"
+        return f"workspaces/{organization_id}/{workspace_type}/{workspace_id}.tar.gz"
 
     def _local_path(self, workspace_id: str) -> Path:
         """Get local path for workspace.
@@ -117,7 +120,7 @@ class WorkspaceSync:
         """Get local path for workspace tar archive."""
         return self.local_base / f"{workspace_id}.tar.gz"
 
-    def download(self, workspace_id: str, prefix: Optional[str] = None) -> Path:
+    def download(self, organization_id: int, workspace_type: str, workspace_id: str) -> Path:
         """
         Download and extract workspace from S3.
 
@@ -125,15 +128,16 @@ class WorkspaceSync:
         with default directory structure.
 
         Args:
+            organization_id: Organization that owns this workspace
+            workspace_type: "agents" or "users"
             workspace_id: Workspace ID (agent_id or user_id)
-            prefix: Optional S3 prefix override (e.g., "workspaces/users")
 
         Returns:
             Path to extracted workspace directory
         """
         local_path = self._local_path(workspace_id)
         tar_path = self._tar_path(workspace_id)
-        s3_key = self._s3_key(workspace_id, prefix)
+        s3_key = self._s3_key(organization_id, workspace_type, workspace_id)
 
         # Ensure local base exists
         self.local_base.mkdir(parents=True, exist_ok=True)
@@ -195,20 +199,21 @@ class WorkspaceSync:
 
         logger.info(f"Created empty workspace at {local_path}")
 
-    def upload(self, workspace_id: str, prefix: Optional[str] = None) -> str:
+    def upload(self, organization_id: int, workspace_type: str, workspace_id: str) -> str:
         """
         Tar and upload workspace to S3.
 
         Args:
+            organization_id: Organization that owns this workspace
+            workspace_type: "agents" or "users"
             workspace_id: Workspace ID (agent_id or user_id)
-            prefix: Optional S3 prefix override (e.g., "workspaces/users")
 
         Returns:
             S3 key of uploaded archive
         """
         local_path = self._local_path(workspace_id)
         tar_path = self._tar_path(workspace_id)
-        s3_key = self._s3_key(workspace_id, prefix)
+        s3_key = self._s3_key(organization_id, workspace_type, workspace_id)
 
         if not local_path.exists():
             raise ValueError(f"Workspace does not exist: {local_path}")
@@ -255,17 +260,17 @@ class WorkspaceSync:
             tar_path.unlink()
             logger.info(f"Cleaned up tar file: {tar_path}")
 
-    def workspace_exists(self, workspace_id: str, prefix: Optional[str] = None) -> bool:
+    def workspace_exists(self, organization_id: int, workspace_type: str, workspace_id: str) -> bool:
         """Check if workspace exists in S3."""
         try:
-            self.s3.head_object(Bucket=self.bucket, Key=self._s3_key(workspace_id, prefix))
+            self.s3.head_object(Bucket=self.bucket, Key=self._s3_key(organization_id, workspace_type, workspace_id))
             return True
         except ClientError:
             return False
 
-    def delete_workspace(self, workspace_id: str, prefix: Optional[str] = None) -> None:
+    def delete_workspace(self, organization_id: int, workspace_type: str, workspace_id: str) -> None:
         """Delete workspace from S3 and local storage."""
-        s3_key = self._s3_key(workspace_id, prefix)
+        s3_key = self._s3_key(organization_id, workspace_type, workspace_id)
 
         try:
             self.s3.delete_object(Bucket=self.bucket, Key=s3_key)

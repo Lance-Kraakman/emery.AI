@@ -876,6 +876,8 @@ export function OrgChartCanvas({
     >
       <StickyNoteProvider updateNote={handleUpdateStickyNote}>
         <ReactFlow
+        snapGrid={[30,30]}
+        snapToGrid={true}
         nodes={nodes}
         edges={filteredEdges}
         onNodesChange={disabled ? undefined : onNodesChange}
