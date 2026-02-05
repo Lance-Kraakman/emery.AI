@@ -122,7 +122,7 @@ class AppStack(Stack):
             },
             "dev": {
                 "domain": "dev.enhancd.ai",
-                "certificate_arn": "arn:aws:acm:us-east-1:463735866328:certificate/2d76beac-68ca-4e75-8cb2-29c4e61b195c"
+                "certificate_arn": "arn:aws:acm:us-east-1:463735866328:certificate/80e6353a-04d0-43c7-a246-c8a3aab67077"
             },
         }
 
