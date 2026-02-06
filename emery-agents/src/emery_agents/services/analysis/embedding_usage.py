@@ -10,7 +10,6 @@ The executor extracts accumulated usage via get_totals() and merges it
 into the task's token usage before reporting via gRPC.
 """
 
-import contextvars
 import logging
 import threading
 from dataclasses import dataclass, field
@@ -28,13 +27,7 @@ class EmbeddingUsageRecord:
 
 
 class EmbeddingUsageTracker:
-    """Thread-safe accumulator for embedding usage within a single request.
-
-    Each gRPC request gets its own tracker instance via contextvars.
-    The threading.Lock is still needed because the @lru_cache in
-    embeddings.py is shared across contexts and may call record()
-    from different threads.
-    """
+    """Thread-safe accumulator for embedding usage within a single request."""
 
     def __init__(self) -> None:
         self._records: list[EmbeddingUsageRecord] = []
@@ -71,34 +64,3 @@ class EmbeddingUsageTracker:
     def call_count(self) -> int:
         with self._lock:
             return len(self._records)
-
-
-# Per-request tracker via contextvars — each async context gets its own instance.
-# This prevents concurrent gRPC requests from mixing embedding usage.
-_tracker_var: contextvars.ContextVar[EmbeddingUsageTracker] = contextvars.ContextVar(
-    'embedding_tracker'
-)
-
-
-def get_embedding_tracker() -> EmbeddingUsageTracker:
-    """Get the embedding usage tracker for the current request context.
-
-    Creates a new tracker on first access within each async context,
-    so each gRPC RPC handler accumulates its own usage independently.
-    """
-    try:
-        return _tracker_var.get()
-    except LookupError:
-        tracker = EmbeddingUsageTracker()
-        _tracker_var.set(tracker)
-        return tracker
-
-
-def get_embedding_usage() -> tuple[int, str]:
-    """Get accumulated embedding usage (total_tokens, model_name) for this request."""
-    return get_embedding_tracker().get_totals()
-
-
-def reset_embedding_usage() -> None:
-    """Reset accumulated embedding usage for this request."""
-    get_embedding_tracker().reset()
