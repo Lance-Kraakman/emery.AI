@@ -43,6 +43,7 @@ from .agents.agent_models import ChatAgent, get_builder_descriptors
 from .approval_handler import is_approval_response
 from .coordinator_streaming import CoordinatorStreamingHandler
 from .generated import agent_worker_pb2
+from .types import CoordinatorStreamingParams
 from .mappers.message_types import ChatMessage
 from .mappers.proto_mapper import tool_configs_from_proto
 from .message_processor import (
@@ -249,6 +250,12 @@ class AgentStreamingHandler:
         AgentExecutor.set_current_context(context)
 
         if not skip_coordinator:
+            # Extract only coordinator-accepted params from kwargs (type-safe)
+            coordinator_params: CoordinatorStreamingParams = {
+                k: kwargs[k]
+                for k in CoordinatorStreamingParams.__annotations__
+                if k in kwargs
+            }
             async for event in self.coordinator_handler.stream_response(
                 context=context,
                 task=current_task,
@@ -256,7 +263,7 @@ class AgentStreamingHandler:
                 capability_registry=self.capability_registry,
                 token_accumulator=token_accumulator,
                 tools=tools,
-                **kwargs,
+                **coordinator_params,
             ):
                 if isinstance(event, dict):
                     yield cast(StreamResponseDict, event)
