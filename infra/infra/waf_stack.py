@@ -133,12 +133,16 @@ class WAFStack(Stack):
                 ]
             ),
             # Priority 8: AWS Managed - Known Bad Inputs (Log4j, etc.)
+            # Exclusions:
+            # - ReactJSRCE_BODY: False positives on Next.js Server Action payloads
+            #   (detects React SSR RCE patterns that match legitimate Server Actions)
             self._managed_rule(
                 name="AWSManagedRulesKnownBadInputsRuleSet",
                 priority=8,
                 vendor_name="AWS",
                 rule_group_name="AWSManagedRulesKnownBadInputsRuleSet",
-                prefix=prefix
+                prefix=prefix,
+                excluded_rules=["ReactJSRCE_BODY"]
             ),
             # Priority 9: AWS Managed - SQL Injection protection
             self._managed_rule(
