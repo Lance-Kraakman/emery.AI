@@ -539,6 +539,38 @@ class SkillStep:
 
 
 # =============================================================================
+# Human Skill Config
+# =============================================================================
+
+@dataclass
+class HumanSkillConfig:
+    """Configuration for human-executed skills.
+
+    AIDEV-NOTE: Human skills pause execution and wait for a human to complete
+    the work. The assignee receives the inputs and must provide the outputs.
+    """
+    instructions: str = ""
+    assignee_type: str = "owner"  # "owner" | "specific_user" | "role"
+    assignee_id: Optional[str] = None  # User ID if specific_user
+    assignee_role: Optional[str] = None  # Role name if role-based
+    timeout_behavior: str = "wait_forever"  # "wait_forever" | "fail" | "skip_with_default"
+    timeout_hours: Optional[int] = None
+    default_outputs: Optional[Dict[str, Any]] = None
+
+    @classmethod
+    def from_api_response(cls, data: Dict[str, Any]) -> HumanSkillConfig:
+        return cls(
+            instructions=data.get("instructions", ""),
+            assignee_type=data.get("assigneeType", data.get("assignee_type", "owner")),
+            assignee_id=data.get("assigneeId", data.get("assignee_id")),
+            assignee_role=data.get("assigneeRole", data.get("assignee_role")),
+            timeout_behavior=data.get("timeoutBehavior", data.get("timeout_behavior", "wait_forever")),
+            timeout_hours=data.get("timeoutHours", data.get("timeout_hours")),
+            default_outputs=data.get("defaultOutputs", data.get("default_outputs")),
+        )
+
+
+# =============================================================================
 # Skill Config DTO
 # =============================================================================
 
@@ -554,7 +586,7 @@ class SkillConfig:
     name: str
     description: str = ""
     instructions: str = ""
-    execution_type: str = "agentic"
+    execution_type: str = "agentic"  # "agentic" | "workflow" | "human"
     model: Optional[str] = None
     agent_type: Optional[str] = None
     inputs: List[InputDefinition] = field(default_factory=list)
@@ -563,6 +595,7 @@ class SkillConfig:
     steps: List[SkillStep] = field(default_factory=list)
     content: List[Any] = field(default_factory=list)
     allow_network: bool = False  # Whether bash tool should have network access (for git/code skills)
+    human_skill_config: Optional[HumanSkillConfig] = None  # Config for human-executed skills
 
     @classmethod
     def from_api_response(cls, data: Dict[str, Any]) -> SkillConfig:
@@ -586,6 +619,13 @@ class SkillConfig:
             for s in data.get("steps", [])
         ]
 
+        # Parse human skill config if present
+        human_config_data = data.get("humanSkillConfig", data.get("human_skill_config"))
+        human_skill_config = (
+            HumanSkillConfig.from_api_response(human_config_data)
+            if human_config_data else None
+        )
+
         return cls(
             id=data.get("id", 0),
             name=data.get("name", ""),
@@ -599,6 +639,7 @@ class SkillConfig:
             tools=tools,
             steps=steps,
             allow_network=data.get("allowNetwork", data.get("allow_network", False)),
+            human_skill_config=human_skill_config,
         )
 
     def is_workflow(self) -> bool:
@@ -608,3 +649,7 @@ class SkillConfig:
     def is_agentic(self) -> bool:
         """Check if this is an agentic skill."""
         return self.execution_type in ("agentic", "", None) or not self.execution_type
+
+    def is_human_skill(self) -> bool:
+        """Check if this is a human-executed skill."""
+        return self.execution_type == "human"

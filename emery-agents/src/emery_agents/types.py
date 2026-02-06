@@ -111,6 +111,7 @@ class SkillExecutionResult:
     """Result from skill execution."""
     result: str
     captured_outputs: Optional[Dict[str, Any]] = None
+    status: str = "completed"  # "completed" | "awaiting_human" | "failed"
 
 
 @dataclass
