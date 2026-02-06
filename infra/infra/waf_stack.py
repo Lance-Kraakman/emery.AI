@@ -145,12 +145,17 @@ class WAFStack(Stack):
                 excluded_rules=["ReactJSRCE_BODY"]
             ),
             # Priority 9: AWS Managed - SQL Injection protection
+            # Exclusions:
+            # - SQLi_BODY: False positives on Server Action payloads containing
+            #   pagination params like {"limit":50} which trigger SQL LIMIT detection.
+            #   SQL injection is still protected by Drizzle ORM parameterized queries.
             self._managed_rule(
                 name="AWSManagedRulesSQLiRuleSet",
                 priority=9,
                 vendor_name="AWS",
                 rule_group_name="AWSManagedRulesSQLiRuleSet",
-                prefix=prefix
+                prefix=prefix,
+                excluded_rules=["SQLi_BODY"]
             ),
         ]
 
