@@ -91,7 +91,7 @@ async def triage_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[
                 memory_context=memory_context,
                 image_context=image_context,
             )
-        record_from_lm(lm)
+        record_from_lm(lm, runtime.token_accumulator.get_llm_tracker())
 
         execution_mode = getattr(result, "execution_mode", "plan").strip().lower()
         reasoning = getattr(result, "reasoning", "")

@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import dspy
 
 from ..protocols import ModelProviderProtocol
+from emery_agents.services.analysis.llm_usage import LlmUsageTracker, record_from_lm
 from emery_agents.entities.models.plan import Plan, PlanStep, PlanStatus, PlanStepStatus, create_step
 from emery_agents.reasoning.signatures.planning import GeneratePlanDiff, PlanDiffResult
 
@@ -171,6 +172,7 @@ class PlanDiffer:
         failed_step: Optional[PlanStep] = None,
         completed_context: Optional[str] = None,
         org_model: Optional[str] = None,
+        llm_tracker: Optional[LlmUsageTracker] = None,
     ) -> PlanDiff:
         """
         Generate minimal diff to address the replan reason.
@@ -181,6 +183,7 @@ class PlanDiffer:
             failed_step: The step that triggered replanning (if any)
             completed_context: Summary of completed step results
             org_model: Organization model ID (unused in DSPy version)
+            llm_tracker: Optional tracker for LLM usage
 
         Returns:
             PlanDiff with minimal changes needed
@@ -237,6 +240,8 @@ class PlanDiffer:
                     completed_context=context_str,
                     pending_steps_json=pending_steps_json,
                 )
+            if self.lm and llm_tracker:
+                record_from_lm(self.lm, llm_tracker)
 
             diff = PlanDiff.from_result(result)
 

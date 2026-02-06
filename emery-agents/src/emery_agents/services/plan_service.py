@@ -23,6 +23,7 @@ from emery_agents.entities.models.context_mapping import ResolvedContext
 from .protocols import ModelProviderProtocol, GRPCClient, Tool
 from emery_agents.tools.capability_registry import CapabilityRegistry
 from emery_agents.ace import StrategyAccumulationService
+from emery_agents.services.analysis.token_accumulator import TokenAccumulator
 from .planning import (
     DSPyPlanGenerator,
     PlanRepository,
@@ -85,6 +86,7 @@ class PlanService:
         memory_context: str = "",
         triage_analysis: Optional[dict] = None,
         configured_tools: Optional[list] = None,
+        token_accumulator: Optional[Any] = None,
     ) -> PlanGenerationResult:
         """Generate plan using DSPy PlannerModule. Returns plan or clarifying questions."""
         # Build request dataclass (includes all config for plan generation)
@@ -106,6 +108,7 @@ class PlanService:
             memory_context=memory_context,
             triage_analysis=triage_analysis,
             configured_tools=configured_tools,
+            token_accumulator=token_accumulator,
         )
 
         # Delegate to generator (uses capability-based discovery)

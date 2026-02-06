@@ -21,6 +21,7 @@ from emery_agents.entities.models.context_mapping import ResolvedContext
 from emery_agents.entities.models.plan import Plan, SkillInputDefinition, SkillOutputDefinition
 from emery_agents.services.protocols import Tool, ManagedAgent
 from emery_agents.tools.capability_registry import CapabilityRegistry
+from emery_agents.services.analysis.token_accumulator import TokenAccumulator
 from emery_agents.services.context import SessionConfig, WorkspaceContext
 
 if TYPE_CHECKING:
@@ -91,6 +92,8 @@ class PlanGenerationRequest:
     # Tools explicitly configured for the skill (from UI tools[] array).
     # Passed to the planner so it uses these tools in generated plan steps.
     configured_tools: Optional[List[Dict[str, Any]]] = None
+
+    token_accumulator: Optional[TokenAccumulator] = None
 
     @property
     def configured_tools_json(self) -> str:
