@@ -71,6 +71,7 @@ enum TaskStatus {
   TASK_FAILED = 3;
   TASK_CANCELLED = 4;
   TASK_TIMEOUT = 5;
+  TASK_AWAITING_HUMAN = 6;  // Paused, waiting for human to complete a step
 }
 
 // Request to cancel a running task
@@ -554,6 +555,7 @@ message ProcessMessageResponse {
     ProcessingError error = 4;        // Processing error
     StepProgress step_progress = 5;   // Real-time step execution progress
     AwaitingInput awaiting_input = 7; // HITL: Agent needs user approval/input
+    AwaitingHumanSkill awaiting_human_skill = 8; // Human skill step needs completion
   }
 
   int64 timestamp = 6;               // Response timestamp
@@ -583,6 +585,21 @@ message InputOption {
   string id = 1;                     // Unique option identifier
   string label = 2;                  // Display text
   string description = 3;            // Optional description
+}
+
+// Human skill step awaiting completion
+// AIDEV-NOTE: Emitted when execution hits a human skill step. Stream closes after this,
+// frontend shows completion UI, user submits outputs, new message resumes execution.
+message AwaitingHumanSkill {
+  int32 skill_id = 1;                // Skill being executed
+  string skill_name = 2;             // Skill display name
+  string step_id = 3;                // Step ID in workflow (for multi-step skills)
+  string instructions = 4;           // What human needs to do (rich text/markdown)
+  repeated SkillInputValue inputs = 5;  // Context from execution (input values)
+  repeated OutputDefinition output_schema = 6;  // What human needs to provide
+  string assigned_to = 7;            // User ID assigned to complete
+  repeated string external_links = 8;  // URLs if human needs to work externally
+  string session_id = 9;             // For resuming after completion
 }
 
 // Multimodal message part (text, image, or file attachment)

@@ -336,10 +336,18 @@ export class Task {
   }
 
   /**
-   * Check if task is in a terminal state
+   * Check if task is in a terminal state (not awaiting_human - that's a paused state)
    */
   get isTerminal(): boolean {
     return [TASK_STATUS.COMPLETED, TASK_STATUS.FAILED, TASK_STATUS.CANCELLED].includes(this._status.value as any);
+  }
+
+  /**
+   * Check if task is in an active state (running or awaiting human)
+   */
+  get isActive(): boolean {
+    return this._status.value === TASK_STATUS.IN_PROGRESS ||
+           this._status.value === TASK_STATUS.AWAITING_HUMAN;
   }
 
   /**
@@ -354,6 +362,35 @@ export class Task {
    */
   get isPending(): boolean {
     return this._status.value === TASK_STATUS.PENDING;
+  }
+
+  /**
+   * Check if task is awaiting human input
+   */
+  get isAwaitingHuman(): boolean {
+    return this._status.value === TASK_STATUS.AWAITING_HUMAN;
+  }
+
+  /**
+   * Pause task for human input
+   */
+  awaitHuman(): void {
+    if (!this._status.canTransitionTo(TaskStatus.awaitingHuman())) {
+      throw new Error(`Cannot await human for task ${this.id}: current status is ${this._status.value}`);
+    }
+
+    this._status = TaskStatus.awaitingHuman();
+  }
+
+  /**
+   * Resume task from human input
+   */
+  resumeFromHuman(): void {
+    if (this._status.value !== TASK_STATUS.AWAITING_HUMAN) {
+      throw new Error(`Cannot resume task ${this.id}: task is not awaiting human input`);
+    }
+
+    this._status = TaskStatus.inProgress();
   }
 
   /**

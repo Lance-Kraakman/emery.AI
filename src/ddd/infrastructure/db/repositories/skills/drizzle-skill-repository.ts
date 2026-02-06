@@ -89,6 +89,7 @@ export class DrizzleSkillRepository implements ISkillRepository {
         toolExecutionConfig: props.toolExecutionConfig || null,
         writeConfig: props.writeConfig || null,
         readConfig: props.readConfig || null,
+        humanSkillConfig: props.humanSkillConfig || null,
         steps: props.steps || null,
         canvasMetadata: props.canvasMetadata || null,
         createdAt: now,
@@ -152,6 +153,9 @@ export class DrizzleSkillRepository implements ISkillRepository {
     }
     if (updates.readConfig !== undefined) {
       updateData.readConfig = updates.readConfig;
+    }
+    if (updates.humanSkillConfig !== undefined) {
+      updateData.humanSkillConfig = updates.humanSkillConfig;
     }
     if (updates.steps !== undefined) {
       updateData.steps = updates.steps;
@@ -262,6 +266,7 @@ export class DrizzleSkillRepository implements ISkillRepository {
       toolExecutionConfig: record.toolExecutionConfig || undefined,
       writeConfig: record.writeConfig || undefined,
       readConfig: record.readConfig || undefined,
+      humanSkillConfig: record.humanSkillConfig || undefined,
       steps: Array.isArray(record.steps) ? record.steps : undefined,
       canvasMetadata: record.canvasMetadata || undefined,
       isSystem: record.isSystem ?? false,

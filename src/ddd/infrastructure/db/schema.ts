@@ -1053,6 +1053,7 @@ export const skills = pgTable("skills", {
   // Execution type determines how the skill is executed:
   // - 'agentic': LLM orchestration with flat instructions (default, current behavior)
   // - 'agent': Step-based DAG execution with structured steps[]
+  // - 'human': Human completes the skill (pauses execution, waits for human)
   // - 'operation': Direct task model execution (bypasses LLM)
   // - 'tool': Direct Pipedream tool execution
   // - 'write': Direct table write execution
@@ -1077,6 +1078,18 @@ export const skills = pgTable("skills", {
   // Read execution configuration (when executionType is 'read')
   // Direct table read with field mappings to output variables
   readConfig: jsonb("read_config").$type<ReadConfig>(),
+
+  // Human skill configuration (when executionType is 'human')
+  // Configuration for human-executed skills: instructions, assignee, timeout
+  humanSkillConfig: jsonb("human_skill_config").$type<{
+    instructions: string;
+    assigneeType: 'owner' | 'specific_user' | 'role';
+    assigneeId?: string;
+    assigneeRole?: string;
+    timeoutBehavior?: 'wait_forever' | 'fail' | 'skip_with_default';
+    timeoutHours?: number;
+    defaultOutputs?: Record<string, any>;
+  }>(),
 
   // Steps configuration (when executionType is 'agent')
   // Each step can be an inline instruction or a reference to another skill
@@ -1225,10 +1238,20 @@ export const tasks = pgTable("tasks", {
   instructions: jsonb("instructions").notNull(), // Task instructions with tools: {task: string, images?: ImageAttachment[], tools?: ToolConfig[], metadata?: Record<string, any>}
   skillId: integer("skill_id").references(() => skills.id, { onDelete: 'set null' }), // Optional skill to execute instead of raw instructions
   triggerContext: jsonb("trigger_context"), // What triggered this task: {type: 'DATABASE_EVENT' | 'CALENDAR' | 'WEBHOOK' | 'MANUAL', scheduleName?: string, tableChange?: TableChangeEvent}
-  status: text("status").notNull().default("pending"), // pending, in_progress, completed, failed, cancelled, timeout
+  status: text("status").notNull().default("pending"), // pending, in_progress, awaiting_human, completed, failed, cancelled, timeout
   result: jsonb("result"), // Final output data
   error: text("error"),
   logs: jsonb("logs").$type<string[]>().default([]), // Execution logs from gRPC TaskProgress
+
+  // Human skill execution tracking (when status is 'awaiting_human')
+  currentStepId: text("current_step_id"), // Current step ID in workflow (for resuming)
+  pendingHumanSteps: jsonb("pending_human_steps").$type<Array<{
+    stepId: string;
+    assignedTo: string;
+    inputs: Record<string, any>;
+    completedAt?: string;
+    outputs?: Record<string, any>;
+  }>>(), // For tracking multiple pending human steps (parallel branches)
 
   // Workspace filesystem - S3 path to task outputs in agent's workspace
   // Results: /workspace/history/{task_id}/result.json
