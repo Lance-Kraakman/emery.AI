@@ -62,14 +62,14 @@ export function EntityPalette({ disabled, onCreateEntity }: EntityPaletteProps) 
   };
 
   return (
-    <div className="flex flex-col gap-1 bg-background/50 backdrop-blur-sm border rounded-lg shadow-sm p-1">
+    <div className="flex flex-col gap-1 bg-background/50 backdrop-blur-sm border rounded-lg shadow-sm p-1 nopan nodrag">
       {paletteItems.map((item) => (
         <div
           key={item.type}
           role="button"
           title={item.label}
           className={cn(
-            'h-8 w-8 flex items-center justify-center rounded-md',
+            'h-8 w-8 flex items-center justify-center rounded-md nopan nodrag',
             'hover:bg-accent hover:text-accent-foreground',
             'cursor-grab active:cursor-grabbing transition-colors',
             disabled && 'opacity-50 pointer-events-none'
