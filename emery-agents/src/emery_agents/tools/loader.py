@@ -147,20 +147,20 @@ class UnifiedToolLoader:
         """
         Get DSPy factory function for a CRUD tool by name.
 
-        Extracts entity type from tool name (e.g., 'emery-create-agent' -> 'agent')
+        Extracts entity type from tool name (e.g., 'enhancd-create-agent' -> 'agent')
         and returns the corresponding factory from CRUD_FACTORIES registry.
 
         Args:
-            tool_name: Tool name from frontend (e.g., "emery-create-agent")
+            tool_name: Tool name from frontend (e.g., "enhancd-create-agent")
 
         Returns:
             DSPy factory function or None if not a CRUD tool
         """
-        if not tool_name.startswith("emery-"):
+        if not tool_name.startswith("enhancd-"):
             return None
 
-        # Extract entity type: "emery-create-agent" -> "agent", "emery-list-agents" -> "agent"
-        parts = tool_name.replace("emery-", "").split("-")
+        # Extract entity type: "enhancd-create-agent" -> "agent", "enhancd-list-agents" -> "agent"
+        parts = tool_name.replace("enhancd-", "").split("-")
         if len(parts) < 2:
             return None
 
@@ -169,9 +169,9 @@ class UnifiedToolLoader:
 
         # Special cases
         if entity == "row" and parts[0] == "get":
-            entity = "row"  # emery-get-rows
+            entity = "row"  # enhancd-get-rows
         elif entity == "field" and parts[0] == "list":
-            entity = "field"  # emery-list-fields
+            entity = "field"  # enhancd-list-fields
 
         return self.CRUD_FACTORIES.get(entity)
 

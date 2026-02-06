@@ -238,7 +238,7 @@ class BwrapExecutor:
             # 4. Run the actual command
             port = self._PROXY_BRIDGE_PORT
             proxy_setup = (
-                f"ip link set lo up 2>/dev/null; "
+                f"umask 0022 && ip link set lo up 2>/dev/null; "
                 f"socat TCP-LISTEN:{port},fork,reuseaddr UNIX-CONNECT:/tmp/proxy.sock &"
                 f" SOCAT_PID=$!; sleep 0.2; "
                 f"export http_proxy=http://127.0.0.1:{port}; "
@@ -250,8 +250,8 @@ class BwrapExecutor:
             )
             cmd.extend(["bash", "-c", proxy_setup])
         else:
-            # Standard: no network at all
-            cmd.extend(["bash", "-c", f"cd /workspace && {command}"])
+            # Standard: no network at all, permissive umask for shared access
+            cmd.extend(["bash", "-c", f"umask 0022 && cd /workspace && {command}"])
 
         return cmd
 

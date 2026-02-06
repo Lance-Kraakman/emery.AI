@@ -16,7 +16,7 @@ class ToolConfig:
     """General tool configuration from gRPC agent config.
 
     Fields:
-        name: Tool identifier (e.g., "emery-create-agent", "gmail_send_email")
+        name: Tool identifier (e.g., "enhancd-create-agent", "gmail_send_email")
         version: Tool version string
         config: Key-value configuration (api_key, base_url, skill_id, etc.)
     """
