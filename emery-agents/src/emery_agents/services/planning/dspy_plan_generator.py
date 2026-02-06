@@ -44,6 +44,7 @@ from emery_agents.services.protocols import Tool
 if TYPE_CHECKING:
     from emery_agents.services.context import ConversationMessage
 
+from emery_agents.services.analysis.token_accumulator import TokenAccumulator
 from .models import PlanGenerationRequest, PlanGenerationResult
 
 logger = logging.getLogger(__name__)
@@ -146,7 +147,7 @@ class DSPyPlanGenerator:
                     triage_analysis=request.triage_analysis,
                     configured_tools=request.configured_tools_json,
                 )
-            record_from_lm(lm)
+            record_from_lm(lm, request.token_accumulator.get_llm_tracker())
         except Exception as e:
             logger.error(f"DSPy planning failed: {e}")
             raise
@@ -210,7 +211,7 @@ class DSPyPlanGenerator:
                     skill_outputs=skill_outputs,
                     configured_tools=request.configured_tools_json,
                 )
-            record_from_lm(lm)
+            record_from_lm(lm, request.token_accumulator.get_llm_tracker())
         except Exception as e:
             logger.error(f"DSPy template planning failed: {e}")
             raise

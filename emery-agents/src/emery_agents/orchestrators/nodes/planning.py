@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 from ...entities.models.plan import Plan, PlanStep, PlanStepStatus, SkillInputDefinition, SkillOutputDefinition
 from ...entities.models.task_ledger import create_ledger_from_plan
 from ...services.plan_service import PlanService
+from ...services.analysis.token_accumulator import TokenAccumulator
 from ...services.context import (
     SessionConfig,
     WorkspaceContext,
@@ -36,6 +37,7 @@ logger = logging.getLogger(__name__)
 def _build_workspace_context(
     api_key: Optional[str],
     org_id: Optional[str],
+    token_accumulator: TokenAccumulator,
 ) -> WorkspaceContext:
     """
     Build workspace context using unified Workspace API.
@@ -92,6 +94,7 @@ _RELEVANCE_THRESHOLD = 0.3
 def _score_resource(
     task_embedding: tuple[float, ...],
     name: str,
+    token_accumulator: TokenAccumulator,
     description: str = "",
 ) -> float:
     """Score a resource's relevance to the task using semantic similarity.
@@ -102,7 +105,10 @@ def _score_resource(
     resource_text = f"{name} {description}".strip()
     if not resource_text:
         return 0.0
-    resource_embedding = get_embedding(resource_text)
+    resource_embedding = get_embedding(
+        resource_text,
+        tracker=token_accumulator.get_embedding_tracker(),
+    )
     return cosine_similarity(task_embedding, resource_embedding)
 
 
@@ -128,6 +134,7 @@ def _top_n_relevant(
 def _filter_relevant_context(
     workspace: WorkspaceContext,
     task: str,
+    token_accumulator: TokenAccumulator,
 ) -> WorkspaceContext:
     """
     Filter workspace context to resources relevant to the task.
@@ -144,7 +151,10 @@ def _filter_relevant_context(
         return workspace
 
     try:
-        task_embedding = get_embedding(task)
+        task_embedding = get_embedding(
+            task,
+            tracker=token_accumulator.get_embedding_tracker(),
+        )
 
         # Caps per resource type
         TABLE_CAP = 15
@@ -155,23 +165,23 @@ def _filter_relevant_context(
 
         filtered_tables = _top_n_relevant(
             workspace.existing_tables, TABLE_CAP,
-            lambda t: _score_resource(task_embedding, t.name, " ".join(f.name for f in t.fields)),
+            lambda t: _score_resource(task_embedding, t.name, token_accumulator, " ".join(f.name for f in t.fields)),
         )
         filtered_apps = _top_n_relevant(
             workspace.existing_apps, APP_CAP,
-            lambda a: _score_resource(task_embedding, a.name, a.description),
+            lambda a: _score_resource(task_embedding, a.name, token_accumulator, a.description),
         )
         filtered_agents = _top_n_relevant(
             workspace.existing_agents, AGENT_CAP,
-            lambda a: _score_resource(task_embedding, a.name, a.description),
+            lambda a: _score_resource(task_embedding, a.name, token_accumulator, a.description),
         )
         filtered_skills = _top_n_relevant(
             workspace.existing_skills, SKILL_CAP,
-            lambda s: _score_resource(task_embedding, s.name, s.description),
+            lambda s: _score_resource(task_embedding, s.name, token_accumulator, s.description),
         )
         filtered_views = _top_n_relevant(
             workspace.existing_views, VIEW_CAP,
-            lambda v: _score_resource(task_embedding, v.name),
+            lambda v: _score_resource(task_embedding, v.name, token_accumulator),
         )
 
         return WorkspaceContext(
@@ -297,10 +307,14 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
             "workspace_context not in graph state — fetching "
             "(caller should populate state to avoid duplicate API call)"
         )
-        full_workspace = _build_workspace_context(api_key, org_id)
+        if not runtime.token_accumulator:
+            raise ValueError("TokenAccumulator is required for planning.")
+        full_workspace = _build_workspace_context(api_key, org_id, runtime.token_accumulator)
 
     # Filter to task-relevant resources
-    workspace_context = _filter_relevant_context(full_workspace, task)
+    if not runtime.token_accumulator:
+        raise ValueError("TokenAccumulator is required for planning.")
+    workspace_context = _filter_relevant_context(full_workspace, task, runtime.token_accumulator)
 
     # Build session config
     config = SessionConfig(
@@ -345,6 +359,7 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
             memory_context=memory_context,
             triage_analysis=triage_analysis,
             configured_tools=configured_tools,
+            token_accumulator=runtime.token_accumulator,
         )
     except Exception as e:
         logger.error(f"Plan generation failed: {e}")

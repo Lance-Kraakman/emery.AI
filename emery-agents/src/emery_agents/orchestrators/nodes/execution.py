@@ -87,6 +87,7 @@ async def execute_step_node(state: PlanExecuteState, runtime: RuntimeContext) ->
         capability_registry=runtime.capability_registry,
         extra_tools=extra_tools or None,
         extra_headers=runtime.extra_headers,  # Audit trail headers for CRUD tool calls
+        llm_tracker=runtime.token_accumulator.get_llm_tracker() if runtime.token_accumulator else None,
     )
 
     # Hydrate with previous step results so context flows between steps

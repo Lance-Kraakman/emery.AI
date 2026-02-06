@@ -27,7 +27,7 @@ import dspy
 
 from ...ace import StepResult
 from ...reasoning.config import get_dspy_lm
-from ...services.analysis.llm_usage import record_from_lm
+from ...services.analysis.llm_usage import LlmUsageTracker, record_from_lm
 from ...reasoning.modules.executor import ExecutorModule, SimpleExecutorModule
 from ...reasoning.utils import extract_dspy_result, build_step_outcome, StepOutcome
 from emery_agents.tools.factories import create_all_tools
@@ -148,6 +148,7 @@ class PlanStepExecutor:
         capability_registry: CapabilityRegistry | None = None,
         extra_tools: list[Any] | None = None,
         extra_headers: dict[str, str] | None = None,
+        llm_tracker: LlmUsageTracker | None = None,
     ):
         """
         Initialize PlanStepExecutor.
@@ -161,6 +162,7 @@ class PlanStepExecutor:
             capability_registry: Registry of capabilities for dynamic discovery in templates
             extra_tools: Additional tools to include (e.g., memory_crud)
             extra_headers: Optional HTTP headers for agent context audit trail
+            llm_tracker: Optional tracker for LLM usage
         """
         self.api_key = api_key
         self.org_id = org_id
@@ -168,6 +170,7 @@ class PlanStepExecutor:
         self.max_steps = max_steps
         self.skill_inputs = skill_inputs if skill_inputs is not None else {}
         self.capability_registry = capability_registry
+        self.llm_tracker = llm_tracker
 
         # Create DSPy tools with auth captured (includes CRUD + discovery tools)
         self._crud_tools = create_all_tools(
@@ -394,7 +397,8 @@ class PlanStepExecutor:
                     step_description=prompt,
                     context=json.dumps(context),
                 )
-            record_from_lm(lm)
+            if self.llm_tracker:
+                record_from_lm(lm, self.llm_tracker)
 
             result_str = extract_dspy_result(result)
             outcome = build_step_outcome(result_str, executor.last_trajectory)
@@ -488,7 +492,8 @@ class PlanStepExecutor:
                     step_description=task,
                     context=json.dumps(context),
                 )
-            record_from_lm(lm)
+            if self.llm_tracker:
+                record_from_lm(lm, self.llm_tracker)
 
             result_str = extract_dspy_result(result)
 

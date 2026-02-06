@@ -9,6 +9,8 @@ Extracted from ExecutionCoordinator for maintainability.
 import logging
 from typing import Any, List, Optional
 
+from emery_agents.services.analysis.llm_usage import LlmUsageTracker
+
 from emery_agents.entities.models.plan import Plan, PlanStatus, PlanStep, PlanStepStatus
 
 from ..planning.plan_differ import PlanDiffer, PlanDiff
@@ -57,6 +59,7 @@ class ReplanHandler:
         failed_step: Optional[PlanStep],
         reason: str,
         tools: List[Any],
+        llm_tracker: Optional[LlmUsageTracker] = None,
     ) -> Plan:
         """
         Handle replanning using diff-based approach.
@@ -69,6 +72,7 @@ class ReplanHandler:
             failed_step: The step that triggered replanning (if any)
             reason: Why replanning was triggered
             tools: Available tools for recovery planning
+            llm_tracker: Optional tracker for LLM usage
 
         Returns:
             Updated plan with recovery steps applied via diff
@@ -96,6 +100,7 @@ class ReplanHandler:
                 failed_step=failed_step,
                 completed_context=completed_context,
                 org_model=self.org_model,
+                llm_tracker=llm_tracker,
             )
 
             # Check if replan needs user clarification

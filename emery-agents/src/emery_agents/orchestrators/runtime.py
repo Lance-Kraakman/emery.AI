@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from PIL import Image as PILImage
 
+from emery_agents.services.analysis.token_accumulator import TokenAccumulator
 from emery_agents.services.context import ConversationMessage, format_conversation_history
 
 if TYPE_CHECKING:
@@ -61,3 +62,4 @@ class RuntimeContext:
     plan_file_repository: Optional[Any] = None
     images: List[PILImage.Image] = field(default_factory=list)
     extra_headers: Optional[Dict[str, str]] = None  # Audit trail headers for CRUD tool calls
+    token_accumulator: Optional[TokenAccumulator] = None

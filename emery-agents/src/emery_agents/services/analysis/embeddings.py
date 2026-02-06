@@ -9,20 +9,26 @@ Used for:
 - Workspace context filtering (planning node)
 - Agent memory (ChromaDB vector storage)
 """
+from __future__ import annotations
 
 import logging
 import os
 from functools import lru_cache
-from typing import Optional
+from typing import TYPE_CHECKING, Any, Optional, cast
 
-from .embedding_usage import get_embedding_tracker
+from .embedding_usage import EmbeddingUsageTracker
+
+if TYPE_CHECKING:
+    from google.genai.client import Client as GeminiClient
+    from huggingface_hub import InferenceClient
 
 logger = logging.getLogger(__name__)
 
 # Provider state
 _provider: Optional[str] = None
-_gemini_client = None
-_hf_client = None
+_gemini_client: Optional["GeminiClient"] = None
+_hf_client: Optional["InferenceClient"] = None
+
 
 # Gemini config
 GEMINI_MODEL = "gemini-embedding-001"
@@ -69,29 +75,36 @@ def _embed_gemini(text: str) -> tuple[float, ...]:
     """Get embedding from Gemini API."""
     from google.genai import types
 
-    result = _gemini_client.models.embed_content(
+    assert _gemini_client is not None
+    result: Any = _gemini_client.models.embed_content(
         model=GEMINI_MODEL,
         contents=text,
         config=types.EmbedContentConfig(output_dimensionality=GEMINI_DIMENSIONS),
     )
+    if not result or not result.embeddings:
+        return ()
     values = result.embeddings[0].values
-    return tuple(float(x) for x in values)
+    return tuple(float(x) for x in values)  # type: ignore
 
 
 def _embed_gemini_batch(texts: list[str]) -> list[tuple[float, ...]]:
     """Embed multiple texts in one synchronous Gemini API call (max 100 per call)."""
     from google.genai import types
 
-    result = _gemini_client.models.embed_content(
+    assert _gemini_client is not None
+    result: Any = _gemini_client.models.embed_content(
         model=GEMINI_MODEL,
-        contents=texts,
+        contents=cast(Any, texts),
         config=types.EmbedContentConfig(output_dimensionality=GEMINI_DIMENSIONS),
     )
-    return [tuple(float(x) for x in emb.values) for emb in result.embeddings]
+    if not result or not result.embeddings:
+        return []
+    return [tuple(float(x) for x in emb.values) for emb in result.embeddings]  # type: ignore
 
 
 def _embed_huggingface(text: str) -> tuple[float, ...]:
     """Get embedding from HuggingFace Inference API (fallback)."""
+    assert _hf_client is not None
     result = _hf_client.feature_extraction(text=text, model=HF_MODEL)
 
     if isinstance(result, list):
@@ -106,7 +119,9 @@ def _embed_huggingface(text: str) -> tuple[float, ...]:
 
 
 @lru_cache(maxsize=5000)
-def get_embedding(text: str) -> tuple[float, ...]:
+def get_embedding(
+    text: str, tracker: Optional[EmbeddingUsageTracker] = None
+) -> tuple[float, ...]:
     """
     Get embedding for text (cached).
 
@@ -118,25 +133,31 @@ def get_embedding(text: str) -> tuple[float, ...]:
 
     Args:
         text: Text to embed
+        tracker: Optional explicit tracker instance.
 
     Returns:
         Tuple of floats (embedding vector). Tuple for hashability/caching.
     """
     provider = _init_provider()
-    tracker = get_embedding_tracker()
 
     if provider == "gemini":
         embedding = _embed_gemini(text)
-        tracker.record(text, GEMINI_MODEL)
+        if tracker:
+            tracker.record(text, GEMINI_MODEL)
     else:
         embedding = _embed_huggingface(text)
-        tracker.record(text, HF_MODEL)
+        if tracker:
+            tracker.record(text, HF_MODEL)
 
     logger.debug(f"Generated embedding: {len(embedding)} dims for '{text[:50]}...' (provider={provider})")
     return embedding
 
 
-def get_embeddings_batch(texts: list[str], batch_size: int = 100) -> list[tuple[float, ...]]:
+def get_embeddings_batch(
+    texts: list[str],
+    tracker: Optional[EmbeddingUsageTracker] = None,
+    batch_size: int = 100,
+) -> list[tuple[float, ...]]:
     """Compute embeddings for multiple texts, chunked for API limits.
 
     Uses Gemini multi-text embed_content (synchronous, up to 100 per call)
@@ -144,6 +165,7 @@ def get_embeddings_batch(texts: list[str], batch_size: int = 100) -> list[tuple[
 
     Args:
         texts: List of texts to embed
+        tracker: Optional explicit tracker instance.
         batch_size: Max texts per API call (default 100, Gemini limit)
 
     Returns:
@@ -158,11 +180,19 @@ def get_embeddings_batch(texts: list[str], batch_size: int = 100) -> list[tuple[
     start = _time.monotonic()
 
     for batch_idx, i in enumerate(range(0, total, batch_size), 1):
-        chunk = texts[i:i + batch_size]
+        chunk = texts[i : i + batch_size]
         if provider == "gemini":
-            results.extend(_embed_gemini_batch(chunk))
+            batch_embeddings = _embed_gemini_batch(chunk)
+            results.extend(batch_embeddings)
         else:
-            results.extend(_embed_huggingface(t) for t in chunk)
+            batch_embeddings = [_embed_huggingface(t) for t in chunk]
+            results.extend(batch_embeddings)
+
+        if tracker:
+            for text in chunk:
+                tracker.record(
+                    text, GEMINI_MODEL if provider == "gemini" else HF_MODEL
+                )
 
         elapsed = _time.monotonic() - start
         logger.info(

@@ -130,7 +130,7 @@ async def direct_execute_node(state: PlanExecuteState, runtime: RuntimeContext) 
                 context=json.dumps(execution_context),
                 images=dspy_images,
             )
-        record_from_lm(lm)
+        record_from_lm(lm, runtime.token_accumulator.get_llm_tracker())
 
         result_str = extract_dspy_result(result)
 
