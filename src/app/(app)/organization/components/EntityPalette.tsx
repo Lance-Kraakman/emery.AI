@@ -46,6 +46,7 @@ export function EntityPalette({ disabled, onCreateEntity }: EntityPaletteProps) 
   const { setDragType } = useOrgChartDragSafe();
 
   const onDragStart = (event: React.DragEvent, nodeType: OrgChartNodeType) => {
+    event.stopPropagation();
     event.dataTransfer.setData('application/orgchart-entity', nodeType);
     event.dataTransfer.effectAllowed = 'move';
     setDragType(nodeType);

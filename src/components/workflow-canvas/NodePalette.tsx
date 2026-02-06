@@ -83,6 +83,7 @@ export function NodePalette({ disabled }: NodePaletteProps) {
     event: React.DragEvent,
     nodeType: WorkflowNodeType
   ) => {
+    event.stopPropagation();
     event.dataTransfer.setData('application/reactflow', nodeType);
     event.dataTransfer.effectAllowed = 'move';
   };

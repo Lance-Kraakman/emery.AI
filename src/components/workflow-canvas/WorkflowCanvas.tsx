@@ -523,6 +523,8 @@ function WorkflowCanvasInner({
         className
       )}
       onMouseMove={onMouseMove}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
     >
       <ReactFlow
         nodes={nodes}
@@ -530,8 +532,6 @@ function WorkflowCanvasInner({
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
-        onDragOver={onDragOver}
-        onDrop={onDrop}
         onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}
         onSelectionChange={onSelectionChange}
