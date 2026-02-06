@@ -523,25 +523,15 @@ function WorkflowCanvasInner({
         className
       )}
       onMouseMove={onMouseMove}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
     >
-      {/* Node Palette - positioned outside ReactFlow for consistent alignment with SkillEditor config panel */}
-      <div
-        className={cn(
-          'absolute left-2 z-10',
-          hasFloatingHeader ? 'top-[72px]' : 'top-2'
-        )}
-      >
-        <NodePalette disabled={disabled} />
-      </div>
-
       <ReactFlow
         nodes={nodes}
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
-        onDragOver={onDragOver}
-        onDrop={onDrop}
         onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}
         onSelectionChange={onSelectionChange}
@@ -558,6 +548,14 @@ function WorkflowCanvasInner({
       >
         <Controls />
         <Background gap={16} />
+
+        {/* Node Palette - must be inside ReactFlow to receive drag events properly */}
+        <Panel
+          position="top-left"
+          className={cn('m-2', hasFloatingHeader && 'mt-[64px]')}
+        >
+          <NodePalette disabled={disabled} />
+        </Panel>
 
         {/* Node Configuration Panel - only in uncontrolled mode or when explicitly enabled */}
         {showConfigPanel && (

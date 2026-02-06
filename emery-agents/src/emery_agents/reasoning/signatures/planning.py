@@ -494,27 +494,25 @@ class TriageTask(dspy.Signature):  # type: ignore[misc]
 
     ROUTING RULES:
 
-    "direct" — Single clear action, execute immediately:
-    - One well-defined action (add a field, run a skill, delete a table)
+    "direct" — Read-only research, Q&A, information gathering:
     - Research/information tasks (web search, summarize, explain)
     - Conversational queries (greetings, questions, help)
-    - All required information is in context or discoverable with one tool call
+    - Lookups that don't modify workspace state
+    - Visual analysis of images ("what's in this image/PDF")
+    - NEVER route skill execution or CRUD modifications here
 
-    "plan" — Multi-step, needs user approval before execution:
-    - Multiple CREATION or MODIFICATION steps across different resources
+    "plan" — Any action that modifies state, execute with plan:
+    - Skill execution (run @skill-name, execute skill, trigger automation)
+    - CRUD operations (add/update/delete tables, fields, apps, rows)
+    - Single well-defined actions that modify workspace (add a field, delete a table)
+    - Multiple steps or cross-capability tasks
     - Complex business logic or data modeling (build a CRM, set up workflows)
-    - Cross-capability tasks (needs schema + app + views)
-    - Only for tasks that BUILD or MODIFY multiple workspace resources
+    - "build an app based on this mockup" + images → "plan" (multi-step using images)
 
     "respond" — Pure conversation, no tools needed:
     - Greetings, thank you messages
     - Questions about what the platform can do
     - Requests for clarification on previous responses
-
-    IMAGE HANDLING:
-    - When images are uploaded, they are available for visual analysis in direct/plan nodes
-    - "what's in this image/PDF" + images → "direct" (single vision analysis task)
-    - "build an app based on this mockup" + images → "plan" (multi-step using images)
     - Never route to "respond" when images are present — respond cannot process images
 
     RESEARCH BEFORE DECIDING:
@@ -522,7 +520,7 @@ class TriageTask(dspy.Signature):  # type: ignore[misc]
     - Use system_research to check if referenced resources exist
     - Don't guess — verify when uncertain
 
-    WHEN IN DOUBT: prefer "direct" for single actions, "plan" for multi-resource tasks.
+    WHEN IN DOUBT: prefer "plan" for any action that modifies state, "direct" for read-only research.
     Research tasks are ALWAYS "direct" regardless of how complex they sound.
     """
 

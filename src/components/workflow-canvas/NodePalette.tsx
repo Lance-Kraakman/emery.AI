@@ -83,12 +83,13 @@ export function NodePalette({ disabled }: NodePaletteProps) {
     event: React.DragEvent,
     nodeType: WorkflowNodeType
   ) => {
+    event.stopPropagation();
     event.dataTransfer.setData('application/reactflow', nodeType);
     event.dataTransfer.effectAllowed = 'move';
   };
 
   return (
-    <Card className="w-48 shadow-lg">
+    <Card className="w-48 shadow-lg nopan nodrag">
       <CardHeader className="p-3 pb-2">
         <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
           Add Node
@@ -101,7 +102,7 @@ export function NodePalette({ disabled }: NodePaletteProps) {
             draggable={!disabled}
             onDragStart={(e) => onDragStart(e, item.type)}
             className={cn(
-              'flex items-center gap-2 p-2 rounded-md cursor-grab',
+              'flex items-center gap-2 p-2 rounded-md cursor-grab nopan nodrag',
               'hover:bg-muted transition-colors',
               'active:cursor-grabbing',
               disabled && 'opacity-50 cursor-not-allowed'

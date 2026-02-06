@@ -116,14 +116,21 @@ class WAFStack(Stack):
                 prefix=prefix
             ),
             # Priority 7: AWS Managed - Common Rule Set (OWASP protections)
-            # Exclude SizeRestrictions_BODY to allow large POST bodies (templates, file uploads up to 5MB)
+            # Exclusions:
+            # - SizeRestrictions_BODY: Allow large POST bodies (templates, file uploads up to 5MB)
+            # - CrossSiteScripting_BODY: False positives on Next.js Server Action payloads
+            # - GenericRFI_BODY: False positives on serialized JSON with URLs
             self._managed_rule(
                 name="AWSManagedRulesCommonRuleSet",
                 priority=7,
                 vendor_name="AWS",
                 rule_group_name="AWSManagedRulesCommonRuleSet",
                 prefix=prefix,
-                excluded_rules=["SizeRestrictions_BODY"]
+                excluded_rules=[
+                    "SizeRestrictions_BODY",
+                    "CrossSiteScripting_BODY",
+                    "GenericRFI_BODY",
+                ]
             ),
             # Priority 8: AWS Managed - Known Bad Inputs (Log4j, etc.)
             self._managed_rule(

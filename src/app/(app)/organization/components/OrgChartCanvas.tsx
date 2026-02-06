@@ -872,6 +872,8 @@ export function OrgChartCanvas({
       ref={reactFlowWrapper}
       className="h-full w-full"
       onKeyDown={handleKeyDown}
+      onDragOver={disabled ? undefined : handleDragOver}
+      onDrop={disabled ? undefined : handleDrop}
       tabIndex={0}
     >
       <StickyNoteProvider updateNote={handleUpdateStickyNote}>
@@ -887,8 +889,6 @@ export function OrgChartCanvas({
         onSelectionChange={handleSelectionChange}
         onNodeDoubleClick={handleNodeDoubleClick}
         onNodeDragStop={disabled ? undefined : handleNodeDragStop}
-        onDragOver={disabled ? undefined : handleDragOver}
-        onDrop={disabled ? undefined : handleDrop}
         nodeTypes={orgChartNodeTypes}
         edgeTypes={orgChartEdgeTypes}
         defaultEdgeOptions={{
