@@ -146,6 +146,44 @@ export interface PermissionRequestEvent {
 }
 
 /**
+ * Output definition for human skill completion
+ */
+export interface HumanSkillOutput {
+  name: string
+  type: string
+  description?: string
+}
+
+/**
+ * Input value provided to human skill
+ */
+export interface HumanSkillInput {
+  name: string
+  type: string
+  value: string
+}
+
+/**
+ * Awaiting human skill event
+ * Emitted when execution reaches a human skill and needs human action
+ *
+ * AIDEV-NOTE: Stream closes after this event. Frontend shows completion UI,
+ * user submits outputs, new message resumes execution with the outputs.
+ */
+export interface AwaitingHumanSkillEvent {
+  type: 'awaiting_human_skill'
+  skillId: number
+  skillName: string
+  stepId: string              // Empty for top-level skill, set for workflow step
+  instructions: string        // What human needs to do (markdown)
+  inputs: HumanSkillInput[]   // Context from execution
+  outputSchema: HumanSkillOutput[]  // What human needs to provide
+  assignedTo: string          // User ID assigned to complete
+  externalLinks: string[]     // Optional URLs for external work
+  sessionId: string           // For resuming execution
+}
+
+/**
  * Union type for all SSE chat events
  */
 export type SSEChatEvent =
@@ -156,6 +194,7 @@ export type SSEChatEvent =
   | PlanStatusUpdateEvent
   | AwaitingInputEvent
   | PermissionRequestEvent
+  | AwaitingHumanSkillEvent
 
 /**
  * Type guards for event discrimination
@@ -186,4 +225,8 @@ export function isAwaitingInputEvent(event: any): event is AwaitingInputEvent {
 
 export function isPermissionRequestEvent(event: any): event is PermissionRequestEvent {
   return event?.type === 'permission_request'
+}
+
+export function isAwaitingHumanSkillEvent(event: any): event is AwaitingHumanSkillEvent {
+  return event?.type === 'awaiting_human_skill'
 }
