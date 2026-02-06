@@ -13,6 +13,7 @@ import dspy
 
 from emery_agents.api.http_client import make_request
 from ..mutation_guard import check_mutation_allowed
+from .puck_validation import validate_puck_template
 
 
 def _ensure_block_ids(template_data: dict[str, Any]) -> dict[str, Any]:
@@ -222,6 +223,10 @@ def create_page_crud(api_key: str, org_id: str, extra_headers: dict[str, str] | 
                 return "ERROR: data.name required for create"
             if data.get("templateData"):
                 data["templateData"] = _ensure_block_ids(data["templateData"])
+                # Validate templateData against Puck blocks schema
+                validation_errors = validate_puck_template(data["templateData"])
+                if validation_errors:
+                    return f"ERROR: Puck validation failed: {'; '.join(validation_errors)}"
             return make_request(
                 endpoint=f"apps/{app_id}/pages",
                 method="POST",
@@ -261,6 +266,11 @@ def create_page_crud(api_key: str, org_id: str, extra_headers: dict[str, str] | 
                 return f"ERROR: templateData must be object, got {type(template_data).__name__}"
 
             data["templateData"] = _ensure_block_ids(template_data)
+
+            # Validate templateData against Puck blocks schema
+            validation_errors = validate_puck_template(data["templateData"])
+            if validation_errors:
+                return f"ERROR: Puck validation failed: {'; '.join(validation_errors)}"
 
             return make_request(
                 endpoint=f"pages/{page_id}/content",
@@ -316,11 +326,21 @@ def create_page_crud(api_key: str, org_id: str, extra_headers: dict[str, str] | 
     return dspy.Tool(
         func=page_crud,
         name="page_crud",
-        desc="Puck page management within apps: list, read, create, update, delete, update_content, publish, unpublish.",
+        desc=(
+            "Puck page management. For create/update_content, templateData must have: "
+            "content (array of blocks), root (object), zones (object for nested blocks). "
+            "Each block needs: type (string), props (object). Block IDs are auto-generated. "
+            "Example: {\"content\": [{\"type\": \"Hero\", \"props\": {\"title\": \"My Page\", \"description\": \"\", \"buttons\": []}}], \"root\": {}, \"zones\": {}}"
+        ),
         arg_desc={
             "method": "Operation: list, read, create, update, delete, update_content, publish, unpublish",
             "app_id": "App ID (required for list, create)",
             "page_id": "Page ID (required for read, update, delete, update_content, publish, unpublish)",
-            "data": "Page data: {name, slug?, templateData?, requiresAuth?, dialogs?}",
+            "data": (
+                "Page data: {name, slug?, templateData?, requiresAuth?, dialogs?}. "
+                "templateData structure: {content: [{type, props}], root: {}, zones: {}}. "
+                "Data blocks (TableBlock, DataBlock) need viewId prop. "
+                "Field blocks (TextField, NumberField, etc.) need fieldId and must be in DataBlock zones."
+            ),
         },
     )

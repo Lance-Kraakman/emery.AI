@@ -180,12 +180,19 @@ def create_skill_crud(api_key: str, org_id: str, extra_headers: dict[str, str] |
             "To CREATE a new skill, use method='create' with agent_id and data containing at least 'name'. "
             "To RUN an existing skill, use method='execute' with the skill's numeric ID "
             "and optional input data. To find a skill's ID, use method='list' first. "
-            "Skills have name, description, instructions, inputs, outputs, tools, model."
+            "Skills have name, description, instructions, inputs, outputs, tools, model. "
+            "In instructions, reference inputs using {input_name} syntax, e.g., 'Send email to {recipient}'."
         ),
         arg_desc={
             "method": "Operation: create (new skill), read (get config), update (modify), list (find skills and IDs), execute (RUN a skill by ID)",
             "skill_id": "Skill ID (required for read, update, execute). Must be a number.",
             "agent_id": "Agent ID (required for create, optional for list)",
-            "data": "For create: must include 'name', optional: description, instructions, inputs, outputs, tools, model, executionType. For update: skill config fields. tools format: [{\"name\": \"tool_name\"}] (objects, not bare strings). For execute: input values as {input_name: value} dict (pass {} if no inputs needed)",
+            "data": (
+                "For create: {name (required), description?, instructions?, inputs?, outputs?, tools?, model?, executionType?}. "
+                "inputs format: [{\"name\": \"recipient\", \"type\": \"email\", \"required\": true}]. "
+                "outputs format: [{\"name\": \"result\", \"type\": \"text\"}]. "
+                "tools format: [{\"name\": \"tool_name\"}]. "
+                "For execute: input values as {input_name: value} dict."
+            ),
         },
     )
