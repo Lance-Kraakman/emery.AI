@@ -26,6 +26,7 @@ from .approval_handler import is_approval_response
 from .response_types import create_error_response
 from ..orchestrators import create_session_graph, RuntimeContext
 from ..services.context import ConversationMessage
+from emery_agents.services.analysis.token_accumulator import TokenAccumulator
 from ..orchestrators.state import DEFAULT_STATE
 from ..services.memory import MemoryService
 from ..services.context import WorkspaceContext
@@ -116,6 +117,7 @@ class CoordinatorStreamingHandler:
         session_id: Optional[str],
         org_model: Optional[str],
         capability_registry: CapabilityRegistry,
+        token_accumulator: TokenAccumulator,
         sm: Optional[Any] = None,
         managed_agents: Optional[List[Any]] = None,
         stored_plan: Optional[Plan] = None,
@@ -184,6 +186,7 @@ class CoordinatorStreamingHandler:
             plan_file_repository=plan_file_repo,
             images=images or [],
             extra_headers=context.tool_provider.extra_headers,
+            token_accumulator=token_accumulator,
         )
 
         # Check if there's a pending graph interrupt to resume
@@ -220,6 +223,7 @@ class CoordinatorStreamingHandler:
         workspace = _build_workspace_context(
             context.tool_provider.api_key,
             str(context.tool_provider.organization_id),
+            token_accumulator,
         )
 
         # === POPULATE CAPABILITY REGISTRY (per-request: user skills + external tools) ===

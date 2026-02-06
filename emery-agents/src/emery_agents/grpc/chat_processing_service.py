@@ -29,11 +29,12 @@ from ..entities.models.plan import Plan, SkillInputDefinition, SkillOutputDefini
 from .message_processor import extract_file_attachments
 from .mappers.proto_mapper import tool_configs_from_proto, history_messages_from_proto, token_usage_to_proto
 from .agent_streaming import AgentStreamingHandler
+from .response_types import StreamResponseDict
 from .coordinator_streaming import CoordinatorStreamingHandler
 from .response_converter import convert_response_to_proto
 from .agents.agent_models import get_builder_descriptors
 from emery_agents.tools.capability_registry import CapabilityRegistry
-from ..services.analysis.token_usage import TokenUsageExtractor
+from emery_agents.services.analysis.token_accumulator import TokenAccumulator
 from emery_agents.entities.models.capability import CapabilityType
 from emery_agents.services.analysis.embedding_cache import load_embedding_cache, save_embedding_cache
 from emery_agents.tools.capability_bootstrap import populate_system_agents, populate_integration_services
@@ -72,54 +73,46 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         self.session_manager.start_cleanup_task()
 
         try:
-            try:
-                self.tool_loader: Optional[UnifiedToolLoader] = UnifiedToolLoader()
-            except ImportError:
-                self.tool_loader = None
+            self.tool_loader: UnifiedToolLoader = UnifiedToolLoader()
+        except ImportError:
+            raise RuntimeError("UnifiedToolLoader failed to initialize due to missing dependencies.")
 
-            self.model_provider: Optional[ModelProvider] = ModelProvider()
-            self.agent_factory: Optional[AgentFactory] = AgentFactory(self.model_provider)
-            # CapabilityRegistry replaces ManagedAgentsFactory.capability_registry
-            self.capability_registry = CapabilityRegistry()
-            populate_system_agents(self.capability_registry)
-            populate_integration_services(self.capability_registry)
-            self._precompute_embeddings()
+        self.model_provider: ModelProvider = ModelProvider()
+        self.agent_factory: AgentFactory = AgentFactory(self.model_provider)
+        self.capability_registry = CapabilityRegistry()
+        populate_system_agents(self.capability_registry)
+        populate_integration_services(self.capability_registry)
+        self._precompute_embeddings()
 
-            self.skill_executor_service = SkillExecutorService(
-                tool_loader=self.tool_loader,
-                agent_factory=self.agent_factory
-            )
+        self.skill_executor_service = SkillExecutorService(
+            tool_loader=self.tool_loader, agent_factory=self.agent_factory
+        )
 
-            self.plan_service = PlanService(
-                grpc_client=None,
-                model_provider=self.model_provider,
-            )
+        self.plan_service = PlanService(
+            grpc_client=None,
+            model_provider=self.model_provider,
+        )
 
-            self._coordinator_handler = CoordinatorStreamingHandler()
-            self._agent_handler = AgentStreamingHandler(
-                session_manager=self.session_manager,
-                model_provider=self.model_provider,
-                skill_executor_service=self.skill_executor_service,
-                tool_loader=self.tool_loader,
-                plan_service=self.plan_service,
-                coordinator_handler=self._coordinator_handler,
-                capability_registry=self.capability_registry,
-            )
+        self._coordinator_handler = CoordinatorStreamingHandler()
+        self._agent_handler = AgentStreamingHandler(
+            session_manager=self.session_manager,
+            model_provider=self.model_provider,
+            skill_executor_service=self.skill_executor_service,
+            tool_loader=self.tool_loader,
+            plan_service=self.plan_service,
+            coordinator_handler=self._coordinator_handler,
+            capability_registry=self.capability_registry,
+        )
 
-            # Shared TaskExecutor for task-based chat executions
-            self._agent_executor = AgentExecutor()
-            self._task_executor = TaskExecutor(
-                agent_executor=self._agent_executor,
-                api_service=None,  # No API service needed for chat tasks
-            )
+        # Shared TaskExecutor for task-based chat executions
+        self._agent_executor = AgentExecutor()
+        self._task_executor = TaskExecutor(
+            agent_executor=self._agent_executor,
+            api_service=None,  # No API service needed for chat tasks
+        )
 
-            logger.info("✅ ChatProcessingService initialized successfully")
+        logger.info("✅ ChatProcessingService initialized successfully")
 
-        except ImportError as e:
-            logger.error(f"❌ Failed to import core services: {e}")
-            self.tool_loader = None
-            self.model_provider = None
-            self.agent_factory = None
 
     def _resolve_agent_id(
         self,
@@ -265,23 +258,27 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         session_id = request.session_id if request.session_id else f"{org_id}_{user_id}"
 
         # Task-based execution tracking (when task_id is provided)
-        # AIDEV-NOTE: When task_id is set, this is a task-tracked execution (skill/agent invocation)
+            # AIDEV-NOTE: When task_id is set, this is a task-tracked execution (skill/agent invocation)
         task_id = request.task_id if request.task_id else None
         if task_id:
             logger.info(f"📋 Task-tracked execution: task_id={task_id[:8]}...")
+
+        # Create a new token accumulator for this request
+        accumulator = TokenAccumulator()
 
         # Register message stream for cancellation tracking
         self.active_streams[message_id] = False  # False = not cancelled
         logger.info(f"🚀 Processing message {message_id} for user {user_id} in org {org_id} (session: {session_id})")
 
         # Extract text preview for logging
-        text_preview = extract_text_from_parts(message_parts)
-        has_image_content = has_images(message_parts)
+        message_parts_list = list(request.message_parts)
+        text_preview = extract_text_from_parts(message_parts_list)
+        has_image_content = has_images(message_parts_list)
         logger.info(f"📝 Message preview: {text_preview[:100]}...")
         if has_image_content:
             logger.info(f"🖼️ Message contains images")
 
-        file_attachments = extract_file_attachments(message_parts)
+        file_attachments = extract_file_attachments(message_parts_list)
         if file_attachments:
             logger.info(f"📎 Extracted {len(file_attachments)} file attachments")
 
@@ -310,8 +307,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
         try:
             conversation_messages = await build_conversation_messages(
-                request.conversation_history,
-                message_parts
+                list(request.conversation_history),
+                message_parts_list
             )
 
             logger.info(f"💬 Built conversation with {len(conversation_messages)} messages (HF format)")
@@ -380,6 +377,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             async for response_dict in self._agent_handler.stream_response(
                 conversation_messages,
                 tools_to_use,
+                token_accumulator=accumulator,
                 domain_context=None,  # Domain context removed - agentId resolved from skill config
                 org_model=org_model,
                 has_images=has_image_content,
@@ -394,7 +392,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 workspace_id=workspace_id,  # Workspace ID for S3 (user_id or agent_id)
                 workspace_type=workspace_type,  # "agents" or "users" — determines memory PII filtering
                 workspace_org_id=workspace_org_id,  # Organization ID for org-scoped S3 keys
-                extra_headers=chat_audit_headers,  # Audit trail headers for CRUD tool calls
+                 extra_headers=chat_audit_headers,  # Audit trail headers for CRUD tool calls
             ):
                 # Check for cancellation
                 if self.active_streams.get(message_id, False):
@@ -413,7 +411,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
                 if isinstance(response_dict, dict):
                     proto_response, content, plan_data, should_break, seq_inc = convert_response_to_proto(
-                        response_dict, sequence
+                        cast(StreamResponseDict, response_dict), sequence
                     )
 
                     if proto_response:
@@ -439,9 +437,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
             processing_time = int((time.time() - start_time) * 1000)
             # Extract accumulated LLM + embedding usage for this request
-            llm_usage = TokenUsageExtractor.extract_llm_usage()
-            embedding_usage = TokenUsageExtractor.extract_embedding_usage()
-            handler_token_usage = TokenUsageExtractor.merge_usage(llm_usage, embedding_usage)
+            llm_usage = accumulator.extract_llm_usage()
+            embedding_usage = accumulator.extract_embedding_usage()
+            handler_token_usage = TokenAccumulator.merge_usage(llm_usage, embedding_usage)
             token_usage_proto = token_usage_to_proto(handler_token_usage)
             model_used = getattr(handler_token_usage, 'model_name', '') if handler_token_usage else ''
 
@@ -476,9 +474,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             logger.exception(f"❌ Message processing failed: {e}")
             
             # Extract partial usage up to failure
-            llm_usage = TokenUsageExtractor.extract_llm_usage()
-            embedding_usage = TokenUsageExtractor.extract_embedding_usage()
-            handler_token_usage = TokenUsageExtractor.merge_usage(llm_usage, embedding_usage)
+            llm_usage = accumulator.extract_llm_usage()
+            embedding_usage = accumulator.extract_embedding_usage()
+            handler_token_usage = TokenAccumulator.merge_usage(llm_usage, embedding_usage)
             token_usage_proto = token_usage_to_proto(handler_token_usage)
             
             # Send error response
