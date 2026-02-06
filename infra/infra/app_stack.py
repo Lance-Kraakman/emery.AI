@@ -628,6 +628,9 @@ class AppStack(Stack):
         )
 
         # Create FargateService with Cloud Map discovery (no NLB needed)
+        # COST-OPT: Mixed Fargate Spot strategy - 75% Spot for cost savings, 25% regular for reliability.
+        # Base=1 ensures at least one task always runs on regular Fargate to handle requests
+        # during Spot interruptions. Spot saves ~70% on compute costs.
         agent_service = ecs.FargateService(
             self, f"{prefix}AgentService",
             cluster=cluster,
@@ -643,6 +646,17 @@ class AppStack(Stack):
                 dns_record_type=servicediscovery.DnsRecordType.A,
                 dns_ttl=Duration.seconds(60)
             ),
+            capacity_provider_strategies=[
+                ecs.CapacityProviderStrategy(
+                    capacity_provider="FARGATE_SPOT",
+                    weight=3,  # 75% of scaled tasks use Spot
+                ),
+                ecs.CapacityProviderStrategy(
+                    capacity_provider="FARGATE",
+                    weight=1,  # 25% use regular Fargate
+                    base=1,    # Always keep 1 task on regular Fargate for reliability
+                ),
+            ],
         )
 
         # Grant database access to merged agent service
