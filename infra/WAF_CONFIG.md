@@ -37,11 +37,16 @@ We exclude specific rules that cause false positives:
 
 ```python
 # infra/infra/waf_stack.py
+
+# CommonRuleSet exclusions:
 excluded_rules=[
     "SizeRestrictions_BODY",      # Allow large uploads (5MB+)
     "CrossSiteScripting_BODY",    # Prevent false positives on Server Actions
     "GenericRFI_BODY",            # Prevent false positives on URLs in payloads
 ]
+
+# KnownBadInputsRuleSet exclusions:
+excluded_rules=["ReactJSRCE_BODY"]  # React SSR RCE detection triggers on Server Actions
 ```
 
 ## Server Actions vs API Routes: When to Use Each
@@ -115,6 +120,7 @@ Yes, because:
 |---------------|-------------------|
 | SQL Injection | ✅ Active (AWSManagedRulesSQLiRuleSet) |
 | Known Bad Inputs (Log4j) | ✅ Active (KnownBadInputsRuleSet) |
+| React SSR RCE in Body | ⚠️ Excluded - false positives on Server Actions |
 | Malicious IPs | ✅ Active (AmazonIpReputationList) |
 | Rate Limiting | ✅ Active (custom rate rules) |
 | XSS in Query/Headers | ✅ Active (only body excluded) |
