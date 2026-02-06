@@ -47,6 +47,9 @@ excluded_rules=[
 
 # KnownBadInputsRuleSet exclusions:
 excluded_rules=["ReactJSRCE_BODY"]  # React SSR RCE detection triggers on Server Actions
+
+# SQLiRuleSet exclusions:
+excluded_rules=["SQLi_BODY"]  # Pagination params like {"limit":50} trigger SQL LIMIT detection
 ```
 
 ## Server Actions vs API Routes: When to Use Each
