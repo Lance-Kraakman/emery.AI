@@ -85,7 +85,16 @@ class MemoryService:
 
         # Ensure directory exists with write permissions
         # (tar.gz roundtrip can leave restrictive permissions from bwrap)
+        # Must chmod parent directories too — ChromaDB needs write access for temp/lock files
         self._chroma_path.mkdir(parents=True, exist_ok=True)
+
+        # Fix entire .agent/memory/chroma tree (parent dirs may have 0o700 from extraction)
+        agent_dir = self._chroma_path.parent.parent  # .agent
+        if agent_dir.exists():
+            agent_dir.chmod(0o755)
+        memory_dir = self._chroma_path.parent  # .agent/memory
+        if memory_dir.exists():
+            memory_dir.chmod(0o755)
         self._chroma_path.chmod(0o755)
 
         # ChromaDB PersistentClient

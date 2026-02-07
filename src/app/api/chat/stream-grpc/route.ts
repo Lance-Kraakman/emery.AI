@@ -104,11 +104,11 @@ export async function POST(req: NextRequest) {
     const userId = session?.user?.id;
     const currentOrganizationId = session?.user?.currentOrganizationId;
 
-    if (!session?.user) {
+    if (!session?.user || !userId) {
       console.error('[CHAT-GRPC-API] Authentication failed - no valid session or user ID');
       return new Response(
         JSON.stringify({ error: 'Authentication required. Please log in and try again.' }),
-        { 
+        {
           status: 401,
           headers: { 'Content-Type': 'application/json' }
         }
@@ -491,6 +491,11 @@ export async function POST(req: NextRequest) {
         userApiKey = await ensureFreshUserApiKey(userId);
       } catch (error) {
         console.error('[CHAT-GRPC-API] Error generating user API key:', error);
+        // Don't silently continue - fail early with clear error
+        return new Response(
+          JSON.stringify({ error: 'Failed to generate API credentials for chat session' }),
+          { status: 500, headers: { 'Content-Type': 'application/json' } }
+        );
       }
     }
 
