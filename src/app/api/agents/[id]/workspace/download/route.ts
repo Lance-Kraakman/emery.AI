@@ -12,8 +12,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/test-auth';
-import { getAgentApplicationService } from '@/ddd/application/di/container';
-import { AgentId } from '@/ddd/domain/shared/value-objects';
+import { getAgentApplicationService, contextManager } from '@/ddd/application/di/container';
+import { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import { WorkspaceS3Service } from '@/lib/workspace/workspace-s3';
 
 /**
@@ -49,9 +49,25 @@ export async function GET(
       );
     }
 
+    // Validate organization context
+    if (!authResult.user.organizationId) {
+      return Response.json(
+        { success: false, error: 'No organization context' },
+        { status: 400 }
+      );
+    }
+
     // Verify agent exists and belongs to user's organization
-    const agentService = getAgentApplicationService();
-    const agent = await agentService.getAgent(AgentId.fromNumber(agentId));
+    // AIDEV-NOTE: Wrap in RLS context since this route returns streaming response
+    // and can't use withAuthenticatedRoute() which returns JSON
+    const agent = await contextManager.withContext(
+      OrganizationId.fromNumber(authResult.user.organizationId),
+      async () => {
+        const agentService = getAgentApplicationService();
+        return agentService.getAgent(AgentId.fromNumber(agentId));
+      },
+      UserId.fromString(authResult.user.id)
+    );
 
     if (!agent) {
       return Response.json(
