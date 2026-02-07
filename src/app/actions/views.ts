@@ -15,6 +15,7 @@
 import { revalidatePath } from "next/cache";
 import { requirePermission, requireResourcePermission, getSessionSafe } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
+import { withAuthContext } from '@/lib/auth/with-context';
 import { getViewApplicationService, getFileApplicationService, getAuditApplicationService } from "@/ddd/application/di/container";
 import { OrganizationId, TableId, UserId, FieldId } from "@/ddd/domain/shared/value-objects";
 import type { FileFieldValue } from "@/ddd/domain/tables/value-objects/field-values";
@@ -39,9 +40,10 @@ export async function createView(
   data: CreateViewData,
   revalidateUrl?: string
 ): Promise<Result<ViewDTO>> {
-  try {
-    const session = await requirePermission("view:create");
-    const currentOrg = await requireCurrentOrganization();
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("view:create");
+      const currentOrg = await requireCurrentOrganization();
 
     const { tableId, name, description, requiresAuth, fieldMappings, filters, sorting, viewType, viewConfig } = data;
 
@@ -194,13 +196,14 @@ export async function createView(
       success: true,
       data: ViewMapper.toDTO(result.data),
     };
-  } catch (error) {
-    console.error("Error creating view:", error);
-    return {
-      success: false,
-      error: "Failed to create view",
-    };
-  }
+    } catch (error) {
+      console.error("Error creating view:", error);
+      return {
+        success: false,
+        error: "Failed to create view",
+      };
+    }
+  });
 }
 
 /**
@@ -212,8 +215,9 @@ export async function updateView(
   data: UpdateViewData,
   revalidateUrl?: string
 ): Promise<Result<ViewDTO>> {
-  try {
-    const { id, name, description, requiresAuth, filters, sorting, pagination, fieldMappings, viewConfig } = data;
+  return withAuthContext(async () => {
+    try {
+      const { id, name, description, requiresAuth, filters, sorting, pagination, fieldMappings, viewConfig } = data;
 
     if (!id) {
       return {
@@ -387,13 +391,14 @@ export async function updateView(
       success: true,
       data: ViewMapper.toDTO(savedView),
     };
-  } catch (error) {
-    console.error("Error updating view:", error);
-    return {
-      success: false,
-      error: "Failed to update view",
-    };
-  }
+    } catch (error) {
+      console.error("Error updating view:", error);
+      return {
+        success: false,
+        error: "Failed to update view",
+      };
+    }
+  });
 }
 
 /**
@@ -403,11 +408,12 @@ export async function deleteView(
   id: number,
   revalidateUrl?: string
 ): Promise<Result> {
-  try {
-    if (!id) {
-      return {
-        success: false,
-        error: "View ID is required",
+  return withAuthContext(async () => {
+    try {
+      if (!id) {
+        return {
+          success: false,
+          error: "View ID is required",
       };
     }
 
@@ -461,13 +467,14 @@ export async function deleteView(
     return {
       success: true,
     };
-  } catch (error) {
-    console.error("Error deleting view:", error);
-    return {
-      success: false,
-      error: "Failed to delete view",
-    };
-  }
+    } catch (error) {
+      console.error("Error deleting view:", error);
+      return {
+        success: false,
+        error: "Failed to delete view",
+      };
+    }
+  });
 }
 
 /**
@@ -478,15 +485,34 @@ export async function deleteView(
  * - If unauthenticated: only allow public views (requiresAuth=false)
  */
 export async function getView(id: number): Promise<ViewDTO | null> {
-  try {
-    if (!id) {
+  // Check session first to determine auth path
+  const session = await getSessionSafe();
+
+  if (!session) {
+    // Unauthenticated: only allow public views (uses rawDb internally)
+    try {
+      if (!id) {
+        return null;
+      }
+      const dataSourceService = getViewApplicationService();
+      const publicResult = await dataSourceService.getPublicView(ViewId.fromNumber(id));
+      if (!publicResult.success || !publicResult.data) {
+        return null;
+      }
+      return ViewMapper.toDTO(publicResult.data);
+    } catch (error) {
+      console.error("Error getting public view:", error);
       return null;
     }
+  }
 
-    const dataSourceService = getViewApplicationService();
-    const session = await getSessionSafe();
-
-    if (session) {
+  // Authenticated path - use withAuthContext
+  return withAuthContext(async () => {
+    try {
+      if (!id) {
+        return null;
+      }
+      const dataSourceService = getViewApplicationService();
       // Authenticated user: use normal RLS-wrapped path
       await requireResourcePermission("view:manage", "view", id);
       const result = await dataSourceService.getView(ViewId.fromNumber(id));
@@ -494,18 +520,11 @@ export async function getView(id: number): Promise<ViewDTO | null> {
         return null;
       }
       return ViewMapper.toDTO(result.data);
-    } else {
-      // Unauthenticated: only allow public views
-      const publicResult = await dataSourceService.getPublicView(ViewId.fromNumber(id));
-      if (!publicResult.success || !publicResult.data) {
-        return null;
-      }
-      return ViewMapper.toDTO(publicResult.data);
+    } catch (error) {
+      console.error("Error getting view:", error);
+      return null;
     }
-  } catch (error) {
-    console.error("Error getting view:", error);
-    return null;
-  }
+  });
 }
 
 /**
@@ -516,9 +535,10 @@ export async function getView(id: number): Promise<ViewDTO | null> {
 export async function getViewsForTable(
   tableId: number
 ): Promise<ViewDTO[]> {
-  try {
-    await requirePermission("database:view");
-    await requireCurrentOrganization();
+  return withAuthContext(async () => {
+    try {
+      await requirePermission("database:view");
+      await requireCurrentOrganization();
 
     if (!tableId) {
       return [];
@@ -534,20 +554,22 @@ export async function getViewsForTable(
       return [];
     }
 
-    return result.data.map((ds) => ViewMapper.toDTO(ds));
-  } catch (error) {
-    console.error("Error getting views for table:", error);
-    return [];
-  }
+      return result.data.map((ds) => ViewMapper.toDTO(ds));
+    } catch (error) {
+      console.error("Error getting views for table:", error);
+      return [];
+    }
+  });
 }
 
 /**
  * Get all views for the current organization
  */
 export async function getViewsForOrganization(): Promise<ViewDTO[]> {
-  try {
-    await requirePermission("database:view");
-    const currentOrg = await requireCurrentOrganization();
+  return withAuthContext(async () => {
+    try {
+      await requirePermission("database:view");
+      const currentOrg = await requireCurrentOrganization();
 
     const dataSourceService = getViewApplicationService();
 
@@ -564,17 +586,18 @@ export async function getViewsForOrganization(): Promise<ViewDTO[]> {
     const tables = await getTables();
     const tableNameMap = new Map(tables.map(t => [t.id, t.name]));
 
-    return result.data.map((ds) => {
-      const dto = ViewMapper.toDTO(ds);
-      return {
-        ...dto,
-        tableName: tableNameMap.get(dto.tableId),
-      };
-    });
-  } catch (error) {
-    console.error("Error getting views for organization:", error);
-    return [];
-  }
+      return result.data.map((ds) => {
+        const dto = ViewMapper.toDTO(ds);
+        return {
+          ...dto,
+          tableName: tableNameMap.get(dto.tableId),
+        };
+      });
+    } catch (error) {
+      console.error("Error getting views for organization:", error);
+      return [];
+    }
+  });
 }
 
 /**
@@ -684,38 +707,40 @@ export async function executeView(
   pageSize: number;
   offset: number;
 } | null> {
-  try {
-    if (!dataSourceId) {
-      return null;
-    }
+  // Check session first to determine auth path
+  const session = await getSessionSafe();
 
-    const dataSourceService = getViewApplicationService();
-    const session = await getSessionSafe();
-
-    // Get view using appropriate method based on auth state
-    let view;
-    let isPublicAccess = false;
-
-    if (session) {
-      // Authenticated user: use normal RLS-wrapped path
-      await requireResourcePermission("view:view", "view", dataSourceId);
-      await requireCurrentOrganization();
-      const viewResult = await dataSourceService.getView(ViewId.fromNumber(dataSourceId));
-      if (!viewResult.success || !viewResult.data) {
-        console.error("Failed to get view:", viewResult.error);
+  // Define the execution logic that works for both paths
+  const executeViewInternal = async (isPublicAccess: boolean) => {
+    try {
+      if (!dataSourceId) {
         return null;
       }
-      view = viewResult.data;
-    } else {
-      // Unauthenticated: only allow public views
-      const publicResult = await dataSourceService.getPublicView(ViewId.fromNumber(dataSourceId));
-      if (!publicResult.success || !publicResult.data) {
-        console.error("Failed to get public view:", publicResult.error);
-        return null;
+
+      const dataSourceService = getViewApplicationService();
+
+      // Get view using appropriate method based on auth state
+      let view;
+
+      if (!isPublicAccess) {
+        // Authenticated user: use normal RLS-wrapped path
+        await requireResourcePermission("view:view", "view", dataSourceId);
+        await requireCurrentOrganization();
+        const viewResult = await dataSourceService.getView(ViewId.fromNumber(dataSourceId));
+        if (!viewResult.success || !viewResult.data) {
+          console.error("Failed to get view:", viewResult.error);
+          return null;
+        }
+        view = viewResult.data;
+      } else {
+        // Unauthenticated: only allow public views
+        const publicResult = await dataSourceService.getPublicView(ViewId.fromNumber(dataSourceId));
+        if (!publicResult.success || !publicResult.data) {
+          console.error("Failed to get public view:", publicResult.error);
+          return null;
+        }
+        view = publicResult.data;
       }
-      view = publicResult.data;
-      isPublicAccess = true;
-    }
 
     // Build additional filter configs if provided
     let runtimeFilters: FilterConfig[] | undefined;
@@ -855,16 +880,26 @@ export async function executeView(
       plainFields, plainRows, view.fieldMappings
     );
 
-    return {
-      rows: filteredRows,
-      fields: filteredFields,
-      totalCount: result.data.totalCount,
-      pageSize: result.data.pageSize,
-      offset: result.data.offset,
-    };
-  } catch (error) {
-    console.error("Error executing view:", error);
-    return null;
+      return {
+        rows: filteredRows,
+        fields: filteredFields,
+        totalCount: result.data.totalCount,
+        pageSize: result.data.pageSize,
+        offset: result.data.offset,
+      };
+    } catch (error) {
+      console.error("Error executing view:", error);
+      return null;
+    }
+  };
+
+  // Route to appropriate path based on auth state
+  if (!session) {
+    // Public access - no RLS context needed
+    return executeViewInternal(true);
+  } else {
+    // Authenticated - wrap with RLS context
+    return withAuthContext(() => executeViewInternal(false));
   }
 }
 
@@ -891,9 +926,10 @@ export async function executeViewAggregations(
     formatType?: string;
   }>;
 } | null> {
-  try {
-    if (!viewId) {
-      return null;
+  return withAuthContext(async () => {
+    try {
+      if (!viewId) {
+        return null;
     }
 
     await requireResourcePermission("view:view", "view", viewId);
@@ -951,11 +987,12 @@ export async function executeViewAggregations(
       console.log(`[Cache] Stored view aggregations: ${viewId}`);
     }
 
-    return response;
-  } catch (error) {
-    console.error("Error executing view aggregations:", error);
-    return null;
-  }
+      return response;
+    } catch (error) {
+      console.error("Error executing view aggregations:", error);
+      return null;
+    }
+  });
 }
 
 /**
@@ -983,13 +1020,14 @@ export async function executeChartView(
   chartType: 'bar' | 'line' | 'pie' | 'area' | 'scatter';
   dataMode: 'raw' | 'aggregated';
 } | null> {
-  try {
-    if (!viewId) {
-      return null;
-    }
+  return withAuthContext(async () => {
+    try {
+      if (!viewId) {
+        return null;
+      }
 
-    await requireResourcePermission("view:view", "view", viewId);
-    await requireCurrentOrganization();
+      await requireResourcePermission("view:view", "view", viewId);
+      await requireCurrentOrganization();
 
     const viewService = getViewApplicationService();
     const cacheService = getCacheService();
@@ -1044,11 +1082,12 @@ export async function executeChartView(
       console.log(`[Cache] Stored chart view: ${viewId}`);
     }
 
-    return result.data;
-  } catch (error) {
-    console.error("Error executing chart view:", error);
-    return null;
-  }
+      return result.data;
+    } catch (error) {
+      console.error("Error executing chart view:", error);
+      return null;
+    }
+  });
 }
 
 /**
@@ -1066,13 +1105,14 @@ export async function getFormViewConfiguration(
   tableFields: any[];
   tableId: number;
 } | null> {
-  try {
-    if (!viewId) {
-      return null;
-    }
+  return withAuthContext(async () => {
+    try {
+      if (!viewId) {
+        return null;
+      }
 
-    await requireResourcePermission("view:view", "view", viewId);
-    await requireCurrentOrganization();
+      await requireResourcePermission("view:view", "view", viewId);
+      await requireCurrentOrganization();
 
     const viewService = getViewApplicationService();
 
@@ -1086,11 +1126,12 @@ export async function getFormViewConfiguration(
       return null;
     }
 
-    return result.data;
-  } catch (error) {
-    console.error("Error getting form view configuration:", error);
-    return null;
-  }
+      return result.data;
+    } catch (error) {
+      console.error("Error getting form view configuration:", error);
+      return null;
+    }
+  });
 }
 
 /**
@@ -1108,19 +1149,20 @@ export async function submitFormView(
   formData: Record<string, any>,
   revalidateUrl?: string
 ): Promise<Result<{ rowId: string }>> {
-  try {
-    if (!viewId) {
-      return {
-        success: false,
-        error: "View ID is required",
-      };
-    }
+  return withAuthContext(async () => {
+    try {
+      if (!viewId) {
+        return {
+          success: false,
+          error: "View ID is required",
+        };
+      }
 
-    // Need to view the form configuration
-    await requireResourcePermission("view:view", "view", viewId);
-    // Need create permission to create a new row
-    const session = await requirePermission("table:create");
-    const currentOrg = await requireCurrentOrganization();
+      // Need to view the form configuration
+      await requireResourcePermission("view:view", "view", viewId);
+      // Need create permission to create a new row
+      const session = await requirePermission("table:create");
+      const currentOrg = await requireCurrentOrganization();
 
     if (!formData || Object.keys(formData).length === 0) {
       return {
@@ -1298,13 +1340,14 @@ export async function submitFormView(
         rowId: createResult.data.id.value,
       },
     };
-  } catch (error) {
-    console.error("Error submitting form view:", error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to submit form",
-    };
-  }
+    } catch (error) {
+      console.error("Error submitting form view:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to submit form",
+      };
+    }
+  });
 }
 
 /**
@@ -1344,13 +1387,14 @@ export async function updateFormViewConfig(
     redirectUrl?: string;
   }
 ): Promise<Result<ViewDTO>> {
-  try {
-    if (!viewId) {
-      return { success: false, error: "View ID is required" };
-    }
+  return withAuthContext(async () => {
+    try {
+      if (!viewId) {
+        return { success: false, error: "View ID is required" };
+      }
 
-    const session = await requireResourcePermission("view:manage", "view", viewId);
-    const currentOrg = await requireCurrentOrganization();
+      const session = await requireResourcePermission("view:manage", "view", viewId);
+      const currentOrg = await requireCurrentOrganization();
 
     const viewService = getViewApplicationService();
 
@@ -1390,15 +1434,16 @@ export async function updateFormViewConfig(
       }
     );
 
-    return {
-      success: true,
-      data: ViewMapper.toDTO(savedView),
-    };
-  } catch (error) {
-    console.error("Error updating form view config:", error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to update form configuration",
-    };
-  }
+      return {
+        success: true,
+        data: ViewMapper.toDTO(savedView),
+      };
+    } catch (error) {
+      console.error("Error updating form view config:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to update form configuration",
+      };
+    }
+  });
 }
