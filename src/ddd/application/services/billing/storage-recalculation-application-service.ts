@@ -15,6 +15,7 @@ import { OrganizationId } from '@/ddd/domain/shared/value-objects';
 import type { Result } from '@/ddd/domain/shared/result';
 import { ResultHelpers } from '@/ddd/domain/shared/result';
 import { invalidateOrgStorageCache } from '@/ddd/infrastructure/storage/repositories/s3-file-storage-repository';
+import { withSystemContext } from '@/ddd/infrastructure/db/system-context';
 import { createDebugLogger } from '@/lib/utils/debug-logger';
 
 const logger = createDebugLogger('StorageRecalculation');
@@ -215,7 +216,10 @@ export class StorageRecalculationApplicationService {
 
       // Process each organization
       for (const org of allOrganizations) {
-        const result = await this.recalculateOrganizationStorage(org.id.value);
+        // AIDEV-NOTE: Wrap in withSystemContext so findById/update work with RLS
+        const result = await withSystemContext(org.id.value, () =>
+          this.recalculateOrganizationStorage(org.id.value)
+        );
 
         if (result.success && result.data) {
           batchResult.successCount++;
