@@ -15,7 +15,7 @@ ARG VERSION=""
 # tree: Directory visualization
 # socat: Unix socket to TCP bridge for sandbox network proxy
 # iproute2: Loopback interface setup inside sandbox (ip link set lo up)
-# libseccomp-dev: Required for seccomp Python bindings (syscall filtering)
+# libseccomp-dev + python3-seccomp: Syscall filtering (C library + Python bindings)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bubblewrap \
     jq \
@@ -25,6 +25,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     socat \
     iproute2 \
     libseccomp-dev \
+    python3-seccomp \
+    procps \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv for faster Python package installation (pinned version)
@@ -48,6 +50,10 @@ LABEL emery.uv-version="0.5.30"
 
 # Copy the application code
 COPY ./src ./src
+
+# Copy diagnostic script
+COPY ./scripts/diag.sh /usr/local/bin/diag
+RUN chmod +x /usr/local/bin/diag
 
 # Set environment variables
 ENV PYTHONPATH=/usr/src/app/src
