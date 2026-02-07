@@ -149,7 +149,7 @@ export function ConnectionSetupFlow({
             <div className="space-y-1 text-sm text-muted-foreground">
               <div className="flex items-center gap-2">
                 <div className="h-1.5 w-1.5 rounded-full bg-primary" />
-                You'll be redirected to {appInfo.displayName} to authorize access
+                You&apos;ll be redirected to {appInfo.displayName} to authorize access
               </div>
               <div className="flex items-center gap-2">
                 <div className="h-1.5 w-1.5 rounded-full bg-primary" />
@@ -157,7 +157,7 @@ export function ConnectionSetupFlow({
               </div>
               <div className="flex items-center gap-2">
                 <div className="h-1.5 w-1.5 rounded-full bg-primary" />
-                You'll be redirected back here after successful connection
+                You&apos;ll be redirected back here after successful connection
               </div>
             </div>
           </div>

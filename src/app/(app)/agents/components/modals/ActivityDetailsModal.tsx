@@ -136,7 +136,7 @@ export function ActivityDetailsModal({ isOpen, onClose, agent, onUpdate }: Activ
                 <Calendar className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                 <h3 className="text-lg font-medium mb-2">No Tasks Yet</h3>
                 <p className="text-muted-foreground mb-4">
-                  This agent hasn't been assigned any tasks yet
+                  This agent hasn&apos;t been assigned any tasks yet
                 </p>
                 <Button onClick={() => setIsAssignTaskOpen(true)}>
                   <Plus className="h-4 w-4 mr-2" />

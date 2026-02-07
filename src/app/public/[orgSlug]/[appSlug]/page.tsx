@@ -35,7 +35,7 @@ export default async function PublicAppRootPage({ params }: PublicAppRootPagePro
         )}
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
           <p className="text-sm text-yellow-800">
-            This app doesn't have a home page configured yet.
+            This app doesn&apos;t have a home page configured yet.
           </p>
         </div>
         <p className="text-sm text-gray-500">

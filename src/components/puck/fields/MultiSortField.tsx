@@ -212,7 +212,7 @@ export function MultiSortField({ value, onChange, viewId }: MultiSortFieldProps)
 
         {config.conditions.length === 0 ? (
           <div className="text-muted-foreground text-xs p-2 text-center border border-dashed rounded">
-            No sort columns. Click "Add" to add one.
+            No sort columns. Click &quot;Add&quot; to add one.
           </div>
         ) : (
           <div className="space-y-2">
@@ -248,7 +248,7 @@ export function MultiSortField({ value, onChange, viewId }: MultiSortFieldProps)
           <div className="space-y-2 pl-2 border-l-2">
             <div>
               <Label className="text-xs text-muted-foreground">
-                Field (state path, e.g., "filters.sortField")
+                Field (state path, e.g., &quot;filters.sortField&quot;)
               </Label>
               <Input
                 value={config.dynamicField || ''}
@@ -259,7 +259,7 @@ export function MultiSortField({ value, onChange, viewId }: MultiSortFieldProps)
             </div>
             <div>
               <Label className="text-xs text-muted-foreground">
-                Direction (state path, e.g., "filters.sortDirection")
+                Direction (state path, e.g., &quot;filters.sortDirection&quot;)
               </Label>
               <Input
                 value={config.dynamicDirection || ''}

@@ -219,7 +219,7 @@ export function ChatHistoryPanel({
           <div className="p-8 text-center">
             {searchQuery ? (
               <p className="text-sm text-muted-foreground">
-                No chats match "{searchQuery}"
+                No chats match &quot;{searchQuery}&quot;
               </p>
             ) : (
               <div>

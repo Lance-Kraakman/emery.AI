@@ -200,8 +200,8 @@ export function RoleWizard({ open, onOpenChange, onSuccess }: RoleWizardProps) {
             <div className="bg-muted/50 p-4 rounded-lg">
               <h4 className="font-medium text-sm mb-2">💡 Role Naming Tips</h4>
               <ul className="text-sm text-muted-foreground space-y-1">
-                <li>• Use descriptive names like "Content Editor" or "Sales Manager"</li>
-                <li>• Avoid generic names like "User" or "Role1"</li>
+                <li>• Use descriptive names like &quot;Content Editor&quot; or &quot;Sales Manager&quot;</li>
+                <li>• Avoid generic names like &quot;User&quot; or &quot;Role1&quot;</li>
                 <li>• Think about the job function or responsibility level</li>
               </ul>
             </div>

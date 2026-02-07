@@ -771,7 +771,7 @@ export const TemplateInternal: ComponentConfig<TemplateProps> = {
                     className="w-full h-7 text-xs"
                   >
                     {updatingVariant && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
-                    Update "{currentDbTemplate.variants.find((v) => v.id === selectedVariantId)?.name}"
+                    Update &quot;{currentDbTemplate.variants.find((v) => v.id === selectedVariantId)?.name}&quot;
                   </Button>
                 )}
               </div>

@@ -63,6 +63,61 @@ export function FileArtifactViewer({
   const { fileField, viewerType, fileName, fileUrl } = artifact.data
   const theme = useOptionalTheme()
 
+  // All hooks must be called before any conditional returns
+  const [zoom, setZoom] = useState(100)
+  const [rotation, setRotation] = useState(0)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const [textContent, setTextContent] = useState<string | null>(null)
+  const [loadingText, setLoadingText] = useState(false)
+  const contentRef = useRef<HTMLDivElement>(null)
+
+  // Load text content for text files (hook must be before any returns)
+  useEffect(() => {
+    if (viewerType === 'text' && fileUrl && !textContent) {
+      logger.debug('TEXT viewer: fetching content', { fileUrl, viewerType })
+      setLoadingText(true)
+      fetch(fileUrl)
+        .then(response => {
+          logger.debug('TEXT viewer: response received', {
+            status: response.status,
+            ok: response.ok,
+            contentType: response.headers.get('content-type')
+          })
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+          }
+          return response.text()
+        })
+        .then(text => {
+          logger.debug('TEXT viewer: content loaded', { length: text.length, preview: text.substring(0, 100) })
+          setTextContent(text)
+          setLoadingText(false)
+        })
+        .catch(error => {
+          logger.error('TEXT viewer: failed to load content', error)
+          setTextContent(`Failed to load file content: ${error.message}`)
+          setLoadingText(false)
+        })
+    }
+  }, [viewerType, fileUrl, textContent])
+
+  // Handle download (hook must be before any returns)
+  const handleDownload = useCallback(() => {
+    if (!fileUrl) return
+    const link = document.createElement('a')
+    link.href = fileUrl
+    link.download = fileName
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }, [fileUrl, fileName])
+
+  // Handle external open (hook must be before any returns)
+  const handleExternalOpen = useCallback(() => {
+    if (!fileUrl) return
+    window.open(fileUrl, '_blank')
+  }, [fileUrl])
+
   // Debug: Log what data we received
   logger.debug('FileArtifactViewer: opening file', { viewerType, fileName, fileUrl, s3Key: fileField?.s3Key })
 
@@ -121,60 +176,10 @@ export function FileArtifactViewer({
     )
   }
 
-  const [zoom, setZoom] = useState(100)
-  const [rotation, setRotation] = useState(0)
-  const [isFullscreen, setIsFullscreen] = useState(false)
-  const [textContent, setTextContent] = useState<string | null>(null)
-  const [loadingText, setLoadingText] = useState(false)
-  const contentRef = useRef<HTMLDivElement>(null)
-
   // Extract display information
   const displayInfo = getFileDisplayInfo(artifact)
 
-  // Load text content for text files
-  useEffect(() => {
-    if (viewerType === 'text' && fileUrl && !textContent) {
-      logger.debug('TEXT viewer: fetching content', { fileUrl, viewerType })
-      setLoadingText(true)
-      fetch(fileUrl)
-        .then(response => {
-          logger.debug('TEXT viewer: response received', {
-            status: response.status,
-            ok: response.ok,
-            contentType: response.headers.get('content-type')
-          })
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-          }
-          return response.text()
-        })
-        .then(text => {
-          logger.debug('TEXT viewer: content loaded', { length: text.length, preview: text.substring(0, 100) })
-          setTextContent(text)
-          setLoadingText(false)
-        })
-        .catch(error => {
-          logger.error('TEXT viewer: failed to load content', error)
-          setTextContent(`Failed to load file content: ${error.message}`)
-          setLoadingText(false)
-        })
-    }
-  }, [viewerType, fileUrl, textContent])
-
-  // Handle download
-  const handleDownload = useCallback(() => {
-    const link = document.createElement('a')
-    link.href = fileUrl
-    link.download = fileName
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  }, [fileUrl, fileName])
-
-  // Handle external open
-  const handleExternalOpen = useCallback(() => {
-    window.open(fileUrl, '_blank')
-  }, [fileUrl])
+  // Note: useEffect and useCallback hooks moved above early returns to satisfy React hooks rules
 
   // Zoom controls
   const handleZoomIn = () => setZoom(prev => Math.min(prev + 25, 300))

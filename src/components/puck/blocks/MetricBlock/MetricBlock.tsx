@@ -71,6 +71,9 @@ export default function MetricBlock(props: MetricBlockProps) {
     _decimals = 0,
   } = props;
 
+  // Hooks must be called before any conditional returns
+  const theme = useTheme();
+
   console.log('[MetricBlock render] Rendering with props:', {
     hasView: !!viewId,
     viewId,
@@ -144,7 +147,6 @@ export default function MetricBlock(props: MetricBlockProps) {
   const formattedValue = formatValue(_metricValue, _formatType, _decimals);
   const displayLabel = _metricLabel || _viewName || 'Metric';
 
-  const theme = useTheme();
   const paddingStyles = padding ? computeFourSidedCSS(padding, theme, 'padding') : {};
   const radiusStyles = radius ? computeFourCornerRadiusCSS(radius, theme) : {};
 

@@ -472,7 +472,7 @@ export function PublishedAgentsDashboard() {
           <AlertDialogHeader>
             <AlertDialogTitle>Suspend Published Agent</AlertDialogTitle>
             <AlertDialogDescription>
-              This will temporarily disable external access to "{suspendingAgent?.displayName}".
+              This will temporarily disable external access to &quot;{suspendingAgent?.displayName}&quot;.
               External API calls will return 404 until the agent is resumed.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -523,7 +523,7 @@ export function PublishedAgentsDashboard() {
                       API Key Generated Successfully
                     </p>
                     <p className="text-xs text-green-600 dark:text-green-400 mt-1">
-                      Copy this key now. It won't be shown again.
+                      Copy this key now. It won&apos;t be shown again.
                     </p>
                     <div className="mt-2 flex items-center gap-2">
                       <code className="flex-1 text-xs bg-white dark:bg-gray-900 p-2 rounded border font-mono break-all">

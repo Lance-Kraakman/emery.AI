@@ -1092,32 +1092,3 @@ export function useChatGRPC(
   }
 }
 
-/**
- * Hook factory for page-specific chat contexts
- * Creates pre-configured chat hooks for different page types
- */
-export const useChatForPage = {
-  missionControl: () => useChatGRPC({ 
-    domainType: 'general' 
-  }),
-  
-  agents: (agentId?: number) => useChatGRPC({ 
-    domainType: 'agents',
-    domainId: agentId 
-  }),
-  
-  teams: (teamId?: number) => useChatGRPC({ 
-    domainType: 'teams',
-    domainId: teamId 
-  }),
-  
-  data: (tableId?: number) => useChatGRPC({ 
-    domainType: 'tables',
-    domainId: tableId
-  }),
-  
-  organization: () => useChatGRPC({ 
-    domainType: 'organizations'
-  }),
-  
-}

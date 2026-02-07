@@ -1328,7 +1328,7 @@ export function TriggerConfigModal({
                   <div>
                     <h4 className="font-medium">Ready to Save</h4>
                     <p className="text-sm text-muted-foreground mt-1">
-                      Your automation configuration is complete. When triggered, it will create a task with the instructions you've defined.
+                      Your automation configuration is complete. When triggered, it will create a task with the instructions you&apos;ve defined.
                     </p>
                   </div>
                 </div>

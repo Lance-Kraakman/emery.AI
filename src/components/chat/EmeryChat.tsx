@@ -604,14 +604,14 @@ export function EmeryChat() {
     setIsClient(true)
   }, [])
 
+  // Get user info for chat history - hooks must be called before any conditional returns
+  const userId = useMemo(() => session?.user?.id, [session?.user?.id])
+  const organizationId = useMemo(() => session?.user?.currentOrganizationId, [session?.user?.currentOrganizationId])
+
   // Don't render if hidden - return hidden div instead of null to avoid hook rule violations
   if (chatState === 'hidden') {
     return <div className="hidden" />
   }
-
-  // Get user info for chat history
-  const userId = useMemo(() => session?.user?.id, [session?.user?.id])
-  const organizationId = useMemo(() => session?.user?.currentOrganizationId, [session?.user?.currentOrganizationId])
 
   // Don't render if user is not authenticated
   if (!userId || !organizationId) {

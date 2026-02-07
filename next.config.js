@@ -105,6 +105,7 @@ const nextConfig = {
   },
   // Remove X-Powered-By header
   poweredByHeader: false,
+
 }
 
 module.exports = nextConfig

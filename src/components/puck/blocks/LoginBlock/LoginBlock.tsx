@@ -149,7 +149,7 @@ export function LoginBlock({
           className="text-2xl font-bold"
           style={{ color: textColor || 'var(--theme-text, #1e293b)' }}
         >
-          You're signed in
+          You&apos;re signed in
         </h2>
         <p style={{ color: 'var(--theme-text-muted, #64748b)' }}>
           Welcome back, {user.name || user.email}!
@@ -282,7 +282,7 @@ export function LoginBlock({
             >
               {currentView === 'sign_in' ? (
                 <>
-                  Don't have an account?{' '}
+                  Don&apos;t have an account?{' '}
                   <button
                     type="button"
                     onClick={() => setCurrentView('sign_up')}

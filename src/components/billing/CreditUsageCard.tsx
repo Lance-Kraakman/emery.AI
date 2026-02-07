@@ -77,7 +77,7 @@ export function CreditUsageCard({ usage, tierName, showOverage = true, hidePerio
           <Alert variant="default" className="border-yellow-500 bg-yellow-50 dark:bg-yellow-950">
             <AlertCircle className="h-4 w-4 text-yellow-600" />
             <AlertDescription className="text-yellow-800 dark:text-yellow-200">
-              You've used {percentageUsed}% of your monthly credits. Consider upgrading to avoid overage charges.
+              You&apos;ve used {percentageUsed}% of your monthly credits. Consider upgrading to avoid overage charges.
             </AlertDescription>
           </Alert>
         )}
@@ -109,7 +109,7 @@ export function CreditUsageCard({ usage, tierName, showOverage = true, hidePerio
             <Alert variant="destructive" className="mt-2">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                You're using credits beyond your monthly allowance. Overage charges will appear on your next invoice.
+                You&apos;re using credits beyond your monthly allowance. Overage charges will appear on your next invoice.
               </AlertDescription>
             </Alert>
           </div>

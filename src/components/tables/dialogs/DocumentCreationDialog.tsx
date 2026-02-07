@@ -97,7 +97,7 @@ export function DocumentCreationDialog({
             Create New Document
           </DialogTitle>
           <DialogDescription>
-            Create a new document in the "{field.name}" field.
+            Create a new document in the &quot;{field.name}&quot; field.
           </DialogDescription>
         </DialogHeader>
         

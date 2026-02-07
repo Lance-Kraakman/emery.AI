@@ -182,7 +182,7 @@ export function ViewsSection({ views, loading, onViewsChange }: ViewsSectionProp
           <AlertDialogHeader>
             <AlertDialogTitle>Delete View</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete "{deletingView?.name}"? This action cannot be undone.
+              Are you sure you want to delete &quot;{deletingView?.name}&quot;? This action cannot be undone.
               Any TableBlock components using this view may stop working.
             </AlertDialogDescription>
           </AlertDialogHeader>

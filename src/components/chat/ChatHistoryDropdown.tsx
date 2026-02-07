@@ -165,7 +165,7 @@ function ChatItem({ session, isActive, onClick, onArchive, onSettings }: ChatIte
           <AlertDialogHeader>
             <AlertDialogTitle>Delete chat?</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete "{session.title}"? This action cannot be undone.
+              Are you sure you want to delete &quot;{session.title}&quot;? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -276,7 +276,7 @@ function ChatSettingsDialog({
           <div className="space-y-2">
             <label className="text-sm font-medium">AI Model</label>
             <p className="text-xs text-muted-foreground mb-2">
-              Select a model for this chat. Leave as "Inherit" to use the organization default.
+              Select a model for this chat. Leave as &quot;Inherit&quot; to use the organization default.
             </p>
             <ModelSelector
               value={model}
@@ -474,7 +474,7 @@ export function ChatHistoryDropdown({
               <div className="p-6 text-center">
                 {searchQuery ? (
                   <p className="text-sm text-muted-foreground">
-                    No chats match "{searchQuery}"
+                    No chats match &quot;{searchQuery}&quot;
                   </p>
                 ) : (
                   <div className="space-y-3">

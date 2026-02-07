@@ -84,6 +84,97 @@ interface PermissionGuardProps {
  * </PermissionGuard>
  * ```
  */
+// Internal components to handle each permission type separately (hooks rules compliant)
+function SinglePermissionGuard({
+  permission,
+  children,
+  fallback,
+  loadingComponent
+}: {
+  permission: string
+  children: React.ReactNode
+  fallback: React.ReactNode
+  loadingComponent: React.ReactNode
+}) {
+  const { hasPermission, isLoading } = usePermission(permission)
+
+  if (isLoading) return <>{loadingComponent}</>
+  if (!hasPermission) return <>{fallback}</>
+  return <>{children}</>
+}
+
+function MultiPermissionGuard({
+  permissions,
+  children,
+  fallback,
+  loadingComponent,
+  requireAll
+}: {
+  permissions: string[]
+  children: React.ReactNode
+  fallback: React.ReactNode
+  loadingComponent: React.ReactNode
+  requireAll: boolean
+}) {
+  const { permissions: permResults, isLoading } = usePermissions(permissions)
+
+  if (isLoading) return <>{loadingComponent}</>
+
+  const hasRequiredPerms = requireAll
+    ? permissions.every((perm: string) => permResults[perm])
+    : permissions.some((perm: string) => permResults[perm])
+
+  if (!hasRequiredPerms) return <>{fallback}</>
+  return <>{children}</>
+}
+
+function SingleResourcePermissionGuard({
+  resourcePermission,
+  children,
+  fallback,
+  loadingComponent
+}: {
+  resourcePermission: { permission: string; resourceType: string; resourceId?: number }
+  children: React.ReactNode
+  fallback: React.ReactNode
+  loadingComponent: React.ReactNode
+}) {
+  const { hasPermission, isLoading } = useResourcePermission(
+    resourcePermission.permission,
+    resourcePermission.resourceType,
+    resourcePermission.resourceId
+  )
+
+  if (isLoading) return <>{loadingComponent}</>
+  if (!hasPermission) return <>{fallback}</>
+  return <>{children}</>
+}
+
+function MultiResourcePermissionGuard({
+  resourcePermissions,
+  children,
+  fallback,
+  loadingComponent,
+  requireAll
+}: {
+  resourcePermissions: ResourcePermissionCheck[]
+  children: React.ReactNode
+  fallback: React.ReactNode
+  loadingComponent: React.ReactNode
+  requireAll: boolean
+}) {
+  const { permissions: permResults, isLoading } = useResourcePermissions(resourcePermissions)
+
+  if (isLoading) return <>{loadingComponent}</>
+
+  const hasRequiredPerms = requireAll
+    ? permResults.every((perm: boolean) => perm)
+    : permResults.some((perm: boolean) => perm)
+
+  if (!hasRequiredPerms) return <>{fallback}</>
+  return <>{children}</>
+}
+
 export function PermissionGuard({
   permission,
   permissions,
@@ -94,76 +185,55 @@ export function PermissionGuard({
   loadingComponent = <Loading text="Checking permissions..." />,
   requireAll = true
 }: PermissionGuardProps) {
-  // Single permission check
+  // Route to the appropriate internal component based on which prop is provided
   if (permission) {
-    const { hasPermission, isLoading } = usePermission(permission)
-    
-    if (isLoading) {
-      return <>{loadingComponent}</>
-    }
-    
-    if (!hasPermission) {
-      return <>{fallback}</>
-    }
-    
-    return <>{children}</>
-  }
-
-  // Multiple permissions check
-  if (permissions && permissions.length > 0) {
-    const { permissions: permResults, isLoading } = usePermissions(permissions)
-    
-    if (isLoading) {
-      return <>{loadingComponent}</>
-    }
-    
-    const hasRequiredPerms = requireAll
-      ? permissions.every((perm: string) => permResults[perm])
-      : permissions.some((perm: string) => permResults[perm])
-    
-    if (!hasRequiredPerms) {
-      return <>{fallback}</>
-    }
-    
-    return <>{children}</>
-  }
-
-  // Single resource permission check
-  if (resourcePermission) {
-    const { hasPermission, isLoading } = useResourcePermission(
-      resourcePermission.permission,
-      resourcePermission.resourceType,
-      resourcePermission.resourceId
+    return (
+      <SinglePermissionGuard
+        permission={permission}
+        fallback={fallback}
+        loadingComponent={loadingComponent}
+      >
+        {children}
+      </SinglePermissionGuard>
     )
-    
-    if (isLoading) {
-      return <>{loadingComponent}</>
-    }
-    
-    if (!hasPermission) {
-      return <>{fallback}</>
-    }
-    
-    return <>{children}</>
   }
 
-  // Multiple resource permissions check
+  if (permissions && permissions.length > 0) {
+    return (
+      <MultiPermissionGuard
+        permissions={permissions}
+        fallback={fallback}
+        loadingComponent={loadingComponent}
+        requireAll={requireAll}
+      >
+        {children}
+      </MultiPermissionGuard>
+    )
+  }
+
+  if (resourcePermission) {
+    return (
+      <SingleResourcePermissionGuard
+        resourcePermission={resourcePermission}
+        fallback={fallback}
+        loadingComponent={loadingComponent}
+      >
+        {children}
+      </SingleResourcePermissionGuard>
+    )
+  }
+
   if (resourcePermissions && resourcePermissions.length > 0) {
-    const { permissions: permResults, isLoading } = useResourcePermissions(resourcePermissions)
-    
-    if (isLoading) {
-      return <>{loadingComponent}</>
-    }
-    
-    const hasRequiredPerms = requireAll
-      ? permResults.every((perm: boolean) => perm)
-      : permResults.some((perm: boolean) => perm)
-    
-    if (!hasRequiredPerms) {
-      return <>{fallback}</>
-    }
-    
-    return <>{children}</>
+    return (
+      <MultiResourcePermissionGuard
+        resourcePermissions={resourcePermissions}
+        fallback={fallback}
+        loadingComponent={loadingComponent}
+        requireAll={requireAll}
+      >
+        {children}
+      </MultiResourcePermissionGuard>
+    )
   }
 
   // No permission checks specified, render children

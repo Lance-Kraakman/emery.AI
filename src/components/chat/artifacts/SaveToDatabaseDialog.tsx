@@ -189,7 +189,7 @@ export function SaveToDatabaseDialog({
             Save to Database
           </DialogTitle>
           <DialogDescription>
-            Save "{fileName}" to a table in your database.
+            Save &quot;{fileName}&quot; to a table in your database.
           </DialogDescription>
         </DialogHeader>
 

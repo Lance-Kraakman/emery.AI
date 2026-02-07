@@ -13,7 +13,7 @@ export type SectionProps = {
 };
 
 export const Section = forwardRef<HTMLDivElement, SectionProps>(
-  ({ children, className, maxWidth = "1280px", style = {}, raw = false }, ref) => {
+  function Section({ children, className, maxWidth = "1280px", style = {}, raw = false }, ref) {
     if (raw) {
       return (
         <div

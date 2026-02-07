@@ -284,7 +284,7 @@ export function PagesSection({ appId, pages, loading, homePageId, onPagesChange 
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete the page "{deletingPage?.name}".
+              This will permanently delete the page &quot;{deletingPage?.name}&quot;.
               This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>

@@ -588,7 +588,7 @@ export function PublishAgentWizard({
             <div>
               <SheetTitle>Publish Agent</SheetTitle>
               <SheetDescription>
-                Make "{agentName}" available via external API
+                Make &quot;{agentName}&quot; available via external API
               </SheetDescription>
             </div>
           </div>

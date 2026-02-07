@@ -322,7 +322,7 @@ export function RolesTab() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Role</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete the role "{deletingRole?.name}"? 
+              Are you sure you want to delete the role &quot;{deletingRole?.name}&quot;? 
               This action cannot be undone.
               {deletingRole?.userCount !== undefined && deletingRole.userCount > 0 && (
                 <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-yellow-800">

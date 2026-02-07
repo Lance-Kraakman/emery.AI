@@ -118,7 +118,7 @@ export function CascadeDeleteDialog({
             <div className="space-y-3 text-sm">
               <p>
                 This will permanently delete the {entityTypeLabels[entityType].toLowerCase()}{' '}
-                <span className="font-medium text-foreground">"{entityName}"</span>
+                <span className="font-medium text-foreground">&quot;{entityName}&quot;</span>
                 {hasChildItems && ' and all its contents'}.
               </p>
 
