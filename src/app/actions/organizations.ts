@@ -130,6 +130,52 @@ export async function saveOrgChartCanvasMetadata(
 }
 
 /**
+ * Get organization settings for the current organization
+ * Used by settings/system/page.tsx Server Component
+ */
+export interface OrganizationSettingsDTO {
+  id: number;
+  plan: string | null;
+  defaultModel: string | null;
+  availableModels: string[];
+}
+
+export async function getOrganizationSettings(): Promise<Result<OrganizationSettingsDTO>> {
+  return withAuthContext(async () => {
+    try {
+      const session = await auth();
+      if (!session?.user?.currentOrganizationId) {
+        return { success: false, error: "Not authenticated" };
+      }
+
+      const organizationId = session.user.currentOrganizationId;
+      const orgRepo = getOrganizationRepository();
+
+      const org = await orgRepo.findById(OrganizationId.fromNumber(organizationId));
+      if (!org) {
+        return { success: false, error: "Organization not found" };
+      }
+
+      return {
+        success: true,
+        data: {
+          id: org.id.value,
+          plan: org.plan || null,
+          defaultModel: org.defaultModel || null,
+          availableModels: org.availableModels || [],
+        }
+      };
+    } catch (error) {
+      console.error("Failed to get organization settings:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to get organization settings"
+      };
+    }
+  });
+}
+
+/**
  * Get org chart canvas metadata from organization.viewConfig
  */
 export async function getOrgChartCanvasMetadata(): Promise<Result<OrgChartCanvasMetadata | null>> {

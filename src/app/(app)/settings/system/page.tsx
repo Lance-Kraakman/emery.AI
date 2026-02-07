@@ -3,8 +3,7 @@ import { Metadata } from 'next';
 import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import { SystemSettingsClient } from './SystemSettingsClient';
-import { getOrganizationRepository } from '@/ddd/application/di/getters';
-import { OrganizationId } from '@/ddd/domain/shared/value-objects';
+import { getOrganizationSettings } from '@/app/actions/organizations';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export const metadata: Metadata = {
@@ -19,15 +18,14 @@ export default async function SystemSettingsPage() {
     redirect('/login');
   }
 
-  // Fetch organization data
-  const orgRepo = getOrganizationRepository();
-  const organization = await orgRepo.findById(
-    OrganizationId.fromNumber(session.user.currentOrganizationId)
-  );
+  // Fetch organization data via server action (has RLS context)
+  const orgResult = await getOrganizationSettings();
 
-  if (!organization) {
+  if (!orgResult.success || !orgResult.data) {
     redirect('/login');
   }
+
+  const organization = orgResult.data;
 
   return (
     <div className="container mx-auto py-4 px-4">
@@ -44,7 +42,7 @@ export default async function SystemSettingsPage() {
         <Suspense fallback={<SystemSettingsSkeleton />}>
           <SystemSettingsClient
             organizationId={session.user.currentOrganizationId}
-            organizationTier={organization.plan || 'free'}
+            organizationTier={(organization.plan || 'free') as 'free' | 'pro' | 'max' | 'enterprise'}
             currentModel={organization.defaultModel || null}
             availableModels={organization.availableModels || []}
           />

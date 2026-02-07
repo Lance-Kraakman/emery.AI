@@ -12,6 +12,8 @@
 
 import { NextRequest } from 'next/server';
 import { authenticateRequest, type AuthResult } from '@/lib/auth/test-auth';
+import { contextManager } from '@/ddd/application/di/container';
+import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 
 // ============================================================================
 // Response Types
@@ -98,16 +100,30 @@ export async function withAuthenticatedRoute<T>(
       );
     }
 
-    // Execute handler with authenticated user
-    const result = await handler(authResult.user);
-
-    // Return error response if handler failed
-    if (!result.success) {
-      return Response.json(result, { status: result.status || 400 });
+    // Set RLS context for all DI service calls
+    // AIDEV-NOTE: This enables contextAwareDb proxy to apply RLS to all queries
+    if (authResult.user.organizationId) {
+      contextManager.setContext(
+        OrganizationId.fromNumber(authResult.user.organizationId),
+        UserId.fromString(authResult.user.id)
+      );
     }
 
-    // Return success response
-    return Response.json(result, { status: 200 });
+    try {
+      // Execute handler with authenticated user
+      const result = await handler(authResult.user);
+
+      // Return error response if handler failed
+      if (!result.success) {
+        return Response.json(result, { status: result.status || 400 });
+      }
+
+      // Return success response
+      return Response.json(result, { status: 200 });
+    } finally {
+      // Clear context after request to prevent leakage
+      contextManager.clearContext();
+    }
 
   } catch (error) {
     return handleApiError(error);

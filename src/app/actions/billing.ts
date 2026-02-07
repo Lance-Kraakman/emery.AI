@@ -398,3 +398,60 @@ export async function setSpendingLimit(limitUsd: number | null): Promise<Spendin
     }
   });
 }
+
+/**
+ * Storage usage result type - re-exports StorageUsageBreakdown for type compatibility
+ */
+import type { StorageUsageBreakdown } from '@/ddd/application/services/billing/storage-quota-application-service';
+
+export type { StorageUsageBreakdown };
+
+export interface StorageUsageResult {
+  success: boolean;
+  data?: StorageUsageBreakdown;
+  error?: string;
+}
+
+/**
+ * Get storage usage breakdown for current organization
+ * Used by billing settings page
+ */
+export async function getStorageUsageBreakdown(): Promise<StorageUsageResult> {
+  return withAuthContext(async () => {
+    try {
+      const session = await auth();
+      if (!session?.user?.id) {
+        return { success: false, error: 'Unauthorized' };
+      }
+
+      const orgId = session.user.currentOrganizationId;
+      if (!orgId) {
+        return { success: false, error: 'No organization selected' };
+      }
+
+      // Get storage quota service through DI
+      const { getStorageQuotaApplicationService } = await import('@/ddd/application/di/container');
+      const storageService = getStorageQuotaApplicationService();
+
+      const result = await storageService.getUsageBreakdown(orgId);
+
+      if (!result.success || !result.data) {
+        return {
+          success: false,
+          error: result.error || 'Failed to get storage usage',
+        };
+      }
+
+      return {
+        success: true,
+        data: result.data,
+      };
+    } catch (error) {
+      console.error('Error getting storage usage:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get storage usage',
+      };
+    }
+  });
+}

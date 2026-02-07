@@ -634,6 +634,46 @@ export async function updateAppTheme(
   });
 }
 
+// Types for sidebar data
+export interface SidebarApp {
+  id: number
+  name: string
+  slug: string
+  pages: { id: number; name: string; slug: string; appId: number }[]
+}
+
+/**
+ * Get apps with pages for sidebar display
+ * Used by layout.tsx to fetch sidebar data with proper RLS context
+ */
+export async function getSidebarApps(): Promise<SidebarApp[]> {
+  return withAuthContext(async () => {
+    try {
+      const session = await auth();
+      if (!session?.user?.currentOrganizationId) return [];
+
+      const orgId = OrganizationId.fromNumber(session.user.currentOrganizationId);
+      const appService = getAppApplicationService();
+      const appsWithPages = await appService.getAppsWithPagesForOrganization(orgId);
+
+      return appsWithPages.map(app => ({
+        id: app.id,
+        name: app.name,
+        slug: app.slug,
+        pages: app.pages.map(page => ({
+          id: page.id,
+          name: page.name,
+          slug: page.slug,
+          appId: app.id
+        }))
+      }));
+    } catch (error) {
+      console.error('[getSidebarApps] Error:', error);
+      return [];
+    }
+  });
+}
+
 /**
  * Set the home page for an app
  */

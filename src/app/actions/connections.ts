@@ -1,9 +1,10 @@
 'use server'
 
-// AIDEV-NOTE: Connection Server Actions - DDD-based replacement for app/actions/pipedream.ts  
+// AIDEV-NOTE: Connection Server Actions - DDD-based replacement for app/actions/pipedream.ts
 // Provides same interface for frontend components but uses new DDD architecture
 
 import { requireAuth } from "./permissions";
+import { withAuthContext } from '@/lib/auth/with-context';
 import { getConnectionApplicationService, getAuditApplicationService } from "@/ddd/application/di/container";
 import { UserId, OrganizationId } from "@/ddd/domain/shared/value-objects";
 import { AppName, ConnectionId, createDefaultPaginationOptions } from "@/ddd/domain/connections/value-objects";
@@ -25,9 +26,10 @@ export async function getUserOAuthConnectionsPaginated(options?: {
   nextCursor?: string;
   hasMore: boolean;
 }>> {
-  try {
-    const session = await requireAuth();
-    const connectionService = getConnectionApplicationService();
+  return withAuthContext(async () => {
+    try {
+      const session = await requireAuth();
+      const connectionService = getConnectionApplicationService();
 
     const limit = options?.limit || 50;
     const cursor = options?.cursor;
@@ -60,16 +62,17 @@ export async function getUserOAuthConnectionsPaginated(options?: {
       console.error(`[ConnectionActions] Failed to get paginated connections:`, result.error);
       return { success: false, error: result.error };
     }
-  } catch (error: unknown) {
-    console.error('[ConnectionActions] Error getting paginated Connections:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return {
-      success: false,
-      error: errorMessage.includes('Authentication required')
-        ? 'Authentication required'
-        : 'Failed to fetch connections'
-    };
-  }
+    } catch (error: unknown) {
+      console.error('[ConnectionActions] Error getting paginated Connections:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return {
+        success: false,
+        error: errorMessage.includes('Authentication required')
+          ? 'Authentication required'
+          : 'Failed to fetch connections'
+      };
+    }
+  });
 }
 
 /**
@@ -78,9 +81,10 @@ export async function getUserOAuthConnectionsPaginated(options?: {
  * @deprecated Use getUserOAuthConnectionsPaginated for better performance with large lists
  */
 export async function getUserOAuthConnections(): Promise<Result<ConnectionDTO[]>> {
-  try {
-    const session = await requireAuth();
-    const connectionService = getConnectionApplicationService();
+  return withAuthContext(async () => {
+    try {
+      const session = await requireAuth();
+      const connectionService = getConnectionApplicationService();
     
     console.log(`[ConnectionActions] Getting Connections for user ${session.user.id}`);
     
@@ -107,16 +111,17 @@ export async function getUserOAuthConnections(): Promise<Result<ConnectionDTO[]>
       console.error(`[ConnectionActions] Failed to get connections:`, result.error);
       return { success: false, error: result.error };
     }
-  } catch (error: unknown) {
-    console.error('[ConnectionActions] Error getting user Connections:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return { 
-      success: false, 
-      error: errorMessage.includes('Authentication required') 
-        ? 'Authentication required' 
-        : 'Failed to fetch connections'
-    };
-  }
+    } catch (error: unknown) {
+      console.error('[ConnectionActions] Error getting user Connections:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return {
+        success: false,
+        error: errorMessage.includes('Authentication required')
+          ? 'Authentication required'
+          : 'Failed to fetch connections'
+      };
+    }
+  });
 }
 
 /**
@@ -134,9 +139,10 @@ export async function getAppConnectionUrl(data: {
   existingConnection?: boolean;
   warningMessage?: string;
 }>> {
-  try {
-    const session = await requireAuth();
-    const connectionService = getConnectionApplicationService();
+  return withAuthContext(async () => {
+    try {
+      const session = await requireAuth();
+      const connectionService = getConnectionApplicationService();
 
     console.log(`[ConnectionActions] Generating connection URL for app ${data.appName}`, {
       forceNew: data.forceNew,
@@ -178,14 +184,15 @@ export async function getAppConnectionUrl(data: {
       console.error(`[ConnectionActions] Failed to generate URL for ${data.appName}:`, result.error);
     }
 
-    return result;
-  } catch (error) {
-    console.error('[ConnectionActions] Error generating connection URL:', error);
-    return {
-      success: false,
-      error: 'Failed to generate connection URL'
-    };
-  }
+      return result;
+    } catch (error) {
+      console.error('[ConnectionActions] Error generating connection URL:', error);
+      return {
+        success: false,
+        error: 'Failed to generate connection URL'
+      };
+    }
+  });
 }
 
 /**
@@ -195,9 +202,10 @@ export async function getAppConnectionUrl(data: {
 export async function disconnectOAuthAccount(data: {
   accountId: string;
 }): Promise<Result> {
-  try {
-    const session = await requireAuth();
-    const connectionService = getConnectionApplicationService();
+  return withAuthContext(async () => {
+    try {
+      const session = await requireAuth();
+      const connectionService = getConnectionApplicationService();
     
     console.log(`[ConnectionActions] Disconnecting account ${data.accountId} for user ${session.user.id}`);
     
@@ -240,14 +248,15 @@ export async function disconnectOAuthAccount(data: {
       console.error(`[ConnectionActions] Failed to disconnect ${data.accountId}:`, result.error);
     }
 
-    return result;
-  } catch (error) {
-    console.error('[ConnectionActions] Error disconnecting OAuth account:', error);
-    return {
-      success: false,
-      error: 'Failed to disconnect account'
-    };
-  }
+      return result;
+    } catch (error) {
+      console.error('[ConnectionActions] Error disconnecting OAuth account:', error);
+      return {
+        success: false,
+        error: 'Failed to disconnect account'
+      };
+    }
+  });
 }
 
 /**
@@ -255,9 +264,10 @@ export async function disconnectOAuthAccount(data: {
  * Useful for validating agent capabilities before execution
  */
 export async function checkRequiredConnections(requiredApps: string[]): Promise<Result<string[]>> {
-  try {
-    const session = await requireAuth();
-    const connectionService = getConnectionApplicationService();
+  return withAuthContext(async () => {
+    try {
+      const session = await requireAuth();
+      const connectionService = getConnectionApplicationService();
     
     console.log(`[ConnectionActions] Checking required connections for user ${session.user.id}:`, requiredApps);
     
@@ -269,17 +279,18 @@ export async function checkRequiredConnections(requiredApps: string[]): Promise<
     const missingAppNames = missing.map(app => app.value);
     console.log(`[ConnectionActions] Missing connections: ${missingAppNames.join(', ') || 'none'}`);
     
-    return { 
-      success: true, 
-      data: missingAppNames
-    };
-  } catch (error) {
-    console.error('[ConnectionActions] Error checking required connections:', error);
-    return { 
-      success: false, 
-      error: 'Failed to check connections' 
-    };
-  }
+      return {
+        success: true,
+        data: missingAppNames
+      };
+    } catch (error) {
+      console.error('[ConnectionActions] Error checking required connections:', error);
+      return {
+        success: false,
+        error: 'Failed to check connections'
+      };
+    }
+  });
 }
 
 /**
@@ -292,26 +303,28 @@ export async function getConnectionSummary(): Promise<Result<{
   errorConnections: number;
   connectedApps: string[];
 }>> {
-  try {
-    const session = await requireAuth();
-    const connectionService = getConnectionApplicationService();
+  return withAuthContext(async () => {
+    try {
+      const session = await requireAuth();
+      const connectionService = getConnectionApplicationService();
 
-    const result = await connectionService.getConnectionSummary(
-      UserId.fromString(session.user.id)
-    );
+      const result = await connectionService.getConnectionSummary(
+        UserId.fromString(session.user.id)
+      );
 
-    if (result.success && result.data) {
-      console.log(`[ConnectionActions] Connection summary: ${result.data.activeConnections}/${result.data.totalConnections} active`);
+      if (result.success && result.data) {
+        console.log(`[ConnectionActions] Connection summary: ${result.data.activeConnections}/${result.data.totalConnections} active`);
+      }
+
+      return result;
+    } catch (error) {
+      console.error('[ConnectionActions] Error getting connection summary:', error);
+      return {
+        success: false,
+        error: 'Failed to get connection summary'
+      };
     }
-
-    return result;
-  } catch (error) {
-    console.error('[ConnectionActions] Error getting connection summary:', error);
-    return {
-      success: false,
-      error: 'Failed to get connection summary'
-    };
-  }
+  });
 }
 
 /**
@@ -323,9 +336,10 @@ export async function getUserConnectionsWithDuplicates(): Promise<Result<{
   duplicateCount: number;
   duplicateGroups: Array<{ key: string; count: number; connections: ConnectionDTO[] }>;
 }>> {
-  try {
-    const session = await requireAuth();
-    const connectionService = getConnectionApplicationService();
+  return withAuthContext(async () => {
+    try {
+      const session = await requireAuth();
+      const connectionService = getConnectionApplicationService();
 
     console.log(`[ConnectionActions] Getting all connections with duplicates for user ${session.user.id}`);
 
@@ -351,18 +365,19 @@ export async function getUserConnectionsWithDuplicates(): Promise<Result<{
           duplicateGroups: duplicateGroupDTOs
         }
       };
-    } else {
-      console.error(`[ConnectionActions] Failed to get connections with duplicates:`, result.error);
-      return { success: false, error: result.error };
+      } else {
+        console.error(`[ConnectionActions] Failed to get connections with duplicates:`, result.error);
+        return { success: false, error: result.error };
+      }
+    } catch (error: unknown) {
+      console.error('[ConnectionActions] Error getting connections with duplicates:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return {
+        success: false,
+        error: `Failed to fetch connections with duplicates: ${errorMessage}`
+      };
     }
-  } catch (error: unknown) {
-    console.error('[ConnectionActions] Error getting connections with duplicates:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return {
-      success: false,
-      error: `Failed to fetch connections with duplicates: ${errorMessage}`
-    };
-  }
+  });
 }
 
 /**
@@ -370,23 +385,25 @@ export async function getUserConnectionsWithDuplicates(): Promise<Result<{
  * Returns boolean indicating if user has active connection for the app
  */
 export async function canUseApp(appName: string): Promise<Result<boolean>> {
-  try {
-    const session = await requireAuth();
-    const connectionService = getConnectionApplicationService();
+  return withAuthContext(async () => {
+    try {
+      const session = await requireAuth();
+      const connectionService = getConnectionApplicationService();
 
-    console.log(`[ConnectionActions] Checking if user ${session.user.id} can use app '${appName}'`);
+      console.log(`[ConnectionActions] Checking if user ${session.user.id} can use app '${appName}'`);
 
-    const canUse = await connectionService.canUseApp(
-      UserId.fromString(session.user.id),
-      AppName.fromString(appName)
-    );
+      const canUse = await connectionService.canUseApp(
+        UserId.fromString(session.user.id),
+        AppName.fromString(appName)
+      );
 
-    console.log(`[ConnectionActions] canUseApp result for '${appName}': ${canUse}`);
-    return { success: true, data: canUse };
-  } catch (error) {
-    console.error(`[ConnectionActions] Error checking app availability for ${appName}:`, error);
-    return { success: false, error: 'Failed to check app availability' };
-  }
+      console.log(`[ConnectionActions] canUseApp result for '${appName}': ${canUse}`);
+      return { success: true, data: canUse };
+    } catch (error) {
+      console.error(`[ConnectionActions] Error checking app availability for ${appName}:`, error);
+      return { success: false, error: 'Failed to check app availability' };
+    }
+  });
 }
 
 // AIDEV-NOTE: Extended connection actions for UI connection status components
@@ -400,10 +417,11 @@ export async function getUnifiedConnectionStatus(appName: string): Promise<Resul
   rawConnection: ConnectionDTO | null;
   connectionDetails: string;
 }>> {
-  try {
-    const session = await requireAuth();
-    const userId = UserId.fromString(session.user.id);
-    const connectionService = getConnectionApplicationService();
+  return withAuthContext(async () => {
+    try {
+      const session = await requireAuth();
+      const userId = UserId.fromString(session.user.id);
+      const connectionService = getConnectionApplicationService();
 
     console.log(`[UnifiedConnectionStatus] Checking ${appName} for user ${session.user.id}`);
 
@@ -423,23 +441,24 @@ export async function getUnifiedConnectionStatus(appName: string): Promise<Resul
     console.log(`  - canUseApp result: ${canUse}`);
     console.log(`  - Connection match: ${!!connectionDTO}`);
 
-    return {
-      success: true,
-      data: {
-        isConnected: canUse,
-        rawConnection: connectionDTO,
-        connectionDetails: matchingConnection
-          ? `${matchingConnection.accountName} (${matchingConnection.status})`
-          : 'No connection'
-      }
-    };
-  } catch (error) {
-    console.error(`[UnifiedConnectionStatus] Error checking ${appName}:`, error);
-    return {
-      success: false,
-      error: `Failed to check connection status for ${appName}`
-    };
-  }
+      return {
+        success: true,
+        data: {
+          isConnected: canUse,
+          rawConnection: connectionDTO,
+          connectionDetails: matchingConnection
+            ? `${matchingConnection.accountName} (${matchingConnection.status})`
+            : 'No connection'
+        }
+      };
+    } catch (error) {
+      console.error(`[UnifiedConnectionStatus] Error checking ${appName}:`, error);
+      return {
+        success: false,
+        error: `Failed to check connection status for ${appName}`
+      };
+    }
+  });
 }
 
 /**
@@ -535,9 +554,10 @@ export async function getToolConnectionStatus(
   tools: any[], // ToolConfig[]
   ownerId?: string
 ): Promise<Result<ToolConnectionStatus[]>> {
-  try {
-    const session = await requireAuth();
-    const connectionService = getConnectionApplicationService();
+  return withAuthContext(async () => {
+    try {
+      const session = await requireAuth();
+      const connectionService = getConnectionApplicationService();
 
     const userId = ownerId ? UserId.fromString(ownerId) : UserId.fromString(session.user.id);
     const toolStatuses: ToolConnectionStatus[] = [];
@@ -608,30 +628,32 @@ export async function getToolConnectionStatus(
       });
     }
 
-    return {
-      success: true,
-      data: toolStatuses
-    };
-  } catch (error) {
-    console.error('Error getting tool connection status:', error);
-    return {
-      success: false,
-      error: 'Failed to get connection status'
-    };
-  }
+      return {
+        success: true,
+        data: toolStatuses
+      };
+    } catch (error) {
+      console.error('Error getting tool connection status:', error);
+      return {
+        success: false,
+        error: 'Failed to get connection status'
+      };
+    }
+  });
 }
 
 /**
  * Get agents owned by user that need connections
  */
 export async function getAgentsNeedingConnections(): Promise<Result<AgentConnectionSummary[]>> {
-  try {
-    const session = await requireAuth();
+  return withAuthContext(async () => {
+    try {
+      const session = await requireAuth();
 
-    // Import agent services
-    const { getAgentApplicationService } = await import('@/ddd/application/di/container');
-    const agentService = getAgentApplicationService();
-    const connectionService = getConnectionApplicationService();
+      // Import agent services
+      const { getAgentApplicationService } = await import('@/ddd/application/di/container');
+      const agentService = getAgentApplicationService();
+      const connectionService = getConnectionApplicationService();
 
     const userId = UserId.fromString(session.user.id);
 
@@ -646,17 +668,18 @@ export async function getAgentsNeedingConnections(): Promise<Result<AgentConnect
     // should be done at user/organization level, not agent level
     const agentSummaries: AgentConnectionSummary[] = [];
 
-    return {
-      success: true,
-      data: agentSummaries
-    };
-  } catch (error) {
-    console.error('Error getting agents needing connections:', error);
-    return {
-      success: false,
-      error: 'Failed to get agent connection status'
-    };
-  }
+      return {
+        success: true,
+        data: agentSummaries
+      };
+    } catch (error) {
+      console.error('Error getting agents needing connections:', error);
+      return {
+        success: false,
+        error: 'Failed to get agent connection status'
+      };
+    }
+  });
 }
 
 /**
@@ -719,41 +742,43 @@ export async function getConnectionSetupUrl(
 export async function validateAgentConnections(
   agentId: number
 ): Promise<Result<ConnectionValidationResult>> {
-  try {
-    const session = await requireAuth();
+  return withAuthContext(async () => {
+    try {
+      const session = await requireAuth();
 
-    const { getAgentApplicationService } = await import('@/ddd/application/di/container');
-    const agentService = getAgentApplicationService();
+      const { getAgentApplicationService } = await import('@/ddd/application/di/container');
+      const agentService = getAgentApplicationService();
 
-    // Get agent details
-    const agent = await agentService.getAgent({ value: agentId } as any);
+      // Get agent details
+      const agent = await agentService.getAgent({ value: agentId } as any);
 
-    if (!agent) {
+      if (!agent) {
+        return {
+          success: false,
+          error: 'Agent not found'
+        };
+      }
+
+      // AIDEV-NOTE: Agents no longer have tools at agent-level
+      // Tools are defined per-task (in skills and schedules)
+      // Always return valid since connection validation is per-task now
+      return {
+        success: true,
+        data: {
+          valid: true,
+          warnings: [],
+          missingConnections: [],
+          toolStatuses: []
+        }
+      };
+    } catch (error) {
+      console.error('Error validating agent connections:', error);
       return {
         success: false,
-        error: 'Agent not found'
+        error: 'Failed to validate connections'
       };
     }
-
-    // AIDEV-NOTE: Agents no longer have tools at agent-level
-    // Tools are defined per-task (in skills and schedules)
-    // Always return valid since connection validation is per-task now
-    return {
-      success: true,
-      data: {
-        valid: true,
-        warnings: [],
-        missingConnections: [],
-        toolStatuses: []
-      }
-    };
-  } catch (error) {
-    console.error('Error validating agent connections:', error);
-    return {
-      success: false,
-      error: 'Failed to validate connections'
-    };
-  }
+  });
 }
 
 /**

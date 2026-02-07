@@ -7,16 +7,13 @@ import { Suspense } from 'react';
 import { Metadata } from 'next';
 import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
-import { getStorageQuotaApplicationService } from '@/ddd/application/di/container';
-import { getBillingStatus } from '@/app/actions/billing';
+import { getBillingStatus, getStorageUsageBreakdown, type StorageUsageBreakdown } from '@/app/actions/billing';
 import { getOrganizationInvoices } from '@/app/actions/invoices';
 import { getCreditBreakdownByModel } from '@/app/actions/credits';
 import { BillingSettingsClient } from './BillingSettingsClient';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { Invoice } from '@/components/billing/InvoiceList';
-import type { StorageUsage } from '@/components/billing/StorageUsageCard';
 import type { InvoiceDTO } from '@/ddd/application/services/billing/invoice-application-service';
-import type { StorageUsageBreakdown } from '@/ddd/application/services/billing/storage-quota-application-service';
 import type { BreakdownItem } from '@/components/billing/CreditBreakdownTabs';
 
 export const metadata: Metadata = {
@@ -36,7 +33,7 @@ export default async function BillingSettingsPage() {
     redirect('/setup');
   }
 
-  // Fetch billing data and credit breakdowns
+  // Fetch billing data and credit breakdowns via server actions (with RLS context)
   const [
     billingStatusResult,
     storageUsageResult,
@@ -44,7 +41,7 @@ export default async function BillingSettingsPage() {
     modelBreakdownResult,
   ] = await Promise.all([
     getBillingStatus(),
-    getStorageQuotaApplicationService().getUsageBreakdown(organizationId),
+    getStorageUsageBreakdown(),
     getOrganizationInvoices(10, 0),
     getCreditBreakdownByModel(organizationId),
   ]);
@@ -52,8 +49,8 @@ export default async function BillingSettingsPage() {
   // Handle errors gracefully
   const billingStatus = billingStatusResult.success ? billingStatusResult : null;
 
-  // StorageUsageBreakdown is compatible with StorageUsage (same properties)
-  const storageUsage: StorageUsage | null = storageUsageResult.success && storageUsageResult.data
+  // StorageUsageBreakdown from server action
+  const storageUsage: StorageUsageBreakdown | null = storageUsageResult.success && storageUsageResult.data
     ? storageUsageResult.data
     : null;
 
