@@ -616,6 +616,7 @@ class TableService(table_service_pb2_grpc.TableServiceServicer):
             # Apply field additions to Delta Lake schema if table exists
             if delta_table and s3_uri:
                 apply_field_additions(delta_table, [request.field], s3_uri, storage_options)
+                invalidate_delta_cache(s3_uri)  # Clear stale cache so next query gets new schema
                 logger.info(f"[AddField] ✅ Added field '{request.field.name}' to table '{request.table_id}' (schema evolved)")
             else:
                 logger.info(f"[AddField] ✅ Added field '{request.field.name}' to table '{request.table_id}' (metadata only)")
