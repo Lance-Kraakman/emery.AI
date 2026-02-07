@@ -347,6 +347,9 @@ class Plan:
     # Context-first planning fields
     context: Optional[str] = None  # What was discovered (existing databases, tables, etc.)
     analysis: Optional[str] = None  # Analysis/reasoning about what will be done
+    # Auto-approve policy from planning patterns
+    auto_approve_policy: str = "confirm"  # "auto" | "confirm" | "explicit"
+    matched_conditions: List[str] = field(default_factory=list)  # Conditions met for auto-approve
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -361,6 +364,8 @@ class Plan:
             "version": self.version,
             "context": self.context,
             "analysis": self.analysis,
+            "autoApprovePolicy": self.auto_approve_policy,
+            "matchedConditions": self.matched_conditions,
         }
 
     def to_stored_dict(self) -> Dict[str, Any]:
@@ -442,6 +447,8 @@ class Plan:
             version=data.get("version", 1),
             context=data.get("context"),
             analysis=data.get("analysis"),
+            auto_approve_policy=data.get("autoApprovePolicy", data.get("auto_approve_policy", "confirm")),
+            matched_conditions=data.get("matchedConditions", data.get("matched_conditions", [])),
         )
 
     def approve(self) -> "Plan":
@@ -457,6 +464,8 @@ class Plan:
             version=self.version,
             context=self.context,
             analysis=self.analysis,
+            auto_approve_policy=self.auto_approve_policy,
+            matched_conditions=self.matched_conditions,
         )
 
     def start_execution(self) -> "Plan":
@@ -472,6 +481,8 @@ class Plan:
             version=self.version,
             context=self.context,
             analysis=self.analysis,
+            auto_approve_policy=self.auto_approve_policy,
+            matched_conditions=self.matched_conditions,
         )
 
     def complete(self) -> "Plan":
@@ -487,6 +498,8 @@ class Plan:
             version=self.version,
             context=self.context,
             analysis=self.analysis,
+            auto_approve_policy=self.auto_approve_policy,
+            matched_conditions=self.matched_conditions,
         )
 
     def fail(self) -> "Plan":
@@ -502,6 +515,8 @@ class Plan:
             version=self.version,
             context=self.context,
             analysis=self.analysis,
+            auto_approve_policy=self.auto_approve_policy,
+            matched_conditions=self.matched_conditions,
         )
 
     def get_pending_steps(self) -> List[PlanStep]:
@@ -530,6 +545,8 @@ class Plan:
             version=self.version,
             context=self.context,
             analysis=self.analysis,
+            auto_approve_policy=self.auto_approve_policy,
+            matched_conditions=self.matched_conditions,
         )
 
     def with_steps(self, steps: List[PlanStep]) -> "Plan":
@@ -545,6 +562,8 @@ class Plan:
             version=self.version,
             context=self.context,
             analysis=self.analysis,
+            auto_approve_policy=self.auto_approve_policy,
+            matched_conditions=self.matched_conditions,
         )
 
     @property
@@ -603,6 +622,8 @@ def create_plan(
     steps: Optional[List[PlanStep]] = None,
     context: Optional[str] = None,
     analysis: Optional[str] = None,
+    auto_approve_policy: str = "confirm",
+    matched_conditions: Optional[List[str]] = None,
 ) -> Plan:
     """
     Factory function to create a new plan.
@@ -613,6 +634,8 @@ def create_plan(
         steps: Optional list of plan steps
         context: What was discovered (existing databases, tables, etc.)
         analysis: Analysis/reasoning about what will be done
+        auto_approve_policy: "auto" | "confirm" | "explicit" from planning patterns
+        matched_conditions: Conditions met for auto-approve decision
 
     Returns:
         A new Plan instance in draft status
@@ -627,6 +650,8 @@ def create_plan(
         generated_at=datetime.now(timezone.utc),
         context=context,
         analysis=analysis,
+        auto_approve_policy=auto_approve_policy,
+        matched_conditions=matched_conditions or [],
     )
 
 

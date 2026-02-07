@@ -200,23 +200,108 @@ def _filter_relevant_context(
 _DESTRUCTIVE_KEYWORDS = {"delete", "remove", "destroy", "drop", "truncate", "clear", "wipe", "purge"}
 
 
-def _is_low_risk_plan(plan: Plan) -> bool:
-    """Check if a plan is low-risk (additive only, no external OAuth, no destructive ops).
+def _check_plan_conditions(plan: Plan) -> list[str]:
+    """Check which auto-approve conditions the plan meets.
 
-    Low-risk plans can be auto-approved to skip the human approval step.
-    Returns True only for purely additive plans with no external service dependencies.
+    Returns list of condition names that are satisfied.
     """
-    for step in plan.steps:
-        # External OAuth integrations need user approval
-        if step.connection_required:
-            return False
+    met_conditions: list[str] = []
 
-        # Destructive operations need approval
+    # single_resource: Plan modifies at most one resource
+    # (heuristic: <= 2 steps, or all steps target same entity)
+    if len(plan.steps) <= 2:
+        met_conditions.append("single_resource")
+
+    # additive_only: No destructive operations
+    has_destructive = False
+    for step in plan.steps:
         desc_lower = step.description.lower()
         if any(kw in desc_lower for kw in _DESTRUCTIVE_KEYWORDS):
+            has_destructive = True
+            break
+    if not has_destructive:
+        met_conditions.append("additive_only")
+
+    # explicit_values: Step descriptions contain explicit values (parentheses with types)
+    # e.g., "Add field 'phone' (phone) to table 'contacts'"
+    has_explicit = all(
+        "(" in step.description and ")" in step.description
+        for step in plan.steps
+    )
+    if has_explicit:
+        met_conditions.append("explicit_values")
+
+    return met_conditions
+
+
+def _is_low_risk_plan(plan: Plan) -> bool:
+    """Check if a plan is low-risk based on auto-approve policy and conditions.
+
+    Auto-approve policies (from PlanningRegistry patterns):
+    - "explicit": Always require approval (OAuth, destructive ops)
+    - "auto": Auto-approve if ALL required conditions are met
+    - "confirm": Default - use heuristics + check conditions
+
+    Low-risk plans can be auto-approved to skip the human approval step.
+    """
+    policy = plan.auto_approve_policy
+    required_conditions = plan.matched_conditions
+
+    # "explicit" policy: ALWAYS require approval
+    if policy == "explicit":
+        logger.debug(f"Plan {plan.id} requires explicit approval (policy=explicit)")
+        return False
+
+    # Check for OAuth connections (always requires approval regardless of policy)
+    for step in plan.steps:
+        if step.connection_required:
+            logger.debug(f"Plan {plan.id} requires approval (OAuth connection: {step.connection_required})")
             return False
 
-    return True
+    # Check for destructive operations
+    for step in plan.steps:
+        desc_lower = step.description.lower()
+        if any(kw in desc_lower for kw in _DESTRUCTIVE_KEYWORDS):
+            logger.debug(f"Plan {plan.id} requires approval (destructive keyword in step)")
+            return False
+
+    # "auto" policy: Auto-approve if ALL required conditions are met
+    if policy == "auto":
+        if not required_conditions:
+            # No conditions specified means unconditional auto-approve
+            logger.debug(f"Plan {plan.id} auto-approved (policy=auto, no conditions)")
+            return True
+
+        met_conditions = _check_plan_conditions(plan)
+        all_met = all(cond in met_conditions for cond in required_conditions)
+        if all_met:
+            logger.debug(f"Plan {plan.id} auto-approved (policy=auto, all conditions met: {met_conditions})")
+            return True
+        else:
+            missing = [c for c in required_conditions if c not in met_conditions]
+            logger.debug(f"Plan {plan.id} requires approval (policy=auto, missing conditions: {missing})")
+            return False
+
+    # "confirm" policy (default): Check conditions as hints, use heuristics
+    if policy == "confirm":
+        met_conditions = _check_plan_conditions(plan)
+
+        # If required_conditions specified and ALL are met, auto-approve
+        if required_conditions and all(c in met_conditions for c in required_conditions):
+            logger.debug(f"Plan {plan.id} auto-approved (policy=confirm, all conditions met: {met_conditions})")
+            return True
+
+        # Fallback heuristic: small additive plans with explicit values
+        if all(c in met_conditions for c in ["additive_only", "explicit_values", "single_resource"]):
+            logger.debug(f"Plan {plan.id} auto-approved (policy=confirm, heuristic: small explicit additive)")
+            return True
+
+        logger.debug(f"Plan {plan.id} requires approval (policy=confirm, conditions: {met_conditions})")
+        return False
+
+    # Unknown policy: require approval
+    logger.warning(f"Unknown auto_approve_policy '{policy}', requiring approval")
+    return False
 
 
 async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[str, Any]:
@@ -293,7 +378,9 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
     # Create discovery tools for ReAct planner (system_research, search_capabilities, search_external)
     # Exclude workspace_overview — redundant with the static workspace_context below
     if api_key and org_id:
-        discovery_tools = create_discovery_tools(api_key, org_id, capability_registry)
+        discovery_tools = create_discovery_tools(
+            api_key, org_id, capability_registry, runtime.planning_registry
+        )
         discovery_tools = [t for t in discovery_tools if t.name != "workspace_overview"]
     else:
         discovery_tools = []

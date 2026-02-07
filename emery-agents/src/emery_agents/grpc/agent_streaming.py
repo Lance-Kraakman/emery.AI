@@ -11,6 +11,7 @@ import dspy
 from emery_agents.services.analysis.token_accumulator import TokenAccumulator
 from emery_agents.services.analysis.llm_usage import record_from_lm
 from emery_agents.tools.capability_registry import CapabilityRegistry
+from emery_agents.planning.registry import PlanningRegistry
 from emery_agents.tools.factories import create_all_tools
 from emery_agents.tools.provider import ToolProvider
 
@@ -77,6 +78,7 @@ class AgentStreamingHandler:
         plan_service: PlanService,
         coordinator_handler: CoordinatorStreamingHandler,
         capability_registry: CapabilityRegistry,
+        planning_registry: Optional[PlanningRegistry] = None,
     ):
         self.session_manager = session_manager
         self.model_provider = model_provider
@@ -85,6 +87,7 @@ class AgentStreamingHandler:
         self.plan_service = plan_service
         self.coordinator_handler = coordinator_handler
         self.capability_registry = capability_registry
+        self.planning_registry = planning_registry
 
     async def stream_response(
         self,
@@ -261,6 +264,7 @@ class AgentStreamingHandler:
                 task=current_task,
                 managed_agents=list(agent.managed_agents.values()),
                 capability_registry=self.capability_registry,
+                planning_registry=self.planning_registry,
                 token_accumulator=token_accumulator,
                 tools=tools,
                 **coordinator_params,

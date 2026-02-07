@@ -22,6 +22,7 @@ from emery_agents.services.context import ConversationMessage, format_conversati
 
 if TYPE_CHECKING:
     from emery_agents.tools.capability_registry import CapabilityRegistry
+    from emery_agents.planning.registry import PlanningRegistry
 
 # Re-export so existing `from ..runtime import ConversationMessage` still works
 __all__ = ["ConversationMessage", "format_conversation_history", "RuntimeContext"]
@@ -41,6 +42,7 @@ class RuntimeContext:
         org_id: Organization ID string
         org_model: Optional model override
         capability_registry: Stateful service with HF embeddings (NOT serializable)
+        planning_registry: PlanningRegistry with searchable patterns (NOT serializable)
         conversation_history: Chat history for context
         user_id: User ID for memory scoping
         workspace_type: "agents" or "users" — determines PII filtering
@@ -54,6 +56,7 @@ class RuntimeContext:
     org_id: str = ""
     org_model: Optional[str] = None
     capability_registry: Optional[CapabilityRegistry] = None
+    planning_registry: Optional["PlanningRegistry"] = None
     conversation_history: Optional[List[ConversationMessage]] = None
     user_id: Optional[str] = None
     workspace_type: Optional[str] = None

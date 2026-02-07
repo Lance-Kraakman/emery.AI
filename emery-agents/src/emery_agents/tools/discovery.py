@@ -24,6 +24,8 @@ from .analysis.research import SystemResearchTool
 from emery_agents.api import WorkspaceAPI
 from .integrations.pipedream import get_pipedream_tool_info, list_pipedream_tools_by_app
 from .capability_registry import CapabilityRegistry
+from .knowledge import create_knowledge_search_tool
+from emery_agents.planning import PlanningRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -269,10 +271,55 @@ def create_web_search_tool() -> dspy.Tool:
     )
 
 
+def create_planning_search_tool(registry: PlanningRegistry) -> dspy.Tool:
+    """Create search_planning_patterns tool wrapping PlanningRegistry.search()."""
+
+    def search_planning_patterns(query: str, capability_id: str = "", limit: int = 3) -> str:
+        """Search for relevant planning patterns."""
+        results = registry.search(query=query, capability_id=capability_id or None, limit=limit)
+        return json.dumps(
+            [
+                {
+                    "id": p.id,
+                    "name": p.name,
+                    "description": p.description,
+                    "strategy": p.strategy,
+                    "stepTemplates": p.step_templates,
+                    "autoApprovePolicy": p.auto_approve_policy.value,
+                    "autoApproveConditions": p.auto_approve_conditions,
+                    "commonMistakes": p.common_mistakes,
+                }
+                for p in results
+            ],
+            default=str,
+        )
+
+    return dspy.Tool(
+        func=search_planning_patterns,
+        name="search_planning_patterns",
+        desc=(
+            "Search for planning patterns — HOW to plan specific types of tasks. "
+            "Returns strategies, step templates, examples, and auto-approve policies.\n"
+            "WHAT IT RETURNS: Ranked list of patterns with strategy (planning approach), "
+            "step templates (how to write step descriptions), common mistakes to avoid, "
+            "and auto-approve policy (when plans can auto-execute).\n"
+            "Use AFTER search_capabilities to get detailed planning guidance for matched capabilities."
+        ),
+        arg_desc={
+            "query": "Task description to match against planning patterns "
+                     "(e.g., 'create database tables', 'send email automation')",
+            "capability_id": "Optional - filter to patterns for this capability "
+                            "(e.g., 'agent:schema_builder')",
+            "limit": "Max results to return (default: 3)",
+        },
+    )
+
+
 def create_discovery_tools(
     api_key: str,
     org_id: str,
     capability_registry: "CapabilityRegistry | None" = None,
+    planning_registry: PlanningRegistry | None = None,
 ) -> list[dspy.Tool]:
     """
     Create all discovery tools with auth captured.
@@ -296,6 +343,13 @@ def create_discovery_tools(
 
     # Add web search (DuckDuckGo — read-only research tool)
     tools.append(create_web_search_tool())
+
+    # Add knowledge search (patterns, strategies, examples)
+    tools.append(create_knowledge_search_tool())
+
+    # Add planning pattern search
+    if planning_registry:
+        tools.append(create_planning_search_tool(planning_registry))
 
     logger.info(f"Created {len(tools)} discovery tools")
     return tools

@@ -61,6 +61,7 @@ async def direct_execute_node(state: PlanExecuteState, runtime: RuntimeContext) 
         api_key=api_key,
         org_id=org_id,
         capability_registry=runtime.capability_registry,
+        planning_registry=runtime.planning_registry,
     )
 
     # Include external tools from runtime (skill tools, Pipedream, etc.)

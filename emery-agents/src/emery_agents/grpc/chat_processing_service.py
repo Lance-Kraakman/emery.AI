@@ -38,9 +38,13 @@ from emery_agents.services.analysis.token_accumulator import TokenAccumulator
 from emery_agents.entities.models.capability import CapabilityType
 from emery_agents.services.analysis.embedding_cache import load_embedding_cache, save_embedding_cache
 from emery_agents.tools.capability_bootstrap import populate_system_agents, populate_integration_services
+from emery_agents.planning.registry import PlanningRegistry
+from emery_agents.planning.patterns import ALL_PATTERNS
 from ..services.tasks import TaskExecutor
 from ..services.tasks.task_executor import TaskData
 from ..services.agents.executor import AgentExecutor
+from emery_agents.tools.knowledge import set_knowledge_base
+from emery_agents.knowledge.cache import load_knowledge_cache, load_knowledge_local
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +69,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             self.workspace_sync = None
             logger.warning("⚠️ S3_BUCKET_NAME not set, workspace sync disabled for chat")
 
+        # Initialize knowledge base for discovery
+        self._initialize_knowledge_base()
+
         self.session_manager = SessionManager(
             idle_timeout=1800,
             max_lifetime=14400,
@@ -84,6 +91,11 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         populate_integration_services(self.capability_registry)
         self._precompute_embeddings()
 
+        # Initialize planning registry with all patterns
+        self.planning_registry = PlanningRegistry()
+        for pattern in ALL_PATTERNS:
+            self.planning_registry.register(pattern)
+
         self.skill_executor_service = SkillExecutorService(
             tool_loader=self.tool_loader, agent_factory=self.agent_factory
         )
@@ -102,6 +114,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             plan_service=self.plan_service,
             coordinator_handler=self._coordinator_handler,
             capability_registry=self.capability_registry,
+            planning_registry=self.planning_registry,
         )
 
         # Shared TaskExecutor for task-based chat executions
@@ -162,6 +175,33 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         if task_id:
             headers["X-Task-ID"] = task_id
         return headers
+
+    def _initialize_knowledge_base(self) -> None:
+        """Eagerly load knowledge base at startup."""
+        s3_bucket = os.getenv("S3_BUCKET_NAME")
+
+        try:
+            kb = None
+            if s3_bucket:
+                kb = load_knowledge_cache(s3_bucket)
+                if kb:
+                    set_knowledge_base(kb)
+                    logger.info(f"✅ KnowledgeBase initialized from S3 ({kb.count()} items)")
+                    return
+
+            # Local fallback
+            local_path = os.environ.get("KNOWLEDGE_BASE_PATH", "./knowledge_base.json.gz")
+            if os.path.exists(local_path):
+                kb = load_knowledge_local(local_path)
+                if kb:
+                    set_knowledge_base(kb)
+                    logger.info(f"✅ KnowledgeBase initialized locally ({kb.count()} items)")
+                    return
+
+            logger.info("ℹ️ No knowledge base cache found, will be empty")
+
+        except Exception as e:
+            logger.warning(f"⚠️ Knowledge base init failed: {e}")
 
     def _precompute_embeddings(self) -> None:
         """Pre-compute capability embeddings at startup.
@@ -627,6 +667,8 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 org_id=str(tool_provider.organization_id),
                 org_model=request.model or None,
                 capability_registry=capability_registry,
+                planning_registry=self.planning_registry,
+                token_accumulator=TokenAccumulator(),
             )
 
             # Call generate_plan_node directly (no graph needed for plan-only)

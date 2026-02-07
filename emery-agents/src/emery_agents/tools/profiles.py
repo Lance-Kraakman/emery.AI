@@ -43,7 +43,7 @@ ADMIN_TOOLS = {"team_crud"}
 DISCOVERY_TOOL_NAMES = {
     "system_research", "workspace_overview", "search_capabilities",
     "search_external", "web_search", "memory_crud",
-    "conversation_history",
+    "conversation_history", "search_knowledge", "search_planning_patterns",
 }
 
 # Non-CRUD tools that should always pass through (ask_question, memory, etc.)

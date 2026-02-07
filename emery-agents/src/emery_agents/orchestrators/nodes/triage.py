@@ -65,7 +65,7 @@ async def triage_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[
     discovery_tools: list[dspy.Tool] = []
     if api_key and org_id:
         discovery_tools = create_discovery_tools(
-            api_key, org_id, runtime.capability_registry
+            api_key, org_id, runtime.capability_registry, runtime.planning_registry
         )
         discovery_tools = [t for t in discovery_tools if t.name not in ("web_search", "workspace_overview")]
 
@@ -93,7 +93,7 @@ async def triage_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[
             )
         record_from_lm(lm, runtime.token_accumulator.get_llm_tracker())
 
-        execution_mode = getattr(result, "execution_mode", "plan").strip().lower()
+        execution_mode = getattr(result, "execution_mode", "direct").strip().lower()
         reasoning = getattr(result, "reasoning", "")
         context_notes = getattr(result, "context_notes", "")
         response_text = getattr(result, "response", "")
@@ -109,9 +109,9 @@ async def triage_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[
         # Validate execution_mode
         if execution_mode not in VALID_MODES:
             logger.warning(
-                f"Triage returned invalid mode '{execution_mode}', defaulting to 'plan'"
+                f"Triage returned invalid mode '{execution_mode}', defaulting to 'direct'"
             )
-            execution_mode = "plan"
+            execution_mode = "direct"
 
         logger.info(f"Triage: mode={execution_mode}, reasoning={reasoning[:100]}")
 

@@ -187,6 +187,21 @@ class PlanOutput(BaseModel):
             "One step per distinct action — do NOT combine multiple actions into one step."
         )
     )
+    # Auto-approve policy from planning patterns (use search_planning_patterns to determine)
+    auto_approve_policy: str = Field(
+        default="confirm",
+        description="Auto-approve policy from matched planning pattern. "
+                    "'auto': approve if conditions met, 'confirm': default require approval, "
+                    "'explicit': always require approval (OAuth, destructive). "
+                    "Use search_planning_patterns to find the appropriate policy for this task type."
+    )
+    matched_conditions: list[str] = Field(
+        default_factory=list,
+        description="Conditions from matched planning pattern that should be checked at runtime. "
+                    "Common conditions: 'single_resource' (<=2 steps), 'explicit_values' (step descriptions "
+                    "contain parentheses with types), 'additive_only' (no destructive operations). "
+                    "Set based on the planning pattern's auto_approve_conditions."
+    )
 
 
 class SkillTemplatePlanOutput(BaseModel):
@@ -520,8 +535,22 @@ class TriageTask(dspy.Signature):  # type: ignore[misc]
     - Use system_research to check if referenced resources exist
     - Don't guess — verify when uncertain
 
-    WHEN IN DOUBT: prefer "plan" for any action that modifies state, "direct" for read-only research.
-    Research tasks are ALWAYS "direct" regardless of how complex they sound.
+    WHEN IN DOUBT: prefer "direct" for questions, research, and read-only tasks.
+    Only use "plan" for EXPLICIT state modifications (create, update, delete, execute skill).
+
+    Examples that should be "direct" (NOT plan):
+    - "Tell me about X" → direct
+    - "How do I..." → direct
+    - "What is..." → direct
+    - "List all..." → direct
+    - "Explain..." → direct
+    - "Search for..." → direct
+
+    Examples that REQUIRE "plan":
+    - "Create a table for..." → plan
+    - "Add a field to..." → plan
+    - "Delete the..." → plan
+    - "@skill-name" → plan
     """
 
     task: str = dspy.InputField(

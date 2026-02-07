@@ -377,6 +377,8 @@ class DSPyPlanGenerator:
             steps=steps,
             context=dspy_plan.context,
             analysis=dspy_plan.analysis,
+            auto_approve_policy=dspy_plan.auto_approve_policy,
+            matched_conditions=dspy_plan.matched_conditions,
         )
 
     def _convert_template_plan(

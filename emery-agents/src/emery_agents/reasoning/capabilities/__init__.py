@@ -1,26 +1,12 @@
 """
 DSPy Capability Planning Guidance.
 
-This module provides planning guidance for each capability, replacing the old
-Jinja2 templates in prompts/capabilities/*/planning.j2.
-
-The guidance tells the planner WHEN to choose each capability and HOW to
-structure plan steps for it.
+This module provides the capability routing header for the planner.
+Individual capability guidance has been migrated to PlanningRegistry
+and is now accessed via the search_planning_patterns tool.
 """
 
 from __future__ import annotations
-
-from . import (
-    agent_builder,
-    app_builder,
-    document_builder,
-    page_builder,
-    schema_builder,
-    skill_builder,
-    skill_executor,
-    table_builder,
-    view_builder,
-)
 
 
 # Quick-reference routing table prepended to all capability guidance.
@@ -33,6 +19,8 @@ Use these tools as needed during planning. Call any tool multiple times to refin
 - CHECK WORKSPACE: Read workspace_context for existing resources. Don't recreate what exists.
 - DISCOVER CAPABILITIES: search_capabilities(query="...") finds system agents, user skills,
   AND external integrations (Gmail, Slack, etc.). Good starting point for any task.
+- GET PLANNING PATTERNS: search_planning_patterns(query="...") finds relevant planning strategies,
+  step templates, and examples for your task. Use this to structure your plan steps.
 - GET TOOL DETAILS: search_external(service="<name>") returns exact tool names and input schemas.
   Call after you know which service you need (e.g., from search_capabilities results).
 - LOOK UP DETAILS: system_research(resource_type='tables', query='<name>', include_details=True)
@@ -43,7 +31,7 @@ Do NOT call search_external without knowing which service — use search_capabil
 
 ## Capability Routing — Quick Reference
 
->>> YOUR CALLABLE PLANNING TOOLS: system_research, search_external, search_capabilities, web_search, finish
+>>> YOUR CALLABLE PLANNING TOOLS: system_research, search_external, search_capabilities, search_planning_patterns, web_search, finish
 >>> NOTHING ELSE IS CALLABLE. The "route_to" column below is for plan step ROUTING ONLY — NOT tool calls.
 
 | User Intent | route_to (NOT a tool!) | Step Capability |
@@ -76,66 +64,24 @@ for a task (e.g., both Gmail and Outlook for "send email"), always ask the user 
 service to use. If the user already specified (e.g., "send with Gmail"), proceed directly.
 """.strip()
 
-# Mapping from capability ID to planning guidance
-_GUIDANCE_MAP: dict[str, str] = {
-    "agent:schema_builder": schema_builder.PLANNING_GUIDANCE,
-    "agent:skill_builder": skill_builder.PLANNING_GUIDANCE,
-    "agent:skill_executor": skill_executor.PLANNING_GUIDANCE,
-    "agent:app_builder": app_builder.PLANNING_GUIDANCE,
-    "agent:document_builder": document_builder.PLANNING_GUIDANCE,
-    "agent:agent_builder": agent_builder.PLANNING_GUIDANCE,
-    "agent:page_builder": page_builder.PLANNING_GUIDANCE,
-    "agent:table_builder": table_builder.PLANNING_GUIDANCE,
-    "agent:view_builder": view_builder.PLANNING_GUIDANCE,
-}
-
-
-def get_all_planning_guidance() -> dict[str, str]:
-    """
-    Return all capability planning guidance.
-
-    Returns:
-        Dict mapping capability ID to planning guidance string.
-    """
-    return _GUIDANCE_MAP.copy()
-
 
 def get_planning_guidance(capability_id: str) -> str | None:
     """
-    Get planning guidance for a specific capability.
+    DEPRECATED: Use search_planning_patterns tool instead.
 
-    Args:
-        capability_id: The capability ID (e.g., "agent:schema_builder")
-
-    Returns:
-        Planning guidance string, or None if not found.
+    This function is kept for backwards compatibility but returns None.
+    Planning guidance is now accessed dynamically via PlanningRegistry.
     """
-    return _GUIDANCE_MAP.get(capability_id)
+    return None
 
 
 def format_planning_guidance(
     capability_ids: list[str] | None = None,
 ) -> str:
     """
-    Format planning guidance as a single string for the planner.
+    Return the capability routing header.
 
-    Args:
-        capability_ids: Optional list of capability IDs to include.
-                       If None, includes all capabilities.
-
-    Returns:
-        Formatted planning guidance string.
+    Individual capability guidance has been migrated to PlanningRegistry
+    and is accessed via the search_planning_patterns tool during planning.
     """
-    if capability_ids is None:
-        guidance_list = list(_GUIDANCE_MAP.values())
-    else:
-        guidance_list = [
-            _GUIDANCE_MAP[cap_id]
-            for cap_id in capability_ids
-            if cap_id in _GUIDANCE_MAP
-        ]
-
-    if not guidance_list:
-        return CAPABILITY_ROUTING_HEADER
-
-    return CAPABILITY_ROUTING_HEADER + "\n\n" + "\n\n".join(guidance_list)
+    return CAPABILITY_ROUTING_HEADER

@@ -32,6 +32,7 @@ from ..services.memory import MemoryService
 from ..services.context import WorkspaceContext
 from emery_agents.tools.capability_registry import CapabilityRegistry
 from emery_agents.tools.capability_bootstrap import populate_user_skills, populate_external_tools
+from emery_agents.planning.registry import PlanningRegistry
 from ..orchestrators.nodes.planning import _build_workspace_context
 from ..services.planning import PlanFileRepository
 
@@ -117,6 +118,7 @@ class CoordinatorStreamingHandler:
         session_id: Optional[str],
         org_model: Optional[str],
         capability_registry: CapabilityRegistry,
+        planning_registry: Optional[PlanningRegistry],
         token_accumulator: TokenAccumulator,
         sm: Optional[Any] = None,
         managed_agents: Optional[List[Any]] = None,
@@ -178,6 +180,7 @@ class CoordinatorStreamingHandler:
             org_id=str(context.tool_provider.organization_id),
             org_model=org_model,
             capability_registry=capability_registry,
+            planning_registry=planning_registry,
             conversation_history=_convert_history(conversation_history),
             user_id=user_id,
             workspace_type=workspace_type,
