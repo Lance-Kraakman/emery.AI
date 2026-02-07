@@ -15,7 +15,7 @@ ARG VERSION=""
 # tree: Directory visualization
 # socat: Unix socket to TCP bridge for sandbox network proxy
 # iproute2: Loopback interface setup inside sandbox (ip link set lo up)
-# libseccomp-dev + python3-seccomp: Syscall filtering (C library + Python bindings)
+# libseccomp-dev: C library for seccomp (pyseccomp uses ctypes to call it)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bubblewrap \
     jq \
@@ -25,7 +25,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     socat \
     iproute2 \
     libseccomp-dev \
-    python3-seccomp \
     procps \
     && rm -rf /var/lib/apt/lists/*
 
