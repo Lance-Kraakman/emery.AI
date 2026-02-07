@@ -99,8 +99,9 @@ export class SchedulerService implements ISchedulerService {
       inputMappings?: Array<{ triggerField: string; skillInputName: string }>;
     }[] = [];
 
-    // Get all agents
-    const agents = await this.agentRepository.findAll();
+    // AIDEV-NOTE: Uses raw method to query across all orgs (bypasses RLS)
+    // This is intentional - scheduler needs visibility across all organizations
+    const agents = await this.agentRepository.findAllRaw();
 
     for (const agent of agents) {
       // Iterate through each agent's automations

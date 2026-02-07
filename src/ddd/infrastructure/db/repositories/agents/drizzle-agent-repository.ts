@@ -16,10 +16,21 @@ type AgentRow = InferSelectModel<typeof agents>;
 export class DrizzleAgentRepository
   extends DrizzleBaseRepository<Agent, AgentId, CreateAgentData, UpdateAgentData, AgentRow>
   implements IAgentRepository {
-  
+
   protected readonly table = agents;
   protected readonly idColumn = agents.id;
   protected readonly organizationColumn = agents.organizationId;
+
+  /**
+   * @param db - Context-aware database client (with RLS enforcement)
+   * @param rawDb - Optional raw database client for cross-org queries (bypasses RLS)
+   */
+  constructor(
+    db: DbClient,
+    private readonly rawDb?: DbClient
+  ) {
+    super(db);
+  }
 
   async create(data: CreateAgentData): Promise<Agent> {
     const [record] = await this.db
@@ -126,6 +137,22 @@ export class DrizzleAgentRepository
       .select()
       .from(agents)
       .where(conditions.length > 0 ? and(...conditions) : undefined);
+
+    return results.map(result => this.fromPersistence(result));
+  }
+
+  /**
+   * Find all agents bypassing RLS (system scheduler use only)
+   * WARNING: Completely bypasses row-level security.
+   * ONLY use for cross-org batch operations in trusted system processes.
+   */
+  async findAllRaw(): Promise<Agent[]> {
+    if (!this.rawDb) {
+      throw new Error('Raw DB required for findAllRaw(). Pass rawDb to constructor when cross-org queries are needed.');
+    }
+    const results: AgentRow[] = await this.rawDb
+      .select()
+      .from(agents);
 
     return results.map(result => this.fromPersistence(result));
   }

@@ -17,8 +17,17 @@ export interface IOrganizationRepository {
    * Find all organizations (admin/system use only)
    * WARNING: Returns all organizations. Use with caution in production.
    * Intended for background jobs, admin tools, and system operations.
+   * Note: Requires RLS context to be set.
    */
   findAll(): Promise<Organization[]>;
+
+  /**
+   * Find all organizations bypassing RLS (system scheduler use only)
+   * WARNING: Completely bypasses row-level security.
+   * ONLY use for cross-org batch operations in trusted system processes.
+   * Requires rawDb to be configured in repository constructor.
+   */
+  findAllRaw(): Promise<Organization[]>;
 
   /**
    * Find organization with member information

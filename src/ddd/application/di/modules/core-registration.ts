@@ -40,14 +40,16 @@ export interface CoreServices {
 
 export interface CoreDependencies {
   db: ContextAwareDbClient;
+  rawDb?: typeof import('@/ddd/infrastructure/db/client').db; // Optional raw DB for cross-org queries
   agentRepository?: any; // Will be provided by agent module
 }
 
 export function registerCoreServices(deps: CoreDependencies): CoreServices {
-  const { db } = deps;
+  const { db, rawDb: passedRawDb } = deps;
 
   // Register repositories
-  const organizationRepository = new DrizzleOrganizationRepository(db);
+  // Organization repository gets rawDb for cross-org queries (system scheduler)
+  const organizationRepository = new DrizzleOrganizationRepository(db, passedRawDb || rawDb);
   const userRepository = new DrizzleUserRepository(db);
   const teamRepository = new DrizzleTeamRepository(db);
   const invitationRepository = new DrizzleInvitationRepository(db);

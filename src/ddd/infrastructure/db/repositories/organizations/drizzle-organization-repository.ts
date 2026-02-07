@@ -14,10 +14,21 @@ type OrganizationRow = InferSelectModel<typeof organizations>;
 export class DrizzleOrganizationRepository
   extends DrizzleBaseRepository<Organization, OrganizationId, CreateOrganizationData, UpdateOrganizationData, OrganizationRow>
   implements IOrganizationRepository {
-  
+
   protected readonly table = organizations;
   protected readonly idColumn = organizations.id;
   protected readonly organizationColumn = undefined; // Organizations are not org-scoped
+
+  /**
+   * @param db - Context-aware database client (with RLS enforcement)
+   * @param rawDb - Optional raw database client for cross-org queries (bypasses RLS)
+   */
+  constructor(
+    db: DbClient,
+    private readonly rawDb?: DbClient
+  ) {
+    super(db);
+  }
 
   /**
    * Generate URL-safe slug from organization name
@@ -45,6 +56,22 @@ export class DrizzleOrganizationRepository
 
   async findAll(): Promise<Organization[]> {
     const result = await this.db
+      .select()
+      .from(organizations);
+
+    return result.map((org: OrganizationRow) => this.fromPersistence(org));
+  }
+
+  /**
+   * Find all organizations bypassing RLS (system scheduler use only)
+   * WARNING: Completely bypasses row-level security.
+   * ONLY use for cross-org batch operations in trusted system processes.
+   */
+  async findAllRaw(): Promise<Organization[]> {
+    if (!this.rawDb) {
+      throw new Error('Raw DB required for findAllRaw(). Pass rawDb to constructor when cross-org queries are needed.');
+    }
+    const result = await this.rawDb
       .select()
       .from(organizations);
 

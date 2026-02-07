@@ -67,4 +67,21 @@ export interface ITaskRepository {
   // Cleanup operations
   deleteCompletedOlderThan(cutoffDate: Date): Promise<number>;
   deleteFailedOlderThan(cutoffDate: Date): Promise<number>;
+
+  // Raw methods (bypass RLS - system scheduler use only)
+  /**
+   * Find pending tasks bypassing RLS (system scheduler use only)
+   * WARNING: Completely bypasses row-level security.
+   * ONLY use for cross-org batch operations in trusted system processes.
+   * Requires rawDb to be configured in repository constructor.
+   */
+  findPendingTasksRaw(limit?: number): Promise<Task[]>;
+
+  /**
+   * Find stuck in-progress tasks bypassing RLS (system scheduler use only)
+   * WARNING: Completely bypasses row-level security.
+   * ONLY use for cross-org batch operations in trusted system processes.
+   * Requires rawDb to be configured in repository constructor.
+   */
+  findStuckInProgressRaw(olderThan: Date): Promise<Task[]>;
 }

@@ -308,10 +308,12 @@ class EventDrivenScheduler {
     const cutoff = new Date(Date.now() - 300000); // 5 minutes ago
 
     // Find zombie IN_PROGRESS tasks (stuck from a crash)
-    const stuckTasks = await this.taskRepository.findStuckInProgress(cutoff);
+    // AIDEV-NOTE: Uses raw method to query across all orgs (bypasses RLS)
+    const stuckTasks = await this.taskRepository.findStuckInProgressRaw(cutoff);
 
     // Find stale PENDING tasks (missed their event notification)
-    const stalePending = await this.taskRepository.findPendingTasks();
+    // AIDEV-NOTE: Uses raw method to query across all orgs (bypasses RLS)
+    const stalePending = await this.taskRepository.findPendingTasksRaw();
     const orphanedPending = stalePending.filter(t => t.createdAt < cutoff);
 
     const total = stuckTasks.length + orphanedPending.length;

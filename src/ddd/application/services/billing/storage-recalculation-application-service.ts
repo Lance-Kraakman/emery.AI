@@ -206,8 +206,9 @@ export class StorageRecalculationApplicationService {
     };
 
     try {
-      // Get all organizations using proper repository method
-      const allOrganizations = await this.organizationRepository.findAll();
+      // Get all organizations using raw method (bypasses RLS for cross-org batch operation)
+      // AIDEV-NOTE: This is intentional - scheduler needs visibility across all orgs
+      const allOrganizations = await this.organizationRepository.findAllRaw();
       batchResult.totalOrganizations = allOrganizations.length;
 
       logger.debug(`Found ${allOrganizations.length} organizations to process`);
@@ -280,7 +281,9 @@ export class StorageRecalculationApplicationService {
     const discrepancies: StorageDiscrepancy[] = [];
 
     try {
-      const allOrganizations = await this.organizationRepository.findAll();
+      // AIDEV-NOTE: Uses raw method to query across all orgs (bypasses RLS)
+      // This is intentional - detecting discrepancies needs visibility across all organizations
+      const allOrganizations = await this.organizationRepository.findAllRaw();
 
       for (const org of allOrganizations) {
         const trackedTotal = org.storageUsedBytes || 0;

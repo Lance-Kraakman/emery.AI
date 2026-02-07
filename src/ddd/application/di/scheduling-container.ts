@@ -10,7 +10,7 @@
 
 import type { DbClient } from '@/ddd/infrastructure/db/client';
 import { contextAwareDb, type ContextAwareDbClient } from '@/ddd/infrastructure/db/simple-context-proxy';
-import { rawClient } from '@/ddd/infrastructure/db/client';
+import { rawClient, db as rawDb } from '@/ddd/infrastructure/db/client';
 import type postgres from 'postgres';
 
 // Task domain imports
@@ -76,8 +76,10 @@ export class TaskSchedulingContainer {
     }
 
     // Register repositories
-    const taskRepository = new DrizzleTaskRepository(db);
-    const agentRepository = new DrizzleAgentRepository(db);
+    // Task repository gets rawDb for cross-org queries (scheduler cleanup, orphan detection)
+    const taskRepository = new DrizzleTaskRepository(db, rawDb);
+    // Agent repository gets rawDb for cross-org queries (finding all agents for calendar automations)
+    const agentRepository = new DrizzleAgentRepository(db, rawDb);
     
     this.services.set('ITaskRepository', taskRepository);
     this.services.set('IAgentRepository', agentRepository);

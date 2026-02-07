@@ -20,10 +20,21 @@ type TaskRow = InferSelectModel<typeof tasks>;
 export class DrizzleTaskRepository
   extends DrizzleBaseRepository<Task, TaskId, CreateTaskData, UpdateTaskData, TaskRow>
   implements ITaskRepository {
-  
+
   protected readonly table = tasks;
   protected readonly idColumn = tasks.id;
   protected readonly organizationColumn = tasks.organizationId;
+
+  /**
+   * @param db - Context-aware database client (with RLS enforcement)
+   * @param rawDb - Optional raw database client for cross-org queries (bypasses RLS)
+   */
+  constructor(
+    db: DbClient,
+    private readonly rawDb?: DbClient
+  ) {
+    super(db);
+  }
 
   async create(data: CreateTaskData): Promise<Task> {
     const [record] = await this.db
@@ -292,5 +303,53 @@ export class DrizzleTaskRepository
   
   protected toPersistence(task: Task): any {
     return task.toPersistence();
+  }
+
+  // ============================================================================
+  // Raw methods (bypass RLS - system scheduler use only)
+  // ============================================================================
+
+  /**
+   * Find pending tasks bypassing RLS (system scheduler use only)
+   * WARNING: Completely bypasses row-level security.
+   * ONLY use for cross-org batch operations in trusted system processes.
+   */
+  async findPendingTasksRaw(limit?: number): Promise<Task[]> {
+    if (!this.rawDb) {
+      throw new Error('Raw DB required for findPendingTasksRaw(). Pass rawDb to constructor when cross-org queries are needed.');
+    }
+    const queryBuilder = this.rawDb
+      .select()
+      .from(tasks)
+      .where(eq(tasks.status, TASK_STATUS.PENDING))
+      .orderBy(asc(tasks.createdAt));
+
+    const results = limit
+      ? await queryBuilder.limit(limit)
+      : await queryBuilder;
+    return results.map((r: TaskRow) => this.fromPersistence(r));
+  }
+
+  /**
+   * Find stuck in-progress tasks bypassing RLS (system scheduler use only)
+   * WARNING: Completely bypasses row-level security.
+   * ONLY use for cross-org batch operations in trusted system processes.
+   */
+  async findStuckInProgressRaw(olderThan: Date): Promise<Task[]> {
+    if (!this.rawDb) {
+      throw new Error('Raw DB required for findStuckInProgressRaw(). Pass rawDb to constructor when cross-org queries are needed.');
+    }
+    const results = await this.rawDb
+      .select()
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.status, TASK_STATUS.IN_PROGRESS),
+          lt(tasks.startedAt, olderThan)
+        )
+      )
+      .orderBy(asc(tasks.createdAt));
+
+    return results.map((r: TaskRow) => this.fromPersistence(r));
   }
 }
