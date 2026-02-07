@@ -428,7 +428,7 @@ export async function executePublicView(
       return null;
     }
 
-    // 1. Verify the page is published
+    // 1. Verify the page is published (uses raw db - no RLS needed)
     const pageRecord = await db.query.pages.findFirst({
       where: and(
         eq(pages.id, pageId),
@@ -441,24 +441,24 @@ export async function executePublicView(
       return null;
     }
 
-    // 2. Get view service and execute
+    // 2. Get view service - public methods use rawDb internally (no RLS context needed)
     const viewService = getViewApplicationService();
 
-    // Get the view first to access its tableId for field lookup
-    const viewResult = await viewService.getView(ViewId.fromNumber(viewId));
+    // 3. Get the PUBLIC view (uses rawDb, verifies requiresAuth=false)
+    const viewResult = await viewService.getPublicView(ViewId.fromNumber(viewId));
     if (!viewResult.success || !viewResult.data) {
       console.error('[executePublicView] Failed to get view:', viewResult.error);
       return null;
     }
     const view = viewResult.data;
 
-    // 3. Build runtime filters if provided
+    // 4. Build runtime filters if provided
     let runtimeFilters: FilterConfig[] | undefined;
     let rowIdFilter: { operator: 'eq' | 'ne'; value: string } | undefined;
 
     if (additionalFilters && additionalFilters.length > 0) {
       // Fetch fields to convert field names to IDs
-      // Pass viaViewId so RLS can check public access via fields_public_via_view policy
+      // Pass viaViewId so getFields uses public path (rawDb)
       const { getFields } = await import('./fields');
       const fields = await getFields(view.tableId.value, { viaViewId: viewId });
       const fieldNameToIdMap = new Map(fields.map(f => [f.name, f.id]));
@@ -520,8 +520,8 @@ export async function executePublicView(
       }
     }
 
-    // 4. Execute the view with optional pagination and filters
-    const result = await viewService.executeView({
+    // 5. Execute the PUBLIC view (uses rawDb, verifies requiresAuth=false)
+    const result = await viewService.executePublicView({
       dataSourceId: ViewId.fromNumber(viewId),
       overridePagination: pagination
         ? PaginationConfig.create(pagination)
@@ -535,8 +535,8 @@ export async function executePublicView(
       return null;
     }
 
-    // 5. Get the schema
-    const schemaResult = await viewService.getViewSchema(ViewId.fromNumber(viewId));
+    // 6. Get the PUBLIC schema (uses rawDb)
+    const schemaResult = await viewService.getPublicViewSchema(ViewId.fromNumber(viewId));
 
     if (!schemaResult.success || !schemaResult.data) {
       console.error('[executePublicView] Failed to get view schema:', schemaResult.error);

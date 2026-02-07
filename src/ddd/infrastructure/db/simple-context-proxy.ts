@@ -16,6 +16,17 @@ import { withRLSContext } from './rls-context';
 import type { DbClient } from './client';
 import { db } from './client';
 
+/**
+ * SECURITY: Fail-closed error when RLS context is missing
+ * This is thrown instead of passing through to prevent unprotected queries
+ */
+function throwMissingContextError(operation: string): never {
+  throw new Error(
+    `RLS context required but not set for ${operation}. ` +
+    `Use withAuthContext() for protected operations or raw db for intentionally public queries.`
+  );
+}
+
 interface QueryStep {
   method: string;
   args: any[];
@@ -137,9 +148,12 @@ function createSimpleContextProxy(baseDb: DbClient): DbClient {
             } finally {
               isInRLSCall = false;
             }
-          } else {
-            // No context or already in RLS call - call original transaction
+          } else if (isInRLSCall) {
+            // Already in RLS call - pass through to avoid recursion
             return originalValue.call(target, callback, config);
+          } else {
+            // SECURITY: No context - fail closed
+            throwMissingContextError('transaction()');
           }
         };
       }
@@ -156,8 +170,8 @@ function createSimpleContextProxy(baseDb: DbClient): DbClient {
             const initialStep = { method: prop as string, args };
             return createQueryBuilderProxy(queryBuilder, target, context, [initialStep]);
           } else {
-            // No context - call original method
-            return originalValue.apply(target, args);
+            // SECURITY: No context - fail closed
+            throwMissingContextError(`${prop as string}()`);
           }
         };
       }
@@ -203,8 +217,8 @@ function createSimpleContextProxy(baseDb: DbClient): DbClient {
             }
           });
         } else {
-          // No context - return original query interface
-          return originalValue;
+          // SECURITY: No context - fail closed
+          throwMissingContextError('query');
         }
       }
       

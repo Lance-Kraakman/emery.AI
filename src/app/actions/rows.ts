@@ -83,8 +83,9 @@ function convertFieldNamesToIds(
 
 
 export async function createRow(data: CreateRowCommand, revalidateUrl?: string, actorOverride?: ActorOverride): Promise<Result> {
-  try {
-    const session = await requirePermission("table:manage");
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("table:manage");
     const { tableId, data: rowData, dataKeyType = 'name' } = data;
 
 
@@ -176,21 +177,23 @@ export async function createRow(data: CreateRowCommand, revalidateUrl?: string, 
       success: true,
       data: rowDTO,
     };
-  } catch (error) {
-    console.error("Error creating row:", error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to create row",
-    };
-  }
+    } catch (error) {
+      console.error("Error creating row:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to create row",
+      };
+    }
+  });
 }
 
 /**
  * Create multiple rows in a table (batch operation)
  */
 export async function createRows(data: { tableId: number; rows: Record<string, any>[] }, revalidateUrl?: string, actorOverride?: ActorOverride): Promise<Result> {
-  try {
-    const session = await requirePermission("table:manage");
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("table:manage");
     const { tableId, rows: rowsData } = data;
 
     if (!tableId) {
@@ -290,13 +293,14 @@ export async function createRows(data: { tableId: number; rows: Record<string, a
       success: true,
       data: rowDTOs,
     };
-  } catch (error) {
-    console.error("Error creating rows:", error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to create rows",
-    };
-  }
+    } catch (error) {
+      console.error("Error creating rows:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to create rows",
+      };
+    }
+  });
 }
 
 export async function createRowAction(formData: FormData) {
@@ -322,10 +326,11 @@ export async function createRowAction(formData: FormData) {
 
 
 export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: string, actorOverride?: ActorOverride): Promise<Result> {
-  try {
-    console.log('[updateRowData] Called with:', { tableId: data.tableId, rowId: data.rowId, data: data.data });
+  return withAuthContext(async () => {
+    try {
+      console.log('[updateRowData] Called with:', { tableId: data.tableId, rowId: data.rowId, data: data.data });
 
-    const session = await requirePermission("table:manage");
+      const session = await requirePermission("table:manage");
     const { tableId, rowId, data: rowData, dataKeyType = 'name' } = data;
 
     if (!tableId || !rowId) {
@@ -464,13 +469,14 @@ export async function updateRowData(data: UpdateRowCommand, revalidateUrl?: stri
       success: true,
       data: rowDTO,
     };
-  } catch (error) {
-    console.error("Error updating row:", error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to update row",
-    };
-  }
+    } catch (error) {
+      console.error("Error updating row:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to update row",
+      };
+    }
+  });
 }
 
 /**
@@ -483,8 +489,9 @@ export async function updateRowsData(
   revalidateUrl?: string,
   actorOverride?: ActorOverride,
 ): Promise<Result> {
-  try {
-    const session = await requirePermission("table:manage");
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("table:manage");
 
     if (!tableId || !updates || updates.length === 0) {
       return {
@@ -623,13 +630,14 @@ export async function updateRowsData(
       success: true,
       data: dsgRows,
     };
-  } catch (error) {
-    console.error("Error bulk updating rows:", error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to bulk update rows",
-    };
-  }
+    } catch (error) {
+      console.error("Error bulk updating rows:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to bulk update rows",
+      };
+    }
+  });
 }
 
 export async function updateRowAction(formData: FormData) {
@@ -655,8 +663,9 @@ export async function updateRowAction(formData: FormData) {
 }
 
 export async function deleteRowData(tableId: number, rowId: string, revalidateUrl?: string, actorOverride?: ActorOverride): Promise<Result> {
-  try {
-    const session = await requirePermission("table:manage");
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("table:manage");
 
     if (!tableId || !rowId) {
       return {
@@ -732,13 +741,14 @@ export async function deleteRowData(tableId: number, rowId: string, revalidateUr
       success: true,
       data: { message: "Row deleted successfully" },
     };
-  } catch (error) {
-    console.error("Error deleting row:", error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to delete row",
-    };
-  }
+    } catch (error) {
+      console.error("Error deleting row:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to delete row",
+      };
+    }
+  });
 }
 
 
@@ -757,8 +767,9 @@ export async function getRowsDSG(
   orderDirection?: 'ASC' | 'DESC',
   filters?: Array<{ field: string, operator: string, value: any }>
 ): Promise<{ rows: any[], hasMore: boolean, total: number }> {
-  try {
-    await requirePermission("table:manage");
+  return withAuthContext(async () => {
+    try {
+      await requirePermission("table:manage");
 
     if (!tableId) {
       throw new Error("tableId is required");
@@ -829,10 +840,11 @@ export async function getRowsDSG(
       hasMore,
       total: totalRows // Now returns actual total from metadata, not just loaded rows
     };
-  } catch (error) {
-    console.error("Error fetching paginated rows:", error);
-    throw new Error(error instanceof Error ? error.message : "Failed to fetch rows");
-  }
+    } catch (error) {
+      console.error("Error fetching paginated rows:", error);
+      throw new Error(error instanceof Error ? error.message : "Failed to fetch rows");
+    }
+  });
 }
 
 /**
@@ -848,8 +860,9 @@ export async function searchRowsDSG(
   query: string,
   limit = 100
 ): Promise<{ rows: any[], total: number }> {
-  try {
-    await requirePermission("table:manage");
+  return withAuthContext(async () => {
+    try {
+      await requirePermission("table:manage");
 
     if (!tableId) {
       throw new Error("tableId is required");
@@ -911,10 +924,11 @@ export async function searchRowsDSG(
       rows: dsgData,
       total: dsgData.length // For search results, total is the number of matches
     };
-  } catch (error) {
-    console.error("Error searching rows:", error);
-    throw new Error(error instanceof Error ? error.message : "Failed to search rows");
-  }
+    } catch (error) {
+      console.error("Error searching rows:", error);
+      throw new Error(error instanceof Error ? error.message : "Failed to search rows");
+    }
+  });
 }
 
 export async function deleteRowAction(formData: FormData) {
