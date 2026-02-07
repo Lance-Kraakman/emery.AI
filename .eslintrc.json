@@ -13,7 +13,9 @@
     {
       "files": [
         "src/ddd/application/di/**/*.ts",
-        "src/scripts/run-scheduler.ts"
+        "src/scripts/run-scheduler.ts",
+        "src/drizzle/seeds/**/*.ts",
+        "src/tests/**/*.ts"
       ],
       "rules": {
         "no-restricted-imports": "off"
