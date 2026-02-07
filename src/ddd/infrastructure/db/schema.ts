@@ -848,6 +848,11 @@ export const agents = pgTable("agents", {
   // See /docs/model-selection-hierarchy.md for complete context-specific hierarchies
   defaultModel: text("default_model"), // Agent-specific default model (overrides organization default for task execution only)
 
+  // Network access for bash commands (git, curl, wget, etc.)
+  // Default true - agents can access public internet via filtered proxy
+  // Security: Proxy blocks private IPs, AWS metadata, localhost
+  allowNetwork: boolean("allow_network").default(true).notNull(),
+
   // Avatar configuration (JSON for extensibility)
   avatarConfig: jsonb("avatar_config").$type<{
     version: number;

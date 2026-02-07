@@ -186,6 +186,7 @@ export class ChatProcessingClient {
       tools: allTools,
       servers: [],
       defaultModel: options.defaultModel || '',
+      allowNetwork: true, // Chat agents have network access by default
     };
 
     console.log(`[CHAT-GRPC-CLIENT] Built AgentConfig with ${allTools.length} tools`);

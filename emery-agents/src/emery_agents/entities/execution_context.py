@@ -104,6 +104,11 @@ class ExecutionContext:
     # When set, BashTool is available for file operations in sandboxed environment
     workspace_path: Optional[Path] = None
 
+    # Network access for bash commands (git, curl, wget)
+    # Default True for agents - enables git clone, curl, etc. in sandbox
+    # When True, network is routed through filtered proxy (blocks private IPs, AWS metadata)
+    allow_network: bool = True
+
     @property
     def is_autonomous(self) -> bool:
         """Check if execution is autonomous (skill-based, no HITL)."""
@@ -141,4 +146,5 @@ class ExecutionContext:
             tool_provider=self.tool_provider,  # Shared reference (not copied)
             plan=self.plan,  # Shared reference (not copied)
             workspace_path=self.workspace_path,
+            allow_network=self.allow_network,
         )

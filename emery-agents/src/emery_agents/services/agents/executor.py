@@ -231,6 +231,10 @@ class AgentExecutor:
             if skill_inputs:
                 logger.info(f"📥 Skill inputs from trigger_data: {list(skill_inputs.keys())}")
 
+        # For skill execution, use skill's allow_network setting
+        # Skills default to False, but can be set to True for git/code skills
+        skill_allow_network = skill.allow_network if skill else False
+
         return ExecutionContext(
             mode=ExecutionMode.AUTONOMOUS,  # Skill execution = autonomous (no HITL)
             task=skill.instructions,  # Changed from 'instructions'
@@ -248,6 +252,7 @@ class AgentExecutor:
             environment={},
             skill_inputs=skill_inputs,  # Runtime values for skill inputs
             resolved_context=request.resolved_context,  # Context table mappings
+            allow_network=skill_allow_network,  # From skill config
         )
 
     def _create_instruction_context(self, request: TaskRequest) -> ExecutionContext:
@@ -276,6 +281,9 @@ class AgentExecutor:
         images = list(instruction_config.images) if instruction_config.images else []
         attachments = list(instruction_config.attachments) if instruction_config.attachments else []
 
+        # Get agent's allow_network setting (default True for backwards compatibility)
+        agent_allow_network = getattr(request.agent_config, 'allow_network', True)
+
         return ExecutionContext(
             mode=ExecutionMode.INTERACTIVE,  # Instruction-based = interactive (with HITL)
             task=instruction_config.task,  # Changed from 'instructions'
@@ -290,6 +298,7 @@ class AgentExecutor:
             org_model=org_model,
             environment={},
             resolved_context=request.resolved_context,  # Context table mappings
+            allow_network=agent_allow_network,  # From agent config
         )
 
     def _find_skill_by_name(self, skills: list[SkillConfig], skill_name: str) -> Optional[SkillConfig]:
@@ -910,7 +919,8 @@ class AgentExecutor:
         # Add bash tool if workspace_path is available (filesystem-based execution)
         if context.workspace_path:
             from pathlib import Path
-            allow_net = getattr(context, 'allow_network', False)
+            # Use context.allow_network (from agent config, defaults to True)
+            allow_net = context.allow_network
             bash_tool = create_bash_tool(
                 workspace_path=Path(context.workspace_path),
                 allow_network=allow_net,

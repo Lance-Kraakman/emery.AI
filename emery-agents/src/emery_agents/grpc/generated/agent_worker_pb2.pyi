@@ -189,7 +189,7 @@ class TokenUsage(_message.Message):
     def __init__(self, model_name: _Optional[str] = ..., input_tokens: _Optional[int] = ..., output_tokens: _Optional[int] = ..., total_tokens: _Optional[int] = ..., cost_usd: _Optional[float] = ...) -> None: ...
 
 class AgentConfig(_message.Message):
-    __slots__ = ("name", "role", "description", "persona", "tools", "servers", "default_model")
+    __slots__ = ("name", "role", "description", "persona", "tools", "servers", "default_model", "allow_network")
     NAME_FIELD_NUMBER: _ClassVar[int]
     ROLE_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
@@ -197,6 +197,7 @@ class AgentConfig(_message.Message):
     TOOLS_FIELD_NUMBER: _ClassVar[int]
     SERVERS_FIELD_NUMBER: _ClassVar[int]
     DEFAULT_MODEL_FIELD_NUMBER: _ClassVar[int]
+    ALLOW_NETWORK_FIELD_NUMBER: _ClassVar[int]
     name: str
     role: str
     description: str
@@ -204,7 +205,8 @@ class AgentConfig(_message.Message):
     tools: _containers.RepeatedCompositeFieldContainer[ToolConfig]
     servers: _containers.RepeatedCompositeFieldContainer[ServerConfig]
     default_model: str
-    def __init__(self, name: _Optional[str] = ..., role: _Optional[str] = ..., description: _Optional[str] = ..., persona: _Optional[str] = ..., tools: _Optional[_Iterable[_Union[ToolConfig, _Mapping]]] = ..., servers: _Optional[_Iterable[_Union[ServerConfig, _Mapping]]] = ..., default_model: _Optional[str] = ...) -> None: ...
+    allow_network: bool
+    def __init__(self, name: _Optional[str] = ..., role: _Optional[str] = ..., description: _Optional[str] = ..., persona: _Optional[str] = ..., tools: _Optional[_Iterable[_Union[ToolConfig, _Mapping]]] = ..., servers: _Optional[_Iterable[_Union[ServerConfig, _Mapping]]] = ..., default_model: _Optional[str] = ..., allow_network: bool = ...) -> None: ...
 
 class SkillConfig(_message.Message):
     __slots__ = ("id", "name", "description", "inputs", "outputs", "instructions", "tools", "model", "content", "agent_type", "execution_type", "steps")

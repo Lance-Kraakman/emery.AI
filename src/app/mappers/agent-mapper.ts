@@ -26,6 +26,7 @@ export interface AgentDTO {
   apiKeyPrefix?: string | null; // First 12 chars of API key (hash stored, never exposed)
   hasApiKey?: boolean; // Whether agent has an API key configured
   defaultModel?: string | null; // AI model override for this agent
+  allowNetwork: boolean; // Network access for bash commands (git, curl, wget)
   avatarConfig?: AvatarConfig | null; // Avatar configuration with icon + color
   createdAt?: string | null; // ISO string for serialization
   updatedAt?: string | null; // ISO string for serialization
@@ -48,6 +49,7 @@ export class AgentMapper {
       apiKeyPrefix: agent.apiKeyPrefix || null,
       hasApiKey: !!agent.apiKey,
       defaultModel: agent.defaultModel || null,
+      allowNetwork: agent.allowNetwork,
       avatarConfig: agent.avatarConfig || null,
       // Convert Date objects to ISO strings for server component serialization
       createdAt: agent.createdAt ? agent.createdAt.toISOString() : null,

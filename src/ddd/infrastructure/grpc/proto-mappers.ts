@@ -71,6 +71,7 @@ export function mapAgentToProto(agent: Agent): AgentConfigProto {
     description: agent.description || '',
     persona: agent.persona || '',
     defaultModel: agent.defaultModel || '', // Agent-specific model override for task execution
+    allowNetwork: agent.allowNetwork, // Network access for bash commands (git, curl, wget)
     tools: [], // Tools are now defined per-task (in skills and schedule configurations)
     servers: [], // Servers removed from agent-level configuration
     // skills removed - now loaded dynamically via API

@@ -74,7 +74,8 @@ export class AgentApplicationService {
         organizationId,
         // Convert AutomationConfigurationDTO[] to AutomationConfiguration[]
         automations: dto.automations ? this.automationsFromDTOs(dto.automations) : [],
-        status: dto.status ? AgentStatus.fromString(dto.status) : undefined
+        status: dto.status ? AgentStatus.fromString(dto.status) : undefined,
+        allowNetwork: dto.allowNetwork // Default true is applied in createAgentDefaults
       };
 
       // Apply defaults and add generated fields
@@ -164,6 +165,7 @@ export class AgentApplicationService {
       if (dto.status !== undefined) updateData.status = dto.status;
       if (dto.avatarConfig !== undefined) updateData.avatarConfig = dto.avatarConfig;
       if (dto.defaultModel !== undefined) updateData.defaultModel = dto.defaultModel;
+      if (dto.allowNetwork !== undefined) updateData.allowNetwork = dto.allowNetwork;
 
       // LOGGING: Update data prepared
       logger.debug('Update data prepared for repository', {

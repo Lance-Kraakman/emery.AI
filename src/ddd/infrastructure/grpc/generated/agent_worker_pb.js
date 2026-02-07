@@ -4135,7 +4135,8 @@ proto.emery.agents.AgentConfig.toObject = function(includeInstance, msg) {
     proto.emery.agents.ToolConfig.toObject, includeInstance),
     serversList: jspb.Message.toObjectList(msg.getServersList(),
     proto.emery.agents.ServerConfig.toObject, includeInstance),
-    defaultModel: jspb.Message.getFieldWithDefault(msg, 8, "")
+    defaultModel: jspb.Message.getFieldWithDefault(msg, 8, ""),
+    allowNetwork: jspb.Message.getBooleanFieldWithDefault(msg, 9, false)
   };
 
   if (includeInstance) {
@@ -4201,6 +4202,10 @@ proto.emery.agents.AgentConfig.deserializeBinaryFromReader = function(msg, reade
     case 8:
       var value = /** @type {string} */ (reader.readString());
       msg.setDefaultModel(value);
+      break;
+    case 9:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setAllowNetwork(value);
       break;
     default:
       reader.skipField();
@@ -4279,6 +4284,13 @@ proto.emery.agents.AgentConfig.serializeBinaryToWriter = function(message, write
   if (f.length > 0) {
     writer.writeString(
       8,
+      f
+    );
+  }
+  f = message.getAllowNetwork();
+  if (f) {
+    writer.writeBool(
+      9,
       f
     );
   }
@@ -4448,6 +4460,24 @@ proto.emery.agents.AgentConfig.prototype.getDefaultModel = function() {
  */
 proto.emery.agents.AgentConfig.prototype.setDefaultModel = function(value) {
   return jspb.Message.setProto3StringField(this, 8, value);
+};
+
+
+/**
+ * optional bool allow_network = 9;
+ * @return {boolean}
+ */
+proto.emery.agents.AgentConfig.prototype.getAllowNetwork = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 9, false));
+};
+
+
+/**
+ * @param {boolean} value
+ * @return {!proto.emery.agents.AgentConfig} returns this
+ */
+proto.emery.agents.AgentConfig.prototype.setAllowNetwork = function(value) {
+  return jspb.Message.setProto3BooleanField(this, 9, value);
 };
 
 

@@ -350,6 +350,8 @@ export interface AgentConfig {
   tools: ToolConfig[];
   servers: ServerConfig[];
   defaultModel: string;
+  /** Network access for bash commands (git, curl, wget) - default true for agents */
+  allowNetwork: boolean;
 }
 
 /**
@@ -2474,7 +2476,16 @@ export const TokenUsage: MessageFns<TokenUsage> = {
 };
 
 function createBaseAgentConfig(): AgentConfig {
-  return { name: "", role: "", description: "", persona: "", tools: [], servers: [], defaultModel: "" };
+  return {
+    name: "",
+    role: "",
+    description: "",
+    persona: "",
+    tools: [],
+    servers: [],
+    defaultModel: "",
+    allowNetwork: false,
+  };
 }
 
 export const AgentConfig: MessageFns<AgentConfig> = {
@@ -2499,6 +2510,9 @@ export const AgentConfig: MessageFns<AgentConfig> = {
     }
     if (message.defaultModel !== "") {
       writer.uint32(66).string(message.defaultModel);
+    }
+    if (message.allowNetwork !== false) {
+      writer.uint32(72).bool(message.allowNetwork);
     }
     return writer;
   },
@@ -2566,6 +2580,14 @@ export const AgentConfig: MessageFns<AgentConfig> = {
           message.defaultModel = reader.string();
           continue;
         }
+        case 9: {
+          if (tag !== 72) {
+            break;
+          }
+
+          message.allowNetwork = reader.bool();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2586,6 +2608,7 @@ export const AgentConfig: MessageFns<AgentConfig> = {
         ? object.servers.map((e: any) => ServerConfig.fromJSON(e))
         : [],
       defaultModel: isSet(object.defaultModel) ? globalThis.String(object.defaultModel) : "",
+      allowNetwork: isSet(object.allowNetwork) ? globalThis.Boolean(object.allowNetwork) : false,
     };
   },
 
@@ -2612,6 +2635,9 @@ export const AgentConfig: MessageFns<AgentConfig> = {
     if (message.defaultModel !== "") {
       obj.defaultModel = message.defaultModel;
     }
+    if (message.allowNetwork !== false) {
+      obj.allowNetwork = message.allowNetwork;
+    }
     return obj;
   },
 
@@ -2627,6 +2653,7 @@ export const AgentConfig: MessageFns<AgentConfig> = {
     message.tools = object.tools?.map((e) => ToolConfig.fromPartial(e)) || [];
     message.servers = object.servers?.map((e) => ServerConfig.fromPartial(e)) || [];
     message.defaultModel = object.defaultModel ?? "";
+    message.allowNetwork = object.allowNetwork ?? false;
     return message;
   },
 };

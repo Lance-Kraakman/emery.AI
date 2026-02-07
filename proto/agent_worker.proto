@@ -137,6 +137,7 @@ message AgentConfig {
   repeated ServerConfig servers = 6;
   reserved 7;  // Was: repeated SkillConfig skills - removed for dynamic execution
   string default_model = 8;
+  bool allow_network = 9;  // Network access for bash commands (git, curl, wget) - default true for agents
 }
 
 // AIDEV-NOTE: Simplified single-instruction skill model (removed multi-step workflow)
