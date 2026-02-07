@@ -171,9 +171,68 @@ DESTRUCTIVE OPERATION - Always requires user approval.
 )
 
 
+DATABASE_CREATE_PATTERN = PlanningPattern(
+    id="plan:database_create",
+    name="Database Creation",
+    description="Planning patterns for creating new databases (containers for tables). "
+                "Databases are organizational containers that group related tables together.",
+    triggers=[
+        "create database",
+        "new database",
+        "set up database",
+        "initialize database",
+        "add database",
+    ],
+    capability_ids=["agent:schema_builder"],
+    strategy="""
+1. Define database name and purpose
+2. Identify tables to create within the database
+3. Create database first, then add tables
+
+DATABASE STRUCTURE:
+- Databases contain tables
+- Tables are organized by domain/purpose
+- Create database before adding tables to it
+
+NAMING:
+- Use clear, descriptive names
+- Reflect the business domain (e.g., 'CRM', 'Inventory', 'HR')
+""",
+    tool_sequence=["schema_builder"],
+    step_templates=[
+        "Create database '[name]' with description: '[purpose]'. Verify: database exists.",
+        "Create database '[name]'. Then create tables: [table1], [table2]. Verify: database and tables exist.",
+    ],
+    examples=[
+        {
+            "request": "Create a CRM database",
+            "plan_steps": [
+                "Create database 'CRM' with description: 'Customer relationship management'. Verify: database exists.",
+            ],
+        },
+        {
+            "request": "Set up an inventory tracking database with products and suppliers",
+            "plan_steps": [
+                "Create database 'Inventory' with description: 'Product and supplier management'. Verify: database exists.",
+                "Create table 'products' with fields: name (text), sku (text), quantity (number), price (number). Verify: products table exists.",
+                "Create table 'suppliers' with fields: name (text), email (email), phone (phone). Verify: suppliers table exists.",
+            ],
+        },
+    ],
+    common_mistakes=[
+        "Not specifying database purpose/description",
+        "Creating tables before the database exists",
+        "Vague database names",
+    ],
+    auto_approve_policy=AutoApprovePolicy.CONFIRM,
+    auto_approve_conditions=["single_resource", "explicit_values", "additive_only"],
+)
+
+
 # Export all schema patterns
 SCHEMA_PATTERNS = [
     SCHEMA_DESIGN_PATTERN,
     SCHEMA_MODIFICATION_PATTERN,
     SCHEMA_DELETE_PATTERN,
+    DATABASE_CREATE_PATTERN,
 ]

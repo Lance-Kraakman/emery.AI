@@ -70,7 +70,67 @@ Skills must exist before they can be attached to an agent.
 )
 
 
+AGENT_EXECUTE_PATTERN = PlanningPattern(
+    id="plan:agent_execute",
+    name="Agent Execution",
+    description="Planning patterns for executing existing agents with tasks. "
+                "Execute agents by ID, not by replicating their logic.",
+    triggers=[
+        "run agent",
+        "execute agent",
+        "trigger agent",
+        "use agent",
+        "call agent",
+        "@agent",
+    ],
+    capability_ids=["agent:agent_executor"],
+    strategy="""
+1. Find the agent ID (from workspace_context or via discovery)
+2. Formulate the task/prompt for the agent
+3. Execute by agent ID with the task
+4. Verify successful execution
+
+IMPORTANT:
+- Execute agents by ID — do NOT replicate the agent's logic manually
+- The agent has its own persona, instructions, skills, and data access
+- Pass the task as a natural language prompt
+
+IF AGENT ID IS UNKNOWN:
+Add a discovery step first to find the agent by name.
+""",
+    tool_sequence=["agent_executor"],
+    step_templates=[
+        "Execute agent '[name]' (agent_id=[ID]) with task: '[task description]'. Verify: agent executed successfully.",
+        "Find the agent ID for '[agent_name]' by listing available agents. Verify: agent found.",
+    ],
+    examples=[
+        {
+            "request": "Run my CRM assistant to draft a follow-up email",
+            "plan_steps": [
+                "Execute agent 'CRM Assistant' (agent_id=42) with task: 'Draft a follow-up email for client John Smith about the Q4 proposal.' Verify: agent executed successfully.",
+            ],
+        },
+        {
+            "request": "Trigger the support agent to look up order status",
+            "plan_steps": [
+                "Find the agent ID for 'Support Bot' by listing available agents. Verify: agent found.",
+                "Execute agent 'Support Bot' (agent_id=<from step 1>) with task: 'Look up order status for order #12345.' Verify: agent executed successfully.",
+            ],
+        },
+    ],
+    common_mistakes=[
+        "Trying to manually implement what the agent does",
+        "Not including the agent ID",
+        "Not verifying execution success",
+        "Using agent_builder instead of agent_executor",
+    ],
+    auto_approve_policy=AutoApprovePolicy.CONFIRM,
+    auto_approve_conditions=["explicit_values"],
+)
+
+
 # Export all agent-related patterns
 AGENT_PATTERNS = [
     AGENT_CREATE_PATTERN,
+    AGENT_EXECUTE_PATTERN,
 ]
