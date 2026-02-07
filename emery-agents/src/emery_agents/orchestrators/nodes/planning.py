@@ -485,9 +485,9 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
     ledger.record_plan_created({"plan_id": plan.id, "step_count": len(plan.steps)})
 
     # Save plan to filesystem
-    if runtime.plan_file_repository and plan:
+    if runtime.engine and plan:
         try:
-            runtime.plan_file_repository.save(plan)
+            runtime.engine.plans.save(plan)
         except Exception as e:
             logger.warning(f"Failed to save plan to filesystem: {e}")
 

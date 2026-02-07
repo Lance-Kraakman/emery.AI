@@ -74,8 +74,8 @@ async def direct_execute_node(state: PlanExecuteState, runtime: RuntimeContext) 
                 tools.append(t)
 
     # Add memory CRUD if available
-    if runtime.memory_service:
-        tools.append(create_memory_crud(runtime.memory_service))
+    if runtime.engine:
+        tools.append(create_memory_crud(runtime.engine.memory))
 
     # Filter tools based on triage analysis (reduces tool surface for better selection)
     triage_analysis = state.get("triage_analysis")

@@ -1,7 +1,7 @@
 """
 Memory Service — ChromaDB-backed persistent semantic memory.
 
-Stores memories in the workspace filesystem under .agent/memory/chroma/.
+Stores memories in the workspace filesystem under .engine/memory/chroma/.
 Syncs to S3 naturally via workspace tar.gz uploads.
 
 Path resolution uses ID-based validation (same pattern as BwrapExecutor)
@@ -73,7 +73,7 @@ class MemoryService:
         """
         self._workspace_type = workspace_type
         self._workspace_id = self._validate_id(workspace_id)
-        self._chroma_path = base_path / self._workspace_id / ".agent" / "memory" / "chroma"
+        self._chroma_path = base_path / self._workspace_id / ".engine" / "memory" / "chroma"
 
         # PII filter only for shared agent memories
         self._pii_filter: Optional[PIIFilter] = None

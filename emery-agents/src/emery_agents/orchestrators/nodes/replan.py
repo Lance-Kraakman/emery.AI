@@ -287,8 +287,8 @@ async def _finish(
     ledger = state.get("ledger")
     plan = plan.complete() if success else plan.fail()
 
-    if runtime.plan_file_repository:
-        runtime.plan_file_repository.save(plan)
+    if runtime.engine:
+        runtime.engine.plans.save(plan)
 
     final_response = None
     if ledger:
@@ -299,8 +299,8 @@ async def _finish(
         except Exception as e:
             logger.warning(f"Synthesis failed: {e}")
 
-    if runtime.memory_service and final_response:
-        runtime.memory_service.add(content=f"Task: {state.get('task', '')[:200]}. Result: {final_response[:300]}", memory_type="fact")
+    if runtime.engine and final_response:
+        runtime.engine.memory.add(content=f"Task: {state.get('task', '')[:200]}. Result: {final_response[:300]}", memory_type="fact")
 
     events.append(ExecutionCompletedEvent(plan_id=plan.id, success=success))
     return {"plan": plan, "response": final_response or "Execution finished.", "success": success, "events": events}
@@ -359,8 +359,8 @@ async def _do_replan(
         replan_number=replan_count
     ))
 
-    if runtime.plan_file_repository:
-        runtime.plan_file_repository.save(updated_plan)
+    if runtime.engine:
+        runtime.engine.plans.save(updated_plan)
 
     if new_pending_count == 0:
         raw = state.get("step_outcomes", {})

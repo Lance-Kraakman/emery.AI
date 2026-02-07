@@ -28,13 +28,14 @@ from ..orchestrators import create_session_graph, RuntimeContext
 from ..services.context import ConversationMessage
 from emery_agents.services.analysis.token_accumulator import TokenAccumulator
 from ..orchestrators.state import DEFAULT_STATE
-from ..services.memory import MemoryService
+# MemoryService now accessed via engine.memory
 from ..services.context import WorkspaceContext
 from emery_agents.tools.capability_registry import CapabilityRegistry
 from emery_agents.tools.capability_bootstrap import populate_user_skills, populate_external_tools
 from emery_agents.planning.registry import PlanningRegistry
 from ..orchestrators.nodes.planning import _build_workspace_context
 from ..services.planning import PlanFileRepository
+from ..engine import AgentEngine
 
 logger = logging.getLogger(__name__)
 
@@ -145,48 +146,45 @@ class CoordinatorStreamingHandler:
 
         # Build RuntimeContext with non-serializable objects
         assert context.tool_provider is not None, "tool_provider required"
-        # Initialize MemoryService from workspace IDs
-        memory_service = None
+
+        # Initialize AgentEngine for unified workspace management
+        engine = None
         memory_context_str = ""
         if workspace_type and workspace_id:
             try:
-                memory_service = MemoryService(
-                    workspace_type=workspace_type,
+                engine = AgentEngine(
                     workspace_id=workspace_id,
+                    workspace_type=workspace_type,
                     base_path=Path("/tmp/workspace"),
                 )
+                engine.initialize()
+
                 # Fetch relevant memories (passed separately to planner, not mixed into task)
-                memory_context_str = memory_service.get_context_summary(task)
+                memory_context_str = engine.memory.get_context_summary(task)
                 if memory_context_str:
                     logger.info(f"Found relevant memory context ({len(memory_context_str)} chars)")
             except Exception as e:
-                logger.warning(f"Failed to initialize MemoryService: {e}")
-
-        # Initialize PlanFileRepository for filesystem-based plan persistence
-        plan_file_repo = None
-        if workspace_type and workspace_id:
-            try:
-                plan_file_repo = PlanFileRepository(
-                    base_path=Path("/tmp/workspace"),
-                    workspace_id=workspace_id,
-                )
-            except Exception as e:
-                logger.warning(f"Failed to initialize PlanFileRepository: {e}")
+                logger.warning(f"Failed to initialize AgentEngine: {e}")
 
         runtime = RuntimeContext(
+            # Engine (unified workspace management)
+            engine=engine,
+            # Tools and agents
             tools=tools,
             managed_agents=self._get_managed_agents_list(managed_agents),
+            # Authentication
             api_key=context.tool_provider.api_key,
             org_id=str(context.tool_provider.organization_id),
             org_model=org_model,
+            # Registries
             capability_registry=capability_registry,
             planning_registry=planning_registry,
+            # Context
             conversation_history=_convert_history(conversation_history),
             user_id=user_id,
             workspace_type=workspace_type,
             workspace_id=workspace_id,
-            memory_service=memory_service,
-            plan_file_repository=plan_file_repo,
+            # Additional context
             images=images or [],
             extra_headers=context.tool_provider.extra_headers,
             token_accumulator=token_accumulator,

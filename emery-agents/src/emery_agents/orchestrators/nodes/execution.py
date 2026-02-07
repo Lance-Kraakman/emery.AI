@@ -74,8 +74,8 @@ async def execute_step_node(state: PlanExecuteState, runtime: RuntimeContext) ->
 
     # Build extra tools (e.g., memory CRUD)
     extra_tools = []
-    if runtime.memory_service:
-        extra_tools.append(create_memory_crud(runtime.memory_service))
+    if runtime.engine:
+        extra_tools.append(create_memory_crud(runtime.engine.memory))
 
     # Create fresh PlanStepExecutor per step from RuntimeContext
     plan_step_executor = PlanStepExecutor(

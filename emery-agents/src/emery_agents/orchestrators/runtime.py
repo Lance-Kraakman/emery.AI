@@ -23,6 +23,7 @@ from emery_agents.services.context import ConversationMessage, format_conversati
 if TYPE_CHECKING:
     from emery_agents.tools.capability_registry import CapabilityRegistry
     from emery_agents.planning.registry import PlanningRegistry
+    from emery_agents.engine import AgentEngine
 
 # Re-export so existing `from ..runtime import ConversationMessage` still works
 __all__ = ["ConversationMessage", "format_conversation_history", "RuntimeContext"]
@@ -36,6 +37,7 @@ class RuntimeContext:
     NOT checkpointed — lives in memory for the session duration.
 
     Fields:
+        engine: AgentEngine instance for unified workspace management
         tools: Callable tool instances (with inference clients, closures)
         managed_agents: Agent descriptors for delegation
         api_key: Auth key for API calls
@@ -47,22 +49,30 @@ class RuntimeContext:
         user_id: User ID for memory scoping
         workspace_type: "agents" or "users" — determines PII filtering
         workspace_id: Agent ID or user ID for workspace path resolution
-        memory_service: MemoryService instance for persistent memory (NOT serializable)
-        plan_file_repository: PlanFileRepository for filesystem-based plan persistence
     """
+    # Agent Engine (unified workspace management)
+    engine: Optional["AgentEngine"] = None
+
+    # Tools and agents
     tools: List[Any] = field(default_factory=list)
     managed_agents: List[Any] = field(default_factory=list)
+
+    # Authentication
     api_key: str = ""
     org_id: str = ""
     org_model: Optional[str] = None
+
+    # Registries
     capability_registry: Optional[CapabilityRegistry] = None
     planning_registry: Optional["PlanningRegistry"] = None
+
+    # Context
     conversation_history: Optional[List[ConversationMessage]] = None
     user_id: Optional[str] = None
     workspace_type: Optional[str] = None
     workspace_id: Optional[str] = None
-    memory_service: Optional[Any] = None
-    plan_file_repository: Optional[Any] = None
+
+    # Additional context
     images: List[PILImage.Image] = field(default_factory=list)
     extra_headers: Optional[Dict[str, str]] = None  # Audit trail headers for CRUD tool calls
     token_accumulator: Optional[TokenAccumulator] = None

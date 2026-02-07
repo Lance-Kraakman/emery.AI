@@ -70,7 +70,8 @@ async def triage_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[
         discovery_tools = [t for t in discovery_tools if t.name not in ("web_search", "workspace_overview")]
 
     # Add memory_crud tool so triage can search_memories for deeper context
-    discovery_tools.append(create_memory_crud(runtime.memory_service))  # type: ignore[arg-type]
+    if runtime.engine:
+        discovery_tools.append(create_memory_crud(runtime.engine.memory))
 
     # Add conversation history tool for current session context
     discovery_tools.append(create_conversation_history_tool(runtime.conversation_history or []))
