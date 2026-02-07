@@ -21,9 +21,12 @@ else
 fi
 
 echo -e "\n[NETWORK - gRPC port 50051]"
-# C3A3 = 50051 in hex
-CONNS=$(cat /proc/net/tcp | grep -i ":C3A3" | wc -l)
+# 50051 decimal = C3A3 hex (shown uppercase in /proc/net/tcp)
+CONNS=$(grep -E ":C3A3|:c3a3" /proc/net/tcp /proc/net/tcp6 2>/dev/null | wc -l)
 echo "Active connections: $CONNS"
+# Show actual listening ports for debugging
+echo "Listening ports (IPv4 + IPv6):"
+cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | grep " 0A " | awk '{print $2}' | cut -d: -f2 | while read hex; do printf "  %d\n" 0x$hex 2>/dev/null; done | sort -u
 
 echo -e "\n[TCP STATE COUNTS]"
 cat /proc/net/tcp | awk 'NR>1 {

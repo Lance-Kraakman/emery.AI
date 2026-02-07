@@ -1,10 +1,13 @@
 /**
  * Organization API endpoint
  * Returns organization info for the authenticated user's current organization
+ *
+ * AIDEV-NOTE: Uses withAuthenticatedRoute() to properly set RLS context
+ * for database operations. This is required for getOrganizationRepository().
  */
 
 import { NextRequest } from 'next/server';
-import { authenticateRequest } from '@/lib/auth/test-auth';
+import { withAuthenticatedRoute } from '@/lib/api/base';
 import { getOrganizationRepository } from '@/ddd/application/di/container';
 import { OrganizationId } from '@/ddd/domain/shared/value-objects';
 
@@ -13,28 +16,15 @@ import { OrganizationId } from '@/ddd/domain/shared/value-objects';
  * Returns the current organization info for the authenticated user
  */
 export async function GET(request: NextRequest): Promise<Response> {
-  try {
-    const authResult = await authenticateRequest(request);
-
-    if (!authResult.success || !authResult.user) {
-      return Response.json({ error: authResult.error || 'Unauthorized' }, { status: 401 });
-    }
-
-    const organizationId = authResult.user.organizationId;
-
-    if (!organizationId) {
-      return Response.json({ error: 'No organization context' }, { status: 400 });
-    }
-
+  return withAuthenticatedRoute(request, async (user) => {
     const orgRepo = getOrganizationRepository();
-    const org = await orgRepo.findById(OrganizationId.fromNumber(organizationId));
+    const org = await orgRepo.findById(OrganizationId.fromNumber(user.organizationId!));
 
     if (!org) {
-      return Response.json({ error: 'Organization not found' }, { status: 404 });
+      return { success: false, error: 'Organization not found', status: 404 };
     }
 
-    // Full response
-    return Response.json({
+    return {
       success: true,
       data: {
         id: org.id.value,
@@ -53,11 +43,6 @@ export async function GET(request: NextRequest): Promise<Response> {
         storageQuotaBytes: org.storageQuotaBytes,
         storageUsedBytes: org.storageUsedBytes,
       }
-    });
-  } catch (error) {
-    console.error('[ORGANIZATIONS-API] Error:', error);
-    return Response.json({
-      error: error instanceof Error ? error.message : 'Failed to fetch organization'
-    }, { status: 500 });
-  }
+    };
+  });
 }

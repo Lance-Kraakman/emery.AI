@@ -3,6 +3,9 @@ Shared HTTP client for DSPy tools.
 
 This module provides thread-safe HTTP request handling for all DSPy tool functions.
 Ported from tools/crud_tools.py AsyncHTTPManager.
+
+AIDEV-NOTE: Includes tenacity-based retry logic for transient server errors (5xx).
+Does NOT retry client errors (4xx) to avoid masking auth/validation issues.
 """
 
 from __future__ import annotations
@@ -18,6 +21,13 @@ import uuid
 from typing import Any
 
 import httpx
+from tenacity import (
+    AsyncRetrying,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_result,
+    RetryCallState,
+)
 
 from emery_agents.utils.permission_error_parser import (
     format_permission_error_for_user,
@@ -25,6 +35,54 @@ from emery_agents.utils.permission_error_parser import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Retry configuration for transient server errors
+RETRYABLE_STATUS_CODES = {500, 502, 503, 504}
+MAX_RETRIES = 3
+MIN_BACKOFF_SECONDS = 1
+MAX_BACKOFF_SECONDS = 10
+
+
+def _is_retryable_error(result: str) -> bool:
+    """
+    Determine if a result indicates a retryable error.
+
+    Only retry server errors (5xx) and timeouts.
+    Do NOT retry client errors (4xx) - these indicate auth/validation issues.
+    """
+    if not isinstance(result, str) or not result.startswith("ERROR:"):
+        return False
+
+    # Don't retry 4xx errors (client errors - auth, validation, etc.)
+    if "HTTP 4" in result:
+        return False
+
+    # Retry 5xx server errors
+    for code in RETRYABLE_STATUS_CODES:
+        if f"HTTP {code}" in result:
+            return True
+
+    # Retry timeouts and connection errors
+    lower_result = result.lower()
+    if "timeout" in lower_result or "connection" in lower_result:
+        return True
+
+    return False
+
+
+def _log_retry(retry_state: RetryCallState) -> None:
+    """Log retry attempts for observability."""
+    attempt = retry_state.attempt_number
+    outcome = retry_state.outcome
+    if outcome and outcome.failed:
+        logger.warning(
+            f"[DSPY-HTTP] Retry {attempt}/{MAX_RETRIES} after error: {outcome.exception()}"
+        )
+    elif outcome:
+        result = outcome.result()
+        logger.warning(
+            f"[DSPY-HTTP] Retry {attempt}/{MAX_RETRIES} after: {result[:100] if result else 'unknown'}"
+        )
 
 
 class HTTPClient:
@@ -119,7 +177,12 @@ class HTTPClient:
         deadline_ms: int | None = None,
         extra_headers: dict[str, str] | None = None,
     ) -> str:
-        """Core async HTTP request with deadline propagation."""
+        """
+        Core async HTTP request with deadline propagation and retry logic.
+
+        Retries transient server errors (5xx) with exponential backoff.
+        Does NOT retry client errors (4xx) to preserve auth/validation semantics.
+        """
         call_id = str(uuid.uuid4())[:8]
         start_time = time.time()
 
@@ -159,65 +222,87 @@ class HTTPClient:
         if deadline_ms:
             timeout = min(deadline_ms / 1000 - 5, 25.0)
 
-        try:
-            if self._client is None:
-                return "ERROR: HTTP client not initialized"
-
-            response = await self._client.request(
-                method=method,
-                url=url,
-                headers=headers,
-                json=data if data else None,
-                timeout=timeout,
-            )
-
-            total_time = time.time() - start_time
-
-            # Handle HTTP errors
-            if response.status_code >= 400:
-                error_detail = f"HTTP {response.status_code}"
-                error_body = None
-
-                try:
-                    error_body = response.json()
-                    if "error" in error_body:
-                        error_detail = error_body["error"]
-                    elif "message" in error_body:
-                        error_detail = error_body["message"]
-                except (json.JSONDecodeError, KeyError, TypeError):
-                    error_detail = response.text[:200] if response.text else error_detail
-
-                logger.error(
-                    f"[DSPY-HTTP] {method} {endpoint} - call_id: {call_id}, "
-                    f"status: {response.status_code}, duration: {total_time:.2f}s"
-                )
-
-                # Special handling for 403 permission errors
-                if response.status_code == 403:
-                    perm_error = parse_permission_error(error_body or {"error": error_detail})
-                    if perm_error:
-                        user_message = format_permission_error_for_user(perm_error)
-                        return f"PERMISSION_DENIED: {user_message}"
-
-                return f"ERROR: {error_detail}"
-
-            # Parse successful response
+        async def _do_request() -> str:
+            """Execute single HTTP request (may be retried by tenacity)."""
             try:
-                logger.info(
-                    f"[DSPY-HTTP] {method} {endpoint} - call_id: {call_id}, "
-                    f"status: {response.status_code}, duration: {total_time:.2f}s"
-                )
-                result_data = response.json()
-                return json.dumps(result_data, default=str)
-            except json.JSONDecodeError:
-                return response.text
+                if self._client is None:
+                    return "ERROR: HTTP client not initialized"
 
-        except httpx.TimeoutException:
-            return f"ERROR: Request timeout after {timeout} seconds"
-        except httpx.RequestError as e:
-            return f"ERROR: HTTP request failed: {e}"
-        except Exception as e:
-            return f"ERROR: Unexpected error: {e}"
+                response = await self._client.request(
+                    method=method,
+                    url=url,
+                    headers=headers,
+                    json=data if data else None,
+                    timeout=timeout,
+                )
+
+                total_time = time.time() - start_time
+
+                # Handle HTTP errors
+                if response.status_code >= 400:
+                    error_detail = f"HTTP {response.status_code}"
+                    error_body = None
+
+                    try:
+                        error_body = response.json()
+                        if "error" in error_body:
+                            error_detail = error_body["error"]
+                        elif "message" in error_body:
+                            error_detail = error_body["message"]
+                    except (json.JSONDecodeError, KeyError, TypeError):
+                        error_detail = response.text[:200] if response.text else error_detail
+
+                    logger.error(
+                        f"[DSPY-HTTP] {method} {endpoint} - call_id: {call_id}, "
+                        f"status: {response.status_code}, duration: {total_time:.2f}s"
+                    )
+
+                    # Special handling for 403 permission errors
+                    if response.status_code == 403:
+                        perm_error = parse_permission_error(error_body or {"error": error_detail})
+                        if perm_error:
+                            user_message = format_permission_error_for_user(perm_error)
+                            return f"PERMISSION_DENIED: {user_message}"
+
+                    # Return error with status code for retry logic to check
+                    return f"ERROR: HTTP {response.status_code} - {error_detail}"
+
+                # Parse successful response
+                try:
+                    logger.info(
+                        f"[DSPY-HTTP] {method} {endpoint} - call_id: {call_id}, "
+                        f"status: {response.status_code}, duration: {total_time:.2f}s"
+                    )
+                    result_data = response.json()
+                    return json.dumps(result_data, default=str)
+                except json.JSONDecodeError:
+                    return response.text
+
+            except httpx.TimeoutException:
+                return f"ERROR: Request timeout after {timeout} seconds"
+            except httpx.RequestError as e:
+                return f"ERROR: HTTP request failed: {e}"
+            except Exception as e:
+                return f"ERROR: Unexpected error: {e}"
+
+        # Execute with retry logic for transient server errors (5xx, timeouts)
+        # Does NOT retry client errors (4xx) to preserve auth/validation semantics
+        last_result: str = ""
+        async for attempt in AsyncRetrying(
+            stop=stop_after_attempt(MAX_RETRIES),
+            wait=wait_exponential(
+                multiplier=1,
+                min=MIN_BACKOFF_SECONDS,
+                max=MAX_BACKOFF_SECONDS,
+            ),
+            retry=retry_if_result(_is_retryable_error),
+            before_sleep=_log_retry,
+            reraise=False,
+        ):
+            with attempt:
+                last_result = await _do_request()
+
+        return last_result
 
 
 # Global singleton client
