@@ -86,16 +86,37 @@ class MemoryService:
         # Ensure directory exists with write permissions
         # (tar.gz roundtrip can leave restrictive permissions from bwrap)
         # Must chmod parent directories too — ChromaDB needs write access for temp/lock files
+
+        # Fix workspace root permissions FIRST (parent of all subdirs)
+        # If workspace root is readonly, subdirs can't be created/written
+        # Use 0o700 (owner-only) for security - no group/others access needed
+        workspace_root = base_path / self._workspace_id
+        if workspace_root.exists():
+            try:
+                workspace_root.chmod(0o700)
+            except PermissionError:
+                logger.warning(f"Cannot fix permissions on workspace root {workspace_root}")
+
         self._chroma_path.mkdir(parents=True, exist_ok=True)
 
-        # Fix entire .agent/memory/chroma tree (parent dirs may have 0o700 from extraction)
+        # Fix entire .agent/memory/chroma tree
+        # Use 0o700 for security - only owner needs access
         agent_dir = self._chroma_path.parent.parent  # .agent
         if agent_dir.exists():
-            agent_dir.chmod(0o755)
+            try:
+                agent_dir.chmod(0o700)
+            except PermissionError:
+                logger.warning(f"Cannot fix permissions on {agent_dir}")
         memory_dir = self._chroma_path.parent  # .agent/memory
         if memory_dir.exists():
-            memory_dir.chmod(0o755)
-        self._chroma_path.chmod(0o755)
+            try:
+                memory_dir.chmod(0o700)
+            except PermissionError:
+                logger.warning(f"Cannot fix permissions on {memory_dir}")
+        try:
+            self._chroma_path.chmod(0o700)
+        except PermissionError:
+            logger.warning(f"Cannot fix permissions on {self._chroma_path}")
 
         # ChromaDB PersistentClient
         self._client = chromadb.PersistentClient(path=str(self._chroma_path))
