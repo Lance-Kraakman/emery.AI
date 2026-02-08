@@ -3,8 +3,10 @@
  *
  * POST /api/agents/[id]/workspace/sync/pull
  *
- * Compares client's file hashes with remote and returns only changed files.
+ * Compares client's file hashes with server and returns only changed files.
  * Client sends their current signatures, server returns files that differ.
+ *
+ * Reads directly from shared filesystem (EFS/NFS).
  *
  * Request body:
  * {
@@ -24,19 +26,16 @@
 
 import { NextRequest } from 'next/server';
 import { createHash } from 'crypto';
-import { createGunzip } from 'zlib';
-import { Readable } from 'stream';
-import * as tar from 'tar';
-import { mkdir, readFile, rm } from 'fs/promises';
+import { readFile, access } from 'fs/promises';
 import { join } from 'path';
-import { tmpdir } from 'os';
-import { randomUUID } from 'crypto';
 import { authenticateRequest } from '@/lib/auth/test-auth';
 import { getAgentApplicationService, contextManager } from '@/ddd/application/di/container';
 import { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
-import { WorkspaceS3Service } from '@/lib/workspace/workspace-s3';
 import { walkDirectory } from '../utils';
 import type { FileHash, SignatureManifest } from '../../signatures/route';
+
+// Base path for workspace storage (EFS mount)
+const WORKSPACE_BASE = process.env.WORKSPACE_STORAGE_PATH || '/mnt/storage/workspaces';
 
 interface PullRequest {
   signatures: Record<string, string>;  // path -> hash
@@ -49,8 +48,6 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ): Promise<Response> {
-  const tempDir = join(tmpdir(), `workspace-pull-${randomUUID()}`);
-
   try {
     // Authenticate
     const authResult = await authenticateRequest(request);
@@ -98,16 +95,19 @@ export async function POST(
     const body: PullRequest = await request.json();
     const clientSignatures = body.signatures || {};
 
+    // Get workspace path on shared filesystem
     const orgId = agent.organizationId.value;
+    const workspacePath = join(WORKSPACE_BASE, String(orgId), String(agentId));
 
     // Check if workspace exists
-    const exists = await WorkspaceS3Service.exists(orgId, agentId);
-    if (!exists) {
-      // No remote workspace - return empty
+    try {
+      await access(workspacePath);
+    } catch {
+      // No workspace - return empty (all client files are "deleted" remotely)
       return Response.json({
         success: true,
         files: {},
-        deleted: Object.keys(clientSignatures), // All local files are "deleted" remotely
+        deleted: Object.keys(clientSignatures),
         signatures: {
           files: {},
           timestamp: Date.now(),
@@ -115,29 +115,14 @@ export async function POST(
       });
     }
 
-    // Download and extract archive
-    await mkdir(tempDir, { recursive: true });
-    const { body: archiveBody } = await WorkspaceS3Service.downloadArchive(orgId, agentId);
-
-    await new Promise<void>((resolve, reject) => {
-      const gunzip = createGunzip();
-      const extract = tar.extract({ cwd: tempDir });
-
-      Readable.from(archiveBody)
-        .pipe(gunzip)
-        .pipe(extract)
-        .on('finish', resolve)
-        .on('error', reject);
-    });
-
     // Walk remote files and compute hashes
-    const remoteFiles = await walkDirectory(tempDir);
+    const remoteFiles = await walkDirectory(workspacePath);
     const remoteHashes: Record<string, FileHash> = {};
     const changedFiles: Record<string, string> = {};  // path -> base64 content
     let totalSize = 0;
 
     for (const relativePath of remoteFiles) {
-      const fullPath = join(tempDir, relativePath);
+      const fullPath = join(workspacePath, relativePath);
       const content = await readFile(fullPath);
       const hash = createHash('sha256').update(content).digest('hex');
 
@@ -184,12 +169,5 @@ export async function POST(
       { success: false, error: 'Failed to pull workspace changes' },
       { status: 500 }
     );
-  } finally {
-    // Cleanup temp directory
-    try {
-      await rm(tempDir, { recursive: true, force: true });
-    } catch {
-      // Ignore cleanup errors
-    }
   }
 }

@@ -12,6 +12,7 @@ from aws_cdk import (
     aws_cloudfront_origins as origins,
     aws_servicediscovery as servicediscovery,
     aws_certificatemanager as acm,
+    aws_efs as efs,
     custom_resources,
     Aws,
     Duration,
@@ -172,6 +173,39 @@ class AppStack(Stack):
         # AIDEV-NOTE: Migration now handled by init containers in each service
         # No separate migration task needed - migrations run before each service starts
 
+        # ========== SHARED FILESYSTEM (EFS) FOR WORKSPACES ==========
+        # Provides persistent workspace storage shared between agent and frontend services.
+        # Eliminates S3 transfer costs and enables instant workspace access.
+        workspace_fs = efs.FileSystem(
+            self, f"{prefix}WorkspaceFS",
+            vpc=data_stack.vpc,
+            removal_policy=RemovalPolicy.RETAIN,  # Keep data on stack deletion
+            performance_mode=efs.PerformanceMode.GENERAL_PURPOSE,
+            throughput_mode=efs.ThroughputMode.BURSTING,
+            lifecycle_policy=efs.LifecyclePolicy.AFTER_30_DAYS,  # Move old files to cheaper tier
+            encrypted=True,
+        )
+
+        # Create access point for workspaces directory
+        workspace_access_point = workspace_fs.add_access_point(
+            f"{prefix}WorkspaceAccessPoint",
+            path="/workspaces",
+            create_acl=efs.Acl(
+                owner_gid="1000",
+                owner_uid="1000",
+                permissions="755",
+            ),
+            posix_user=efs.PosixUser(
+                gid="1000",
+                uid="1000",
+            ),
+        )
+
+        CfnOutput(
+            self, f"{prefix}WorkspaceFSId",
+            value=workspace_fs.file_system_id,
+            description="EFS filesystem ID for workspace storage"
+        )
 
         # Create custom task definition with init container for migrations
         # COST-OPT: ARM64 (Graviton) ~20% cheaper per vCPU-hour than x86
@@ -182,6 +216,19 @@ class AppStack(Stack):
             runtime_platform=ecs.RuntimePlatform(
                 cpu_architecture=ecs.CpuArchitecture.ARM64,
                 operating_system_family=ecs.OperatingSystemFamily.LINUX
+            ),
+        )
+
+        # Add EFS volume for workspace storage
+        frontend_task_definition.add_volume(
+            name="workspace-storage",
+            efs_volume_configuration=ecs.EfsVolumeConfiguration(
+                file_system_id=workspace_fs.file_system_id,
+                transit_encryption="ENABLED",
+                authorization_config=ecs.AuthorizationConfig(
+                    access_point_id=workspace_access_point.access_point_id,
+                    iam="ENABLED",
+                ),
             ),
         )
 
@@ -211,6 +258,7 @@ class AppStack(Stack):
             port_mappings=[ecs.PortMapping(container_port=3000)],
             environment={
                 "REDIS_URL": data_stack.redis_endpoint,  # ElastiCache for caching
+                "WORKSPACE_STORAGE_PATH": "/mnt/storage/workspaces",  # EFS mount for workspaces
             },
             secrets={
                 "DATABASE_URL": ecs.Secret.from_secrets_manager(data_stack.db_instance.secret),
@@ -221,6 +269,15 @@ class AppStack(Stack):
                 log_retention=log_retention,
             ),
             essential=True
+        )
+
+        # Mount EFS workspace storage in frontend container
+        frontend_container.add_mount_points(
+            ecs.MountPoint(
+                container_path="/mnt/storage/workspaces",
+                source_volume="workspace-storage",
+                read_only=False,
+            )
         )
 
         # Init container dependency: main container waits for migration (FIXED SYNTAX)
@@ -587,7 +644,21 @@ class AppStack(Stack):
             ),
         )
 
+        # Add EFS volume for workspace storage (shared with frontend)
+        agent_task_definition.add_volume(
+            name="workspace-storage",
+            efs_volume_configuration=ecs.EfsVolumeConfiguration(
+                file_system_id=workspace_fs.file_system_id,
+                transit_encryption="ENABLED",
+                authorization_config=ecs.AuthorizationConfig(
+                    access_point_id=workspace_access_point.access_point_id,
+                    iam="ENABLED",
+                ),
+            ),
+        )
+
         # Chat container (port 50051): AgentWorker + ChatProcessingService
+        # SYS_PTRACE capability required for gVisor sandbox (ptrace platform)
         chat_container = agent_task_definition.add_container(
             f"{prefix}AgentChatContainer",
             image=agent_image,
@@ -595,6 +666,7 @@ class AppStack(Stack):
             port_mappings=[ecs.PortMapping(container_port=50051)],
             environment={
                 "GRPC_CHAT_MAX_WORKERS": "20",
+                "WORKSPACE_STORAGE_PATH": "/mnt/storage/workspaces",  # EFS mount for workspaces
             },
             secrets={
                 "DATABASE_URL": ecs.Secret.from_secrets_manager(data_stack.db_instance.secret),
@@ -605,6 +677,19 @@ class AppStack(Stack):
                 log_retention=log_retention,
             ),
             essential=True,  # Task restarts if chat container fails
+            linux_parameters=ecs.LinuxParameters(
+                self, f"{prefix}AgentChatLinuxParams",
+                add_capabilities=[ecs.Capability.SYS_PTRACE],  # Required for gVisor sandbox
+            ),
+        )
+
+        # Mount EFS workspace storage in chat container
+        chat_container.add_mount_points(
+            ecs.MountPoint(
+                container_path="/mnt/storage/workspaces",
+                source_volume="workspace-storage",
+                read_only=False,
+            )
         )
 
         # Table container (port 50052): TableService only
@@ -685,6 +770,10 @@ class AppStack(Stack):
             ec2.Port.tcp(6379),
             "Allow agent service to access ElastiCache Redis"
         )
+
+        # Grant EFS access for workspace storage
+        workspace_fs.connections.allow_default_port_from(agent_service)
+        workspace_fs.connections.allow_default_port_from(frontend_service.service)
 
         # Add ECR permissions for agent service
         agent_task_definition.execution_role.add_managed_policy(

@@ -12,10 +12,13 @@ services:
       - HF_TOKEN=${HF_TOKEN:-}
       - PYTHONPATH=/usr/src/app/src
       - USE_PIPEDREAM_TOOLS=true
+      - WORKSPACE_STORAGE_PATH=/mnt/storage/workspaces
     volumes:
       # Mount source code for development testing
       - ./src:/usr/src/app/src:ro
       - ./tests:/usr/src/app/tests:ro
+      # Shared workspace storage (EFS-compatible for local testing)
+      - workspace-data:/mnt/storage/workspaces
     networks:
       - test-network
     healthcheck:
@@ -36,10 +39,13 @@ services:
       - HF_TOKEN=${HF_TOKEN:-}
       - PYTHONPATH=/usr/src/app/src
       - USE_PIPEDREAM_TOOLS=true
+      - WORKSPACE_STORAGE_PATH=/mnt/storage/workspaces
     volumes:
       # Mount source code for development testing
       - ./src:/usr/src/app/src:ro
       - ./tests:/usr/src/app/tests:ro
+      # Shared workspace storage (EFS-compatible for local testing)
+      - workspace-data:/mnt/storage/workspaces
     networks:
       - test-network
     healthcheck:
@@ -64,3 +70,8 @@ services:
 networks:
   test-network:
     driver: bridge
+
+volumes:
+  workspace-data:
+    # Shared workspace storage for local testing
+    # Simulates EFS behavior in production

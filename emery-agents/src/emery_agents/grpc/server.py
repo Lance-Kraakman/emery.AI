@@ -13,7 +13,7 @@ from grpc import aio
 
 from emery_agents.tools.loader import UnifiedToolLoader
 
-from ..infrastructure.workspace_sync import WorkspaceSync
+from ..infrastructure.storage import create_workspace_storage, WorkspaceStorage
 from ..services.agents.executor import AgentExecutor
 from ..services.tasks import TaskExecutor
 from .generated import (
@@ -66,17 +66,12 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
             api_service=None,  # No API service needed for background tasks
         )
 
-        # Initialize workspace sync for filesystem-based agent workspaces
-        # Workspaces are stored in S3 as tar.gz archives
-        s3_bucket = os.getenv("S3_BUCKET_NAME")
-        if s3_bucket:
-            self.workspace_sync: WorkspaceSync | None = WorkspaceSync(
-                bucket=s3_bucket,
-            )
-            logger.info(f"WorkspaceSync initialized with bucket: {s3_bucket}")
-        else:
-            self.workspace_sync = None
-            logger.warning("S3_BUCKET_NAME not set - workspace persistence disabled")
+        # Initialize workspace storage (EFS/NFS/local filesystem)
+        # Workspaces are stored directly on shared filesystem - no S3 needed
+        self.workspace_storage: WorkspaceStorage = create_workspace_storage()
+
+        # Workspace-level locks to prevent concurrent access to same workspace
+        self._workspace_locks: dict[str, asyncio.Lock] = {}
 
     async def ExecuteTask(
         self, request: agent_worker_pb2.TaskRequest, context: grpc.aio.ServicerContext
@@ -84,9 +79,11 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
         """Execute agent task with streaming progress updates.
 
         AIDEV-NOTE: Refactored to use shared TaskExecutor for consistency with
-        ProcessMessage task-based execution. Workspace sync remains here as it's
-        specific to background task execution.
+        ProcessMessage task-based execution. Uses shared filesystem storage
+        with workspace-level locking to prevent concurrent access.
         """
+        import subprocess
+
         # Convert protobuf to entity at boundary, then build TaskData
         task_request = self.proto_mapper.task_request_from_proto(request)
         task_data = TaskExecutor.from_task_request(task_request)
@@ -99,74 +96,87 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
 
         logger.info(f"Task: {request.name}")
 
-        # Download workspace from S3 if workspace sync is enabled
+        # Get workspace path from shared filesystem (instant - no download needed)
         workspace_path: Path | None = None
         workspace_id = str(task_data.agent_id) if task_data.agent_id else "org"
-        if self.workspace_sync and task_data.agent_id:
-            try:
-                workspace_path = self.workspace_sync.download(
-                    task_data.organization_id, "agents", workspace_id
-                )
-                logger.info(
-                    f"📁 [TASK-{task_data.task_id[:8]}] Workspace downloaded to {workspace_path}"
-                )
+        workspace_lock_key = f"{task_data.organization_id}:{workspace_id}"
+        workspace_lock: asyncio.Lock | None = None
 
-                # Prepare task history directory
-                self.workspace_sync.prepare_task_history(
-                    workspace_id=workspace_id,
-                    task_id=task_data.task_id,
-                )
+        # Get or create lock for this workspace
+        if task_data.agent_id:
+            if workspace_lock_key not in self._workspace_locks:
+                self._workspace_locks[workspace_lock_key] = asyncio.Lock()
+            workspace_lock = self._workspace_locks[workspace_lock_key]
 
-                # Log workspace manifest after download
-                try:
-                    shell = self.workspace_sync._get_shell(workspace_id)
-                    tree_result = shell.run(
-                        "tree -L 2 --noreport 2>/dev/null || find . -maxdepth 2 -type f | head -50",
-                        timeout=10,
-                    )
-                    manifest_text = (
-                        tree_result.stdout
-                        if tree_result.success
-                        else "Could not generate manifest"
-                    )
-                    file_count = (
-                        len([l for l in manifest_text.strip().split("\n") if l.strip()])
-                        if manifest_text
-                        else 0
-                    )
-
-                    print(
-                        f"📂 [TASK-{task_data.task_id[:8]}] Workspace contents ({file_count} entries):\n{manifest_text}"
-                    )
-                    sys.stdout.flush()
-
-                    self.workspace_sync.append_to_session_log(
-                        workspace_id=workspace_id,
-                        task_id=task_data.task_id,
-                        entry={
-                            "type": "workspace_manifest",
-                            "workspace_id": workspace_id,
-                            "manifest": manifest_text,
-                            "file_count": file_count,
-                        },
-                    )
-                except Exception as manifest_err:
-                    logger.warning(f"Failed to log workspace manifest: {manifest_err}")
-
-            except Exception as e:
-                logger.error(f"Failed to download workspace: {e}")
-                # Continue without workspace - task can still execute
-
-        # Set workspace path in task data
-        task_data.workspace_path = workspace_path
-
-        self.active_tasks[task_data.task_id] = {
-            "agent_id": task_data.agent_id,
-            "start_time": time.time(),
-            "workspace_path": workspace_path,
-        }
+            # Acquire workspace lock - held for entire task duration
+            await workspace_lock.acquire()
+            logger.info(f"🔒 [TASK-{task_data.task_id[:8]}] Acquired workspace lock")
 
         try:
+            # Set up workspace if we have an agent
+            if task_data.agent_id:
+                try:
+                    workspace_path = self.workspace_storage.get_workspace_path(
+                        task_data.organization_id, workspace_id
+                    )
+                    logger.info(
+                        f"📁 [TASK-{task_data.task_id[:8]}] Workspace ready at {workspace_path}"
+                    )
+
+                    # Prepare task history directory
+                    self.workspace_storage.prepare_task_history(
+                        org_id=task_data.organization_id,
+                        agent_id=workspace_id,
+                        task_id=task_data.task_id,
+                    )
+
+                    # Log workspace manifest
+                    try:
+                        result = subprocess.run(
+                            ["find", str(workspace_path), "-maxdepth", "2", "-type", "f"],
+                            capture_output=True,
+                            text=True,
+                            timeout=10,
+                        )
+                        manifest_text = result.stdout if result.returncode == 0 else "Could not generate manifest"
+                        file_count = (
+                            len([l for l in manifest_text.strip().split("\n") if l.strip()])
+                            if manifest_text
+                            else 0
+                        )
+
+                        print(
+                            f"📂 [TASK-{task_data.task_id[:8]}] Workspace contents ({file_count} entries):\n{manifest_text[:500]}"
+                        )
+                        sys.stdout.flush()
+
+                        self.workspace_storage.append_to_session_log(
+                            org_id=task_data.organization_id,
+                            agent_id=workspace_id,
+                            task_id=task_data.task_id,
+                            entry={
+                                "type": "workspace_manifest",
+                                "workspace_id": workspace_id,
+                                "manifest": manifest_text[:1000],
+                                "file_count": file_count,
+                            },
+                        )
+                    except Exception as manifest_err:
+                        logger.warning(f"Failed to log workspace manifest: {manifest_err}")
+
+                except Exception as e:
+                    logger.error(f"Failed to access workspace: {e}")
+                    # Continue without workspace - task can still execute
+
+            # Set workspace path in task data
+            task_data.workspace_path = workspace_path
+
+            self.active_tasks[task_data.task_id] = {
+                "agent_id": task_data.agent_id,
+                "start_time": time.time(),
+                "workspace_path": workspace_path,
+            }
+
             logger.info(
                 f"🔧 [TASK-{task_data.task_id[:8]}] Model context: agent={task_data.agent_model or 'none'}, org={task_data.org_model or 'none'}"
             )
@@ -220,21 +230,27 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
             yield error_progress
 
         finally:
-            # Upload workspace back to S3 and cleanup
-            if self.workspace_sync and workspace_path and task_data.agent_id:
+            # Workspace changes persist instantly on shared filesystem
+            # No upload needed - just rotate old history periodically
+            if workspace_path and task_data.agent_id:
                 try:
-                    self.workspace_sync.upload(
-                        task_data.organization_id, "agents", workspace_id
+                    # Rotate old history (non-blocking, best effort)
+                    self.workspace_storage.rotate_history(
+                        task_data.organization_id, workspace_id, max_days=30
                     )
                     logger.info(
-                        f"📤 [TASK-{task_data.task_id[:8]}] Workspace uploaded to S3"
+                        f"✅ [TASK-{task_data.task_id[:8]}] Workspace changes persisted"
                     )
-                    self.workspace_sync.cleanup(workspace_id)
                 except Exception as e:
-                    logger.error(f"Failed to upload workspace: {e}")
+                    logger.warning(f"Failed to rotate history: {e}")
 
             if task_data.task_id in self.active_tasks:
                 del self.active_tasks[task_data.task_id]
+
+            # Release workspace lock
+            if workspace_lock is not None and workspace_lock.locked():
+                workspace_lock.release()
+                logger.info(f"🔓 [TASK-{task_data.task_id[:8]}] Released workspace lock")
 
     async def GetWorkerInfo(
         self, request: agent_worker_pb2.Empty, context: grpc.aio.ServicerContext

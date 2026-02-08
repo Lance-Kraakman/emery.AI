@@ -59,3 +59,7 @@ volumes:
   redis-data:
   minio-data:
   postgres-data:
+  # Shared workspace storage for agent/frontend
+  # Mount with: volumes: - workspace-data:/mnt/storage/workspaces
+  # Set env: WORKSPACE_STORAGE_PATH=/mnt/storage/workspaces
+  workspace-data:

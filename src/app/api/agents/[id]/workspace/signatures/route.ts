@@ -3,8 +3,10 @@
  *
  * GET /api/agents/[id]/workspace/signatures
  *
- * Returns SHA256 hash manifest for all files in the remote workspace.
+ * Returns SHA256 hash manifest for all files in the workspace.
  * Used by Tauri desktop app for delta sync - only transfer changed files.
+ *
+ * Reads directly from shared filesystem (EFS/NFS).
  *
  * Authentication: API key or session
  * Authorization: Agent must belong to user's organization
@@ -12,18 +14,15 @@
 
 import { NextRequest } from 'next/server';
 import { createHash } from 'crypto';
-import { createGunzip } from 'zlib';
-import { Readable } from 'stream';
-import * as tar from 'tar';
-import { mkdir, readFile, rm } from 'fs/promises';
+import { readFile, stat, access } from 'fs/promises';
 import { join } from 'path';
-import { tmpdir } from 'os';
-import { randomUUID } from 'crypto';
 import { authenticateRequest } from '@/lib/auth/test-auth';
 import { getAgentApplicationService, contextManager } from '@/ddd/application/di/container';
 import { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
-import { WorkspaceS3Service } from '@/lib/workspace/workspace-s3';
 import { walkDirectory } from '../sync/utils';
+
+// Base path for workspace storage (EFS mount)
+const WORKSPACE_BASE = process.env.WORKSPACE_STORAGE_PATH || '/mnt/storage/workspaces';
 
 export interface FileHash {
   hash: string;  // SHA256 hex
@@ -39,8 +38,6 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ): Promise<Response> {
-  const tempDir = join(tmpdir(), `workspace-sig-${randomUUID()}`);
-
   try {
     // Authenticate
     const authResult = await authenticateRequest(request);
@@ -84,11 +81,15 @@ export async function GET(
       );
     }
 
-    // Check if workspace exists
+    // Get workspace path on shared filesystem
     const orgId = agent.organizationId.value;
-    const exists = await WorkspaceS3Service.exists(orgId, agentId);
-    if (!exists) {
-      // Return empty manifest for new workspaces
+    const workspacePath = join(WORKSPACE_BASE, String(orgId), String(agentId));
+
+    // Check if workspace exists
+    try {
+      await access(workspacePath);
+    } catch {
+      // Workspace doesn't exist yet - return empty manifest
       return Response.json({
         success: true,
         signatures: {
@@ -98,28 +99,12 @@ export async function GET(
       });
     }
 
-    // Download and extract archive
-    await mkdir(tempDir, { recursive: true });
-    const { body } = await WorkspaceS3Service.downloadArchive(orgId, agentId);
-
-    // Extract tar.gz to temp directory
-    await new Promise<void>((resolve, reject) => {
-      const gunzip = createGunzip();
-      const extract = tar.extract({ cwd: tempDir });
-
-      Readable.from(body)
-        .pipe(gunzip)
-        .pipe(extract)
-        .on('finish', resolve)
-        .on('error', reject);
-    });
-
     // Walk directory and compute hashes
-    const files = await walkDirectory(tempDir);
+    const files = await walkDirectory(workspacePath);
     const fileHashes: Record<string, FileHash> = {};
 
     for (const relativePath of files) {
-      const fullPath = join(tempDir, relativePath);
+      const fullPath = join(workspacePath, relativePath);
       const content = await readFile(fullPath);
       const hash = createHash('sha256').update(content).digest('hex');
       fileHashes[relativePath] = {
@@ -141,12 +126,5 @@ export async function GET(
       { success: false, error: 'Failed to get workspace signatures' },
       { status: 500 }
     );
-  } finally {
-    // Cleanup temp directory
-    try {
-      await rm(tempDir, { recursive: true, force: true });
-    } catch {
-      // Ignore cleanup errors
-    }
   }
 }

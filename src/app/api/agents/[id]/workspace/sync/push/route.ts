@@ -3,8 +3,10 @@
  *
  * POST /api/agents/[id]/workspace/sync/push
  *
- * Receives changed files from client and applies them to the remote workspace.
+ * Receives changed files from client and writes them directly to the workspace.
  * Only changed files are sent, not the entire archive.
+ *
+ * Writes directly to shared filesystem (EFS/NFS).
  *
  * Request body:
  * {
@@ -18,19 +20,16 @@
 
 import { NextRequest } from 'next/server';
 import { createHash } from 'crypto';
-import { createGunzip, createGzip } from 'zlib';
-import { Readable } from 'stream';
-import * as tar from 'tar';
-import { mkdir, readFile, rm, writeFile, unlink } from 'fs/promises';
+import { mkdir, readFile, writeFile, unlink, access } from 'fs/promises';
 import { join, dirname } from 'path';
-import { tmpdir } from 'os';
-import { randomUUID } from 'crypto';
 import { authenticateRequest } from '@/lib/auth/test-auth';
 import { getAgentApplicationService, contextManager } from '@/ddd/application/di/container';
 import { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
-import { WorkspaceS3Service } from '@/lib/workspace/workspace-s3';
 import { walkDirectory } from '../utils';
 import type { FileHash, SignatureManifest } from '../../signatures/route';
+
+// Base path for workspace storage (EFS mount)
+const WORKSPACE_BASE = process.env.WORKSPACE_STORAGE_PATH || '/mnt/storage/workspaces';
 
 interface PushRequest {
   files: Record<string, string>;  // path -> base64 content
@@ -66,8 +65,6 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ): Promise<Response> {
-  const tempDir = join(tmpdir(), `workspace-push-${randomUUID()}`);
-
   try {
     // Authenticate
     const authResult = await authenticateRequest(request);
@@ -120,26 +117,12 @@ export async function POST(
       );
     }
 
+    // Get workspace path on shared filesystem
     const orgId = agent.organizationId.value;
-    await mkdir(tempDir, { recursive: true });
+    const workspacePath = join(WORKSPACE_BASE, String(orgId), String(agentId));
 
-    // Download existing archive if it exists
-    const exists = await WorkspaceS3Service.exists(orgId, agentId);
-    if (exists) {
-      const { body: archiveBody } = await WorkspaceS3Service.downloadArchive(orgId, agentId);
-
-      // Extract tar.gz to temp directory
-      await new Promise<void>((resolve, reject) => {
-        const gunzip = createGunzip();
-        const extract = tar.extract({ cwd: tempDir });
-
-        Readable.from(archiveBody)
-          .pipe(gunzip)
-          .pipe(extract)
-          .on('finish', resolve)
-          .on('error', reject);
-      });
-    }
+    // Ensure workspace directory exists
+    await mkdir(workspacePath, { recursive: true });
 
     // Apply changes
     const filesAdded: string[] = [];
@@ -152,7 +135,7 @@ export async function POST(
         const path = sanitizePath(rawPath);
         if (!path) continue; // Skip invalid paths
 
-        const fullPath = join(tempDir, path);
+        const fullPath = join(workspacePath, path);
         try {
           await unlink(fullPath);
           filesDeleted.push(path);
@@ -190,33 +173,35 @@ export async function POST(
           );
         }
 
-        const fullPath = join(tempDir, path);
+        const fullPath = join(workspacePath, path);
         const dir = dirname(fullPath);
         await mkdir(dir, { recursive: true });
 
         // Check if file exists to determine if it's add or update
+        let fileExists = false;
         try {
-          await readFile(fullPath);
-          filesUpdated.push(path);
+          await access(fullPath);
+          fileExists = true;
         } catch {
-          filesAdded.push(path);
+          // File doesn't exist
         }
 
         await writeFile(fullPath, content);
+
+        if (fileExists) {
+          filesUpdated.push(path);
+        } else {
+          filesAdded.push(path);
+        }
       }
     }
 
-    // Re-archive and upload to S3
-    const allFiles = await walkDirectory(tempDir);
-
-    // Create tar.gz buffer
-    const archiveBuffer = await createTarGz(tempDir, allFiles);
-    await WorkspaceS3Service.uploadArchive(orgId, agentId, archiveBuffer);
-
-    // Compute new signatures
+    // Compute new signatures for all files
+    const allFiles = await walkDirectory(workspacePath);
     const fileHashes: Record<string, FileHash> = {};
+
     for (const relativePath of allFiles) {
-      const fullPath = join(tempDir, relativePath);
+      const fullPath = join(workspacePath, relativePath);
       const content = await readFile(fullPath);
       const hash = createHash('sha256').update(content).digest('hex');
       fileHashes[relativePath] = {
@@ -243,34 +228,5 @@ export async function POST(
       { success: false, error: 'Failed to push workspace changes' },
       { status: 500 }
     );
-  } finally {
-    // Cleanup temp directory
-    try {
-      await rm(tempDir, { recursive: true, force: true });
-    } catch {
-      // Ignore cleanup errors
-    }
   }
-}
-
-/**
- * Create a tar.gz buffer from directory
- */
-async function createTarGz(baseDir: string, files: string[]): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    const gzip = createGzip();
-
-    gzip.on('data', (chunk) => chunks.push(chunk));
-    gzip.on('end', () => resolve(Buffer.concat(chunks)));
-    gzip.on('error', reject);
-
-    tar.create(
-      {
-        gzip: false,
-        cwd: baseDir,
-      },
-      files
-    ).pipe(gzip);
-  });
 }
