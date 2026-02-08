@@ -1,10 +1,19 @@
 mod workspace_sync;
 
 use workspace_sync::{
-    // Basic sync commands
-    check_sync_status, get_api_key, get_sync_config, pull_workspace, push_workspace,
-    select_sync_folder, set_sync_config, store_api_key,
-    // Delta sync commands
+    // Configuration commands
+    get_api_key, get_sync_config, select_sync_folder, set_sync_config, store_api_key,
+    // SFTP connection commands
+    sftp_connect, sftp_disconnect, sftp_is_connected,
+    // Workspace lock commands
+    check_workspace_lock,
+    // Sync status commands
+    check_sync_status,
+    // Sync commands (SFTP + rsync)
+    pull_workspace, push_workspace, sync_pending_changes,
+    // Filesystem watcher commands
+    get_watched_path, is_watching, start_watching, stop_watching,
+    // Deprecated commands (kept for backwards compatibility)
     clear_agent_files, get_cached_signatures, get_local_signatures, pull_workspace_delta,
     push_workspace_delta,
 };
@@ -27,16 +36,30 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            // Basic sync commands
+            // Configuration commands
             select_sync_folder,
             get_sync_config,
             set_sync_config,
-            check_sync_status,
-            pull_workspace,
-            push_workspace,
             store_api_key,
             get_api_key,
-            // Delta sync commands
+            // SFTP connection commands
+            sftp_connect,
+            sftp_disconnect,
+            sftp_is_connected,
+            // Workspace lock commands
+            check_workspace_lock,
+            // Sync status commands
+            check_sync_status,
+            // Sync commands (SFTP + rsync)
+            push_workspace,
+            pull_workspace,
+            sync_pending_changes,
+            // Filesystem watcher commands
+            start_watching,
+            stop_watching,
+            is_watching,
+            get_watched_path,
+            // Deprecated commands (backwards compatibility)
             get_local_signatures,
             get_cached_signatures,
             push_workspace_delta,

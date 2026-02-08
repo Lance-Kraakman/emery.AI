@@ -1,73 +1,95 @@
 /**
- * Workspace Sync Hook
+ * Workspace Sync Hook (SFTP + rsync)
  *
  * Provides workspace sync functionality for Tauri desktop app.
- * Handles local folder selection, pull/push operations, and conflict detection.
+ * Features:
+ * - SFTP connection lifecycle (connect/disconnect)
+ * - File watcher for event-driven sync
+ * - Workspace lock detection (shows when agent is working)
+ * - Byte-level delta sync via rsync algorithm
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { isTauri } from './useDeviceFlow';
+
+// ============================================================================
+// Types
+// ============================================================================
 
 interface SyncConfig {
   folder_path: string;
   last_sync: number | null;
 }
 
+/** Sync result from SFTP operations */
+interface SyncResult {
+  files_synced: number;
+  bytes_transferred: number;
+  timestamp: number;
+  direction: 'push' | 'pull' | 'queued' | 'none';
+}
+
+/** Workspace lock state (from .emery-lock file) */
+interface WorkspaceLockState {
+  locked: boolean;
+  task_id: string | null;
+  started_at: number | null;
+  agent_id: number | null;
+}
+
+/** File change event from watcher */
+interface FileChangeEvent {
+  agent_id: number;
+  paths: string[];
+  timestamp: number;
+}
+
+/** Sync status from Tauri */
 interface SyncStatus {
+  connected: boolean;
+  locked: boolean;
+  locked_by_task: string | null;
   local_modified: number | null;
   remote_modified: number | null;
-  has_conflict: boolean;
-  needs_pull: boolean;
-  needs_push: boolean;
+  pending_changes: number;
 }
 
-interface PullResult {
-  files_extracted: number;
-  timestamp: number;
-}
-
-interface PushResult {
-  files_archived: number;
-  timestamp: number;
-}
-
-// Delta sync results (more detailed)
-interface DeltaPullResult {
-  files_added: string[];
-  files_updated: string[];
-  files_skipped: string[];  // Conflicts saved as .agent files
-  timestamp: number;
-}
-
-interface DeltaPushResult {
-  files_added: number;
-  files_updated: number;
-  files_deleted: number;
-  timestamp: number;
-}
-
-export type SyncState = 'idle' | 'syncing' | 'error';
+export type SyncState = 'idle' | 'connecting' | 'syncing' | 'watching' | 'error';
 
 export interface UseWorkspaceSyncReturn {
+  // Availability
   isAvailable: boolean;
-  syncPath: string | null;
-  status: SyncStatus | null;
+
+  // Connection state
+  isConnected: boolean;
+  isWatching: boolean;
   syncState: SyncState;
+
+  // Paths
+  syncPath: string | null;
+
+  // Lock state (agent working)
+  lockState: WorkspaceLockState | null;
+  isLocked: boolean;
+
+  // Sync info
+  pendingChanges: number;
+  lastSync: number | null;
   error: string | null;
-  hasConflict: boolean;
-  lastSyncResult: DeltaPullResult | DeltaPushResult | null;
+
+  // Actions
   selectFolder: () => Promise<void>;
-  checkStatus: () => Promise<void>;
-  pull: () => Promise<DeltaPullResult | null>;
-  push: () => Promise<DeltaPushResult | null>;
-  pullFull: () => Promise<PullResult | null>;
-  pushFull: () => Promise<PushResult | null>;
-  clearAgentFiles: () => Promise<number>;
+  connect: () => Promise<boolean>;
   disconnect: () => Promise<void>;
-  resolveConflict: (resolution: 'keep_local' | 'keep_remote') => Promise<void>;
+  pull: () => Promise<SyncResult | null>;
+  push: () => Promise<SyncResult | null>;
+  syncPending: () => Promise<SyncResult | null>;
 }
 
-// Dynamic import for Tauri API (only available in Tauri context)
+// ============================================================================
+// Tauri Invoke Helper
+// ============================================================================
+
 async function invokeTauri<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   if (!isTauri()) {
     throw new Error('Tauri API not available');
@@ -76,17 +98,37 @@ async function invokeTauri<T>(command: string, args?: Record<string, unknown>): 
   return invoke<T>(command, args);
 }
 
+// ============================================================================
+// Hook
+// ============================================================================
+
 export function useWorkspaceSync(agentId: number): UseWorkspaceSyncReturn {
-  const [syncPath, setSyncPath] = useState<string | null>(null);
-  const [status, setStatus] = useState<SyncStatus | null>(null);
+  // Connection state
+  const [isConnected, setIsConnected] = useState(false);
+  const [isWatching, setIsWatching] = useState(false);
   const [syncState, setSyncState] = useState<SyncState>('idle');
+
+  // Paths
+  const [syncPath, setSyncPath] = useState<string | null>(null);
+
+  // Lock state
+  const [lockState, setLockState] = useState<WorkspaceLockState | null>(null);
+
+  // Sync info
+  const [pendingChanges, setPendingChanges] = useState(0);
+  const [lastSync, setLastSync] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [hasConflict, setHasConflict] = useState(false);
-  const [lastSyncResult, setLastSyncResult] = useState<DeltaPullResult | DeltaPushResult | null>(null);
+
+  // Refs for cleanup
+  const fileChangeUnlistenRef = useRef<(() => void) | null>(null);
+  const lockPollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const isAvailable = isTauri();
 
-  // Get API base URL
+  // ---------------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------------
+
   const getApiBase = useCallback(() => {
     if (typeof window !== 'undefined') {
       return window.location.origin;
@@ -94,7 +136,6 @@ export function useWorkspaceSync(agentId: number): UseWorkspaceSyncReturn {
     return '';
   }, []);
 
-  // Get stored API key
   const getApiKey = useCallback(async (): Promise<string> => {
     const apiKey = await invokeTauri<string | null>('get_api_key');
     if (!apiKey) {
@@ -103,7 +144,10 @@ export function useWorkspaceSync(agentId: number): UseWorkspaceSyncReturn {
     return apiKey;
   }, []);
 
+  // ---------------------------------------------------------------------------
   // Load saved config on mount
+  // ---------------------------------------------------------------------------
+
   useEffect(() => {
     if (!isAvailable) return;
 
@@ -112,8 +156,9 @@ export function useWorkspaceSync(agentId: number): UseWorkspaceSyncReturn {
         const config = await invokeTauri<SyncConfig | null>('get_sync_config', {
           agentId,
         });
-        if (config) {
+        if (config?.folder_path) {
           setSyncPath(config.folder_path);
+          setLastSync(config.last_sync);
         }
       } catch (err) {
         console.error('Failed to load sync config:', err);
@@ -123,17 +168,234 @@ export function useWorkspaceSync(agentId: number): UseWorkspaceSyncReturn {
     loadConfig();
   }, [agentId, isAvailable]);
 
+  // ---------------------------------------------------------------------------
+  // SFTP Connection
+  // ---------------------------------------------------------------------------
+
+  const connect = useCallback(async (): Promise<boolean> => {
+    if (!isAvailable || !syncPath) return false;
+
+    try {
+      setError(null);
+      setSyncState('connecting');
+
+      const apiKey = await getApiKey();
+      const apiBase = getApiBase();
+
+      await invokeTauri('sftp_connect', {
+        agentId,
+        apiKey,
+        apiBase,
+      });
+
+      setIsConnected(true);
+      setSyncState('idle');
+      return true;
+    } catch (err) {
+      console.error('SFTP connection failed:', err);
+      setError(err instanceof Error ? err.message : 'Failed to connect');
+      setSyncState('error');
+      setIsConnected(false);
+      return false;
+    }
+  }, [agentId, isAvailable, syncPath, getApiKey, getApiBase]);
+
+  const disconnect = useCallback(async () => {
+    if (!isAvailable) return;
+
+    try {
+      // Stop watching first
+      if (isWatching) {
+        await invokeTauri('stop_watching', { agentId });
+        setIsWatching(false);
+      }
+
+      // Disconnect SFTP
+      await invokeTauri('sftp_disconnect', { agentId });
+      setIsConnected(false);
+      setSyncState('idle');
+
+      // Clear config
+      await invokeTauri('set_sync_config', {
+        agentId,
+        folderPath: '',
+      });
+      setSyncPath(null);
+      setLockState(null);
+      setPendingChanges(0);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to disconnect');
+    }
+  }, [agentId, isAvailable, isWatching]);
+
+  // ---------------------------------------------------------------------------
+  // Auto-connect when syncPath is set
+  // ---------------------------------------------------------------------------
+
+  useEffect(() => {
+    if (!isAvailable || !syncPath || isConnected) return;
+
+    connect().catch(console.error);
+  }, [isAvailable, syncPath, isConnected, connect]);
+
+  // ---------------------------------------------------------------------------
+  // File Watcher
+  // ---------------------------------------------------------------------------
+
+  const startWatching = useCallback(async () => {
+    if (!isConnected || !syncPath) return;
+
+    try {
+      await invokeTauri('start_watching', {
+        agentId,
+        localPath: syncPath,
+      });
+      setIsWatching(true);
+      setSyncState('watching');
+    } catch (err) {
+      console.error('Failed to start watching:', err);
+    }
+  }, [agentId, isConnected, syncPath]);
+
+  // Start watching when connected
+  useEffect(() => {
+    if (!isConnected || !syncPath) return;
+
+    startWatching();
+
+    return () => {
+      if (isWatching) {
+        invokeTauri('stop_watching', { agentId }).catch(console.error);
+      }
+    };
+  }, [agentId, isConnected, syncPath, startWatching, isWatching]);
+
+  // ---------------------------------------------------------------------------
+  // File Change Event Listener
+  // ---------------------------------------------------------------------------
+
+  const push = useCallback(async (): Promise<SyncResult | null> => {
+    if (!isAvailable || !syncPath || !isConnected) return null;
+
+    try {
+      setError(null);
+      setSyncState('syncing');
+
+      const apiKey = await getApiKey();
+      const apiBase = getApiBase();
+
+      const result = await invokeTauri<SyncResult>('push_workspace', {
+        agentId,
+        localPath: syncPath,
+        apiKey,
+        apiBase,
+      });
+
+      setLastSync(result.timestamp);
+
+      // If queued due to lock, update pending count
+      if (result.direction === 'queued') {
+        setPendingChanges((prev) => prev + 1);
+      } else {
+        setPendingChanges(0);
+      }
+
+      setSyncState(isWatching ? 'watching' : 'idle');
+      return result;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to push');
+      setSyncState('error');
+      return null;
+    }
+  }, [agentId, isAvailable, isConnected, isWatching, syncPath, getApiKey, getApiBase]);
+
+  // Listen for file change events and auto-push
+  useEffect(() => {
+    if (!isWatching) return;
+
+    const setupListener = async () => {
+      const { listen } = await import('@tauri-apps/api/event');
+
+      const unlisten = await listen<FileChangeEvent>('workspace-file-change', (event) => {
+        if (event.payload.agent_id === agentId) {
+          console.log('File changed, syncing...', event.payload.paths);
+          // Auto-push (will queue if locked)
+          push().catch(console.error);
+        }
+      });
+
+      fileChangeUnlistenRef.current = unlisten;
+    };
+
+    setupListener().catch(console.error);
+
+    return () => {
+      if (fileChangeUnlistenRef.current) {
+        fileChangeUnlistenRef.current();
+        fileChangeUnlistenRef.current = null;
+      }
+    };
+  }, [agentId, isWatching, push]);
+
+  // ---------------------------------------------------------------------------
+  // Lock Status Polling
+  // ---------------------------------------------------------------------------
+
+  useEffect(() => {
+    if (!isConnected) return;
+
+    const checkLock = async () => {
+      try {
+        const state = await invokeTauri<WorkspaceLockState>('check_workspace_lock', {
+          agentId,
+        });
+        setLockState(state);
+
+        // If lock just released and we have pending changes, sync them
+        if (!state.locked && pendingChanges > 0) {
+          console.log('Lock released, syncing pending changes...');
+          const apiKey = await getApiKey();
+          const apiBase = getApiBase();
+          await invokeTauri('sync_pending_changes', { agentId, apiKey, apiBase });
+          setPendingChanges(0);
+        }
+      } catch (err) {
+        console.error('Failed to check lock status:', err);
+      }
+    };
+
+    // Check immediately
+    checkLock();
+
+    // Poll every 5 seconds
+    lockPollIntervalRef.current = setInterval(checkLock, 5000);
+
+    return () => {
+      if (lockPollIntervalRef.current) {
+        clearInterval(lockPollIntervalRef.current);
+        lockPollIntervalRef.current = null;
+      }
+    };
+  }, [agentId, isConnected, pendingChanges, getApiKey, getApiBase]);
+
+  // ---------------------------------------------------------------------------
+  // Actions
+  // ---------------------------------------------------------------------------
+
   const selectFolder = useCallback(async () => {
     if (!isAvailable) return;
 
     try {
       setError(null);
       const path = await invokeTauri<string>('select_sync_folder');
+
       await invokeTauri('set_sync_config', {
         agentId,
         folderPath: path,
       });
+
       setSyncPath(path);
+      // Connection will auto-start via useEffect
     } catch (err) {
       if (err instanceof Error && err.message.includes('cancelled')) {
         return; // User cancelled, not an error
@@ -142,30 +404,8 @@ export function useWorkspaceSync(agentId: number): UseWorkspaceSyncReturn {
     }
   }, [agentId, isAvailable]);
 
-  const checkStatus = useCallback(async () => {
-    if (!isAvailable || !syncPath) return;
-
-    try {
-      setError(null);
-      const apiKey = await getApiKey();
-      const apiBase = getApiBase();
-
-      const result = await invokeTauri<SyncStatus>('check_sync_status', {
-        agentId,
-        apiKey,
-        apiBase,
-      });
-
-      setStatus(result);
-      setHasConflict(result.has_conflict);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to check sync status');
-    }
-  }, [agentId, isAvailable, syncPath, getApiKey, getApiBase]);
-
-  // Delta pull: Only downloads changed files, preserves user edits
-  const pull = useCallback(async (): Promise<DeltaPullResult | null> => {
-    if (!isAvailable || !syncPath) return null;
+  const pull = useCallback(async (): Promise<SyncResult | null> => {
+    if (!isAvailable || !syncPath || !isConnected) return null;
 
     try {
       setError(null);
@@ -174,32 +414,25 @@ export function useWorkspaceSync(agentId: number): UseWorkspaceSyncReturn {
       const apiKey = await getApiKey();
       const apiBase = getApiBase();
 
-      const result = await invokeTauri<DeltaPullResult>('pull_workspace_delta', {
+      const result = await invokeTauri<SyncResult>('pull_workspace', {
         agentId,
         localPath: syncPath,
         apiKey,
         apiBase,
       });
 
-      // Check if there were conflicts (files saved as .agent versions)
-      setHasConflict(result.files_skipped.length > 0);
-      setLastSyncResult(result);
-      setSyncState('idle');
-
-      // Refresh status after successful pull
-      checkStatus().catch(console.error);
-
+      setLastSync(result.timestamp);
+      setSyncState(isWatching ? 'watching' : 'idle');
       return result;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to pull workspace');
+      setError(err instanceof Error ? err.message : 'Failed to pull');
       setSyncState('error');
       return null;
     }
-  }, [agentId, isAvailable, syncPath, getApiKey, getApiBase, checkStatus]);
+  }, [agentId, isAvailable, isConnected, isWatching, syncPath, getApiKey, getApiBase]);
 
-  // Delta push: Only uploads changed files
-  const push = useCallback(async (): Promise<DeltaPushResult | null> => {
-    if (!isAvailable || !syncPath) return null;
+  const syncPending = useCallback(async (): Promise<SyncResult | null> => {
+    if (!isAvailable || !isConnected) return null;
 
     try {
       setError(null);
@@ -208,150 +441,78 @@ export function useWorkspaceSync(agentId: number): UseWorkspaceSyncReturn {
       const apiKey = await getApiKey();
       const apiBase = getApiBase();
 
-      const result = await invokeTauri<DeltaPushResult>('push_workspace_delta', {
+      const result = await invokeTauri<SyncResult>('sync_pending_changes', {
         agentId,
-        localPath: syncPath,
         apiKey,
         apiBase,
       });
 
-      setHasConflict(false);
-      setLastSyncResult(result);
-      setSyncState('idle');
-
-      // Refresh status after successful push
-      checkStatus().catch(console.error);
-
-      return result;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to push workspace');
-      setSyncState('error');
-      return null;
-    }
-  }, [agentId, isAvailable, syncPath, getApiKey, getApiBase, checkStatus]);
-
-  // Full pull: Downloads entire workspace (overwrites local)
-  const pullFull = useCallback(async (): Promise<PullResult | null> => {
-    if (!isAvailable || !syncPath) return null;
-
-    try {
-      setError(null);
-      setSyncState('syncing');
-
-      const apiKey = await getApiKey();
-      const apiBase = getApiBase();
-
-      const result = await invokeTauri<PullResult>('pull_workspace', {
-        agentId,
-        localPath: syncPath,
-        apiKey,
-        apiBase,
-      });
-
-      setHasConflict(false);
-      setSyncState('idle');
-
-      checkStatus().catch(console.error);
-
-      return result;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to pull workspace');
-      setSyncState('error');
-      return null;
-    }
-  }, [agentId, isAvailable, syncPath, getApiKey, getApiBase, checkStatus]);
-
-  // Full push: Uploads entire workspace (overwrites remote)
-  const pushFull = useCallback(async (): Promise<PushResult | null> => {
-    if (!isAvailable || !syncPath) return null;
-
-    try {
-      setError(null);
-      setSyncState('syncing');
-
-      const apiKey = await getApiKey();
-      const apiBase = getApiBase();
-
-      const result = await invokeTauri<PushResult>('push_workspace', {
-        agentId,
-        localPath: syncPath,
-        apiKey,
-        apiBase,
-      });
-
-      setHasConflict(false);
-      setSyncState('idle');
-
-      checkStatus().catch(console.error);
-
-      return result;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to push workspace');
-      setSyncState('error');
-      return null;
-    }
-  }, [agentId, isAvailable, syncPath, getApiKey, getApiBase, checkStatus]);
-
-  // Clear all .agent.* conflict files
-  const clearAgentFiles = useCallback(async (): Promise<number> => {
-    if (!isAvailable || !syncPath) return 0;
-
-    try {
-      const count = await invokeTauri<number>('clear_agent_files', {
-        localPath: syncPath,
-      });
-      setHasConflict(false);
-      return count;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to clear agent files');
-      return 0;
-    }
-  }, [isAvailable, syncPath]);
-
-  const disconnect = useCallback(async () => {
-    if (!isAvailable) return;
-
-    try {
-      setError(null);
-      await invokeTauri('set_sync_config', {
-        agentId,
-        folderPath: '',
-      });
-      setSyncPath(null);
-      setStatus(null);
-      setHasConflict(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to disconnect');
-    }
-  }, [agentId, isAvailable]);
-
-  const resolveConflict = useCallback(
-    async (resolution: 'keep_local' | 'keep_remote') => {
-      if (resolution === 'keep_local') {
-        await push();
-      } else {
-        await pull();
+      if (result.direction !== 'none') {
+        setLastSync(result.timestamp);
+        setPendingChanges(0);
       }
-    },
-    [push, pull]
-  );
+
+      setSyncState(isWatching ? 'watching' : 'idle');
+      return result;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to sync pending');
+      setSyncState('error');
+      return null;
+    }
+  }, [agentId, isAvailable, isConnected, isWatching, getApiKey, getApiBase]);
+
+  // ---------------------------------------------------------------------------
+  // Cleanup on unmount
+  // ---------------------------------------------------------------------------
+
+  useEffect(() => {
+    return () => {
+      // Cleanup watcher
+      if (fileChangeUnlistenRef.current) {
+        fileChangeUnlistenRef.current();
+      }
+      // Cleanup lock polling
+      if (lockPollIntervalRef.current) {
+        clearInterval(lockPollIntervalRef.current);
+      }
+      // Disconnect SFTP
+      if (isConnected) {
+        invokeTauri('sftp_disconnect', { agentId }).catch(console.error);
+      }
+    };
+  }, [agentId, isConnected]);
+
+  // ---------------------------------------------------------------------------
+  // Return
+  // ---------------------------------------------------------------------------
 
   return {
+    // Availability
     isAvailable,
-    syncPath,
-    status,
+
+    // Connection state
+    isConnected,
+    isWatching,
     syncState,
+
+    // Paths
+    syncPath,
+
+    // Lock state
+    lockState,
+    isLocked: lockState?.locked ?? false,
+
+    // Sync info
+    pendingChanges,
+    lastSync,
     error,
-    hasConflict,
-    lastSyncResult,
+
+    // Actions
     selectFolder,
-    checkStatus,
+    connect,
+    disconnect,
     pull,
     push,
-    pullFull,
-    pushFull,
-    clearAgentFiles,
-    disconnect,
-    resolveConflict,
+    syncPending,
   };
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React from 'react';
 import {
   FolderSync,
   Download,
@@ -10,6 +10,10 @@ import {
   Check,
   Loader2,
   Unplug,
+  Lock,
+  Wifi,
+  WifiOff,
+  Eye,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -24,7 +28,6 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { useWorkspaceSync } from '@/hooks/useWorkspaceSync';
-import { ConflictDialog } from './ConflictDialog';
 
 interface WorkspaceSyncControlsProps {
   agentId: number;
@@ -33,78 +36,73 @@ interface WorkspaceSyncControlsProps {
 export function WorkspaceSyncControls({ agentId }: WorkspaceSyncControlsProps) {
   const {
     isAvailable,
+    isConnected,
+    isWatching,
     syncPath,
-    status,
     syncState,
     error,
-    hasConflict,
+    isLocked,
+    lockState,
+    pendingChanges,
+    lastSync,
     selectFolder,
-    checkStatus,
+    connect,
+    disconnect,
     pull,
     push,
-    disconnect,
-    resolveConflict,
   } = useWorkspaceSync(agentId);
 
-  const [conflictDialogOpen, setConflictDialogOpen] = React.useState(false);
   const [popoverOpen, setPopoverOpen] = React.useState(false);
-
-  // Check status on mount and when syncPath changes
-  useEffect(() => {
-    if (syncPath) {
-      checkStatus();
-    }
-  }, [syncPath, checkStatus]);
-
-  // Open conflict dialog when conflict is detected
-  useEffect(() => {
-    if (hasConflict) {
-      setConflictDialogOpen(true);
-    }
-  }, [hasConflict]);
 
   if (!isAvailable) {
     return null;
   }
 
   const isSyncing = syncState === 'syncing';
-  const needsSync = status?.needs_pull || status?.needs_push;
-
-  const handlePull = async () => {
-    if (hasConflict) {
-      setConflictDialogOpen(true);
-      return;
-    }
-    await pull();
-  };
-
-  const handlePush = async () => {
-    if (hasConflict) {
-      setConflictDialogOpen(true);
-      return;
-    }
-    await push();
-  };
-
-  const handleResolveConflict = async (resolution: 'keep_local' | 'keep_remote') => {
-    await resolveConflict(resolution);
-    // Dialog closes itself on success via ConflictDialog's internal state
-  };
+  const isConnecting = syncState === 'connecting';
 
   const getStatusIcon = () => {
+    if (isConnecting) {
+      return <Loader2 className="h-4 w-4 animate-spin" />;
+    }
     if (isSyncing) {
       return <Loader2 className="h-4 w-4 animate-spin" />;
     }
-    if (hasConflict) {
-      return <AlertTriangle className="h-4 w-4 text-warning" />;
+    if (isLocked) {
+      return <Lock className="h-4 w-4 text-warning" />;
     }
     if (error) {
       return <AlertTriangle className="h-4 w-4 text-destructive" />;
     }
-    if (needsSync) {
-      return <RefreshCw className="h-4 w-4 text-primary" />;
+    if (!isConnected) {
+      return <WifiOff className="h-4 w-4 text-muted-foreground" />;
+    }
+    if (isWatching) {
+      return <Eye className="h-4 w-4 text-success" />;
     }
     return <Check className="h-4 w-4 text-success" />;
+  };
+
+  const getStatusText = () => {
+    if (isConnecting) return 'Connecting...';
+    if (isSyncing) return 'Syncing...';
+    if (isLocked) return 'Agent working...';
+    if (error) return 'Error';
+    if (!isConnected) return 'Disconnected';
+    if (isWatching) return 'Watching';
+    return 'Connected';
+  };
+
+  const formatLastSync = () => {
+    if (!lastSync) return 'Never';
+    const date = new Date(lastSync * 1000);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+
+    if (diff < 60000) return 'Just now';
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+    return date.toLocaleDateString();
   };
 
   // Not connected - show connect button
@@ -132,111 +130,139 @@ export function WorkspaceSyncControls({ agentId }: WorkspaceSyncControlsProps) {
 
   // Connected - show sync controls
   return (
-    <>
-      <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-9 gap-2"
-            disabled={isSyncing}
-          >
-            {getStatusIcon()}
-            <span className="hidden sm:inline">Sync</span>
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-72" align="end">
-          <div className="grid gap-4">
-            <div className="space-y-2">
-              <h4 className="font-medium leading-none">Workspace Sync</h4>
-              <p className="text-sm text-muted-foreground truncate">
-                {syncPath}
-              </p>
+    <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-9 gap-2"
+          disabled={isSyncing || isConnecting}
+        >
+          {getStatusIcon()}
+          <span className="hidden sm:inline">{getStatusText()}</span>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-80" align="end">
+        <div className="grid gap-4">
+          <div className="space-y-2">
+            <h4 className="font-medium leading-none">Workspace Sync</h4>
+            <p className="text-sm text-muted-foreground truncate">{syncPath}</p>
+          </div>
+
+          {/* Status indicators */}
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            <div className="flex items-center gap-2">
+              {isConnected ? (
+                <Wifi className="h-3 w-3 text-success" />
+              ) : (
+                <WifiOff className="h-3 w-3 text-muted-foreground" />
+              )}
+              <span>{isConnected ? 'Connected' : 'Disconnected'}</span>
             </div>
+            <div className="flex items-center gap-2">
+              {isWatching ? (
+                <Eye className="h-3 w-3 text-success" />
+              ) : (
+                <Eye className="h-3 w-3 text-muted-foreground" />
+              )}
+              <span>{isWatching ? 'Watching' : 'Not watching'}</span>
+            </div>
+          </div>
 
-            {error && (
-              <div className="rounded-md bg-destructive/10 p-2 text-sm text-destructive">
-                {error}
-              </div>
-            )}
+          {/* Error message */}
+          {error && (
+            <div className="rounded-md bg-destructive/10 p-2 text-sm text-destructive">
+              {error}
+            </div>
+          )}
 
-            {hasConflict && (
-              <div className="rounded-md bg-warning/10 p-2 text-sm text-warning">
-                Conflict detected - both local and remote have changes
-              </div>
-            )}
-
-            <div className="grid gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handlePull}
-                disabled={isSyncing || (!status?.needs_pull && !hasConflict)}
-                className="justify-start gap-2"
-              >
-                <Download className="h-4 w-4" />
-                Pull from remote
-                {status?.needs_pull && !hasConflict && (
-                  <span className="ml-auto text-xs text-muted-foreground">
-                    New changes
-                  </span>
+          {/* Lock status */}
+          {isLocked && (
+            <div className="rounded-md bg-warning/10 p-2 text-sm text-warning flex items-center gap-2">
+              <Lock className="h-4 w-4" />
+              <div>
+                <div>Agent is working</div>
+                {lockState?.task_id && (
+                  <div className="text-xs opacity-75">
+                    Task: {lockState.task_id.slice(0, 8)}...
+                  </div>
                 )}
-              </Button>
+              </div>
+            </div>
+          )}
 
+          {/* Pending changes */}
+          {pendingChanges > 0 && (
+            <div className="rounded-md bg-primary/10 p-2 text-sm text-primary">
+              {pendingChanges} change{pendingChanges > 1 ? 's' : ''} queued
+              (waiting for agent)
+            </div>
+          )}
+
+          {/* Last sync */}
+          <div className="text-xs text-muted-foreground">
+            Last sync: {formatLastSync()}
+          </div>
+
+          {/* Action buttons */}
+          <div className="grid gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => pull()}
+              disabled={isSyncing || !isConnected}
+              className="justify-start gap-2"
+            >
+              <Download className="h-4 w-4" />
+              Pull from remote
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => push()}
+              disabled={isSyncing || !isConnected}
+              className="justify-start gap-2"
+            >
+              <Upload className="h-4 w-4" />
+              Push to remote
+              {isLocked && (
+                <span className="ml-auto text-xs text-muted-foreground">
+                  Will queue
+                </span>
+              )}
+            </Button>
+
+            {!isConnected && (
               <Button
                 variant="outline"
                 size="sm"
-                onClick={handlePush}
-                disabled={isSyncing || (!status?.needs_push && !hasConflict)}
-                className="justify-start gap-2"
-              >
-                <Upload className="h-4 w-4" />
-                Push to remote
-                {status?.needs_push && !hasConflict && (
-                  <span className="ml-auto text-xs text-muted-foreground">
-                    Local changes
-                  </span>
-                )}
-              </Button>
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => checkStatus()}
-                disabled={isSyncing}
+                onClick={() => connect()}
+                disabled={isConnecting}
                 className="justify-start gap-2"
               >
                 <RefreshCw className="h-4 w-4" />
-                Refresh status
+                Reconnect
               </Button>
-
-            </div>
-
-            <div className="border-t pt-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  disconnect();
-                  setPopoverOpen(false);
-                }}
-                className="w-full justify-start gap-2 text-muted-foreground hover:text-destructive"
-              >
-                <Unplug className="h-4 w-4" />
-                Disconnect folder
-              </Button>
-            </div>
+            )}
           </div>
-        </PopoverContent>
-      </Popover>
 
-      <ConflictDialog
-        open={conflictDialogOpen}
-        onOpenChange={setConflictDialogOpen}
-        onResolve={handleResolveConflict}
-        localModified={status?.local_modified}
-        remoteModified={status?.remote_modified}
-      />
-    </>
+          <div className="border-t pt-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                disconnect();
+                setPopoverOpen(false);
+              }}
+              className="w-full justify-start gap-2 text-muted-foreground hover:text-destructive"
+            >
+              <Unplug className="h-4 w-4" />
+              Disconnect folder
+            </Button>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }

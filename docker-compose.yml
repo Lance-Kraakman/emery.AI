@@ -55,6 +55,19 @@ services:
       timeout: 5s
       retries: 5
 
+  # SFTP server for workspace sync (local development)
+  # Connect: sftp -P 2222 agent@localhost (password: test123)
+  # Maps to same workspace-data volume as agents use
+  sftp:
+    image: atmoz/sftp
+    container_name: emery-sftp
+    ports:
+      - "2222:22"
+    volumes:
+      - workspace-data:/home/agent/workspace
+    # Format: user:password:uid:gid:dir
+    command: "agent:test123:1000:1000:workspace"
+
 volumes:
   redis-data:
   minio-data:

@@ -3,18 +3,25 @@
  *
  * POST /api/agents/[id]/workspace/upload
  *
- * Uploads a tar.gz archive to S3 as the agent's workspace.
+ * Uploads a tar.gz archive and extracts it to the agent's workspace on EFS.
  * Used by Tauri desktop app to push local changes to remote.
+ *
+ * Extracts directly to shared filesystem (EFS/NFS).
  *
  * Authentication: withAuthenticatedRoute (session or API key)
  * Authorization: Agent must exist and belong to the user's organization
  */
 
 import { NextRequest } from 'next/server';
+import { mkdir, writeFile, unlink } from 'fs/promises';
+import { join } from 'path';
+import * as tar from 'tar';
 import { authenticateRequest } from '@/lib/auth/test-auth';
 import { getAgentApplicationService, contextManager } from '@/ddd/application/di/container';
 import { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
-import { WorkspaceS3Service } from '@/lib/workspace/workspace-s3';
+
+// Base path for workspace storage (EFS mount)
+const WORKSPACE_BASE = process.env.WORKSPACE_STORAGE_PATH || '/mnt/storage/workspaces';
 
 // Maximum workspace size: 100MB
 const MAX_WORKSPACE_SIZE = 100 * 1024 * 1024;
@@ -114,17 +121,30 @@ export async function POST(
       );
     }
 
-    // Upload to S3
+    // Get workspace path on EFS
+    // Directory structure: /{org_id}/agents/{agent_id}/
     const orgId = agent.organizationId.value;
-    const { lastModified } = await WorkspaceS3Service.uploadArchive(
-      orgId,
-      agentId,
-      bytes
-    );
+    const workspacePath = join(WORKSPACE_BASE, String(orgId), 'agents', String(agentId));
+
+    // Ensure workspace directory exists
+    await mkdir(workspacePath, { recursive: true });
+
+    // Write to temp file, extract, cleanup
+    // (tar.extract requires a file path for gzipped archives)
+    const tempFile = join(workspacePath, `.upload-${Date.now()}.tar.gz`);
+    await writeFile(tempFile, Buffer.from(bytes));
+
+    try {
+      await tar.extract({ file: tempFile, cwd: workspacePath });
+      await unlink(tempFile);
+    } catch (err) {
+      await unlink(tempFile).catch(() => {}); // cleanup on error
+      throw err;
+    }
 
     return Response.json({
       success: true,
-      lastModified: lastModified.toISOString(),
+      lastModified: new Date().toISOString(),
       size: body.byteLength,
     });
   } catch (error) {

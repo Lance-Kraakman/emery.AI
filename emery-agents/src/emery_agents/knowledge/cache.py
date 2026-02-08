@@ -13,6 +13,7 @@ import gzip
 import hashlib
 import json
 import logging
+import os
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -203,3 +204,13 @@ def load_knowledge_local(path: str) -> KnowledgeBase | None:
     except Exception as e:
         logger.warning(f"Error loading knowledge cache locally: {e}")
         return None
+
+
+# ---------------------------------------------------------------------------
+# EFS Cache Path
+# ---------------------------------------------------------------------------
+
+def get_efs_cache_path() -> str:
+    """Get the EFS knowledge cache path."""
+    base = os.getenv("WORKSPACE_STORAGE_PATH", "/mnt/storage/workspaces")
+    return os.path.join(base, "cache", "knowledge_base.json.gz")

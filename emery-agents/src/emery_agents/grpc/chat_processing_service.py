@@ -11,7 +11,12 @@ from typing import Any, cast
 import grpc
 
 from emery_agents.entities.models.capability import CapabilityType
-from emery_agents.knowledge.cache import load_knowledge_cache, load_knowledge_local
+from emery_agents.knowledge.cache import (
+    get_efs_cache_path,
+    load_knowledge_cache,
+    load_knowledge_local,
+    save_knowledge_local,
+)
 from emery_agents.planning.patterns import ALL_PATTERNS
 from emery_agents.planning.registry import PlanningRegistry
 from emery_agents.services.analysis.embedding_cache import (
@@ -29,7 +34,7 @@ from emery_agents.tools.loader import UnifiedToolLoader
 from emery_agents.tools.provider import ToolProvider
 
 from ..entities.models.plan import Plan, SkillInputDefinition, SkillOutputDefinition
-from ..infrastructure.storage import create_workspace_storage, WorkspaceType
+from ..infrastructure.storage import WorkspaceType, create_workspace_storage
 from ..orchestrators.nodes.planning import generate_plan_node
 from ..orchestrators.runtime import RuntimeContext
 from ..orchestrators.state import PlanExecuteState
@@ -188,21 +193,41 @@ class ChatProcessingServiceImplementation(
         return headers
 
     def _initialize_knowledge_base(self) -> None:
-        """Eagerly load knowledge base at startup."""
+        """Eagerly load knowledge base at startup.
+
+        Load order (fastest to slowest):
+        1. EFS cache (shared filesystem, persistent across restarts)
+        2. S3 cache (remote, slower but always available)
+        3. Local path (for development/testing)
+
+        If loaded from S3, we save to EFS to pre-populate for next instances.
+        """
         s3_bucket = os.getenv("S3_BUCKET_NAME")
+        efs_path = get_efs_cache_path()
 
         try:
             kb = None
+
+            # 1. Try EFS first (fastest - shared filesystem)
+            if os.path.exists(efs_path):
+                kb = load_knowledge_local(efs_path)
+                if kb:
+                    set_knowledge_base(kb)
+                    logger.info(f"✅ KnowledgeBase from EFS ({kb.count()} items)")
+                    return
+
+            # 2. Fall back to S3
             if s3_bucket:
                 kb = load_knowledge_cache(s3_bucket)
                 if kb:
                     set_knowledge_base(kb)
-                    logger.info(
-                        f"✅ KnowledgeBase initialized from S3 ({kb.count()} items)"
-                    )
+                    logger.info(f"✅ KnowledgeBase from S3 ({kb.count()} items)")
+                    # Pre-populate EFS for next instances
+                    os.makedirs(os.path.dirname(efs_path), exist_ok=True)
+                    save_knowledge_local(efs_path, kb)
                     return
 
-            # Local fallback
+            # 3. Local fallback (development/testing)
             local_path = os.environ.get(
                 "KNOWLEDGE_BASE_PATH", "./knowledge_base.json.gz"
             )
@@ -210,9 +235,7 @@ class ChatProcessingServiceImplementation(
                 kb = load_knowledge_local(local_path)
                 if kb:
                     set_knowledge_base(kb)
-                    logger.info(
-                        f"✅ KnowledgeBase initialized locally ({kb.count()} items)"
-                    )
+                    logger.info(f"✅ KnowledgeBase from local ({kb.count()} items)")
                     return
 
             logger.info("ℹ️ No knowledge base cache found, will be empty")

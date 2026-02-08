@@ -11,6 +11,11 @@ Both gRPC handlers now use this shared executor.
 Credential resolution:
 - Org-level task (agent_id is None): Use invoking user's credentials
 - Agent task (agent_id is set): Use agent's stored credentials
+
+Workspace locking:
+- Agent tasks acquire workspace lock before execution
+- Lock released after task completes (success or failure)
+- Prevents user sync during agent execution
 """
 
 from __future__ import annotations
@@ -24,6 +29,7 @@ from pathlib import Path
 from typing import Literal, TypedDict
 
 from emery_agents.api import AgentAPIService, SkillAPIService
+from emery_agents.services.tasks import workspace_lock
 from emery_agents.entities.skill_config import SkillConfig
 from emery_agents.tools.execution.dynamic_execution import fetch_skill_execution_config
 from emery_agents.tools.provider import ToolProvider
@@ -163,6 +169,7 @@ class TaskExecutor:
         """
         start_time = time.time()
         task_id = task_data.task_id
+        lock_acquired = False
 
         logger.info(
             f"[TASK-{task_id[:8]}] Starting execution - "
@@ -171,6 +178,15 @@ class TaskExecutor:
         )
 
         try:
+            # Acquire workspace lock if agent has a workspace
+            if task_data.workspace_path and task_data.agent_id:
+                lock_acquired = await workspace_lock.acquire_lock(
+                    workspace_path=task_data.workspace_path,
+                    task_id=task_id,
+                    agent_id=task_data.agent_id,
+                )
+                if lock_acquired:
+                    logger.info(f"[TASK-{task_id[:8]}] Workspace lock acquired")
             # 1. Resolve credentials based on task assignment
             credentials = await self._resolve_credentials(task_data)
             logger.info(
@@ -252,6 +268,16 @@ class TaskExecutor:
                 "timestamp_ms": int(time.time() * 1000),
                 "progress_percent": 0.0,
             }
+
+        finally:
+            # Release workspace lock if acquired
+            if lock_acquired and task_data.workspace_path:
+                released = await workspace_lock.release_lock(
+                    workspace_path=task_data.workspace_path,
+                    task_id=task_id,
+                )
+                if released:
+                    logger.info(f"[TASK-{task_id[:8]}] Workspace lock released")
 
     async def execute_with_context(
         self,
