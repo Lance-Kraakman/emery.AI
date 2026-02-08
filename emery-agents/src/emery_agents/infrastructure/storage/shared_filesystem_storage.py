@@ -29,31 +29,46 @@ class SharedFilesystemStorage(WorkspaceStorage):
             ├── agents/
             │   └── {agent_id}/
             │       ├── .agent/
-            │       │   ├── config.json
-            │       │   ├── memory.jsonl
-            │       │   ├── plans/
-            │       │   └── memory/chroma/
+            │       │   ├── config.json      # Agent configuration
+            │       │   ├── memory.jsonl     # Persistent memory (future)
+            │       │   ├── plans/           # Saved execution plans
+            │       │   └── memory/chroma/   # Vector store for RAG
             │       ├── workspace/
-            │       │   ├── context/
-            │       │   ├── scratch/
-            │       │   └── outputs/
+            │       │   ├── context/         # Synced tables/data
+            │       │   ├── scratch/         # Working files
+            │       │   └── outputs/         # Generated artifacts
             │       └── history/
             │           └── {date}/{task_id}/
+            │               ├── session.jsonl  # Execution log
+            │               └── result.json    # Task result
             └── users/
                 └── {user_id}/
                     ├── .user/
-                    │   └── config.json
+                    │   └── config.json      # User session config
                     ├── workspace/
+                    │   ├── scratch/         # Working files
+                    │   └── outputs/         # Generated artifacts
                     └── history/
+                        └── {date}/{task_id}/
     """
 
-    DEFAULT_DIRS: ClassVar[list[str]] = [
+    # Default directories for agent workspaces (full agent context)
+    AGENT_DIRS: ClassVar[list[str]] = [
         ".agent",
         ".agent/plans",
         ".agent/memory",
         ".agent/memory/chroma",
         "workspace",
         "workspace/context",
+        "workspace/scratch",
+        "workspace/outputs",
+        "history",
+    ]
+
+    # Default directories for user workspaces (simpler - just chat sessions)
+    USER_DIRS: ClassVar[list[str]] = [
+        ".user",
+        "workspace",
         "workspace/scratch",
         "workspace/outputs",
         "history",
@@ -111,10 +126,12 @@ class SharedFilesystemStorage(WorkspaceStorage):
         self, path: Path, workspace_type: WorkspaceType, workspace_id: str
     ) -> None:
         """Create workspace with default directory structure."""
-        for subdir in self.DEFAULT_DIRS:
+        # Use appropriate directory structure based on workspace type
+        dirs = self.AGENT_DIRS if workspace_type == WorkspaceType.AGENTS else self.USER_DIRS
+        for subdir in dirs:
             (path / subdir).mkdir(parents=True, exist_ok=True)
 
-        # Create initial config (use .agent for agents, .user for users)
+        # Create initial config in the appropriate directory
         config_dir = ".agent" if workspace_type == WorkspaceType.AGENTS else ".user"
         config = {
             "workspace_id": workspace_id,
@@ -123,7 +140,6 @@ class SharedFilesystemStorage(WorkspaceStorage):
             "version": 1,
         }
         config_path = path / config_dir / "config.json"
-        config_path.parent.mkdir(parents=True, exist_ok=True)
         config_path.write_text(json.dumps(config, indent=2))
 
     def workspace_exists(
