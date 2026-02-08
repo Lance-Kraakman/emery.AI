@@ -21,7 +21,7 @@ import type {
 } from '@/ddd/domain/published-agents/types';
 import type { SecurityReport, SecurityReportData } from '@/ddd/domain/security/types';
 import type { Result } from '@/ddd/domain/shared/result';
-import { OrganizationId, AgentId } from '@/ddd/domain/shared/value-objects';
+import { AgentId } from '@/ddd/domain/shared/value-objects';
 
 // ============================================================================
 // DTOs

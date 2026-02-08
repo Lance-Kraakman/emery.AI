@@ -6,9 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { cn } from '@/lib/utils';
 import { getSkillsByAgent } from '@/app/actions/skills';
-import type { SkillDTO, InputDefinition } from '@/app/mappers/skill-mapper';
+import type { SkillDTO } from '@/app/mappers/skill-mapper';
 import type { TriggerType } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 import type { AutomationInputMappingDTO } from '@/app/dtos/automation.dto';
 import { InstructionTemplateService } from '@/ddd/domain/tasks/services/instruction-template-service';
@@ -117,7 +116,7 @@ export function SkillSelectorForAutomation({
 
   // Handle input mapping change
   const handleMappingChange = (skillInputName: string, triggerField: string | undefined) => {
-    let newMappings = inputMappings.filter(m => m.skillInputName !== skillInputName);
+    const newMappings = inputMappings.filter(m => m.skillInputName !== skillInputName);
 
     // Only add mapping if a trigger field is selected
     if (triggerField && triggerField !== '__none__') {

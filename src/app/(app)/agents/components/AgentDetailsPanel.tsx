@@ -14,18 +14,12 @@ import {
 } from 'lucide-react';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import { OrganizationMapper, type UserDTO } from '@/app/mappers/organization-mapper';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { ConfigurationCard } from './ConfigurationCard';
 import { useModal } from './modals/ModalContext';
 import { ScheduleManagerModal } from './modals/ScheduleManagerModal';
 import { getOrganizationMembers } from '@/app/actions/invitations';
-import {
-  isCalendarTrigger,
-  isDatabaseEventTrigger,
-  isWebhookTrigger,
-  getTriggerTypeLabel
-} from './trigger-utils';
+
+
 import { getDelegationStatus } from '../lib/delegation-helpers';
 import { getAgentDelegationCount } from '@/app/actions/delegations';
 

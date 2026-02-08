@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Button as PuckButton, createUsePuck, FieldLabel, walkTree } from "@measured/puck";
 import { Button } from "@/components/ui/button";
-import { ComponentConfig, Slot } from "@measured/puck";
+import { ComponentConfig } from "@measured/puck";
 import { generateId } from "@/components/puck/lib/generate-id";
 import TemplateComponent, { TemplateProps } from "./Template";
 import { useLinkContext } from "../../contexts/PageContext";

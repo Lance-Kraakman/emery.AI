@@ -4,7 +4,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { getUserOAuthConnectionsPaginated, getAppConnectionUrl, disconnectOAuthAccount, getAvailableAppsPaginated } from '@/app/actions/connections';
 import { getOwnerDelegationsSummary, revokeServiceFromAgent, type DelegationSummaryItem } from '@/app/actions/delegations';
-import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { UnifiedConnectionsGrid } from './components/UnifiedConnectionsGrid';
 import { DelegationsGrid } from './components/DelegationsGrid';

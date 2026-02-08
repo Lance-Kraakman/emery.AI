@@ -5,7 +5,6 @@
 import type { IContextMappingRepository } from '@/ddd/domain/context/repositories/context-mapping-repository';
 import type {
   ContextMapping,
-  CreateContextMappingData,
   UpdateContextMappingData,
   ContextMappingTargetType,
 } from '@/ddd/domain/context/entities/context-mapping';

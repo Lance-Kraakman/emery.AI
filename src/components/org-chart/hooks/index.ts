@@ -15,7 +15,7 @@ import type {
   OrgChartCanvasMetadata,
 } from '../types';
 import { useOrgChartState } from './useOrgChartState';
-import { useOrgChartSync, type SyncProps } from './useOrgChartSync';
+import { useOrgChartSync } from './useOrgChartSync';
 import { useOrgChartHistory } from './useOrgChartHistory';
 import { useOrgChartSelection } from './useOrgChartSelection';
 import { useOrgChartPersistence } from './useOrgChartPersistence';

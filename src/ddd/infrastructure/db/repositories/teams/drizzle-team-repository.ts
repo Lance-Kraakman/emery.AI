@@ -8,7 +8,6 @@ import { OrganizationId, TeamId, AgentId } from '@/ddd/domain/shared/value-objec
 import { teams } from '@/ddd/infrastructure/db/schema';
 import { eq, sql } from 'drizzle-orm';
 import type { InferSelectModel } from 'drizzle-orm';
-import type { DbClient } from '@/ddd/infrastructure/db/client';
 
 type TeamRow = InferSelectModel<typeof teams>;
 

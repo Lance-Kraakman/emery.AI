@@ -1,12 +1,9 @@
 import type {
   Skill,
-  SkillParameterType,
   SkillExecutionType,
-  TaskModelConfig,
   SkillStep,
   ToolExecutionConfig,
   WriteConfig,
-  InputMappingConfig,
   InputDefinition,
   OutputDefinition,
   CanvasMetadata,
@@ -16,7 +13,6 @@ import type {
   RowIdSource,
 } from '@/ddd/domain/skills/entities/skill';
 import type { MessagePart } from '@/ddd/infrastructure/grpc/generated/agent_worker';
-import { s3SkillAttachmentService } from '@/ddd/infrastructure/multimodal/s3-skill-attachment-service';
 
 // Re-export unified types from domain
 export type { InputDefinition, OutputDefinition, TableReference, FieldSource, RowIdSource };

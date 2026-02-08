@@ -584,7 +584,7 @@ export async function getToolConnectionStatus(
 
       let isConnected = true;
       let missingApps: string[] = [];
-      let warnings: string[] = [];
+      const warnings: string[] = [];
       let connectionType: 'oauth' | 'api_key' | 'none' = 'none';
 
       if (requiredApps.length > 0) {

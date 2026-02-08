@@ -5,7 +5,7 @@
  * as styled cards within the TipTap document.
  */
 
-import { Node, mergeAttributes, Attribute } from '@tiptap/core';
+import { Node, mergeAttributes } from '@tiptap/core';
 import { NodeViewWrapper, ReactNodeViewRenderer, NodeViewProps } from '@tiptap/react';
 import React, { useState } from 'react';
 import { File as FileIcon, Music, Download, Loader2 } from 'lucide-react';

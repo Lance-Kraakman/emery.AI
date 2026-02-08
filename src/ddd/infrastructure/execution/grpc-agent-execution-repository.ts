@@ -8,9 +8,9 @@ import type {
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
 import { workerRegistry } from '@/ddd/infrastructure/grpc/client';
 import type { TaskProgress } from '@/ddd/infrastructure/grpc/client';
-import { createTaskRequest, mapTaskProgressFromProto, type AgentData, type ResolvedContextData, type ContextMappingData } from '@/ddd/infrastructure/grpc/proto-mappers';
+import { createTaskRequest, mapTaskProgressFromProto, type ResolvedContextData, type ContextMappingData } from '@/ddd/infrastructure/grpc/proto-mappers';
 import { getAgentDisplayName, type Agent } from '@/ddd/domain/agents/entities/agent';
-import { AgentId, UserId, OrganizationId, TaskStatus, ApiKey } from '@/ddd/domain/shared/value-objects';
+import { AgentId } from '@/ddd/domain/shared/value-objects';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 import { TokenUsageApplicationService } from '@/ddd/application/services/billing/token-usage-application-service';
 import { getTokenUsageRepository, getOrganizationRepository, getContextMappingApplicationService } from '@/ddd/application/di/getters';

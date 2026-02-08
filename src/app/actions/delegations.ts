@@ -6,9 +6,8 @@ import { requirePermission, requireAuth } from "./permissions";
 import { container, getAuditApplicationService } from "@/ddd/application/di/container";
 import type { CredentialDelegationApplicationService } from "@/ddd/application/services/delegations/credential-delegation-application-service";
 import type { ConnectionApplicationService } from "@/ddd/application/services/connections/connection-application-service";
-import { AgentId, UserId, OrganizationId } from '@/ddd/domain/shared/value-objects';
+import { AgentId, UserId } from '@/ddd/domain/shared/value-objects';
 import { AppName } from '@/ddd/domain/connections/value-objects';
-import { DelegationId } from '@/ddd/domain/shared/value-objects';
 import { getResourceAccessList, type AccessEntry } from "./resource-permissions";
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
 
@@ -158,7 +157,7 @@ export async function updateAgentDelegationServices(
       }
 
       // Get current delegation
-      let currentResult = await delegationService.getDelegationForAgent(
+      const currentResult = await delegationService.getDelegationForAgent(
         AgentId.fromNumber(agentId)
       );
 

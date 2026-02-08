@@ -25,7 +25,7 @@ import { useOrgChartSession } from '@/components/org-chart/hooks';
 import { createAgent, deleteAgent } from '@/app/actions/agents';
 import { createSkill, deleteSkill } from '@/app/actions/skills';
 import { createDatabase, deleteDatabase, cascadeDeleteDatabase } from '@/app/actions/databases';
-import { getContextMappings, type ContextMappingDTO } from '@/app/actions/context-mappings';
+import { getContextMappings } from '@/app/actions/context-mappings';
 import { TriggerConfigModal } from '@/app/(app)/agents/components/modals/TriggerConfigModal';
 import { CreateTableDialog } from '@/app/(app)/data/components/CreateTableDialog';
 import { useEmeryAgent } from '@/contexts/EmeryStoreProvider';

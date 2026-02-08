@@ -18,7 +18,7 @@ import type { IOrganizationRepository } from '@/ddd/domain/organizations/reposit
 import { Task } from '@/ddd/domain/tasks/entities/task';
 import type { TriggerContext } from '@/ddd/domain/tasks/entities/task';
 import { isActiveAgent } from '@/ddd/domain/agents/entities/agent';
-import { AgentId, OrganizationId, TaskId, UserId, TaskStatus, TeamId } from '@/ddd/domain/shared/value-objects';
+import { AgentId, OrganizationId, TaskId, UserId, TaskStatus } from '@/ddd/domain/shared/value-objects';
 import type { CreateTaskDTO, ExecuteTaskDTO, TaskExecutionResultDTO, TaskDTO } from '@/app/dtos/task.dto';
 import { taskToDTO } from '@/app/mappers/task-mapper';
 import type { Result } from '@/ddd/domain/shared/result';

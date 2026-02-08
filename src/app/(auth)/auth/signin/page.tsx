@@ -1,6 +1,5 @@
 import React from "react"
 import { auth } from "@/lib/auth"
-import { redirect } from "next/navigation"
 import Link from "next/link"
 import { SignInButton } from "@/components/auth/SignInButton"
 import { EmailSignInForm } from "@/components/auth/EmailSignInForm"

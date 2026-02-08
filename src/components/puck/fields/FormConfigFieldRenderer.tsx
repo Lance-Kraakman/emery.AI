@@ -29,8 +29,6 @@ import {
   GripVertical,
   FileText,
   Settings,
-  Eye,
-  EyeOff,
 } from 'lucide-react';
 import { updateFormViewConfig } from '@/app/actions/views';
 import { toast } from 'sonner';

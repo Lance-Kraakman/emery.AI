@@ -1,7 +1,6 @@
 import { Client } from 'pg';
-import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import { sql, inArray, or, like } from 'drizzle-orm';
+import { inArray, or, like } from 'drizzle-orm';
 import * as schema from '@/ddd/infrastructure/db/schema';
 import { withRLSContext } from '@/ddd/infrastructure/db/rls-context';
 import { contextAwareDb, type ContextAwareDbClient } from '@/ddd/infrastructure/db/simple-context-proxy';

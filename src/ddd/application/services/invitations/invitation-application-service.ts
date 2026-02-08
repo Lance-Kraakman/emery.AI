@@ -13,7 +13,6 @@ import type { IUserRepository } from '@/ddd/domain/users/repositories/user-repos
 import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
 import type { IRBACRepository } from '@/ddd/domain/rbac/repositories/rbac-repository';
 import { OrganizationId, UserId, EmailAddress, InvitationId, InvitationToken } from '@/ddd/domain/shared/value-objects';
-import { SystemRoleType, SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
 import type { Result } from '@/ddd/domain/shared/result';
 import type {
   Invitation,
@@ -25,7 +24,6 @@ import type {
   InvitationEmailContext
 } from '@/ddd/domain/invitations/entities/invitation';
 import {
-  isValidInvitationRole,
   createInvitationExpiry,
   isInvitationExpired
 } from '@/ddd/domain/invitations/entities/invitation';

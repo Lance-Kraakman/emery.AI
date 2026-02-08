@@ -13,7 +13,7 @@ import { Task } from '@/ddd/domain/tasks/entities/task';
 import { DrizzleBaseRepository } from '../base/drizzle-base-repository';
 import { TaskId } from '@/ddd/domain/tasks/value-objects/task-id';
 import { TaskStatus, TASK_STATUS } from '@/ddd/domain/tasks/value-objects/task-status';
-import { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
+import { AgentId } from '@/ddd/domain/shared/value-objects';
 
 type TaskRow = InferSelectModel<typeof tasks>;
 

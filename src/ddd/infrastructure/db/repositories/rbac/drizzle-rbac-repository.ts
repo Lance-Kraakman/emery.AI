@@ -13,13 +13,12 @@ import {
   rolePermissions, 
   userRoles 
 } from '@/ddd/infrastructure/db/schema';
-import { Permission, ACTIONS, RESOURCES } from '@/ddd/domain/shared/value-objects/permission';
+import { Permission } from '@/ddd/domain/shared/value-objects/permission';
 import { UserId, OrganizationId } from '@/ddd/domain/shared/value-objects';
 import type { 
   Role, 
   CreateRoleData, 
-  UpdateRoleData,
-  SYSTEM_ROLES 
+  UpdateRoleData 
 } from '@/ddd/domain/rbac/entities/role';
 import { PermissionDTO, RoleDTO, toPermissionDTOFromRow, toRoleDTO } from '@/app/mappers/permission-mapper';
 import type { IRBACRepository } from '@/ddd/domain/rbac/repositories/rbac-repository';

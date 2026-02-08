@@ -9,7 +9,7 @@ import { getUserRoleApplicationService, getUserRepository, getOrganizationReposi
 import { withAuthContext } from '@/lib/auth/with-context';
 import type { Result } from "./types";
 import { UserId, OrganizationId } from "@/ddd/domain/shared/value-objects";
-import { SystemRoleType, SYSTEM_ROLES, SYSTEM_ROLE_IDS } from "@/ddd/domain/rbac/entities/role";
+import { SystemRoleType, SYSTEM_ROLE_IDS } from "@/ddd/domain/rbac/entities/role";
 import { OrganizationMapper, type OrganizationDTO } from "@/app/mappers/organization-mapper";
 
 // Helper to map Role entities to simplified format for OrganizationDTO.userRoles

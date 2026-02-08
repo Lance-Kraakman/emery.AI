@@ -18,7 +18,6 @@
  * ```
  */
 
-import { ArrayField } from "@measured/puck";
 import type { TableField } from "@/ddd/domain/tables/value-objects/table-field";
 import type { SortDirection } from "@/ddd/domain/views/value-objects/sort-config";
 

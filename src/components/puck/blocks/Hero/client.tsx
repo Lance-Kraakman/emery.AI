@@ -1,4 +1,4 @@
-/* eslint-disable @next/next/no-img-element */
+ 
 import React from "react";
 import { ComponentConfig } from "@measured/puck";
 import { quotes } from "./quotes";
@@ -6,7 +6,6 @@ import { AutoField, FieldLabel } from "@measured/puck";
 import { Link2 } from "lucide-react";
 import HeroComponent, { HeroProps } from "./Hero";
 import { backgroundColorField, textColorField, fontFamilyField, fontWeightField, paddingField, textAlignField } from "../../fields/standard-fields";
-import type { FourSidedSpacing } from "../../types/spacing-types";
 import { createLinkActionField, createVariableTextField } from "../../custom-fields";
 
 export const Hero: ComponentConfig<HeroProps> = {

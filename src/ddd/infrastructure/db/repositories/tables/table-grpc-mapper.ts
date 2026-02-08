@@ -29,20 +29,15 @@ import {
   Table as ITable,
   TableSchema as ITableSchema,
   TableField as ITableField,
-  Row as IRow,
   RowData as IRowData,
   RowDataValue as IRowDataValue,
   RowFilter as IRowFilter,
-  CreateTableRequest as ICreateTableRequest,
   CreateRowsRequest as ICreateRowsRequest,
   UpdateRowsRequest as IUpdateRowsRequest,
   DeleteRowsRequest as IDeleteRowsRequest,
   QueryRowsRequest as IQueryRowsRequest,
   GetTableStatsRequest as IGetTableStatsRequest,
   AddFieldRequest,
-  UpdateFieldRequest,
-  DeleteFieldRequest,
-  GetFieldsRequest,
 } from '@/ddd/infrastructure/grpc/generated/table_service';
 
 /**

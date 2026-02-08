@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Link2, ChevronRight, Plus, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { Link2, Plus, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 import type { ConnectionDTO } from '@/app/mappers/connection-mapper';
 
 interface CompactConnectionsListProps {

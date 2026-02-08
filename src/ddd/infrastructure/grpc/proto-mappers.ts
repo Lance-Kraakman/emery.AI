@@ -24,7 +24,7 @@ import {
   ContextMappingProto,
   ResolvedContextProto,
 } from './generated/agent_worker';
-import { Task, TaskStatus } from '@/ddd/domain/tasks/entities/task';
+import { TaskStatus } from '@/ddd/domain/tasks/entities/task';
 
 // AgentData interface for gRPC transport (uses primitives, not domain value objects)
 // AIDEV-NOTE: Skills are now in separate table, not embedded in Agent

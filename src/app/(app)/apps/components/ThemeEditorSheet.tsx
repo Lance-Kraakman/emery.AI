@@ -28,7 +28,6 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { ColorInput } from "@/components/ui/color-input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -38,7 +37,6 @@ import {
 } from "@/components/ui/select";
 import { FontSelect } from "@/components/ui/font-select";
 import {
-  ThemeConfig,
   type ThemeConfigProps,
   DEFAULT_THEME,
 } from "@/ddd/domain/puck/value-objects/theme-config";

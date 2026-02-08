@@ -5,7 +5,6 @@ import type { AppDTO } from '@/app/mappers/puck-app-mapper';
 import type { PageDTO } from '@/app/mappers/puck-page-mapper';
 import type { ViewDTO } from '@/app/mappers/view-mapper';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Palette } from 'lucide-react';
 import { appsActions } from '@/stores/apps.store';

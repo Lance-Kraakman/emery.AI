@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, Upload, RefreshCw, Loader2 } from 'lucide-react';
+import { Search, Upload, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { TemplateCard } from './TemplateCard';
 import type { TemplateDTO, BuiltinTemplateInfo, TemplateEntityType } from '@/ddd/domain/templates/types';

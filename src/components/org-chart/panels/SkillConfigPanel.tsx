@@ -51,7 +51,6 @@ import {
   updateContextMapping,
   detachContextTable,
 } from '@/app/actions/context-mappings';
-import { getFields } from '@/app/actions/fields';
 import { FieldPickerPopover } from '@/components/skill-config/FieldPickerPopover';
 import { ManualInputItem } from '@/components/skill-config/ManualInputItem';
 import { ManualOutputItem } from '@/components/skill-config/ManualOutputItem';

@@ -3,8 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { withAuthContext } from '@/lib/auth/with-context';
 import { getSkillApplicationService, getAgentApplicationService, getStorageQuotaApplicationService, getAuditApplicationService } from '@/ddd/application/di/container';
-import { getOrganizationRepository, getUserRepository } from '@/ddd/application/di/getters';
-import { UserId } from '@/ddd/domain/shared/value-objects/user-id';
+import { getOrganizationRepository } from '@/ddd/application/di/getters';
 import { ensureFreshUserApiKey } from '@/lib/auth/user-api-keys';
 import { OrganizationId } from '@/ddd/domain/shared/value-objects';
 import { SkillMapper } from '@/app/mappers/skill-mapper';

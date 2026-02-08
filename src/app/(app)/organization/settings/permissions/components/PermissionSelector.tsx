@@ -6,7 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, Eye, Edit, Plus, Play, Users, Shield, ChevronDown } from "lucide-react";
+import { Search, Eye, Edit, Plus, Play, Users, Shield } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ResourceSelector } from "./ResourceSelector";
 

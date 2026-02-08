@@ -23,7 +23,6 @@ import { FilterPopover } from '../FilterPopover'
 import { FilterChip } from '../FilterChip'
 import { ViewSelector } from '../ViewSelector'
 import { SaveViewDialog } from '../SaveViewDialog'
-import { ShareButton } from '@/components/permissions/ShareButton'
 import { ShareDialog } from '@/components/permissions/ShareDialog'
 import { useGrid } from './GridContext'
 

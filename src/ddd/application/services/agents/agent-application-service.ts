@@ -13,14 +13,12 @@ import type { CredentialDelegationApplicationService } from '@/ddd/application/s
 import type { ConnectionApplicationService } from '@/ddd/application/services/connections/connection-application-service';
 import {
   Agent,
-  type CreateAgentData,
-  type UpdateAgentData
+  type CreateAgentData
 } from '@/ddd/domain/agents/entities/agent';
 import type { Result } from '@/ddd/domain/shared/result';
 import { createAgentDefaults } from '@/ddd/domain/agents/entities/agent';
-import { AgentId, OrganizationId, UserId, TeamId, AgentStatus, ApiKey, AGENT_STATUS } from '@/ddd/domain/shared/value-objects';
-import { AppName } from '@/ddd/domain/connections/value-objects';
-import { TriggerConfig, TriggerConfigFromJSON } from '@/ddd/domain/scheduling/value-objects/trigger-config';
+import { AgentId, OrganizationId, UserId, TeamId, AgentStatus, ApiKey } from '@/ddd/domain/shared/value-objects';
+import { TriggerConfigFromJSON } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 import type { CreateAgentDTO, UpdateAgentDTO, AgentFiltersDTO, AgentDTO } from '@/app/dtos/agent.dto';
 import type { AutomationConfiguration } from '@/ddd/domain/agents/entities/agent';
 import { AgentMapper } from '@/app/mappers/agent-mapper';

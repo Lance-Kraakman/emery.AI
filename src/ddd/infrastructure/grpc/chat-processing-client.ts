@@ -18,11 +18,9 @@ import type {
   ProcessMessageRequest,
   ProcessMessageResponse,
   HistoryMessage,
-  ContentChunk,
   ProcessingComplete,
   ProcessingError,
   StepProgress,
-  MessagePart,
   AwaitingInput,
 } from './generated/agent_worker';
 import { toProtoMessageParts } from './mappers/message-part-mapper';

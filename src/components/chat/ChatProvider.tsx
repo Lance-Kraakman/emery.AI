@@ -2,7 +2,6 @@
 
 import React, { createContext, useContext } from 'react'
 import { useChatGRPC } from './useChatGRPC'
-import type { ChatHandler } from '@llamaindex/chat-ui'
 import type { ChatContextConfig } from '@/components/layout/types'
 import type { ExtendedChatHandler } from './types/extended-chat-handler'
 

@@ -29,10 +29,9 @@ import { createNotificationClient, rawClient } from "@/ddd/infrastructure/db/cli
 import { contextAwareDb } from "@/ddd/infrastructure/db/simple-context-proxy";
 import { withSystemContext } from "@/ddd/infrastructure/db/system-context";
 import { TaskId } from "@/ddd/domain/tasks/value-objects/task-id";
-import { OrganizationId } from "@/ddd/domain/shared/value-objects";
 import type { TaskEvent } from "@/ddd/domain/scheduling";
-import { CalendarTriggerConfig, DatabaseEventTriggerConfig, TriggerConfigFromJSON } from "@/ddd/domain/scheduling/value-objects/trigger-config";
-import { getAgentRepository, getSkillRepository } from "@/ddd/application/di/container";
+import { CalendarTriggerConfig } from "@/ddd/domain/scheduling/value-objects/trigger-config";
+import { getAgentRepository } from "@/ddd/application/di/container";
 import { InstructionTemplateService } from "@/ddd/domain/tasks/services/instruction-template-service";
 import type { TriggerContext } from "@/ddd/domain/tasks/entities/task";
 import postgres from "postgres";

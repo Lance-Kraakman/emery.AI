@@ -20,7 +20,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
-import { AlertTriangle, Bot, Sparkles, Database, Table2, Clock, Loader2 } from 'lucide-react';
+import { AlertTriangle, Sparkles, Database, Table2, Clock, Loader2 } from 'lucide-react';
 
 const CONFIRMATION_PHRASE = 'I-understand-delete-all';
 

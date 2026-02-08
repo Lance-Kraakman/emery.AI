@@ -16,7 +16,7 @@ import { AppId } from "@/ddd/domain/puck/value-objects/app-id"
 import { TemplateId } from "@/ddd/domain/puck/value-objects/template-id"
 import { Template, type TemplateData, type TemplateVariant } from "@/ddd/domain/puck/entities/template"
 import { getTemplateApplicationService } from "@/ddd/application/di/container"
-import type { CreateTemplateCommand, UpdateTemplateCommand } from "@/ddd/application/services/puck/template-application-service"
+import type { CreateTemplateCommand } from "@/ddd/application/services/puck/template-application-service"
 
 // DTO for transferring template data to the client
 export interface TemplateDTO {

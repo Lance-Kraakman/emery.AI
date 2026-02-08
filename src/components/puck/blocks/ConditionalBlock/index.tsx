@@ -89,10 +89,10 @@ function evaluateCondition(
     case 'falsy':
       return !value;
     case 'eq':
-      // eslint-disable-next-line eqeqeq
+       
       return value == compareValue;
     case 'ne':
-      // eslint-disable-next-line eqeqeq
+       
       return value != compareValue;
     case 'gt':
       return Number(value) > Number(compareValue);

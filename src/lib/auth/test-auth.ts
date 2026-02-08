@@ -7,7 +7,7 @@
 
 import { NextRequest } from 'next/server';
 import { auth, getUserIdFromRequest } from '@/lib/auth';
-import { validateUserApiKey, extractApiKeyFromHeader, UserApiKeyInfo } from './user-api-keys';
+import { validateUserApiKey, extractApiKeyFromHeader } from './user-api-keys';
 import { db } from '@/ddd/infrastructure/db/client';
 import { users } from '@/ddd/infrastructure/db/schema';
 import { eq } from 'drizzle-orm';

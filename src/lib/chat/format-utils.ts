@@ -5,7 +5,6 @@
  * to be displayed in the chat UI.
  */
 
-import type { BatchedQuestion } from '@/components/chat/types/extended-chat-handler'
 
 /**
  * Plan step structure from planJson

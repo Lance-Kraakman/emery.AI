@@ -47,7 +47,6 @@ import { ApprovalInputBar } from './ApprovalInputBar'
 import { SaveToSkillDialog } from './SaveToSkillDialog'
 import { savePlanToSkill } from '@/app/actions/skills'
 import { createDebugLogger } from '@/lib/utils/debug-logger'
-import type { ExecutionStep } from '@/app/dtos/chat.dto'
 import type { ChatMessage as EmeryChatMessage } from './types/extended-chat-handler'
 
 const logger = createDebugLogger('EmeryChat')

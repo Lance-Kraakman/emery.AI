@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Calendar, Clock, ChevronRight, Plus, Database, Webhook, Zap } from 'lucide-react';
+import { Calendar, Clock, Plus, Database, Webhook, Zap } from 'lucide-react';
 import { RRule } from 'rrule';
 import type { AutomationConfigurationDTO } from '@/app/dtos/automation.dto';
 

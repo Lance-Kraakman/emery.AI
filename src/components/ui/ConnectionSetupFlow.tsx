@@ -17,8 +17,7 @@ import {
   CheckCircle,
   AlertTriangle,
   ArrowRight,
-  Loader2,
-  X
+  Loader2
 } from 'lucide-react';
 import { getConnectionSetupUrl } from '@/app/actions/connections';
 import { cn } from '@/lib/utils';

@@ -17,7 +17,7 @@ import type {
   DatabaseFiltersDTO,
   DatabaseDTO
 } from "@/app/dtos/database.dto"
-import { UserId, DatabaseId, OrganizationId } from "@/ddd/domain/shared/value-objects"
+import { DatabaseId, OrganizationId } from "@/ddd/domain/shared/value-objects"
 import { DatabaseMapper } from "@/app/mappers/database-mapper"
 
 const createDatabaseSchema = z.object({

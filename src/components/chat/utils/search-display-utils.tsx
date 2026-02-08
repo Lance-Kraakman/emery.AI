@@ -14,7 +14,6 @@ import {
   Users, 
   Settings, 
   Database,
-  Table,
   Key,
   UserCog,
   Monitor,

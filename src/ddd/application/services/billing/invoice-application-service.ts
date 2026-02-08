@@ -4,7 +4,7 @@
  * Orchestrates invoice management, billing history, and Stripe invoice sync.
  * Handles invoice creation, status updates, and reporting.
  */
-import type { IInvoiceRepository, InvoiceSummary } from '@/ddd/domain/billing/repositories/invoice-repository';
+import type { IInvoiceRepository } from '@/ddd/domain/billing/repositories/invoice-repository';
 import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
 import type { CreateInvoiceData, Invoice, InvoiceStatus } from '@/ddd/domain/billing/entities/invoice';
 import { InvoiceUtils } from '@/ddd/domain/billing/entities/invoice';

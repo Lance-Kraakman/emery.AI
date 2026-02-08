@@ -80,7 +80,7 @@ async function fetchAndSavePipedreamTools() {
   
   try {
     // Get all apps using cursor-based pagination (Pipedream standard)
-    let uniqueApps = new Set<string>();
+    const uniqueApps = new Set<string>();
 
     console.log(`  🔄 Cursor-based pagination (Pipedream standard)...`);
     const limit = 100;
@@ -205,7 +205,7 @@ async function fetchAndSavePipedreamTools() {
   // Track statistics
   let totalActions = 0;
   let totalMcpTools = 0;
-  let failedApps: string[] = [];
+  const failedApps: string[] = [];
   let processedApps = 0;
   
   for (const appSlug of appsToProcess) {

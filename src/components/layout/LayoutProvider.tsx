@@ -11,7 +11,7 @@ import type {
 } from './types'
 import { LAYOUT_BREAKPOINTS } from './types'
 import { uiStateStore, uiStateSelectors } from '@/stores/ui-state.store'
-import { storeActions, uiStateActions } from '@/stores/actions'
+import { uiStateActions } from '@/stores/actions'
 
 /**
  * Layout Context Provider - TanStack Store-based Layout State Management

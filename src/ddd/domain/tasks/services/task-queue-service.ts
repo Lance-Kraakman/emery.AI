@@ -10,8 +10,6 @@
 
 import { Task } from '../entities/task';
 import { TaskId } from '../value-objects/task-id';
-import { TaskStatus, TASK_STATUS } from '../value-objects/task-status';
-import type { AgentId } from '@/ddd/domain/shared/value-objects';
 
 export interface TaskQueueConfig {
   maxConcurrentTasks?: number;

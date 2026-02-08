@@ -15,7 +15,7 @@ import {
   type AvatarStyleName,
   type AvatarColorName,
 } from '@/lib/avatars';
-import { getStyleOptions, type StyleOption } from '@/lib/avatar-options';
+import { getStyleOptions } from '@/lib/avatar-options';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 

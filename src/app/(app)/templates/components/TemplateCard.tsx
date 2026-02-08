@@ -17,10 +17,8 @@ import {
   LayoutGrid,
   Download,
   Trash2,
-  Copy,
   Play,
-  Save,
-  Lock
+  Save
 } from 'lucide-react';
 import type { TemplateDTO, BuiltinTemplateInfo, TemplateEntityType } from '@/ddd/domain/templates/types';
 

@@ -13,7 +13,6 @@ import { getChatApplicationService } from '@/ddd/application/di/container'
 import type {
   ChatContextDTO,
   ChatSessionDTO,
-  ChatMessageDTO,
   ChatWithMessagesDTO,
   ChatActionResult,
   CreateChatSessionDTO

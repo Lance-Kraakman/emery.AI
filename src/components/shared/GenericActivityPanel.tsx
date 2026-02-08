@@ -15,7 +15,7 @@ import {
   ChevronLeft,
   Plus
 } from 'lucide-react';
-import { format, formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 
 // AIDEV-NOTE: Generic activity panel to reduce duplication across activity components
 // Supports different item types and provides consistent layout

@@ -10,8 +10,7 @@ import { getTableApplicationService, getRowApplicationService } from "@/ddd/appl
 import type { Result, CreateRowCommand, UpdateRowCommand } from "./types";
 import { Row, RowId } from "@/ddd/domain/tables/value-objects/row";
 import { TableId, UserId } from "@/ddd/domain/shared/value-objects";
-import { RowMapper, type RowDTO } from "@/app/mappers/row-mapper";
-import type { DSGRow } from "@/app/mappers/dsg-mapper";
+import { RowMapper } from "@/app/mappers/row-mapper";
 import type { TableField } from "@/ddd/domain/tables/value-objects/table-field";
 import { getCacheService, CACHE_TAGS } from "@/lib/cache";
 import {

@@ -1,5 +1,4 @@
 import { Organization, OrganizationWithMembers, OrganizationMember } from '@/ddd/domain/organizations/entities/organization';
-import { RoleDTO } from './permission-mapper';
 
 export interface OrganizationDTO {
   id: number;

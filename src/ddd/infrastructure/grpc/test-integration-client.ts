@@ -10,8 +10,6 @@ import {
   AgentConfig,
   TriggerData,
   InstructionConfig,
-  ToolConfig,
-  TaskProgress,
   TaskStatus
 } from './generated/agent_worker';
 

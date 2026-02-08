@@ -5,7 +5,7 @@ import { BaseModal } from './BaseModal';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-import { Loader2, ShieldCheck, ShieldX, Trash2, AlertCircle, Users, Info, Settings } from 'lucide-react';
+import { Loader2, ShieldCheck, ShieldX, Trash2, AlertCircle, Users, Settings } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import {

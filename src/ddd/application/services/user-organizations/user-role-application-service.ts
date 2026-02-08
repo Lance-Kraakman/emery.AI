@@ -16,7 +16,7 @@ import type { OrganizationMember } from '@/ddd/domain/organizations/entities/org
 import { UserId, OrganizationId } from '@/ddd/domain/shared/value-objects';
 import { SystemRoleType, SYSTEM_ROLES, SYSTEM_ROLE_IDS } from '@/ddd/domain/rbac/entities/role';
 import type { Result } from '@/ddd/domain/shared/result';
-import { RoleDTO, toRoleDTO } from '@/app/mappers/permission-mapper';
+import { RoleDTO } from '@/app/mappers/permission-mapper';
 
 export interface AddUserToOrganizationCommand {
   userId: string;

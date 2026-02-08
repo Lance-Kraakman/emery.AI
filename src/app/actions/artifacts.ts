@@ -9,7 +9,7 @@
 
 import { requirePermission } from "./permissions";
 import { withAuthContext } from '@/lib/auth/with-context';
-import { getDocumentApplicationService, getFileApplicationService } from "@/ddd/application/di/container";
+import { getDocumentApplicationService } from "@/ddd/application/di/container";
 import { FieldId, OrganizationId, TableId, UserId } from "@/ddd/domain/shared/value-objects";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";

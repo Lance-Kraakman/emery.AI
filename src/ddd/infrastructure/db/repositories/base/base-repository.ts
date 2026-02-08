@@ -1,4 +1,4 @@
-import { BaseId, OrganizationId } from '@/ddd/domain/shared/value-objects';
+import { OrganizationId } from '@/ddd/domain/shared/value-objects';
 import type { DbClient } from '@/ddd/infrastructure/db/client';
 
 /**

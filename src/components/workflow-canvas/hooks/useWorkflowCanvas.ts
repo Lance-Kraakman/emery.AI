@@ -9,8 +9,6 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   useNodesState,
   useEdgesState,
-  addEdge,
-  type Connection,
   type XYPosition,
 } from '@xyflow/react';
 import type { SkillStep, CanvasMetadata, InputDefinition, OutputDefinition } from '@/ddd/domain/skills/entities/skill';

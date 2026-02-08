@@ -1,4 +1,4 @@
-/* eslint-disable @next/next/no-img-element */
+ 
 import React from "react";
 import styles from "./styles.module.css";
 import { getClassNameFactory } from "@/components/puck/lib";

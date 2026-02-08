@@ -15,7 +15,7 @@
  * - Add worker routing logic based on tool configuration
  */
 
-import { ToolConfig, AgentToolConfig, TableToolConfig, DocumentToolConfig, FileToolConfig, DatabaseToolConfig } from '../value-objects/tool-config'
+import { ToolConfig } from '../value-objects/tool-config'
 import { ToolMetadata, ToolCategory } from '../value-objects/tool-metadata'
 import { Reference } from '@/ddd/domain/chat/value-objects/reference'
 import type { InputDefinition } from '@/ddd/domain/skills/entities/skill'

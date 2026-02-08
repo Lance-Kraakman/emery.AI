@@ -18,8 +18,6 @@ import { roles, permissions, rolePermissions, userRoles } from '@/ddd/infrastruc
 import { eq, and, or, isNull, sql, ne } from 'drizzle-orm';
 import type { 
   CustomRole, 
-  CreateRoleCommand, 
-  UpdateRoleCommand, 
   RoleResult as Result, 
   RoleSelectionOption 
 } from './types';

@@ -9,7 +9,6 @@ import {
   MeasurementCategory,
   CalculationFrequency
 } from '@/ddd/domain/shared/value-objects';
-import { SystemRoleType } from '@/ddd/domain/rbac/entities/role';
 
 export interface Organization {
   id: OrganizationId;

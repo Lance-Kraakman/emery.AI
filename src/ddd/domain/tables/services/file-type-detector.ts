@@ -13,7 +13,6 @@ import {
   FILE_VIEWER_TYPES, 
   FILE_TYPE_EXTENSIONS, 
   FILE_TYPE_MIME_PATTERNS,
-  TIPTAP_MIME_TYPE,
   isTiptapMimeType
 } from '../value-objects/file-viewer-types'
 

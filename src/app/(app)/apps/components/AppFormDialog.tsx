@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import type { AppDTO } from '@/app/mappers/puck-app-mapper';
 import { useForm } from '@tanstack/react-form';
 import { Button } from '@/components/ui/button';

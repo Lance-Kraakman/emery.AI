@@ -10,7 +10,7 @@ import { withAuthContext } from '@/lib/auth/with-context';
 import { requirePermission, requireResourcePermission } from "./permissions"
 import { requireCurrentOrganization } from "./user-organizations"
 import { getAppApplicationService } from "@/ddd/application/di/container"
-import { ActionError, type Result, type ErrorCode } from "@/lib/puck/errors"
+import { ActionError, type Result } from "@/lib/puck/errors"
 
 import { OrganizationId, UserId } from "@/ddd/domain/shared/value-objects"
 import { AppId } from "@/ddd/domain/puck/value-objects/app-id"

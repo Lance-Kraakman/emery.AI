@@ -1,4 +1,4 @@
-import { eq, ilike, and, count } from 'drizzle-orm';
+import { eq, ilike, and } from 'drizzle-orm';
 import type { InferSelectModel } from 'drizzle-orm';
 
 import { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';

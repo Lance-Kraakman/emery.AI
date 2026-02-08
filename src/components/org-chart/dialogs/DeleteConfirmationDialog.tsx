@@ -20,8 +20,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { AlertTriangle, Bot, Sparkles, Database, Clock, Loader2, Table2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import type { OrgChartNode, OrgChartNodeType, AgentContainerNodeData, SkillNodeData, DatabaseNodeData } from '../types';
+import type { OrgChartNode, OrgChartNodeType, AgentContainerNodeData, DatabaseNodeData } from '../types';
 
 interface DeleteImpactItem {
   type: OrgChartNodeType;

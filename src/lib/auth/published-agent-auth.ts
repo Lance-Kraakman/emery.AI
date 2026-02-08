@@ -10,7 +10,7 @@
 import { createHash } from 'crypto';
 import { db } from '@/ddd/infrastructure/db/client';
 import { publishedAgents, publishedAgentApiKeys } from '@/ddd/infrastructure/db/schema';
-import { eq, and, isNull, or, gte } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import type { PublishedAgentAuthResult, ApiKeyScope } from '@/ddd/domain/published-agents/types';
 
 /**

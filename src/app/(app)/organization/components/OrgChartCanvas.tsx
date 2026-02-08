@@ -24,7 +24,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { cn } from '@/lib/utils';
-import { StickyNote, Search, Maximize, LayoutGrid, FileDown, FileUp, Layers, ShieldCheck } from 'lucide-react';
+import { StickyNote, Search, LayoutGrid, FileDown, FileUp, Layers, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import {

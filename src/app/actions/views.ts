@@ -29,7 +29,7 @@ import { ViewConfig } from "@/ddd/domain/views/value-objects/view-config";
 import { ViewMapper, type ViewDTO } from "@/app/mappers/view-mapper";
 import { FieldMapper, type FieldDTO } from "@/app/mappers/field-mapper";
 import type { Result, CreateViewData, UpdateViewData } from "./types";
-import { getCacheService, CACHE_KEYS, CACHE_TAGS } from "@/lib/cache";
+import { getCacheService, CACHE_KEYS } from "@/lib/cache";
 
 /**
  * Create a new view

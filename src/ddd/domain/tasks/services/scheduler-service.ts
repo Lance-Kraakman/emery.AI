@@ -8,7 +8,6 @@
  * Automations reference skills by ID, so task creation requires skill lookup.
  */
 
-import { Task } from '../entities/task';
 import type { AgentId } from '@/ddd/domain/shared/value-objects';
 import type { TriggerConfig, TriggerType, ScheduledTask, AutomationTaskRequest } from '@/ddd/domain/scheduling';
 import { CalendarTriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';

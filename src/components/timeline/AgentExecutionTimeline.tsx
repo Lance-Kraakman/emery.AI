@@ -5,7 +5,7 @@ import { format, subDays, addDays, isWithinInterval } from 'date-fns';
 import { RRule } from 'rrule';
 import type { TaskDTO } from '@/app/mappers/task-mapper';
 import type { AutomationConfigurationDTO } from '@/app/dtos/automation.dto';
-import { Calendar, Clock, AlertCircle, CheckCircle, Loader, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 import { TaskCard } from '@/components/tasks/TaskCard';
 
 interface TimelineTask {

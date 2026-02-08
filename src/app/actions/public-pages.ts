@@ -5,7 +5,7 @@
 
 import { db } from "@/ddd/infrastructure/db/client"
 import { apps, pages, organizations, userRoles, roles } from "@/ddd/infrastructure/db/schema"
-import { eq, and, inArray } from "drizzle-orm"
+import { eq, and } from "drizzle-orm"
 import { ActionError, type Result } from "@/lib/puck/errors"
 import { PuckPageMapper, type PageDTO } from "@/app/mappers/puck-page-mapper"
 import { AppMapper, type AppDTO } from "@/app/mappers/puck-app-mapper"

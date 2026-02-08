@@ -16,9 +16,7 @@ const logger = createDebugLogger('TableRepo');
 import { tables, fields } from '@/ddd/infrastructure/db/schema';
 import { eq, and } from 'drizzle-orm';
 import type { InferSelectModel } from 'drizzle-orm';
-import { s3Client, BUCKET_NAME, ensureBucketExists } from '@/lib/s3/client';
-import { PutObjectCommand } from '@aws-sdk/client-s3';
-import { TableId, DatabaseId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
+import { TableId, DatabaseId, OrganizationId } from '@/ddd/domain/shared/value-objects';
 import type { 
   IDynamicTableRepository
 } from '@/ddd/domain/tables/repositories/dynamic-table-repository';

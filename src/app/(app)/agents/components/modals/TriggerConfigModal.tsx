@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react';
 import { BaseModal } from './BaseModal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -14,7 +13,6 @@ import {
   Database,
   Globe,
   Zap,
-  Clock,
   Save,
   X,
   Loader2,
@@ -22,16 +20,12 @@ import {
   Info
 } from 'lucide-react';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
-import { TriggerConfigs, type TriggerConfig, type TriggerType, PipedreamEventTriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
+import { TriggerConfigs, type TriggerConfig, type TriggerType } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 import { updateAgentFromClient, deployPipedreamSource } from '@/app/actions/agents';
 import { TableSelector } from '../TableSelector';
 import ScheduleManager from '../ScheduleManager';
-import {
-  isCalendarTrigger,
-  isDatabaseEventTrigger,
-  isWebhookTrigger,
-  getTriggerTypeLabel
-} from '../trigger-utils';
+
+
 import { UnifiedChatInput } from '@/components/shared/UnifiedChatInput';
 import type { AutomationConfigurationDTO } from '@/app/dtos/automation.dto';
 import { uploadTaskAttachment } from '@/app/actions/tasks';

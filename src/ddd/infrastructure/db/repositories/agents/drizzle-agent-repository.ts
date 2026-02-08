@@ -6,9 +6,9 @@ import type { Agent } from '@/ddd/domain/agents/entities/agent';
 import { AgentFactory } from '@/ddd/domain/agents/entities/agent';
 import { DrizzleBaseRepository } from '../base/drizzle-base-repository';
 import { agents } from '@/ddd/infrastructure/db/schema';
-import { eq, and, or, gte, isNotNull, sql, ne } from 'drizzle-orm';
+import { eq, and, or, gte, sql, ne } from 'drizzle-orm';
 import type { InferSelectModel } from 'drizzle-orm';
-import { AgentId, OrganizationId, UserId, AgentStatus, ApiKey } from '@/ddd/domain/shared/value-objects';
+import { AgentId, OrganizationId, UserId, ApiKey } from '@/ddd/domain/shared/value-objects';
 import type { DbClient } from '@/ddd/infrastructure/db/client';
 
 type AgentRow = InferSelectModel<typeof agents>;

@@ -8,7 +8,7 @@
  */
 
 import React, { useState } from 'react'
-import { MoreHorizontal, MessageSquare, Calendar, Archive, Trash2 } from 'lucide-react'
+import { MoreHorizontal, MessageSquare, Calendar, Archive } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,

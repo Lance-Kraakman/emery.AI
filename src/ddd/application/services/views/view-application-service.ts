@@ -17,7 +17,6 @@ import { PaginationConfig } from "@/ddd/domain/views/value-objects/pagination-co
 import { FieldMapping } from "@/ddd/domain/views/value-objects/field-mapping";
 import { ViewType } from "@/ddd/domain/views/value-objects/view-type";
 import { ViewConfig } from "@/ddd/domain/views/value-objects/view-config";
-import { AggregationConfig } from "@/ddd/domain/views/value-objects/aggregation-config";
 import { TableId } from "@/ddd/domain/shared/value-objects/table-id";
 import { OrganizationId } from "@/ddd/domain/shared/value-objects/organization-id";
 import { UserId } from "@/ddd/domain/shared/value-objects/user-id";

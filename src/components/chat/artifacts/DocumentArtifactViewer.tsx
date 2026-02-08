@@ -14,7 +14,6 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
-  Save,
   FileText,
   Hash,
   X,
@@ -23,7 +22,6 @@ import {
 import type { DocumentArtifact } from '../types/chat-artifacts';
 import { getDocumentDisplayInfo } from '../types/chat-artifacts';
 import { TipTapDocumentEditor } from '@/components/shared/TipTapDocumentEditor';
-import { updateTiptapDocumentContent } from '@/app/actions/artifacts';
 import styles from './DocumentArtifactViewer.module.css';
 import { createDebugLogger } from '@/lib/utils/debug-logger';
 import { useOptionalTheme } from '@/components/puck/contexts/PageContext';

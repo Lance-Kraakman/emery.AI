@@ -1,7 +1,7 @@
 const dataAttrRe = /^(data-.*)$/;
 
 export const filterDataAttrs = (props: Record<string, any>) => {
-  let filteredProps: Record<string, any> = {};
+  const filteredProps: Record<string, any> = {};
 
   for (const prop in props) {
     if (

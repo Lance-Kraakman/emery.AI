@@ -8,7 +8,7 @@
  * Session state provides faster restore for navigation within a session.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import type { OrgChartSessionState } from '../types';
 
 const SESSION_KEY = 'orgChart:sessionState';

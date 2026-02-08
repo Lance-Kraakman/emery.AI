@@ -5,26 +5,20 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query'
 import { useStore } from '@tanstack/react-store'
 import { toast } from 'sonner'
-import debounce from 'lodash/debounce'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Settings, Plus, Search, TableIcon as Table, Database } from "lucide-react"
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
+import { TableIcon as Table } from "lucide-react"
 import { DynamicDataSheetGrid } from "./components/DynamicDataSheetGrid"
 import { FieldManagerDialog } from "./components/FieldManagerDialog"
 import { useEmery, useEmeryTable } from "@/contexts/EmeryStoreProvider"
 import { dataStore, dataSelectors } from '@/stores/data-management.store'
-import { storeActions, dataActions } from '@/stores/actions'
-import type { TableDTO } from "@/app/mappers/table-mapper"
-import type { ViewDTO } from "@/app/mappers/view-mapper"
+import { dataActions } from '@/stores/actions'
 import { getFields } from "@/app/actions/fields"
-import { getRowsDSG, searchRowsDSG, createRow, createRows, updateRowData, updateRowsData, deleteRowData } from "@/app/actions/rows"
+import { getRowsDSG, searchRowsDSG, createRows, updateRowsData, deleteRowData } from "@/app/actions/rows"
 import { getView, getViewsForTable } from "@/app/actions/views"
 import { useBulkRowUpdate } from "@/hooks/use-bulk-row-update"
 import { GRID_CONFIG } from "@/lib/constants/grid"
 import { rowQueryKeys, fieldQueryKeys } from "@/lib/query-keys/rows"
 import type { FilterConfig } from "@/lib/types/filters"
-import type { FieldValue as DomainFieldValue } from "@/ddd/domain/tables/value-objects/field-values"
 import type { FieldDTO } from "@/app/mappers/field-mapper"
 import type { DSGRow } from "@/app/mappers/dsg-mapper"
 import type { RowDTO } from "@/app/mappers/row-mapper"

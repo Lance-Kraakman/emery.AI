@@ -10,7 +10,7 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Coins, TrendingUp, AlertCircle } from 'lucide-react';
-import { formatCredits, formatCurrency, calculatePercentageUsed, calculateOverage } from '@/lib/billing/utils';
+import { formatCredits, formatCurrency, calculatePercentageUsed } from '@/lib/billing/utils';
 
 export interface CreditUsage {
   creditsUsed: number;

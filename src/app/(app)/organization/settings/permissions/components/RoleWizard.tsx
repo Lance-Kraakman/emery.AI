@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { ChevronLeft, ChevronRight, Check, Plus, Users, Settings, Shield } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, Plus, Users, Shield } from "lucide-react";
 import { createCustomRole } from "@/app/actions/roles";
 import { CompactPermissionList } from "./CompactPermissionList";
 import { getAvailablePermissions } from "@/app/actions/roles";

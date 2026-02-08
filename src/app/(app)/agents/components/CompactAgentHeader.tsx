@@ -15,6 +15,8 @@ import { TaskAssignmentModal } from './TaskAssignmentModal';
 import { ShareButton } from '@/components/permissions/ShareButton';
 import { ShareDialog } from '@/components/permissions/ShareDialog';
 import { PublishAgentWizard } from './PublishAgentWizard';
+import { WorkspaceSyncControls } from '@/components/workspace/WorkspaceSyncControls';
+import { isTauri } from '@/hooks/useDeviceFlow';
 
 interface CompactAgentHeaderProps {
   agent: AgentDTO;
@@ -412,15 +414,19 @@ export function CompactAgentHeader({
           </>
         )}
 
-        {/* Download Workspace Button - Always visible */}
-        <button
-          onClick={handleDownloadWorkspace}
-          disabled={downloading}
-          className="p-2 border rounded-md hover:bg-accent transition-colors disabled:opacity-50"
-          title="Download agent workspace"
-        >
-          <Download className={`h-4 w-4 ${downloading ? 'animate-pulse' : ''}`} />
-        </button>
+        {/* Workspace Sync (Tauri) or Download (Web) */}
+        {isTauri() ? (
+          <WorkspaceSyncControls agentId={agent.id} />
+        ) : (
+          <button
+            onClick={handleDownloadWorkspace}
+            disabled={downloading}
+            className="p-2 border rounded-md hover:bg-accent transition-colors disabled:opacity-50"
+            title="Download agent workspace"
+          >
+            <Download className={`h-4 w-4 ${downloading ? 'animate-pulse' : ''}`} />
+          </button>
+        )}
 
         {/* Share Button - Always visible */}
         <ShareButton

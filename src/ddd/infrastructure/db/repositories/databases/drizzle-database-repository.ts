@@ -7,7 +7,6 @@ import { DrizzleBaseRepository } from '../base/drizzle-base-repository';
 import type { DatabaseId, OrganizationId } from '@/ddd/domain/shared/value-objects';
 import { databases } from '@/ddd/infrastructure/db/schema';
 import { eq, and, ne } from 'drizzle-orm';
-import type { DbClient } from '@/ddd/infrastructure/db/client';
 
 export class DrizzleDatabaseRepository 
   extends DrizzleBaseRepository<Database, DatabaseId, CreateDatabaseData, UpdateDatabaseData, any>
