@@ -397,4 +397,37 @@ export class DatabaseApplicationService {
   async getDatabaseCount(organizationId: OrganizationId): Promise<number> {
     return await this.databaseRepository.countByOrganization(organizationId);
   }
+
+  /**
+   * Update the agent that owns a database
+   * @param databaseId - Database ID
+   * @param agentId - Agent ID to assign, or null for org-level
+   */
+  async updateDatabaseAgent(
+    databaseId: DatabaseId,
+    agentId: number | null
+  ): Promise<Result<DatabaseDTO>> {
+    try {
+      const database = await this.databaseRepository.findById(databaseId);
+      if (!database) {
+        return {
+          success: false,
+          error: `Database with ID ${databaseId.value} not found`
+        };
+      }
+
+      const updatedDatabase = await this.databaseRepository.updateAgent(databaseId, agentId);
+
+      return {
+        success: true,
+        data: DatabaseMapper.toDTO(updatedDatabase)
+      };
+    } catch (error) {
+      logger.error('Error updating database agent', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to update database agent"
+      };
+    }
+  }
 }

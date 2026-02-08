@@ -60,4 +60,11 @@ export interface IDatabaseRepository {
    * Count databases by organization
    */
   countByOrganization(organizationId: OrganizationId): Promise<number>;
+
+  /**
+   * Update the agent that owns this database
+   * @param id - Database ID
+   * @param agentId - Agent ID to assign, or null for org-level
+   */
+  updateAgent(id: DatabaseId, agentId: number | null): Promise<Database>;
 }

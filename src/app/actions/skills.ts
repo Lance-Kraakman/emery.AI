@@ -1339,6 +1339,93 @@ export async function transferSkillToAgent(
 }
 
 /**
+ * Remove a skill from an agent, making it org-level
+ * This changes the skill's scope from agent-scoped to org-level
+ */
+export async function unassignSkillFromAgent(
+  skillId: number
+): Promise<Result<SkillDTO>> {
+  return withAuthContext(async () => {
+    try {
+      const session = await getServerSession(authOptions);
+      if (!session?.user?.id) {
+        return { success: false, error: 'Unauthorized' };
+      }
+
+      const service = getSkillApplicationService();
+
+      // Fetch skill to verify it's agent-scoped
+      const skillResult = await service.getSkill(skillId);
+      if (!skillResult.success || !skillResult.data) {
+        return { success: false, error: 'Skill not found' };
+      }
+
+      const skill = skillResult.data;
+      const previousAgentId = skill.agentId?.value ?? null;
+
+      // Verify skill is agent-scoped (has an agent)
+      if (!skill.agentId) {
+        return { success: false, error: 'Skill is already org-level' };
+      }
+
+      // Check permission to manage the agent-scoped skill
+      await requireResourcePermission("agents:manage", "agent", skill.agentId.value);
+
+      // Update the skill's agentId to null (org-level)
+      const updateResult = await service.updateSkillAgent(skillId, null);
+
+      if (!updateResult.success) {
+        return { success: false, error: updateResult.error || 'Failed to unassign skill' };
+      }
+
+      // Fetch updated skill
+      const updatedSkillResult = await service.getSkill(skillId);
+      if (!updatedSkillResult.success || !updatedSkillResult.data) {
+        return { success: false, error: 'Failed to fetch updated skill' };
+      }
+
+      // AUDIT: Log skill unassignment
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        skill.organizationId,
+        {
+          eventType: 'agent',
+          eventCategory: 'skill_crud',
+          eventAction: 'update',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'skill',
+          resourceId: String(skillId),
+          resourceName: skill.name,
+          eventData: { action: 'unassign_from_agent', previousAgentId },
+          success: true,
+        }
+      );
+
+      // Revalidate paths
+      revalidatePath('/skills'); // Org skills page
+      if (previousAgentId) {
+        revalidatePath(`/agents/${previousAgentId}/skills`); // Agent skills page
+      }
+      revalidatePath('/organization'); // Org chart
+      revalidatePath('/');
+
+      return {
+        success: true,
+        data: SkillMapper.toDTO(updatedSkillResult.data)
+      };
+    } catch (error) {
+      console.error('[unassignSkillFromAgent] error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to unassign skill from agent'
+      };
+    }
+  });
+}
+
+/**
  * Result type for generateSkillPlan - can return plan, questions, or error
  */
 export type GeneratePlanResult =

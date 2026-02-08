@@ -138,6 +138,23 @@ export class DrizzleDatabaseRepository
     return result.length;
   }
 
+  async updateAgent(id: DatabaseId, agentId: number | null): Promise<Database> {
+    const [record] = await this.db
+      .update(databases)
+      .set({
+        agentId: agentId,
+        updatedAt: new Date()
+      })
+      .where(eq(databases.id, id.value))
+      .returning();
+
+    if (!record) {
+      throw new Error(`Database with id ${id.value} not found`);
+    }
+
+    return this.fromPersistence(record);
+  }
+
   protected fromPersistence(record: any): Database {
     return Database.fromPersistence({
       id: record.id,
