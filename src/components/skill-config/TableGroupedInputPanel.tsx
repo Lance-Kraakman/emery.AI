@@ -133,6 +133,10 @@ export function TableGroupedInputPanel({
     onInputsChange(inputs.filter((i) => i.inputMapping?.source?.tableId !== tableId));
   };
 
+  const handleClearAll = () => {
+    onInputsChange([]);
+  };
+
   return (
     <div className="space-y-3">
       {/* Header */}
@@ -295,6 +299,17 @@ export function TableGroupedInputPanel({
               onSelectTable={(tableId) => fetchFieldsForTable(tableId)}
               onAddFields={(tableId, fields) => handleAddInputsFromTable(tableId, fields)}
             />
+          )}
+          {inputs.length > 0 && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={handleClearAll}
+              className="h-6 px-2 text-[11px] text-muted-foreground hover:text-destructive"
+            >
+              Clear all
+            </Button>
           )}
         </div>
       )}

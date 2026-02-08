@@ -354,6 +354,10 @@ export function TableGroupedOutputPanel({
     });
   };
 
+  const handleClearAll = () => {
+    onOutputsChange([]);
+  };
+
   return (
     <div className="space-y-3">
       {/* Header */}
@@ -561,6 +565,17 @@ export function TableGroupedOutputPanel({
               tables={tables}
               onAddFields={(tableId, fields) => handleAddOutputsToTable(tableId, fields)}
             />
+          )}
+          {outputs.length > 0 && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={handleClearAll}
+              className="h-6 px-2 text-[11px] text-muted-foreground hover:text-destructive"
+            >
+              Clear all
+            </Button>
           )}
         </div>
       )}
