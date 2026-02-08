@@ -26,6 +26,7 @@ import { createDebugLogger } from '@/lib/utils/debug-logger';
 import { InstructionTemplateService } from '@/ddd/domain/tasks/services/instruction-template-service';
 import type { EnrichedSkill, SkillEnrichmentService } from '@/ddd/application/services/skills/skill-enrichment-service';
 import { getAuditApplicationService } from '@/ddd/application/di/container';
+import { getTaskQueueService, type ITaskQueueService } from '@/lib/cache/task-queue-service';
 
 const logger = createDebugLogger('AgentTaskService');
 
@@ -58,6 +59,19 @@ function buildTriggerContextFromType(triggerType: string): TriggerContext {
 }
 
 export class AgentTaskApplicationService {
+  /**
+   * Task queue service for Redis-backed per-org concurrency control
+   * Lazy-loaded to allow service initialization before Redis connects
+   */
+  private _taskQueueService: ITaskQueueService | null = null;
+
+  private get taskQueueService(): ITaskQueueService {
+    if (!this._taskQueueService) {
+      this._taskQueueService = getTaskQueueService();
+    }
+    return this._taskQueueService;
+  }
+
   constructor(
     private readonly agentRepository: IAgentRepository,
     private readonly taskRepository: ITaskRepository,
@@ -182,9 +196,45 @@ export class AgentTaskApplicationService {
   }
 
   /**
-   * Execute an existing pending task
+   * Execute an existing pending task with per-organization concurrency control
+   * Uses Redis-backed queue to coordinate across multiple scheduler instances
    */
   async executeTask(dto: ExecuteTaskDTO): Promise<Result<TaskExecutionResultDTO>> {
+    const { taskId } = dto;
+
+    // Pre-load task to get organizationId for per-org slot allocation
+    const task = await this.taskRepository.findById(TaskId.fromString(taskId));
+    if (!task) {
+      return {
+        success: false,
+        error: `Task ${taskId} not found`
+      };
+    }
+
+    const orgId = task.organizationId.value.toString();
+
+    // Acquire per-org execution slot (blocks until available)
+    await this.taskQueueService.acquireExecutionSlot(orgId, taskId);
+
+    try {
+      return await this.executeTaskInternal(dto);
+    } finally {
+      // Release the slot for this org
+      await this.taskQueueService.releaseExecutionSlot(orgId, taskId);
+    }
+  }
+
+  /**
+   * Get current queue statistics for an organization
+   */
+  async getQueueStats(organizationId: string): Promise<{ active: number; maxConcurrent: number }> {
+    return await this.taskQueueService.getStats(organizationId);
+  }
+
+  /**
+   * Internal execution logic (called after acquiring execution slot)
+   */
+  private async executeTaskInternal(dto: ExecuteTaskDTO): Promise<Result<TaskExecutionResultDTO>> {
     try {
       const { taskId, timeoutSeconds } = dto;
 

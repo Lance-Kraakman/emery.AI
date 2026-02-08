@@ -34,6 +34,7 @@ import { CalendarTriggerConfig } from "@/ddd/domain/scheduling/value-objects/tri
 import { getAgentRepository } from "@/ddd/application/di/container";
 import { InstructionTemplateService } from "@/ddd/domain/tasks/services/instruction-template-service";
 import type { TriggerContext } from "@/ddd/domain/tasks/entities/task";
+import { getTaskQueueService as getRedisTaskQueueService, type ITaskQueueService } from "@/lib/cache/task-queue-service";
 import postgres from "postgres";
 import * as cron from "node-cron";
 
@@ -77,13 +78,21 @@ class EventDrivenScheduler {
   private fallbackTimer: NodeJS.Timeout | null = null;
   private storageRecalculationCron: cron.ScheduledTask | null = null;
 
+  /**
+   * Redis-backed task queue service for distributed debouncing
+   * Replaces in-memory Map to support multi-instance scheduler deployments
+   */
+  private redisTaskQueueService: ITaskQueueService;
+
   constructor(
     private agentTaskService = getAgentTaskApplicationService(),
     private schedulerService = getSchedulerService(),
     private taskRepository = getTaskRepository(),
     private taskQueueService = getTaskQueueService(),
     private storageRecalculationService = getStorageRecalculationApplicationService()
-  ) {}
+  ) {
+    this.redisTaskQueueService = getRedisTaskQueueService();
+  }
 
   async start(): Promise<void> {
     log('🚀', 'Starting Event-Driven Scheduler...');
@@ -140,11 +149,22 @@ class EventDrivenScheduler {
   }
 
   private async handleTaskEvent(event: TaskEvent): Promise<void> {
+    if (!event.taskId) {
+      logWarn('⚠️', 'task_event missing taskId');
+      return;
+    }
+
+    const taskId = event.taskId;
+
+    // Redis-backed debounce: acquireDebounce returns true if this is the first
+    // processing attempt within the debounce window (30s by default)
+    const shouldProcess = await this.redisTaskQueueService.acquireDebounce(taskId);
+    if (!shouldProcess) {
+      log('⏭️', `Debounced task ${taskId.substring(0, 8)} (Redis lock exists)`);
+      return;
+    }
+
     return withSystemContext(event.organizationId, async () => {
-      if (!event.taskId) {
-        logWarn('⚠️', 'task_event missing taskId');
-        return;
-      }
       // This is a manual task execution
       const task = await this.taskRepository.findById(TaskId.fromString(event.taskId));
       if (task && task.isPending) {

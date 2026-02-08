@@ -81,6 +81,12 @@ export class AgentWorkerClient {
   private client: any;
   private address: string;
 
+  /**
+   * Retry configuration for connection-level errors
+   */
+  private readonly MAX_RETRIES = 3;
+  private readonly BASE_DELAY_MS = 1000; // 1 second base delay for exponential backoff
+
   constructor(workerAddress: string) {
     this.address = workerAddress;
     console.log(`[GRPC-CLIENT] Creating new client for address: ${workerAddress}`);
@@ -99,13 +105,71 @@ export class AgentWorkerClient {
   }
 
   /**
+   * Check if an error is retryable (connection-level errors, not application errors)
+   */
+  private isRetryableError(error: grpc.ServiceError): boolean {
+    // Retry on connection-level errors, not application errors
+    return (
+      error.code === grpc.status.CANCELLED ||      // 1: Connection cancelled (worker crash/restart)
+      error.code === grpc.status.UNAVAILABLE ||    // 14: Worker not reachable
+      error.code === grpc.status.DEADLINE_EXCEEDED // 4: Connection timeout
+    );
+  }
+
+  /**
+   * Sleep for a given number of milliseconds
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
    * Execute a task on the worker and stream progress updates
+   * Includes automatic retry with exponential backoff for connection-level errors
    */
   async executeTask(
     request: TaskRequest,
     onProgress: (progress: TaskProgress) => void
   ): Promise<void> {
     console.log(`[GRPC-CLIENT] Executing task ${request.taskId} on worker ${this.address}`);
+
+    let lastError: grpc.ServiceError | null = null;
+
+    for (let attempt = 0; attempt <= this.MAX_RETRIES; attempt++) {
+      try {
+        await this.executeTaskOnce(request, onProgress);
+        return; // Success - exit the retry loop
+      } catch (error) {
+        const grpcError = error as grpc.ServiceError;
+        lastError = grpcError;
+
+        // Check if we should retry
+        if (this.isRetryableError(grpcError) && attempt < this.MAX_RETRIES) {
+          const delay = this.BASE_DELAY_MS * Math.pow(2, attempt); // 1s, 2s, 4s
+          console.log(
+            `[GRPC-RETRY] Task ${request.taskId} attempt ${attempt + 1}/${this.MAX_RETRIES + 1} failed ` +
+            `with ${grpc.status[grpcError.code] || grpcError.code}, retrying in ${delay}ms...`
+          );
+          await this.sleep(delay);
+          continue;
+        }
+
+        // Non-retryable error or max retries exceeded
+        throw grpcError;
+      }
+    }
+
+    // Should not reach here, but throw last error if we do
+    throw lastError;
+  }
+
+  /**
+   * Execute a task once (internal method, no retry)
+   */
+  private executeTaskOnce(
+    request: TaskRequest,
+    onProgress: (progress: TaskProgress) => void
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
       const call = this.client.ExecuteTask(request);
 
