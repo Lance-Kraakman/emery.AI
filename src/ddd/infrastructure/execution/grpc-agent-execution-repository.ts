@@ -143,9 +143,10 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
 
 
       // 5. Initialize execution tracking
-      let finalStatus: 'completed' | 'failed' | 'in_progress' = 'in_progress';
+      let finalStatus: 'completed' | 'failed' | 'in_progress' | 'awaiting_human' = 'in_progress';
       let finalOutputData: any = null;
       let finalError: string | null = null;
+      let humanSkillData: AgentExecutionResult['humanSkillData'] = undefined;
       const startedAt = new Date();
       let completedAt: Date | undefined;
       
@@ -228,30 +229,52 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
           finalStatus = 'failed';
           finalError = taskUpdate.error || 'Task failed';
           completedAt = new Date();
+        } else if (taskUpdate.status?.value === 'awaiting_human') {
+          console.log(`[GRPC-EXECUTION-REPO] ${executionId}: Task AWAITING HUMAN!`);
+          finalStatus = 'awaiting_human';
+          // Extract human skill data from the output
+          if (taskUpdate.result?.type === 'awaiting_human_skill') {
+            humanSkillData = {
+              skillId: taskUpdate.result.skill_id,
+              skillName: taskUpdate.result.skill_name,
+              stepId: taskUpdate.result.step_id || '',
+              instructions: taskUpdate.result.instructions,
+              inputs: taskUpdate.result.inputs || {},
+              outputSchema: taskUpdate.result.output_schema || [],
+              assignedTo: taskUpdate.result.assigned_to || '',
+            };
+          }
         }
       });
       
       // 7. Ensure finalStatus was properly set, default to failed if still in_progress
+      // Note: awaiting_human is a valid non-terminal status - don't treat it as failure
       if (finalStatus === 'in_progress') {
         console.warn(`[GRPC-EXECUTION-REPO] ${executionId}: Execution finished but status still in_progress, setting to failed`);
         finalStatus = 'failed';
         finalError = 'Task execution did not complete properly';
         completedAt = new Date();
       }
-      
+
       // 8. Clean up execution tracking and return result
       this.activeExecutions.delete(executionId);
-      
-      console.log(`[GRPC-EXECUTION-REPO] Execution ${executionId} completed with status: ${finalStatus}`);
-      
+
+      // Re-capture final status for type safety after callback mutations
+      const resultStatus = finalStatus as 'completed' | 'failed' | 'awaiting_human';
+      console.log(`[GRPC-EXECUTION-REPO] Execution ${executionId} completed with status: ${resultStatus}`);
+
+      // For awaiting_human, success is false but task is not failed - it's paused
+      const success = resultStatus === 'completed';
+
       return {
-        success: (finalStatus as string) === 'completed',
+        success,
         executionId,
-        status: finalStatus as AgentExecutionResult['status'],
+        status: resultStatus as AgentExecutionResult['status'],
         outputData: finalOutputData,
         error: finalError || undefined,
         startedAt,
-        completedAt
+        completedAt,
+        humanSkillData
       };
       
     } catch (error) {

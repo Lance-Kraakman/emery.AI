@@ -92,6 +92,17 @@ export interface TaskInstructions {
   metadata?: Record<string, any>;
 }
 
+/**
+ * Pending human step data for workflow execution
+ */
+export interface PendingHumanStep {
+  stepId: string;
+  assignedTo: string;
+  inputs: Record<string, any>;
+  completedAt?: string;
+  outputs?: Record<string, any>;
+}
+
 export interface TaskConfig {
   id?: TaskId; // Will be generated if not provided
   agentId?: AgentId | null; // null = org-level task, set = agent executes this
@@ -108,6 +119,8 @@ export interface TaskConfig {
   completedAt?: Date;
   createdBy?: UserId;
   createdAt?: Date;
+  currentStepId?: string;
+  pendingHumanSteps?: PendingHumanStep[];
 }
 
 export interface CreateTaskData {
@@ -135,7 +148,9 @@ export class Task {
     private _startedAt: Date | null,
     private _completedAt: Date | null,
     public readonly createdBy: UserId | null,
-    public readonly createdAt: Date
+    public readonly createdAt: Date,
+    private _currentStepId: string | null,
+    private _pendingHumanSteps: PendingHumanStep[]
   ) {}
 
   static create(config: TaskConfig): Task {
@@ -165,7 +180,9 @@ export class Task {
       config.startedAt || null,
       config.completedAt || null,
       config.createdBy || null,
-      config.createdAt || now
+      config.createdAt || now,
+      config.currentStepId || null,
+      config.pendingHumanSteps || []
     );
   }
 
@@ -185,6 +202,8 @@ export class Task {
     completedAt?: Date | null;
     createdBy?: string | null;
     createdAt: Date;
+    currentStepId?: string | null;
+    pendingHumanSteps?: any; // JSONB from database
   }): Task {
     return new Task(
       TaskId.fromString(data.id),
@@ -201,7 +220,9 @@ export class Task {
       data.startedAt || null,
       data.completedAt || null,
       data.createdBy ? UserId.fromString(data.createdBy) : null,
-      data.createdAt
+      data.createdAt,
+      data.currentStepId || null,
+      Array.isArray(data.pendingHumanSteps) ? data.pendingHumanSteps : []
     );
   }
 
@@ -221,6 +242,8 @@ export class Task {
     completedAt: Date | null;
     createdBy: string | null;
     createdAt: Date;
+    currentStepId: string | null;
+    pendingHumanSteps: PendingHumanStep[];
   } {
     return {
       id: this.id.value,
@@ -237,7 +260,9 @@ export class Task {
       startedAt: this._startedAt,
       completedAt: this._completedAt,
       createdBy: this.createdBy?.value || null,
-      createdAt: this.createdAt
+      createdAt: this.createdAt,
+      currentStepId: this._currentStepId,
+      pendingHumanSteps: this._pendingHumanSteps
     };
   }
 
@@ -248,6 +273,8 @@ export class Task {
   get logs(): string[] { return this._logs; }
   get startedAt(): Date | null { return this._startedAt; }
   get completedAt(): Date | null { return this._completedAt; }
+  get currentStepId(): string | null { return this._currentStepId; }
+  get pendingHumanSteps(): PendingHumanStep[] { return this._pendingHumanSteps; }
 
   /**
    * Start task execution
@@ -391,6 +418,30 @@ export class Task {
     }
 
     this._status = TaskStatus.inProgress();
+  }
+
+  /**
+   * Add a pending human step to the task
+   */
+  addPendingHumanStep(step: Omit<PendingHumanStep, 'completedAt' | 'outputs'>): void {
+    this._pendingHumanSteps.push({
+      ...step,
+      completedAt: undefined,
+      outputs: undefined,
+    });
+    this._currentStepId = step.stepId;
+  }
+
+  /**
+   * Complete a pending human step with outputs
+   */
+  completeHumanStep(stepId: string, outputs: Record<string, any>): void {
+    const step = this._pendingHumanSteps.find(s => s.stepId === stepId);
+    if (!step) {
+      throw new Error(`Human step ${stepId} not found on task ${this.id}`);
+    }
+    step.completedAt = new Date().toISOString();
+    step.outputs = outputs;
   }
 
   /**

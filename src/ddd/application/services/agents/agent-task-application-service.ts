@@ -383,6 +383,17 @@ export class AgentTaskApplicationService {
         if (executionResult.success) {
           task.complete(executionResult.outputData);
           logger.summary(`Task ${taskId.substring(0, 8)} completed successfully`);
+        } else if (executionResult.status === 'awaiting_human') {
+          // Human skill - pause task and store human skill data
+          task.awaitHuman();
+          if (executionResult.humanSkillData) {
+            task.addPendingHumanStep({
+              stepId: executionResult.humanSkillData.stepId || `skill-${executionResult.humanSkillData.skillId}`,
+              assignedTo: executionResult.humanSkillData.assignedTo,
+              inputs: executionResult.humanSkillData.inputs,
+            });
+          }
+          logger.summary(`Task ${taskId.substring(0, 8)} awaiting human input`);
         } else {
           task.fail(executionResult.error || 'Execution failed');
         }
@@ -425,7 +436,9 @@ export class AgentTaskApplicationService {
           result: task.result,
           completedAt: task.completedAt,
           error: task.error,
-          logs: task.logs
+          logs: task.logs,
+          currentStepId: task.currentStepId,
+          pendingHumanSteps: task.pendingHumanSteps
         });
       }
 
@@ -568,5 +581,47 @@ export class AgentTaskApplicationService {
    */
   async getWorkerHealth(organizationId: number) {
     return await this.executionRepository.getWorkerHealth(organizationId.toString());
+  }
+
+  /**
+   * Get tasks awaiting human input for an organization
+   */
+  async getAwaitingHumanTasks(organizationId: number): Promise<TaskDTO[]> {
+    const tasks = await this.taskRepository.findByStatus(TaskStatus.awaitingHuman());
+    // Filter by organization (findByStatus doesn't filter by org)
+    const orgTasks = tasks.filter(task => task.organizationId.value === organizationId);
+    return orgTasks.map(taskToDTO);
+  }
+
+  /**
+   * Complete a human step on a task
+   * Updates the pendingHumanSteps with outputs and sets task status to pending for resume
+   */
+  async completeHumanStep(taskId: string, stepId: string, outputs: Record<string, any>): Promise<void> {
+    const task = await this.taskRepository.findById(TaskId.fromString(taskId));
+    if (!task) {
+      throw new Error(`Task ${taskId} not found`);
+    }
+
+    if (!task.isAwaitingHuman) {
+      throw new Error(`Task ${taskId} is not awaiting human input`);
+    }
+
+    // Complete the human step on the domain entity
+    task.completeHumanStep(stepId, outputs);
+
+    // Resume the task so scheduler can pick it up
+    task.resumeFromHuman();
+
+    // Set back to pending status so scheduler picks it up
+    // Note: resumeFromHuman sets to in_progress, but we want pending for scheduler
+    // Since Task entity doesn't have a direct method for this, we use the repository update
+    await this.taskRepository.update(task.id, {
+      status: 'pending', // Back to pending so scheduler picks it up
+      pendingHumanSteps: task.pendingHumanSteps,
+      currentStepId: task.currentStepId
+    });
+
+    logger.summary(`Human step ${stepId} completed on task ${taskId}, set to pending for resume`);
   }
 }

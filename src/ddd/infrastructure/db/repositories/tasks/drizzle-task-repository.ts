@@ -297,7 +297,9 @@ export class DrizzleTaskRepository
       startedAt: record.startedAt,
       completedAt: record.completedAt,
       createdBy: record.createdBy,
-      createdAt: record.createdAt || new Date()
+      createdAt: record.createdAt || new Date(),
+      currentStepId: record.currentStepId,
+      pendingHumanSteps: record.pendingHumanSteps
     });
   }
   

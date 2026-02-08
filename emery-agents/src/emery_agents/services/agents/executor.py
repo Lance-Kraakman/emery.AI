@@ -131,6 +131,64 @@ class AgentExecutor:
         """
         return skill.execution_type == "agent" and len(skill.steps) > 0
 
+    async def _handle_human_skill_execution(
+        self,
+        skill: SkillConfig,
+        context: ExecutionContext,
+        start_time: float,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """
+        Handle human skill execution by emitting awaiting_human event.
+
+        Human skills pause execution and wait for a human to complete the work.
+        The task runner handles the actual waiting and resume.
+
+        Yields:
+            Progress dict with status="awaiting_human" and human skill context
+        """
+        human_config = skill.human_skill_config
+        instructions = (
+            human_config.instructions if human_config else skill.instructions
+        )
+
+        # Build output schema from skill outputs
+        output_schema = [
+            {"name": out.name, "type": out.type}
+            for out in skill.outputs
+        ]
+
+        # Resolve assignee
+        assigned_to = ""
+        if human_config:
+            if human_config.assignee_type == "specific_user" and human_config.assignee_id:
+                assigned_to = human_config.assignee_id
+            elif human_config.assignee_type == "role" and human_config.assignee_role:
+                assigned_to = f"role:{human_config.assignee_role}"
+            # For "owner", the task layer resolves the actual user
+
+        # Yield awaiting_human progress event
+        yield {
+            "status": "awaiting_human",
+            "output": json.dumps({
+                "type": "awaiting_human_skill",
+                "skill_id": skill.id,
+                "skill_name": skill.name,
+                "step_id": "",  # Empty for top-level skill
+                "instructions": instructions,
+                "inputs": context.skill_inputs or {},
+                "output_schema": output_schema,
+                "assigned_to": assigned_to,
+            }),
+            "error_message": "",
+            "timestamp_ms": int(time.time() * 1000),
+            "progress_percent": 0.0,
+        }
+
+        elapsed = time.time() - start_time
+        logger.info(
+            f"👤 Human skill '{skill.name}' paused for human input after {elapsed:.2f}s"
+        )
+
     def _is_agentic_skill(self, skill: SkillConfig) -> bool:
         """
         Check if skill uses agentic execution (flat instructions, LLM orchestration).
@@ -419,6 +477,15 @@ class AgentExecutor:
                     raise ValueError(error_msg)
 
                 skill = context.skill
+
+                # Route: human skill - emit awaiting_human event and pause execution
+                if skill.is_human_skill():
+                    logger.info(f"👤 Human skill detected: {skill.name}")
+                    async for progress in self._handle_human_skill_execution(
+                        skill, context, start_time
+                    ):
+                        yield progress
+                    return
 
                 # Route: step-based agent execution (DAG workflow)
                 if self._is_agent_skill(skill):

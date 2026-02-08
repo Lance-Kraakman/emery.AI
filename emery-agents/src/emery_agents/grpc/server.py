@@ -208,6 +208,7 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
                     "in_progress": agent_worker_pb2.TASK_IN_PROGRESS,
                     "completed": agent_worker_pb2.TASK_COMPLETED,
                     "failed": agent_worker_pb2.TASK_FAILED,
+                    "awaiting_human": agent_worker_pb2.TASK_AWAITING_HUMAN,
                 }
 
                 # Create protobuf directly

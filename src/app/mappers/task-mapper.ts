@@ -5,7 +5,7 @@
  * Handles conversion from Value Objects to serializable primitives.
  */
 
-import type { Task as TaskEntity, TaskInstructions, TriggerContext } from '@/ddd/domain/tasks/entities/task';
+import type { Task as TaskEntity, TaskInstructions, TriggerContext, PendingHumanStep } from '@/ddd/domain/tasks/entities/task';
 
 // DTO representing a task as returned by server actions to the frontend
 export interface TaskDTO {
@@ -24,6 +24,9 @@ export interface TaskDTO {
   completedAt: Date | null;
   createdBy: string | null;           // Converted from UserId value object
   createdAt: Date;
+  // Human skill tracking
+  currentStepId: string | null;       // Current step ID in workflow
+  pendingHumanSteps: PendingHumanStep[]; // Pending human steps with inputs/outputs
 }
 
 /**
@@ -45,7 +48,9 @@ export function taskToDTO(task: TaskEntity): TaskDTO {
     startedAt: task.startedAt,
     completedAt: task.completedAt,
     createdBy: task.createdBy?.value || null,
-    createdAt: task.createdAt
+    createdAt: task.createdAt,
+    currentStepId: task.currentStepId,
+    pendingHumanSteps: task.pendingHumanSteps
   };
 }
 

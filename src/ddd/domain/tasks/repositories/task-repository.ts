@@ -34,6 +34,14 @@ export interface UpdateTaskData {
   logs?: string[];
   startedAt?: Date | null;
   completedAt?: Date | null;
+  currentStepId?: string | null;
+  pendingHumanSteps?: Array<{
+    stepId: string;
+    assignedTo: string;
+    inputs: Record<string, any>;
+    completedAt?: string;
+    outputs?: Record<string, any>;
+  }>;
 }
 
 export interface ITaskRepository {
