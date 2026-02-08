@@ -88,15 +88,29 @@ Inside the sandbox:
 
 ## Available Commands
 
-The sandbox includes standard Linux tools:
+The sandbox has `PATH=/usr/local/bin:/usr/bin:/bin` providing access to:
+
+### Always Available
 - `bash`, `sh` - Shells
+- `python3`, `pip` - Python 3.11 interpreter and package manager
 - `git` - Version control
-- `curl`, `wget` - HTTP clients
-- `python3`, `pip` - Python interpreter
-- `node`, `npm`, `npx` - Node.js (if installed)
+- `curl`, `wget` - HTTP clients (via proxy when network enabled)
 - `jq` - JSON processor
 - `grep`, `sed`, `awk` - Text processing
 - `ls`, `cat`, `head`, `tail`, `find` - File utilities
+- `tree` - Directory visualization
+- `socat` - Socket relay (used for network proxy)
+
+### Not Available (add to Dockerfile if needed)
+- `gcc`, `make`, `cmake` - C/C++ compilation
+- `node`, `npm` - Node.js runtime
+- `go` - Go compiler
+- `rustc`, `cargo` - Rust toolchain
+
+To add compilation tools, update the Dockerfile:
+```dockerfile
+RUN apt-get update && apt-get install -y build-essential
+```
 
 ## Security Layers
 
@@ -154,3 +168,22 @@ The skill setting overrides the agent setting when executing a skill.
 ### Git clone fails
 - Use HTTPS URLs, not SSH (git@github.com:...)
 - For private repos, include the token in the URL
+
+## Security Testing
+
+The container includes security testing tools to validate sandbox isolation:
+
+```bash
+# Run security pentest (executes inside bwrap sandbox)
+run-sandbox-pentest
+
+# Quick mode (faster, less thorough)
+run-sandbox-pentest --quick
+```
+
+This runs:
+- **amicontained** - Container security introspection
+- **deepce** - Container escape enumeration
+- **botb** - Breakout testing
+
+See `src/emery_agents/services/sandbox/SECURITY.md` for detailed security documentation.

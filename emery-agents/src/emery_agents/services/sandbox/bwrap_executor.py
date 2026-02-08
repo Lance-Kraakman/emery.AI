@@ -38,6 +38,10 @@ from .seccomp_filter import create_seccomp_fd
 
 logger = logging.getLogger(__name__)
 
+# Minimal PATH for sandbox - allows tools to be found without exposing secrets
+# All these directories are already mounted read-only
+SANDBOX_PATH = "/usr/local/bin:/usr/bin:/bin"
+
 
 @dataclass
 class ExecutionResult:
@@ -136,6 +140,11 @@ class BwrapExecutor:
         "/run",
         "--tmpfs",
         "/etc",
+        # Mount /etc/alternatives so Debian symlinks work (awk, python, etc.)
+        # Safe: contains only symlinks to binaries already in /usr, read-only
+        "--ro-bind",
+        "/etc/alternatives",
+        "/etc/alternatives",
         # Session/parent controls
         "--new-session",
         "--die-with-parent",
@@ -358,7 +367,7 @@ class BwrapExecutor:
         logger.debug(f"Workspace: {workspace_path}")
 
         # Execute with empty environment by default (no host secrets)
-        exec_env = env if env is not None else {}
+        exec_env = env if env is not None else {"PATH": SANDBOX_PATH}
 
         try:
             result = subprocess.run(

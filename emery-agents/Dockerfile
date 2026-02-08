@@ -50,9 +50,22 @@ LABEL emery.uv-version="0.5.30"
 # Copy the application code
 COPY ./src ./src
 
-# Copy diagnostic script
+# Copy diagnostic scripts
 COPY ./scripts/diag.sh /usr/local/bin/diag
-RUN chmod +x /usr/local/bin/diag
+COPY ./scripts/sandbox-pentest.sh /usr/local/bin/sandbox-pentest
+COPY ./scripts/run-sandbox-pentest.py /usr/local/bin/run-sandbox-pentest
+RUN chmod +x /usr/local/bin/diag /usr/local/bin/sandbox-pentest /usr/local/bin/run-sandbox-pentest
+
+# Install battle-tested container security testing tools
+# amicontained: https://github.com/genuinetools/amicontained
+# deepce: https://github.com/stealthcopter/deepce
+# botb: https://github.com/brompwnie/botb
+RUN curl -sLo /usr/local/bin/amicontained https://github.com/genuinetools/amicontained/releases/download/v0.4.9/amicontained-linux-amd64 && \
+    chmod +x /usr/local/bin/amicontained && \
+    curl -sLo /usr/local/bin/deepce https://raw.githubusercontent.com/stealthcopter/deepce/main/deepce.sh && \
+    chmod +x /usr/local/bin/deepce && \
+    curl -sLo /usr/local/bin/botb https://github.com/brompwnie/botb/releases/download/1.8.0/botb-linux-amd64 && \
+    chmod +x /usr/local/bin/botb
 
 # Set environment variables
 ENV PYTHONPATH=/usr/src/app/src

@@ -12,6 +12,7 @@ The sandbox starts with an **empty namespace**. Only explicitly mounted paths ex
 | `/dev/null,zero,full,random,urandom` | dev-bind | Only essential devices (not full /dev) |
 | `/dev/fd`, `/dev/stdin`, `/dev/stdout`, `/dev/stderr` | symlink | Points to /proc/self/fd |
 | `/tmp`, `/var`, `/run`, `/etc` | tmpfs | Fresh empty directories, not host's |
+| `/etc/alternatives` | read-only | Debian symlinks (awk, python, etc.) - contains only symlinks to /usr binaries |
 
 **Invisible to the sandbox:**
 - `/home`, `/root` — no user directories
@@ -54,9 +55,31 @@ Everything else is allowed (blocklist approach — bash/python/curl/git need hun
 
 ## What bwrap blocks (environment)
 
-- `env={}` — empty environment passed to subprocess
+- Minimal environment with only `PATH` set (see below)
 - No `AWS_SECRET_ACCESS_KEY`, no `DATABASE_URL`, no `REDIS_URL`
 - When allowNetwork=true, only `http_proxy`/`https_proxy` vars are injected (pointing to sandbox-local socat bridge)
+
+## Available tools in sandbox
+
+The sandbox has `PATH=/usr/local/bin:/usr/bin:/bin` set, giving access to:
+
+| Tool | Location | Purpose |
+|------|----------|---------|
+| `python3` | /usr/local/bin | Python interpreter |
+| `pip` | /usr/local/bin | Python package manager |
+| `bash`, `sh` | /bin | Shell |
+| `git` | /usr/bin | Version control |
+| `curl`, `wget` | /usr/bin | HTTP clients (via proxy when network enabled) |
+| `jq` | /usr/bin | JSON processing |
+| `awk`, `sed`, `grep` | /usr/bin | Text processing |
+| `ls`, `cat`, `cp`, `mv`, `rm` | /bin | File operations |
+| `tree` | /usr/bin | Directory visualization |
+
+**Not available by default** (add to Dockerfile if needed):
+- `gcc`, `make`, `cmake` — C/C++ compilation
+- `node`, `npm` — Node.js
+- `go` — Go compiler
+- `rustc`, `cargo` — Rust
 
 ## Network isolation (proxy layer)
 
@@ -117,10 +140,51 @@ The sandbox can't write to /proc (no sysctl changes), but kernel symbol addresse
 | bwrap IPC namespace | Shared memory / semaphore attacks |
 | bwrap network namespace | All network access (always isolated) |
 | Seccomp BPF filter | Dangerous syscalls (io_uring, bpf, ptrace, etc.) |
-| Empty environment | Credential/secret leakage |
+| Minimal environment (PATH only) | Credential/secret leakage |
 | Network proxy (when allowed) | Internal network access (VPC, metadata, localhost) |
 | 5-minute execution timeout | Resource exhaustion, runaway processes |
 | `--die-with-parent` | Orphaned sandbox processes |
 | `--new-session` | Terminal/TTY attacks |
 | AWS Security Groups | Inbound network to containers |
 | AWS WAF | Inbound HTTP attacks |
+
+## Security testing
+
+The sandbox includes security testing tools that can be run to validate isolation:
+
+```bash
+# Run inside container (executes in bwrap sandbox)
+run-sandbox-pentest
+```
+
+### Bundled security tools
+
+| Tool | Purpose | Source |
+|------|---------|--------|
+| **amicontained** | Container security introspection | github.com/genuinetools/amicontained |
+| **deepce** | Container escape enumeration | github.com/stealthcopter/deepce |
+| **botb** | Break out the Box - escape testing | github.com/brompwnie/botb |
+
+### Validated security controls
+
+Last tested: Feb 2026
+
+| Test | Result |
+|------|--------|
+| Seccomp filter active | PASS |
+| Network interfaces isolated | PASS |
+| /home, /root inaccessible | PASS |
+| /etc is tmpfs (isolated) | PASS |
+| Docker socket not accessible | PASS |
+| /proc/sys/kernel/core_pattern not writable | PASS |
+| AWS metadata (169.254.169.254) blocked | PASS |
+| CVE-2019-5736 (runc escape) | BLOCKED (/bin/sh read-only) |
+| Container escape vectors | None found |
+
+### Known limitations (acceptable risk)
+
+| Item | Status | Notes |
+|------|--------|-------|
+| /proc/kallsyms readable | INFO | Kernel addresses visible (set kptr_restrict=2 on host to hide) |
+| AppArmor | unconfined | Not enforced (bwrap + seccomp is primary defense) |
+| Capabilities | 13 caps | Could drop more, but current set is functional |
