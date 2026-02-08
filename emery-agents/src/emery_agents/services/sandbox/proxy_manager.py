@@ -36,7 +36,7 @@ class ProxyManager:
     Usage:
         manager = ProxyManager.get_instance()
         socket_path = manager.ensure_running()
-        # ... use socket_path in bwrap bind mount ...
+        # ... use socket_path in gVisor bind mount ...
     """
 
     _instance: Optional["ProxyManager"] = None

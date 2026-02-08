@@ -1,18 +1,67 @@
 # Sandbox Security Model
 
-## What bwrap blocks (filesystem)
+## Overview
 
-The sandbox starts with an **empty namespace**. Only explicitly mounted paths exist.
+Agent commands execute in a **gVisor sandbox** using the `runsc` runtime. gVisor provides stronger isolation than namespace-based sandboxes (like bubblewrap) by implementing a user-space kernel called Sentry that intercepts ALL syscalls. The real Linux kernel is never directly exposed to agent code.
+
+## Security Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Host Container (Fargate)                               │
+│                                                         │
+│  ┌───────────────────────────────────────────────────┐  │
+│  │  gVisor Sandbox (runsc)                           │  │
+│  │  ┌─────────────────────────────────────────────┐  │  │
+│  │  │  Sentry (user-space kernel)                 │  │  │
+│  │  │  - Intercepts ALL syscalls                  │  │  │
+│  │  │  - Synthetic /proc, /sys                    │  │  │
+│  │  │  - Never touches real kernel                │  │  │
+│  │  └─────────────────────────────────────────────┘  │  │
+│  │  ┌─────────────────────────────────────────────┐  │  │
+│  │  │  Gofer (filesystem proxy)                   │  │  │
+│  │  │  - Mediates all file access                 │  │  │
+│  │  │  - Runs in separate process                 │  │  │
+│  │  └─────────────────────────────────────────────┘  │  │
+│  │  ┌─────────────────────────────────────────────┐  │  │
+│  │  │  Agent Command                              │  │  │
+│  │  │  /workspace (rw), /usr (ro), /bin (ro)      │  │  │
+│  │  └─────────────────────────────────────────────┘  │  │
+│  └───────────────────────────────────────────────────┘  │
+│                         │                               │
+│                         │ Unix socket (proxy)           │
+│  ┌──────────────────────▼────────────────────────────┐  │
+│  │  Network Filtering Proxy                          │  │
+│  │  - Blocks private IPs (10.x, 172.x, 169.254.x)   │  │
+│  │  - Allows public internet                         │  │
+│  └───────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────┘
+```
+
+## What gVisor blocks
+
+### Kernel isolation (Sentry)
+
+gVisor's Sentry intercepts and handles ALL system calls in user-space. This provides:
+
+| Threat | Protection |
+|--------|------------|
+| Kernel syscall exploits | Sentry handles syscalls, not the real kernel |
+| io_uring/bpf/ptrace exploits | Not implemented in Sentry |
+| Unknown kernel 0-days | Real kernel never exposed |
+| /proc info leakage | Synthetic /proc, no host info |
+| Container escape | No namespace to escape from |
+
+### Filesystem isolation
+
+The sandbox starts with an **OCI runtime spec** that explicitly mounts only allowed paths:
 
 | Path | Access | What's there |
 |------|--------|-------------|
 | `/workspace` | read-write | Agent's own workspace only |
 | `/usr`, `/bin`, `/lib` | read-only | System tools (python, bash, curl, git) |
-| `/proc` | read-only | Host procfs (see remaining concerns below) |
-| `/dev/null,zero,full,random,urandom` | dev-bind | Only essential devices (not full /dev) |
-| `/dev/fd`, `/dev/stdin`, `/dev/stdout`, `/dev/stderr` | symlink | Points to /proc/self/fd |
-| `/tmp`, `/var`, `/run`, `/etc` | tmpfs | Fresh empty directories, not host's |
-| `/etc/alternatives` | read-only | Debian symlinks (awk, python, etc.) - contains only symlinks to /usr binaries |
+| `/tmp`, `/var`, `/run`, `/etc` | tmpfs | Fresh empty directories |
+| `/etc/alternatives` | read-only | Debian symlinks only |
 
 **Invisible to the sandbox:**
 - `/home`, `/root` — no user directories
@@ -22,42 +71,42 @@ The sandbox starts with an **empty namespace**. Only explicitly mounted paths ex
 - Other agent workspaces — each agent only sees its own
 - Any path not explicitly listed above
 
-## What bwrap blocks (namespaces)
+### Namespace isolation
 
-| Namespace | Flag | Effect |
-|-----------|------|--------|
-| User | `--unshare-user` | Fake root inside sandbox, unprivileged on host |
-| PID | `--unshare-pid` | Can't see or signal host processes |
-| Network | `--unshare-net` | Zero network interfaces (ALWAYS, even with allowNetwork) |
-| UTS | `--unshare-uts` | Can't change hostname |
-| Cgroup | `--unshare-cgroup` | Isolated cgroup view |
-| IPC | `--unshare-ipc` | Isolated shared memory, semaphores, message queues |
+gVisor creates isolated namespaces for:
 
-## Seccomp syscall filter
+| Namespace | Effect |
+|-----------|--------|
+| PID | Can't see or signal host processes |
+| Network | Zero network interfaces (always, even with allowNetwork) |
+| UTS | Isolated hostname |
+| IPC | Isolated shared memory, semaphores, message queues |
+| Mount | Isolated filesystem view |
 
-A mandatory seccomp-bpf filter blocks dangerous syscalls before execution. If the filter cannot be created, execution is refused (fail-closed).
+### Environment isolation
 
-Uses libseccomp Python bindings (same library Flatpak uses for its bwrap seccomp filters). Filter is compiled to BPF and passed via `bwrap --seccomp <fd>`.
-
-**Blocked syscalls:**
-
-| Syscall | Why blocked |
-|---------|------------|
-| `io_uring_setup/enter/register` | Kernel async I/O — ~10+ CVEs in recent years |
-| `bpf` | eBPF kernel programmability — regular privilege escalation target |
-| `keyctl`, `add_key`, `request_key` | Kernel keyring — has had escalation bugs |
-| `ptrace` | Process tracing — sandbox escape vector |
-| `userfaultfd` | Used as a primitive in race condition exploits |
-| `kexec_load`, `kexec_file_load` | Load/execute a new kernel |
-| `perf_event_open` | Kernel info leak + exploit vector |
-
-Everything else is allowed (blocklist approach — bash/python/curl/git need hundreds of syscalls).
-
-## What bwrap blocks (environment)
-
-- Minimal environment with only `PATH` set (see below)
+- Minimal environment with only `PATH` set
 - No `AWS_SECRET_ACCESS_KEY`, no `DATABASE_URL`, no `REDIS_URL`
-- When allowNetwork=true, only `http_proxy`/`https_proxy` vars are injected (pointing to sandbox-local socat bridge)
+- When allowNetwork=true, only `http_proxy`/`https_proxy` vars are injected
+
+## Network isolation (proxy layer)
+
+When `allowNetwork=false`: zero network interfaces, nothing gets out.
+
+When `allowNetwork=true`: still zero interfaces, only exit is through filtering proxy.
+
+**Proxy blocks (all internal):**
+- `10.0.0.0/8` — VPC (DB, Redis, other ECS tasks)
+- `172.16.0.0/12`, `192.168.0.0/16` — private ranges
+- `127.0.0.0/8` — localhost
+- `169.254.169.254/32` — AWS instance metadata (IAM creds)
+- `169.254.170.2/32` — ECS task credential endpoint
+- `100.64.0.0/10` — carrier-grade NAT / AWS VPC endpoints
+- All IPv6 private/link-local
+
+**Proxy allows:** any public IP.
+
+**Bypass resistance:** tools that ignore proxy env vars get zero network (no interfaces exist). Direct TCP connections fail with "network unreachable".
 
 ## Available tools in sandbox
 
@@ -81,71 +130,35 @@ The sandbox has `PATH=/usr/local/bin:/usr/bin:/bin` set, giving access to:
 - `go` — Go compiler
 - `rustc`, `cargo` — Rust
 
-## Network isolation (proxy layer)
+## gVisor platform
 
-When `allowNetwork=false`: zero network interfaces, nothing gets out.
+We use `--platform=ptrace` which works on AWS Fargate (no KVM required). The ptrace platform:
+- Intercepts syscalls via ptrace
+- Slightly slower than KVM platform (~30% overhead)
+- No special hardware requirements
+- Works in any Linux container environment
 
-When `allowNetwork=true`: still zero interfaces, only exit is through filtering proxy.
+## Comparison to other isolation methods
 
-**Proxy blocks (all internal):**
-- `10.0.0.0/8` — VPC (DB, Redis, other ECS tasks)
-- `172.16.0.0/12`, `192.168.0.0/16` — private ranges
-- `127.0.0.0/8` — localhost
-- `169.254.169.254/32` — AWS instance metadata (IAM creds)
-- `169.254.170.2/32` — ECS task credential endpoint
-- `100.64.0.0/10` — carrier-grade NAT / AWS VPC endpoints
-- All IPv6 private/link-local
-
-**Proxy allows:** any public IP.
-
-**Bypass resistance:** tools that ignore proxy env vars get zero network (no interfaces exist). Direct TCP connections fail with "network unreachable".
-
-## Remaining kernel-level concerns
-
-bwrap uses Linux namespaces, which are a **kernel feature**. The sandboxed process still shares the host kernel. The seccomp filter significantly reduces the attack surface, but the kernel remains the boundary.
-
-### `/proc` exposure (info leak)
-
-Uses `--ro-bind /proc /proc` which mounts the **host's** procfs read-only.
-
-Exposed (read-only):
-- `/proc/cpuinfo`, `/proc/meminfo` — hardware info (low risk)
-- `/proc/kallsyms` — kernel symbol addresses (useful for kernel exploits)
-- `/proc/sys/*` — kernel config (informational)
-
-The sandbox can't write to /proc (no sysctl changes), but kernel symbol addresses are valuable for exploit development.
-
-**Future mitigation:** Use `--proc /proc` instead (new procfs scoped to sandbox's PID namespace). May not work on Fargate due to mount restrictions.
-
-### User namespace as attack surface
-
-`--unshare-user` creates a user namespace where the process appears as root (UID 0) but maps to an unprivileged user on the host. However:
-- User namespace code itself has been a frequent source of kernel CVEs
-- `CAP_SYS_ADMIN` within the namespace enables operations that can trigger kernel bugs
-- Several container escapes have targeted user namespace edge cases
-
-## Future improvements (kernel isolation)
-
-- **`--proc /proc`** — new procfs scoped to sandbox PIDs (hides kallsyms). Test on Fargate.
-- **gVisor** — Google's user-space kernel. Sandbox never touches the real kernel. Used by GKE Sandbox, Cloud Run. Requires moving from Fargate to EC2-backed ECS.
-- **Firecracker** — AWS's microVM. Full kernel isolation. Used by Lambda. Requires KVM (not available on Fargate).
+| Method | Kernel exposure | Syscall isolation | /proc | Escape vectors |
+|--------|----------------|-------------------|-------|----------------|
+| **gVisor (Sentry)** | None | All intercepted | Synthetic | Minimal |
+| bwrap + seccomp | ~300 syscalls | Blocklist | Host (ro) | Namespace bugs |
+| Docker | Full kernel | Optional seccomp | Host | Many |
+| Firecracker | None (microVM) | Separate kernel | Separate | Minimal |
 
 ## Defense-in-depth layers
 
 | Layer | Protects against |
 |-------|-----------------|
-| bwrap filesystem namespace | Host file access, other agent data |
-| Selective /dev (5 devices only) | /dev/mem, /dev/kmem, raw block device access |
-| bwrap PID namespace | Host process visibility |
-| bwrap IPC namespace | Shared memory / semaphore attacks |
-| bwrap network namespace | All network access (always isolated) |
-| Seccomp BPF filter | Dangerous syscalls (io_uring, bpf, ptrace, etc.) |
-| Minimal environment (PATH only) | Credential/secret leakage |
-| Network proxy (when allowed) | Internal network access (VPC, metadata, localhost) |
-| 5-minute execution timeout | Resource exhaustion, runaway processes |
-| `--die-with-parent` | Orphaned sandbox processes |
-| `--new-session` | Terminal/TTY attacks |
-| AWS Security Groups | Inbound network to containers |
+| gVisor Sentry | Kernel syscall exploits |
+| Gofer process | Filesystem escape |
+| OCI mounts | Host file access |
+| PID namespace | Host process visibility |
+| Network namespace | All network access |
+| Network proxy | Internal network access |
+| 5-minute timeout | Resource exhaustion |
+| AWS Security Groups | Inbound network |
 | AWS WAF | Inbound HTTP attacks |
 
 ## Security testing
@@ -153,7 +166,7 @@ The sandbox can't write to /proc (no sysctl changes), but kernel symbol addresse
 The sandbox includes security testing tools that can be run to validate isolation:
 
 ```bash
-# Run inside container (executes in bwrap sandbox)
+# Run inside container (executes in gVisor sandbox)
 run-sandbox-pentest
 ```
 
@@ -171,20 +184,28 @@ Last tested: Feb 2026
 
 | Test | Result |
 |------|--------|
-| Seccomp filter active | PASS |
+| Kernel syscalls isolated (Sentry) | PASS |
 | Network interfaces isolated | PASS |
 | /home, /root inaccessible | PASS |
 | /etc is tmpfs (isolated) | PASS |
 | Docker socket not accessible | PASS |
-| /proc/sys/kernel/core_pattern not writable | PASS |
 | AWS metadata (169.254.169.254) blocked | PASS |
-| CVE-2019-5736 (runc escape) | BLOCKED (/bin/sh read-only) |
 | Container escape vectors | None found |
 
-### Known limitations (acceptable risk)
+## ECS requirements
 
-| Item | Status | Notes |
-|------|--------|-------|
-| /proc/kallsyms readable | INFO | Kernel addresses visible (set kptr_restrict=2 on host to hide) |
-| AppArmor | unconfined | Not enforced (bwrap + seccomp is primary defense) |
-| Capabilities | 13 caps | Could drop more, but current set is functional |
+For gVisor to work on ECS/Fargate, the task definition needs:
+
+```json
+{
+  "containerDefinitions": [{
+    "linuxParameters": {
+      "capabilities": {
+        "add": ["SYS_PTRACE"]
+      }
+    }
+  }]
+}
+```
+
+This capability is required for gVisor's ptrace platform.

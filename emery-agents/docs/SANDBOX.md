@@ -4,7 +4,17 @@ This document describes the sandboxed execution environment for agent bash comma
 
 ## Overview
 
-Agents execute bash commands in an isolated sandbox using [Bubblewrap (bwrap)](https://github.com/containers/bubblewrap). This provides security isolation while allowing agents to perform useful work like running git, curl, and other command-line tools.
+Agents execute bash commands in an isolated sandbox using [gVisor (runsc)](https://gvisor.dev/). gVisor provides stronger isolation than namespace-based sandboxes by implementing a user-space kernel called Sentry that intercepts ALL syscalls. The real Linux kernel is never directly exposed to agent code.
+
+## Security Model
+
+gVisor intercepts every system call via its Sentry kernel:
+- **Sentry**: User-space kernel that handles all syscalls
+- **Gofer**: Separate process that mediates all filesystem access
+- **Synthetic /proc, /sys**: No host information leakage
+- **Platform**: ptrace (works on Fargate, no KVM required)
+
+For detailed security documentation, see `src/emery_agents/services/sandbox/SECURITY.md`.
 
 ## Filesystem Access
 
@@ -13,18 +23,19 @@ The following paths are mounted read-only from the host:
 - `/usr` - System binaries and libraries
 - `/bin` - Essential binaries (bash, ls, cat, etc.)
 - `/lib`, `/lib64` - Shared libraries
-- `/proc` - Process information (read-only bind mount)
+- `/etc/alternatives` - Debian symlinks
 
 ### Writable Paths
 - `/workspace` - Agent's workspace directory (persistent storage)
 - `/tmp` - Ephemeral tmpfs (isolated per execution)
-- `/var/log`, `/run` - Ephemeral tmpfs directories
+- `/var`, `/run`, `/etc` - Ephemeral tmpfs directories
 
 ### Invisible Paths
 All other host paths are invisible to the sandboxed process. The agent cannot:
 - Access other agent workspaces
 - Read host environment variables
 - Access host secrets or credentials
+- Read real /proc or /sys (gVisor provides synthetic versions)
 
 ## Network Access
 
@@ -35,7 +46,7 @@ All other host paths are invisible to the sandboxed process. The agent cannot:
 ### How Network Works
 
 When network is enabled:
-1. The sandbox uses `--unshare-net` (zero network interfaces by default)
+1. The sandbox has zero network interfaces (always isolated)
 2. A filtering proxy runs on the host, listening on a Unix socket
 3. The socket is bind-mounted into the sandbox
 4. `socat` bridges the Unix socket to sandbox-local TCP
@@ -46,6 +57,7 @@ The proxy blocks connections to:
 - Private IP ranges (RFC1918: 10.x.x.x, 172.16-31.x.x, 192.168.x.x)
 - Localhost (127.x.x.x)
 - AWS metadata service (169.254.169.254)
+- ECS task credential endpoint (169.254.170.2)
 - Link-local addresses (169.254.x.x)
 - IPv6 local addresses
 
@@ -82,7 +94,7 @@ These bypass the HTTP proxy and will fail:
 
 Inside the sandbox:
 - The process appears to run as `root` (UID 0)
-- This is due to user namespace mapping
+- This is due to user namespace mapping in the OCI spec
 - On the host, it's still an unprivileged user
 - The "root" identity cannot escape the sandbox
 
@@ -111,31 +123,6 @@ To add compilation tools, update the Dockerfile:
 ```dockerfile
 RUN apt-get update && apt-get install -y build-essential
 ```
-
-## Security Layers
-
-### 1. Namespace Isolation
-- User namespace (unprivileged root)
-- PID namespace (isolated process tree)
-- Network namespace (no interfaces)
-- UTS namespace (isolated hostname)
-- IPC namespace (isolated shared memory)
-- Cgroup namespace (isolated resource limits)
-
-### 2. Filesystem Isolation
-- Empty namespace by default
-- Only explicitly mounted paths visible
-- Read-only system paths
-- Isolated tmp directories
-
-### 3. Seccomp Filtering
-- Syscall filtering blocks dangerous operations
-- Prevents kernel exploitation attempts
-
-### 4. Network Filtering
-- All network via HTTP proxy
-- Proxy blocks private/reserved IPs
-- No direct network access possible
 
 ## Configuration
 
@@ -174,7 +161,7 @@ The skill setting overrides the agent setting when executing a skill.
 The container includes security testing tools to validate sandbox isolation:
 
 ```bash
-# Run security pentest (executes inside bwrap sandbox)
+# Run security pentest (executes inside gVisor sandbox)
 run-sandbox-pentest
 
 # Quick mode (faster, less thorough)
@@ -187,3 +174,21 @@ This runs:
 - **botb** - Breakout testing
 
 See `src/emery_agents/services/sandbox/SECURITY.md` for detailed security documentation.
+
+## ECS Requirements
+
+For gVisor to work on ECS/Fargate, the task definition needs:
+
+```json
+{
+  "containerDefinitions": [{
+    "linuxParameters": {
+      "capabilities": {
+        "add": ["SYS_PTRACE"]
+      }
+    }
+  }]
+}
+```
+
+This capability is required for gVisor's ptrace platform.

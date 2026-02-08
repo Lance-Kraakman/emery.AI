@@ -3,7 +3,7 @@ Filtering CONNECT proxy for sandboxed network access.
 
 Architecture (same pattern as Anthropic's sandbox-runtime):
 - Listens on a Unix domain socket on the host
-- Socket is bind-mounted into bwrap sandbox (which has --unshare-net)
+- Socket is bind-mounted into gVisor sandbox (which has --network=none)
 - Sandbox has zero network interfaces — only exit is through this proxy
 - Resolves DNS on host side, checks resolved IP against private/reserved ranges
 - Blocks all internal/private IPs, allows public internet only

@@ -4,7 +4,7 @@ Workspace Sync - S3-based workspace persistence for agents.
 Downloads/uploads agent workspaces as tar.gz archives from/to S3.
 Provides persistent storage across task executions.
 
-All file writes within workspaces go through bwrap sandbox for isolation.
+All file writes within workspaces go through gVisor sandbox for isolation.
 
 Workspace structure:
     /workspace/
@@ -33,7 +33,7 @@ from typing import Any
 import boto3
 from botocore.exceptions import ClientError
 
-from ..services.sandbox import BwrapExecutor, WorkspaceShell
+from ..services.sandbox import GVisorExecutor, GVisorShell
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ class WorkspaceSync:
 
     Each agent has a persistent workspace stored as a tar.gz archive in S3.
     Workspaces are downloaded at task start and uploaded at task end.
-    All file writes go through bwrap sandbox via WorkspaceShell.
+    All file writes go through gVisor sandbox via GVisorShell.
     """
 
     # Default directories to create in a new workspace
@@ -75,17 +75,17 @@ class WorkspaceSync:
         self.bucket = bucket
         self.local_base = local_base or Path("/tmp/workspace")
         self.s3 = boto3.client("s3")
-        self._executor = BwrapExecutor(base_path=self.local_base)
-        self._shell_cache: dict[str, WorkspaceShell] = {}
+        self._executor = GVisorExecutor(base_path=self.local_base)
+        self._shell_cache: dict[str, GVisorShell] = {}
 
         logger.info(
             f"WorkspaceSync initialized: bucket={bucket}, local={self.local_base}"
         )
 
-    def _get_shell(self, workspace_id: str) -> WorkspaceShell:
+    def _get_shell(self, workspace_id: str) -> GVisorShell:
         """Get or create a sandboxed shell for the workspace ID.
 
-        Uses BwrapExecutor.get_shell_for_id() which validates the workspace_id
+        Uses GVisorExecutor.get_shell_for_id() which validates the workspace_id
         internally and ensures path safety.
         """
         if workspace_id not in self._shell_cache:
@@ -106,7 +106,7 @@ class WorkspaceSync:
             workspace_type: "agents" or "users"
             workspace_id: Agent ID or user ID
 
-        Validates workspace_id via BwrapExecutor's validation.
+        Validates workspace_id via GVisorExecutor's validation.
         """
         # Validate via executor (raises ValueError if invalid)
         self._executor._validate_workspace_id(workspace_id)
@@ -115,9 +115,9 @@ class WorkspaceSync:
     def _local_path(self, workspace_id: str) -> Path:
         """Get local path for workspace.
 
-        Uses BwrapExecutor's validation to ensure path safety.
+        Uses GVisorExecutor's validation to ensure path safety.
         """
-        # BwrapExecutor validates and returns the safe path
+        # GVisorExecutor validates and returns the safe path
         return self._executor._validate_workspace_id(workspace_id)
 
     def _tar_path(self, workspace_id: str) -> Path:
@@ -161,7 +161,7 @@ class WorkspaceSync:
             self.s3.download_file(self.bucket, s3_key, str(tar_path))
 
             # Extract archive — filter='data' normalizes permissions
-            # (prevents bwrap's restrictive 0o700 dirs from breaking ChromaDB writes)
+            # (prevents restrictive 0o700 dirs from breaking ChromaDB writes)
             with tarfile.open(tar_path, "r:gz") as tar:
                 tar.extractall(local_path, filter="data")
 

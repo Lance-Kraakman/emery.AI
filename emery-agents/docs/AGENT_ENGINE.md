@@ -29,7 +29,7 @@ Everything lives inside `.engine/` for consistent S3 sync:
 |---------|----------|---------|
 | MemoryService | `engine.memory` | ChromaDB |
 | PlanFileRepository | `engine.plans` | JSON files |
-| BwrapExecutor | `engine.sandbox` | N/A |
+| GVisorExecutor | `engine.sandbox` | N/A |
 
 ### Why Lazy Initialization?
 

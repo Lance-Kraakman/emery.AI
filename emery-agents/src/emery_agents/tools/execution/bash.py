@@ -1,7 +1,8 @@
 """
-Bash Tool - Execute bash commands in isolated bwrap sandbox.
+Bash Tool - Execute bash commands in isolated gVisor sandbox.
 
-Ported from tools/bash_tool.py as DSPy-compatible function.
+gVisor provides strong kernel isolation by intercepting ALL syscalls
+via its Sentry user-space kernel. The real kernel is never exposed.
 """
 
 from __future__ import annotations
@@ -10,7 +11,7 @@ import logging
 from collections.abc import Callable
 from pathlib import Path
 
-from emery_agents.services.sandbox.bwrap_executor import BwrapExecutor
+from emery_agents.services.sandbox import GVisorExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ def create_bash_tool(
     Returns:
         bash function that DSPy ReAct can use
     """
-    executor = BwrapExecutor()
+    executor = GVisorExecutor()
 
     logger.info(
         f"BashTool initialized: workspace={workspace_path}, "

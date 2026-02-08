@@ -1,10 +1,17 @@
 """
 Sandbox Module - Isolated execution environments for agent tasks.
 
-Provides bubblewrap (bwrap) based isolation for secure command execution.
-Agents run in isolated filesystem namespaces with only their workspace accessible.
+Provides gVisor-based isolation for secure command execution.
+gVisor intercepts ALL syscalls via its Sentry user-space kernel,
+providing stronger isolation than namespace-based sandboxes.
+
+Agents run in isolated gVisor containers with only their workspace accessible.
 """
 
-from .bwrap_executor import BwrapExecutor, ExecutionResult, WorkspaceShell
+from .gvisor_executor import ExecutionResult, GVisorExecutor, GVisorShell
 
-__all__ = ["BwrapExecutor", "ExecutionResult", "WorkspaceShell"]
+__all__ = [
+    "GVisorExecutor",
+    "GVisorShell",
+    "ExecutionResult",
+]

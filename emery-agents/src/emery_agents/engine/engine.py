@@ -9,7 +9,7 @@ from .paths import EnginePaths
 if TYPE_CHECKING:
     from ..services.memory import MemoryService
     from ..services.planning.plan_file_repository import PlanFileRepository
-    from ..services.sandbox.bwrap_executor import BwrapExecutor
+    from ..services.sandbox import GVisorExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ class AgentEngine:
 
         self._memory: MemoryService | None = None
         self._plans: PlanFileRepository | None = None
-        self._sandbox: BwrapExecutor | None = None
+        self._sandbox: GVisorExecutor | None = None
         self._initialized = False
 
     def initialize(self) -> None:
@@ -87,13 +87,13 @@ class AgentEngine:
         return self._plans
 
     @property
-    def sandbox(self) -> "BwrapExecutor":
-        """Bubblewrap sandbox executor."""
+    def sandbox(self) -> "GVisorExecutor":
+        """gVisor sandbox executor."""
         self._ensure_initialized()
         if self._sandbox is None:
-            from ..services.sandbox.bwrap_executor import BwrapExecutor
+            from ..services.sandbox import GVisorExecutor
 
-            self._sandbox = BwrapExecutor(base_path=self.base_path)
+            self._sandbox = GVisorExecutor(base_path=self.base_path)
         return self._sandbox
 
     def execute_command(

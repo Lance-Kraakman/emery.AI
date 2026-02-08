@@ -4,7 +4,7 @@ Memory Service — ChromaDB-backed persistent semantic memory.
 Stores memories in the workspace filesystem under .engine/memory/chroma/.
 Syncs to S3 naturally via workspace tar.gz uploads.
 
-Path resolution uses ID-based validation (same pattern as BwrapExecutor)
+Path resolution uses ID-based validation (same pattern as GVisorExecutor)
 to prevent path traversal. Never accepts raw filesystem paths.
 
 PII is stripped from agent memories (shared) via PIIFilter.
@@ -88,7 +88,7 @@ class MemoryService:
                 )
 
         # Ensure directory exists with write permissions
-        # (tar.gz roundtrip can leave restrictive permissions from bwrap)
+        # (tar.gz roundtrip can leave restrictive permissions from sandbox)
         # Must chmod parent directories too — ChromaDB needs write access for temp/lock files
 
         # Fix workspace root permissions FIRST (parent of all subdirs)
@@ -154,7 +154,7 @@ class MemoryService:
     def _validate_id(workspace_id: str) -> str:
         """Validate workspace ID for path safety.
 
-        Same validation pattern as BwrapExecutor._validate_workspace_id().
+        Same validation pattern as GVisorExecutor._validate_workspace_id().
 
         Args:
             workspace_id: ID to validate.
