@@ -2,7 +2,6 @@
  * Store Types - Shared types and interfaces for TanStack Store implementation
  */
 
-import type { Store } from '@tanstack/react-store'
 
 // Base store configuration
 export interface BaseStoreConfig {

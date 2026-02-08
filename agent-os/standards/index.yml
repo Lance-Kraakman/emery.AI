@@ -1,0 +1,27 @@
+# Agent OS Standards Index
+
+database:
+  rls-context:
+    description: RLS context pattern with raw db vs contextAwareDb for tenant isolation
+
+grpc:
+  sse-event-format:
+    description: Streaming event structure from Python to frontend (type field contract)
+
+orchestration:
+  event-streaming:
+    description: Dataclass events for real-time UI feedback
+  state-runtime-split:
+    description: Serializable state vs non-serializable runtime separation
+
+reasoning:
+  dspy-patterns:
+    description: DSPy signature, async LM, and module structure conventions
+
+tools:
+  capability-model:
+    description: Unified Capability dataclass with type:name ID format
+  discovery-vs-crud:
+    description: Read-only discovery tools vs mutation-guarded CRUD tools
+  factory-pattern:
+    description: DSPy tool factories with auth captured in closures

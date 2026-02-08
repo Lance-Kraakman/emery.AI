@@ -6,11 +6,9 @@ Contains repository implementations, external service integrations, and framewor
 """
 
 from .workspace import ContextCache, TableMetadata, WorkspaceConfig
-from .workspace_sync import WorkspaceSync
 
 __all__ = [
     "WorkspaceConfig",
     "ContextCache",
     "TableMetadata",
-    "WorkspaceSync",
 ]

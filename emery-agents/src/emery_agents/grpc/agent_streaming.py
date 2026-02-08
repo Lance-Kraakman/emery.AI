@@ -29,7 +29,7 @@ from ..services.execution.state_machine import ActionType, Phase
 from ..services.models.provider import ModelProvider
 from ..services.plan_service import PlanService
 from ..services.skills.executor import SkillExecutorService
-from ..tools.execution import SkillTool
+from ..tools.execution.skill import SkillTool
 from ..tools.loader import UnifiedToolLoader
 from ..tools.tool_modes import ToolMode
 from ..types import ExecutionMode

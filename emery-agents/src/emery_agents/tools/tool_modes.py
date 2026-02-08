@@ -5,6 +5,8 @@ Categorizes tools as read-only or mutation-capable for two-phase execution.
 Planning mode uses only read-only tools, execution mode uses all tools.
 """
 
+from __future__ import annotations
+
 import logging
 from typing import Any
 

@@ -1,19 +1,18 @@
 'use client'
 
 import { generateId } from 'ai'
-import React, { useState, useEffect, useRef, useMemo } from 'react'
-import { useSession } from 'next-auth/react'
-import { ChatHandler, Message, type MessagePart } from '@llamaindex/chat-ui'
+import { useState, useEffect, useRef } from 'react'
+import { Message, type MessagePart } from '@llamaindex/chat-ui'
 import { useStore } from '@tanstack/react-store'
 import { uiStateStore, uiStateSelectors } from '@/stores/ui-state.store'
-import { createChatStreamRequest, type ChatContextOptions } from './types/chat-requests'
+import { type ChatContextOptions } from './types/chat-requests'
 import { loadChatWithFullHistory, getCurrentChatSession } from '@/app/actions/chat-history'
-import type { ChatMessageDTO, ChatContextDTO } from '@/app/mappers/chat-mapper'
+import type { ChatContextDTO } from '@/app/mappers/chat-mapper'
 import type { ToolDTO } from '@/app/mappers/tool-mapper'
 import { createDebugLogger } from '@/lib/utils/debug-logger'
 import type { AnyAttachmentMetadata } from '@/ddd/domain/multimodal/value-objects/attachment-metadata'
 import type { ExecutionStep } from '@/ddd/domain/chat/value-objects/execution-step'
-import type { ExtendedChatHandler, ChatMessage, CurrentStepProgress } from './types/extended-chat-handler'
+import type { ExtendedChatHandler, ChatMessage } from './types/extended-chat-handler'
 import { createTextMessage, createMultimodalMessage, getMessageContent } from '@/lib/chat/message-helpers'
 import { createExecutionStep, addStepDeduped } from '@/lib/chat/step-collection'
 import {
@@ -26,7 +25,7 @@ import {
   isPermissionRequestEvent,
   type PermissionRequestEvent
 } from '@/lib/chat/types/sse-events'
-import type { PendingPlanApproval, ActivePlanExecution, PlanExecutionStatus, AwaitingInputState } from './types/extended-chat-handler'
+import type { PendingPlanApproval, ActivePlanExecution, AwaitingInputState } from './types/extended-chat-handler'
 
 const logger = createDebugLogger('ChatGRPC')
 
@@ -449,7 +448,7 @@ export function useChatGRPC(
 
       // Use FormData if there are attachments, otherwise JSON
       let requestBody: FormData | string
-      let headers: Record<string, string> = {}
+      const headers: Record<string, string> = {}
 
       if (filesToAttach.length > 0) {
         // Use FormData for multipart/form-data with files

@@ -33,7 +33,8 @@ export interface OrgStoragePrefixes {
 }
 
 // ---------------------------------------------------------------------------
-// Prefix constants (shared with Python via convention — see workspace_sync.py)
+// Prefix constants
+// Note: Workspaces now use EFS (SharedFilesystemStorage) - S3 paths are legacy
 // ---------------------------------------------------------------------------
 
 export const WORKSPACES_PREFIX = 'workspaces';

@@ -5,6 +5,11 @@ const nextConfig = {
   // AIDEV-NOTE: Removed env config to allow runtime environment variable loading
   // App router is now stable in Next.js 15
 
+  // Run lint separately (pnpm lint) - build should not fail on lint warnings
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+
   // AIDEV-NOTE: Consistent build ID for multi-container deployments (prevents version skew)
   generateBuildId: async () => {
     return process.env.GIT_SHA || process.env.BUILD_ID || 'development'

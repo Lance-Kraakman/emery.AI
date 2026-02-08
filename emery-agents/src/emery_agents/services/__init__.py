@@ -19,16 +19,7 @@ Submodules:
 """
 
 # Models (LLM/Model management)
-# NOTE: ExecutionCoordinator has been replaced by LangGraph orchestrators.
-# All callers now use create_session_graph() or generate_plan_node() directly.
 from ..entities.models.task_ledger import TaskLedger, create_ledger_from_plan
-
-# Orchestrators (LangGraph-based — primary orchestration path)
-from ..orchestrators import (
-    RuntimeContext,
-    create_session_graph,
-    create_session_plan_only_graph,
-)
 
 # Agents (agent-related services)
 # AgentExecutor omitted: import directly from services.agents.executor (heavy, circular if eager)
@@ -62,8 +53,7 @@ from .models import ModelProvider, TokenUsage
 # Root-level services
 from .plan_service import PlanService, PlanServiceFactory
 
-# Tasks (unified task execution)
-from .tasks import TaskExecutor
+# Tasks: import directly from .tasks to avoid circular imports
 
 __all__ = [
     "ModelProvider",
@@ -90,12 +80,7 @@ __all__ = [
     "TaskLedger",
     "create_ledger_from_plan",
     "AgentAPIService",
-    # Orchestrators
-    "create_session_graph",
-    "create_session_plan_only_graph",
-    "RuntimeContext",
-    # Tasks
-    "TaskExecutor",
+    # Tasks: import directly from .tasks
     # Credentials
     "ResolvedCredentials",
     "CredentialSource",

@@ -3,19 +3,18 @@ Execution Module
 
 Extracted components from ExecutionCoordinator for maintainability.
 
-- StepExecutor: Executes individual plan steps
 - InterruptHandler: Manages interrupt queue and classification
 - ReplanHandler: Handles diff-based replanning
 - ExecutionState: Unified state management
 - Phase: Simplified phase enum (IDLE, WORKING, AWAITING_INPUT, COMPLETE, FAILED)
 - Events: All coordinator event types for UI feedback
-- Config: Coordinator configuration classes
+
+Import directly from submodules to avoid circular imports:
+- StepExecutor: from .step_executor
+- PlanStepExecutor: from .plan_step_executor
+- CoordinatorMode, ExecutionCoordinatorConfig: from .config
 """
 
-from .config import (
-    CoordinatorMode,
-    ExecutionCoordinatorConfig,
-)
 from .events import (
     AutoFixCompletedEvent,
     AutoFixStartedEvent,
@@ -52,7 +51,6 @@ from .events import (
     ClarifyingQuestion as EventClarifyingQuestion,  # More detailed version for events
 )
 from .interrupt_handler import InterruptHandler, QueuedInterrupt
-from .plan_step_executor import PlanStepExecutor
 from .replan_handler import ReplanHandler, ReplanNeedsClarificationError
 from .state import (
     ClarifyingQuestion,
@@ -63,7 +61,6 @@ from .state import (
     StepResult,
     WorkMode,
 )
-from .step_executor import StepExecutor
 
 
 class TaskBuilder:
@@ -86,8 +83,7 @@ class TaskBuilder:
 
 
 __all__ = [
-    "StepExecutor",
-    "PlanStepExecutor",
+    # StepExecutor, PlanStepExecutor: import directly from submodules
     "InterruptHandler",
     "QueuedInterrupt",
     "ReplanHandler",
@@ -101,9 +97,7 @@ __all__ = [
     "PendingInput",
     "StepResult",
     "ExecutionState",
-    # Config
-    "CoordinatorMode",
-    "ExecutionCoordinatorConfig",
+    # Config: import directly from .config
     # Events
     "PendingContext",
     "PlanCreatedEvent",

@@ -9,14 +9,14 @@
 
 import type { QueryClient } from '@tanstack/react-query'
 import { appStateActions, appStateStore } from './app-state.store'
-import { uiStateActions, uiStateStore } from './ui-state.store'
-import { agentsActions, agentsStore } from './agents.store'
-import { teamsActions, teamsStore } from './teams.store'
-import { dataActions, dataStore } from './data-management.store'
-import { chatActions, chatStore } from './chat.store'
-import { orgChartActions, orgChartStore } from './organization-chart.store'
-import { formsActions, formsStore } from './forms.store'
-import { appsActions, appsStore } from './apps.store'
+import { uiStateActions } from './ui-state.store'
+import { agentsActions } from './agents.store'
+import { teamsActions } from './teams.store'
+import { dataActions } from './data-management.store'
+import { chatActions } from './chat.store'
+import { orgChartActions } from './organization-chart.store'
+import { formsActions } from './forms.store'
+import { appsActions } from './apps.store'
 
 // Import server actions
 import { getCurrentOrganization } from '@/app/actions/user-organizations'
@@ -24,8 +24,6 @@ import { getDatabases } from '@/app/actions/databases'
 import { getTables } from '@/app/actions/tables'
 import { getAgents } from '@/app/actions/agents'
 import { getTeams } from '@/app/actions/teams'
-import { getFields } from '@/app/actions/fields'
-import { getRowsDSG } from '@/app/actions/rows'
 
 // Query client reference for invalidating queries from store actions
 let queryClientRef: QueryClient | null = null

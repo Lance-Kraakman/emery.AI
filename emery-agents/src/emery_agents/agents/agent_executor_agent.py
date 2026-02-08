@@ -19,7 +19,7 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-from emery_agents.tools.execution import create_skill_invoker_tools
+from emery_agents.tools.execution.skill_invoker import create_skill_invoker_tools
 
 from ..entities.workspace import WorkspaceAgent, WorkspaceSkill
 from ..reasoning.modules import ExecutorModule

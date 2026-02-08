@@ -4,10 +4,11 @@
  * GET /api/agents/[id]/workspace/download
  * HEAD /api/agents/[id]/workspace/download
  *
- * GET: Streams the agent's workspace tar.gz archive from S3.
+ * GET: Streams the agent's workspace as tar.gz archive.
  * HEAD: Returns metadata (Last-Modified, Content-Length) without body.
  *
- * Workspace is written by the Python WorkspaceSync service after each task execution.
+ * TODO: Migrate to read from EFS instead of S3 for consistency with delta sync.
+ * Workspaces are now written to EFS by SharedFilesystemStorage.
  *
  * Authentication: withAuthenticatedRoute (session or API key)
  * Authorization: Agent must exist and belong to the user's organization
