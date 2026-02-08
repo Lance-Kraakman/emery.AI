@@ -383,10 +383,100 @@ function computeDatabaseAffinity(
 }
 
 /**
+ * Arrange the org chart in a left-to-right layout:
+ *   Column 1 (left): Org-level skills
+ *   Column 2-N (middle): Agent cards in a grid
+ *   Column N+1 (right): Org-level databases
+ *
+ * This creates a cleaner flow: skills → agents → databases
+ */
+export function arrangeOrgChartLTR(
+  nodes: OrgChartNode[],
+  edges: OrgChartEdge[]
+): OrgChartNode[] {
+  const PADDING = 50;
+  const HORIZONTAL_GAP = 80; // Gap between columns
+  const VERTICAL_GAP = 30;   // Gap between rows within a column
+  const AGENT_WIDTH = 220;   // Estimated width for compact agent cards
+  const NODE_WIDTH = 160;    // Width for skill/database nodes
+  const NODE_HEIGHT = 80;    // Estimated height
+  const MAX_AGENTS_PER_COLUMN = 4; // Max agents in a row before wrapping
+
+  let result = [...nodes];
+
+  // --- Classify nodes ---
+  const orgSkills = result.filter((n) => n.type === 'skill' && !n.parentId);
+  const agents = result.filter((n) => n.type === 'agent');
+  const orgDatabases = result.filter((n) => n.type === 'database' && !n.parentId);
+
+  // --- Column 1: Org-level skills (left side) ---
+  const skillColumnX = PADDING;
+  let currentY = PADDING;
+
+  const skillPositions = new Map<string, { x: number; y: number }>();
+  orgSkills.forEach((skill, index) => {
+    skillPositions.set(skill.id, { x: skillColumnX, y: currentY + index * (NODE_HEIGHT + VERTICAL_GAP) });
+  });
+
+  // Calculate width of skill column
+  const skillColumnWidth = orgSkills.length > 0 ? NODE_WIDTH + HORIZONTAL_GAP : 0;
+
+  // --- Column 2-N: Agents in a grid ---
+  const agentColumnStartX = PADDING + skillColumnWidth;
+  currentY = PADDING;
+
+  const agentPositions = new Map<string, { x: number; y: number }>();
+  agents.forEach((agent, index) => {
+    const row = index % MAX_AGENTS_PER_COLUMN;
+    const col = Math.floor(index / MAX_AGENTS_PER_COLUMN);
+    const x = agentColumnStartX + col * (AGENT_WIDTH + HORIZONTAL_GAP);
+    const y = PADDING + row * (NODE_HEIGHT * 2 + VERTICAL_GAP); // Agents are taller
+    agentPositions.set(agent.id, { x, y });
+  });
+
+  // Calculate total width of agent columns
+  const agentColumns = Math.ceil(agents.length / MAX_AGENTS_PER_COLUMN);
+  const agentColumnsWidth = agentColumns > 0 ? agentColumns * (AGENT_WIDTH + HORIZONTAL_GAP) : 0;
+
+  // --- Column N+1: Org-level databases (right side) ---
+  const databaseColumnX = agentColumnStartX + agentColumnsWidth;
+  currentY = PADDING;
+
+  const databasePositions = new Map<string, { x: number; y: number }>();
+  orgDatabases.forEach((db, index) => {
+    databasePositions.set(db.id, { x: databaseColumnX, y: currentY + index * (NODE_HEIGHT + VERTICAL_GAP) });
+  });
+
+  // --- Apply positions to all nodes ---
+  result = result.map((node) => {
+    const skillPos = skillPositions.get(node.id);
+    if (skillPos) {
+      return { ...node, position: skillPos };
+    }
+
+    const agentPos = agentPositions.get(node.id);
+    if (agentPos) {
+      return { ...node, position: agentPos };
+    }
+
+    const dbPos = databasePositions.get(node.id);
+    if (dbPos) {
+      return { ...node, position: dbPos };
+    }
+
+    return node;
+  });
+
+  return result;
+}
+
+/**
  * Arrange the org chart in a top-down tiered layout:
  *   Tier 1 (top): Org-level skills
  *   Tier 2 (middle): Agent containers side-by-side
  *   Tier 3 (bottom): Databases aligned under their most-connected agent
+ *
+ * @deprecated Use arrangeOrgChartLTR instead for cleaner left-to-right flow
  */
 export function arrangeOrgChartTopDown(
   nodes: OrgChartNode[],
