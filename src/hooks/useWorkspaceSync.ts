@@ -31,6 +31,21 @@ interface PushResult {
   timestamp: number;
 }
 
+// Delta sync results (more detailed)
+interface DeltaPullResult {
+  files_added: string[];
+  files_updated: string[];
+  files_skipped: string[];  // Conflicts saved as .agent files
+  timestamp: number;
+}
+
+interface DeltaPushResult {
+  files_added: number;
+  files_updated: number;
+  files_deleted: number;
+  timestamp: number;
+}
+
 export type SyncState = 'idle' | 'syncing' | 'error';
 
 export interface UseWorkspaceSyncReturn {
@@ -40,10 +55,14 @@ export interface UseWorkspaceSyncReturn {
   syncState: SyncState;
   error: string | null;
   hasConflict: boolean;
+  lastSyncResult: DeltaPullResult | DeltaPushResult | null;
   selectFolder: () => Promise<void>;
   checkStatus: () => Promise<void>;
-  pull: () => Promise<PullResult | null>;
-  push: () => Promise<PushResult | null>;
+  pull: () => Promise<DeltaPullResult | null>;
+  push: () => Promise<DeltaPushResult | null>;
+  pullFull: () => Promise<PullResult | null>;
+  pushFull: () => Promise<PushResult | null>;
+  clearAgentFiles: () => Promise<number>;
   disconnect: () => Promise<void>;
   resolveConflict: (resolution: 'keep_local' | 'keep_remote') => Promise<void>;
 }
@@ -63,6 +82,7 @@ export function useWorkspaceSync(agentId: number): UseWorkspaceSyncReturn {
   const [syncState, setSyncState] = useState<SyncState>('idle');
   const [error, setError] = useState<string | null>(null);
   const [hasConflict, setHasConflict] = useState(false);
+  const [lastSyncResult, setLastSyncResult] = useState<DeltaPullResult | DeltaPushResult | null>(null);
 
   const isAvailable = isTauri();
 
@@ -143,7 +163,75 @@ export function useWorkspaceSync(agentId: number): UseWorkspaceSyncReturn {
     }
   }, [agentId, isAvailable, syncPath, getApiKey, getApiBase]);
 
-  const pull = useCallback(async (): Promise<PullResult | null> => {
+  // Delta pull: Only downloads changed files, preserves user edits
+  const pull = useCallback(async (): Promise<DeltaPullResult | null> => {
+    if (!isAvailable || !syncPath) return null;
+
+    try {
+      setError(null);
+      setSyncState('syncing');
+
+      const apiKey = await getApiKey();
+      const apiBase = getApiBase();
+
+      const result = await invokeTauri<DeltaPullResult>('pull_workspace_delta', {
+        agentId,
+        localPath: syncPath,
+        apiKey,
+        apiBase,
+      });
+
+      // Check if there were conflicts (files saved as .agent versions)
+      setHasConflict(result.files_skipped.length > 0);
+      setLastSyncResult(result);
+      setSyncState('idle');
+
+      // Refresh status after successful pull
+      checkStatus().catch(console.error);
+
+      return result;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to pull workspace');
+      setSyncState('error');
+      return null;
+    }
+  }, [agentId, isAvailable, syncPath, getApiKey, getApiBase, checkStatus]);
+
+  // Delta push: Only uploads changed files
+  const push = useCallback(async (): Promise<DeltaPushResult | null> => {
+    if (!isAvailable || !syncPath) return null;
+
+    try {
+      setError(null);
+      setSyncState('syncing');
+
+      const apiKey = await getApiKey();
+      const apiBase = getApiBase();
+
+      const result = await invokeTauri<DeltaPushResult>('push_workspace_delta', {
+        agentId,
+        localPath: syncPath,
+        apiKey,
+        apiBase,
+      });
+
+      setHasConflict(false);
+      setLastSyncResult(result);
+      setSyncState('idle');
+
+      // Refresh status after successful push
+      checkStatus().catch(console.error);
+
+      return result;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to push workspace');
+      setSyncState('error');
+      return null;
+    }
+  }, [agentId, isAvailable, syncPath, getApiKey, getApiBase, checkStatus]);
+
+  // Full pull: Downloads entire workspace (overwrites local)
+  const pullFull = useCallback(async (): Promise<PullResult | null> => {
     if (!isAvailable || !syncPath) return null;
 
     try {
@@ -163,7 +251,6 @@ export function useWorkspaceSync(agentId: number): UseWorkspaceSyncReturn {
       setHasConflict(false);
       setSyncState('idle');
 
-      // Refresh status after successful pull (don't await to avoid blocking return)
       checkStatus().catch(console.error);
 
       return result;
@@ -174,7 +261,8 @@ export function useWorkspaceSync(agentId: number): UseWorkspaceSyncReturn {
     }
   }, [agentId, isAvailable, syncPath, getApiKey, getApiBase, checkStatus]);
 
-  const push = useCallback(async (): Promise<PushResult | null> => {
+  // Full push: Uploads entire workspace (overwrites remote)
+  const pushFull = useCallback(async (): Promise<PushResult | null> => {
     if (!isAvailable || !syncPath) return null;
 
     try {
@@ -194,7 +282,6 @@ export function useWorkspaceSync(agentId: number): UseWorkspaceSyncReturn {
       setHasConflict(false);
       setSyncState('idle');
 
-      // Refresh status after successful push (don't await to avoid blocking return)
       checkStatus().catch(console.error);
 
       return result;
@@ -204,6 +291,22 @@ export function useWorkspaceSync(agentId: number): UseWorkspaceSyncReturn {
       return null;
     }
   }, [agentId, isAvailable, syncPath, getApiKey, getApiBase, checkStatus]);
+
+  // Clear all .agent.* conflict files
+  const clearAgentFiles = useCallback(async (): Promise<number> => {
+    if (!isAvailable || !syncPath) return 0;
+
+    try {
+      const count = await invokeTauri<number>('clear_agent_files', {
+        localPath: syncPath,
+      });
+      setHasConflict(false);
+      return count;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to clear agent files');
+      return 0;
+    }
+  }, [isAvailable, syncPath]);
 
   const disconnect = useCallback(async () => {
     if (!isAvailable) return;
@@ -240,10 +343,14 @@ export function useWorkspaceSync(agentId: number): UseWorkspaceSyncReturn {
     syncState,
     error,
     hasConflict,
+    lastSyncResult,
     selectFolder,
     checkStatus,
     pull,
     push,
+    pullFull,
+    pushFull,
+    clearAgentFiles,
     disconnect,
     resolveConflict,
   };

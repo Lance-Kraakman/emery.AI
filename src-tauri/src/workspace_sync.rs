@@ -2,21 +2,27 @@
 //!
 //! Provides Tauri commands for syncing agent workspaces between
 //! local folders and the remote S3-backed storage.
+//!
+//! Supports hash-based delta sync for efficient transfers - only changed files are sent.
 
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 use std::fs::{self, File};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::AppHandle;
 use tauri_plugin_dialog::DialogExt;
-use tokio::sync::oneshot;
 use tauri_plugin_http::reqwest;
 use tauri_plugin_store::StoreExt;
 use thiserror::Error;
+use tokio::sync::oneshot;
+use walkdir::WalkDir;
 
 const STORE_PATH: &str = "workspace-sync.json";
 const API_KEY_STORE_KEY: &str = "api_key";
@@ -70,6 +76,64 @@ pub struct PushResult {
     pub timestamp: i64,
 }
 
+// ============================================================================
+// Delta Sync Types
+// ============================================================================
+
+/// Signature manifest for a directory of files
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SignatureManifest {
+    pub files: HashMap<String, FileSignature>,
+    pub last_sync: i64,
+}
+
+/// Hash for a single file
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileSignature {
+    pub hash: String, // SHA256 hex hash
+    pub size: u64,
+}
+
+/// Result of a delta pull operation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeltaPullResult {
+    pub files_added: Vec<String>,
+    pub files_updated: Vec<String>,
+    pub files_skipped: Vec<String>, // Conflicts - saved as .agent.ext
+    pub timestamp: i64,
+}
+
+/// Result of a delta push operation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeltaPushResult {
+    pub files_added: u32,
+    pub files_updated: u32,
+    pub files_deleted: u32,
+    pub timestamp: i64,
+}
+
+/// Request payload for push sync
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PushSyncRequest {
+    pub files: HashMap<String, String>, // path -> base64 content
+    pub deleted: Vec<String>,
+}
+
+/// Request payload for pull sync
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PullSyncRequest {
+    pub signatures: HashMap<String, String>, // path -> hash
+}
+
+/// Response from pull sync API
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PullSyncResponse {
+    pub success: bool,
+    pub files: HashMap<String, String>, // path -> base64 content
+    pub deleted: Vec<String>,
+    pub signatures: SignatureManifest,
+}
+
 fn get_store_key(agent_id: i64) -> String {
     format!("agent_{}", agent_id)
 }
@@ -79,6 +143,38 @@ fn get_current_timestamp() -> i64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0)
+}
+
+fn get_signatures_store_key(agent_id: i64) -> String {
+    format!("agent_{}_signatures", agent_id)
+}
+
+/// Compute SHA256 hash of content
+fn compute_hash(content: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(content);
+    format!("{:x}", hasher.finalize())
+}
+
+/// Convert file path to .agent version (e.g., file.txt -> file.agent.txt)
+fn make_agent_path(path: &Path) -> PathBuf {
+    let stem = path.file_stem().unwrap_or_default().to_string_lossy();
+    let ext = path.extension().map(|e| e.to_string_lossy().to_string());
+
+    let new_name = match ext {
+        Some(e) => format!("{}.agent.{}", stem, e),
+        None => format!("{}.agent", stem),
+    };
+
+    path.with_file_name(new_name)
+}
+
+/// Check if a path is an agent conflict file
+fn is_agent_file(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|n| n.to_str())
+        .map(|n| n.contains(".agent."))
+        .unwrap_or(false)
 }
 
 fn get_dir_mtime(path: &Path) -> Option<i64> {
@@ -433,4 +529,402 @@ pub async fn get_api_key(app: AppHandle) -> Result<Option<String>, String> {
         .and_then(|v| v.as_str().map(String::from));
 
     Ok(api_key)
+}
+
+// ============================================================================
+// Delta Sync Commands
+// ============================================================================
+
+/// Compute hashes for all files in a local directory.
+#[tauri::command]
+pub async fn get_local_signatures(local_path: String) -> Result<SignatureManifest, String> {
+    let local_dir = PathBuf::from(&local_path);
+
+    if !local_dir.exists() {
+        return Ok(SignatureManifest::default());
+    }
+
+    let mut files = HashMap::new();
+
+    for entry in WalkDir::new(&local_dir)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+    {
+        let path = entry.path();
+
+        // Skip .agent conflict files
+        if is_agent_file(path) {
+            continue;
+        }
+
+        // Get relative path
+        let relative = path
+            .strip_prefix(&local_dir)
+            .map_err(|e| e.to_string())?
+            .to_string_lossy()
+            .to_string();
+
+        // Read file content
+        let mut content = Vec::new();
+        let mut file = File::open(path).map_err(|e| e.to_string())?;
+        file.read_to_end(&mut content).map_err(|e| e.to_string())?;
+
+        // Compute hash
+        let hash = compute_hash(&content);
+        let size = content.len() as u64;
+
+        files.insert(relative, FileSignature { hash, size });
+    }
+
+    Ok(SignatureManifest {
+        files,
+        last_sync: get_current_timestamp(),
+    })
+}
+
+/// Get cached signature manifest for an agent
+#[tauri::command]
+pub async fn get_cached_signatures(
+    app: AppHandle,
+    agent_id: i64,
+) -> Result<Option<SignatureManifest>, String> {
+    let store = app
+        .store(STORE_PATH)
+        .map_err(|e| SyncError::Store(e.to_string()))?;
+
+    let key = get_signatures_store_key(agent_id);
+    let manifest = store
+        .get(&key)
+        .and_then(|v| serde_json::from_value::<SignatureManifest>(v.clone()).ok());
+
+    Ok(manifest)
+}
+
+/// Save signature manifest to cache
+fn save_signatures_to_cache(
+    app: &AppHandle,
+    agent_id: i64,
+    manifest: &SignatureManifest,
+) -> Result<(), String> {
+    let store = app
+        .store(STORE_PATH)
+        .map_err(|e| SyncError::Store(e.to_string()))?;
+
+    let key = get_signatures_store_key(agent_id);
+    store.set(
+        key,
+        serde_json::to_value(manifest).map_err(|e| SyncError::Store(e.to_string()))?,
+    );
+    store.save().map_err(|e| SyncError::Store(e.to_string()))?;
+
+    Ok(())
+}
+
+/// Delta push: Upload only changed files (hash-based comparison).
+#[tauri::command]
+pub async fn push_workspace_delta(
+    app: AppHandle,
+    agent_id: i64,
+    local_path: String,
+    api_key: String,
+    api_base: String,
+) -> Result<DeltaPushResult, String> {
+    let local_dir = PathBuf::from(&local_path);
+
+    if !local_dir.exists() {
+        return Err("Local folder does not exist".to_string());
+    }
+
+    // 1. Get remote signatures (hashes)
+    let client = reqwest::Client::new();
+    let url = format!("{}/api/agents/{}/workspace/signatures", api_base, agent_id);
+
+    let response = client
+        .get(&url)
+        .header("Authorization", format!("Bearer {}", api_key))
+        .send()
+        .await
+        .map_err(SyncError::Http)?;
+
+    #[derive(Deserialize)]
+    #[allow(dead_code)]
+    struct SignaturesResponse {
+        success: bool,
+        signatures: SignatureManifest,
+    }
+
+    let remote_manifest: SignatureManifest = if response.status().is_success() {
+        let body = response.text().await.map_err(SyncError::Http)?;
+        let resp: SignaturesResponse =
+            serde_json::from_str(&body).map_err(|e| format!("Failed to parse signatures: {}", e))?;
+        resp.signatures
+    } else if response.status() == 404 {
+        SignatureManifest::default()
+    } else {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(format!("Failed to get remote signatures: {} - {}", status, body));
+    };
+
+    // 2. Compare local files to remote hashes
+    let mut changed_files: HashMap<String, String> = HashMap::new();
+    let mut local_files: HashMap<String, ()> = HashMap::new();
+    let mut files_added: u32 = 0;
+    let mut files_updated: u32 = 0;
+
+    for entry in WalkDir::new(&local_dir)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+    {
+        let path = entry.path();
+
+        // Skip .agent conflict files
+        if is_agent_file(path) {
+            continue;
+        }
+
+        let relative = path
+            .strip_prefix(&local_dir)
+            .map_err(|e| e.to_string())?
+            .to_string_lossy()
+            .to_string();
+
+        local_files.insert(relative.clone(), ());
+
+        // Read local file
+        let mut content = Vec::new();
+        let mut file = File::open(path).map_err(|e| e.to_string())?;
+        file.read_to_end(&mut content).map_err(|e| e.to_string())?;
+
+        let local_hash = compute_hash(&content);
+
+        if let Some(remote_sig) = remote_manifest.files.get(&relative) {
+            // File exists remotely
+            if remote_sig.hash != local_hash {
+                // File changed - send full content
+                changed_files.insert(relative, BASE64.encode(&content));
+                files_updated += 1;
+            }
+            // If hashes match, file unchanged - skip
+        } else {
+            // New file - send full content
+            changed_files.insert(relative, BASE64.encode(&content));
+            files_added += 1;
+        }
+    }
+
+    // 3. Find deleted files (in remote but not in local)
+    let deleted: Vec<String> = remote_manifest
+        .files
+        .keys()
+        .filter(|k| !local_files.contains_key(*k))
+        .cloned()
+        .collect();
+
+    let files_deleted = deleted.len() as u32;
+
+    // 4. Send to server
+    let push_url = format!("{}/api/agents/{}/workspace/sync/push", api_base, agent_id);
+    let request = PushSyncRequest {
+        files: changed_files,
+        deleted: deleted,
+    };
+
+    let request_body = serde_json::to_string(&request)
+        .map_err(|e| format!("Failed to serialize request: {}", e))?;
+
+    let response = client
+        .post(&push_url)
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .body(request_body)
+        .send()
+        .await
+        .map_err(SyncError::Http)?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(format!("Push sync failed: {} - {}", status, body));
+    }
+
+    // 5. Update local signature cache
+    let new_manifest = get_local_signatures(local_path.clone()).await?;
+    save_signatures_to_cache(&app, agent_id, &new_manifest)?;
+
+    // 6. Update sync config timestamp
+    let timestamp = get_current_timestamp();
+    let store = app
+        .store(STORE_PATH)
+        .map_err(|e| SyncError::Store(e.to_string()))?;
+
+    let key = get_store_key(agent_id);
+    let config = SyncConfig {
+        folder_path: local_path,
+        last_sync: Some(timestamp),
+    };
+    store.set(
+        key,
+        serde_json::to_value(&config).map_err(|e| SyncError::Store(e.to_string()))?,
+    );
+    store.save().map_err(|e| SyncError::Store(e.to_string()))?;
+
+    Ok(DeltaPushResult {
+        files_added,
+        files_updated,
+        files_deleted,
+        timestamp,
+    })
+}
+
+/// Delta pull: Download only changed files, with conflict detection.
+#[tauri::command]
+pub async fn pull_workspace_delta(
+    app: AppHandle,
+    agent_id: i64,
+    local_path: String,
+    api_key: String,
+    api_base: String,
+) -> Result<DeltaPullResult, String> {
+    let local_dir = PathBuf::from(&local_path);
+
+    // Create directory if it doesn't exist
+    fs::create_dir_all(&local_dir).map_err(SyncError::Io)?;
+
+    // 1. Get cached signatures (baseline from last sync)
+    let cached_manifest = get_cached_signatures(app.clone(), agent_id)
+        .await?
+        .unwrap_or_default();
+
+    // 2. Compute current local hashes
+    let local_manifest = get_local_signatures(local_path.clone()).await?;
+
+    // 3. Send local hashes to server to get changed files
+    let client = reqwest::Client::new();
+    let url = format!("{}/api/agents/{}/workspace/sync/pull", api_base, agent_id);
+
+    // Build hash-only request
+    let signatures: HashMap<String, String> = local_manifest
+        .files
+        .iter()
+        .map(|(k, v)| (k.clone(), v.hash.clone()))
+        .collect();
+
+    let request = PullSyncRequest { signatures };
+    let request_body = serde_json::to_string(&request)
+        .map_err(|e| format!("Failed to serialize request: {}", e))?;
+
+    let response = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .body(request_body)
+        .send()
+        .await
+        .map_err(SyncError::Http)?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(format!("Pull sync failed: {} - {}", status, body));
+    }
+
+    let response_body = response.text().await.map_err(SyncError::Http)?;
+    let pull_response: PullSyncResponse = serde_json::from_str(&response_body)
+        .map_err(|e| format!("Failed to parse pull response: {}", e))?;
+
+    let mut files_added = Vec::new();
+    let mut files_updated = Vec::new();
+    let mut files_skipped = Vec::new();
+
+    // 4. Process files from server
+    for (path, base64_content) in pull_response.files {
+        let file_path = local_dir.join(&path);
+
+        // Create parent directories if needed
+        if let Some(parent) = file_path.parent() {
+            fs::create_dir_all(parent).map_err(SyncError::Io)?;
+        }
+
+        let content = BASE64.decode(&base64_content).map_err(|e| e.to_string())?;
+
+        // Check if file exists locally
+        if file_path.exists() {
+            // Check if user edited this file (compare to cached baseline)
+            let mut local_content = Vec::new();
+            let mut f = File::open(&file_path).map_err(SyncError::Io)?;
+            f.read_to_end(&mut local_content).map_err(SyncError::Io)?;
+
+            let local_hash = compute_hash(&local_content);
+            let cached_hash = cached_manifest.files.get(&path).map(|s| s.hash.as_str());
+
+            if Some(local_hash.as_str()) != cached_hash {
+                // User edited! Save agent version separately
+                let agent_path = make_agent_path(&file_path);
+                fs::write(&agent_path, &content).map_err(SyncError::Io)?;
+                files_skipped.push(path);
+            } else {
+                // User didn't edit, safe to overwrite
+                fs::write(&file_path, &content).map_err(SyncError::Io)?;
+                files_updated.push(path);
+            }
+        } else {
+            // New file from agent
+            fs::write(&file_path, &content).map_err(SyncError::Io)?;
+            files_added.push(path);
+        }
+    }
+
+    // 5. Handle deleted files (files that exist locally but not remotely)
+    // Note: We don't auto-delete - user's files are sacred
+    // The deleted list is informational only
+
+    // 6. Update signature cache with new remote signatures
+    save_signatures_to_cache(&app, agent_id, &pull_response.signatures)?;
+
+    // 7. Update sync config timestamp
+    let timestamp = get_current_timestamp();
+    let store = app
+        .store(STORE_PATH)
+        .map_err(|e| SyncError::Store(e.to_string()))?;
+
+    let key = get_store_key(agent_id);
+    let config = SyncConfig {
+        folder_path: local_path,
+        last_sync: Some(timestamp),
+    };
+    store.set(
+        key,
+        serde_json::to_value(&config).map_err(|e| SyncError::Store(e.to_string()))?,
+    );
+    store.save().map_err(|e| SyncError::Store(e.to_string()))?;
+
+    Ok(DeltaPullResult {
+        files_added,
+        files_updated,
+        files_skipped,
+        timestamp,
+    })
+}
+
+/// Clear all .agent.* conflict files from the workspace
+#[tauri::command]
+pub async fn clear_agent_files(local_path: String) -> Result<u32, String> {
+    let local_dir = PathBuf::from(&local_path);
+    let mut count = 0;
+
+    for entry in WalkDir::new(&local_dir)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+    {
+        if is_agent_file(entry.path()) {
+            fs::remove_file(entry.path()).map_err(|e| e.to_string())?;
+            count += 1;
+        }
+    }
+
+    Ok(count)
 }
