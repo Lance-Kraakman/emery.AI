@@ -44,6 +44,7 @@ import type { ToolDTO } from '@/app/mappers/tool-mapper'
 import { StepProgressIndicator } from './StepProgressIndicator'
 import { StepHistoryDisplay } from './StepHistoryDisplay'
 import { ApprovalInputBar } from './ApprovalInputBar'
+import { HumanTaskCard } from './HumanTaskCard'
 import { SaveToSkillDialog } from './SaveToSkillDialog'
 import { savePlanToSkill } from '@/app/actions/skills'
 import { createDebugLogger } from '@/lib/utils/debug-logger'
@@ -462,6 +463,16 @@ function ChatContentWithCanvas({
           />
         )}
 
+        {/* Human Task: Completion form for human skills */}
+        {handler.humanTask && (
+          <HumanTaskCard
+            humanTask={handler.humanTask}
+            onSubmit={(outputs) => handler.submitHumanTask?.(outputs)}
+            onCancel={handler.cancelHumanTask}
+            disabled={handler.isLoading}
+          />
+        )}
+
         {/* Save to Skill Dialog */}
         <SaveToSkillDialog
           open={showSaveToSkillDialog}
@@ -472,7 +483,7 @@ function ChatContentWithCanvas({
         />
 
         {/* Hide main input when awaiting user response (Claude Code-style) */}
-        {!handler.awaitingInput && (
+        {!handler.awaitingInput && !handler.humanTask && (
           <UnifiedChatInput
             onSendMessage={async (message) => {
               // Send message with proper MessagePart format

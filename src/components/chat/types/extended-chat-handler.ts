@@ -1,7 +1,7 @@
 import type { ChatHandler, Message } from '@llamaindex/chat-ui'
 import type { ToolDTO } from '@/app/mappers/tool-mapper'
 import type { ExecutionStep } from '@/ddd/domain/chat/value-objects/execution-step'
-import type { PlanStepData, InputOption, PermissionRequestEvent } from '@/lib/chat/types/sse-events'
+import type { PlanStepData, InputOption, PermissionRequestEvent, HumanSkillInput, HumanSkillOutput } from '@/lib/chat/types/sse-events'
 
 /**
  * ChatMessage with ID and metadata support for execution steps
@@ -99,6 +99,25 @@ export interface AwaitingInputState {
 }
 
 /**
+ * Human task state for human skill completion
+ *
+ * AIDEV-NOTE: Separate from AwaitingInputState because human tasks have
+ * structured output fields, not just text responses. UI renders a form
+ * with fields matching the output schema.
+ */
+export interface HumanTaskState {
+  skillId: number
+  skillName: string
+  stepId: string
+  instructions: string
+  inputs: HumanSkillInput[]
+  outputSchema: HumanSkillOutput[]
+  assignedTo: string
+  externalLinks: string[]
+  sessionId: string
+}
+
+/**
  * Extended ChatHandler interface with Emery-specific functionality
  *
  * Extends LlamaIndex ChatHandler with:
@@ -155,6 +174,11 @@ export interface ExtendedChatHandler extends ChatHandler {
   // Unified HITL awaiting input (plan approval or questions)
   awaitingInput: AwaitingInputState | null
   respondToInput?: (response: string) => Promise<void>
+
+  // Human task completion (human skills)
+  humanTask: HumanTaskState | null
+  submitHumanTask?: (outputs: Record<string, string>) => Promise<void>
+  cancelHumanTask?: () => void
 
   // Permission request (RBAC errors)
   permissionRequest: PermissionRequestEvent | null

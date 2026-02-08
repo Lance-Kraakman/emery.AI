@@ -118,6 +118,7 @@ class SkillExecutionResult:
 
     result: str
     captured_outputs: dict[str, Any] | None = None
+    status: str = "completed"  # "completed" | "awaiting_human" | "failed"
 
 
 @dataclass

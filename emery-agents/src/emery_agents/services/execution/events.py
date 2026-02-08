@@ -340,3 +340,21 @@ class PlanningStartedEvent:
     """Event emitted when planning begins."""
 
     goal: str
+
+
+@dataclass
+class AwaitingHumanSkillEvent:
+    """Event emitted when a human skill requires human action.
+
+    AIDEV-NOTE: Emitted when execution reaches a human skill. The stream closes
+    after this event, and execution resumes when human provides outputs.
+    """
+    skill_id: int
+    skill_name: str
+    step_id: str  # Empty for top-level skill, set for workflow step
+    instructions: str  # What the human needs to do
+    inputs: Dict[str, Any]  # Context provided to human
+    output_schema: List[Dict[str, str]]  # Expected outputs {name, type}
+    assigned_to: str  # User ID of assignee
+    external_links: List[str] = field(default_factory=list)  # Optional external URLs
+    session_id: str = ""  # For resuming execution

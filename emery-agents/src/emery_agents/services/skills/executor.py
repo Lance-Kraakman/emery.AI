@@ -157,6 +157,77 @@ class SkillExecutorService:
                 return step.agentic_config.plan
         return None
 
+    def _handle_human_skill(
+        self,
+        skill_config: SkillConfig,
+        runtime_inputs: Dict[str, Any],
+        capture_outputs: bool,
+        progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+    ) -> Union[str, SkillExecutionResult]:
+        """Handle human skill execution by emitting AwaitingHumanSkill event.
+
+        Human skills pause execution and wait for a human to complete the work.
+        The caller (chat stream or task runner) handles the actual waiting.
+
+        Args:
+            skill_config: Human skill configuration
+            runtime_inputs: Context provided to the human
+            capture_outputs: Return type flag
+            progress_callback: Optional callback for streaming the event
+
+        Returns:
+            SkillExecutionResult with awaiting_human status
+        """
+        logger.info(f"👤 Human skill detected: {skill_config.name}")
+
+        human_config = skill_config.human_skill_config
+        instructions = (
+            human_config.instructions if human_config else skill_config.instructions
+        )
+
+        # Build output schema from skill outputs
+        output_schema = [
+            {"name": out.name, "type": out.type}
+            for out in skill_config.outputs
+        ]
+
+        # Resolve assignee (simplified - full resolution happens at task layer)
+        assigned_to = ""
+        if human_config:
+            if human_config.assignee_type == "specific_user" and human_config.assignee_id:
+                assigned_to = human_config.assignee_id
+            elif human_config.assignee_type == "role" and human_config.assignee_role:
+                assigned_to = f"role:{human_config.assignee_role}"
+            # For "owner", the task layer resolves the actual user
+
+        # Build awaiting human skill event
+        event_data = {
+            "type": "awaiting_human_skill",
+            "skill_id": skill_config.id,
+            "skill_name": skill_config.name,
+            "step_id": "",  # Empty for top-level skill
+            "instructions": instructions,
+            "inputs": runtime_inputs,
+            "output_schema": output_schema,
+            "assigned_to": assigned_to,
+            "external_links": [],
+        }
+
+        # Emit event via progress callback if available
+        if progress_callback:
+            progress_callback(event_data)
+            logger.info(f"📤 Emitted awaiting_human_skill event for {skill_config.name}")
+
+        # Return result indicating skill is awaiting human
+        result_msg = f"Awaiting human: {skill_config.name}"
+        if capture_outputs:
+            return SkillExecutionResult(
+                result=result_msg,
+                captured_outputs=None,
+                status="awaiting_human",
+            )
+        return result_msg
+
     def _build_wrapper_dag(
         self,
         skill_config: SkillConfig,
@@ -539,6 +610,15 @@ class SkillExecutorService:
         )
 
         try:
+            # Check for human skill first - emit event and pause
+            if skill_config.is_human_skill():
+                return self._handle_human_skill(
+                    skill_config=skill_config,
+                    runtime_inputs=runtime_inputs,
+                    capture_outputs=capture_outputs,
+                    progress_callback=progress_callback,
+                )
+
             if skill_config.is_workflow():
                 return self._execute_steps(
                     skill_config,

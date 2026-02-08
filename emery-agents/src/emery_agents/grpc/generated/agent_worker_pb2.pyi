@@ -1,11 +1,9 @@
-from collections.abc import Iterable as _Iterable
-from collections.abc import Mapping as _Mapping
-from typing import ClassVar as _ClassVar
-
-from google.protobuf import descriptor as _descriptor
-from google.protobuf import message as _message
 from google.protobuf.internal import containers as _containers
 from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
+from google.protobuf import descriptor as _descriptor
+from google.protobuf import message as _message
+from collections.abc import Iterable as _Iterable, Mapping as _Mapping
+from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
@@ -17,6 +15,7 @@ class TaskStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     TASK_FAILED: _ClassVar[TaskStatus]
     TASK_CANCELLED: _ClassVar[TaskStatus]
     TASK_TIMEOUT: _ClassVar[TaskStatus]
+    TASK_AWAITING_HUMAN: _ClassVar[TaskStatus]
 
 class WorkerStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -32,13 +31,13 @@ class StepType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     STEP_ACTION: _ClassVar[StepType]
     STEP_REASONING: _ClassVar[StepType]
     STEP_FINAL: _ClassVar[StepType]
-
 TASK_PENDING: TaskStatus
 TASK_IN_PROGRESS: TaskStatus
 TASK_COMPLETED: TaskStatus
 TASK_FAILED: TaskStatus
 TASK_CANCELLED: TaskStatus
 TASK_TIMEOUT: TaskStatus
+TASK_AWAITING_HUMAN: TaskStatus
 WORKER_HEALTHY: WorkerStatus
 WORKER_BUSY: WorkerStatus
 WORKER_DEGRADED: WorkerStatus
@@ -50,27 +49,7 @@ STEP_REASONING: StepType
 STEP_FINAL: StepType
 
 class TaskRequest(_message.Message):
-    __slots__ = (
-        "task_id",
-        "agent_id",
-        "skill_name",
-        "instruction_config",
-        "agent_config",
-        "trigger_data",
-        "organization_id",
-        "owner_id",
-        "timeout_seconds",
-        "name",
-        "agent_model",
-        "organization_model",
-        "input_content",
-        "resolved_context",
-        "skill_id",
-        "trigger_type",
-        "triggered_by_user_id",
-        "triggered_by_user_name",
-        "user_api_key",
-    )
+    __slots__ = ("task_id", "agent_id", "skill_name", "instruction_config", "agent_config", "trigger_data", "organization_id", "owner_id", "timeout_seconds", "name", "agent_model", "organization_model", "input_content", "resolved_context", "skill_id", "trigger_type", "triggered_by_user_id", "triggered_by_user_name", "user_api_key")
     TASK_ID_FIELD_NUMBER: _ClassVar[int]
     AGENT_ID_FIELD_NUMBER: _ClassVar[int]
     SKILL_NAME_FIELD_NUMBER: _ClassVar[int]
@@ -109,39 +88,10 @@ class TaskRequest(_message.Message):
     triggered_by_user_id: str
     triggered_by_user_name: str
     user_api_key: str
-    def __init__(
-        self,
-        task_id: str | None = ...,
-        agent_id: int | None = ...,
-        skill_name: str | None = ...,
-        instruction_config: InstructionConfig | _Mapping | None = ...,
-        agent_config: AgentConfig | _Mapping | None = ...,
-        trigger_data: TriggerData | _Mapping | None = ...,
-        organization_id: str | None = ...,
-        owner_id: str | None = ...,
-        timeout_seconds: int | None = ...,
-        name: str | None = ...,
-        agent_model: str | None = ...,
-        organization_model: str | None = ...,
-        input_content: _Iterable[MessagePart | _Mapping] | None = ...,
-        resolved_context: ResolvedContextProto | _Mapping | None = ...,
-        skill_id: int | None = ...,
-        trigger_type: str | None = ...,
-        triggered_by_user_id: str | None = ...,
-        triggered_by_user_name: str | None = ...,
-        user_api_key: str | None = ...,
-    ) -> None: ...
+    def __init__(self, task_id: _Optional[str] = ..., agent_id: _Optional[int] = ..., skill_name: _Optional[str] = ..., instruction_config: _Optional[_Union[InstructionConfig, _Mapping]] = ..., agent_config: _Optional[_Union[AgentConfig, _Mapping]] = ..., trigger_data: _Optional[_Union[TriggerData, _Mapping]] = ..., organization_id: _Optional[str] = ..., owner_id: _Optional[str] = ..., timeout_seconds: _Optional[int] = ..., name: _Optional[str] = ..., agent_model: _Optional[str] = ..., organization_model: _Optional[str] = ..., input_content: _Optional[_Iterable[_Union[MessagePart, _Mapping]]] = ..., resolved_context: _Optional[_Union[ResolvedContextProto, _Mapping]] = ..., skill_id: _Optional[int] = ..., trigger_type: _Optional[str] = ..., triggered_by_user_id: _Optional[str] = ..., triggered_by_user_name: _Optional[str] = ..., user_api_key: _Optional[str] = ...) -> None: ...
 
 class TaskProgress(_message.Message):
-    __slots__ = (
-        "task_id",
-        "status",
-        "output_json",
-        "error_message",
-        "timestamp_ms",
-        "progress_percent",
-        "token_usage",
-    )
+    __slots__ = ("task_id", "status", "output_json", "error_message", "timestamp_ms", "progress_percent", "token_usage")
     TASK_ID_FIELD_NUMBER: _ClassVar[int]
     STATUS_FIELD_NUMBER: _ClassVar[int]
     OUTPUT_JSON_FIELD_NUMBER: _ClassVar[int]
@@ -156,16 +106,7 @@ class TaskProgress(_message.Message):
     timestamp_ms: int
     progress_percent: float
     token_usage: TokenUsage
-    def __init__(
-        self,
-        task_id: str | None = ...,
-        status: TaskStatus | str | None = ...,
-        output_json: str | None = ...,
-        error_message: str | None = ...,
-        timestamp_ms: int | None = ...,
-        progress_percent: float | None = ...,
-        token_usage: TokenUsage | _Mapping | None = ...,
-    ) -> None: ...
+    def __init__(self, task_id: _Optional[str] = ..., status: _Optional[_Union[TaskStatus, str]] = ..., output_json: _Optional[str] = ..., error_message: _Optional[str] = ..., timestamp_ms: _Optional[int] = ..., progress_percent: _Optional[float] = ..., token_usage: _Optional[_Union[TokenUsage, _Mapping]] = ...) -> None: ...
 
 class ChatTaskProgress(_message.Message):
     __slots__ = ("task_id", "step", "total_steps", "step_name", "status", "output_json")
@@ -181,15 +122,7 @@ class ChatTaskProgress(_message.Message):
     step_name: str
     status: str
     output_json: str
-    def __init__(
-        self,
-        task_id: str | None = ...,
-        step: int | None = ...,
-        total_steps: int | None = ...,
-        step_name: str | None = ...,
-        status: str | None = ...,
-        output_json: str | None = ...,
-    ) -> None: ...
+    def __init__(self, task_id: _Optional[str] = ..., step: _Optional[int] = ..., total_steps: _Optional[int] = ..., step_name: _Optional[str] = ..., status: _Optional[str] = ..., output_json: _Optional[str] = ...) -> None: ...
 
 class CancelTaskRequest(_message.Message):
     __slots__ = ("task_id", "reason")
@@ -197,7 +130,7 @@ class CancelTaskRequest(_message.Message):
     REASON_FIELD_NUMBER: _ClassVar[int]
     task_id: str
     reason: str
-    def __init__(self, task_id: str | None = ..., reason: str | None = ...) -> None: ...
+    def __init__(self, task_id: _Optional[str] = ..., reason: _Optional[str] = ...) -> None: ...
 
 class CancelTaskResponse(_message.Message):
     __slots__ = ("success", "message")
@@ -205,20 +138,10 @@ class CancelTaskResponse(_message.Message):
     MESSAGE_FIELD_NUMBER: _ClassVar[int]
     success: bool
     message: str
-    def __init__(self, success: bool = ..., message: str | None = ...) -> None: ...
+    def __init__(self, success: bool = ..., message: _Optional[str] = ...) -> None: ...
 
 class WorkerInfo(_message.Message):
-    __slots__ = (
-        "worker_id",
-        "version",
-        "organization_id",
-        "status",
-        "skills",
-        "active_tasks",
-        "max_concurrent_tasks",
-        "uptime_seconds",
-        "supported_tools",
-    )
+    __slots__ = ("worker_id", "version", "organization_id", "status", "skills", "active_tasks", "max_concurrent_tasks", "uptime_seconds", "supported_tools")
     WORKER_ID_FIELD_NUMBER: _ClassVar[int]
     VERSION_FIELD_NUMBER: _ClassVar[int]
     ORGANIZATION_ID_FIELD_NUMBER: _ClassVar[int]
@@ -237,18 +160,7 @@ class WorkerInfo(_message.Message):
     max_concurrent_tasks: int
     uptime_seconds: int
     supported_tools: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(
-        self,
-        worker_id: str | None = ...,
-        version: str | None = ...,
-        organization_id: str | None = ...,
-        status: WorkerStatus | str | None = ...,
-        skills: _Iterable[str] | None = ...,
-        active_tasks: int | None = ...,
-        max_concurrent_tasks: int | None = ...,
-        uptime_seconds: int | None = ...,
-        supported_tools: _Iterable[str] | None = ...,
-    ) -> None: ...
+    def __init__(self, worker_id: _Optional[str] = ..., version: _Optional[str] = ..., organization_id: _Optional[str] = ..., status: _Optional[_Union[WorkerStatus, str]] = ..., skills: _Optional[_Iterable[str]] = ..., active_tasks: _Optional[int] = ..., max_concurrent_tasks: _Optional[int] = ..., uptime_seconds: _Optional[int] = ..., supported_tools: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class Empty(_message.Message):
     __slots__ = ()
@@ -262,21 +174,10 @@ class ErrorResponse(_message.Message):
     code: str
     message: str
     details: str
-    def __init__(
-        self,
-        code: str | None = ...,
-        message: str | None = ...,
-        details: str | None = ...,
-    ) -> None: ...
+    def __init__(self, code: _Optional[str] = ..., message: _Optional[str] = ..., details: _Optional[str] = ...) -> None: ...
 
 class TokenUsage(_message.Message):
-    __slots__ = (
-        "model_name",
-        "input_tokens",
-        "output_tokens",
-        "total_tokens",
-        "cost_usd",
-    )
+    __slots__ = ("model_name", "input_tokens", "output_tokens", "total_tokens", "cost_usd")
     MODEL_NAME_FIELD_NUMBER: _ClassVar[int]
     INPUT_TOKENS_FIELD_NUMBER: _ClassVar[int]
     OUTPUT_TOKENS_FIELD_NUMBER: _ClassVar[int]
@@ -287,26 +188,10 @@ class TokenUsage(_message.Message):
     output_tokens: int
     total_tokens: int
     cost_usd: float
-    def __init__(
-        self,
-        model_name: str | None = ...,
-        input_tokens: int | None = ...,
-        output_tokens: int | None = ...,
-        total_tokens: int | None = ...,
-        cost_usd: float | None = ...,
-    ) -> None: ...
+    def __init__(self, model_name: _Optional[str] = ..., input_tokens: _Optional[int] = ..., output_tokens: _Optional[int] = ..., total_tokens: _Optional[int] = ..., cost_usd: _Optional[float] = ...) -> None: ...
 
 class AgentConfig(_message.Message):
-    __slots__ = (
-        "name",
-        "role",
-        "description",
-        "persona",
-        "tools",
-        "servers",
-        "default_model",
-        "allow_network",
-    )
+    __slots__ = ("name", "role", "description", "persona", "tools", "servers", "default_model")
     NAME_FIELD_NUMBER: _ClassVar[int]
     ROLE_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
@@ -314,7 +199,6 @@ class AgentConfig(_message.Message):
     TOOLS_FIELD_NUMBER: _ClassVar[int]
     SERVERS_FIELD_NUMBER: _ClassVar[int]
     DEFAULT_MODEL_FIELD_NUMBER: _ClassVar[int]
-    ALLOW_NETWORK_FIELD_NUMBER: _ClassVar[int]
     name: str
     role: str
     description: str
@@ -322,34 +206,10 @@ class AgentConfig(_message.Message):
     tools: _containers.RepeatedCompositeFieldContainer[ToolConfig]
     servers: _containers.RepeatedCompositeFieldContainer[ServerConfig]
     default_model: str
-    allow_network: bool
-    def __init__(
-        self,
-        name: str | None = ...,
-        role: str | None = ...,
-        description: str | None = ...,
-        persona: str | None = ...,
-        tools: _Iterable[ToolConfig | _Mapping] | None = ...,
-        servers: _Iterable[ServerConfig | _Mapping] | None = ...,
-        default_model: str | None = ...,
-        allow_network: bool = ...,
-    ) -> None: ...
+    def __init__(self, name: _Optional[str] = ..., role: _Optional[str] = ..., description: _Optional[str] = ..., persona: _Optional[str] = ..., tools: _Optional[_Iterable[_Union[ToolConfig, _Mapping]]] = ..., servers: _Optional[_Iterable[_Union[ServerConfig, _Mapping]]] = ..., default_model: _Optional[str] = ...) -> None: ...
 
 class SkillConfig(_message.Message):
-    __slots__ = (
-        "id",
-        "name",
-        "description",
-        "inputs",
-        "outputs",
-        "instructions",
-        "tools",
-        "model",
-        "content",
-        "agent_type",
-        "execution_type",
-        "steps",
-    )
+    __slots__ = ("id", "name", "description", "inputs", "outputs", "instructions", "tools", "model", "content", "agent_type", "execution_type", "steps")
     ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
@@ -374,21 +234,7 @@ class SkillConfig(_message.Message):
     agent_type: str
     execution_type: str
     steps: _containers.RepeatedCompositeFieldContainer[SkillStep]
-    def __init__(
-        self,
-        id: int | None = ...,
-        name: str | None = ...,
-        description: str | None = ...,
-        inputs: _Iterable[InputDefinition | _Mapping] | None = ...,
-        outputs: _Iterable[OutputDefinition | _Mapping] | None = ...,
-        instructions: str | None = ...,
-        tools: _Iterable[ToolConfig | _Mapping] | None = ...,
-        model: str | None = ...,
-        content: _Iterable[MessagePart | _Mapping] | None = ...,
-        agent_type: str | None = ...,
-        execution_type: str | None = ...,
-        steps: _Iterable[SkillStep | _Mapping] | None = ...,
-    ) -> None: ...
+    def __init__(self, id: _Optional[int] = ..., name: _Optional[str] = ..., description: _Optional[str] = ..., inputs: _Optional[_Iterable[_Union[InputDefinition, _Mapping]]] = ..., outputs: _Optional[_Iterable[_Union[OutputDefinition, _Mapping]]] = ..., instructions: _Optional[str] = ..., tools: _Optional[_Iterable[_Union[ToolConfig, _Mapping]]] = ..., model: _Optional[str] = ..., content: _Optional[_Iterable[_Union[MessagePart, _Mapping]]] = ..., agent_type: _Optional[str] = ..., execution_type: _Optional[str] = ..., steps: _Optional[_Iterable[_Union[SkillStep, _Mapping]]] = ...) -> None: ...
 
 class InputFieldSource(_message.Message):
     __slots__ = ("table_id", "field_id", "row_source")
@@ -398,18 +244,13 @@ class InputFieldSource(_message.Message):
     table_id: int
     field_id: int
     row_source: RowIdSource
-    def __init__(
-        self,
-        table_id: int | None = ...,
-        field_id: int | None = ...,
-        row_source: RowIdSource | _Mapping | None = ...,
-    ) -> None: ...
+    def __init__(self, table_id: _Optional[int] = ..., field_id: _Optional[int] = ..., row_source: _Optional[_Union[RowIdSource, _Mapping]] = ...) -> None: ...
 
 class InputMappingConfig(_message.Message):
     __slots__ = ("source",)
     SOURCE_FIELD_NUMBER: _ClassVar[int]
     source: InputFieldSource
-    def __init__(self, source: InputFieldSource | _Mapping | None = ...) -> None: ...
+    def __init__(self, source: _Optional[_Union[InputFieldSource, _Mapping]] = ...) -> None: ...
 
 class InputDefinition(_message.Message):
     __slots__ = ("name", "required", "type", "input_mapping")
@@ -421,13 +262,7 @@ class InputDefinition(_message.Message):
     required: bool
     type: str
     input_mapping: InputMappingConfig
-    def __init__(
-        self,
-        name: str | None = ...,
-        required: bool = ...,
-        type: str | None = ...,
-        input_mapping: InputMappingConfig | _Mapping | None = ...,
-    ) -> None: ...
+    def __init__(self, name: _Optional[str] = ..., required: bool = ..., type: _Optional[str] = ..., input_mapping: _Optional[_Union[InputMappingConfig, _Mapping]] = ...) -> None: ...
 
 class OutputSource(_message.Message):
     __slots__ = ("type", "node_id", "output_name")
@@ -437,12 +272,7 @@ class OutputSource(_message.Message):
     type: str
     node_id: str
     output_name: str
-    def __init__(
-        self,
-        type: str | None = ...,
-        node_id: str | None = ...,
-        output_name: str | None = ...,
-    ) -> None: ...
+    def __init__(self, type: _Optional[str] = ..., node_id: _Optional[str] = ..., output_name: _Optional[str] = ...) -> None: ...
 
 class OutputDefinition(_message.Message):
     __slots__ = ("name", "type", "output_mapping", "description", "source")
@@ -456,14 +286,7 @@ class OutputDefinition(_message.Message):
     output_mapping: OutputMappingConfig
     description: str
     source: OutputSource
-    def __init__(
-        self,
-        name: str | None = ...,
-        type: str | None = ...,
-        output_mapping: OutputMappingConfig | _Mapping | None = ...,
-        description: str | None = ...,
-        source: OutputSource | _Mapping | None = ...,
-    ) -> None: ...
+    def __init__(self, name: _Optional[str] = ..., type: _Optional[str] = ..., output_mapping: _Optional[_Union[OutputMappingConfig, _Mapping]] = ..., description: _Optional[str] = ..., source: _Optional[_Union[OutputSource, _Mapping]] = ...) -> None: ...
 
 class ErrorConfig(_message.Message):
     __slots__ = ("continue_on_error", "error_output_var")
@@ -471,9 +294,7 @@ class ErrorConfig(_message.Message):
     ERROR_OUTPUT_VAR_FIELD_NUMBER: _ClassVar[int]
     continue_on_error: bool
     error_output_var: str
-    def __init__(
-        self, continue_on_error: bool = ..., error_output_var: str | None = ...
-    ) -> None: ...
+    def __init__(self, continue_on_error: bool = ..., error_output_var: _Optional[str] = ...) -> None: ...
 
 class RetryConfig(_message.Message):
     __slots__ = ("max_attempts", "backoff_ms", "backoff_type")
@@ -483,12 +304,7 @@ class RetryConfig(_message.Message):
     max_attempts: int
     backoff_ms: int
     backoff_type: str
-    def __init__(
-        self,
-        max_attempts: int | None = ...,
-        backoff_ms: int | None = ...,
-        backoff_type: str | None = ...,
-    ) -> None: ...
+    def __init__(self, max_attempts: _Optional[int] = ..., backoff_ms: _Optional[int] = ..., backoff_type: _Optional[str] = ...) -> None: ...
 
 class StepOutput(_message.Message):
     __slots__ = ("type", "condition", "next_steps")
@@ -498,12 +314,7 @@ class StepOutput(_message.Message):
     type: str
     condition: str
     next_steps: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(
-        self,
-        type: str | None = ...,
-        condition: str | None = ...,
-        next_steps: _Iterable[str] | None = ...,
-    ) -> None: ...
+    def __init__(self, type: _Optional[str] = ..., condition: _Optional[str] = ..., next_steps: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class LoopConfig(_message.Message):
     __slots__ = ("type", "items_var", "current_item_var", "condition", "max_iterations")
@@ -517,52 +328,24 @@ class LoopConfig(_message.Message):
     current_item_var: str
     condition: str
     max_iterations: int
-    def __init__(
-        self,
-        type: str | None = ...,
-        items_var: str | None = ...,
-        current_item_var: str | None = ...,
-        condition: str | None = ...,
-        max_iterations: int | None = ...,
-    ) -> None: ...
+    def __init__(self, type: _Optional[str] = ..., items_var: _Optional[str] = ..., current_item_var: _Optional[str] = ..., condition: _Optional[str] = ..., max_iterations: _Optional[int] = ...) -> None: ...
 
 class SkillStep(_message.Message):
-    __slots__ = (
-        "id",
-        "name",
-        "instruction",
-        "skill_id",
-        "tools",
-        "inputs",
-        "outputs",
-        "parallel",
-        "condition",
-        "input_defs",
-        "output_defs",
-        "error_config",
-        "retry_config",
-        "step_outputs",
-        "parallel_group",
-        "loop_config",
-        "is_disabled",
-        "agentic_config",
-    )
+    __slots__ = ("id", "name", "instruction", "skill_id", "tools", "inputs", "outputs", "parallel", "condition", "input_defs", "output_defs", "error_config", "retry_config", "step_outputs", "parallel_group", "loop_config", "is_disabled", "agentic_config")
     class InputsEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
         VALUE_FIELD_NUMBER: _ClassVar[int]
         key: str
         value: str
-        def __init__(self, key: str | None = ..., value: str | None = ...) -> None: ...
-
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
     class OutputsEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
         VALUE_FIELD_NUMBER: _ClassVar[int]
         key: str
         value: str
-        def __init__(self, key: str | None = ..., value: str | None = ...) -> None: ...
-
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
     ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     INSTRUCTION_FIELD_NUMBER: _ClassVar[int]
@@ -599,27 +382,7 @@ class SkillStep(_message.Message):
     loop_config: LoopConfig
     is_disabled: bool
     agentic_config: AgenticStepConfig
-    def __init__(
-        self,
-        id: str | None = ...,
-        name: str | None = ...,
-        instruction: str | None = ...,
-        skill_id: int | None = ...,
-        tools: _Iterable[str] | None = ...,
-        inputs: _Mapping[str, str] | None = ...,
-        outputs: _Mapping[str, str] | None = ...,
-        parallel: bool = ...,
-        condition: str | None = ...,
-        input_defs: _Iterable[InputDefinition | _Mapping] | None = ...,
-        output_defs: _Iterable[OutputDefinition | _Mapping] | None = ...,
-        error_config: ErrorConfig | _Mapping | None = ...,
-        retry_config: RetryConfig | _Mapping | None = ...,
-        step_outputs: _Iterable[StepOutput | _Mapping] | None = ...,
-        parallel_group: str | None = ...,
-        loop_config: LoopConfig | _Mapping | None = ...,
-        is_disabled: bool = ...,
-        agentic_config: AgenticStepConfig | _Mapping | None = ...,
-    ) -> None: ...
+    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., instruction: _Optional[str] = ..., skill_id: _Optional[int] = ..., tools: _Optional[_Iterable[str]] = ..., inputs: _Optional[_Mapping[str, str]] = ..., outputs: _Optional[_Mapping[str, str]] = ..., parallel: bool = ..., condition: _Optional[str] = ..., input_defs: _Optional[_Iterable[_Union[InputDefinition, _Mapping]]] = ..., output_defs: _Optional[_Iterable[_Union[OutputDefinition, _Mapping]]] = ..., error_config: _Optional[_Union[ErrorConfig, _Mapping]] = ..., retry_config: _Optional[_Union[RetryConfig, _Mapping]] = ..., step_outputs: _Optional[_Iterable[_Union[StepOutput, _Mapping]]] = ..., parallel_group: _Optional[str] = ..., loop_config: _Optional[_Union[LoopConfig, _Mapping]] = ..., is_disabled: bool = ..., agentic_config: _Optional[_Union[AgenticStepConfig, _Mapping]] = ...) -> None: ...
 
 class AgenticStepConfig(_message.Message):
     __slots__ = ("instructions", "tools", "agent_type", "model", "plan")
@@ -633,27 +396,10 @@ class AgenticStepConfig(_message.Message):
     agent_type: str
     model: str
     plan: StoredPlan
-    def __init__(
-        self,
-        instructions: str | None = ...,
-        tools: _Iterable[ToolConfig | _Mapping] | None = ...,
-        agent_type: str | None = ...,
-        model: str | None = ...,
-        plan: StoredPlan | _Mapping | None = ...,
-    ) -> None: ...
+    def __init__(self, instructions: _Optional[str] = ..., tools: _Optional[_Iterable[_Union[ToolConfig, _Mapping]]] = ..., agent_type: _Optional[str] = ..., model: _Optional[str] = ..., plan: _Optional[_Union[StoredPlan, _Mapping]] = ...) -> None: ...
 
 class StoredPlan(_message.Message):
-    __slots__ = (
-        "id",
-        "goal",
-        "basic_instructions",
-        "context",
-        "analysis",
-        "steps",
-        "version",
-        "generated_at",
-        "approved_at",
-    )
+    __slots__ = ("id", "goal", "basic_instructions", "context", "analysis", "steps", "version", "generated_at", "approved_at")
     ID_FIELD_NUMBER: _ClassVar[int]
     GOAL_FIELD_NUMBER: _ClassVar[int]
     BASIC_INSTRUCTIONS_FIELD_NUMBER: _ClassVar[int]
@@ -672,39 +418,17 @@ class StoredPlan(_message.Message):
     version: int
     generated_at: str
     approved_at: str
-    def __init__(
-        self,
-        id: str | None = ...,
-        goal: str | None = ...,
-        basic_instructions: str | None = ...,
-        context: str | None = ...,
-        analysis: str | None = ...,
-        steps: _Iterable[StoredPlanStep | _Mapping] | None = ...,
-        version: int | None = ...,
-        generated_at: str | None = ...,
-        approved_at: str | None = ...,
-    ) -> None: ...
+    def __init__(self, id: _Optional[str] = ..., goal: _Optional[str] = ..., basic_instructions: _Optional[str] = ..., context: _Optional[str] = ..., analysis: _Optional[str] = ..., steps: _Optional[_Iterable[_Union[StoredPlanStep, _Mapping]]] = ..., version: _Optional[int] = ..., generated_at: _Optional[str] = ..., approved_at: _Optional[str] = ...) -> None: ...
 
 class StoredPlanStep(_message.Message):
-    __slots__ = (
-        "step_id",
-        "description",
-        "tool_call",
-        "parameters",
-        "context_tables",
-        "target_agent",
-        "sub_plan",
-        "prompt_template",
-        "required_context",
-    )
+    __slots__ = ("step_id", "description", "tool_call", "parameters", "context_tables", "target_agent", "sub_plan", "prompt_template", "required_context")
     class ParametersEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
         VALUE_FIELD_NUMBER: _ClassVar[int]
         key: str
         value: str
-        def __init__(self, key: str | None = ..., value: str | None = ...) -> None: ...
-
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
     STEP_ID_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
     TOOL_CALL_FIELD_NUMBER: _ClassVar[int]
@@ -723,18 +447,7 @@ class StoredPlanStep(_message.Message):
     sub_plan: StoredSubPlan
     prompt_template: str
     required_context: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(
-        self,
-        step_id: str | None = ...,
-        description: str | None = ...,
-        tool_call: str | None = ...,
-        parameters: _Mapping[str, str] | None = ...,
-        context_tables: _Iterable[str] | None = ...,
-        target_agent: str | None = ...,
-        sub_plan: StoredSubPlan | _Mapping | None = ...,
-        prompt_template: str | None = ...,
-        required_context: _Iterable[str] | None = ...,
-    ) -> None: ...
+    def __init__(self, step_id: _Optional[str] = ..., description: _Optional[str] = ..., tool_call: _Optional[str] = ..., parameters: _Optional[_Mapping[str, str]] = ..., context_tables: _Optional[_Iterable[str]] = ..., target_agent: _Optional[str] = ..., sub_plan: _Optional[_Union[StoredSubPlan, _Mapping]] = ..., prompt_template: _Optional[str] = ..., required_context: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class StoredSubPlan(_message.Message):
     __slots__ = ("agent_name", "goal", "steps", "planning_observations")
@@ -746,13 +459,7 @@ class StoredSubPlan(_message.Message):
     goal: str
     steps: _containers.RepeatedCompositeFieldContainer[StoredPlanStep]
     planning_observations: str
-    def __init__(
-        self,
-        agent_name: str | None = ...,
-        goal: str | None = ...,
-        steps: _Iterable[StoredPlanStep | _Mapping] | None = ...,
-        planning_observations: str | None = ...,
-    ) -> None: ...
+    def __init__(self, agent_name: _Optional[str] = ..., goal: _Optional[str] = ..., steps: _Optional[_Iterable[_Union[StoredPlanStep, _Mapping]]] = ..., planning_observations: _Optional[str] = ...) -> None: ...
 
 class TargetFieldMetadata(_message.Message):
     __slots__ = ("field_type", "options", "max_selections", "field_name")
@@ -764,13 +471,7 @@ class TargetFieldMetadata(_message.Message):
     options: _containers.RepeatedScalarFieldContainer[str]
     max_selections: int
     field_name: str
-    def __init__(
-        self,
-        field_type: str | None = ...,
-        options: _Iterable[str] | None = ...,
-        max_selections: int | None = ...,
-        field_name: str | None = ...,
-    ) -> None: ...
+    def __init__(self, field_type: _Optional[str] = ..., options: _Optional[_Iterable[str]] = ..., max_selections: _Optional[int] = ..., field_name: _Optional[str] = ...) -> None: ...
 
 class TableReference(_message.Message):
     __slots__ = ("order", "field")
@@ -778,7 +479,7 @@ class TableReference(_message.Message):
     FIELD_FIELD_NUMBER: _ClassVar[int]
     order: int
     field: str
-    def __init__(self, order: int | None = ..., field: str | None = ...) -> None: ...
+    def __init__(self, order: _Optional[int] = ..., field: _Optional[str] = ...) -> None: ...
 
 class FieldSource(_message.Message):
     __slots__ = ("skill_output", "table_ref", "skill_input")
@@ -788,21 +489,10 @@ class FieldSource(_message.Message):
     skill_output: str
     table_ref: TableReference
     skill_input: str
-    def __init__(
-        self,
-        skill_output: str | None = ...,
-        table_ref: TableReference | _Mapping | None = ...,
-        skill_input: str | None = ...,
-    ) -> None: ...
+    def __init__(self, skill_output: _Optional[str] = ..., table_ref: _Optional[_Union[TableReference, _Mapping]] = ..., skill_input: _Optional[str] = ...) -> None: ...
 
 class RowIdSource(_message.Message):
-    __slots__ = (
-        "static_id",
-        "skill_input",
-        "skill_output",
-        "table_ref",
-        "use_source_row",
-    )
+    __slots__ = ("static_id", "skill_input", "skill_output", "table_ref", "use_source_row")
     STATIC_ID_FIELD_NUMBER: _ClassVar[int]
     SKILL_INPUT_FIELD_NUMBER: _ClassVar[int]
     SKILL_OUTPUT_FIELD_NUMBER: _ClassVar[int]
@@ -813,14 +503,7 @@ class RowIdSource(_message.Message):
     skill_output: str
     table_ref: TableReference
     use_source_row: bool
-    def __init__(
-        self,
-        static_id: str | None = ...,
-        skill_input: str | None = ...,
-        skill_output: str | None = ...,
-        table_ref: TableReference | _Mapping | None = ...,
-        use_source_row: bool = ...,
-    ) -> None: ...
+    def __init__(self, static_id: _Optional[str] = ..., skill_input: _Optional[str] = ..., skill_output: _Optional[str] = ..., table_ref: _Optional[_Union[TableReference, _Mapping]] = ..., use_source_row: bool = ...) -> None: ...
 
 class FieldMapping(_message.Message):
     __slots__ = ("source", "target_field_id", "target_field_metadata", "append_mode")
@@ -832,24 +515,10 @@ class FieldMapping(_message.Message):
     target_field_id: int
     target_field_metadata: TargetFieldMetadata
     append_mode: bool
-    def __init__(
-        self,
-        source: FieldSource | _Mapping | None = ...,
-        target_field_id: int | None = ...,
-        target_field_metadata: TargetFieldMetadata | _Mapping | None = ...,
-        append_mode: bool = ...,
-    ) -> None: ...
+    def __init__(self, source: _Optional[_Union[FieldSource, _Mapping]] = ..., target_field_id: _Optional[int] = ..., target_field_metadata: _Optional[_Union[TargetFieldMetadata, _Mapping]] = ..., append_mode: bool = ...) -> None: ...
 
 class TableMapping(_message.Message):
-    __slots__ = (
-        "order",
-        "target_table_id",
-        "row_action",
-        "row_id_source",
-        "mappings",
-        "display_field_id",
-        "mode",
-    )
+    __slots__ = ("order", "target_table_id", "row_action", "row_id_source", "mappings", "display_field_id", "mode")
     ORDER_FIELD_NUMBER: _ClassVar[int]
     TARGET_TABLE_ID_FIELD_NUMBER: _ClassVar[int]
     ROW_ACTION_FIELD_NUMBER: _ClassVar[int]
@@ -864,16 +533,7 @@ class TableMapping(_message.Message):
     mappings: _containers.RepeatedCompositeFieldContainer[FieldMapping]
     display_field_id: int
     mode: str
-    def __init__(
-        self,
-        order: int | None = ...,
-        target_table_id: int | None = ...,
-        row_action: str | None = ...,
-        row_id_source: RowIdSource | _Mapping | None = ...,
-        mappings: _Iterable[FieldMapping | _Mapping] | None = ...,
-        display_field_id: int | None = ...,
-        mode: str | None = ...,
-    ) -> None: ...
+    def __init__(self, order: _Optional[int] = ..., target_table_id: _Optional[int] = ..., row_action: _Optional[str] = ..., row_id_source: _Optional[_Union[RowIdSource, _Mapping]] = ..., mappings: _Optional[_Iterable[_Union[FieldMapping, _Mapping]]] = ..., display_field_id: _Optional[int] = ..., mode: _Optional[str] = ...) -> None: ...
 
 class OutputMappingConfig(_message.Message):
     __slots__ = ("mode", "table_mappings")
@@ -881,11 +541,7 @@ class OutputMappingConfig(_message.Message):
     TABLE_MAPPINGS_FIELD_NUMBER: _ClassVar[int]
     mode: str
     table_mappings: _containers.RepeatedCompositeFieldContainer[TableMapping]
-    def __init__(
-        self,
-        mode: str | None = ...,
-        table_mappings: _Iterable[TableMapping | _Mapping] | None = ...,
-    ) -> None: ...
+    def __init__(self, mode: _Optional[str] = ..., table_mappings: _Optional[_Iterable[_Union[TableMapping, _Mapping]]] = ...) -> None: ...
 
 class ToolConfig(_message.Message):
     __slots__ = ("name", "version", "config")
@@ -895,20 +551,14 @@ class ToolConfig(_message.Message):
         VALUE_FIELD_NUMBER: _ClassVar[int]
         key: str
         value: str
-        def __init__(self, key: str | None = ..., value: str | None = ...) -> None: ...
-
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
     NAME_FIELD_NUMBER: _ClassVar[int]
     VERSION_FIELD_NUMBER: _ClassVar[int]
     CONFIG_FIELD_NUMBER: _ClassVar[int]
     name: str
     version: str
     config: _containers.ScalarMap[str, str]
-    def __init__(
-        self,
-        name: str | None = ...,
-        version: str | None = ...,
-        config: _Mapping[str, str] | None = ...,
-    ) -> None: ...
+    def __init__(self, name: _Optional[str] = ..., version: _Optional[str] = ..., config: _Optional[_Mapping[str, str]] = ...) -> None: ...
 
 class ServerConfig(_message.Message):
     __slots__ = ("name", "endpoint", "config")
@@ -918,30 +568,17 @@ class ServerConfig(_message.Message):
         VALUE_FIELD_NUMBER: _ClassVar[int]
         key: str
         value: str
-        def __init__(self, key: str | None = ..., value: str | None = ...) -> None: ...
-
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
     NAME_FIELD_NUMBER: _ClassVar[int]
     ENDPOINT_FIELD_NUMBER: _ClassVar[int]
     CONFIG_FIELD_NUMBER: _ClassVar[int]
     name: str
     endpoint: str
     config: _containers.ScalarMap[str, str]
-    def __init__(
-        self,
-        name: str | None = ...,
-        endpoint: str | None = ...,
-        config: _Mapping[str, str] | None = ...,
-    ) -> None: ...
+    def __init__(self, name: _Optional[str] = ..., endpoint: _Optional[str] = ..., config: _Optional[_Mapping[str, str]] = ...) -> None: ...
 
 class SkillInputValue(_message.Message):
-    __slots__ = (
-        "name",
-        "type",
-        "string_value",
-        "number_value",
-        "bool_value",
-        "json_value",
-    )
+    __slots__ = ("name", "type", "string_value", "number_value", "bool_value", "json_value")
     NAME_FIELD_NUMBER: _ClassVar[int]
     TYPE_FIELD_NUMBER: _ClassVar[int]
     STRING_VALUE_FIELD_NUMBER: _ClassVar[int]
@@ -954,23 +591,13 @@ class SkillInputValue(_message.Message):
     number_value: float
     bool_value: bool
     json_value: str
-    def __init__(
-        self,
-        name: str | None = ...,
-        type: str | None = ...,
-        string_value: str | None = ...,
-        number_value: float | None = ...,
-        bool_value: bool = ...,
-        json_value: str | None = ...,
-    ) -> None: ...
+    def __init__(self, name: _Optional[str] = ..., type: _Optional[str] = ..., string_value: _Optional[str] = ..., number_value: _Optional[float] = ..., bool_value: bool = ..., json_value: _Optional[str] = ...) -> None: ...
 
 class TriggerData(_message.Message):
     __slots__ = ("skill_inputs",)
     SKILL_INPUTS_FIELD_NUMBER: _ClassVar[int]
     skill_inputs: _containers.RepeatedCompositeFieldContainer[SkillInputValue]
-    def __init__(
-        self, skill_inputs: _Iterable[SkillInputValue | _Mapping] | None = ...
-    ) -> None: ...
+    def __init__(self, skill_inputs: _Optional[_Iterable[_Union[SkillInputValue, _Mapping]]] = ...) -> None: ...
 
 class InstructionConfig(_message.Message):
     __slots__ = ("task", "images", "attachments", "tools", "servers", "model")
@@ -986,15 +613,7 @@ class InstructionConfig(_message.Message):
     tools: _containers.RepeatedCompositeFieldContainer[ToolConfig]
     servers: _containers.RepeatedCompositeFieldContainer[ServerConfig]
     model: str
-    def __init__(
-        self,
-        task: str | None = ...,
-        images: _Iterable[ImageAttachment | _Mapping] | None = ...,
-        attachments: _Iterable[FileAttachment | _Mapping] | None = ...,
-        tools: _Iterable[ToolConfig | _Mapping] | None = ...,
-        servers: _Iterable[ServerConfig | _Mapping] | None = ...,
-        model: str | None = ...,
-    ) -> None: ...
+    def __init__(self, task: _Optional[str] = ..., images: _Optional[_Iterable[_Union[ImageAttachment, _Mapping]]] = ..., attachments: _Optional[_Iterable[_Union[FileAttachment, _Mapping]]] = ..., tools: _Optional[_Iterable[_Union[ToolConfig, _Mapping]]] = ..., servers: _Optional[_Iterable[_Union[ServerConfig, _Mapping]]] = ..., model: _Optional[str] = ...) -> None: ...
 
 class ImageAttachment(_message.Message):
     __slots__ = ("url", "s3_key")
@@ -1002,7 +621,7 @@ class ImageAttachment(_message.Message):
     S3_KEY_FIELD_NUMBER: _ClassVar[int]
     url: str
     s3_key: str
-    def __init__(self, url: str | None = ..., s3_key: str | None = ...) -> None: ...
+    def __init__(self, url: _Optional[str] = ..., s3_key: _Optional[str] = ...) -> None: ...
 
 class FileAttachment(_message.Message):
     __slots__ = ("type", "url", "filename", "mime_type")
@@ -1014,30 +633,10 @@ class FileAttachment(_message.Message):
     url: str
     filename: str
     mime_type: str
-    def __init__(
-        self,
-        type: str | None = ...,
-        url: str | None = ...,
-        filename: str | None = ...,
-        mime_type: str | None = ...,
-    ) -> None: ...
+    def __init__(self, type: _Optional[str] = ..., url: _Optional[str] = ..., filename: _Optional[str] = ..., mime_type: _Optional[str] = ...) -> None: ...
 
 class GeneratePlanRequest(_message.Message):
-    __slots__ = (
-        "instructions",
-        "organization_id",
-        "user_id",
-        "skill_id",
-        "model",
-        "user_api_key",
-        "timeout_seconds",
-        "skill_inputs",
-        "previous_plan_json",
-        "user_feedback",
-        "skill_outputs",
-        "session_id",
-        "answers",
-    )
+    __slots__ = ("instructions", "organization_id", "user_id", "skill_id", "model", "user_api_key", "timeout_seconds", "skill_inputs", "previous_plan_json", "user_feedback", "skill_outputs", "session_id", "answers")
     INSTRUCTIONS_FIELD_NUMBER: _ClassVar[int]
     ORGANIZATION_ID_FIELD_NUMBER: _ClassVar[int]
     USER_ID_FIELD_NUMBER: _ClassVar[int]
@@ -1064,22 +663,7 @@ class GeneratePlanRequest(_message.Message):
     skill_outputs: _containers.RepeatedCompositeFieldContainer[OutputDefinition]
     session_id: str
     answers: _containers.RepeatedCompositeFieldContainer[ClarificationAnswer]
-    def __init__(
-        self,
-        instructions: str | None = ...,
-        organization_id: int | None = ...,
-        user_id: str | None = ...,
-        skill_id: int | None = ...,
-        model: str | None = ...,
-        user_api_key: str | None = ...,
-        timeout_seconds: int | None = ...,
-        skill_inputs: _Iterable[InputDefinition | _Mapping] | None = ...,
-        previous_plan_json: str | None = ...,
-        user_feedback: str | None = ...,
-        skill_outputs: _Iterable[OutputDefinition | _Mapping] | None = ...,
-        session_id: str | None = ...,
-        answers: _Iterable[ClarificationAnswer | _Mapping] | None = ...,
-    ) -> None: ...
+    def __init__(self, instructions: _Optional[str] = ..., organization_id: _Optional[int] = ..., user_id: _Optional[str] = ..., skill_id: _Optional[int] = ..., model: _Optional[str] = ..., user_api_key: _Optional[str] = ..., timeout_seconds: _Optional[int] = ..., skill_inputs: _Optional[_Iterable[_Union[InputDefinition, _Mapping]]] = ..., previous_plan_json: _Optional[str] = ..., user_feedback: _Optional[str] = ..., skill_outputs: _Optional[_Iterable[_Union[OutputDefinition, _Mapping]]] = ..., session_id: _Optional[str] = ..., answers: _Optional[_Iterable[_Union[ClarificationAnswer, _Mapping]]] = ...) -> None: ...
 
 class GeneratePlanResponse(_message.Message):
     __slots__ = ("progress", "awaiting_input", "plan_complete", "error", "timestamp")
@@ -1093,14 +677,7 @@ class GeneratePlanResponse(_message.Message):
     plan_complete: PlanComplete
     error: ProcessingError
     timestamp: int
-    def __init__(
-        self,
-        progress: PlanProgress | _Mapping | None = ...,
-        awaiting_input: AwaitingInput | _Mapping | None = ...,
-        plan_complete: PlanComplete | _Mapping | None = ...,
-        error: ProcessingError | _Mapping | None = ...,
-        timestamp: int | None = ...,
-    ) -> None: ...
+    def __init__(self, progress: _Optional[_Union[PlanProgress, _Mapping]] = ..., awaiting_input: _Optional[_Union[AwaitingInput, _Mapping]] = ..., plan_complete: _Optional[_Union[PlanComplete, _Mapping]] = ..., error: _Optional[_Union[ProcessingError, _Mapping]] = ..., timestamp: _Optional[int] = ...) -> None: ...
 
 class PlanProgress(_message.Message):
     __slots__ = ("message", "phase")
@@ -1108,7 +685,7 @@ class PlanProgress(_message.Message):
     PHASE_FIELD_NUMBER: _ClassVar[int]
     message: str
     phase: str
-    def __init__(self, message: str | None = ..., phase: str | None = ...) -> None: ...
+    def __init__(self, message: _Optional[str] = ..., phase: _Optional[str] = ...) -> None: ...
 
 class PlanComplete(_message.Message):
     __slots__ = ("plan_json", "plan_id", "planning_time_ms", "token_usage")
@@ -1120,13 +697,7 @@ class PlanComplete(_message.Message):
     plan_id: str
     planning_time_ms: int
     token_usage: TokenUsage
-    def __init__(
-        self,
-        plan_json: str | None = ...,
-        plan_id: str | None = ...,
-        planning_time_ms: int | None = ...,
-        token_usage: TokenUsage | _Mapping | None = ...,
-    ) -> None: ...
+    def __init__(self, plan_json: _Optional[str] = ..., plan_id: _Optional[str] = ..., planning_time_ms: _Optional[int] = ..., token_usage: _Optional[_Union[TokenUsage, _Mapping]] = ...) -> None: ...
 
 class ClarificationAnswer(_message.Message):
     __slots__ = ("question_id", "answer")
@@ -1134,24 +705,10 @@ class ClarificationAnswer(_message.Message):
     ANSWER_FIELD_NUMBER: _ClassVar[int]
     question_id: str
     answer: str
-    def __init__(
-        self, question_id: str | None = ..., answer: str | None = ...
-    ) -> None: ...
+    def __init__(self, question_id: _Optional[str] = ..., answer: _Optional[str] = ...) -> None: ...
 
 class ProcessMessageRequest(_message.Message):
-    __slots__ = (
-        "message_parts",
-        "user_id",
-        "organization_id",
-        "conversation_history",
-        "agent_config",
-        "model",
-        "message_id",
-        "session_id",
-        "user_api_key",
-        "task_id",
-        "user_name",
-    )
+    __slots__ = ("message_parts", "user_id", "organization_id", "conversation_history", "agent_config", "model", "message_id", "session_id", "user_api_key", "task_id", "user_name")
     MESSAGE_PARTS_FIELD_NUMBER: _ClassVar[int]
     USER_ID_FIELD_NUMBER: _ClassVar[int]
     ORGANIZATION_ID_FIELD_NUMBER: _ClassVar[int]
@@ -1174,37 +731,16 @@ class ProcessMessageRequest(_message.Message):
     user_api_key: str
     task_id: str
     user_name: str
-    def __init__(
-        self,
-        message_parts: _Iterable[MessagePart | _Mapping] | None = ...,
-        user_id: str | None = ...,
-        organization_id: int | None = ...,
-        conversation_history: _Iterable[HistoryMessage | _Mapping] | None = ...,
-        agent_config: AgentConfig | _Mapping | None = ...,
-        model: str | None = ...,
-        message_id: str | None = ...,
-        session_id: str | None = ...,
-        user_api_key: str | None = ...,
-        task_id: str | None = ...,
-        user_name: str | None = ...,
-    ) -> None: ...
+    def __init__(self, message_parts: _Optional[_Iterable[_Union[MessagePart, _Mapping]]] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[int] = ..., conversation_history: _Optional[_Iterable[_Union[HistoryMessage, _Mapping]]] = ..., agent_config: _Optional[_Union[AgentConfig, _Mapping]] = ..., model: _Optional[str] = ..., message_id: _Optional[str] = ..., session_id: _Optional[str] = ..., user_api_key: _Optional[str] = ..., task_id: _Optional[str] = ..., user_name: _Optional[str] = ...) -> None: ...
 
 class ProcessMessageResponse(_message.Message):
-    __slots__ = (
-        "content_chunk",
-        "complete",
-        "error",
-        "step_progress",
-        "awaiting_input",
-        "timestamp",
-        "task_id",
-        "task_progress",
-    )
+    __slots__ = ("content_chunk", "complete", "error", "step_progress", "awaiting_input", "awaiting_human_skill", "timestamp", "task_id", "task_progress")
     CONTENT_CHUNK_FIELD_NUMBER: _ClassVar[int]
     COMPLETE_FIELD_NUMBER: _ClassVar[int]
     ERROR_FIELD_NUMBER: _ClassVar[int]
     STEP_PROGRESS_FIELD_NUMBER: _ClassVar[int]
     AWAITING_INPUT_FIELD_NUMBER: _ClassVar[int]
+    AWAITING_HUMAN_SKILL_FIELD_NUMBER: _ClassVar[int]
     TIMESTAMP_FIELD_NUMBER: _ClassVar[int]
     TASK_ID_FIELD_NUMBER: _ClassVar[int]
     TASK_PROGRESS_FIELD_NUMBER: _ClassVar[int]
@@ -1213,20 +749,11 @@ class ProcessMessageResponse(_message.Message):
     error: ProcessingError
     step_progress: StepProgress
     awaiting_input: AwaitingInput
+    awaiting_human_skill: AwaitingHumanSkill
     timestamp: int
     task_id: str
     task_progress: ChatTaskProgress
-    def __init__(
-        self,
-        content_chunk: ContentChunk | _Mapping | None = ...,
-        complete: ProcessingComplete | _Mapping | None = ...,
-        error: ProcessingError | _Mapping | None = ...,
-        step_progress: StepProgress | _Mapping | None = ...,
-        awaiting_input: AwaitingInput | _Mapping | None = ...,
-        timestamp: int | None = ...,
-        task_id: str | None = ...,
-        task_progress: ChatTaskProgress | _Mapping | None = ...,
-    ) -> None: ...
+    def __init__(self, content_chunk: _Optional[_Union[ContentChunk, _Mapping]] = ..., complete: _Optional[_Union[ProcessingComplete, _Mapping]] = ..., error: _Optional[_Union[ProcessingError, _Mapping]] = ..., step_progress: _Optional[_Union[StepProgress, _Mapping]] = ..., awaiting_input: _Optional[_Union[AwaitingInput, _Mapping]] = ..., awaiting_human_skill: _Optional[_Union[AwaitingHumanSkill, _Mapping]] = ..., timestamp: _Optional[int] = ..., task_id: _Optional[str] = ..., task_progress: _Optional[_Union[ChatTaskProgress, _Mapping]] = ...) -> None: ...
 
 class AwaitingInput(_message.Message):
     __slots__ = ("input_type", "title", "content", "options", "plan_json", "session_id")
@@ -1242,15 +769,7 @@ class AwaitingInput(_message.Message):
     options: _containers.RepeatedCompositeFieldContainer[InputOption]
     plan_json: str
     session_id: str
-    def __init__(
-        self,
-        input_type: str | None = ...,
-        title: str | None = ...,
-        content: str | None = ...,
-        options: _Iterable[InputOption | _Mapping] | None = ...,
-        plan_json: str | None = ...,
-        session_id: str | None = ...,
-    ) -> None: ...
+    def __init__(self, input_type: _Optional[str] = ..., title: _Optional[str] = ..., content: _Optional[str] = ..., options: _Optional[_Iterable[_Union[InputOption, _Mapping]]] = ..., plan_json: _Optional[str] = ..., session_id: _Optional[str] = ...) -> None: ...
 
 class InputOption(_message.Message):
     __slots__ = ("id", "label", "description")
@@ -1260,12 +779,29 @@ class InputOption(_message.Message):
     id: str
     label: str
     description: str
-    def __init__(
-        self,
-        id: str | None = ...,
-        label: str | None = ...,
-        description: str | None = ...,
-    ) -> None: ...
+    def __init__(self, id: _Optional[str] = ..., label: _Optional[str] = ..., description: _Optional[str] = ...) -> None: ...
+
+class AwaitingHumanSkill(_message.Message):
+    __slots__ = ("skill_id", "skill_name", "step_id", "instructions", "inputs", "output_schema", "assigned_to", "external_links", "session_id")
+    SKILL_ID_FIELD_NUMBER: _ClassVar[int]
+    SKILL_NAME_FIELD_NUMBER: _ClassVar[int]
+    STEP_ID_FIELD_NUMBER: _ClassVar[int]
+    INSTRUCTIONS_FIELD_NUMBER: _ClassVar[int]
+    INPUTS_FIELD_NUMBER: _ClassVar[int]
+    OUTPUT_SCHEMA_FIELD_NUMBER: _ClassVar[int]
+    ASSIGNED_TO_FIELD_NUMBER: _ClassVar[int]
+    EXTERNAL_LINKS_FIELD_NUMBER: _ClassVar[int]
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    skill_id: int
+    skill_name: str
+    step_id: str
+    instructions: str
+    inputs: _containers.RepeatedCompositeFieldContainer[SkillInputValue]
+    output_schema: _containers.RepeatedCompositeFieldContainer[OutputDefinition]
+    assigned_to: str
+    external_links: _containers.RepeatedScalarFieldContainer[str]
+    session_id: str
+    def __init__(self, skill_id: _Optional[int] = ..., skill_name: _Optional[str] = ..., step_id: _Optional[str] = ..., instructions: _Optional[str] = ..., inputs: _Optional[_Iterable[_Union[SkillInputValue, _Mapping]]] = ..., output_schema: _Optional[_Iterable[_Union[OutputDefinition, _Mapping]]] = ..., assigned_to: _Optional[str] = ..., external_links: _Optional[_Iterable[str]] = ..., session_id: _Optional[str] = ...) -> None: ...
 
 class MessagePart(_message.Message):
     __slots__ = ("text", "image_url", "file")
@@ -1275,24 +811,19 @@ class MessagePart(_message.Message):
     text: TextPart
     image_url: ImageUrlPart
     file: FilePart
-    def __init__(
-        self,
-        text: TextPart | _Mapping | None = ...,
-        image_url: ImageUrlPart | _Mapping | None = ...,
-        file: FilePart | _Mapping | None = ...,
-    ) -> None: ...
+    def __init__(self, text: _Optional[_Union[TextPart, _Mapping]] = ..., image_url: _Optional[_Union[ImageUrlPart, _Mapping]] = ..., file: _Optional[_Union[FilePart, _Mapping]] = ...) -> None: ...
 
 class TextPart(_message.Message):
     __slots__ = ("text",)
     TEXT_FIELD_NUMBER: _ClassVar[int]
     text: str
-    def __init__(self, text: str | None = ...) -> None: ...
+    def __init__(self, text: _Optional[str] = ...) -> None: ...
 
 class ImageUrlPart(_message.Message):
     __slots__ = ("url",)
     URL_FIELD_NUMBER: _ClassVar[int]
     url: str
-    def __init__(self, url: str | None = ...) -> None: ...
+    def __init__(self, url: _Optional[str] = ...) -> None: ...
 
 class FilePart(_message.Message):
     __slots__ = ("url", "mime_type", "filename", "size")
@@ -1304,13 +835,7 @@ class FilePart(_message.Message):
     mime_type: str
     filename: str
     size: int
-    def __init__(
-        self,
-        url: str | None = ...,
-        mime_type: str | None = ...,
-        filename: str | None = ...,
-        size: int | None = ...,
-    ) -> None: ...
+    def __init__(self, url: _Optional[str] = ..., mime_type: _Optional[str] = ..., filename: _Optional[str] = ..., size: _Optional[int] = ...) -> None: ...
 
 class HistoryMessage(_message.Message):
     __slots__ = ("role", "content_parts", "timestamp")
@@ -1320,12 +845,7 @@ class HistoryMessage(_message.Message):
     role: str
     content_parts: _containers.RepeatedCompositeFieldContainer[MessagePart]
     timestamp: int
-    def __init__(
-        self,
-        role: str | None = ...,
-        content_parts: _Iterable[MessagePart | _Mapping] | None = ...,
-        timestamp: int | None = ...,
-    ) -> None: ...
+    def __init__(self, role: _Optional[str] = ..., content_parts: _Optional[_Iterable[_Union[MessagePart, _Mapping]]] = ..., timestamp: _Optional[int] = ...) -> None: ...
 
 class ContentChunk(_message.Message):
     __slots__ = ("content", "sequence")
@@ -1333,26 +853,17 @@ class ContentChunk(_message.Message):
     SEQUENCE_FIELD_NUMBER: _ClassVar[int]
     content: str
     sequence: int
-    def __init__(
-        self, content: str | None = ..., sequence: int | None = ...
-    ) -> None: ...
+    def __init__(self, content: _Optional[str] = ..., sequence: _Optional[int] = ...) -> None: ...
 
 class ProcessingComplete(_message.Message):
-    __slots__ = (
-        "model_used",
-        "total_tokens",
-        "processing_time_ms",
-        "metadata",
-        "token_usage",
-    )
+    __slots__ = ("model_used", "total_tokens", "processing_time_ms", "metadata", "token_usage")
     class MetadataEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
         VALUE_FIELD_NUMBER: _ClassVar[int]
         key: str
         value: str
-        def __init__(self, key: str | None = ..., value: str | None = ...) -> None: ...
-
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
     MODEL_USED_FIELD_NUMBER: _ClassVar[int]
     TOTAL_TOKENS_FIELD_NUMBER: _ClassVar[int]
     PROCESSING_TIME_MS_FIELD_NUMBER: _ClassVar[int]
@@ -1363,34 +874,17 @@ class ProcessingComplete(_message.Message):
     processing_time_ms: int
     metadata: _containers.ScalarMap[str, str]
     token_usage: TokenUsage
-    def __init__(
-        self,
-        model_used: str | None = ...,
-        total_tokens: int | None = ...,
-        processing_time_ms: int | None = ...,
-        metadata: _Mapping[str, str] | None = ...,
-        token_usage: TokenUsage | _Mapping | None = ...,
-    ) -> None: ...
+    def __init__(self, model_used: _Optional[str] = ..., total_tokens: _Optional[int] = ..., processing_time_ms: _Optional[int] = ..., metadata: _Optional[_Mapping[str, str]] = ..., token_usage: _Optional[_Union[TokenUsage, _Mapping]] = ...) -> None: ...
 
 class ProcessingError(_message.Message):
-    __slots__ = (
-        "error_code",
-        "error_message",
-        "error_details",
-        "hint",
-        "can_retry",
-        "auto_retry",
-        "session_reset",
-        "token_usage",
-    )
+    __slots__ = ("error_code", "error_message", "error_details", "hint", "can_retry", "auto_retry", "session_reset", "token_usage")
     class ErrorDetailsEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
         VALUE_FIELD_NUMBER: _ClassVar[int]
         key: str
         value: str
-        def __init__(self, key: str | None = ..., value: str | None = ...) -> None: ...
-
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
     ERROR_CODE_FIELD_NUMBER: _ClassVar[int]
     ERROR_MESSAGE_FIELD_NUMBER: _ClassVar[int]
     ERROR_DETAILS_FIELD_NUMBER: _ClassVar[int]
@@ -1407,17 +901,7 @@ class ProcessingError(_message.Message):
     auto_retry: bool
     session_reset: bool
     token_usage: TokenUsage
-    def __init__(
-        self,
-        error_code: str | None = ...,
-        error_message: str | None = ...,
-        error_details: _Mapping[str, str] | None = ...,
-        hint: str | None = ...,
-        can_retry: bool = ...,
-        auto_retry: bool = ...,
-        session_reset: bool = ...,
-        token_usage: TokenUsage | _Mapping | None = ...,
-    ) -> None: ...
+    def __init__(self, error_code: _Optional[str] = ..., error_message: _Optional[str] = ..., error_details: _Optional[_Mapping[str, str]] = ..., hint: _Optional[str] = ..., can_retry: bool = ..., auto_retry: bool = ..., session_reset: bool = ..., token_usage: _Optional[_Union[TokenUsage, _Mapping]] = ...) -> None: ...
 
 class StepProgress(_message.Message):
     __slots__ = ("step_type", "step_name", "content", "metadata", "step_index")
@@ -1427,8 +911,7 @@ class StepProgress(_message.Message):
         VALUE_FIELD_NUMBER: _ClassVar[int]
         key: str
         value: str
-        def __init__(self, key: str | None = ..., value: str | None = ...) -> None: ...
-
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
     STEP_TYPE_FIELD_NUMBER: _ClassVar[int]
     STEP_NAME_FIELD_NUMBER: _ClassVar[int]
     CONTENT_FIELD_NUMBER: _ClassVar[int]
@@ -1439,14 +922,7 @@ class StepProgress(_message.Message):
     content: str
     metadata: _containers.ScalarMap[str, str]
     step_index: int
-    def __init__(
-        self,
-        step_type: StepType | str | None = ...,
-        step_name: str | None = ...,
-        content: str | None = ...,
-        metadata: _Mapping[str, str] | None = ...,
-        step_index: int | None = ...,
-    ) -> None: ...
+    def __init__(self, step_type: _Optional[_Union[StepType, str]] = ..., step_name: _Optional[str] = ..., content: _Optional[str] = ..., metadata: _Optional[_Mapping[str, str]] = ..., step_index: _Optional[int] = ...) -> None: ...
 
 class CancelMessageRequest(_message.Message):
     __slots__ = ("message_id", "user_id", "organization_id")
@@ -1456,12 +932,7 @@ class CancelMessageRequest(_message.Message):
     message_id: str
     user_id: str
     organization_id: int
-    def __init__(
-        self,
-        message_id: str | None = ...,
-        user_id: str | None = ...,
-        organization_id: int | None = ...,
-    ) -> None: ...
+    def __init__(self, message_id: _Optional[str] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[int] = ...) -> None: ...
 
 class CancelMessageResponse(_message.Message):
     __slots__ = ("success", "message")
@@ -1469,17 +940,10 @@ class CancelMessageResponse(_message.Message):
     MESSAGE_FIELD_NUMBER: _ClassVar[int]
     success: bool
     message: str
-    def __init__(self, success: bool = ..., message: str | None = ...) -> None: ...
+    def __init__(self, success: bool = ..., message: _Optional[str] = ...) -> None: ...
 
 class ContextMappingProto(_message.Message):
-    __slots__ = (
-        "table_id",
-        "table_name",
-        "access_mode",
-        "sync_mode",
-        "target_type",
-        "target_id",
-    )
+    __slots__ = ("table_id", "table_name", "access_mode", "sync_mode", "target_type", "target_id")
     TABLE_ID_FIELD_NUMBER: _ClassVar[int]
     TABLE_NAME_FIELD_NUMBER: _ClassVar[int]
     ACCESS_MODE_FIELD_NUMBER: _ClassVar[int]
@@ -1492,15 +956,7 @@ class ContextMappingProto(_message.Message):
     sync_mode: str
     target_type: str
     target_id: str
-    def __init__(
-        self,
-        table_id: int | None = ...,
-        table_name: str | None = ...,
-        access_mode: str | None = ...,
-        sync_mode: str | None = ...,
-        target_type: str | None = ...,
-        target_id: str | None = ...,
-    ) -> None: ...
+    def __init__(self, table_id: _Optional[int] = ..., table_name: _Optional[str] = ..., access_mode: _Optional[str] = ..., sync_mode: _Optional[str] = ..., target_type: _Optional[str] = ..., target_id: _Optional[str] = ...) -> None: ...
 
 class ResolvedContextProto(_message.Message):
     __slots__ = ("mappings", "agent_mappings", "skill_mappings", "step_mappings")
@@ -1512,10 +968,4 @@ class ResolvedContextProto(_message.Message):
     agent_mappings: _containers.RepeatedCompositeFieldContainer[ContextMappingProto]
     skill_mappings: _containers.RepeatedCompositeFieldContainer[ContextMappingProto]
     step_mappings: _containers.RepeatedCompositeFieldContainer[ContextMappingProto]
-    def __init__(
-        self,
-        mappings: _Iterable[ContextMappingProto | _Mapping] | None = ...,
-        agent_mappings: _Iterable[ContextMappingProto | _Mapping] | None = ...,
-        skill_mappings: _Iterable[ContextMappingProto | _Mapping] | None = ...,
-        step_mappings: _Iterable[ContextMappingProto | _Mapping] | None = ...,
-    ) -> None: ...
+    def __init__(self, mappings: _Optional[_Iterable[_Union[ContextMappingProto, _Mapping]]] = ..., agent_mappings: _Optional[_Iterable[_Union[ContextMappingProto, _Mapping]]] = ..., skill_mappings: _Optional[_Iterable[_Union[ContextMappingProto, _Mapping]]] = ..., step_mappings: _Optional[_Iterable[_Union[ContextMappingProto, _Mapping]]] = ...) -> None: ...

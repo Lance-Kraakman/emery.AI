@@ -3,7 +3,8 @@
 
 export const TASK_STATUS = {
   PENDING: 'pending',
-  IN_PROGRESS: 'in_progress', 
+  IN_PROGRESS: 'in_progress',
+  AWAITING_HUMAN: 'awaiting_human',  // Paused, waiting for human to complete a step
   COMPLETED: 'completed',
   FAILED: 'failed',
   CANCELLED: 'cancelled'
@@ -46,6 +47,10 @@ export class TaskStatus {
     return new TaskStatus(TASK_STATUS.IN_PROGRESS);
   }
 
+  static awaitingHuman(): TaskStatus {
+    return new TaskStatus(TASK_STATUS.AWAITING_HUMAN);
+  }
+
   static completed(): TaskStatus {
     return new TaskStatus(TASK_STATUS.COMPLETED);
   }
@@ -68,10 +73,25 @@ export class TaskStatus {
   }
 
   /**
-   * Check if task is currently running
+   * Check if task is currently running (actively executing)
    */
   isRunning(): boolean {
     return this._value === TASK_STATUS.IN_PROGRESS;
+  }
+
+  /**
+   * Check if task is awaiting human input
+   */
+  isAwaitingHuman(): boolean {
+    return this._value === TASK_STATUS.AWAITING_HUMAN;
+  }
+
+  /**
+   * Check if task is in an active state (running or waiting for human)
+   */
+  isActive(): boolean {
+    return this._value === TASK_STATUS.IN_PROGRESS ||
+           this._value === TASK_STATUS.AWAITING_HUMAN;
   }
 
   /**
@@ -94,7 +114,9 @@ export class TaskStatus {
    * Check if task can be cancelled
    */
   canCancel(): boolean {
-    return this._value === TASK_STATUS.PENDING || this._value === TASK_STATUS.IN_PROGRESS;
+    return this._value === TASK_STATUS.PENDING ||
+           this._value === TASK_STATUS.IN_PROGRESS ||
+           this._value === TASK_STATUS.AWAITING_HUMAN;
   }
 
   /**
@@ -112,7 +134,9 @@ export class TaskStatus {
       case TASK_STATUS.PENDING:
         return [TaskStatus.inProgress(), TaskStatus.cancelled()];
       case TASK_STATUS.IN_PROGRESS:
-        return [TaskStatus.completed(), TaskStatus.failed(), TaskStatus.cancelled()];
+        return [TaskStatus.completed(), TaskStatus.failed(), TaskStatus.cancelled(), TaskStatus.awaitingHuman()];
+      case TASK_STATUS.AWAITING_HUMAN:
+        return [TaskStatus.inProgress(), TaskStatus.cancelled(), TaskStatus.failed()]; // Human completes → resume
       case TASK_STATUS.FAILED:
         return [TaskStatus.pending()]; // Can be retried
       case TASK_STATUS.COMPLETED:
@@ -137,11 +161,12 @@ export class TaskStatus {
   getPriorityLevel(): number {
     switch (this._value) {
       case TASK_STATUS.FAILED: return 1; // High priority for retries
-      case TASK_STATUS.PENDING: return 2; // Normal priority
-      case TASK_STATUS.IN_PROGRESS: return 3; // Currently running
-      case TASK_STATUS.COMPLETED: return 4; // Lowest priority
-      case TASK_STATUS.CANCELLED: return 5; // No priority
-      default: return 6;
+      case TASK_STATUS.AWAITING_HUMAN: return 2; // Needs human attention
+      case TASK_STATUS.PENDING: return 3; // Normal priority
+      case TASK_STATUS.IN_PROGRESS: return 4; // Currently running
+      case TASK_STATUS.COMPLETED: return 5; // Lowest priority
+      case TASK_STATUS.CANCELLED: return 6; // No priority
+      default: return 7;
     }
   }
 
@@ -160,6 +185,7 @@ export class TaskStatus {
     switch (this._value) {
       case TASK_STATUS.PENDING: return 'Pending';
       case TASK_STATUS.IN_PROGRESS: return 'In Progress';
+      case TASK_STATUS.AWAITING_HUMAN: return 'Awaiting Human';
       case TASK_STATUS.COMPLETED: return 'Completed';
       case TASK_STATUS.FAILED: return 'Failed';
       case TASK_STATUS.CANCELLED: return 'Cancelled';
@@ -174,6 +200,7 @@ export class TaskStatus {
     switch (this._value) {
       case TASK_STATUS.PENDING: return 'status-pending';
       case TASK_STATUS.IN_PROGRESS: return 'status-in-progress';
+      case TASK_STATUS.AWAITING_HUMAN: return 'status-awaiting-human';
       case TASK_STATUS.COMPLETED: return 'status-completed';
       case TASK_STATUS.FAILED: return 'status-failed';
       case TASK_STATUS.CANCELLED: return 'status-cancelled';
@@ -188,6 +215,7 @@ export class TaskStatus {
     switch (this._value) {
       case TASK_STATUS.PENDING: return 0;
       case TASK_STATUS.IN_PROGRESS: return 50;
+      case TASK_STATUS.AWAITING_HUMAN: return 50; // Paused mid-execution
       case TASK_STATUS.COMPLETED: return 100;
       case TASK_STATUS.FAILED: return 0;
       case TASK_STATUS.CANCELLED: return 0;

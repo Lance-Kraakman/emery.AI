@@ -4,10 +4,13 @@ import { OrganizationId } from '@/ddd/domain/shared/value-objects/organization-i
 import { MessagePart } from '@/ddd/infrastructure/grpc/generated/agent_worker';
 
 /**
- * Skill Execution Types (legacy - being replaced by unified canvas)
- * @deprecated Use WorkflowNodeType for new code
+ * Skill Execution Types
+ * - 'agentic': Single LLM execution with tools (default)
+ * - 'agent': Multi-step DAG workflow (TODO: rename to 'workflow')
+ * - 'human': Human completes the skill (NEW)
+ * - 'operation' | 'tool' | 'write': Legacy, use workflow steps instead
  */
-export type SkillExecutionType = 'agentic' | 'agent' | 'operation' | 'tool' | 'write';
+export type SkillExecutionType = 'agentic' | 'agent' | 'operation' | 'tool' | 'write' | 'human';
 
 /**
  * Workflow Node Types
@@ -19,6 +22,7 @@ export type SkillExecutionType = 'agentic' | 'agent' | 'operation' | 'tool' | 'w
  * - 'tool': Direct Pipedream tool execution
  * - 'write': Direct database write
  * - 'read': Direct database read
+ * - 'human': Human completes this step (NEW)
  *
  * Flow control nodes:
  * - 'skillRef': Reference to another skill
@@ -33,7 +37,8 @@ export type WorkflowNodeType =
   | 'operation'
   | 'tool'
   | 'write'
-  | 'read';
+  | 'read'
+  | 'human';
 
 // =============================================================================
 // DAG Execution Configuration Types
@@ -150,6 +155,27 @@ export interface AgenticStepConfig {
 }
 
 /**
+ * Human Step/Skill Configuration
+ * Used when executionType or nodeType is 'human' - human completes the work
+ */
+export interface HumanSkillConfig {
+  /** Rich text/markdown instructions with links for the human */
+  instructions: string;
+  /** How to determine the assignee */
+  assigneeType: 'owner' | 'specific_user' | 'role';
+  /** User ID when assigneeType is 'specific_user' */
+  assigneeId?: string;
+  /** Role name when assigneeType is 'role' */
+  assigneeRole?: string;
+  /** What to do on timeout */
+  timeoutBehavior?: 'wait_forever' | 'fail' | 'skip_with_default';
+  /** Timeout in hours (only used if timeoutBehavior is not 'wait_forever') */
+  timeoutHours?: number;
+  /** Default outputs to use if skipping on timeout */
+  defaultOutputs?: Record<string, any>;
+}
+
+/**
  * Condition Step Configuration
  * Used when nodeType is 'condition' - branching based on expressions
  */
@@ -184,6 +210,7 @@ export interface SkillStep {
   toolExecutionConfig?: ToolExecutionConfig;  // For 'tool' nodes
   writeConfig?: WriteConfig;              // For 'write' nodes
   readConfig?: ReadConfig;                // For 'read' nodes
+  humanSkillConfig?: HumanSkillConfig;    // For 'human' nodes
   conditions?: ConditionStepConfig[];     // For 'condition' nodes
   loopConfig?: LoopConfig;                // For 'loop' nodes
 
@@ -515,11 +542,12 @@ export interface Skill {
   readonly model?: string | null; // Optional: Override model for this skill
   readonly agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
   readonly allowNetwork?: boolean; // Whether bash tool has network access (for git/code skills)
-  readonly executionType?: SkillExecutionType; // 'agentic' (default), 'agent', 'operation', 'tool', or 'write'
+  readonly executionType?: SkillExecutionType; // 'agentic' (default), 'agent', 'human', 'operation', 'tool', or 'write'
   readonly taskModelConfig?: TaskModelConfig; // Config for 'operation' execution
   readonly toolExecutionConfig?: ToolExecutionConfig; // Config for 'tool' execution
   readonly writeConfig?: WriteConfig; // Config for 'write' execution
   readonly readConfig?: ReadConfig; // Config for 'read' execution
+  readonly humanSkillConfig?: HumanSkillConfig; // Config for 'human' execution
   readonly steps?: SkillStep[]; // Steps for 'agent' execution (step-based DAG workflow)
   readonly canvasMetadata?: CanvasMetadata; // Canvas annotations (sticky notes) - doesn't affect execution
   readonly isSystem: boolean; // System skills cannot be deleted by users
@@ -543,11 +571,12 @@ export interface CreateSkillProps {
   model?: string | null; // Optional: Override model for this skill
   agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
   allowNetwork?: boolean; // Whether bash tool has network access (for git/code skills)
-  executionType?: SkillExecutionType; // 'agentic' (default), 'agent', 'operation', 'tool', or 'write'
+  executionType?: SkillExecutionType; // 'agentic' (default), 'agent', 'human', 'operation', 'tool', or 'write'
   taskModelConfig?: TaskModelConfig; // Config for 'operation' execution
   toolExecutionConfig?: ToolExecutionConfig; // Config for 'tool' execution
   writeConfig?: WriteConfig; // Config for 'write' execution
   readConfig?: ReadConfig; // Config for 'read' execution
+  humanSkillConfig?: HumanSkillConfig; // Config for 'human' execution
   steps?: SkillStep[]; // Steps for 'agent' execution (step-based DAG workflow)
   canvasMetadata?: CanvasMetadata; // Canvas annotations (sticky notes)
 }
@@ -566,11 +595,12 @@ export interface UpdateSkillProps {
   model?: string | null; // Optional: Override model for this skill
   agentType?: string | null; // Optional: "tool_calling" (default) or "code_agent"
   allowNetwork?: boolean; // Whether bash tool has network access (for git/code skills)
-  executionType?: SkillExecutionType; // 'agentic' (default), 'agent', 'operation', 'tool', or 'write'
+  executionType?: SkillExecutionType; // 'agentic' (default), 'agent', 'human', 'operation', 'tool', or 'write'
   taskModelConfig?: TaskModelConfig | null; // Config for 'operation' execution (null to clear)
   toolExecutionConfig?: ToolExecutionConfig | null; // Config for 'tool' execution (null to clear)
   writeConfig?: WriteConfig | null; // Config for 'write' execution (null to clear)
   readConfig?: ReadConfig | null; // Config for 'read' execution (null to clear)
+  humanSkillConfig?: HumanSkillConfig | null; // Config for 'human' execution (null to clear)
   steps?: SkillStep[] | null; // Steps for 'agent' execution (null to clear)
   canvasMetadata?: CanvasMetadata | null; // Canvas annotations (null to clear)
 }
@@ -610,6 +640,11 @@ export class SkillEntity {
       throw new Error('Steps are required for agent (step-based) execution');
     }
 
+    // Human skill config is required for human execution
+    if (executionType === 'human' && !props.humanSkillConfig) {
+      throw new Error('Human skill configuration is required for human execution');
+    }
+
     // Validate input names
     const inputs = props.inputs || [];
     for (const input of inputs) {
@@ -640,6 +675,7 @@ export class SkillEntity {
       taskModelConfig: props.taskModelConfig,
       toolExecutionConfig: props.toolExecutionConfig,
       writeConfig: props.writeConfig,
+      humanSkillConfig: props.humanSkillConfig,
       steps: props.steps,
       canvasMetadata: props.canvasMetadata,
       isSystem: false // User-created skills are never system skills
@@ -713,6 +749,9 @@ export class SkillEntity {
       writeConfig: updates.writeConfig !== undefined
         ? (updates.writeConfig === null ? undefined : updates.writeConfig)
         : skill.writeConfig,
+      humanSkillConfig: updates.humanSkillConfig !== undefined
+        ? (updates.humanSkillConfig === null ? undefined : updates.humanSkillConfig)
+        : skill.humanSkillConfig,
       steps: updates.steps !== undefined
         ? (updates.steps === null ? undefined : updates.steps)
         : skill.steps,
@@ -749,6 +788,13 @@ export class SkillEntity {
    */
   static isAgentExecution(skill: Skill): boolean {
     return skill.executionType === 'agent';
+  }
+
+  /**
+   * Check if skill uses human execution (human completes the skill)
+   */
+  static isHumanExecution(skill: Skill): boolean {
+    return skill.executionType === 'human';
   }
 
   /**
