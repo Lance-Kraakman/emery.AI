@@ -74,8 +74,12 @@ export function successResponse<T>(data: T, message?: string): Response {
  *
  * Handles:
  * - Authentication via authenticateRequest()
+ * - RLS context via contextManager.withContext()
  * - Error handling with proper status codes
  * - Consistent response format
+ *
+ * AIDEV-NOTE: Uses withContext (asyncLocalStorage.run) for proper async context
+ * scoping. This ensures RLS context propagates correctly across all async operations.
  *
  * @example
  * export async function GET(request: NextRequest) {
@@ -100,30 +104,33 @@ export async function withAuthenticatedRoute<T>(
       );
     }
 
-    // Set RLS context for all DI service calls
-    // AIDEV-NOTE: This enables contextAwareDb proxy to apply RLS to all queries
-    if (authResult.user.organizationId) {
-      contextManager.setContext(
-        OrganizationId.fromNumber(authResult.user.organizationId),
-        UserId.fromString(authResult.user.id)
+    if (!authResult.user.organizationId) {
+      return Response.json(
+        { success: false, error: 'No organization context' },
+        { status: 400 }
       );
     }
 
-    try {
-      // Execute handler with authenticated user
-      const result = await handler(authResult.user);
+    // Capture user in a local variable to preserve type narrowing in callback
+    const user = authResult.user;
+    // organizationId is validated above but TypeScript doesn't narrow object fields
+    const organizationId = user.organizationId!;
 
-      // Return error response if handler failed
-      if (!result.success) {
-        return Response.json(result, { status: result.status || 400 });
-      }
+    // Use withContext (asyncLocalStorage.run) for proper async context scoping
+    // This ensures RLS context propagates correctly in all async operations
+    const result = await contextManager.withContext(
+      OrganizationId.fromNumber(organizationId),
+      () => handler(user),
+      UserId.fromString(user.id)
+    );
 
-      // Return success response
-      return Response.json(result, { status: 200 });
-    } finally {
-      // Clear context after request to prevent leakage
-      contextManager.clearContext();
+    // Return error response if handler failed
+    if (!result.success) {
+      return Response.json(result, { status: result.status || 400 });
     }
+
+    // Return success response
+    return Response.json(result, { status: 200 });
 
   } catch (error) {
     return handleApiError(error);
