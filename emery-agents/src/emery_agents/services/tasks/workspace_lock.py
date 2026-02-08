@@ -17,9 +17,9 @@ import json
 import time
 from pathlib import Path
 
-import structlog
+import logging
 
-logger = structlog.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 LOCK_FILE = ".emery-lock"
 LOCK_TTL_SECS = 3600  # 1 hour - matches Tauri TTL
@@ -48,14 +48,12 @@ async def acquire_lock(workspace_path: Path, task_id: str, agent_id: int) -> boo
             # If lock is stale (older than TTL), we can overwrite it
             if existing_age < LOCK_TTL_SECS:
                 logger.warning(
-                    "workspace_lock_exists",
-                    existing_task_id=existing.get("task_id"),
-                    existing_agent_id=existing.get("agent_id"),
-                    age_seconds=existing_age,
+                    f"workspace_lock_exists existing_task_id={existing.get('task_id')} "
+                    f"existing_agent_id={existing.get('agent_id')} age_seconds={existing_age}"
                 )
                 # Don't fail - overwrite the lock since we're the agent
         except (json.JSONDecodeError, OSError) as e:
-            logger.warning("invalid_lock_file", error=str(e))
+            logger.warning(f"invalid_lock_file error={e}")
 
     lock_data = {
         "task_id": task_id,
@@ -65,15 +63,10 @@ async def acquire_lock(workspace_path: Path, task_id: str, agent_id: int) -> boo
 
     try:
         lock_path.write_text(json.dumps(lock_data))
-        logger.info(
-            "workspace_lock_acquired",
-            task_id=task_id,
-            agent_id=agent_id,
-            lock_path=str(lock_path),
-        )
+        logger.info(f"workspace_lock_acquired task_id={task_id} agent_id={agent_id} lock_path={lock_path}")
         return True
     except OSError as e:
-        logger.error("workspace_lock_failed", error=str(e))
+        logger.error(f"workspace_lock_failed error={e}")
         return False
 
 
@@ -93,7 +86,7 @@ async def release_lock(workspace_path: Path, task_id: str) -> bool:
     lock_path = workspace_path / LOCK_FILE
 
     if not lock_path.exists():
-        logger.debug("workspace_lock_not_found", task_id=task_id)
+        logger.debug(f"workspace_lock_not_found task_id={task_id}")
         return False
 
     try:
@@ -102,21 +95,15 @@ async def release_lock(workspace_path: Path, task_id: str) -> bool:
         # Only delete if we own the lock
         if lock_data.get("task_id") == task_id:
             lock_path.unlink()
-            logger.info(
-                "workspace_lock_released",
-                task_id=task_id,
-                lock_path=str(lock_path),
-            )
+            logger.info(f"workspace_lock_released task_id={task_id} lock_path={lock_path}")
             return True
         else:
             logger.warning(
-                "workspace_lock_not_owned",
-                our_task_id=task_id,
-                lock_task_id=lock_data.get("task_id"),
+                f"workspace_lock_not_owned our_task_id={task_id} lock_task_id={lock_data.get('task_id')}"
             )
             return False
     except (json.JSONDecodeError, OSError) as e:
-        logger.error("workspace_lock_release_failed", error=str(e))
+        logger.error(f"workspace_lock_release_failed error={e}")
         return False
 
 
@@ -141,11 +128,7 @@ async def check_lock(workspace_path: Path) -> dict | None:
 
         # Ignore stale locks
         if age > LOCK_TTL_SECS:
-            logger.debug(
-                "workspace_lock_stale",
-                task_id=lock_data.get("task_id"),
-                age_seconds=age,
-            )
+            logger.debug(f"workspace_lock_stale task_id={lock_data.get('task_id')} age_seconds={age}")
             return None
 
         return lock_data

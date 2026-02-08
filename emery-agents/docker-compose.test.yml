@@ -55,6 +55,24 @@ services:
       retries: 3
       start_period: 30s
 
+  # SFTP server for workspace sync (Tauri client connects here)
+  sftp:
+    image: lscr.io/linuxserver/openssh-server:latest
+    ports:
+      - "2222:2222"
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=UTC
+      - USER_NAME=agent
+      - USER_PASSWORD=test123
+      - PASSWORD_ACCESS=true
+    volumes:
+      # Same workspace volume as agents - enables Tauri to sync directly
+      - workspace-data:/config/workspace
+    networks:
+      - test-network
+
   # Test database if needed for integration tests
   test-postgres:
     image: pgvector/pgvector:pg17

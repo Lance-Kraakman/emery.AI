@@ -123,6 +123,10 @@ services:
       S3_BUCKET_NAME: enhancd-files
       NEXTJS_BASE_URL: http://app-integration:3000
       EMERY_DEBUG_PROMPTS: "1"
+      WORKSPACE_STORAGE_PATH: /mnt/storage/workspaces
+    volumes:
+      # Shared workspace storage (same as SFTP server)
+      - workspace_data:/mnt/storage/workspaces
     depends_on:
       postgres-integration:
         condition: service_healthy
@@ -159,6 +163,10 @@ services:
       AWS_ALLOW_HTTP: "true"
       AWS_S3_ALLOW_UNSAFE_RENAME: "true"
       REDIS_URL: redis://redis-integration:6379
+      WORKSPACE_STORAGE_PATH: /mnt/storage/workspaces
+    volumes:
+      # Shared workspace storage (same as SFTP server)
+      - workspace_data:/mnt/storage/workspaces
     depends_on:
       postgres-integration:
         condition: service_healthy
@@ -172,6 +180,25 @@ services:
       interval: 15s
       timeout: 10s
       retries: 3
+    networks:
+      - integration-test-network
+
+  # SFTP server for workspace sync (Tauri desktop client connects here)
+  sftp-integration:
+    image: lscr.io/linuxserver/openssh-server:latest
+    container_name: emery-integration-sftp
+    ports:
+      - "127.0.0.1:2222:2222"
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=UTC
+      - USER_NAME=agent
+      - USER_PASSWORD=test123
+      - PASSWORD_ACCESS=true
+    volumes:
+      # Shared workspace storage - same volume agents use
+      - workspace_data:/config/workspace
     networks:
       - integration-test-network
 
@@ -229,6 +256,7 @@ volumes:
   integration_postgres_data:  # Isolated volume for integration tests
   integration_minio_data:     # MinIO data for S3 storage testing
   integration_redis_data:     # Redis data for caching
+  workspace_data:             # Shared workspace for SFTP sync + agents
 
 networks:
   integration-test-network:

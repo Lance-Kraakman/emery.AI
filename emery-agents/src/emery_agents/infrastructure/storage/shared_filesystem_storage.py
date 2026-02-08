@@ -142,6 +142,53 @@ class SharedFilesystemStorage(WorkspaceStorage):
         config_path = path / config_dir / "config.json"
         config_path.write_text(json.dumps(config, indent=2))
 
+    def create_agent_identifier(
+        self,
+        org_id: int,
+        workspace_id: str,
+        agent_name: str,
+        agent_id: int | None = None,
+    ) -> Path:
+        """
+        Create visible agent identifier file in workspace root.
+
+        Creates a file like `ProjectManager.enhancd.json` so users can
+        easily identify which agent the synced folder belongs to.
+
+        Args:
+            org_id: Organization ID
+            workspace_id: Workspace identifier (usually agent_id as string)
+            agent_name: Human-readable agent name
+            agent_id: Optional agent ID (uses workspace_id if not provided)
+
+        Returns:
+            Path to the created identifier file
+        """
+        path = self._workspace_path(org_id, WorkspaceType.AGENTS, workspace_id)
+
+        # Sanitize agent name for filename (remove special chars)
+        safe_name = "".join(c if c.isalnum() or c in " -_" else "" for c in agent_name)
+        safe_name = safe_name.strip().replace(" ", "-") or "Agent"
+
+        # Remove any existing .enhancd.json files first
+        for existing in path.glob("*.enhancd.json"):
+            existing.unlink()
+            logger.debug(f"Removed old identifier file: {existing}")
+
+        identifier = {
+            "id": agent_id or int(workspace_id),
+            "name": agent_name,
+            "org_id": org_id,
+            "created_at": datetime.now().isoformat(),
+            "workspace_path": str(path),
+        }
+
+        identifier_path = path / f"{safe_name}.enhancd.json"
+        identifier_path.write_text(json.dumps(identifier, indent=2))
+        logger.info(f"Created agent identifier: {identifier_path}")
+
+        return identifier_path
+
     def workspace_exists(
         self, org_id: int, workspace_type: WorkspaceType, workspace_id: str
     ) -> bool:

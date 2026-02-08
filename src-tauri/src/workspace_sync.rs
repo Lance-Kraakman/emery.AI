@@ -477,12 +477,17 @@ pub async fn sftp_connect(
     api_key: String,
     api_base: String,
 ) -> Result<(), String> {
+    // Get workspace root from env var (configurable for local vs production)
+    let sftp_root = std::env::var("SFTP_WORKSPACE_ROOT").unwrap_or_else(|_| "/config/workspace".to_string());
+
     // Get SFTP credentials from API
     let client = reqwest::Client::new();
     let url = format!(
         "{}/api/agents/{}/workspace/sftp-credentials",
         api_base, agent_id
     );
+
+    log::debug!("Fetching SFTP credentials from: {}", url);
 
     let response = client
         .get(&url)
@@ -492,17 +497,32 @@ pub async fn sftp_connect(
         .map_err(SyncError::Http)?;
 
     if !response.status().is_success() {
-        // Fall back to local dev credentials
+        log::info!("API returned {}, falling back to local dev credentials", response.status());
+
+        // Fall back to local dev credentials (linuxserver/openssh-server)
+        // Path: {SFTP_WORKSPACE_ROOT}/agents/{agent_id}
+        let remote_path = format!("{}/agents/{}", sftp_root, agent_id);
+
         let creds = SftpCredentials {
             host: "localhost".to_string(),
             port: 2222,
             username: "agent".to_string(),
             password: "test123".to_string(),
-            remote_path: "/workspace".to_string(),
+            remote_path: remote_path.clone(),
         };
 
         let mut manager = SFTP_MANAGER.lock().map_err(|e| e.to_string())?;
         manager.connect(agent_id, &creds)?;
+
+        // Create agent workspace directory if it doesn't exist
+        if let Some(conn) = manager.get(agent_id) {
+            let path = std::path::Path::new(&remote_path);
+            log::debug!("Ensuring workspace directory exists: {}", remote_path);
+            // Create parent dirs recursively
+            create_remote_dirs(&conn.sftp, path).ok();
+        }
+
+        log::info!("Connected to local SFTP, workspace: {}", remote_path);
         return Ok(());
     }
 
@@ -521,6 +541,8 @@ pub async fn sftp_connect(
 
     let mut manager = SFTP_MANAGER.lock().map_err(|e| e.to_string())?;
     manager.connect(agent_id, &creds_resp.credentials)?;
+
+    log::info!("Connected to SFTP, workspace: {}", creds_resp.credentials.remote_path);
 
     Ok(())
 }
@@ -700,24 +722,36 @@ pub async fn push_workspace(
     _api_key: String,
     _api_base: String,
 ) -> Result<SyncResult, String> {
+    log::info!("push_workspace: agent_id={}, local_path={}", agent_id, local_path);
+
     let local_dir = PathBuf::from(&local_path);
 
     if !local_dir.exists() {
-        return Err("Local folder does not exist".to_string());
+        log::error!("push_workspace: Local folder does not exist: {}", local_path);
+        return Err(format!("Local folder does not exist: {}", local_path));
     }
 
     // Check workspace lock first (reads .emery-lock file via SFTP)
     let lock_state = check_workspace_lock(agent_id).await?;
     if lock_state.locked {
+        log::info!("push_workspace: Workspace locked by task {:?}, queuing changes", lock_state.task_id);
         // Queue changes instead of syncing
         return queue_pending_changes(app, agent_id, local_path, "push").await;
     }
 
     // Ensure connected
-    let manager = SFTP_MANAGER.lock().map_err(|e| e.to_string())?;
+    let manager = SFTP_MANAGER.lock().map_err(|e| {
+        log::error!("push_workspace: Failed to acquire SFTP manager lock: {}", e);
+        e.to_string()
+    })?;
     let conn = manager
         .get(agent_id)
-        .ok_or_else(|| SyncError::NotConnected.to_string())?;
+        .ok_or_else(|| {
+            log::error!("push_workspace: Not connected to SFTP for agent_id={}", agent_id);
+            SyncError::NotConnected.to_string()
+        })?;
+
+    log::debug!("push_workspace: Using remote_path: {}", conn.remote_path);
 
     // Get local files
     let local_files = get_local_files(&local_dir)?;
@@ -780,20 +814,32 @@ pub async fn push_workspace(
         // Ensure remote directory exists
         if let Some(parent) = remote_path.parent() {
             // Create parent directories recursively
-            create_remote_dirs(&conn.sftp, parent)?;
+            log::debug!("push_workspace: Creating remote directory: {:?}", parent);
+            if let Err(e) = create_remote_dirs(&conn.sftp, parent) {
+                log::error!("push_workspace: Failed to create remote directory {:?}: {}", parent, e);
+                return Err(format!("Failed to create remote directory {:?}: {}", parent, e));
+            }
         }
 
         // Write to remote (always send full file for now since SFTP doesn't support apply)
         // In production with delta, we'd send to a server-side apply endpoint
+        log::debug!("push_workspace: Writing file to {:?}", remote_path);
         let mut remote_file = conn
             .sftp
             .create(remote_path)
-            .map_err(|e| SyncError::Sftp(e.to_string()))?;
+            .map_err(|e| {
+                log::error!("push_workspace: Failed to create remote file {:?}: {}", remote_path, e);
+                SyncError::Sftp(format!("Failed to create remote file {:?}: {}", remote_path, e))
+            })?;
         remote_file
             .write_all(&local_content)
-            .map_err(|e| SyncError::Io(e))?;
+            .map_err(|e| {
+                log::error!("push_workspace: Failed to write to remote file {:?}: {}", remote_path, e);
+                SyncError::Io(e)
+            })?;
 
         files_synced += 1;
+        log::debug!("push_workspace: Synced file {} ({} bytes)", file_info.path, local_content.len());
     }
 
     // Clear pending changes since we just synced

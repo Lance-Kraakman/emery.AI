@@ -127,6 +127,20 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
                         f"📁 [TASK-{task_data.task_id[:8]}] Workspace ready at {workspace_path}"
                     )
 
+                    # Create agent identifier file (visible in synced folder)
+                    agent_name = (
+                        request.agent_config.name
+                        if request.agent_config and request.agent_config.name
+                        else None
+                    )
+                    if agent_name:
+                        self.workspace_storage.create_agent_identifier(
+                            org_id=task_data.organization_id,
+                            workspace_id=workspace_id,
+                            agent_name=agent_name,
+                            agent_id=task_data.agent_id,
+                        )
+
                     # Prepare task history directory
                     self.workspace_storage.prepare_task_history(
                         org_id=task_data.organization_id,

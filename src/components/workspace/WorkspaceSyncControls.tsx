@@ -142,11 +142,16 @@ export function WorkspaceSyncControls({ agentId }: WorkspaceSyncControlsProps) {
           <span className="hidden sm:inline">{getStatusText()}</span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-80" align="end">
-        <div className="grid gap-4">
+      <PopoverContent className="w-80 max-w-[calc(100vw-2rem)]" align="end">
+        <div className="grid gap-4 overflow-hidden">
           <div className="space-y-2">
             <h4 className="font-medium leading-none">Workspace Sync</h4>
-            <p className="text-sm text-muted-foreground truncate">{syncPath}</p>
+            <p
+              className="text-sm text-muted-foreground truncate max-w-full"
+              title={syncPath}
+            >
+              {syncPath}
+            </p>
           </div>
 
           {/* Status indicators */}
