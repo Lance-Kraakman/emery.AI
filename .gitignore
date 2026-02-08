@@ -83,3 +83,8 @@ security/reports/
 
 # Generated gRPC TLS certificates (dev)
 certs/
+
+# Knowledge base data
+emery-agents/TaskStream/
+emery-agents/knowledge_base.json.gz
+*.json.gz
