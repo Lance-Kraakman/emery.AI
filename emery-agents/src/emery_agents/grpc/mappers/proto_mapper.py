@@ -7,22 +7,28 @@ No complex abstractions - just direct mapping functions.
 """
 
 import json
-from typing import List, Dict, Any, Optional, TypedDict
-from ..generated import agent_worker_pb2
-from ...entities.task import TaskRequest, TriggerData, SkillInputValue
-from ...entities.agent import AgentConfig
-from ...entities.tool_config import ToolConfig
+from typing import Any, TypedDict
+
 from ...entities.message import (
-    TextPart, ImagePart, FilePart, MessagePart,
-    ImageAttachment, FileAttachment, HistoryMessage, TokenUsage,
+    FileAttachment,
+    FilePart,
+    HistoryMessage,
+    ImageAttachment,
+    ImagePart,
+    MessagePart,
+    TextPart,
 )
-from ...types import TaskStatus, WorkerStatus, InstructionConfig
 from ...entities.models.context_mapping import ResolvedContext
+from ...entities.task import SkillInputValue, TaskRequest, TriggerData
+from ...entities.tool_config import ToolConfig
+from ...types import InstructionConfig
+from ..generated import agent_worker_pb2
 
 
 # Type definitions for structured return values
 class TaskProgressDict(TypedDict):
     """Type-safe structure for task progress data."""
+
     task_id: str
     status: str
     output_json: str
@@ -33,25 +39,28 @@ class TaskProgressDict(TypedDict):
 
 class WorkerInfoDict(TypedDict):
     """Type-safe structure for worker info data."""
+
     worker_id: str
     version: str
     organization_id: str
     status: str
-    capabilities: List[str]
+    capabilities: list[str]
     active_tasks: int
     max_concurrent_tasks: int
     uptime_seconds: int
-    supported_tools: List[str]
+    supported_tools: list[str]
 
 
 class CancelTaskRequestDict(TypedDict):
     """Type-safe structure for cancel task request."""
+
     task_id: str
     reason: str
 
 
 class CancelTaskResponseDict(TypedDict):
     """Type-safe structure for cancel task response."""
+
     success: bool
     message: str
 
@@ -59,33 +68,35 @@ class CancelTaskResponseDict(TypedDict):
 class ProtoMapper:
     """Handles conversion between protobuf messages and domain entities."""
 
-    def task_request_from_proto(self, proto: agent_worker_pb2.TaskRequest) -> TaskRequest:
+    def task_request_from_proto(
+        self, proto: agent_worker_pb2.TaskRequest
+    ) -> TaskRequest:
         """Convert protobuf TaskRequest to domain entity."""
         # Convert agent config
 
         # Convert trigger data with typed skill inputs
-        skill_input_values: List[SkillInputValue] = []
+        skill_input_values: list[SkillInputValue] = []
         if proto.trigger_data and proto.trigger_data.skill_inputs:
             for input_val in proto.trigger_data.skill_inputs:
                 # Extract value from oneof field
                 value: Any = None
-                if input_val.HasField('string_value'):
+                if input_val.HasField("string_value"):
                     value = input_val.string_value
-                elif input_val.HasField('number_value'):
+                elif input_val.HasField("number_value"):
                     value = input_val.number_value
-                elif input_val.HasField('bool_value'):
+                elif input_val.HasField("bool_value"):
                     value = input_val.bool_value
-                elif input_val.HasField('json_value'):
+                elif input_val.HasField("json_value"):
                     try:
                         value = json.loads(input_val.json_value)
                     except json.JSONDecodeError:
                         value = input_val.json_value  # Fallback to raw string
 
-                skill_input_values.append(SkillInputValue(
-                    name=input_val.name,
-                    type=input_val.type,
-                    value=value
-                ))
+                skill_input_values.append(
+                    SkillInputValue(
+                        name=input_val.name, type=input_val.type, value=value
+                    )
+                )
 
         trigger_data = TriggerData(skill_inputs=skill_input_values)
 
@@ -104,7 +115,7 @@ class ProtoMapper:
                 servers=list(proto.instruction_config.servers),
                 images=list(proto.instruction_config.images),
                 attachments=list(proto.instruction_config.attachments),
-                model=proto.instruction_config.model or None
+                model=proto.instruction_config.model or None,
             )
 
         # Parse resolved context if present
@@ -137,7 +148,9 @@ class ProtoMapper:
             user_api_key=proto.user_api_key or None,
         )
 
-    def task_progress_to_proto(self, progress: TaskProgressDict) -> agent_worker_pb2.TaskProgress:
+    def task_progress_to_proto(
+        self, progress: TaskProgressDict
+    ) -> agent_worker_pb2.TaskProgress:
         """
         Convert domain TaskProgress to protobuf.
 
@@ -159,7 +172,7 @@ class ProtoMapper:
             output_json=progress.output_json,
             error_message=progress.error_message,
             timestamp_ms=progress.timestamp_ms,
-            progress_percent=progress.progress_percent
+            progress_percent=progress.progress_percent,
         )
 
     def worker_info_to_proto(self, info: WorkerInfoDict) -> agent_worker_pb2.WorkerInfo:
@@ -182,27 +195,28 @@ class ProtoMapper:
             active_tasks=info.active_tasks,
             max_concurrent_tasks=info.max_concurrent_tasks,
             uptime_seconds=info.uptime_seconds,
-            supported_tools=info.supported_tools
+            supported_tools=info.supported_tools,
         )
 
-    def cancel_task_request_from_proto(self, proto: agent_worker_pb2.CancelTaskRequest) -> CancelTaskRequestDict:
+    def cancel_task_request_from_proto(
+        self, proto: agent_worker_pb2.CancelTaskRequest
+    ) -> CancelTaskRequestDict:
         """Convert protobuf CancelTaskRequest - simplified to return dict."""
-        return {
-            'task_id': proto.task_id,
-            'reason': proto.reason
-        }
+        return {"task_id": proto.task_id, "reason": proto.reason}
 
-    def cancel_task_response_to_proto(self, response: CancelTaskResponseDict) -> agent_worker_pb2.CancelTaskResponse:
+    def cancel_task_response_to_proto(
+        self, response: CancelTaskResponseDict
+    ) -> agent_worker_pb2.CancelTaskResponse:
         """Convert domain CancelTaskResponse to protobuf."""
         return agent_worker_pb2.CancelTaskResponse(
-            success=response.success,
-            message=response.message
+            success=response.success, message=response.message
         )
 
 
 # =========================================================================
 # Standalone converter functions (used at gRPC boundary)
 # =========================================================================
+
 
 def tool_config_from_proto(proto: agent_worker_pb2.ToolConfig) -> ToolConfig:
     """Convert protobuf ToolConfig to entity ToolConfig."""
@@ -213,18 +227,20 @@ def tool_config_from_proto(proto: agent_worker_pb2.ToolConfig) -> ToolConfig:
     )
 
 
-def tool_configs_from_proto(protos: List[agent_worker_pb2.ToolConfig]) -> List[ToolConfig]:
+def tool_configs_from_proto(
+    protos: list[agent_worker_pb2.ToolConfig],
+) -> list[ToolConfig]:
     """Convert list of protobuf ToolConfigs to entity ToolConfigs."""
     return [tool_config_from_proto(p) for p in protos]
 
 
-def message_part_from_proto(proto: agent_worker_pb2.MessagePart) -> Optional[MessagePart]:
+def message_part_from_proto(proto: agent_worker_pb2.MessagePart) -> MessagePart | None:
     """Convert protobuf MessagePart to entity MessagePart."""
-    if proto.HasField('text'):
+    if proto.HasField("text"):
         return TextPart(text=proto.text.text)
-    elif proto.HasField('image_url'):
+    elif proto.HasField("image_url"):
         return ImagePart(url=proto.image_url.url)
-    elif proto.HasField('file'):
+    elif proto.HasField("file"):
         return FilePart(
             url=proto.file.url,
             mime_type=proto.file.mime_type,
@@ -234,7 +250,9 @@ def message_part_from_proto(proto: agent_worker_pb2.MessagePart) -> Optional[Mes
     return None
 
 
-def message_parts_from_proto(protos: List[agent_worker_pb2.MessagePart]) -> List[MessagePart]:
+def message_parts_from_proto(
+    protos: list[agent_worker_pb2.MessagePart],
+) -> list[MessagePart]:
     """Convert list of protobuf MessageParts to entity MessageParts."""
     result = []
     for p in protos:
@@ -245,47 +263,49 @@ def message_parts_from_proto(protos: List[agent_worker_pb2.MessagePart]) -> List
 
 
 def file_attachments_from_proto(
-    message_parts: List[agent_worker_pb2.MessagePart],
-) -> List[FileAttachment]:
+    message_parts: list[agent_worker_pb2.MessagePart],
+) -> list[FileAttachment]:
     """Extract FileAttachment entities from protobuf MessageParts."""
     attachments = []
     for part in message_parts:
-        if part.HasField('file'):
-            attachments.append(FileAttachment(
-                url=part.file.url,
-                mime_type=part.file.mime_type,
-                filename=part.file.filename,
-            ))
+        if part.HasField("file"):
+            attachments.append(
+                FileAttachment(
+                    url=part.file.url,
+                    mime_type=part.file.mime_type,
+                    filename=part.file.filename,
+                )
+            )
     return attachments
 
 
 def image_attachments_from_proto(
-    message_parts: List[agent_worker_pb2.MessagePart],
-) -> List[ImageAttachment]:
+    message_parts: list[agent_worker_pb2.MessagePart],
+) -> list[ImageAttachment]:
     """Extract ImageAttachment entities from protobuf MessageParts."""
     attachments = []
     for part in message_parts:
-        if part.HasField('image_url') and part.image_url.url:
+        if part.HasField("image_url") and part.image_url.url:
             attachments.append(ImageAttachment(url=part.image_url.url))
     return attachments
 
 
-def token_usage_to_proto(tu: Optional[Any]) -> Optional[agent_worker_pb2.TokenUsage]:
+def token_usage_to_proto(tu: Any | None) -> agent_worker_pb2.TokenUsage | None:
     """Convert entity TokenUsage (or compatible) to protobuf TokenUsage."""
     if not tu:
         return None
     return agent_worker_pb2.TokenUsage(
-        model_name=getattr(tu, 'model_name', ''),
-        input_tokens=getattr(tu, 'input_tokens', 0),
-        output_tokens=getattr(tu, 'output_tokens', 0),
-        total_tokens=getattr(tu, 'total_tokens', 0),
-        cost_usd=getattr(tu, 'cost_usd', 0.0),
+        model_name=getattr(tu, "model_name", ""),
+        input_tokens=getattr(tu, "input_tokens", 0),
+        output_tokens=getattr(tu, "output_tokens", 0),
+        total_tokens=getattr(tu, "total_tokens", 0),
+        cost_usd=getattr(tu, "cost_usd", 0.0),
     )
 
 
 def history_messages_from_proto(
-    protos: List[agent_worker_pb2.HistoryMessage],
-) -> List[HistoryMessage]:
+    protos: list[agent_worker_pb2.HistoryMessage],
+) -> list[HistoryMessage]:
     """Convert proto HistoryMessage list to entity HistoryMessage list."""
     return [
         HistoryMessage(

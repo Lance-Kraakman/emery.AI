@@ -13,13 +13,12 @@ Patterns: @agent:name, @skill:name, @tool:name
 
 import re
 from dataclasses import dataclass
-from typing import Optional, Tuple, Dict
 
 # Pattern matches @agent:name where name contains alphanumerics, hyphens, or underscores
-AGENT_MENTION_PATTERN = re.compile(r'@agent:([a-zA-Z0-9_-]+)', re.IGNORECASE)
+AGENT_MENTION_PATTERN = re.compile(r"@agent:([a-zA-Z0-9_-]+)", re.IGNORECASE)
 
 
-def parse_agent_mention(text: str) -> Tuple[str, Optional[str]]:
+def parse_agent_mention(text: str) -> tuple[str, str | None]:
     """
     Parse @agent:name mention from text.
 
@@ -45,9 +44,9 @@ def parse_agent_mention(text: str) -> Tuple[str, Optional[str]]:
     if match:
         agent_name = match.group(1)
         # Remove the mention from text and clean up whitespace
-        cleaned_text = AGENT_MENTION_PATTERN.sub('', text).strip()
+        cleaned_text = AGENT_MENTION_PATTERN.sub("", text).strip()
         # Normalize multiple spaces to single space
-        cleaned_text = ' '.join(cleaned_text.split())
+        cleaned_text = " ".join(cleaned_text.split())
         return (cleaned_text, agent_name)
     return (text, None)
 
@@ -85,24 +84,24 @@ def extract_all_agent_mentions(text: str) -> list[str]:
 # ============================================================================
 
 # Pattern matches @skill:name where name contains alphanumerics, hyphens, or underscores
-SKILL_MENTION_PATTERN = re.compile(r'@skill:([a-zA-Z0-9_-]+)', re.IGNORECASE)
+SKILL_MENTION_PATTERN = re.compile(r"@skill:([a-zA-Z0-9_-]+)", re.IGNORECASE)
 
 # Pattern to extract "with key1: value1, key2: value2" after skill mention
 SKILL_INPUTS_PATTERN = re.compile(
-    r'@skill:[a-zA-Z0-9_-]+\s+with\s+(.+)',
-    re.IGNORECASE | re.DOTALL
+    r"@skill:[a-zA-Z0-9_-]+\s+with\s+(.+)", re.IGNORECASE | re.DOTALL
 )
 
 
 @dataclass
 class SkillInvocation:
     """Represents a parsed @skill:name invocation with optional inputs."""
+
     skill_name: str
-    inputs: Dict[str, str]
+    inputs: dict[str, str]
     cleaned_task: str  # Task text with @skill mention removed
 
 
-def parse_skill_mention(text: str) -> Tuple[str, Optional[str]]:
+def parse_skill_mention(text: str) -> tuple[str, str | None]:
     """
     Parse @skill:name mention from text.
 
@@ -125,14 +124,14 @@ def parse_skill_mention(text: str) -> Tuple[str, Optional[str]]:
     if match:
         skill_name = match.group(1)
         # Remove the mention from text and clean up whitespace
-        cleaned_text = SKILL_MENTION_PATTERN.sub('', text).strip()
+        cleaned_text = SKILL_MENTION_PATTERN.sub("", text).strip()
         # Normalize multiple spaces to single space
-        cleaned_text = ' '.join(cleaned_text.split())
+        cleaned_text = " ".join(cleaned_text.split())
         return (cleaned_text, skill_name)
     return (text, None)
 
 
-def parse_skill_inputs(inputs_str: str) -> Dict[str, str]:
+def parse_skill_inputs(inputs_str: str) -> dict[str, str]:
     """
     Parse "key1: value1, key2: value2" format into a dictionary.
 
@@ -154,16 +153,15 @@ def parse_skill_inputs(inputs_str: str) -> Dict[str, str]:
         >>> parse_skill_inputs('name: "John Doe", age: 25')
         {'name': 'John Doe', 'age': '25'}
     """
-    inputs: Dict[str, str] = {}
+    inputs: dict[str, str] = {}
     if not inputs_str:
         return inputs
 
     # Simple parsing: split by comma, then by colon
     # This handles most cases; for complex quoted values, we'd need a proper parser
-    current_key: Optional[str] = None
-    current_value_parts: list[str] = []
+    current_key: str | None = None
     in_quotes = False
-    quote_char: Optional[str] = None
+    quote_char: str | None = None
 
     i = 0
     while i < len(inputs_str):
@@ -182,26 +180,26 @@ def parse_skill_inputs(inputs_str: str) -> Dict[str, str]:
             continue
 
         # Handle colon (key-value separator) - only when not in quotes
-        if char == ':' and not in_quotes and current_key is None:
+        if char == ":" and not in_quotes and current_key is None:
             # Everything before this is the key
             key_part = inputs_str[:i].strip()
             # Find the last comma or start to get just the key name
-            last_comma = key_part.rfind(',')
+            last_comma = key_part.rfind(",")
             if last_comma >= 0:
-                current_key = key_part[last_comma + 1:].strip()
+                current_key = key_part[last_comma + 1 :].strip()
             else:
                 current_key = key_part.strip()
-            inputs_str = inputs_str[i + 1:]  # Move past the colon
+            inputs_str = inputs_str[i + 1 :]  # Move past the colon
             i = 0
             continue
 
         # Handle comma (value separator) - only when not in quotes
-        if char == ',' and not in_quotes and current_key is not None:
+        if char == "," and not in_quotes and current_key is not None:
             # Everything before this is the value for current_key
             value = inputs_str[:i].strip()
             inputs[current_key] = value
             current_key = None
-            inputs_str = inputs_str[i + 1:].strip()  # Move past the comma
+            inputs_str = inputs_str[i + 1 :].strip()  # Move past the comma
             i = 0
             continue
 
@@ -211,9 +209,9 @@ def parse_skill_inputs(inputs_str: str) -> Dict[str, str]:
     if current_key is not None:
         value = inputs_str.strip()
         inputs[current_key] = value
-    elif inputs_str.strip() and ':' in inputs_str:
+    elif inputs_str.strip() and ":" in inputs_str:
         # Handle simple case where we have remaining "key: value"
-        parts = inputs_str.split(':', 1)
+        parts = inputs_str.split(":", 1)
         if len(parts) == 2:
             key = parts[0].strip()
             value = parts[1].strip()
@@ -223,7 +221,7 @@ def parse_skill_inputs(inputs_str: str) -> Dict[str, str]:
     return inputs
 
 
-def parse_skill_invocation(text: str) -> Optional[SkillInvocation]:
+def parse_skill_invocation(text: str) -> SkillInvocation | None:
     """
     Parse @skill:name invocation with optional inputs.
 
@@ -250,13 +248,15 @@ def parse_skill_invocation(text: str) -> Optional[SkillInvocation]:
         return None
 
     # Try to extract inputs from "with key: value" format
-    inputs: Dict[str, str] = {}
+    inputs: dict[str, str] = {}
     inputs_match = SKILL_INPUTS_PATTERN.search(text)
     if inputs_match:
         inputs_str = inputs_match.group(1)
         inputs = parse_skill_inputs(inputs_str)
         # Remove "with ..." from cleaned_text
-        cleaned_text = re.sub(r'\s*with\s+.+', '', cleaned_text, flags=re.IGNORECASE | re.DOTALL).strip()
+        cleaned_text = re.sub(
+            r"\s*with\s+.+", "", cleaned_text, flags=re.IGNORECASE | re.DOTALL
+        ).strip()
 
     return SkillInvocation(
         skill_name=skill_name,
@@ -283,10 +283,10 @@ def has_skill_mention(text: str) -> bool:
 # ============================================================================
 
 # Pattern matches @tool:name where name contains alphanumerics, hyphens, or underscores
-TOOL_MENTION_PATTERN = re.compile(r'@tool:([a-zA-Z0-9_-]+)', re.IGNORECASE)
+TOOL_MENTION_PATTERN = re.compile(r"@tool:([a-zA-Z0-9_-]+)", re.IGNORECASE)
 
 
-def parse_tool_mention(text: str) -> Tuple[str, Optional[str]]:
+def parse_tool_mention(text: str) -> tuple[str, str | None]:
     """
     Parse @tool:name mention from text.
 
@@ -308,8 +308,8 @@ def parse_tool_mention(text: str) -> Tuple[str, Optional[str]]:
     match = TOOL_MENTION_PATTERN.search(text)
     if match:
         tool_name = match.group(1)
-        cleaned_text = TOOL_MENTION_PATTERN.sub('', text).strip()
-        cleaned_text = ' '.join(cleaned_text.split())
+        cleaned_text = TOOL_MENTION_PATTERN.sub("", text).strip()
+        cleaned_text = " ".join(cleaned_text.split())
         return (cleaned_text, tool_name)
     return (text, None)
 
@@ -330,6 +330,7 @@ def has_tool_mention(text: str) -> bool:
 # ============================================================================
 # MULTI-MENTION DETECTION
 # ============================================================================
+
 
 def count_all_mentions(text: str) -> int:
     """Count total @agent + @skill + @tool mentions in text.

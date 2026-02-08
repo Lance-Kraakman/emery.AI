@@ -6,14 +6,13 @@ Migrated from:
 - reasoning/capabilities/skill_executor.py PLANNING_GUIDANCE
 """
 
-from emery_agents.planning.pattern import PlanningPattern, AutoApprovePolicy
-
+from emery_agents.planning.pattern import AutoApprovePolicy, PlanningPattern
 
 SKILL_CREATE_PATTERN = PlanningPattern(
     id="plan:skill_create",
     name="Skill Creation",
     description="Planning patterns for creating automated skills and workflows. "
-                "Skills are reusable automations with inputs, outputs, and instructions.",
+    "Skills are reusable automations with inputs, outputs, and instructions.",
     triggers=[
         "create skill",
         "build skill",
@@ -80,7 +79,7 @@ SKILL_EXECUTE_PATTERN = PlanningPattern(
     id="plan:skill_execute",
     name="Skill Execution",
     description="Planning patterns for running, executing, or triggering existing skills. "
-                "Execute skills by ID, not by replicating their logic.",
+    "Execute skills by ID, not by replicating their logic.",
     triggers=[
         "run skill",
         "execute skill",

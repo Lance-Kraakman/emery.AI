@@ -9,14 +9,17 @@ References:
 - Content parts follow pattern: {"type": "text|image|image_url", ...}
 - Images use PIL.Image.Image objects internally
 """
-from dataclasses import dataclass, field
+
+from dataclasses import dataclass
 from enum import Enum
-from typing import Any, List, TypedDict, Literal, Optional
+from typing import Literal, TypedDict
+
 from PIL import Image
 
 
 class MessageRole(str, Enum):
     """Role of a message in a conversation."""
+
     USER = "user"
     ASSISTANT = "assistant"
     SYSTEM = "system"
@@ -31,10 +34,11 @@ class ChatMessage:
     Replaces smolagents ChatMessage. Used for message handling
     in the chat processing flow.
     """
+
     role: MessageRole
     content: "MessageContentList"
-    name: Optional[str] = None
-    tool_call_id: Optional[str] = None
+    name: str | None = None
+    tool_call_id: str | None = None
 
     @classmethod
     def user(cls, content: "MessageContentList") -> "ChatMessage":
@@ -59,6 +63,7 @@ class TextContentPart(TypedDict):
     Example:
         {"type": "text", "text": "Hello, how are you?"}
     """
+
     type: Literal["text"]
     text: str
 
@@ -73,6 +78,7 @@ class ImageContentPart(TypedDict):
     Example:
         {"type": "image", "image": <PIL.Image.Image object>}
     """
+
     type: Literal["image"]
     image: Image.Image
 
@@ -89,6 +95,7 @@ class ImageUrlContentPart(TypedDict):
             "image_url": {"url": "data:image/jpeg;base64,/9j/4AAQSkZJRg..."}
         }
     """
+
     type: Literal["image_url"]
     image_url: dict  # {"url": str}
 

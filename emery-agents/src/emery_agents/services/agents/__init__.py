@@ -8,9 +8,9 @@ Agent-related services.
 - AgentAPIService: Fetches agents/skills from Next.js API
 """
 
-from .factory import AgentConfig, AgentFactory
 from emery_agents.api import AgentAPIService
 
+from .factory import AgentConfig, AgentFactory
 
 __all__ = [
     "AgentConfig",

@@ -14,44 +14,48 @@ import json
 import logging
 import os
 import re
-from typing import Any, Dict, List, Optional, Callable
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 from emery_agents.entities.tool_config import ToolConfig
+
 # SkillConfig removed - skills now loaded dynamically via API
 from .crud import (
-    create_table_crud,
-    create_field_crud,
-    create_row_crud,
-    create_database_crud,
     create_agent_crud,
+    create_app_crud,
+    create_database_crud,
     create_document_crud,
+    create_field_crud,
     create_file_crud,
+    create_page_crud,
+    create_row_crud,
     create_skill_crud,
+    create_table_crud,
     create_team_crud,
     create_view_crud,
-    create_app_crud,
-    create_page_crud,
 )
+
 # SkillTool removed - skills now executed dynamically via DynamicSkillTool
 from .integrations import (
     DynamicAgentTool,
     DynamicSkillTool,
     PipedreamTool,
-    create_file_reader_tool,
     create_calculator_tool,
     create_document_reader_tool,
+    create_file_reader_tool,
     create_table_query_tool,
-    load_emery_database,
-    load_table_schema,
-    load_table_data,
-    load_measurement_api_tool,
-    load_kpi_api_tool,
     load_analysis_api_tool,
+    load_emery_database,
+    load_kpi_api_tool,
+    load_measurement_api_tool,
     load_process_api_tool,
+    load_table_data,
+    load_table_schema,
 )
+
 # HuggingFaceInferenceClient removed - skills now executed dynamically via API
 
 
@@ -65,7 +69,7 @@ class UnifiedToolLoader:
     """
 
     # Registry: maps CRUD tool type to DSPy factory function
-    CRUD_FACTORIES: Dict[str, Callable[[str, str], Callable[..., str]]] = {
+    CRUD_FACTORIES: dict[str, Callable[[str, str], Callable[..., str]]] = {
         "agent": create_agent_crud,
         "document": create_document_crud,
         "file": create_file_crud,
@@ -80,7 +84,7 @@ class UnifiedToolLoader:
         "page": create_page_crud,
     }
 
-    def __init__(self, metadata_path: Optional[str] = None):
+    def __init__(self, metadata_path: str | None = None):
         """Initialize with path to unified metadata file."""
         if metadata_path is None:
             metadata_path = self._get_default_metadata_path()
@@ -93,27 +97,33 @@ class UnifiedToolLoader:
         """Get default path to unified metadata file."""
         current_dir = Path(__file__).parent
         # Navigate to execution/tools directory where the metadata is located
-        metadata_path = current_dir.parent / "execution" / "tools" / "unified_metadata.json"
+        metadata_path = (
+            current_dir.parent / "execution" / "tools" / "unified_metadata.json"
+        )
         return str(metadata_path)
 
-    def _load_unified_metadata(self) -> Dict[str, Any]:
+    def _load_unified_metadata(self) -> dict[str, Any]:
         """Load the unified metadata file."""
         try:
-            with open(self.metadata_path, 'r') as f:
-                metadata: Dict[str, Any] = json.load(f)
+            with open(self.metadata_path) as f:
+                metadata: dict[str, Any] = json.load(f)
 
             pipedream_count = len(metadata.get("pipedream_tools", {}))
             emery_count = len(metadata.get("emery_tools", {}))
-            print(f"✅ Loaded unified metadata: {pipedream_count} Pipedream tools, {emery_count} Emery tools")
+            print(
+                f"✅ Loaded unified metadata: {pipedream_count} Pipedream tools, {emery_count} Emery tools"
+            )
             return metadata
         except FileNotFoundError:
-            print(f"⚠️  Unified metadata not found at {self.metadata_path}, using empty metadata")
+            print(
+                f"⚠️  Unified metadata not found at {self.metadata_path}, using empty metadata"
+            )
             return {"pipedream_tools": {}, "emery_tools": {}}
         except json.JSONDecodeError as e:
             print(f"❌ Invalid JSON in unified metadata: {e}")
             return {"pipedream_tools": {}, "emery_tools": {}}
 
-    def _build_tool_lookup(self) -> Dict[str, Dict[str, Any]]:
+    def _build_tool_lookup(self) -> dict[str, dict[str, Any]]:
         """Build a lookup table of tool ID to tool configuration.
 
         Keys are normalized to underscore format for consistent lookup.
@@ -122,28 +132,34 @@ class UnifiedToolLoader:
         lookup = {}
 
         # Add Pipedream tools (normalize keys: dashes → underscores)
-        for tool_id, tool_config in self.unified_metadata.get("pipedream_tools", {}).items():
+        for tool_id, tool_config in self.unified_metadata.get(
+            "pipedream_tools", {}
+        ).items():
             key = tool_id.replace("-", "_")
             lookup[key] = {**tool_config, "source": "pipedream"}
 
         # Add Emery tools (normalize keys: dashes → underscores)
-        for tool_id, tool_config in self.unified_metadata.get("emery_tools", {}).items():
+        for tool_id, tool_config in self.unified_metadata.get(
+            "emery_tools", {}
+        ).items():
             key = tool_id.replace("-", "_")
             lookup[key] = {**tool_config, "source": "emery"}
 
         return lookup
 
-    def get_available_tools(self, api_key_mode: str = "agent") -> List[str]:
+    def get_available_tools(self, api_key_mode: str = "agent") -> list[str]:
         """Get list of available tool IDs."""
         return list(self.tool_lookup.keys())
 
-    def get_tool_config(self, tool_id: str) -> Optional[Dict[str, Any]]:
+    def get_tool_config(self, tool_id: str) -> dict[str, Any] | None:
         """Get tool configuration by ID."""
         return self.tool_lookup.get(tool_id)
 
     # _find_skill_by_id removed - skills now loaded dynamically via API
 
-    def _get_crud_factory(self, tool_name: str) -> Optional[Callable[[str, str], Callable[..., str]]]:
+    def _get_crud_factory(
+        self, tool_name: str
+    ) -> Callable[[str, str], Callable[..., str]] | None:
         """
         Get DSPy factory function for a CRUD tool by name.
 
@@ -180,8 +196,8 @@ class UnifiedToolLoader:
         tool_config: ToolConfig,
         api_key: str = "",
         api_key_mode: str = "agent",
-        organization_id: Optional[int] = None,
-        workspace_path: Optional[Path] = None
+        organization_id: int | None = None,
+        workspace_path: Path | None = None,
     ) -> Any:
         """
         Load a tool instance from ToolConfig using unified metadata.
@@ -199,10 +215,12 @@ class UnifiedToolLoader:
         # Handle skill_reference tools dynamically
         # AIDEV-NOTE: skill_reference tools come from frontend @skill UI selection
         # They contain skill_id - we create DynamicSkillTool which fetches via API
-        if tool_config.config.get('type') == 'skill_reference':
-            skill_id_str = tool_config.config.get('skill_id')
+        if tool_config.config.get("type") == "skill_reference":
+            skill_id_str = tool_config.config.get("skill_id")
             if not skill_id_str:
-                raise ValueError(f"skill_reference tool '{tool_config.name}' missing skill_id in config")
+                raise ValueError(
+                    f"skill_reference tool '{tool_config.name}' missing skill_id in config"
+                )
 
             skill_id = int(skill_id_str)
             org_id = organization_id if organization_id else 0
@@ -216,12 +234,14 @@ class UnifiedToolLoader:
 
         # Handle agent reference tools (type: 'reference', name: 'agent-{id}')
         # These are agent-to-agent references in tool configurations
-        if tool_config.config.get('type') == 'reference':
-            agent_id_match = re.match(r'agent-(\d+)', tool_config.name)
+        if tool_config.config.get("type") == "reference":
+            agent_id_match = re.match(r"agent-(\d+)", tool_config.name)
             if agent_id_match:
                 agent_ref_id = int(agent_id_match.group(1))
                 org_id = organization_id if organization_id else 0
-                logger.info(f"[TOOL-LOADER] Creating DynamicAgentTool for agent_id={agent_ref_id}")
+                logger.info(
+                    f"[TOOL-LOADER] Creating DynamicAgentTool for agent_id={agent_ref_id}"
+                )
                 return DynamicAgentTool(
                     agent_id=agent_ref_id,
                     api_key=api_key,
@@ -240,21 +260,40 @@ class UnifiedToolLoader:
 
         unified_tool = self.get_tool_config(tool_name_lookup)
         if not unified_tool:
-            raise ValueError(f"Tool '{tool_config.name}' (also tried '{tool_name_lookup}') not found in unified metadata")
+            raise ValueError(
+                f"Tool '{tool_config.name}' (also tried '{tool_name_lookup}') not found in unified metadata"
+            )
 
         source = unified_tool["source"]
 
         if source == "pipedream":
-            return self._load_pipedream_tool(tool_config, unified_tool, api_key, api_key_mode)
+            return self._load_pipedream_tool(
+                tool_config, unified_tool, api_key, api_key_mode
+            )
         elif source == "emery":
-            return self._load_emery_tool(tool_config, unified_tool, api_key, api_key_mode, organization_id, workspace_path)
+            return self._load_emery_tool(
+                tool_config,
+                unified_tool,
+                api_key,
+                api_key_mode,
+                organization_id,
+                workspace_path,
+            )
         else:
             raise ValueError(f"Unknown tool source: {source}")
 
-    def _load_pipedream_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+    def _load_pipedream_tool(
+        self,
+        tool_config: ToolConfig,
+        unified_tool: dict[str, Any],
+        api_key: str,
+        api_key_mode: str,
+    ) -> Any:
         """Load a Pipedream tool using the unified configuration."""
         if not api_key:
-            raise ValueError(f"API key required for Pipedream tool '{tool_config.name}'")
+            raise ValueError(
+                f"API key required for Pipedream tool '{tool_config.name}'"
+            )
 
         # Build config with API key; only include api_key_mode if explicitly
         # set in the original config — otherwise PipedreamTool auto-detects
@@ -264,18 +303,21 @@ class UnifiedToolLoader:
             config_dict["api_key_mode"] = tool_config.config["api_key_mode"]
 
         enhanced_config = ToolConfig(
-            name=tool_config.name,
-            version=tool_config.version,
-            config=config_dict
+            name=tool_config.name, version=tool_config.version, config=config_dict
         )
 
         # Create Pipedream tool with enhanced config containing API key
-        return PipedreamTool(
-            tool_id=unified_tool["id"],
-            config=enhanced_config
-        )
+        return PipedreamTool(tool_id=unified_tool["id"], config=enhanced_config)
 
-    def _load_emery_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, organization_id: Optional[int] = None, workspace_path: Optional[Path] = None) -> Any:
+    def _load_emery_tool(
+        self,
+        tool_config: ToolConfig,
+        unified_tool: dict[str, Any],
+        api_key: str,
+        api_key_mode: str,
+        organization_id: int | None = None,
+        workspace_path: Path | None = None,
+    ) -> Any:
         """Load an Emery tool using the unified configuration."""
         tool_id = unified_tool["id"]
 
@@ -290,7 +332,9 @@ class UnifiedToolLoader:
         # Non-CRUD tools
         # file_reader needs special handling for workspace_path
         if tool_id == "file_reader":
-            return self._load_file_reader_tool(tool_config, unified_tool, api_key, api_key_mode, workspace_path)
+            return self._load_file_reader_tool(
+                tool_config, unified_tool, api_key, api_key_mode, workspace_path
+            )
 
         non_crud_mapping = {
             "calculator": self._load_calculator_tool,
@@ -312,51 +356,123 @@ class UnifiedToolLoader:
         return loader_func(tool_config, unified_tool, api_key, api_key_mode)
 
     # Emery tool loaders - using DSPy factory functions
-    def _load_file_reader_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str, workspace_path: Optional[Path] = None) -> Any:
+    def _load_file_reader_tool(
+        self,
+        tool_config: ToolConfig,
+        unified_tool: dict[str, Any],
+        api_key: str,
+        api_key_mode: str,
+        workspace_path: Path | None = None,
+    ) -> Any:
         """Load File Reader tool with optional workspace sandboxing."""
         return create_file_reader_tool(workspace_path)
 
-    def _load_calculator_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+    def _load_calculator_tool(
+        self,
+        tool_config: ToolConfig,
+        unified_tool: dict[str, Any],
+        api_key: str,
+        api_key_mode: str,
+    ) -> Any:
         """Load Calculator tool."""
         return create_calculator_tool()
 
-    def _load_document_reader_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+    def _load_document_reader_tool(
+        self,
+        tool_config: ToolConfig,
+        unified_tool: dict[str, Any],
+        api_key: str,
+        api_key_mode: str,
+    ) -> Any:
         """Load Document Reader tool."""
         return create_document_reader_tool()
 
-    def _load_table_query_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+    def _load_table_query_tool(
+        self,
+        tool_config: ToolConfig,
+        unified_tool: dict[str, Any],
+        api_key: str,
+        api_key_mode: str,
+    ) -> Any:
         """Load Table Query tool."""
         return create_table_query_tool()
 
-    def _load_emery_database_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+    def _load_emery_database_tool(
+        self,
+        tool_config: ToolConfig,
+        unified_tool: dict[str, Any],
+        api_key: str,
+        api_key_mode: str,
+    ) -> Any:
         """Load Emery Database tool."""
         return load_emery_database(tool_config)
 
-    def _load_table_schema_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+    def _load_table_schema_tool(
+        self,
+        tool_config: ToolConfig,
+        unified_tool: dict[str, Any],
+        api_key: str,
+        api_key_mode: str,
+    ) -> Any:
         """Load Table Schema tool."""
         return load_table_schema(tool_config)
 
-    def _load_table_data_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+    def _load_table_data_tool(
+        self,
+        tool_config: ToolConfig,
+        unified_tool: dict[str, Any],
+        api_key: str,
+        api_key_mode: str,
+    ) -> Any:
         """Load Table Data tool."""
         return load_table_data(tool_config)
 
-    def _load_measurement_api_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+    def _load_measurement_api_tool(
+        self,
+        tool_config: ToolConfig,
+        unified_tool: dict[str, Any],
+        api_key: str,
+        api_key_mode: str,
+    ) -> Any:
         """Load Measurement API tool."""
         return load_measurement_api_tool(tool_config)
 
-    def _load_kpi_api_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+    def _load_kpi_api_tool(
+        self,
+        tool_config: ToolConfig,
+        unified_tool: dict[str, Any],
+        api_key: str,
+        api_key_mode: str,
+    ) -> Any:
         """Load KPI API tool."""
         return load_kpi_api_tool(tool_config)
 
-    def _load_analysis_api_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+    def _load_analysis_api_tool(
+        self,
+        tool_config: ToolConfig,
+        unified_tool: dict[str, Any],
+        api_key: str,
+        api_key_mode: str,
+    ) -> Any:
         """Load Analysis API tool."""
         return load_analysis_api_tool(tool_config)
 
-    def _load_process_api_tool(self, tool_config: ToolConfig, unified_tool: Dict[str, Any], api_key: str, api_key_mode: str) -> Any:
+    def _load_process_api_tool(
+        self,
+        tool_config: ToolConfig,
+        unified_tool: dict[str, Any],
+        api_key: str,
+        api_key_mode: str,
+    ) -> Any:
         """Load Process API tool."""
         return load_process_api_tool(tool_config)
 
-    def load_tools(self, tool_configs: List[ToolConfig], api_key: str = "", api_key_mode: str = "agent") -> List[Any]:
+    def load_tools(
+        self,
+        tool_configs: list[ToolConfig],
+        api_key: str = "",
+        api_key_mode: str = "agent",
+    ) -> list[Any]:
         """Load multiple tools from configurations."""
         tools = []
 
@@ -371,22 +487,25 @@ class UnifiedToolLoader:
 
         return tools
 
-    def list_tools_by_category(self, category: str) -> List[Dict[str, Any]]:
+    def list_tools_by_category(self, category: str) -> list[dict[str, Any]]:
         """List tools filtered by category."""
         return [
-            tool for tool in self.tool_lookup.values()
+            tool
+            for tool in self.tool_lookup.values()
             if tool.get("category") == category
         ]
 
-    def search_tools(self, query: str) -> List[Dict[str, Any]]:
+    def search_tools(self, query: str) -> list[dict[str, Any]]:
         """Search tools by name, description."""
         query_lower = query.lower()
         results = []
 
         for tool in self.tool_lookup.values():
             # Search in name and description
-            if (query_lower in tool.get("name", "").lower() or
-                query_lower in tool.get("description", "").lower()):
+            if (
+                query_lower in tool.get("name", "").lower()
+                or query_lower in tool.get("description", "").lower()
+            ):
                 results.append(tool)
 
         return results
@@ -396,10 +515,8 @@ class UnifiedToolLoader:
     # =========================================================================
 
     def create_tool_configs_with_context(
-        self,
-        tool_names: List[str],
-        context: Dict[str, Any]
-    ) -> List[ToolConfig]:
+        self, tool_names: list[str], context: dict[str, Any]
+    ) -> list[ToolConfig]:
         """
         Create tool configurations with enhanced context for Pipedream tools.
 
@@ -413,6 +530,7 @@ class UnifiedToolLoader:
             List of ToolConfig entities
         """
         import logging
+
         logger = logging.getLogger(__name__)
 
         tool_configs = []
@@ -421,42 +539,63 @@ class UnifiedToolLoader:
             config = {}
 
             # Check if this is a Pipedream tool
-            is_pipedream_tool = any(tool_name.startswith(prefix) for prefix in [
-                "gmail_", "slack_", "github_", "google_", "notion_", "trello_",
-                "discord_", "linear_", "dropbox_", "airtable_", "hubspot_"
-            ])
+            is_pipedream_tool = any(
+                tool_name.startswith(prefix)
+                for prefix in [
+                    "gmail_",
+                    "slack_",
+                    "github_",
+                    "google_",
+                    "notion_",
+                    "trello_",
+                    "discord_",
+                    "linear_",
+                    "dropbox_",
+                    "airtable_",
+                    "hubspot_",
+                ]
+            )
 
             if is_pipedream_tool:
                 # Extract API key from context environment
-                api_key = context.get("api_key") or (context.get("environment", {}).get("api_key"))
-                base_url = context.get("base_url") or (context.get("environment", {}).get("base_url", os.getenv("NEXTJS_BASE_URL", "http://localhost:3000")))
+                api_key = context.get("api_key") or (
+                    context.get("environment", {}).get("api_key")
+                )
+                base_url = context.get("base_url") or (
+                    context.get("environment", {}).get(
+                        "base_url",
+                        os.getenv("NEXTJS_BASE_URL", "http://localhost:3000"),
+                    )
+                )
 
                 if api_key:
                     config = {
                         "api_key": api_key,
                         "base_url": base_url,
-                        "api_key_mode": "agent"
+                        "api_key_mode": "agent",
                     }
-                    logger.info(f"Configured Pipedream tool {tool_name} with API key context")
+                    logger.info(
+                        f"Configured Pipedream tool {tool_name} with API key context"
+                    )
                 else:
-                    logger.warning(f"Pipedream tool {tool_name} missing api_key in context")
+                    logger.warning(
+                        f"Pipedream tool {tool_name} missing api_key in context"
+                    )
 
-            tool_configs.append(ToolConfig(
-                name=tool_name,
-                version="1.0",
-                config=config
-            ))
+            tool_configs.append(
+                ToolConfig(name=tool_name, version="1.0", config=config)
+            )
 
         return tool_configs
 
     def load_tools_from_configs(
         self,
-        tool_configs: List[ToolConfig],
-        api_key: Optional[str] = None,
+        tool_configs: list[ToolConfig],
+        api_key: str | None = None,
         api_key_mode: str = "agent",
-        organization_id: Optional[int] = None,
-        workspace_path: Optional[Path] = None
-    ) -> List[Any]:
+        organization_id: int | None = None,
+        workspace_path: Path | None = None,
+    ) -> list[Any]:
         """
         Load smolagents tools from ToolConfig entities.
 
@@ -473,6 +612,7 @@ class UnifiedToolLoader:
             List of successfully loaded tool instances
         """
         import logging
+
         logger = logging.getLogger(__name__)
 
         if not tool_configs:
@@ -487,27 +627,42 @@ class UnifiedToolLoader:
             try:
                 logger.info(f"🔧 Loading individual tool: {tool_config.name}")
                 # Extract API key from config for user mode
-                tool_api_key = tool_config.config.get('api_key', api_key) if tool_config.config else api_key
-                logger.info(f"  Extracted API key from config: present={bool(tool_api_key)}")
+                tool_api_key = (
+                    tool_config.config.get("api_key", api_key)
+                    if tool_config.config
+                    else api_key
+                )
+                logger.info(
+                    f"  Extracted API key from config: present={bool(tool_api_key)}"
+                )
 
                 tool_instance = self.load_tool(
                     tool_config,
                     api_key=tool_api_key or "",
                     api_key_mode=api_key_mode,
                     organization_id=organization_id,
-                    workspace_path=workspace_path
+                    workspace_path=workspace_path,
                 )
                 smolagents_tools.append(tool_instance)
                 logger.info(f"✅ Successfully loaded tool: {tool_config.name}")
             except Exception as tool_error:
                 logger.error(f"❌ Failed to load tool {tool_config.name}: {tool_error}")
                 # Redact sensitive fields before logging
-                safe_config = {k: '***REDACTED***' if k in ('api_key', 'secret', 'password', 'token', 'credential') else v
-                               for k, v in (tool_config.config or {}).items()}
-                logger.error(f"❌ Tool config was: {safe_config if safe_config else 'empty'}")
+                safe_config = {
+                    k: "***REDACTED***"
+                    if k in ("api_key", "secret", "password", "token", "credential")
+                    else v
+                    for k, v in (tool_config.config or {}).items()
+                }
+                logger.error(
+                    f"❌ Tool config was: {safe_config if safe_config else 'empty'}"
+                )
                 import traceback
+
                 logger.error(f"❌ Tool loading traceback: {traceback.format_exc()}")
                 # Continue with other tools instead of failing completely
 
-        logger.info(f"✅ Successfully converted {len(smolagents_tools)} out of {len(tool_configs)} tools")
+        logger.info(
+            f"✅ Successfully converted {len(smolagents_tools)} out of {len(tool_configs)} tools"
+        )
         return smolagents_tools

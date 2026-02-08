@@ -12,15 +12,15 @@ import asyncio
 import atexit
 import concurrent.futures
 import logging
-from typing import Any, Coroutine, TypeVar
+from collections.abc import Coroutine
+from typing import Any, TypeVar
 
 _logger = logging.getLogger(__name__)
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 _async_thread_pool = concurrent.futures.ThreadPoolExecutor(
-    max_workers=10,
-    thread_name_prefix="async-bridge"
+    max_workers=10, thread_name_prefix="async-bridge"
 )
 
 
@@ -33,10 +33,7 @@ def _cleanup_thread_pool() -> None:
 atexit.register(_cleanup_thread_pool)
 
 
-def run_async_in_thread(
-    coro: Coroutine[Any, Any, T],
-    timeout: float = 60.0
-) -> T:
+def run_async_in_thread(coro: Coroutine[Any, Any, T], timeout: float = 60.0) -> T:
     """Run coroutine in thread pool. Timeout defaults to 60s."""
     try:
         future = _async_thread_pool.submit(asyncio.run, coro)
@@ -50,13 +47,13 @@ def run_async_in_thread(
 
 
 from .mention_parser import (
-    parse_agent_mention,
-    has_agent_mention,
-    extract_all_agent_mentions,
-    parse_skill_mention,
-    parse_skill_invocation,
-    has_skill_mention,
     SkillInvocation,
+    extract_all_agent_mentions,
+    has_agent_mention,
+    has_skill_mention,
+    parse_agent_mention,
+    parse_skill_invocation,
+    parse_skill_mention,
 )
 from .session_logger import (
     SessionLogger,

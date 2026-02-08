@@ -9,21 +9,26 @@ that map to user-friendly messages. Never expose raw exceptions to users.
 """
 
 import re
-from typing import Optional
 from dataclasses import dataclass
-from .error_messages import get_error_message, get_severity, ErrorSeverity, ErrorMessageInfo
+
+from .error_messages import (
+    ErrorSeverity,
+    get_error_message,
+    get_severity,
+)
 
 
 @dataclass
 class ClassifiedError:
     """Structured error classification result."""
-    error_type: str                    # Error type identifier (e.g., "rate_limit")
-    severity: ErrorSeverity           # TRANSIENT, RECOVERABLE, or FATAL
-    user_message: str                 # User-friendly error message
-    hint: Optional[str]               # Actionable hint for user
-    can_retry: bool                   # Can user retry?
-    auto_retry: bool                  # Should we auto-retry?
-    technical_details: str            # Raw error (for logging only)
+
+    error_type: str  # Error type identifier (e.g., "rate_limit")
+    severity: ErrorSeverity  # TRANSIENT, RECOVERABLE, or FATAL
+    user_message: str  # User-friendly error message
+    hint: str | None  # Actionable hint for user
+    can_retry: bool  # Can user retry?
+    auto_retry: bool  # Should we auto-retry?
+    technical_details: str  # Raw error (for logging only)
 
 
 def classify_error(exception: Exception) -> ClassifiedError:
@@ -109,13 +114,14 @@ def classify_error(exception: Exception) -> ClassifiedError:
         hint=error_info.get("hint"),
         can_retry=error_info["can_retry"],
         auto_retry=error_info["auto_retry"],
-        technical_details=technical_details
+        technical_details=technical_details,
     )
 
 
 # ============================================================
 # Pattern Matching Helper Functions
 # ============================================================
+
 
 def _is_rate_limit_error(error_message: str) -> bool:
     """Check if error is a rate limit error."""
@@ -125,7 +131,7 @@ def _is_rate_limit_error(error_message: str) -> bool:
         r"429",
         r"throttl",
         r"quota.*exceeded",
-        r"limit exceeded"
+        r"limit exceeded",
     ]
     return any(re.search(pattern, error_message) for pattern in patterns)
 
@@ -133,8 +139,12 @@ def _is_rate_limit_error(error_message: str) -> bool:
 def _is_network_error(error_message: str, error_type: str) -> bool:
     """Check if error is a network/connection error."""
     network_exceptions = [
-        "TimeoutError", "ConnectionError", "ConnectTimeout",
-        "ReadTimeout", "HTTPError", "RequestException"
+        "TimeoutError",
+        "ConnectionError",
+        "ConnectTimeout",
+        "ReadTimeout",
+        "HTTPError",
+        "RequestException",
     ]
 
     patterns = [
@@ -143,12 +153,11 @@ def _is_network_error(error_message: str, error_type: str) -> bool:
         r"network",
         r"unreachable",
         r"timed out",
-        r"connect.*failed"
+        r"connect.*failed",
     ]
 
-    return (
-        error_type in network_exceptions or
-        any(re.search(pattern, error_message) for pattern in patterns)
+    return error_type in network_exceptions or any(
+        re.search(pattern, error_message) for pattern in patterns
     )
 
 
@@ -159,7 +168,7 @@ def _is_service_unavailable(error_message: str) -> bool:
         r"service unavailable",
         r"temporarily unavailable",
         r"server.*down",
-        r"maintenance"
+        r"maintenance",
     ]
     return any(re.search(pattern, error_message) for pattern in patterns)
 
@@ -172,7 +181,7 @@ def _is_input_too_large(error_message: str) -> bool:
         r"request.*too big",
         r"payload.*large",
         r"413",
-        r"max.*size"
+        r"max.*size",
     ]
     return any(re.search(pattern, error_message) for pattern in patterns)
 
@@ -184,7 +193,7 @@ def _is_context_length_exceeded(error_message: str) -> bool:
         r"token.*limit",
         r"maximum.*tokens",
         r"context.*window",
-        r"sequence.*long"
+        r"sequence.*long",
     ]
     return any(re.search(pattern, error_message) for pattern in patterns)
 
@@ -196,7 +205,7 @@ def _is_bad_request(error_message: str) -> bool:
         r"400",
         r"invalid.*request",
         r"malformed",
-        r"parse error"
+        r"parse error",
     ]
     return any(re.search(pattern, error_message) for pattern in patterns)
 
@@ -207,7 +216,7 @@ def _is_content_filter_error(error_message: str) -> bool:
         r"content.*filter",
         r"inappropriate.*content",
         r"policy.*violation",
-        r"blocked.*content"
+        r"blocked.*content",
     ]
     return any(re.search(pattern, error_message) for pattern in patterns)
 
@@ -218,7 +227,7 @@ def _is_tool_execution_error(error_message: str) -> bool:
         r"tool.*error",
         r"tool.*failed",
         r"function.*error",
-        r"execution.*failed"
+        r"execution.*failed",
     ]
     return any(re.search(pattern, error_message) for pattern in patterns)
 
@@ -230,7 +239,7 @@ def _is_auth_error(error_message: str) -> bool:
         r"unauthorized",
         r"authentication.*failed",
         r"not authenticated",
-        r"invalid.*credentials"
+        r"invalid.*credentials",
     ]
     return any(re.search(pattern, error_message) for pattern in patterns)
 
@@ -241,19 +250,14 @@ def _is_api_key_invalid(error_message: str) -> bool:
         r"api.*key.*invalid",
         r"invalid.*token",
         r"bad.*api.*key",
-        r"unauthorized.*api"
+        r"unauthorized.*api",
     ]
     return any(re.search(pattern, error_message) for pattern in patterns)
 
 
 def _is_model_not_found(error_message: str) -> bool:
     """Check if model not found."""
-    patterns = [
-        r"404",
-        r"model.*not.*found",
-        r"model.*unavailable",
-        r"model.*exist"
-    ]
+    patterns = [r"404", r"model.*not.*found", r"model.*unavailable", r"model.*exist"]
     return any(re.search(pattern, error_message) for pattern in patterns)
 
 
@@ -264,6 +268,6 @@ def _is_quota_exceeded(error_message: str) -> bool:
         r"billing.*limit",
         r"insufficient.*funds",
         r"credit.*exceeded",
-        r"payment.*required"
+        r"payment.*required",
     ]
     return any(re.search(pattern, error_message) for pattern in patterns)

@@ -51,9 +51,8 @@ dependencies = [
     "presidio-analyzer>=2.2.0",  # PII detection for agent memory
     "presidio-anonymizer>=2.2.0",  # PII anonymization for agent memory
     "redis>=5.0.0",  # Redis client for Delta Lake write buffer
-    # NOTE: seccomp (libseccomp Python bindings) is a system package, not on PyPI.
-    # Install via system package manager on Linux: apt install python3-seccomp
-    # The sandbox module gracefully handles its absence at runtime.
+    "faiss-cpu>=1.7.0",  # FAISS for vector search in KnowledgeBase
+    "pyseccomp>=0.1.2",  # Seccomp syscall filtering for bwrap sandbox (ctypes-based, pip-installable)
 ]
 
 [project.optional-dependencies]
@@ -63,8 +62,7 @@ dev = [
     "mypy>=1.7.0",
     "types-requests>=2.31.0",
     "black>=23.11.0",
-    "isort>=5.12.0",
-    "flake8>=6.1.0",
+    "ruff>=0.9.0",
 ]
 # MLX features only available on macOS (Apple Silicon)
 macos = [
@@ -90,17 +88,50 @@ dev-dependencies = [
     "mypy>=1.7.0",
     "types-requests>=2.31.0",
     "black>=23.11.0",
-    "isort>=5.12.0",
-    "flake8>=6.1.0",
+    "ruff>=0.9.0",
 ]
 
 [tool.black]
 line-length = 88
 target-version = ['py311']
 
-[tool.isort]
-profile = "black"
-line_length = 88
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes (includes F401 unused imports)
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "UP",     # pyupgrade (modern Python syntax)
+    "SIM",    # flake8-simplify
+]
+ignore = [
+    "E501",   # Line too long (handled by formatter)
+    "E402",   # Module level import not at top (sometimes intentional)
+    "E741",   # Ambiguous variable name (sometimes intentional, e.g., 'l' for list)
+    "UP042",  # Class inherits from both str and Enum (StrEnum requires 3.11+, keep for compatibility)
+    "UP007",  # Use X | Y for type annotations (requires unsafe fix for Union aliases)
+    "SIM102", # Nested if statements (sometimes clearer)
+    "SIM103", # Return condition directly (sometimes clearer to be explicit)
+    "SIM105", # Use contextlib.suppress (sometimes try/except is clearer)
+    "SIM108", # Use ternary operator (readability preference)
+    "SIM110", # Use any/all (sometimes explicit loop is clearer)
+    "SIM117", # Use single with statement (sometimes separate is clearer)
+    "SIM118", # Use key in dict (not key in dict.keys())
+    "B904",   # raise without from in except (too noisy, fix incrementally)
+    "B905",   # zip without strict= (Python 3.10+, not always needed)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B", "SIM"]
+"*_pb2*.py" = ["E", "F", "I", "UP"]  # Generated protobuf files
+
+[tool.ruff.lint.isort]
+known-first-party = ["emery_agents"]
 
 [tool.mypy]
 python_version = "3.11"

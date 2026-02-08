@@ -7,15 +7,17 @@ and coordinator_event_converter.py to avoid duplication.
 """
 
 from enum import Enum
-from typing import List, Literal, TypedDict, Union
-
+from typing import Literal, TypedDict, Union
 
 # Step types
-StepType = Literal["PLANNING", "ACTION", "REASONING", "FINAL", "CODE_EXECUTION", "PHASE", "INFO"]
+StepType = Literal[
+    "PLANNING", "ACTION", "REASONING", "FINAL", "CODE_EXECUTION", "PHASE", "INFO"
+]
 
 
 class MetadataType(str, Enum):
     """Metadata event type identifiers for frontend routing."""
+
     GOAL_ACHIEVED = "goal_achieved"
     REPLAN = "replan"
     FINAL_SYNTHESIS = "final_synthesis"
@@ -38,6 +40,7 @@ class MetadataType(str, Enum):
 
 class InputType(str, Enum):
     """Input type identifiers for awaiting_input events."""
+
     PLAN_APPROVAL = "plan_approval"
     RECOVERY_APPROVAL = "recovery_approval"
     APPROVAL = "approval"
@@ -46,6 +49,7 @@ class InputType(str, Enum):
 
 class StepMetadata(TypedDict, total=False):
     """Metadata for execution steps."""
+
     tool: str
     arguments: str
     observations: str
@@ -77,6 +81,7 @@ class StepMetadata(TypedDict, total=False):
 
 class StepProgressDict(TypedDict):
     """Step progress event structure."""
+
     type: Literal["step_progress"]
     step_type: StepType
     step_name: str
@@ -87,17 +92,20 @@ class StepProgressDict(TypedDict):
 
 class ContentChunkDict(TypedDict):
     """Content chunk event structure."""
+
     type: Literal["content_chunk"]
     content: str
 
 
 class ErrorDetailsDict(TypedDict, total=False):
     """Error details metadata."""
+
     severity: str
 
 
 class ErrorDataDict(TypedDict):
     """Error data structure."""
+
     error_code: str
     error_message: str
     error_details: ErrorDetailsDict
@@ -109,12 +117,14 @@ class ErrorDataDict(TypedDict):
 
 class ErrorResponseDict(TypedDict):
     """Error response event structure."""
+
     type: Literal["error"]
     error: ErrorDataDict
 
 
 class InputOptionDict(TypedDict, total=False):
     """Option for awaiting input questions."""
+
     id: str
     label: str
     description: str
@@ -122,37 +132,42 @@ class InputOptionDict(TypedDict, total=False):
 
 class QuestionDict(TypedDict, total=False):
     """Question structure for clarification."""
+
     question: str
-    options: List[str]
+    options: list[str]
     context: str
     required: bool
 
 
 class AwaitingInputDataDict(TypedDict, total=False):
     """Awaiting input data structure."""
+
     input_type: str
     title: str
     content: str
-    options: List[InputOptionDict]
+    options: list[InputOptionDict]
     plan_json: str
     plan_id: str
-    questions: List[QuestionDict]
+    questions: list[QuestionDict]
 
 
 class AwaitingInputResponseDict(TypedDict):
     """Awaiting input response structure."""
+
     type: Literal["awaiting_input"]
     data: AwaitingInputDataDict
 
 
 class InterruptedResponseDict(TypedDict):
     """Interrupted response structure."""
+
     type: Literal["interrupted"]
     message: str
 
 
 class PermissionRequestMetadata(TypedDict, total=False):
     """Metadata for permission request events."""
+
     requires_user_action: bool
     can_continue_without: bool
 
@@ -164,6 +179,7 @@ class PermissionRequestResponseDict(TypedDict):
     Emitted when agent encounters a permission error in interactive mode,
     allowing the UI to prompt the user for access approval.
     """
+
     type: Literal["permission_request"]
     permission: str
     resource: str
@@ -175,6 +191,7 @@ class PermissionRequestResponseDict(TypedDict):
 
 class PermissionDeniedMetadata(TypedDict, total=False):
     """Metadata for permission denied events."""
+
     error_type: str
     recoverable: bool
 
@@ -186,6 +203,7 @@ class PermissionDeniedResponseDict(TypedDict):
     Emitted when agent encounters a permission error in autonomous mode,
     providing guidance on what permission is needed.
     """
+
     type: Literal["permission_denied"]
     permission: str
     resource: str
@@ -210,6 +228,7 @@ StreamResponseDict = Union[
 # Factory Functions
 # ============================================================================
 
+
 def create_error_response(
     error_code: str,
     error_message: str,
@@ -217,7 +236,7 @@ def create_error_response(
     hint: str = "",
     can_retry: bool = True,
     auto_retry: bool = False,
-    session_reset: bool = False
+    session_reset: bool = False,
 ) -> ErrorResponseDict:
     """
     Create a standardized error response dict.
@@ -243,8 +262,8 @@ def create_error_response(
             "hint": hint,
             "can_retry": can_retry,
             "auto_retry": auto_retry,
-            "session_reset": session_reset
-        }
+            "session_reset": session_reset,
+        },
     }
 
 
@@ -280,7 +299,7 @@ def create_permission_request_event(
         "metadata": {
             "requires_user_action": True,
             "can_continue_without": False,
-        }
+        },
     }
 
 
@@ -317,5 +336,5 @@ def create_permission_denied_event(
         "metadata": {
             "error_type": "PERMISSION_DENIED",
             "recoverable": False,
-        }
+        },
     }

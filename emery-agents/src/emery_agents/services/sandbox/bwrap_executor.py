@@ -32,7 +32,6 @@ import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, List, Tuple
 
 from .proxy_manager import ProxyManager
 from .seccomp_filter import create_seccomp_fd
@@ -43,6 +42,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ExecutionResult:
     """Result of a sandboxed command execution."""
+
     exit_code: int
     stdout: str
     stderr: str
@@ -86,27 +86,56 @@ class BwrapExecutor:
         "--unshare-cgroup",
         "--unshare-ipc",
         # System tools (read-only)
-        "--ro-bind", "/usr", "/usr",
-        "--ro-bind", "/bin", "/bin",
+        "--ro-bind",
+        "/usr",
+        "/usr",
+        "--ro-bind",
+        "/bin",
+        "/bin",
         # Bind existing proc read-only (instead of mounting new procfs)
-        "--ro-bind", "/proc", "/proc",
+        "--ro-bind",
+        "/proc",
+        "/proc",
         # Minimal /dev — only essential device nodes, not full host /dev tree
         # (removes /dev/mem, /dev/kmem, raw block devices, etc.)
-        "--tmpfs", "/dev",
-        "--dev-bind", "/dev/null", "/dev/null",
-        "--dev-bind", "/dev/zero", "/dev/zero",
-        "--dev-bind", "/dev/full", "/dev/full",
-        "--dev-bind", "/dev/random", "/dev/random",
-        "--dev-bind", "/dev/urandom", "/dev/urandom",
-        "--symlink", "/proc/self/fd", "/dev/fd",
-        "--symlink", "/proc/self/fd/0", "/dev/stdin",
-        "--symlink", "/proc/self/fd/1", "/dev/stdout",
-        "--symlink", "/proc/self/fd/2", "/dev/stderr",
+        "--tmpfs",
+        "/dev",
+        "--dev-bind",
+        "/dev/null",
+        "/dev/null",
+        "--dev-bind",
+        "/dev/zero",
+        "/dev/zero",
+        "--dev-bind",
+        "/dev/full",
+        "/dev/full",
+        "--dev-bind",
+        "/dev/random",
+        "/dev/random",
+        "--dev-bind",
+        "/dev/urandom",
+        "/dev/urandom",
+        "--symlink",
+        "/proc/self/fd",
+        "/dev/fd",
+        "--symlink",
+        "/proc/self/fd/0",
+        "/dev/stdin",
+        "--symlink",
+        "/proc/self/fd/1",
+        "/dev/stdout",
+        "--symlink",
+        "/proc/self/fd/2",
+        "/dev/stderr",
         # Ephemeral tmpfs for system dirs
-        "--tmpfs", "/tmp",
-        "--tmpfs", "/var",
-        "--tmpfs", "/run",
-        "--tmpfs", "/etc",
+        "--tmpfs",
+        "/tmp",
+        "--tmpfs",
+        "/var",
+        "--tmpfs",
+        "/run",
+        "--tmpfs",
+        "/etc",
         # Session/parent controls
         "--new-session",
         "--die-with-parent",
@@ -115,13 +144,14 @@ class BwrapExecutor:
     # Default base path for workspaces
     DEFAULT_BASE_PATH = Path("/tmp/workspace")
 
-    def __init__(self, base_path: Optional[Path] = None) -> None:
+    def __init__(self, base_path: Path | None = None) -> None:
         self._base_path = base_path or self.DEFAULT_BASE_PATH
         self._verify_bwrap_available()
 
     def _verify_bwrap_available(self) -> None:
         """Check if bubblewrap is installed."""
         import shutil
+
         if not shutil.which("bwrap"):
             logger.warning(
                 "bubblewrap (bwrap) not found in PATH. "
@@ -168,7 +198,9 @@ class BwrapExecutor:
         try:
             workspace_path.resolve().relative_to(self._base_path.resolve())
         except ValueError:
-            raise ValueError(f"Path traversal detected for workspace_id: {workspace_id}")
+            raise ValueError(
+                f"Path traversal detected for workspace_id: {workspace_id}"
+            )
 
         return workspace_path
 
@@ -199,9 +231,9 @@ class BwrapExecutor:
         workspace_path: Path,
         seccomp_fd: int,
         allow_network: bool = False,
-        proxy_socket_path: Optional[str] = None,
-        additional_binds: Optional[List[Tuple[str, str]]] = None,
-    ) -> List[str]:
+        proxy_socket_path: str | None = None,
+        additional_binds: list[tuple[str, str]] | None = None,
+    ) -> list[str]:
         """Build the full bwrap command with all options."""
         cmd = self.BWRAP_BASE_CMD.copy()
 
@@ -261,7 +293,7 @@ class BwrapExecutor:
         workspace_path: Path,
         timeout: int = 300,
         allow_network: bool = False,
-        env: Optional[dict[str, str]] = None,
+        env: dict[str, str] | None = None,
     ) -> ExecutionResult:
         """
         Execute a command in an isolated bwrap sandbox.
@@ -315,7 +347,9 @@ class BwrapExecutor:
 
         # Build bwrap command
         cmd = self._build_command(
-            command, workspace_path, seccomp_fd,
+            command,
+            workspace_path,
+            seccomp_fd,
             allow_network=allow_network,
             proxy_socket_path=proxy_socket_path,
         )
@@ -359,7 +393,9 @@ class BwrapExecutor:
         finally:
             os.close(seccomp_fd)
 
-    def get_shell(self, workspace_path: Path, allow_network: bool = False) -> "WorkspaceShell":
+    def get_shell(
+        self, workspace_path: Path, allow_network: bool = False
+    ) -> "WorkspaceShell":
         """Get a shell bound to a specific workspace."""
         return WorkspaceShell(self, workspace_path, allow_network)
 

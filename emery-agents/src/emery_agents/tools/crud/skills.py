@@ -12,11 +12,14 @@ from typing import Any
 import dspy
 
 from emery_agents.api.http_client import make_request
-from ..mutation_guard import check_mutation_allowed
+
 from ..execution.dynamic_execution import execute_skill_by_id
+from ..mutation_guard import check_mutation_allowed
 
 
-def create_skill_crud(api_key: str, org_id: str, extra_headers: dict[str, str] | None = None) -> dspy.Tool:
+def create_skill_crud(
+    api_key: str, org_id: str, extra_headers: dict[str, str] | None = None
+) -> dspy.Tool:
     """
     Factory: Create skill_crud tool with auth captured in closure.
 
@@ -76,8 +79,7 @@ def create_skill_crud(api_key: str, org_id: str, extra_headers: dict[str, str] |
             # Normalize tools to proper object format before sending
             if "tools" in data:
                 data["tools"] = [
-                    t if isinstance(t, dict) else {"name": t}
-                    for t in data["tools"]
+                    t if isinstance(t, dict) else {"name": t} for t in data["tools"]
                 ]
 
             data["agentId"] = int(agent_id_str)
@@ -125,8 +127,7 @@ def create_skill_crud(api_key: str, org_id: str, extra_headers: dict[str, str] |
             # Normalize tools to proper object format before sending
             if "tools" in data:
                 data["tools"] = [
-                    t if isinstance(t, dict) else {"name": t}
-                    for t in data["tools"]
+                    t if isinstance(t, dict) else {"name": t} for t in data["tools"]
                 ]
 
             return make_request(
@@ -189,9 +190,9 @@ def create_skill_crud(api_key: str, org_id: str, extra_headers: dict[str, str] |
             "agent_id": "Agent ID (required for create, optional for list)",
             "data": (
                 "For create: {name (required), description?, instructions?, inputs?, outputs?, tools?, model?, executionType?}. "
-                "inputs format: [{\"name\": \"recipient\", \"type\": \"email\", \"required\": true}]. "
-                "outputs format: [{\"name\": \"result\", \"type\": \"text\"}]. "
-                "tools format: [{\"name\": \"tool_name\"}]. "
+                'inputs format: [{"name": "recipient", "type": "email", "required": true}]. '
+                'outputs format: [{"name": "result", "type": "text"}]. '
+                'tools format: [{"name": "tool_name"}]. '
                 "For execute: input values as {input_name: value} dict."
             ),
         },

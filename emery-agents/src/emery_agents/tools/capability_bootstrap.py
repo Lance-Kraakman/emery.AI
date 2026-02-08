@@ -18,11 +18,11 @@ from typing import Any
 
 import dspy
 
-from .capability_registry import CapabilityRegistry
-from .integrations.pipedream import PIPEDREAM_METADATA
 from ..entities.models.capability import Capability, CapabilityType
 from ..entities.workspace import WorkspaceSkill
 from ..grpc.agents.agent_descriptors import get_builder_descriptors
+from .capability_registry import CapabilityRegistry
+from .integrations.pipedream import PIPEDREAM_METADATA
 
 logger = logging.getLogger(__name__)
 
@@ -125,11 +125,11 @@ def populate_integration_services(registry: CapabilityRegistry) -> int:
     count = 0
     for service, tools in by_service.items():
         tool_descs = [
-            t.get("description", "")[:80]
-            for t in tools[:5]
-            if t.get("description")
+            t.get("description", "")[:80] for t in tools[:5] if t.get("description")
         ]
-        summary = f"{service} integration ({len(tools)} actions): {'; '.join(tool_descs)}"
+        summary = (
+            f"{service} integration ({len(tools)} actions): {'; '.join(tool_descs)}"
+        )
 
         capability = Capability(
             id=f"integration:{service}",
@@ -218,7 +218,7 @@ def populate_external_tools(
             name=tool.name,
             type=CapabilityType.TOOL,
             domain=domain,
-            description=getattr(tool, 'description', '') or "",
+            description=getattr(tool, "description", "") or "",
             actions=["execute"],
             entities=[],
         )

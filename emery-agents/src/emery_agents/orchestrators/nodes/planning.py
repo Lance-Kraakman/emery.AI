@@ -6,37 +6,42 @@ Wraps existing PlanService for plan creation.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-from ...entities.models.plan import Plan, PlanStep, PlanStepStatus, SkillInputDefinition, SkillOutputDefinition
+from emery_agents.api import WorkspaceAPI
+from emery_agents.tools.discovery import create_discovery_tools
+
+from ...entities.models.plan import (
+    Plan,
+    SkillInputDefinition,
+    SkillOutputDefinition,
+)
 from ...entities.models.task_ledger import create_ledger_from_plan
-from ...services.plan_service import PlanService
+from ...entities.workspace import WorkspaceTable
+from ...services.analysis.embeddings import cosine_similarity, get_embedding
 from ...services.analysis.token_accumulator import TokenAccumulator
 from ...services.context import (
     SessionConfig,
     WorkspaceContext,
 )
-from ...entities.workspace import WorkspaceTable
 from ...services.execution.events import (
-    PlanCreatedEvent,
-    PlanApprovedEvent,
-    PlanningStartedEvent,
     AwaitingClarificationEvent,
     ErrorEvent,
+    PlanApprovedEvent,
+    PlanCreatedEvent,
+    PlanningStartedEvent,
 )
-from ...services.analysis.embeddings import get_embedding, cosine_similarity
+from ...services.plan_service import PlanService
 from ...tools.tool_modes import ToolMode, filter_tools_for_mode
-from emery_agents.api import WorkspaceAPI
-from emery_agents.tools.discovery import create_discovery_tools
-from ..state import PlanExecuteState
 from ..runtime import RuntimeContext
+from ..state import PlanExecuteState
 
 logger = logging.getLogger(__name__)
 
 
 def _build_workspace_context(
-    api_key: Optional[str],
-    org_id: Optional[str],
+    api_key: str | None,
+    org_id: str | None,
     token_accumulator: TokenAccumulator,
 ) -> WorkspaceContext:
     """
@@ -68,14 +73,16 @@ def _build_workspace_context(
     all_tables = []
     for db in data.databases:
         for t in db.tables:
-            all_tables.append(WorkspaceTable(
-                id=t.id,
-                name=t.name,
-                database_id=db.id,
-                database_name=db.name,
-                field_count=t.field_count,
-                fields=t.fields,
-            ))
+            all_tables.append(
+                WorkspaceTable(
+                    id=t.id,
+                    name=t.name,
+                    database_id=db.id,
+                    database_name=db.name,
+                    field_count=t.field_count,
+                    fields=t.fields,
+                )
+            )
 
     return WorkspaceContext(
         existing_databases=data.databases,
@@ -164,23 +171,39 @@ def _filter_relevant_context(
         VIEW_CAP = 10
 
         filtered_tables = _top_n_relevant(
-            workspace.existing_tables, TABLE_CAP,
-            lambda t: _score_resource(task_embedding, t.name, token_accumulator, " ".join(f.name for f in t.fields)),
+            workspace.existing_tables,
+            TABLE_CAP,
+            lambda t: _score_resource(
+                task_embedding,
+                t.name,
+                token_accumulator,
+                " ".join(f.name for f in t.fields),
+            ),
         )
         filtered_apps = _top_n_relevant(
-            workspace.existing_apps, APP_CAP,
-            lambda a: _score_resource(task_embedding, a.name, token_accumulator, a.description),
+            workspace.existing_apps,
+            APP_CAP,
+            lambda a: _score_resource(
+                task_embedding, a.name, token_accumulator, a.description
+            ),
         )
         filtered_agents = _top_n_relevant(
-            workspace.existing_agents, AGENT_CAP,
-            lambda a: _score_resource(task_embedding, a.name, token_accumulator, a.description),
+            workspace.existing_agents,
+            AGENT_CAP,
+            lambda a: _score_resource(
+                task_embedding, a.name, token_accumulator, a.description
+            ),
         )
         filtered_skills = _top_n_relevant(
-            workspace.existing_skills, SKILL_CAP,
-            lambda s: _score_resource(task_embedding, s.name, token_accumulator, s.description),
+            workspace.existing_skills,
+            SKILL_CAP,
+            lambda s: _score_resource(
+                task_embedding, s.name, token_accumulator, s.description
+            ),
         )
         filtered_views = _top_n_relevant(
-            workspace.existing_views, VIEW_CAP,
+            workspace.existing_views,
+            VIEW_CAP,
             lambda v: _score_resource(task_embedding, v.name, token_accumulator),
         )
 
@@ -193,11 +216,22 @@ def _filter_relevant_context(
             existing_views=filtered_views,
         )
     except Exception:
-        logger.warning("Embedding service unavailable, returning full workspace context")
+        logger.warning(
+            "Embedding service unavailable, returning full workspace context"
+        )
         return workspace
 
 
-_DESTRUCTIVE_KEYWORDS = {"delete", "remove", "destroy", "drop", "truncate", "clear", "wipe", "purge"}
+_DESTRUCTIVE_KEYWORDS = {
+    "delete",
+    "remove",
+    "destroy",
+    "drop",
+    "truncate",
+    "clear",
+    "wipe",
+    "purge",
+}
 
 
 def _check_plan_conditions(plan: Plan) -> list[str]:
@@ -225,8 +259,7 @@ def _check_plan_conditions(plan: Plan) -> list[str]:
     # explicit_values: Step descriptions contain explicit values (parentheses with types)
     # e.g., "Add field 'phone' (phone) to table 'contacts'"
     has_explicit = all(
-        "(" in step.description and ")" in step.description
-        for step in plan.steps
+        "(" in step.description and ")" in step.description for step in plan.steps
     )
     if has_explicit:
         met_conditions.append("explicit_values")
@@ -255,14 +288,18 @@ def _is_low_risk_plan(plan: Plan) -> bool:
     # Check for OAuth connections (always requires approval regardless of policy)
     for step in plan.steps:
         if step.connection_required:
-            logger.debug(f"Plan {plan.id} requires approval (OAuth connection: {step.connection_required})")
+            logger.debug(
+                f"Plan {plan.id} requires approval (OAuth connection: {step.connection_required})"
+            )
             return False
 
     # Check for destructive operations
     for step in plan.steps:
         desc_lower = step.description.lower()
         if any(kw in desc_lower for kw in _DESTRUCTIVE_KEYWORDS):
-            logger.debug(f"Plan {plan.id} requires approval (destructive keyword in step)")
+            logger.debug(
+                f"Plan {plan.id} requires approval (destructive keyword in step)"
+            )
             return False
 
     # "auto" policy: Auto-approve if ALL required conditions are met
@@ -275,11 +312,15 @@ def _is_low_risk_plan(plan: Plan) -> bool:
         met_conditions = _check_plan_conditions(plan)
         all_met = all(cond in met_conditions for cond in required_conditions)
         if all_met:
-            logger.debug(f"Plan {plan.id} auto-approved (policy=auto, all conditions met: {met_conditions})")
+            logger.debug(
+                f"Plan {plan.id} auto-approved (policy=auto, all conditions met: {met_conditions})"
+            )
             return True
         else:
             missing = [c for c in required_conditions if c not in met_conditions]
-            logger.debug(f"Plan {plan.id} requires approval (policy=auto, missing conditions: {missing})")
+            logger.debug(
+                f"Plan {plan.id} requires approval (policy=auto, missing conditions: {missing})"
+            )
             return False
 
     # "confirm" policy (default): Check conditions as hints, use heuristics
@@ -287,16 +328,27 @@ def _is_low_risk_plan(plan: Plan) -> bool:
         met_conditions = _check_plan_conditions(plan)
 
         # If required_conditions specified and ALL are met, auto-approve
-        if required_conditions and all(c in met_conditions for c in required_conditions):
-            logger.debug(f"Plan {plan.id} auto-approved (policy=confirm, all conditions met: {met_conditions})")
+        if required_conditions and all(
+            c in met_conditions for c in required_conditions
+        ):
+            logger.debug(
+                f"Plan {plan.id} auto-approved (policy=confirm, all conditions met: {met_conditions})"
+            )
             return True
 
         # Fallback heuristic: small additive plans with explicit values
-        if all(c in met_conditions for c in ["additive_only", "explicit_values", "single_resource"]):
-            logger.debug(f"Plan {plan.id} auto-approved (policy=confirm, heuristic: small explicit additive)")
+        if all(
+            c in met_conditions
+            for c in ["additive_only", "explicit_values", "single_resource"]
+        ):
+            logger.debug(
+                f"Plan {plan.id} auto-approved (policy=confirm, heuristic: small explicit additive)"
+            )
             return True
 
-        logger.debug(f"Plan {plan.id} requires approval (policy=confirm, conditions: {met_conditions})")
+        logger.debug(
+            f"Plan {plan.id} requires approval (policy=confirm, conditions: {met_conditions})"
+        )
         return False
 
     # Unknown policy: require approval
@@ -304,7 +356,9 @@ def _is_low_risk_plan(plan: Plan) -> bool:
     return False
 
 
-async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[str, Any]:
+async def generate_plan_node(
+    state: PlanExecuteState, runtime: RuntimeContext
+) -> dict[str, Any]:
     """
     Generate a plan using PlanService.
 
@@ -313,7 +367,10 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
     task = state.get("task", "")
     if not task:
         logger.error("generate_plan_node called without a task")
-        return {"error": "No task provided", "events": [ErrorEvent(error="No task provided")]}
+        return {
+            "error": "No task provided",
+            "events": [ErrorEvent(error="No task provided")],
+        }
 
     # Read non-serializable objects from runtime
     tools = runtime.tools
@@ -358,9 +415,15 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
         )
 
     # Construct synthetic triage_analysis when triage was skipped (@mention path)
-    if (pre_selected_skill or pre_selected_agent or pre_selected_tool) and not triage_analysis:
+    if (
+        pre_selected_skill or pre_selected_agent or pre_selected_tool
+    ) and not triage_analysis:
         mention_name = pre_selected_skill or pre_selected_agent or pre_selected_tool
-        mention_type = "skill" if pre_selected_skill else ("agent" if pre_selected_agent else "tool")
+        mention_type = (
+            "skill"
+            if pre_selected_skill
+            else ("agent" if pre_selected_agent else "tool")
+        )
         triage_analysis = {
             "intent": f"Execute {mention_type} '{mention_name}' as requested by user",
             "entities": [mention_name],
@@ -368,7 +431,7 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
             "external_services": [],
         }
 
-    events: List[Any] = []
+    events: list[Any] = []
 
     logger.info("Creating plan (planner handles clarification if needed)")
 
@@ -396,12 +459,16 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
         )
         if not runtime.token_accumulator:
             raise ValueError("TokenAccumulator is required for planning.")
-        full_workspace = _build_workspace_context(api_key, org_id, runtime.token_accumulator)
+        full_workspace = _build_workspace_context(
+            api_key, org_id, runtime.token_accumulator
+        )
 
     # Filter to task-relevant resources
     if not runtime.token_accumulator:
         raise ValueError("TokenAccumulator is required for planning.")
-    workspace_context = _filter_relevant_context(full_workspace, task, runtime.token_accumulator)
+    workspace_context = _filter_relevant_context(
+        full_workspace, task, runtime.token_accumulator
+    )
 
     # Build session config
     config = SessionConfig(
@@ -450,16 +517,22 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
         )
     except Exception as e:
         logger.error(f"Plan generation failed: {e}")
-        events.append(ErrorEvent(error=f"Failed to generate plan: {e}", recoverable=True))
+        events.append(
+            ErrorEvent(error=f"Failed to generate plan: {e}", recoverable=True)
+        )
         return {"error": str(e), "events": events}
 
     # Check if planner needs clarification
     if result.needs_clarification and result.clarifying_questions:
-        logger.info(f"Planner needs clarification: {len(result.clarifying_questions)} question(s)")
-        events.append(AwaitingClarificationEvent.from_dict_list(
-            questions=result.clarifying_questions,
-            reasoning="Need more details to create a specific plan",
-        ))
+        logger.info(
+            f"Planner needs clarification: {len(result.clarifying_questions)} question(s)"
+        )
+        events.append(
+            AwaitingClarificationEvent.from_dict_list(
+                questions=result.clarifying_questions,
+                reasoning="Need more details to create a specific plan",
+            )
+        )
         return {
             "clarifying_questions": result.clarifying_questions,
             "awaiting_input": "clarification",
@@ -469,7 +542,11 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
     plan = result.plan
     if plan is None:
         logger.error("Plan generation returned no plan and no questions")
-        events.append(ErrorEvent(error="Plan generation failed: no plan returned", recoverable=True))
+        events.append(
+            ErrorEvent(
+                error="Plan generation failed: no plan returned", recoverable=True
+            )
+        )
         return {"error": "No plan returned", "events": events}
 
     # Emit planning started only when a real plan was created (not for greetings/clarification)
@@ -480,7 +557,9 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
     ledger = create_ledger_from_plan(
         task_id=plan.id,
         goal=task,
-        plan_steps=[{"step_id": s.step_id, "description": s.description} for s in plan.steps],
+        plan_steps=[
+            {"step_id": s.step_id, "description": s.description} for s in plan.steps
+        ],
     )
     ledger.record_plan_created({"plan_id": plan.id, "step_count": len(plan.steps)})
 
@@ -509,7 +588,9 @@ async def generate_plan_node(state: PlanExecuteState, runtime: RuntimeContext) -
 
     # Non-auto-approved: emit PlanCreatedEvent so frontend shows approval UI
     events.append(PlanCreatedEvent(plan_id=plan.id, plan=plan))
-    logger.info(f"Plan {plan.id} created with {len(plan.steps)} steps, awaiting approval")
+    logger.info(
+        f"Plan {plan.id} created with {len(plan.steps)} steps, awaiting approval"
+    )
     return {
         "plan": plan,
         "ledger": ledger,

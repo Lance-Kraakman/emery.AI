@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .http_client import make_request
 
@@ -27,13 +27,13 @@ class RowAPI:
         self._org_id = org_id
 
     @staticmethod
-    def _clean_data(data: Dict[str, Any]) -> Dict[str, Any]:
+    def _clean_data(data: dict[str, Any]) -> dict[str, Any]:
         """Sanitize field values before sending to the API.
 
         - Strips None values (backend can't handle null for typed fields)
         - Coerces whole-number floats to int (e.g. 86.0 -> 86)
         """
-        cleaned: Dict[str, Any] = {}
+        cleaned: dict[str, Any] = {}
         for k, v in data.items():
             if v is None:
                 continue
@@ -43,7 +43,7 @@ class RowAPI:
         return cleaned
 
     @staticmethod
-    def _unwrap(result: str) -> Dict[str, Any]:
+    def _unwrap(result: str) -> dict[str, Any]:
         """Unwrap API response envelope, raise on error."""
         if result.startswith("ERROR") or result.startswith("PERMISSION_DENIED"):
             raise ValueError(result)
@@ -55,7 +55,7 @@ class RowAPI:
         except (json.JSONDecodeError, TypeError):
             raise ValueError(f"Invalid API response: {result[:200]}")
 
-    def create_row(self, table_id: int, data: Dict[str, Any]) -> Dict[str, Any]:
+    def create_row(self, table_id: int, data: dict[str, Any]) -> dict[str, Any]:
         """Create a new row.
 
         Args:
@@ -68,15 +68,19 @@ class RowAPI:
         result = make_request(
             endpoint="rows",
             method="POST",
-            data={"tableId": table_id, "data": self._clean_data(data), "dataKeyType": "id"},
+            data={
+                "tableId": table_id,
+                "data": self._clean_data(data),
+                "dataKeyType": "id",
+            },
             auth_token=self._api_key,
             org_id=self._org_id,
         )
         return self._unwrap(result)
 
     def update_row(
-        self, table_id: int, row_id: str, data: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, table_id: int, row_id: str, data: dict[str, Any]
+    ) -> dict[str, Any]:
         """Update an existing row by ID.
 
         Args:
@@ -90,7 +94,12 @@ class RowAPI:
         result = make_request(
             endpoint="rows",
             method="PUT",
-            data={"tableId": table_id, "rowId": row_id, "data": self._clean_data(data), "dataKeyType": "id"},
+            data={
+                "tableId": table_id,
+                "rowId": row_id,
+                "data": self._clean_data(data),
+                "dataKeyType": "id",
+            },
             auth_token=self._api_key,
             org_id=self._org_id,
         )
@@ -99,12 +108,12 @@ class RowAPI:
     def get_rows(
         self,
         table_id: int,
-        filters: Optional[List[Dict[str, Any]]] = None,
+        filters: list[dict[str, Any]] | None = None,
         limit: int = 100,
         offset: int = 0,
-        order_by: Optional[str] = None,
-        order_direction: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        order_by: str | None = None,
+        order_direction: str | None = None,
+    ) -> list[dict[str, Any]]:
         """Query rows with optional filters.
 
         Args:
@@ -139,7 +148,7 @@ class RowAPI:
             return data.get("rows", [])
         return data if isinstance(data, list) else []
 
-    def get_row(self, table_id: int, row_id: str) -> Optional[Dict[str, Any]]:
+    def get_row(self, table_id: int, row_id: str) -> dict[str, Any] | None:
         """Get a single row by ID.
 
         Args:
@@ -159,9 +168,9 @@ class RowAPI:
     def upsert_row(
         self,
         table_id: int,
-        data: Dict[str, Any],
-        match_field_ids: Optional[List[int]] = None,
-    ) -> Dict[str, Any]:
+        data: dict[str, Any],
+        match_field_ids: list[int] | None = None,
+    ) -> dict[str, Any]:
         """Create or update a row based on match field values.
 
         Queries for a row where all match fields equal their values in data.
@@ -193,7 +202,9 @@ class RowAPI:
 
         if rows:
             row_id = rows[0]["id"]
-            logger.info(f"Upsert: found row {row_id} matching {len(filters)} fields, updating")
+            logger.info(
+                f"Upsert: found row {row_id} matching {len(filters)} fields, updating"
+            )
             return self.update_row(table_id, row_id, data)
         else:
             logger.info(f"Upsert: no match on {len(filters)} fields, creating new row")

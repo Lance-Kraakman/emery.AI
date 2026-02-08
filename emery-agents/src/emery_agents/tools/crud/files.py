@@ -11,10 +11,13 @@ from typing import Any
 import dspy
 
 from emery_agents.api.http_client import make_request
+
 from ..mutation_guard import check_mutation_allowed
 
 
-def create_file_crud(api_key: str, org_id: str, extra_headers: dict[str, str] | None = None) -> dspy.Tool:
+def create_file_crud(
+    api_key: str, org_id: str, extra_headers: dict[str, str] | None = None
+) -> dspy.Tool:
     """
     Factory: Create file_crud tool with auth captured in closure.
 
@@ -72,7 +75,9 @@ def create_file_crud(api_key: str, org_id: str, extra_headers: dict[str, str] | 
                 return "ERROR: file_id is required for read operation"
             if not table_id or not row_id or not field_id:
                 return "ERROR: Context params (table_id, row_id, field_id) required for read operation"
-            endpoint = f"files/{file_id}?tableId={table_id}&rowId={row_id}&fieldId={field_id}"
+            endpoint = (
+                f"files/{file_id}?tableId={table_id}&rowId={row_id}&fieldId={field_id}"
+            )
             return make_request(
                 endpoint=endpoint,
                 method="GET",
@@ -89,7 +94,9 @@ def create_file_crud(api_key: str, org_id: str, extra_headers: dict[str, str] | 
                 return "ERROR: File data is required for update operation"
             if not table_id or not row_id or not field_id:
                 return "ERROR: Context params (table_id, row_id, field_id) required for update operation"
-            endpoint = f"files/{file_id}?tableId={table_id}&rowId={row_id}&fieldId={field_id}"
+            endpoint = (
+                f"files/{file_id}?tableId={table_id}&rowId={row_id}&fieldId={field_id}"
+            )
             return make_request(
                 endpoint=endpoint,
                 method="PUT",
@@ -104,7 +111,9 @@ def create_file_crud(api_key: str, org_id: str, extra_headers: dict[str, str] | 
                 return "ERROR: file_id is required for delete operation"
             if not table_id or not row_id or not field_id:
                 return "ERROR: Context params (table_id, row_id, field_id) required for delete operation"
-            endpoint = f"files/{file_id}?tableId={table_id}&rowId={row_id}&fieldId={field_id}"
+            endpoint = (
+                f"files/{file_id}?tableId={table_id}&rowId={row_id}&fieldId={field_id}"
+            )
             return make_request(
                 endpoint=endpoint,
                 method="DELETE",

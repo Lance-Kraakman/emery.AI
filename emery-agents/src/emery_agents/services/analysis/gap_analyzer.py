@@ -7,17 +7,16 @@ vs. what needs clarification. Uses DSPy ChainOfThought with AnalyzeGaps signatur
 
 import json
 import logging
-from typing import Any, Dict, List, Optional
 
 import dspy
 
-from ...reasoning.signatures.planning import AnalyzeGaps, GapAnalysisResultModel
 from ...entities.models.domain_concerns import (
     ConcernGap,
     DomainConcern,
     GapAnalysisResult,
     get_concerns_for_agent,
 )
+from ...reasoning.signatures.planning import AnalyzeGaps, GapAnalysisResultModel
 
 logger = logging.getLogger(__name__)
 
@@ -56,8 +55,8 @@ class GapAnalyzer:
 
     def __init__(
         self,
-        lm: Optional[dspy.LM] = None,
-        org_model: Optional[str] = None,
+        lm: dspy.LM | None = None,
+        org_model: str | None = None,
     ):
         """
         Initialize gap analyzer.
@@ -74,7 +73,7 @@ class GapAnalyzer:
         self,
         agent_name: str,
         user_request: str,
-        gathered_context: Optional[str] = None,
+        gathered_context: str | None = None,
     ) -> GapAnalysisResult:
         """
         Analyze user request against domain concerns.
@@ -137,7 +136,7 @@ class GapAnalyzer:
         self,
         agent_name: str,
         result: GapAnalysisResultModel,
-        concerns: List[DomainConcern],
+        concerns: list[DomainConcern],
     ) -> GapAnalysisResult:
         """Parse DSPy analysis result into GapAnalysisResult."""
         # Build concern lookup
@@ -147,17 +146,19 @@ class GapAnalyzer:
         clear_concerns = result.clear_concerns
 
         # Parse gaps (typed access from GapItemOutput)
-        gaps: List[ConcernGap] = []
+        gaps: list[ConcernGap] = []
         for gap in result.gaps:
             concern = concern_map.get(gap.concern_id)
             if concern:
-                gaps.append(ConcernGap(
-                    concern=concern,
-                    context_found=gap.context_found,
-                    reason_unclear=gap.reason_unclear,
-                    suggested_question=gap.suggested_question,
-                    suggested_options=gap.suggested_options,
-                ))
+                gaps.append(
+                    ConcernGap(
+                        concern=concern,
+                        context_found=gap.context_found,
+                        reason_unclear=gap.reason_unclear,
+                        suggested_question=gap.suggested_question,
+                        suggested_options=gap.suggested_options,
+                    )
+                )
 
         logger.info(f"✅ Gap analysis: {len(clear_concerns)} clear, {len(gaps)} gaps")
 
@@ -174,8 +175,8 @@ class GapAnalyzerFactory:
 
     def __init__(
         self,
-        lm: Optional[dspy.LM] = None,
-        org_model: Optional[str] = None,
+        lm: dspy.LM | None = None,
+        org_model: str | None = None,
     ):
         self.lm = lm
         self.org_model = org_model

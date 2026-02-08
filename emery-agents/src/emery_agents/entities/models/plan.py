@@ -9,15 +9,13 @@ Two levels of instructions:
 2. Plan File: Generated detailed execution plan with tool calls (stored in plan JSONB)
 """
 
-from dataclasses import dataclass, field, asdict
-from datetime import datetime, timezone
-from typing import List, Optional, Dict, Any
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from enum import Enum
-import json
-
-
+from typing import Any, Optional
 
 # --- Skill Definition Models (used in plan generation templates) ---
+
 
 @dataclass
 class SkillInputDefinition:
@@ -27,7 +25,7 @@ class SkillInputDefinition:
     type: str = "text"
     required: bool = False
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dict for Jinja template."""
         return {
             "name": self.name,
@@ -43,7 +41,7 @@ class SkillOutputDefinition:
     name: str
     type: str = "text"
 
-    def to_dict(self) -> Dict[str, str]:
+    def to_dict(self) -> dict[str, str]:
         """Convert to dict for Jinja template."""
         return {
             "name": self.name,
@@ -53,8 +51,10 @@ class SkillOutputDefinition:
 
 # --- Plan Status Enums ---
 
+
 class PlanStepStatus(str, Enum):
     """Status of a plan step during execution."""
+
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
@@ -64,6 +64,7 @@ class PlanStepStatus(str, Enum):
 
 class PlanStatus(str, Enum):
     """Status of the overall plan."""
+
     DRAFT = "draft"
     APPROVED = "approved"
     EXECUTING = "executing"
@@ -79,13 +80,14 @@ class SubPlan:
     Generated during cascading planning when a sub-agent runs
     in planning-only mode. Attached to parent PlanStep.
     """
+
     agent_name: str  # "schema_builder", "skill_builder", etc.
     goal: str
-    steps: List["PlanStep"]
-    context_gathered: Dict[str, Any] = field(default_factory=dict)
-    planning_observations: Optional[str] = None
+    steps: list["PlanStep"]
+    context_gathered: dict[str, Any] = field(default_factory=dict)
+    planning_observations: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "agentName": self.agent_name,
@@ -96,17 +98,21 @@ class SubPlan:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "SubPlan":
+    def from_dict(cls, data: dict[str, Any]) -> "SubPlan":
         """Create from dictionary."""
         return cls(
             agent_name=data.get("agentName", data.get("agent_name", "")),
             goal=data.get("goal", ""),
             steps=[PlanStep.from_dict(s) for s in data.get("steps", [])],
-            context_gathered=data.get("contextGathered", data.get("context_gathered", {})),
-            planning_observations=data.get("planningObservations", data.get("planning_observations")),
+            context_gathered=data.get(
+                "contextGathered", data.get("context_gathered", {})
+            ),
+            planning_observations=data.get(
+                "planningObservations", data.get("planning_observations")
+            ),
         )
 
-    def with_steps(self, steps: List["PlanStep"]) -> "SubPlan":
+    def with_steps(self, steps: list["PlanStep"]) -> "SubPlan":
         """Return new SubPlan with updated steps.
 
         Used in recursive cascade planning to attach nested sub-plans.
@@ -136,28 +142,35 @@ class PlanStep:
     - connection_required: App slug (e.g., "slack", "gmail") that needs OAuth connection
       If set, this step is a prerequisite that requires user to connect the app.
     """
+
     step_id: str
     description: str
-    tool_call: Optional[str] = None  # e.g., "row_crud:read", "tool_executor"
-    parameters: Optional[Dict[str, Any]] = None
-    context_tables: List[str] = field(default_factory=list)
+    tool_call: str | None = None  # e.g., "row_crud:read", "tool_executor"
+    parameters: dict[str, Any] | None = None
+    context_tables: list[str] = field(default_factory=list)
     status: str = PlanStepStatus.PENDING.value
-    result: Optional[str] = None
-    error: Optional[str] = None
+    result: str | None = None
+    error: str | None = None
     # Cascading planning fields
     sub_plan: Optional["SubPlan"] = None  # Detailed plan from sub-agent
-    target_agent: Optional[str] = None  # Detected agent for this step
+    target_agent: str | None = None  # Detected agent for this step
     # Prompt template fields for autonomous execution
-    prompt_template: Optional[str] = None  # Jinja2 template with {{ variables }}
-    required_context: List[str] = field(default_factory=list)  # Variables needed at runtime
+    prompt_template: str | None = None  # Jinja2 template with {{ variables }}
+    required_context: list[str] = field(
+        default_factory=list
+    )  # Variables needed at runtime
     # OAuth connection requirement (Phase 2: discover_tools integration)
-    connection_required: Optional[str] = None  # App slug requiring connection (e.g., "slack", "gmail")
+    connection_required: str | None = (
+        None  # App slug requiring connection (e.g., "slack", "gmail")
+    )
     # Phase grouping fields for hierarchical planning
-    phase_name: Optional[str] = None  # e.g., "Discovery", "Filtering", "Summary"
-    phase_order: Optional[int] = None  # e.g., 1, 2, 3 for ordering phases
-    replan_after: bool = False  # If True, replan subsequent phases after this step's phase completes
+    phase_name: str | None = None  # e.g., "Discovery", "Filtering", "Summary"
+    phase_order: int | None = None  # e.g., 1, 2, 3 for ordering phases
+    replan_after: bool = (
+        False  # If True, replan subsequent phases after this step's phase completes
+    )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "stepId": self.step_id,
@@ -179,7 +192,7 @@ class PlanStep:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "PlanStep":
+    def from_dict(cls, data: dict[str, Any]) -> "PlanStep":
         """Create from dictionary."""
         sub_plan_data = data.get("subPlan", data.get("sub_plan"))
         return cls(
@@ -194,8 +207,12 @@ class PlanStep:
             sub_plan=SubPlan.from_dict(sub_plan_data) if sub_plan_data else None,
             target_agent=data.get("targetAgent", data.get("target_agent")),
             prompt_template=data.get("promptTemplate", data.get("prompt_template")),
-            required_context=data.get("requiredContext", data.get("required_context", [])),
-            connection_required=data.get("connectionRequired", data.get("connection_required")),
+            required_context=data.get(
+                "requiredContext", data.get("required_context", [])
+            ),
+            connection_required=data.get(
+                "connectionRequired", data.get("connection_required")
+            ),
             phase_name=data.get("phaseName", data.get("phase_name")),
             phase_order=data.get("phaseOrder", data.get("phase_order")),
             replan_after=data.get("replanAfter", data.get("replan_after", False)),
@@ -222,7 +239,7 @@ class PlanStep:
             replan_after=self.replan_after,
         )
 
-    def mark_completed(self, result: Optional[str] = None) -> "PlanStep":
+    def mark_completed(self, result: str | None = None) -> "PlanStep":
         """Mark step as completed with optional result."""
         return PlanStep(
             step_id=self.step_id,
@@ -306,7 +323,7 @@ class PlanStep:
             replan_after=self.replan_after,
         )
 
-    def with_parameters(self, parameters: Dict[str, Any]) -> "PlanStep":
+    def with_parameters(self, parameters: dict[str, Any]) -> "PlanStep":
         """Return new PlanStep with updated parameters."""
         return PlanStep(
             step_id=self.step_id,
@@ -336,22 +353,25 @@ class Plan:
     Generated from basic instructions (agent description/instructions).
     Contains step-by-step tool calls for execution.
     """
+
     id: str
     goal: str
     basic_instructions: str
-    steps: List[PlanStep]
+    steps: list[PlanStep]
     status: str = PlanStatus.DRAFT.value
-    generated_at: Optional[datetime] = None
-    approved_at: Optional[datetime] = None
+    generated_at: datetime | None = None
+    approved_at: datetime | None = None
     version: int = 1
     # Context-first planning fields
-    context: Optional[str] = None  # What was discovered (existing databases, tables, etc.)
-    analysis: Optional[str] = None  # Analysis/reasoning about what will be done
+    context: str | None = None  # What was discovered (existing databases, tables, etc.)
+    analysis: str | None = None  # Analysis/reasoning about what will be done
     # Auto-approve policy from planning patterns
     auto_approve_policy: str = "confirm"  # "auto" | "confirm" | "explicit"
-    matched_conditions: List[str] = field(default_factory=list)  # Conditions met for auto-approve
+    matched_conditions: list[str] = field(
+        default_factory=list
+    )  # Conditions met for auto-approve
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             "id": self.id,
@@ -368,7 +388,7 @@ class Plan:
             "matchedConditions": self.matched_conditions,
         }
 
-    def to_stored_dict(self) -> Dict[str, Any]:
+    def to_stored_dict(self) -> dict[str, Any]:
         """Convert Plan to StoredPlan format for persistence.
 
         Strips runtime fields (status, result, error) keeping only
@@ -386,9 +406,9 @@ class Plan:
             "approvedAt": self.approved_at.isoformat() if self.approved_at else None,
         }
 
-    def _step_to_stored(self, step: PlanStep) -> Dict[str, Any]:
+    def _step_to_stored(self, step: PlanStep) -> dict[str, Any]:
         """Convert PlanStep to stored format (no runtime fields)."""
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "stepId": step.step_id,
             "description": step.description,
         }
@@ -422,24 +442,34 @@ class Plan:
         return result
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Plan":
+    def from_dict(cls, data: dict[str, Any]) -> "Plan":
         """Create from dictionary."""
         generated_at = None
         if data.get("generatedAt"):
-            generated_at = datetime.fromisoformat(data["generatedAt"].replace("Z", "+00:00"))
+            generated_at = datetime.fromisoformat(
+                data["generatedAt"].replace("Z", "+00:00")
+            )
         elif data.get("generated_at"):
-            generated_at = datetime.fromisoformat(data["generated_at"].replace("Z", "+00:00"))
+            generated_at = datetime.fromisoformat(
+                data["generated_at"].replace("Z", "+00:00")
+            )
 
         approved_at = None
         if data.get("approvedAt"):
-            approved_at = datetime.fromisoformat(data["approvedAt"].replace("Z", "+00:00"))
+            approved_at = datetime.fromisoformat(
+                data["approvedAt"].replace("Z", "+00:00")
+            )
         elif data.get("approved_at"):
-            approved_at = datetime.fromisoformat(data["approved_at"].replace("Z", "+00:00"))
+            approved_at = datetime.fromisoformat(
+                data["approved_at"].replace("Z", "+00:00")
+            )
 
         return cls(
             id=data.get("id", ""),
             goal=data.get("goal", ""),
-            basic_instructions=data.get("basicInstructions", data.get("basic_instructions", "")),
+            basic_instructions=data.get(
+                "basicInstructions", data.get("basic_instructions", "")
+            ),
             steps=[PlanStep.from_dict(s) for s in data.get("steps", [])],
             status=data.get("status", PlanStatus.DRAFT.value),
             generated_at=generated_at,
@@ -447,8 +477,12 @@ class Plan:
             version=data.get("version", 1),
             context=data.get("context"),
             analysis=data.get("analysis"),
-            auto_approve_policy=data.get("autoApprovePolicy", data.get("auto_approve_policy", "confirm")),
-            matched_conditions=data.get("matchedConditions", data.get("matched_conditions", [])),
+            auto_approve_policy=data.get(
+                "autoApprovePolicy", data.get("auto_approve_policy", "confirm")
+            ),
+            matched_conditions=data.get(
+                "matchedConditions", data.get("matched_conditions", [])
+            ),
         )
 
     def approve(self) -> "Plan":
@@ -460,7 +494,7 @@ class Plan:
             steps=self.steps,
             status=PlanStatus.APPROVED.value,
             generated_at=self.generated_at,
-            approved_at=datetime.now(timezone.utc),
+            approved_at=datetime.now(UTC),
             version=self.version,
             context=self.context,
             analysis=self.analysis,
@@ -519,21 +553,18 @@ class Plan:
             matched_conditions=self.matched_conditions,
         )
 
-    def get_pending_steps(self) -> List[PlanStep]:
+    def get_pending_steps(self) -> list[PlanStep]:
         """Get all pending steps."""
         return [s for s in self.steps if s.status == PlanStepStatus.PENDING.value]
 
-    def get_next_step(self) -> Optional[PlanStep]:
+    def get_next_step(self) -> PlanStep | None:
         """Get the next pending step."""
         pending = self.get_pending_steps()
         return pending[0] if pending else None
 
     def update_step(self, step_id: str, updated_step: PlanStep) -> "Plan":
         """Return new plan with updated step."""
-        new_steps = [
-            updated_step if s.step_id == step_id else s
-            for s in self.steps
-        ]
+        new_steps = [updated_step if s.step_id == step_id else s for s in self.steps]
         return Plan(
             id=self.id,
             goal=self.goal,
@@ -549,7 +580,7 @@ class Plan:
             matched_conditions=self.matched_conditions,
         )
 
-    def with_steps(self, steps: List[PlanStep]) -> "Plan":
+    def with_steps(self, steps: list[PlanStep]) -> "Plan":
         """Return new plan with replaced steps list."""
         return Plan(
             id=self.id,
@@ -588,10 +619,11 @@ class StepPlan(Plan):
     Extends Plan with parent skill context.
     Used for steps that have LLM decision-making (executionType: 'agentic').
     """
+
     parent_skill_id: int = 0
     parent_step_id: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         data = super().to_dict()
         data["parentSkillId"] = self.parent_skill_id
@@ -599,7 +631,7 @@ class StepPlan(Plan):
         return data
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "StepPlan":
+    def from_dict(cls, data: dict[str, Any]) -> "StepPlan":
         """Create from dictionary."""
         base = Plan.from_dict(data)
         return cls(
@@ -619,11 +651,11 @@ class StepPlan(Plan):
 def create_plan(
     goal: str,
     basic_instructions: str,
-    steps: Optional[List[PlanStep]] = None,
-    context: Optional[str] = None,
-    analysis: Optional[str] = None,
+    steps: list[PlanStep] | None = None,
+    context: str | None = None,
+    analysis: str | None = None,
     auto_approve_policy: str = "confirm",
-    matched_conditions: Optional[List[str]] = None,
+    matched_conditions: list[str] | None = None,
 ) -> Plan:
     """
     Factory function to create a new plan.
@@ -641,13 +673,14 @@ def create_plan(
         A new Plan instance in draft status
     """
     import uuid
+
     return Plan(
         id=str(uuid.uuid4()),
         goal=goal,
         basic_instructions=basic_instructions,
         steps=steps or [],
         status=PlanStatus.DRAFT.value,
-        generated_at=datetime.now(timezone.utc),
+        generated_at=datetime.now(UTC),
         context=context,
         analysis=analysis,
         auto_approve_policy=auto_approve_policy,
@@ -657,15 +690,15 @@ def create_plan(
 
 def create_step(
     description: str,
-    tool_call: Optional[str] = None,
-    parameters: Optional[Dict[str, Any]] = None,
-    context_tables: Optional[List[str]] = None,
-    target_agent: Optional[str] = None,
-    prompt_template: Optional[str] = None,
-    required_context: Optional[List[str]] = None,
-    connection_required: Optional[str] = None,
-    phase_name: Optional[str] = None,
-    phase_order: Optional[int] = None,
+    tool_call: str | None = None,
+    parameters: dict[str, Any] | None = None,
+    context_tables: list[str] | None = None,
+    target_agent: str | None = None,
+    prompt_template: str | None = None,
+    required_context: list[str] | None = None,
+    connection_required: str | None = None,
+    phase_name: str | None = None,
+    phase_order: int | None = None,
     replan_after: bool = False,
 ) -> PlanStep:
     """
@@ -688,6 +721,7 @@ def create_step(
         A new PlanStep instance in pending status
     """
     import uuid
+
     return PlanStep(
         step_id=str(uuid.uuid4()),
         description=description,
@@ -715,9 +749,9 @@ class RecoveryResult:
     """
 
     confidence: float  # 0.0-1.0
-    corrected_parameters: Dict[str, Any]  # Parameters to add/change
+    corrected_parameters: dict[str, Any]  # Parameters to add/change
     reasoning: str  # LLM's explanation
-    questions: List[str] = field(default_factory=list)  # Questions if low confidence
+    questions: list[str] = field(default_factory=list)  # Questions if low confidence
 
     @property
     def should_auto_fix(self) -> bool:

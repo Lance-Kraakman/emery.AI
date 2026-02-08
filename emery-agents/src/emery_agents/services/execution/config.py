@@ -6,15 +6,15 @@ Configuration classes for ExecutionCoordinator.
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
 
 from ..plan_service import PlanService
-from .plan_step_executor import PlanStepExecutor
 from ..protocols import ModelProviderProtocol
+from .plan_step_executor import PlanStepExecutor
 
 
 class CoordinatorMode(Enum):
     """How coordinator handles the task."""
+
     PLAN_AND_APPROVE = "plan_and_approve"  # Full planning flow
     DIRECT = "direct"  # Execute immediately without plan
 
@@ -24,11 +24,11 @@ class ExecutionCoordinatorConfig:
     """Configuration for ExecutionCoordinator."""
 
     plan_service: PlanService
-    model_provider: Optional[ModelProviderProtocol] = None
-    plan_step_executor: Optional[PlanStepExecutor] = None
+    model_provider: ModelProviderProtocol | None = None
+    plan_step_executor: PlanStepExecutor | None = None
     evaluate_after_steps: int = 1
     max_replans: int = 3
-    org_model: Optional[str] = None
+    org_model: str | None = None
 
     def __post_init__(self) -> None:
         """Validate configuration."""

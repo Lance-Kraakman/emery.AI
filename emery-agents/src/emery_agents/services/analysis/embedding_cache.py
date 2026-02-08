@@ -24,11 +24,13 @@ from emery_agents.entities.models.capability import Capability
 
 class _EmbeddingCacheData(TypedDict):
     """Structure of the S3 embedding cache file."""
+
     model: str
     dimensions: int
     content_hash: str
     count: int
     embeddings: dict[str, list[float]]
+
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +43,9 @@ _EMBEDDING_DIMENSIONS = 768
 
 def _capability_text(cap: Capability) -> str:
     """Build searchable text from capability metadata (mirrors CapabilityRegistry._capability_text)."""
-    return f"{cap.name} {cap.description} {' '.join(cap.actions)} {' '.join(cap.entities)}"
+    return (
+        f"{cap.name} {cap.description} {' '.join(cap.actions)} {' '.join(cap.entities)}"
+    )
 
 
 def compute_content_hash(capabilities: list[Capability]) -> str:
@@ -99,7 +103,9 @@ def load_embedding_cache(
     raw_embeddings: dict[str, list[float]] = data.get("embeddings", {})
     embeddings = {cap_id: tuple(vec) for cap_id, vec in raw_embeddings.items()}
 
-    logger.info(f"Loaded {len(embeddings)} embeddings from S3 cache (hash={expected_hash[:12]}...)")
+    logger.info(
+        f"Loaded {len(embeddings)} embeddings from S3 cache (hash={expected_hash[:12]}...)"
+    )
     return embeddings
 
 

@@ -5,13 +5,12 @@ Represents a table attached to an agent/skill/step for Context Sync.
 """
 
 from dataclasses import dataclass
-from datetime import datetime
 from enum import Enum
-from typing import List, Optional
 
 
 class ContextMappingTargetType(str, Enum):
     """Target type for context mapping."""
+
     AGENT = "agent"
     SKILL = "skill"
     SKILL_STEP = "skill_step"
@@ -19,6 +18,7 @@ class ContextMappingTargetType(str, Enum):
 
 class ContextMappingAccessMode(str, Enum):
     """Access mode for context tables."""
+
     READ = "read"
     WRITE = "write"
     READWRITE = "readwrite"
@@ -26,6 +26,7 @@ class ContextMappingAccessMode(str, Enum):
 
 class ContextMappingSyncMode(str, Enum):
     """Sync mode for context tables."""
+
     ON_ACCESS = "on_access"
     ON_SAVE = "on_save"
     REALTIME = "realtime"
@@ -39,6 +40,7 @@ class ContextMapping:
     Context mappings define which dynamic tables are available
     to an agent during execution, along with access permissions.
     """
+
     id: int
     organization_id: int
     target_type: ContextMappingTargetType
@@ -63,21 +65,21 @@ class ContextMapping:
         - target_id: string
         """
         # Parse access_mode with fallback
-        access_str = getattr(proto, 'access_mode', 'read') or 'read'
+        access_str = getattr(proto, "access_mode", "read") or "read"
         try:
             access_mode = ContextMappingAccessMode(access_str)
         except ValueError:
             access_mode = ContextMappingAccessMode.READ
 
         # Parse sync_mode with fallback
-        sync_str = getattr(proto, 'sync_mode', 'on_access') or 'on_access'
+        sync_str = getattr(proto, "sync_mode", "on_access") or "on_access"
         try:
             sync_mode = ContextMappingSyncMode(sync_str)
         except ValueError:
             sync_mode = ContextMappingSyncMode.ON_ACCESS
 
         # Parse target_type with fallback
-        target_str = getattr(proto, 'target_type', 'agent') or 'agent'
+        target_str = getattr(proto, "target_type", "agent") or "agent"
         try:
             target_type = ContextMappingTargetType(target_str)
         except ValueError:
@@ -87,9 +89,9 @@ class ContextMapping:
             id=0,  # ID not sent over proto (DB-only field)
             organization_id=0,  # Not sent over proto (RLS handles this)
             target_type=target_type,
-            target_id=getattr(proto, 'target_id', '') or '',
+            target_id=getattr(proto, "target_id", "") or "",
             table_id=proto.table_id,
-            table_name=proto.table_name or '',
+            table_name=proto.table_name or "",
             access_mode=access_mode,
             sync_mode=sync_mode,
             is_system=False,  # Not sent over proto
@@ -99,14 +101,14 @@ class ContextMapping:
         """Check if this mapping allows read access."""
         return self.access_mode in (
             ContextMappingAccessMode.READ,
-            ContextMappingAccessMode.READWRITE
+            ContextMappingAccessMode.READWRITE,
         )
 
     def can_write(self) -> bool:
         """Check if this mapping allows write access."""
         return self.access_mode in (
             ContextMappingAccessMode.WRITE,
-            ContextMappingAccessMode.READWRITE
+            ContextMappingAccessMode.READWRITE,
         )
 
     def should_sync_on_access(self) -> bool:
@@ -125,6 +127,7 @@ class ContextMapping:
             ContextMappingProto for sending back to TypeScript
         """
         from emery_agents.grpc.generated import agent_worker_pb2
+
         return agent_worker_pb2.ContextMappingProto(
             table_id=self.table_id,
             table_name=self.table_name,
@@ -142,10 +145,11 @@ class ResolvedContext:
 
     Contains merged mappings respecting hierarchy: agent -> skill -> step
     """
-    mappings: List["ContextMapping"]
-    agent_mappings: List["ContextMapping"]
-    skill_mappings: List["ContextMapping"]
-    step_mappings: List["ContextMapping"]
+
+    mappings: list["ContextMapping"]
+    agent_mappings: list["ContextMapping"]
+    skill_mappings: list["ContextMapping"]
+    step_mappings: list["ContextMapping"]
 
     @classmethod
     def from_proto(cls, proto) -> "ResolvedContext":
@@ -183,22 +187,22 @@ class ResolvedContext:
             step_mappings=[],
         )
 
-    def get_read_tables(self) -> List["ContextMapping"]:
+    def get_read_tables(self) -> list["ContextMapping"]:
         """Get all tables with read access."""
         return [m for m in self.mappings if m.can_read()]
 
-    def get_write_tables(self) -> List["ContextMapping"]:
+    def get_write_tables(self) -> list["ContextMapping"]:
         """Get all tables with write access."""
         return [m for m in self.mappings if m.can_write()]
 
-    def get_mapping_by_table_id(self, table_id: int) -> Optional[ContextMapping]:
+    def get_mapping_by_table_id(self, table_id: int) -> ContextMapping | None:
         """Get mapping for a specific table ID."""
         for m in self.mappings:
             if m.table_id == table_id:
                 return m
         return None
 
-    def get_mapping_by_table_name(self, table_name: str) -> Optional[ContextMapping]:
+    def get_mapping_by_table_name(self, table_name: str) -> ContextMapping | None:
         """Get mapping for a specific table name."""
         for m in self.mappings:
             if m.table_name.lower() == table_name.lower():
@@ -213,6 +217,7 @@ class ResolvedContext:
             ResolvedContextProto for sending back to TypeScript
         """
         from emery_agents.grpc.generated import agent_worker_pb2
+
         return agent_worker_pb2.ResolvedContextProto(
             mappings=[m.to_proto() for m in self.mappings],
             agent_mappings=[m.to_proto() for m in self.agent_mappings],

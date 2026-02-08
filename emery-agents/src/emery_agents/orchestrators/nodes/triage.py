@@ -8,26 +8,32 @@ Routes to: "direct" | "plan" | "respond"
 """
 
 import logging
-from typing import Any, Dict, List
+from typing import Any
 
 import dspy
 
 from ...reasoning.config import get_dspy_lm
-from ...services.analysis.llm_usage import record_from_lm
 from ...reasoning.signatures.planning import TriageTask
-from ...tools.discovery import create_discovery_tools
-from ...services.execution.events import ErrorEvent, FinalSynthesisEvent, ExecutionCompletedEvent
-from ..state import PlanExecuteState
+from ...services.analysis.llm_usage import record_from_lm
+from ...services.execution.events import (
+    ErrorEvent,
+    ExecutionCompletedEvent,
+    FinalSynthesisEvent,
+)
 from ...services.memory import create_memory_crud
+from ...tools.discovery import create_discovery_tools
 from ...tools.output import create_conversation_history_tool
 from ..runtime import RuntimeContext
+from ..state import PlanExecuteState
 
 logger = logging.getLogger(__name__)
 
 VALID_MODES = {"direct", "plan", "respond"}
 
 
-async def triage_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[str, Any]:
+async def triage_node(
+    state: PlanExecuteState, runtime: RuntimeContext
+) -> dict[str, Any]:
     """
     Triage node: classify task with discovery tools available.
 
@@ -48,7 +54,7 @@ async def triage_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[
     api_key = state.get("api_key", "")
     org_id = state.get("org_id", "")
 
-    events: List[Any] = []
+    events: list[Any] = []
 
     # Build context for triage
     workspace = state.get("workspace_context")
@@ -67,14 +73,20 @@ async def triage_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[
         discovery_tools = create_discovery_tools(
             api_key, org_id, runtime.capability_registry, runtime.planning_registry
         )
-        discovery_tools = [t for t in discovery_tools if t.name not in ("web_search", "workspace_overview")]
+        discovery_tools = [
+            t
+            for t in discovery_tools
+            if t.name not in ("web_search", "workspace_overview")
+        ]
 
     # Add memory_crud tool so triage can search_memories for deeper context
     if runtime.engine:
         discovery_tools.append(create_memory_crud(runtime.engine.memory))
 
     # Add conversation history tool for current session context
-    discovery_tools.append(create_conversation_history_tool(runtime.conversation_history or []))
+    discovery_tools.append(
+        create_conversation_history_tool(runtime.conversation_history or [])
+    )
 
     # Create ReAct module with discovery tools for informed routing
     react = dspy.ReAct(
@@ -119,14 +131,18 @@ async def triage_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[
         # For "respond" mode, generate the response inline
         if execution_mode == "respond":
             final_response = response_text or context_notes or reasoning
-            events.append(FinalSynthesisEvent(
-                plan_id="triage",
-                synthesis=final_response,
-            ))
-            events.append(ExecutionCompletedEvent(
-                plan_id="triage",
-                success=True,
-            ))
+            events.append(
+                FinalSynthesisEvent(
+                    plan_id="triage",
+                    synthesis=final_response,
+                )
+            )
+            events.append(
+                ExecutionCompletedEvent(
+                    plan_id="triage",
+                    success=True,
+                )
+            )
             return {
                 "execution_mode": execution_mode,
                 "triage_reasoning": reasoning,

@@ -7,21 +7,22 @@ Sessions are identified by chat_id and maintain agent memory across messages.
 
 import asyncio
 import logging
-from datetime import datetime, timedelta
-from pathlib import Path
-from typing import Dict, Optional, Any, List
 from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Optional
 
-from ..execution.state_machine import CoordinatorStateMachine, Phase
 from ...grpc.agents.agent_models import ChatAgent
-from ...entities.models.plan import Plan
 from ...infrastructure.workspace_sync import WorkspaceSync
+from ..execution.state_machine import CoordinatorStateMachine
 
 logger = logging.getLogger(__name__)
+
 
 @dataclass
 class SessionMetadata:
     """Metadata for agent session."""
+
     session_id: str
     organization_id: int
     user_id: str
@@ -32,15 +33,15 @@ class SessionMetadata:
     history_message_count: int = 0
     # Error tracking for recovery
     consecutive_errors: int = 0
-    last_error_type: Optional[str] = None
-    last_error_timestamp: Optional[datetime] = None
+    last_error_type: str | None = None
+    last_error_timestamp: datetime | None = None
     # File attachments accumulated during session (for skill context injection)
-    attachments: List[Any] = field(default_factory=list)
+    attachments: list[Any] = field(default_factory=list)
     # Workspace tracking for filesystem-based agent execution
-    workspace_path: Optional[Path] = None  # Local path to extracted workspace
-    workspace_id: Optional[str] = None  # ID for S3 (user_id or agent_id)
-    workspace_type: Optional[str] = None  # "agents" or "users"
-    workspace_org_id: Optional[int] = None  # Organization ID for org-scoped S3 keys
+    workspace_path: Path | None = None  # Local path to extracted workspace
+    workspace_id: str | None = None  # ID for S3 (user_id or agent_id)
+    workspace_type: str | None = None  # "agents" or "users"
+    workspace_org_id: int | None = None  # Organization ID for org-scoped S3 keys
 
 
 class SessionManager:
@@ -66,7 +67,7 @@ class SessionManager:
         self,
         idle_timeout: int = 1800,
         max_lifetime: int = 14400,
-        workspace_sync: Optional['WorkspaceSync'] = None
+        workspace_sync: Optional["WorkspaceSync"] = None,
     ):
         """
         Initialize session manager.
@@ -76,16 +77,16 @@ class SessionManager:
             max_lifetime: Maximum session lifetime in seconds (default 4 hours)
             workspace_sync: WorkspaceSync instance for S3 workspace persistence
         """
-        self.agents: Dict[str, 'ChatAgent'] = {}
-        self.metadata: Dict[str, SessionMetadata] = {}
-        self.locks: Dict[str, asyncio.Lock] = {}
-        self.state_machines: Dict[str, CoordinatorStateMachine] = {}
+        self.agents: dict[str, ChatAgent] = {}
+        self.metadata: dict[str, SessionMetadata] = {}
+        self.locks: dict[str, asyncio.Lock] = {}
+        self.state_machines: dict[str, CoordinatorStateMachine] = {}
         self.idle_timeout = idle_timeout
         self.max_lifetime = max_lifetime
         self.workspace_sync = workspace_sync
         # Plan generation sessions (for HITL question/answer flow)
-        self._plan_sessions: Dict[str, Dict[str, Any]] = {}
-        self._cleanup_task: Optional[asyncio.Task] = None
+        self._plan_sessions: dict[str, dict[str, Any]] = {}
+        self._cleanup_task: asyncio.Task | None = None
         logger.info(
             f"SessionManager initialized: "
             f"idle_timeout={idle_timeout}s, max_lifetime={max_lifetime}s, "
@@ -119,24 +120,40 @@ class SessionManager:
             # Check idle timeout
             idle_time = (now - meta.last_activity).total_seconds()
             if idle_time > self.idle_timeout:
-                sessions_to_remove.append((session_id, f"idle timeout ({idle_time:.0f}s)"))
+                sessions_to_remove.append(
+                    (session_id, f"idle timeout ({idle_time:.0f}s)")
+                )
                 continue
 
             # Check max lifetime
             lifetime = (now - meta.created_at).total_seconds()
             if lifetime > self.max_lifetime:
-                sessions_to_remove.append((session_id, f"max lifetime ({lifetime:.0f}s)"))
+                sessions_to_remove.append(
+                    (session_id, f"max lifetime ({lifetime:.0f}s)")
+                )
 
         for session_id, reason in sessions_to_remove:
             # Upload workspace to S3 before removing session
             meta = self.metadata.get(session_id)
-            if meta and self.workspace_sync and meta.workspace_id and meta.workspace_type and meta.workspace_org_id:
+            if (
+                meta
+                and self.workspace_sync
+                and meta.workspace_id
+                and meta.workspace_type
+                and meta.workspace_org_id
+            ):
                 try:
-                    self.workspace_sync.upload(meta.workspace_org_id, meta.workspace_type, meta.workspace_id)
+                    self.workspace_sync.upload(
+                        meta.workspace_org_id, meta.workspace_type, meta.workspace_id
+                    )
                     self.workspace_sync.cleanup(meta.workspace_id)
-                    logger.info(f"📤 Uploaded workspace for session {session_id} before cleanup")
+                    logger.info(
+                        f"📤 Uploaded workspace for session {session_id} before cleanup"
+                    )
                 except Exception as e:
-                    logger.error(f"Failed to upload workspace for session {session_id}: {e}")
+                    logger.error(
+                        f"Failed to upload workspace for session {session_id}: {e}"
+                    )
 
             await self.remove_session(session_id, reason)
 
@@ -152,7 +169,9 @@ class SessionManager:
             self.locks[session_id] = asyncio.Lock()
         return self.locks[session_id]
 
-    def get_agent(self, session_id: str, organization_id: Optional[int] = None) -> Optional['ChatAgent']:
+    def get_agent(
+        self, session_id: str, organization_id: int | None = None
+    ) -> Optional["ChatAgent"]:
         """
         Get existing agent for session if in memory.
 
@@ -193,15 +212,15 @@ class SessionManager:
     def register_agent(
         self,
         session_id: str,
-        agent: 'ChatAgent',
+        agent: "ChatAgent",
         organization_id: int,
         user_id: str,
         restored_from_history: bool = False,
         history_message_count: int = 0,
-        workspace_path: Optional[Path] = None,
-        workspace_id: Optional[str] = None,
-        workspace_type: Optional[str] = None,
-        workspace_org_id: Optional[int] = None,
+        workspace_path: Path | None = None,
+        workspace_id: str | None = None,
+        workspace_type: str | None = None,
+        workspace_org_id: int | None = None,
     ):
         """
         Register new agent in session manager.
@@ -242,9 +261,7 @@ class SessionManager:
         )
 
     async def restore_agent_from_history(
-        self,
-        agent: 'ChatAgent',
-        conversation_history: List[Any]
+        self, agent: "ChatAgent", conversation_history: list[Any]
     ) -> int:
         """
         Restore agent memory from conversation history.
@@ -272,7 +289,9 @@ class SessionManager:
             # HistoryMessage has content_parts (list of MessagePart), not content (string)
             text_content = self._extract_text_from_content_parts(msg.content_parts)
 
-            logger.info(f"📚 [RESTORE-DEBUG] Message {i}: role={msg.role}, text_length={len(text_content)}, preview={text_content[:50]}...")
+            logger.info(
+                f"📚 [RESTORE-DEBUG] Message {i}: role={msg.role}, text_length={len(text_content)}, preview={text_content[:50]}..."
+            )
 
             # Create simple MemoryStep for both user and assistant messages
             step = MemoryStep(
@@ -282,14 +301,18 @@ class SessionManager:
             )
             agent.memory.steps.append(step)
             restored_count += 1
-            logger.info(f"✅ [RESTORE-DEBUG] Added MemoryStep ({msg.role}): {text_content[:30]}...")
+            logger.info(
+                f"✅ [RESTORE-DEBUG] Added MemoryStep ({msg.role}): {text_content[:30]}..."
+            )
 
         if restored_count > 0:
-            logger.info(f"📚 Restored {restored_count} messages to agent memory (user + assistant)")
+            logger.info(
+                f"📚 Restored {restored_count} messages to agent memory (user + assistant)"
+            )
 
         return restored_count
 
-    def _extract_text_from_content_parts(self, content_parts: List[Any]) -> str:
+    def _extract_text_from_content_parts(self, content_parts: list[Any]) -> str:
         """
         Extract text content from entity MessagePart list.
 
@@ -309,9 +332,8 @@ class SessionManager:
         return " ".join(text_parts).strip() if text_parts else ""
 
     def extract_file_attachments_from_history(
-        self,
-        conversation_history: List[Any]
-    ) -> List[Any]:
+        self, conversation_history: list[Any]
+    ) -> list[Any]:
         """
         Extract file attachments from conversation history content_parts.
 
@@ -334,14 +356,18 @@ class SessionManager:
                 if isinstance(part, FilePart):
                     url = part.url
                     if url and url not in seen_urls:
-                        attachments.append(FileAttachment(
-                            url=url,
-                            mime_type=part.mime_type,
-                        ))
+                        attachments.append(
+                            FileAttachment(
+                                url=url,
+                                mime_type=part.mime_type,
+                            )
+                        )
                         seen_urls.add(url)
 
         if attachments:
-            logger.info(f"📎 Extracted {len(attachments)} file attachments from history")
+            logger.info(
+                f"📎 Extracted {len(attachments)} file attachments from history"
+            )
 
         return attachments
 
@@ -368,7 +394,7 @@ class SessionManager:
             if session_id in self.locks:
                 del self.locks[session_id]
 
-    def get_session_info(self, session_id: str) -> Optional[Dict[str, Any]]:
+    def get_session_info(self, session_id: str) -> dict[str, Any] | None:
         """
         Get session metadata (for debugging/monitoring).
 
@@ -398,26 +424,25 @@ class SessionManager:
             "lifetime_seconds": (datetime.now() - meta.created_at).total_seconds(),
             "consecutive_errors": meta.consecutive_errors,
             "last_error_type": meta.last_error_type,
-            "last_error_timestamp": meta.last_error_timestamp.isoformat() if meta.last_error_timestamp else None
+            "last_error_timestamp": meta.last_error_timestamp.isoformat()
+            if meta.last_error_timestamp
+            else None,
         }
 
-    def list_active_sessions(self) -> List[Dict[str, Any]]:
+    def list_active_sessions(self) -> list[dict[str, Any]]:
         """
         List all active sessions (for monitoring).
 
         Returns:
             List of session metadata dictionaries
         """
-        return [
-            self.get_session_info(sid)
-            for sid in list(self.metadata.keys())
-        ]
+        return [self.get_session_info(sid) for sid in list(self.metadata.keys())]
 
     # ============================================================
     # Attachment Management Methods
     # ============================================================
 
-    def add_attachments(self, session_id: str, attachments: List[Any]) -> None:
+    def add_attachments(self, session_id: str, attachments: list[Any]) -> None:
         """
         Add file attachments to session storage.
 
@@ -442,7 +467,7 @@ class SessionManager:
             f"📎 Session {session_id}: {len(self.metadata[session_id].attachments)} total attachments"
         )
 
-    def get_attachments(self, session_id: str) -> List[Any]:
+    def get_attachments(self, session_id: str) -> list[Any]:
         """
         Get all file attachments for session.
 
@@ -499,7 +524,9 @@ class SessionManager:
             Current consecutive error count after increment
         """
         if session_id not in self.metadata:
-            logger.warning(f"Cannot increment error count - session {session_id} not found")
+            logger.warning(
+                f"Cannot increment error count - session {session_id} not found"
+            )
             return 0
 
         meta = self.metadata[session_id]
@@ -533,7 +560,9 @@ class SessionManager:
             meta.last_error_type = None
             meta.last_error_timestamp = None
 
-    def should_remove_session_on_error(self, session_id: str, threshold: int = 5) -> bool:
+    def should_remove_session_on_error(
+        self, session_id: str, threshold: int = 5
+    ) -> bool:
         """
         Check if session should be removed due to excessive errors.
 
@@ -575,7 +604,7 @@ class SessionManager:
     # State Machine Methods (Unified coordinator state)
     # ============================================================
 
-    def get_state_machine(self, session_id: str) -> Optional[CoordinatorStateMachine]:
+    def get_state_machine(self, session_id: str) -> CoordinatorStateMachine | None:
         """
         Get existing state machine for session.
 
@@ -608,7 +637,9 @@ class SessionManager:
     # Plan Generation Session Methods (for HITL question/answer flow)
     # ============================================================
 
-    async def store_plan_session(self, session_id: str, context: Dict[str, Any]) -> None:
+    async def store_plan_session(
+        self, session_id: str, context: dict[str, Any]
+    ) -> None:
         """
         Store plan generation session context for later resume.
 
@@ -623,7 +654,7 @@ class SessionManager:
         self._plan_sessions[session_id] = context
         logger.info(f"📋 Stored plan session {session_id} for resume")
 
-    async def get_plan_session(self, session_id: str) -> Optional[Dict[str, Any]]:
+    async def get_plan_session(self, session_id: str) -> dict[str, Any] | None:
         """
         Get stored plan generation session context.
 
@@ -650,4 +681,3 @@ class SessionManager:
         if session_id in self._plan_sessions:
             del self._plan_sessions[session_id]
             logger.info(f"📋 Removed plan session {session_id}")
-

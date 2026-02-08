@@ -8,20 +8,23 @@ Uses DSPy ChainOfThought with ExtractExecutionInsights signature.
 
 import json
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, List, Optional
 
 import dspy
 
-from emery_agents.services.protocols import ModelProviderProtocol
-
-
-from emery_agents.ace.models.execution_context import ExecutionContext, ExecutionInsight, InsightType, StepResult, create_insight
-from emery_agents.reasoning.signatures.evaluation import (
-    ExtractExecutionInsights,
-    ExecutionInsightsResult,
+from emery_agents.ace.models.execution_context import (
+    ExecutionContext,
+    ExecutionInsight,
+    InsightType,
+    StepResult,
+    create_insight,
 )
+from emery_agents.reasoning.signatures.evaluation import (
+    ExecutionInsightsResult,
+    ExtractExecutionInsights,
+)
+from emery_agents.services.protocols import ModelProviderProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -50,10 +53,10 @@ class ExecutionContextService:
     Part of the ACE (Agentic Context Engineering) pattern.
     """
 
-    lm: Optional[dspy.LM] = None
+    lm: dspy.LM | None = None
     curate_after_steps: int = 3
-    model_provider: Optional[ModelProviderProtocol] = None
-    org_model: Optional[str] = None
+    model_provider: ModelProviderProtocol | None = None
+    org_model: str | None = None
 
     def __post_init__(self) -> None:
         self._module = InsightExtractionModule()
@@ -61,7 +64,7 @@ class ExecutionContextService:
     def curate(
         self,
         execution_context: ExecutionContext,
-        step_results: List[StepResult],
+        step_results: list[StepResult],
     ) -> ExecutionContext:
         """
         Curate step results into insights.
@@ -102,8 +105,8 @@ class ExecutionContextService:
 
     def _extract_insights(
         self,
-        step_results: List[StepResult],
-    ) -> List[ExecutionInsight]:
+        step_results: list[StepResult],
+    ) -> list[ExecutionInsight]:
         """
         Use DSPy to extract insights from step results.
         """
@@ -111,10 +114,7 @@ class ExecutionContextService:
             return []
 
         # Prepare step results as JSON for the signature
-        results_data = {
-            step.step_id: str(step.result)
-            for step in step_results
-        }
+        results_data = {step.step_id: str(step.result) for step in step_results}
         step_ids = [step.step_id for step in step_results]
         results_json = json.dumps(results_data)
 
@@ -135,10 +135,10 @@ class ExecutionContextService:
     def _parse_insights(
         self,
         result: ExecutionInsightsResult,
-        step_ids: List[str],
-    ) -> List[ExecutionInsight]:
+        step_ids: list[str],
+    ) -> list[ExecutionInsight]:
         """Parse DSPy result into ExecutionInsight objects."""
-        insights: List[ExecutionInsight] = []
+        insights: list[ExecutionInsight] = []
 
         # Map string to InsightType enum
         type_map = {t.value.upper(): t for t in InsightType}
@@ -160,10 +160,10 @@ class ExecutionContextService:
 
 
 def create_execution_context_service(
-    lm: Optional[dspy.LM] = None,
+    lm: dspy.LM | None = None,
     curate_after_steps: int = 3,
-    model_provider: Optional[ModelProviderProtocol] = None,
-    org_model: Optional[str] = None,
+    model_provider: ModelProviderProtocol | None = None,
+    org_model: str | None = None,
 ) -> ExecutionContextService:
     """
     Factory function to create ExecutionContextService.

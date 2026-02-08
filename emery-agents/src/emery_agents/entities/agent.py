@@ -7,28 +7,30 @@ Uses direct types (int, str) with validation in constructors.
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, Optional
-from ..types import AgentId, OrganizationId, OwnerId, DatabaseId, RoleId
+from typing import Any
+
+from ..types import AgentId, DatabaseId, OrganizationId, OwnerId, RoleId
 
 
 @dataclass
 class AgentConfig:
     """Configuration for creating a new agent - simplified."""
+
     name: str
     organization_id: OrganizationId
     owner_id: OwnerId
-    role: Optional[str] = None
-    description: Optional[str] = None
-    persona: Optional[str] = None
-    tools: Optional[Dict[str, Any]] = None
-    servers: Optional[Dict[str, Any]] = None
-    trigger: Optional[Dict[str, Any]] = None
-    skills: Optional[Dict[str, Any]] = None
-    database_id: Optional[DatabaseId] = None
-    status: Optional[str] = None
-    role_id: Optional[RoleId] = None
-    api_key: Optional[str] = None
-    default_model: Optional[str] = None  # For AI model selection hierarchy
+    role: str | None = None
+    description: str | None = None
+    persona: str | None = None
+    tools: dict[str, Any] | None = None
+    servers: dict[str, Any] | None = None
+    trigger: dict[str, Any] | None = None
+    skills: dict[str, Any] | None = None
+    database_id: DatabaseId | None = None
+    status: str | None = None
+    role_id: RoleId | None = None
+    api_key: str | None = None
+    default_model: str | None = None  # For AI model selection hierarchy
 
 
 class Agent:
@@ -36,23 +38,23 @@ class Agent:
 
     def __init__(
         self,
-        id: Optional[AgentId],
+        id: AgentId | None,
         name: str,
         organization_id: OrganizationId,
         owner_id: OwnerId,
-        role: Optional[str] = None,
-        description: Optional[str] = None,
-        persona: Optional[str] = None,
-        tools: Optional[Dict[str, Any]] = None,
-        servers: Optional[Dict[str, Any]] = None,
-        trigger: Optional[Dict[str, Any]] = None,
-        skills: Optional[Dict[str, Any]] = None,
-        database_id: Optional[DatabaseId] = None,
-        status: Optional[str] = None,
-        role_id: Optional[RoleId] = None,
-        api_key: Optional[str] = None,
-        default_model: Optional[str] = None,
-        created_at: Optional[datetime] = None,
+        role: str | None = None,
+        description: str | None = None,
+        persona: str | None = None,
+        tools: dict[str, Any] | None = None,
+        servers: dict[str, Any] | None = None,
+        trigger: dict[str, Any] | None = None,
+        skills: dict[str, Any] | None = None,
+        database_id: DatabaseId | None = None,
+        status: str | None = None,
+        role_id: RoleId | None = None,
+        api_key: str | None = None,
+        default_model: str | None = None,
+        created_at: datetime | None = None,
     ):
         # Validation
         if not name or not name.strip():
@@ -99,11 +101,11 @@ class Agent:
             status=config.status or "active",
             role_id=config.role_id,
             api_key=config.api_key,
-            default_model=config.default_model
+            default_model=config.default_model,
         )
 
     @classmethod
-    def from_persistence(cls, data: Dict[str, Any]) -> "Agent":
+    def from_persistence(cls, data: dict[str, Any]) -> "Agent":
         """Create agent from persistence data (dict from gRPC/DB)."""
         return cls(
             id=data.get("id"),
@@ -122,10 +124,10 @@ class Agent:
             role_id=data.get("role_id"),
             api_key=data.get("api_key"),
             default_model=data.get("default_model"),
-            created_at=data.get("created_at")
+            created_at=data.get("created_at"),
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert agent to dictionary for persistence/serialization."""
         return {
             "id": self.id,
@@ -144,7 +146,7 @@ class Agent:
             "role_id": self.role_id,
             "api_key": self.api_key,
             "default_model": self.default_model,
-            "created_at": self.created_at.isoformat() if self.created_at else None
+            "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
     # Business logic

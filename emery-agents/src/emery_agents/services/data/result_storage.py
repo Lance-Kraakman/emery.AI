@@ -9,7 +9,7 @@ import json
 import logging
 import uuid
 from dataclasses import dataclass
-from typing import Optional, Any, Dict, List
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -22,11 +22,12 @@ class StoredResult:
     The full data is stored externally, while only the summary
     is kept in the agent's context window.
     """
+
     id: str
     summary: str
     size: int
-    record_count: Optional[int] = None
-    storage_path: Optional[str] = None
+    record_count: int | None = None
+    storage_path: str | None = None
     content_type: str = "application/json"
 
     def to_context_string(self) -> str:
@@ -52,7 +53,7 @@ class StoredResult:
         else:
             return f"{size / (1024 * 1024):.1f} MB"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "id": self.id,
@@ -64,7 +65,7 @@ class StoredResult:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "StoredResult":
+    def from_dict(cls, data: dict[str, Any]) -> "StoredResult":
         """Create from dictionary."""
         return cls(
             id=data["id"],
@@ -91,7 +92,7 @@ class ResultStorageService:
 
     def __init__(
         self,
-        api_client: Optional[Any] = None,
+        api_client: Any | None = None,
         char_threshold: int = DEFAULT_CHAR_THRESHOLD,
         record_threshold: int = DEFAULT_RECORD_THRESHOLD,
     ):
@@ -107,7 +108,7 @@ class ResultStorageService:
         self.char_threshold = char_threshold
         self.record_threshold = record_threshold
         # In-memory cache for results (fallback when no API client)
-        self._cache: Dict[str, str] = {}
+        self._cache: dict[str, str] = {}
 
     def should_offload(self, result: str) -> bool:
         """
@@ -136,8 +137,8 @@ class ResultStorageService:
     async def store(
         self,
         result: str,
-        context: Optional[str] = None,
-        task_id: Optional[str] = None,
+        context: str | None = None,
+        task_id: str | None = None,
     ) -> StoredResult:
         """
         Store a result and return a summary reference.
@@ -153,7 +154,7 @@ class ResultStorageService:
         result_id = str(uuid.uuid4())
         summary = self._generate_summary(result)
         record_count = self._count_records(result)
-        size = len(result.encode('utf-8'))
+        size = len(result.encode("utf-8"))
 
         # Store via API if available
         storage_path = None
@@ -184,7 +185,7 @@ class ResultStorageService:
             storage_path=storage_path,
         )
 
-    async def retrieve(self, result_id: str) -> Optional[str]:
+    async def retrieve(self, result_id: str) -> str | None:
         """
         Retrieve a stored result by ID.
 
@@ -253,7 +254,7 @@ class ResultStorageService:
 
         return result
 
-    def _count_records(self, result: str) -> Optional[int]:
+    def _count_records(self, result: str) -> int | None:
         """
         Count records if result is a JSON array.
 
@@ -303,7 +304,7 @@ class ResultStorageServiceFactory:
 
     def __init__(
         self,
-        api_client: Optional[Any] = None,
+        api_client: Any | None = None,
         char_threshold: int = ResultStorageService.DEFAULT_CHAR_THRESHOLD,
         record_threshold: int = ResultStorageService.DEFAULT_RECORD_THRESHOLD,
     ):
@@ -321,8 +322,8 @@ class ResultStorageServiceFactory:
 
     def create(
         self,
-        char_threshold: Optional[int] = None,
-        record_threshold: Optional[int] = None,
+        char_threshold: int | None = None,
+        record_threshold: int | None = None,
     ) -> ResultStorageService:
         """
         Create a ResultStorageService instance.

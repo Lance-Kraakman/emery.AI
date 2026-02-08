@@ -7,8 +7,9 @@ Ported from tools/recovery_output_tool.py as DSPy-compatible function.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +101,8 @@ def create_recovery_output_tool(
         if corrected_parameters:
             logger.debug(f"  Parameters: {corrected_parameters}")
 
-        return f"Recovery submitted: {confidence_pct} confidence, {param_count} parameters"
+        return (
+            f"Recovery submitted: {confidence_pct} confidence, {param_count} parameters"
+        )
 
     return submit_recovery

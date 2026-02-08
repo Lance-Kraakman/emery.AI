@@ -8,7 +8,7 @@ Internal code uses these entities with isinstance() instead of proto HasField().
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Union
+from typing import Union
 
 
 @dataclass
@@ -49,8 +49,9 @@ class FileAttachment:
 @dataclass
 class HistoryMessage:
     """A message from conversation history, converted from proto at boundary."""
+
     role: str
-    content_parts: List[MessagePart] = field(default_factory=list)
+    content_parts: list[MessagePart] = field(default_factory=list)
     timestamp: int = 0
 
 

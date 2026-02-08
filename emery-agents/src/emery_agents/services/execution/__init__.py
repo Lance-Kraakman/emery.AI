@@ -12,56 +12,58 @@ Extracted components from ExecutionCoordinator for maintainability.
 - Config: Coordinator configuration classes
 """
 
-from .step_executor import StepExecutor
-from .plan_step_executor import PlanStepExecutor
-from .interrupt_handler import InterruptHandler, QueuedInterrupt
-from .replan_handler import ReplanHandler, ReplanNeedsClarificationError
-from .state import (
-    Phase,
-    InputType,
-    WorkMode,
-    ClarifyingQuestion,
-    PendingInput,
-    StepResult,
-    ExecutionState,
-)
 from .config import (
     CoordinatorMode,
     ExecutionCoordinatorConfig,
 )
 from .events import (
-    PendingContext,
-    PlanCreatedEvent,
-    PlanApprovedEvent,
-    PlanRejectedEvent,
-    PlanFeedbackEvent,
-    StepStartedEvent,
-    StepCompletedEvent,
-    StepFailedEvent,
+    AutoFixCompletedEvent,
+    AutoFixStartedEvent,
+    AwaitingClarificationEvent,
+    ContextInjectedEvent,
+    ErrorEvent,
+    EvaluationCompletedEvent,
+    EvaluationResult,
+    ExecutionBlockedEvent,
     ExecutionCompletedEvent,
     FinalSynthesisEvent,
-    EvaluationResult,
-    EvaluationCompletedEvent,
-    ReplanTriggeredEvent,
-    PlanUpdatedEvent,
-    PhaseStartedEvent,
-    PhaseCompletedEvent,
     GoalAchievedEvent,
-    ExecutionBlockedEvent,
-    RecoveryAnalysisEvent,
-    AutoFixStartedEvent,
-    AutoFixCompletedEvent,
-    RecoveryPlanProposedEvent,
-    ErrorEvent,
+    InterruptProcessingEvent,
     InterruptQueuedEvent,
     InterruptReceivedEvent,
-    InterruptProcessingEvent,
+    PendingContext,
+    PhaseCompletedEvent,
+    PhaseStartedEvent,
+    PlanApprovedEvent,
     PlanCancelledEvent,
-    ContextInjectedEvent,
-    ClarifyingQuestion as EventClarifyingQuestion,  # More detailed version for events
-    AwaitingClarificationEvent,
+    PlanCreatedEvent,
+    PlanFeedbackEvent,
     PlanningStartedEvent,
+    PlanRejectedEvent,
+    PlanUpdatedEvent,
+    RecoveryAnalysisEvent,
+    RecoveryPlanProposedEvent,
+    ReplanTriggeredEvent,
+    StepCompletedEvent,
+    StepFailedEvent,
+    StepStartedEvent,
 )
+from .events import (
+    ClarifyingQuestion as EventClarifyingQuestion,  # More detailed version for events
+)
+from .interrupt_handler import InterruptHandler, QueuedInterrupt
+from .plan_step_executor import PlanStepExecutor
+from .replan_handler import ReplanHandler, ReplanNeedsClarificationError
+from .state import (
+    ClarifyingQuestion,
+    ExecutionState,
+    InputType,
+    PendingInput,
+    Phase,
+    StepResult,
+    WorkMode,
+)
+from .step_executor import StepExecutor
 
 
 class TaskBuilder:

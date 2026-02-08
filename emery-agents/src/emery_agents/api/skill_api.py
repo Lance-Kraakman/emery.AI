@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
+import builtins
 import json
 import logging
 import os
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import httpx
 
-from .http_client import make_request, unwrap_entity
 from ..entities.workspace import WorkspaceSkill
+from .http_client import make_request, unwrap_entity
 
 logger = logging.getLogger(__name__)
 
@@ -39,9 +40,9 @@ class SkillAPI:
 
     def list(
         self,
-        agent_id: Optional[int] = None,
-        filters: Optional[Dict[str, Any]] = None,
-    ) -> List[WorkspaceSkill]:
+        agent_id: int | None = None,
+        filters: dict[str, Any] | None = None,
+    ) -> builtins.list[WorkspaceSkill]:
         """List skills, optionally filtered by agent.
 
         Args:
@@ -89,7 +90,7 @@ class SkillAPI:
             logger.debug(f"Skill parse failed: {e}")
             return []
 
-    def get(self, skill_id: int) -> Optional[WorkspaceSkill]:
+    def get(self, skill_id: int) -> WorkspaceSkill | None:
         """Get skill by ID.
 
         Args:
@@ -144,7 +145,7 @@ class SkillAPIService:
     def __init__(
         self,
         api_key: str,
-        organization_id: Optional[int] = None,
+        organization_id: int | None = None,
         timeout: float = 15.0,
     ):
         self.api_key = api_key
@@ -152,7 +153,7 @@ class SkillAPIService:
         self.timeout = timeout
         self.base_url = os.getenv("NEXTJS_BASE_URL", "http://localhost:3000")
 
-    def _build_headers(self, call_id: str) -> Dict[str, str]:
+    def _build_headers(self, call_id: str) -> dict[str, str]:
         """Build request headers with auth, RLS, and observability."""
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -166,8 +167,8 @@ class SkillAPIService:
 
     async def fetch_skills(
         self,
-        agent_id: Optional[str] = None,
-    ) -> List[WorkspaceSkill]:
+        agent_id: str | None = None,
+    ) -> list[WorkspaceSkill]:
         """
         Fetch skills from API.
 
@@ -183,11 +184,13 @@ class SkillAPIService:
         """
         call_id = str(uuid.uuid4())[:8]
 
-        params: Dict[str, str] = {}
+        params: dict[str, str] = {}
         if agent_id:
             params["agent_id"] = agent_id
 
-        logger.info(f"[SKILL-API] Fetching skills - call_id: {call_id}, params: {params}")
+        logger.info(
+            f"[SKILL-API] Fetching skills - call_id: {call_id}, params: {params}"
+        )
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.get(
@@ -226,10 +229,12 @@ class SkillAPIService:
                 for skill in raw_skills
             ]
 
-            logger.info(f"[SKILL-API] Fetched {len(skills)} skills - call_id: {call_id}")
+            logger.info(
+                f"[SKILL-API] Fetched {len(skills)} skills - call_id: {call_id}"
+            )
             return skills
 
-    async def fetch_skill_by_id(self, skill_id: str) -> Optional[WorkspaceSkill]:
+    async def fetch_skill_by_id(self, skill_id: str) -> WorkspaceSkill | None:
         """
         Fetch a single skill by ID.
 
@@ -254,7 +259,9 @@ class SkillAPIService:
             )
 
             if response.status_code == 404:
-                logger.info(f"[SKILL-API] Skill {skill_id} not found - call_id: {call_id}")
+                logger.info(
+                    f"[SKILL-API] Skill {skill_id} not found - call_id: {call_id}"
+                )
                 return None
 
             if not response.is_success:
@@ -281,7 +288,7 @@ class SkillAPIService:
                 raw=raw,
             )
 
-    async def fetch_skill_by_name(self, name: str) -> Optional[WorkspaceSkill]:
+    async def fetch_skill_by_name(self, name: str) -> WorkspaceSkill | None:
         """
         Fetch a single skill by name (normalized fuzzy match).
 

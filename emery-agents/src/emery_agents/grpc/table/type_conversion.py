@@ -6,8 +6,9 @@ This module has no dependencies on other table modules to avoid circular imports
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
+
 import pyarrow as pa
 import pyarrow.types as pat
 
@@ -49,7 +50,7 @@ def cast_value_to_column_type(value: Any, column_type: pa.DataType) -> Any:
         # Boolean types
         elif pat.is_boolean(column_type):
             if isinstance(value, str):
-                return value.lower() in ('true', '1', 'yes', 'on')
+                return value.lower() in ("true", "1", "yes", "on")
             return bool(value)
 
         # Timestamp types
@@ -58,9 +59,9 @@ def cast_value_to_column_type(value: Any, column_type: pa.DataType) -> Any:
                 return value  # Unix timestamp
             elif isinstance(value, str):
                 try:
-                    dt = datetime.fromisoformat(value.replace('Z', '+00:00'))
+                    dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
                     if dt.tzinfo is None:
-                        dt = dt.replace(tzinfo=timezone.utc)
+                        dt = dt.replace(tzinfo=UTC)
                     return dt
                 except ValueError:
                     return value
@@ -71,6 +72,7 @@ def cast_value_to_column_type(value: Any, column_type: pa.DataType) -> Any:
             if isinstance(value, str):
                 # Try to parse as JSON list
                 import json
+
                 return json.loads(value)
             elif isinstance(value, (list, tuple)):
                 return list(value)
@@ -82,6 +84,8 @@ def cast_value_to_column_type(value: Any, column_type: pa.DataType) -> Any:
             return str(value)
 
     except (ValueError, TypeError) as e:
-        logger.warning(f"[cast_value_to_column_type] Cannot cast {value} to {column_type}: {e}")
+        logger.warning(
+            f"[cast_value_to_column_type] Cannot cast {value} to {column_type}: {e}"
+        )
         # Return original value and let operation handle the error
         return value

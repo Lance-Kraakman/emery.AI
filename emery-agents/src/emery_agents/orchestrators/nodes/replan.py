@@ -18,40 +18,44 @@ is the single decision point after each step.
 import asyncio
 import dataclasses
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import dspy
 
 from ...entities.models.plan import Plan, PlanStep, PlanStepStatus
-from ...services.plan_service import PlanService
-from ...services.execution.replan_handler import ReplanHandler, ReplanNeedsClarificationError
+from ...reasoning.config import get_dspy_lm
+from ...reasoning.modules.evaluator import EvaluatorModule
+from ...reasoning.utils import StepOutcome
+from ...services.analysis.llm_usage import LlmUsageTracker, record_from_lm
 from ...services.execution.events import (
-    EvaluationResult,
+    AutoFixCompletedEvent,
+    AwaitingClarificationEvent,
     EvaluationCompletedEvent,
-    GoalAchievedEvent,
+    EvaluationResult,
     ExecutionBlockedEvent,
     ExecutionCompletedEvent,
     FinalSynthesisEvent,
-    ReplanTriggeredEvent,
+    GoalAchievedEvent,
     PlanUpdatedEvent,
     RecoveryAnalysisEvent,
-    AutoFixStartedEvent,
-    AutoFixCompletedEvent,
     RecoveryPlanProposedEvent,
     ReflectionCompletedEvent,
-    AwaitingClarificationEvent,
+    ReplanTriggeredEvent,
 )
-from ...reasoning.modules.evaluator import EvaluatorModule
-from ...reasoning.config import get_dspy_lm
-from ...services.analysis.llm_usage import LlmUsageTracker, record_from_lm
-from ...reasoning.utils import StepOutcome
-from ..state import PlanExecuteState
+from ...services.execution.replan_handler import (
+    ReplanHandler,
+    ReplanNeedsClarificationError,
+)
+from ...services.plan_service import PlanService
 from ..runtime import RuntimeContext
+from ..state import PlanExecuteState
 
 logger = logging.getLogger(__name__)
 
 
-async def replan_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[str, Any]:
+async def replan_node(
+    state: PlanExecuteState, runtime: RuntimeContext
+) -> dict[str, Any]:
     """
     Unified decision point after each step execution.
     Handles evaluation, failure recovery, replanning, and synthesis.
@@ -62,11 +66,11 @@ async def replan_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[
     max_replans = state.get("max_replans", 3)
     org_model = state.get("org_model")
     raw_outcomes = state.get("step_outcomes", {})
-    outcomes: Dict[str, StepOutcome] = {
+    outcomes: dict[str, StepOutcome] = {
         k: StepOutcome.from_dict(v) for k, v in raw_outcomes.items()
     }
 
-    events: List[Any] = []
+    events: list[Any] = []
 
     assert plan is not None, "Cannot replan without a plan"
 
@@ -82,7 +86,9 @@ async def replan_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[
 
     last_completed = _get_last_completed_step(plan)
     if last_completed and _should_reflect(last_completed, plan):
-        reflection_dict = await _reflect_on_step(last_completed, plan, state, events, tracker)
+        reflection_dict = await _reflect_on_step(
+            last_completed, plan, state, events, tracker
+        )
         if reflection_dict is not None:
             step_reflections[last_completed.step_id] = reflection_dict
             reflection_summary = _update_reflection_summary(
@@ -92,21 +98,31 @@ async def replan_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[
     pending = plan.get_pending_steps()
     if pending:
         plan = _enrich_next_step_with_reflections(plan, reflection_summary)
-        return {"plan": plan, "step_reflections": step_reflections, "reflection_summary": reflection_summary, "error": None, "events": events}
+        return {
+            "plan": plan,
+            "step_reflections": step_reflections,
+            "reflection_summary": reflection_summary,
+            "error": None,
+            "events": events,
+        }
 
     evaluation = await _evaluate_progress(plan, org_model, events, outcomes, tracker)
 
     if evaluation.goal_achieved:
-        return await _finish(plan, state, org_model, evaluation, events, runtime, tracker)
+        return await _finish(
+            plan, state, org_model, evaluation, events, runtime, tracker
+        )
 
     if replan_count >= max_replans:
         logger.warning(f"Max replans ({max_replans}) reached, finishing")
-        return await _finish(plan, state, org_model, evaluation, events, runtime, tracker)
+        return await _finish(
+            plan, state, org_model, evaluation, events, runtime, tracker
+        )
 
     return await _do_replan(state, runtime, error, replan_count, events, tracker)
 
 
-def _get_last_completed_step(plan: Plan) -> Optional[PlanStep]:
+def _get_last_completed_step(plan: Plan) -> PlanStep | None:
     completed = [s for s in plan.steps if s.status == PlanStepStatus.COMPLETED.value]
     return completed[-1] if completed else None
 
@@ -121,8 +137,12 @@ def _should_reflect(step: PlanStep, plan: Plan) -> bool:
 
 
 async def _reflect_on_step(
-    step: PlanStep, plan: Plan, state: PlanExecuteState, events: List[Any], tracker: LlmUsageTracker
-) -> Optional[Dict[str, Any]]:
+    step: PlanStep,
+    plan: Plan,
+    state: PlanExecuteState,
+    events: list[Any],
+    tracker: LlmUsageTracker,
+) -> dict[str, Any] | None:
     existing_reflections = state.get("step_reflections", {})
     if step.step_id in existing_reflections:
         return None
@@ -151,22 +171,32 @@ async def _reflect_on_step(
             )
         record_from_lm(lm, tracker)
         reflection_dict = reflection.model_dump()
-        events.append(ReflectionCompletedEvent(
-            step_id=step.step_id,
-            quality_score=reflection.quality_score,
-            was_suboptimal=reflection.was_suboptimal,
-            pattern_learned=reflection.pattern_learned,
-        ))
+        events.append(
+            ReflectionCompletedEvent(
+                step_id=step.step_id,
+                quality_score=reflection.quality_score,
+                was_suboptimal=reflection.was_suboptimal,
+                pattern_learned=reflection.pattern_learned,
+            )
+        )
         return reflection_dict
     except Exception as e:
         logger.warning(f"Reflection failed for step {step.step_id}: {e}")
         return None
 
 
-def _update_reflection_summary(current_summary: str, step_id: str, reflection_dict: Dict[str, Any]) -> str:
+def _update_reflection_summary(
+    current_summary: str, step_id: str, reflection_dict: dict[str, Any]
+) -> str:
     pattern = reflection_dict.get("pattern_learned", "")
     improvement = reflection_dict.get("what_could_improve", "")
-    insight = f"[{step_id}] {pattern}" if pattern else f"[{step_id}] {improvement}" if improvement else ""
+    insight = (
+        f"[{step_id}] {pattern}"
+        if pattern
+        else f"[{step_id}] {improvement}"
+        if improvement
+        else ""
+    )
     if not insight:
         return current_summary
     updated = f"{current_summary}\n{insight}" if current_summary else insight
@@ -174,7 +204,7 @@ def _update_reflection_summary(current_summary: str, step_id: str, reflection_di
         newline_idx = updated.find("\n")
         if newline_idx == -1:
             break
-        updated = updated[newline_idx + 1:]
+        updated = updated[newline_idx + 1 :]
     return updated
 
 
@@ -193,8 +223,11 @@ def _enrich_next_step_with_reflections(plan: Plan, reflection_summary: str) -> P
 
 
 async def _handle_step_failure(
-    state: PlanExecuteState, runtime: RuntimeContext, events: List[Any], tracker: LlmUsageTracker
-) -> Dict[str, Any]:
+    state: PlanExecuteState,
+    runtime: RuntimeContext,
+    events: list[Any],
+    tracker: LlmUsageTracker,
+) -> dict[str, Any]:
     plan = state.get("plan")
     error = state.get("error", "")
     ledger = state.get("ledger")
@@ -203,36 +236,72 @@ async def _handle_step_failure(
     api_key = runtime.api_key
     capability_registry = runtime.capability_registry
     assert plan is not None
-    failed_step = next((s for s in plan.steps if s.status == PlanStepStatus.FAILED.value), None)
+    failed_step = next(
+        (s for s in plan.steps if s.status == PlanStepStatus.FAILED.value), None
+    )
     if not failed_step or not ledger:
         return {"awaiting_input": "recovery", "events": events}
 
     try:
         plan_service = PlanService()
         recovery = plan_service.analyze_step_failure(
-            failed_step=failed_step, error_message=error, plan=plan, ledger=ledger, org_model=org_model,
-            api_key=api_key, organization_id=organization_id, capability_registry=capability_registry
+            failed_step=failed_step,
+            error_message=error,
+            plan=plan,
+            ledger=ledger,
+            org_model=org_model,
+            api_key=api_key,
+            organization_id=organization_id,
+            capability_registry=capability_registry,
         )
-        events.append(RecoveryAnalysisEvent(step_id=failed_step.step_id, confidence=recovery.confidence))
+        events.append(
+            RecoveryAnalysisEvent(
+                step_id=failed_step.step_id, confidence=recovery.confidence
+            )
+        )
         if recovery.should_auto_fix:
-            updated_step = failed_step.with_parameters({**(failed_step.parameters or {}), **recovery.corrected_parameters})
+            updated_step = failed_step.with_parameters(
+                {**(failed_step.parameters or {}), **recovery.corrected_parameters}
+            )
             updated_plan = plan.update_step(failed_step.step_id, updated_step)
-            events.append(AutoFixCompletedEvent(step_id=failed_step.step_id, result="Recovery prepared."))
+            events.append(
+                AutoFixCompletedEvent(
+                    step_id=failed_step.step_id, result="Recovery prepared."
+                )
+            )
             return {"plan": updated_plan, "error": None, "events": events}
         elif recovery.should_propose:
-            events.append(RecoveryPlanProposedEvent(step_id=failed_step.step_id, fix_description=recovery.reasoning, confidence=recovery.confidence))
+            events.append(
+                RecoveryPlanProposedEvent(
+                    step_id=failed_step.step_id,
+                    fix_description=recovery.reasoning,
+                    confidence=recovery.confidence,
+                )
+            )
             return {"awaiting_input": "recovery", "events": events}
         else:
-            events.append(AwaitingClarificationEvent(questions=recovery.questions or ["What to do?"]))
+            events.append(
+                AwaitingClarificationEvent(
+                    questions=recovery.questions or ["What to do?"]
+                )
+            )
             return {"awaiting_input": "recovery", "events": events}
     except Exception as e:
         logger.error(f"Recovery analysis failed: {e}")
-        events.append(AwaitingClarificationEvent(questions=["What would you like to do about this error?"]))
+        events.append(
+            AwaitingClarificationEvent(
+                questions=["What would you like to do about this error?"]
+            )
+        )
         return {"awaiting_input": "recovery", "events": events}
 
 
 async def _evaluate_progress(
-    plan: Plan, org_model: Optional[str], events: List[Any], outcomes: Dict[str, StepOutcome], tracker: LlmUsageTracker
+    plan: Plan,
+    org_model: str | None,
+    events: list[Any],
+    outcomes: dict[str, StepOutcome],
+    tracker: LlmUsageTracker,
 ) -> EvaluationResult:
     try:
         plan_steps, step_results = [], []
@@ -246,31 +315,51 @@ async def _evaluate_progress(
                 step_results.append("[IN_PROGRESS]")
             else:
                 step_results.append("[PENDING]")
-        
+
         lm = get_dspy_lm(org_model=org_model)
         evaluator = EvaluatorModule()
         with dspy.context(lm=lm):
             result = await asyncio.to_thread(
-                evaluator.evaluate_goal, plan.goal, plan_steps, step_results, list(outcomes.values())
+                evaluator.evaluate_goal,
+                plan.goal,
+                plan_steps,
+                step_results,
+                list(outcomes.values()),
             )
         record_from_lm(lm, tracker)
 
         reason = f"Confidence: {result.confidence:.0%}. "
-        reason += f"Blockers: {', '.join(result.blockers)}" if result.blockers else f"Remaining: {', '.join(result.remaining_items)}" if result.remaining_items else "Goal achieved"
+        reason += (
+            f"Blockers: {', '.join(result.blockers)}"
+            if result.blockers
+            else f"Remaining: {', '.join(result.remaining_items)}"
+            if result.remaining_items
+            else "Goal achieved"
+        )
         evaluation = EvaluationResult(
-            goal_achieved=result.achieved, blocking_issues=bool(result.blockers),
+            goal_achieved=result.achieved,
+            blocking_issues=bool(result.blockers),
             should_continue=not result.achieved and bool(result.remaining_items),
-            needs_replan=bool(result.blockers) and not result.achieved, reason=reason
+            needs_replan=bool(result.blockers) and not result.achieved,
+            reason=reason,
         )
     except Exception as e:
         logger.error(f"Evaluation failed: {e}")
-        evaluation = EvaluationResult(goal_achieved=False, blocking_issues=False, should_continue=True, needs_replan=False, reason=f"Evaluation error: {e}")
+        evaluation = EvaluationResult(
+            goal_achieved=False,
+            blocking_issues=False,
+            should_continue=True,
+            needs_replan=False,
+            reason=f"Evaluation error: {e}",
+        )
 
-    events.append(EvaluationCompletedEvent(
-        plan_id=plan.id,
-        evaluation=evaluation,
-        evaluation_number=1,
-    ))
+    events.append(
+        EvaluationCompletedEvent(
+            plan_id=plan.id,
+            evaluation=evaluation,
+            evaluation_number=1,
+        )
+    )
     if evaluation.goal_achieved:
         logger.info("Goal achieved")
         events.append(GoalAchievedEvent(plan_id=plan.id, reason=evaluation.reason))
@@ -281,8 +370,14 @@ async def _evaluate_progress(
 
 
 async def _finish(
-    plan: Plan, state: PlanExecuteState, org_model: Optional[str], evaluation: EvaluationResult, events: List[Any], runtime: RuntimeContext, tracker: LlmUsageTracker
-) -> Dict[str, Any]:
+    plan: Plan,
+    state: PlanExecuteState,
+    org_model: str | None,
+    evaluation: EvaluationResult,
+    events: list[Any],
+    runtime: RuntimeContext,
+    tracker: LlmUsageTracker,
+) -> dict[str, Any]:
     success = evaluation.goal_achieved
     ledger = state.get("ledger")
     plan = plan.complete() if success else plan.fail()
@@ -295,32 +390,47 @@ async def _finish(
         try:
             final_response = await _synthesize_answer(plan, ledger, org_model, tracker)
             if final_response:
-                events.append(FinalSynthesisEvent(plan_id=plan.id, synthesis=final_response))
+                events.append(
+                    FinalSynthesisEvent(plan_id=plan.id, synthesis=final_response)
+                )
         except Exception as e:
             logger.warning(f"Synthesis failed: {e}")
 
     if runtime.engine and final_response:
-        runtime.engine.memory.add(content=f"Task: {state.get('task', '')[:200]}. Result: {final_response[:300]}", memory_type="fact")
+        runtime.engine.memory.add(
+            content=f"Task: {state.get('task', '')[:200]}. Result: {final_response[:300]}",
+            memory_type="fact",
+        )
 
     events.append(ExecutionCompletedEvent(plan_id=plan.id, success=success))
-    return {"plan": plan, "response": final_response or "Execution finished.", "success": success, "events": events}
+    return {
+        "plan": plan,
+        "response": final_response or "Execution finished.",
+        "success": success,
+        "events": events,
+    }
 
 
 async def _synthesize_answer(
-    plan: Plan, ledger: Any, org_model: Optional[str], tracker: LlmUsageTracker
+    plan: Plan, ledger: Any, org_model: str | None, tracker: LlmUsageTracker
 ) -> str:
     step_results = ledger.get_step_results()
     if not step_results:
         return ""
-    
-    parts = [f"### {ledger.steps.get(step_id).step_name if ledger.steps.get(step_id) else step_id}\n{result or '(no output)'}" for step_id, result in step_results.items()]
+
+    parts = [
+        f"### {ledger.steps.get(step_id).step_name if ledger.steps.get(step_id) else step_id}\n{result or '(no output)'}"
+        for step_id, result in step_results.items()
+    ]
     formatted_results = "\n\n".join(parts)
 
     try:
         lm = get_dspy_lm(org_model=org_model)
         evaluator = EvaluatorModule()
         with dspy.context(lm=lm):
-            result = await asyncio.to_thread(evaluator.synthesize_answer, plan.goal, formatted_results, "")
+            result = await asyncio.to_thread(
+                evaluator.synthesize_answer, plan.goal, formatted_results, ""
+            )
         record_from_lm(lm, tracker)
         return str(result)
     except Exception as e:
@@ -329,43 +439,75 @@ async def _synthesize_answer(
 
 
 async def _do_replan(
-    state: PlanExecuteState, runtime: RuntimeContext, error: Optional[str], replan_count: int, events: List[Any], tracker: LlmUsageTracker
-) -> Dict[str, Any]:
+    state: PlanExecuteState,
+    runtime: RuntimeContext,
+    error: str | None,
+    replan_count: int,
+    events: list[Any],
+    tracker: LlmUsageTracker,
+) -> dict[str, Any]:
     plan = state.get("plan")
     org_model = state.get("org_model")
     tools = runtime.tools
     assert plan is not None
 
     replan_count += 1
-    events.append(ReplanTriggeredEvent(plan_id=plan.id, reason=error or "Eval trigger", replan_number=replan_count))
+    events.append(
+        ReplanTriggeredEvent(
+            plan_id=plan.id, reason=error or "Eval trigger", replan_number=replan_count
+        )
+    )
 
     replan_handler = ReplanHandler(model_provider=None, org_model=org_model)
     old_pending_count = len(plan.get_pending_steps())
 
     try:
         updated_plan = await replan_handler.handle_replan(
-            current_plan=plan, failed_step=None, reason=error or "Eval trigger",
-            tools=tools, llm_tracker=tracker
+            current_plan=plan,
+            failed_step=None,
+            reason=error or "Eval trigger",
+            tools=tools,
+            llm_tracker=tracker,
         )
     except ReplanNeedsClarificationError as e:
-        events.append(AwaitingClarificationEvent.from_dict_list(questions=e.questions, reasoning=e.reasoning))
-        return {"awaiting_input": "clarification", "replan_count": replan_count, "events": events}
+        events.append(
+            AwaitingClarificationEvent.from_dict_list(
+                questions=e.questions, reasoning=e.reasoning
+            )
+        )
+        return {
+            "awaiting_input": "clarification",
+            "replan_count": replan_count,
+            "events": events,
+        }
 
     new_pending_count = len(updated_plan.get_pending_steps())
-    events.append(PlanUpdatedEvent(
-        plan_id=plan.id, reason=error or "Eval trigger",
-        added_steps=max(0, new_pending_count - old_pending_count),
-        removed_steps=max(0, old_pending_count - new_pending_count),
-        replan_number=replan_count
-    ))
+    events.append(
+        PlanUpdatedEvent(
+            plan_id=plan.id,
+            reason=error or "Eval trigger",
+            added_steps=max(0, new_pending_count - old_pending_count),
+            removed_steps=max(0, old_pending_count - new_pending_count),
+            replan_number=replan_count,
+        )
+    )
 
     if runtime.engine:
         runtime.engine.plans.save(updated_plan)
 
     if new_pending_count == 0:
         raw = state.get("step_outcomes", {})
-        replan_outcomes = {k: StepOutcome.from_dict(v) for k,v in raw.items()}
-        evaluation = await _evaluate_progress(updated_plan, org_model, events, replan_outcomes, tracker)
-        return await _finish(updated_plan, state, org_model, evaluation, events, runtime, tracker)
+        replan_outcomes = {k: StepOutcome.from_dict(v) for k, v in raw.items()}
+        evaluation = await _evaluate_progress(
+            updated_plan, org_model, events, replan_outcomes, tracker
+        )
+        return await _finish(
+            updated_plan, state, org_model, evaluation, events, runtime, tracker
+        )
 
-    return {"plan": updated_plan, "replan_count": replan_count, "error": None, "events": events}
+    return {
+        "plan": updated_plan,
+        "replan_count": replan_count,
+        "error": None,
+        "events": events,
+    }

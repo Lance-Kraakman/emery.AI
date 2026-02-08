@@ -24,9 +24,10 @@ Usage:
 """
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Any, Callable, Dict, Optional, Set
+from typing import Any, Optional
 
 from emery_agents.entities.models.plan import Plan
 
@@ -41,49 +42,53 @@ class Phase(Enum):
     for gRPC layer routing decisions, while execution.Phase tracks the
     coordinator's execution state. They serve different purposes.
     """
-    IDLE = auto()                       # No active coordination, accepts new tasks
-    AWAITING_CLARIFICATION = auto()     # Waiting for task classifier clarification
-    AWAITING_APPROVAL = auto()          # Waiting for user to approve a plan
-    AWAITING_QUESTIONS = auto()         # Waiting for managed agent HITL response
-    EXECUTING = auto()                  # Plan execution in progress
-    AWAITING_RECOVERY = auto()          # Waiting for user to help resolve blocked execution
+
+    IDLE = auto()  # No active coordination, accepts new tasks
+    AWAITING_CLARIFICATION = auto()  # Waiting for task classifier clarification
+    AWAITING_APPROVAL = auto()  # Waiting for user to approve a plan
+    AWAITING_QUESTIONS = auto()  # Waiting for managed agent HITL response
+    EXECUTING = auto()  # Plan execution in progress
+    AWAITING_RECOVERY = auto()  # Waiting for user to help resolve blocked execution
 
 
 class ActionType(Enum):
     """Actions returned by state machine handlers."""
-    FALL_THROUGH = auto()     # Let agent.run() handle (no coordinator intervention)
+
+    FALL_THROUGH = auto()  # Let agent.run() handle (no coordinator intervention)
     RUN_COORDINATOR = auto()  # Run coordinator.execute() for new task
-    EXECUTE_PLAN = auto()     # Call coordinator.execute_plan() after approval
-    YIELD_EVENT = auto()      # Yield an event to frontend
-    ERROR = auto()            # Return error response
-    COMPLETE = auto()         # Execution complete, clear state
+    EXECUTE_PLAN = auto()  # Call coordinator.execute_plan() after approval
+    YIELD_EVENT = auto()  # Yield an event to frontend
+    ERROR = auto()  # Return error response
+    COMPLETE = auto()  # Execution complete, clear state
     # Recovery actions for AWAITING_RECOVERY phase
-    RETRY_STEP = auto()       # Retry the failed step as-is
-    SKIP_STEP = auto()        # Skip the failed step and continue
-    RETRY_WITH_INPUT = auto() # Retry with user-provided context/input
+    RETRY_STEP = auto()  # Retry the failed step as-is
+    SKIP_STEP = auto()  # Skip the failed step and continue
+    RETRY_WITH_INPUT = auto()  # Retry with user-provided context/input
 
 
 @dataclass
 class StateAction:
     """Result from state machine handler - tells caller what to do."""
+
     action_type: ActionType
-    event: Optional[Any] = None              # For YIELD_EVENT
-    error_message: Optional[str] = None      # For ERROR
-    next_phase: Optional[Phase] = None       # Phase to transition to (if any)
-    context_updates: Optional[Dict[str, Any]] = None  # Fields to update
-    combined_task: Optional[str] = None      # For clarification - combined task text
+    event: Any | None = None  # For YIELD_EVENT
+    error_message: str | None = None  # For ERROR
+    next_phase: Phase | None = None  # Phase to transition to (if any)
+    context_updates: dict[str, Any] | None = None  # Fields to update
+    combined_task: str | None = None  # For clarification - combined task text
 
 
 @dataclass
 class StateContext:
     """All context needed for state machine decisions."""
+
     phase: Phase = field(default=Phase.IDLE)
-    original_task: Optional[str] = None
+    original_task: str | None = None
     plan: Optional["Plan"] = None
     # Recovery context (for AWAITING_RECOVERY phase)
-    blocked_reason: Optional[str] = None
-    failed_step: Optional[Any] = None
-    recovery_input: Optional[str] = None
+    blocked_reason: str | None = None
+    failed_step: Any | None = None
+    recovery_input: str | None = None
 
     def clear(self) -> None:
         """Reset to idle state."""
@@ -97,35 +102,36 @@ class StateContext:
 
 class InvalidTransitionError(Exception):
     """Raised when an invalid state transition is attempted."""
+
     pass
 
 
 # Valid state transitions matrix
-VALID_TRANSITIONS: Dict[Phase, Set[Phase]] = {
+VALID_TRANSITIONS: dict[Phase, set[Phase]] = {
     Phase.IDLE: {
         Phase.AWAITING_CLARIFICATION,
         Phase.AWAITING_APPROVAL,
         Phase.AWAITING_QUESTIONS,  # Direct HITL from agent.run()
-        Phase.EXECUTING,           # AUTONOMOUS mode (skip approval)
+        Phase.EXECUTING,  # AUTONOMOUS mode (skip approval)
     },
     Phase.AWAITING_CLARIFICATION: {
         Phase.IDLE,  # User answers, replan with combined task
     },
     Phase.AWAITING_APPROVAL: {
         Phase.EXECUTING,  # User approves plan
-        Phase.IDLE,       # User provides feedback (replan)
+        Phase.IDLE,  # User provides feedback (replan)
     },
     Phase.AWAITING_QUESTIONS: {
         Phase.IDLE,  # Resume via FALL_THROUGH to agent.run()
     },
     Phase.EXECUTING: {
-        Phase.IDLE,               # Execution complete or error
-        Phase.AWAITING_QUESTIONS, # Managed agent pauses for HITL
+        Phase.IDLE,  # Execution complete or error
+        Phase.AWAITING_QUESTIONS,  # Managed agent pauses for HITL
         Phase.AWAITING_RECOVERY,  # Execution blocked, needs user help
     },
     Phase.AWAITING_RECOVERY: {
         Phase.EXECUTING,  # User provides input, retry step
-        Phase.IDLE,       # User chooses to replan/cancel
+        Phase.IDLE,  # User chooses to replan/cancel
     },
 }
 
@@ -162,7 +168,7 @@ class CoordinatorStateMachine:
     def __init__(self, session_id: str):
         self.session_id = session_id
         self.context = StateContext()
-        self._handlers: Dict[Phase, Callable[[str, Any], StateAction]] = {
+        self._handlers: dict[Phase, Callable[[str, Any], StateAction]] = {
             Phase.IDLE: self._handle_idle,
             Phase.AWAITING_CLARIFICATION: self._handle_clarification,
             Phase.AWAITING_APPROVAL: self._handle_approval,
@@ -204,7 +210,9 @@ class CoordinatorStateMachine:
             else:
                 logger.warning(f"Unknown context field: {key}")
 
-        logger.info(f"📊 State machine [{self.session_id}]: {old_phase.name} → {to_phase.name}")
+        logger.info(
+            f"📊 State machine [{self.session_id}]: {old_phase.name} → {to_phase.name}"
+        )
 
     def handle_input(self, input_type: str, data: Any) -> StateAction:
         """
@@ -221,10 +229,12 @@ class CoordinatorStateMachine:
         if not handler:
             return StateAction(
                 action_type=ActionType.ERROR,
-                error_message=f"No handler for phase {self.context.phase.name}"
+                error_message=f"No handler for phase {self.context.phase.name}",
             )
 
-        logger.debug(f"📊 State machine [{self.session_id}]: handling {input_type} in {self.context.phase.name}")
+        logger.debug(
+            f"📊 State machine [{self.session_id}]: handling {input_type} in {self.context.phase.name}"
+        )
         return handler(input_type, data)
 
     # ============================================================
@@ -241,7 +251,7 @@ class CoordinatorStateMachine:
         self.context.original_task = data
         return StateAction(
             action_type=ActionType.RUN_COORDINATOR,
-            context_updates={"original_task": data}
+            context_updates={"original_task": data},
         )
 
     def _handle_clarification(self, input_type: str, data: Any) -> StateAction:
@@ -259,7 +269,7 @@ class CoordinatorStateMachine:
         return StateAction(
             action_type=ActionType.RUN_COORDINATOR,
             next_phase=Phase.IDLE,
-            combined_task=combined_task
+            combined_task=combined_task,
         )
 
     def _handle_approval(self, input_type: str, data: Any) -> StateAction:
@@ -271,8 +281,7 @@ class CoordinatorStateMachine:
         if self._is_approval(data):
             # User approved - execute the plan
             return StateAction(
-                action_type=ActionType.EXECUTE_PLAN,
-                next_phase=Phase.EXECUTING
+                action_type=ActionType.EXECUTE_PLAN, next_phase=Phase.EXECUTING
             )
         else:
             # User provided feedback - combine and replan
@@ -282,7 +291,7 @@ class CoordinatorStateMachine:
             return StateAction(
                 action_type=ActionType.RUN_COORDINATOR,
                 next_phase=Phase.IDLE,
-                combined_task=combined_task
+                combined_task=combined_task,
             )
 
     def _handle_managed_agent_hitl(self, input_type: str, data: Any) -> StateAction:
@@ -305,7 +314,7 @@ class CoordinatorStateMachine:
         return StateAction(
             action_type=ActionType.FALL_THROUGH,
             next_phase=Phase.IDLE,
-            combined_task=task_for_resume
+            combined_task=task_for_resume,
         )
 
     def _handle_executing(self, input_type: str, data: Any) -> StateAction:
@@ -314,10 +323,12 @@ class CoordinatorStateMachine:
 
         This shouldn't happen normally - execution is in progress.
         """
-        logger.warning(f"📊 State machine [{self.session_id}]: unexpected input during execution")
+        logger.warning(
+            f"📊 State machine [{self.session_id}]: unexpected input during execution"
+        )
         return StateAction(
             action_type=ActionType.ERROR,
-            error_message="Execution in progress. Please wait for completion."
+            error_message="Execution in progress. Please wait for completion.",
         )
 
     def _handle_recovery(self, input_type: str, data: Any) -> StateAction:
@@ -345,7 +356,9 @@ class CoordinatorStateMachine:
                 next_phase=Phase.EXECUTING,
             )
         elif data_lower in ("replan", "cancel"):
-            logger.info(f"📊 State machine [{self.session_id}]: user chose {data_lower}")
+            logger.info(
+                f"📊 State machine [{self.session_id}]: user chose {data_lower}"
+            )
             self.context.clear()
             return StateAction(
                 action_type=ActionType.RUN_COORDINATOR,
@@ -353,7 +366,9 @@ class CoordinatorStateMachine:
             )
         else:
             # User provided helpful input - store and retry with it
-            logger.info(f"📊 State machine [{self.session_id}]: user provided recovery input")
+            logger.info(
+                f"📊 State machine [{self.session_id}]: user provided recovery input"
+            )
             return StateAction(
                 action_type=ActionType.RETRY_WITH_INPUT,
                 next_phase=Phase.EXECUTING,
@@ -370,26 +385,15 @@ class CoordinatorStateMachine:
 
         Transitions: IDLE → AWAITING_CLARIFICATION
         """
-        self.transition(
-            Phase.AWAITING_CLARIFICATION,
-            original_task=task
-        )
+        self.transition(Phase.AWAITING_CLARIFICATION, original_task=task)
 
-    def on_plan_created(
-        self,
-        plan: "Plan",
-        task: str
-    ) -> None:
+    def on_plan_created(self, plan: "Plan", task: str) -> None:
         """
         Plan created, ready for user approval.
 
         Transitions: IDLE → AWAITING_APPROVAL
         """
-        self.transition(
-            Phase.AWAITING_APPROVAL,
-            plan=plan,
-            original_task=task
-        )
+        self.transition(Phase.AWAITING_APPROVAL, plan=plan, original_task=task)
 
     def on_managed_agent_hitl(self, task: str) -> None:
         """
@@ -397,10 +401,7 @@ class CoordinatorStateMachine:
 
         Transitions: IDLE/EXECUTING → AWAITING_QUESTIONS
         """
-        self.transition(
-            Phase.AWAITING_QUESTIONS,
-            original_task=task
-        )
+        self.transition(Phase.AWAITING_QUESTIONS, original_task=task)
 
     def on_execution_started(self) -> None:
         """
@@ -413,7 +414,7 @@ class CoordinatorStateMachine:
     def on_execution_blocked(
         self,
         reason: str,
-        failed_step: Optional[Any] = None,
+        failed_step: Any | None = None,
     ) -> None:
         """
         Execution blocked, needs user help to proceed.
@@ -437,7 +438,9 @@ class CoordinatorStateMachine:
         Transitions: EXECUTING → IDLE
         """
         self.context.clear()
-        logger.info(f"📊 State machine [{self.session_id}]: execution complete, state cleared")
+        logger.info(
+            f"📊 State machine [{self.session_id}]: execution complete, state cleared"
+        )
 
     def on_error(self, error_message: str, fatal: bool = False) -> None:
         """
@@ -454,10 +457,14 @@ class CoordinatorStateMachine:
         if fatal:
             # Only clear on truly fatal errors (auth failures, etc.)
             self.context.clear()
-            logger.info(f"📊 State machine [{self.session_id}]: fatal error, context cleared")
+            logger.info(
+                f"📊 State machine [{self.session_id}]: fatal error, context cleared"
+            )
         else:
             # Preserve state - user can say "retry" or continue naturally
-            logger.info(f"📊 State machine [{self.session_id}]: non-fatal error, context preserved for retry")
+            logger.info(
+                f"📊 State machine [{self.session_id}]: non-fatal error, context preserved for retry"
+            )
 
     # ============================================================
     # Helpers
@@ -471,7 +478,7 @@ class CoordinatorStateMachine:
     # Serialization (for persistence/debugging)
     # ============================================================
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize state machine state for debugging/logging."""
         return {
             "session_id": self.session_id,

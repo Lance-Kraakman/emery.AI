@@ -10,7 +10,7 @@ Executes skill in-process via execute_skill_by_id().
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 import requests
 
@@ -57,7 +57,9 @@ class DynamicSkillTool:
         # DSPy tool properties
         skill_name = self._skill_metadata.get("name", f"skill_{skill_id}")
         self.name = f"skill_{skill_name.replace(':', '').replace(' ', '_').replace('-', '_').lower()}"
-        self.description = self._skill_metadata.get("description", f"Execute skill {skill_id}")
+        self.description = self._skill_metadata.get(
+            "description", f"Execute skill {skill_id}"
+        )
         self.inputs = self._build_inputs_schema()
         self.output_type = "string"
 
@@ -83,7 +85,9 @@ class DynamicSkillTool:
         """
         from ..execution.dynamic_execution import execute_skill_by_id
 
-        logger.info(f"[DYNAMIC-SKILL] Executing skill {self.skill_id} with inputs: {list(kwargs.keys())}")
+        logger.info(
+            f"[DYNAMIC-SKILL] Executing skill {self.skill_id} with inputs: {list(kwargs.keys())}"
+        )
 
         return execute_skill_by_id(
             skill_id=self.skill_id,
@@ -92,7 +96,7 @@ class DynamicSkillTool:
             org_id=str(self.organization_id),
         )
 
-    def _fetch_skill_metadata(self) -> Dict[str, Any]:
+    def _fetch_skill_metadata(self) -> dict[str, Any]:
         """
         Fetch basic skill info for tool registration.
 
@@ -118,13 +122,24 @@ class DynamicSkillTool:
 
             if response.status_code == 404:
                 logger.error(f"[DYNAMIC-SKILL] Skill {self.skill_id} not found")
-                return {"name": f"unknown_skill_{self.skill_id}", "description": "Skill not found"}
+                return {
+                    "name": f"unknown_skill_{self.skill_id}",
+                    "description": "Skill not found",
+                }
             elif response.status_code == 403:
-                logger.error(f"[DYNAMIC-SKILL] Permission denied for skill {self.skill_id}")
-                return {"name": f"skill_{self.skill_id}", "description": "Permission denied"}
+                logger.error(
+                    f"[DYNAMIC-SKILL] Permission denied for skill {self.skill_id}"
+                )
+                return {
+                    "name": f"skill_{self.skill_id}",
+                    "description": "Permission denied",
+                }
             elif response.status_code >= 400:
                 logger.error(f"[DYNAMIC-SKILL] API error {response.status_code}")
-                return {"name": f"skill_{self.skill_id}", "description": f"API error: {response.status_code}"}
+                return {
+                    "name": f"skill_{self.skill_id}",
+                    "description": f"API error: {response.status_code}",
+                }
 
             data = response.json()
 
@@ -147,7 +162,7 @@ class DynamicSkillTool:
             logger.error(f"[DYNAMIC-SKILL] Error fetching skill metadata: {e}")
             return {"name": f"skill_{self.skill_id}", "description": str(e)}
 
-    def _build_inputs_schema(self) -> Dict[str, Any]:
+    def _build_inputs_schema(self) -> dict[str, Any]:
         """
         Build inputs schema from skill.inputs for DSPy.
 

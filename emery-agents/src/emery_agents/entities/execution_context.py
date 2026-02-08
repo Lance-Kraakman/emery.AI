@@ -5,16 +5,16 @@ Represents the context for agent task execution without DDD value object overhea
 Uses direct types (int, str) instead of wrapper classes.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Dict, Any, Callable
+from typing import Any
 
 from emery_agents.entities.models.context_mapping import ResolvedContext
-from ..types import AgentId, OrganizationId, ExecutionMode, ToolMode
 
-from .message import ImageAttachment, FileAttachment
+from ..types import AgentId, ExecutionMode, OrganizationId, ToolMode
+from .message import FileAttachment, ImageAttachment
 from .skill_config import SkillConfig
-
 
 # Constants
 DEFAULT_MAX_STEPS = 10
@@ -34,44 +34,48 @@ class ExecutionContext:
 
     # Core execution properties
     mode: ExecutionMode
-    task: str                              # Main instruction text (changed from 'instructions')
-    available_tools: List[str]
+    task: str  # Main instruction text (changed from 'instructions')
+    available_tools: list[str]
 
     # Multimodal content (optional)
-    images: List[ImageAttachment] = field(default_factory=list)       # Image URLs
-    attachments: List[FileAttachment] = field(default_factory=list)   # Current message files (default)
-    session_attachments: List[FileAttachment] = field(default_factory=list)  # All session files (for explicit lookup by name)
+    images: list[ImageAttachment] = field(default_factory=list)  # Image URLs
+    attachments: list[FileAttachment] = field(
+        default_factory=list
+    )  # Current message files (default)
+    session_attachments: list[FileAttachment] = field(
+        default_factory=list
+    )  # All session files (for explicit lookup by name)
 
     # Optional context
-    agent_id: Optional[AgentId] = None
-    organization_id: Optional[OrganizationId] = None
-    skill_name: Optional[str] = None
+    agent_id: AgentId | None = None
+    organization_id: OrganizationId | None = None
+    skill_name: str | None = None
     max_steps: int = DEFAULT_MAX_STEPS
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS
 
     # Skill configuration for skill-based execution
-    skill: Optional[SkillConfig] = None
+    skill: SkillConfig | None = None
 
     # Available skills for delegation (skill-as-tool)
     # When set, these skills can be invoked as tools by the executing agent
-    available_skills: List[SkillConfig] = field(default_factory=list)
+    available_skills: list[SkillConfig] = field(default_factory=list)
 
     # Model selection hierarchy
-    agent_model: Optional[str] = None
-    org_model: Optional[str] = None
+    agent_model: str | None = None
+    org_model: str | None = None
 
     # OutputTool reference for capturing agent outputs (set at runtime)
-    output_tool: Optional[Any] = None
+    output_tool: Any | None = None
 
     # Environment data
-    environment: Dict[str, Any] = field(default_factory=dict)
+    environment: dict[str, Any] = field(default_factory=dict)
 
     # Runtime skill inputs from automation inputMappings
     # These are resolved from trigger_data.payload and passed to execute_skill(runtime_inputs=...)
-    skill_inputs: Dict[str, Any] = field(default_factory=dict)
+    skill_inputs: dict[str, Any] = field(default_factory=dict)
 
     # Row ID that triggered this execution (for table automations with input_mapping)
-    source_row_id: Optional[int] = None
+    source_row_id: int | None = None
 
     # Use ExecutionCoordinator for two-phase execution (planning → approval → execution)
     # When True, enables HITL approval gates and evaluation loop
@@ -84,25 +88,25 @@ class ExecutionContext:
 
     # Resolved context table mappings for this execution
     # Contains merged mappings with hierarchy priority: step > skill > agent
-    resolved_context: Optional[ResolvedContext] = None
+    resolved_context: ResolvedContext | None = None
 
     # Progress callback for streaming nested skill execution steps to UI
     # Called with step dicts: {'type': str, 'step_name': str, 'content': str, 'metadata': dict}
-    progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None
+    progress_callback: Callable[[dict[str, Any]], None] | None = None
 
     # Centralized tool provider (created once at top level)
     # Provides tools with consistent auth configuration
     # Import here to avoid circular dependency
-    tool_provider: Optional[Any] = None  # Type: Optional[ToolProvider]
+    tool_provider: Any | None = None  # Type: Optional[ToolProvider]
 
     # Stored plan for autonomous execution (passed by entry point)
     # When set with mode=AUTONOMOUS, coordinator executes this plan directly
     # Type: Optional[Plan] - using Any to avoid circular import
-    plan: Optional[Any] = None
+    plan: Any | None = None
 
     # Workspace filesystem path for isolated bash execution
     # When set, BashTool is available for file operations in sandboxed environment
-    workspace_path: Optional[Path] = None
+    workspace_path: Path | None = None
 
     # Network access for bash commands (git, curl, wget)
     # Default True for agents - enables git clone, curl, etc. in sandbox
@@ -119,7 +123,7 @@ class ExecutionContext:
         """Check if execution is interactive (chat-based, with HITL)."""
         return self.mode == ExecutionMode.INTERACTIVE
 
-    def with_tools(self, tools: List[str]) -> 'ExecutionContext':
+    def with_tools(self, tools: list[str]) -> "ExecutionContext":
         """Create new context with different tools."""
         return ExecutionContext(
             mode=self.mode,

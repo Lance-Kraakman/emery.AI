@@ -128,19 +128,13 @@ class DirectExecution(dspy.Signature):  # type: ignore[misc]
     If the user has uploaded images, analyze them visually to answer the query.
     """
 
-    step_description: str = dspy.InputField(
-        desc="The user's task to execute."
-    )
-    context: str = dspy.InputField(
-        desc="Workspace state and conversation history."
-    )
+    step_description: str = dspy.InputField(desc="The user's task to execute.")
+    context: str = dspy.InputField(desc="Workspace state and conversation history.")
     images: list[DspyImage] = dspy.InputField(
         desc="User-uploaded images for visual analysis.",
         default=[],
     )
-    result: str = dspy.OutputField(
-        desc="What was accomplished and the outcome."
-    )
+    result: str = dspy.OutputField(desc="What was accomplished and the outcome.")
 
 
 class DirectExecutorModule(dspy.Module):  # type: ignore[misc]
@@ -170,7 +164,9 @@ class DirectExecutorModule(dspy.Module):  # type: ignore[misc]
             max_iters=max_iters,
         )
 
-    def forward(self, step_description: str, context: str, images: list[DspyImage] | None = None) -> Prediction:
+    def forward(
+        self, step_description: str, context: str, images: list[DspyImage] | None = None
+    ) -> Prediction:
         """Execute and return full Prediction (required for dspy.Refine)."""
         return self.react(  # type: ignore[no-any-return]
             step_description=step_description,

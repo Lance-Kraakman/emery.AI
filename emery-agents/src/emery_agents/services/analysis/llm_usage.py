@@ -4,7 +4,9 @@ LLM Usage Tracking Service
 This module provides a thread-safe tracker for accumulating LLM token usage
 and a function to extract usage data from DSPy's Language Model history.
 """
+
 from __future__ import annotations
+
 import logging
 import threading
 from dataclasses import dataclass, field
@@ -20,6 +22,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class LlmUsageRecord:
     """Represents a single record of LLM token usage."""
+
     model_name: str
     input_tokens: int
     output_tokens: int
@@ -61,7 +64,7 @@ class LlmUsageTracker:
             self._records.clear()
 
 
-def record_from_lm(lm: "dspy.LM", tracker: LlmUsageTracker) -> None:
+def record_from_lm(lm: dspy.LM, tracker: LlmUsageTracker) -> None:
     """
     Extract token usage from dspy.LM.history and record it.
 

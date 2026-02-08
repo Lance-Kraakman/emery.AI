@@ -8,14 +8,21 @@ ChainOfThought with GeneratePlanDiff signature.
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 import dspy
 
-from ..protocols import ModelProviderProtocol
-from emery_agents.services.analysis.llm_usage import LlmUsageTracker, record_from_lm
-from emery_agents.entities.models.plan import Plan, PlanStep, PlanStatus, PlanStepStatus, create_step
+from emery_agents.entities.models.plan import (
+    Plan,
+    PlanStatus,
+    PlanStep,
+    PlanStepStatus,
+    create_step,
+)
 from emery_agents.reasoning.signatures.planning import GeneratePlanDiff, PlanDiffResult
+from emery_agents.services.analysis.llm_usage import LlmUsageTracker, record_from_lm
+
+from ..protocols import ModelProviderProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -29,22 +36,22 @@ class PlanDiff:
     while preserving as much of the original plan as possible.
     """
 
-    steps_to_skip: List[str] = field(default_factory=list)
+    steps_to_skip: list[str] = field(default_factory=list)
     """Step IDs to mark as SKIPPED."""
 
-    steps_to_modify: List[Tuple[str, Dict[str, Any]]] = field(default_factory=list)
+    steps_to_modify: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
     """(step_id, modifications) - Update existing steps."""
 
-    steps_to_insert: List[Tuple[int, PlanStep]] = field(default_factory=list)
+    steps_to_insert: list[tuple[int, PlanStep]] = field(default_factory=list)
     """(position, new_step) - Insert new steps at specific positions."""
 
-    steps_to_append: List[PlanStep] = field(default_factory=list)
+    steps_to_append: list[PlanStep] = field(default_factory=list)
     """New steps to add at the end."""
 
     reasoning: str = ""
     """Explanation of why these changes were made."""
 
-    clarifying_questions: List[Dict[str, Any]] = field(default_factory=list)
+    clarifying_questions: list[dict[str, Any]] = field(default_factory=list)
     """Questions to ask user when missing information detected."""
 
     def is_empty(self) -> bool:
@@ -89,21 +96,25 @@ class PlanDiff:
             append_steps.append(step)
 
         # Build modify tuples (typed access)
-        modify_tuples: List[Tuple[str, Dict[str, Any]]] = []
+        modify_tuples: list[tuple[str, dict[str, Any]]] = []
         for m in result.steps_to_modify:
             mods = {"description": m.new_description}
             modify_tuples.append((m.step_id, mods))
 
         # Convert clarifying questions to dicts for runtime representation
-        questions = [
-            {
-                "question": q.question,
-                "question_type": q.question_type.value,
-                "options": q.options,
-                "reason": q.reason,
-            }
-            for q in result.clarifying_questions
-        ] if result.needs_clarification else []
+        questions = (
+            [
+                {
+                    "question": q.question,
+                    "question_type": q.question_type.value,
+                    "options": q.options,
+                    "reason": q.reason,
+                }
+                for q in result.clarifying_questions
+            ]
+            if result.needs_clarification
+            else []
+        )
 
         return cls(
             steps_to_skip=result.steps_to_skip,
@@ -151,7 +162,7 @@ class PlanDiffer:
 
     def __init__(
         self,
-        lm: Optional[dspy.LM] = None,
+        lm: dspy.LM | None = None,
         model_provider: Optional["ModelProviderProtocol"] = None,
     ):
         """
@@ -169,10 +180,10 @@ class PlanDiffer:
         self,
         current_plan: Plan,
         reason: str,
-        failed_step: Optional[PlanStep] = None,
-        completed_context: Optional[str] = None,
-        org_model: Optional[str] = None,
-        llm_tracker: Optional[LlmUsageTracker] = None,
+        failed_step: PlanStep | None = None,
+        completed_context: str | None = None,
+        org_model: str | None = None,
+        llm_tracker: LlmUsageTracker | None = None,
     ) -> PlanDiff:
         """
         Generate minimal diff to address the replan reason.
@@ -190,8 +201,7 @@ class PlanDiffer:
         """
         # Get pending steps
         pending_steps = [
-            s for s in current_plan.steps
-            if s.status == PlanStepStatus.PENDING.value
+            s for s in current_plan.steps if s.status == PlanStepStatus.PENDING.value
         ]
 
         if not pending_steps:
@@ -213,7 +223,9 @@ class PlanDiffer:
         # Build failed step info
         failed_step_info = ""
         if failed_step:
-            failed_step_info = f"Step '{failed_step.step_id}': {failed_step.description}"
+            failed_step_info = (
+                f"Step '{failed_step.step_id}': {failed_step.description}"
+            )
             if failed_step.error:
                 failed_step_info += f"\nError: {failed_step.error}"
 
@@ -247,7 +259,9 @@ class PlanDiffer:
 
             # Check for clarifying questions
             if diff.needs_clarification:
-                logger.info(f"❓ Replan needs clarification: {len(diff.clarifying_questions)} question(s)")
+                logger.info(
+                    f"❓ Replan needs clarification: {len(diff.clarifying_questions)} question(s)"
+                )
                 return diff
 
             # If failed_step provided, ensure it's in steps_to_skip
@@ -277,7 +291,7 @@ class PlanDiffer:
         Returns:
             New Plan with diff applied
         """
-        new_steps: List[PlanStep] = []
+        new_steps: list[PlanStep] = []
 
         for step in plan.steps:
             step_id = step.step_id
@@ -333,7 +347,9 @@ class PlanDiffer:
                 new_steps.append(step)
 
         # Handle insertions at specific positions (reverse order to maintain indices)
-        for position, new_step in sorted(diff.steps_to_insert, key=lambda x: x[0], reverse=True):
+        for position, new_step in sorted(
+            diff.steps_to_insert, key=lambda x: x[0], reverse=True
+        ):
             if 0 <= position <= len(new_steps):
                 new_steps.insert(position, new_step)
             else:

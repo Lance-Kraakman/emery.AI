@@ -8,8 +8,8 @@ This module provides:
 """
 
 from emery_agents.planning.pattern import (
-    PlanningPattern,
     AutoApprovePolicy,
+    PlanningPattern,
 )
 from emery_agents.planning.registry import PlanningRegistry
 

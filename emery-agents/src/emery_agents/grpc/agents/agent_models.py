@@ -15,7 +15,7 @@ These models provide the same interface without smolagents dependency.
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, List, Any, Literal, Optional
+from typing import Any, Literal
 
 from .agent_descriptors import AgentDescriptor, get_builder_descriptors
 
@@ -23,12 +23,13 @@ from .agent_descriptors import AgentDescriptor, get_builder_descriptors
 @dataclass
 class MemoryStep:
     """A single step in agent memory (replaces smolagents TaskStep/ActionStep)."""
+
     role: Literal["user", "assistant"]
     content: str
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
-    step_number: Optional[int] = None
+    step_number: int | None = None
     # Optional metadata for compatibility
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -38,7 +39,8 @@ class AgentMemory:
 
     Provides a simple list of steps that can be appended to and cleared.
     """
-    steps: List[MemoryStep] = field(default_factory=list)
+
+    steps: list[MemoryStep] = field(default_factory=list)
 
     def clear(self) -> None:
         """Clear all memory steps."""
@@ -61,18 +63,19 @@ class ChatAgent:
     Provides the same interface as smolagents agent for compatibility with
     existing code that reads agent properties.
     """
+
     name: str = "chat_planner"
     description: str = "Plans and coordinates tasks"
     memory: AgentMemory = field(default_factory=AgentMemory)
-    managed_agents: Dict[str, AgentDescriptor] = field(default_factory=dict)
+    managed_agents: dict[str, AgentDescriptor] = field(default_factory=dict)
     system_prompt: str = ""
 
     @classmethod
     def create(
         cls,
-        managed_agents: Optional[List[AgentDescriptor]] = None,
+        managed_agents: list[AgentDescriptor] | None = None,
         system_prompt: str = "",
-    ) -> 'ChatAgent':
+    ) -> "ChatAgent":
         """
         Create a ChatAgent with managed agents.
 

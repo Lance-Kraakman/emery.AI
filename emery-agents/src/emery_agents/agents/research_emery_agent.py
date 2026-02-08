@@ -16,8 +16,9 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-from ..reasoning.modules import ExecutorModule
 from emery_agents.tools.analysis import create_system_research_tool
+
+from ..reasoning.modules import ExecutorModule
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +80,9 @@ def create_research_emery_agent(
     )
 
     tool_names = [getattr(t, "name", getattr(t, "__name__", str(t))) for t in all_tools]
-    logger.info("✨ Created ResearchEmery ExecutorModule (read-only system introspection)")
+    logger.info(
+        "✨ Created ResearchEmery ExecutorModule (read-only system introspection)"
+    )
     logger.info(f"   Tools: {tool_names}")
     logger.info(f"   Max iters: {max_steps}")
 

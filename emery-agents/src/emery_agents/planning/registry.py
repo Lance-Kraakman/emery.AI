@@ -9,10 +9,13 @@ searchable patterns.
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
-from emery_agents.services.analysis import get_embedding, get_embeddings_batch, cosine_similarity
-from emery_agents.planning.pattern import PlanningPattern, AutoApprovePolicy
+from emery_agents.planning.pattern import AutoApprovePolicy, PlanningPattern
+from emery_agents.services.analysis import (
+    cosine_similarity,
+    get_embedding,
+    get_embeddings_batch,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +67,7 @@ class PlanningRegistry:
             return True
         return False
 
-    def get(self, pattern_id: str) -> Optional[PlanningPattern]:
+    def get(self, pattern_id: str) -> PlanningPattern | None:
         """Get a specific pattern by ID."""
         return self._patterns.get(pattern_id)
 
@@ -100,7 +103,7 @@ class PlanningRegistry:
         self,
         query: str,
         *,
-        capability_id: Optional[str] = None,
+        capability_id: str | None = None,
         limit: int = 3,
     ) -> list[PlanningPattern]:
         """
@@ -118,10 +121,7 @@ class PlanningRegistry:
 
         # Filter by capability if specified
         if capability_id:
-            candidates = [
-                p for p in candidates
-                if capability_id in p.capability_ids
-            ]
+            candidates = [p for p in candidates if capability_id in p.capability_ids]
 
         if not candidates:
             return []
@@ -155,10 +155,7 @@ class PlanningRegistry:
         Returns:
             List of patterns that include this capability
         """
-        return [
-            p for p in self._patterns.values()
-            if capability_id in p.capability_ids
-        ]
+        return [p for p in self._patterns.values() if capability_id in p.capability_ids]
 
     def get_by_policy(self, policy: AutoApprovePolicy) -> list[PlanningPattern]:
         """
@@ -170,10 +167,7 @@ class PlanningRegistry:
         Returns:
             List of patterns with matching policy
         """
-        return [
-            p for p in self._patterns.values()
-            if p.auto_approve_policy == policy
-        ]
+        return [p for p in self._patterns.values() if p.auto_approve_policy == policy]
 
     # --- Embedding management ---
 
@@ -204,8 +198,7 @@ class PlanningRegistry:
             Number of embeddings computed
         """
         patterns_without_emb = [
-            p for p in self._patterns.values()
-            if p.id not in self._embeddings
+            p for p in self._patterns.values() if p.id not in self._embeddings
         ]
 
         if not patterns_without_emb:

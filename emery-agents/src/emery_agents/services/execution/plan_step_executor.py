@@ -25,17 +25,18 @@ from typing import Any
 
 import dspy
 
-from ...ace import StepResult
-from ...reasoning.config import get_dspy_lm
-from ...services.analysis.llm_usage import LlmUsageTracker, record_from_lm
-from ...reasoning.modules.executor import ExecutorModule, SimpleExecutorModule
-from ...reasoning.utils import extract_dspy_result, build_step_outcome, StepOutcome
-from emery_agents.tools.factories import create_all_tools
-from ...entities.models.plan import Plan, PlanStep, PlanStepStatus
 from emery_agents.tools.capability_registry import CapabilityRegistry
+from emery_agents.tools.factories import create_all_tools
+
+from ...ace import StepResult
+from ...entities.models.plan import Plan, PlanStep, PlanStepStatus
+from ...reasoning.config import get_dspy_lm
+from ...reasoning.modules.executor import ExecutorModule, SimpleExecutorModule
+from ...reasoning.utils import StepOutcome, build_step_outcome, extract_dspy_result
+from ...services.analysis.llm_usage import LlmUsageTracker, record_from_lm
 from ...utils.session_logger import get_session_logger
-from .prompt_template_resolver import resolve_prompt_template
 from ..protocols import ModelProviderProtocol
+from .prompt_template_resolver import resolve_prompt_template
 
 logger = logging.getLogger(__name__)
 
@@ -60,21 +61,29 @@ def _build_step_prompt(
 
     # Include original user request when it contains data not captured in goal
     if original_task and len(original_task) > len(goal) + 50:
-        display_task = original_task[:8000] + "\n...[truncated]" if len(original_task) > 8000 else original_task
-        parts.extend(["", "## Original User Request (contains input data)", display_task])
+        display_task = (
+            original_task[:8000] + "\n...[truncated]"
+            if len(original_task) > 8000
+            else original_task
+        )
+        parts.extend(
+            ["", "## Original User Request (contains input data)", display_task]
+        )
 
-    parts.extend([
-        "",
-        "## Before You Act",
-        "",
-        "You have discovery tools (`workspace_overview`, `system_research`, `search_capabilities`, `search_external`) ",
-        "and CRUD tools for listing, reading, creating, updating, and deleting resources.",
-        "",
-        "1. Discover what exists — use `workspace_overview` or list operations to find resources and IDs",
-        "2. Understand schemas — discover field names and types before creating or populating data",
-        "3. Use discovered info directly — do not ask the user for things you can look up",
-        "4. Chain discoveries — find the table, then list its fields, then populate rows",
-    ])
+    parts.extend(
+        [
+            "",
+            "## Before You Act",
+            "",
+            "You have discovery tools (`workspace_overview`, `system_research`, `search_capabilities`, `search_external`) ",
+            "and CRUD tools for listing, reading, creating, updating, and deleting resources.",
+            "",
+            "1. Discover what exists — use `workspace_overview` or list operations to find resources and IDs",
+            "2. Understand schemas — discover field names and types before creating or populating data",
+            "3. Use discovered info directly — do not ask the user for things you can look up",
+            "4. Chain discoveries — find the table, then list its fields, then populate rows",
+        ]
+    )
 
     if current_step.phase_name:
         parts.extend(["", f"## Phase: {current_step.phase_name}"])
@@ -87,36 +96,44 @@ def _build_step_prompt(
 
     # Skill execution hint — guide executor to use skill_crud
     if current_step.target_agent == "skill_executor":
-        parts.extend([
-            "",
-            "## Skill Execution",
-            "This step executes an existing skill. Use `skill_crud(method='execute', skill_id=<ID>, data={inputs})`.",
-            "If you don't have the skill_id yet, call `skill_crud(method='list')` first.",
-            "Do NOT replicate the skill's logic — just execute it by ID.",
-        ])
+        parts.extend(
+            [
+                "",
+                "## Skill Execution",
+                "This step executes an existing skill. Use `skill_crud(method='execute', skill_id=<ID>, data={inputs})`.",
+                "If you don't have the skill_id yet, call `skill_crud(method='list')` first.",
+                "Do NOT replicate the skill's logic — just execute it by ID.",
+            ]
+        )
 
     # Tool directive — when the plan specifies a tool, the executor MUST use it
     if current_step.tool_call:
-        parts.extend([
-            "",
-            "## Required Tool",
-            f"You MUST use the `{current_step.tool_call}` tool to complete this step.",
-            "Do NOT use alternative tools or skip the tool call.",
-        ])
+        parts.extend(
+            [
+                "",
+                "## Required Tool",
+                f"You MUST use the `{current_step.tool_call}` tool to complete this step.",
+                "Do NOT use alternative tools or skip the tool call.",
+            ]
+        )
 
     # Step scope constraint — prevent LLM from executing beyond this step
-    parts.extend([
-        "",
-        "## Step Scope",
-        "Execute ONLY what this step describes. Do NOT perform work from remaining steps.",
-        "Each remaining step will be executed separately with its own context.",
-    ])
+    parts.extend(
+        [
+            "",
+            "## Step Scope",
+            "Execute ONLY what this step describes. Do NOT perform work from remaining steps.",
+            "Each remaining step will be executed separately with its own context.",
+        ]
+    )
 
     # Completed steps
     if completed_steps:
-        parts.extend(["", "## Previously Completed Steps (already done — use their results)"])
+        parts.extend(
+            ["", "## Previously Completed Steps (already done — use their results)"]
+        )
         for i, step in enumerate(completed_steps, 1):
-            result = step.result or 'completed'
+            result = step.result or "completed"
             parts.append(f"- Step {i}: {step.description}")
             parts.append(f"  Result: {result}")
 
@@ -233,15 +250,20 @@ class PlanStepExecutor:
                 action="routing_started",
                 description=current_step.description,
             )
-            session_logger.log_event("step_routing", {
-                "step_id": current_step.step_id,
-                "target_agent": current_step.target_agent,
-                "has_prompt_template": bool(current_step.prompt_template),
-                "execution_mode": "autonomous" if current_step.prompt_template else "interactive",
-                "phase_name": current_step.phase_name,
-                "step_index": step_index,
-                "total_steps": len(plan.steps),
-            })
+            session_logger.log_event(
+                "step_routing",
+                {
+                    "step_id": current_step.step_id,
+                    "target_agent": current_step.target_agent,
+                    "has_prompt_template": bool(current_step.prompt_template),
+                    "execution_mode": "autonomous"
+                    if current_step.prompt_template
+                    else "interactive",
+                    "phase_name": current_step.phase_name,
+                    "step_index": step_index,
+                    "total_steps": len(plan.steps),
+                },
+            )
 
         outcome = self._execute_with_dspy(plan, current_step, session_logger)
 
@@ -296,8 +318,8 @@ class PlanStepExecutor:
         if current_step.prompt_template and not current_step.tool_call:
             # Pure LLM task with prompt template - no tools needed
             logger.info(
-                f"📝 Direct execution: step has prompt_template but no tool_call, "
-                f"executing as pure LLM task (skipping ReAct tools)"
+                "📝 Direct execution: step has prompt_template but no tool_call, "
+                "executing as pure LLM task (skipping ReAct tools)"
             )
             return self._execute_direct(plan, current_step, session_logger)
 
@@ -311,7 +333,7 @@ class PlanStepExecutor:
         ]
         remaining_steps = [
             s
-            for s in plan.steps[step_index + 1:]
+            for s in plan.steps[step_index + 1 :]
             if s.status == PlanStepStatus.PENDING.value
         ]
 
@@ -365,7 +387,9 @@ class PlanStepExecutor:
 
         # Log full prompt for debugging
         if session_logger:
-            execution_mode = "autonomous" if current_step.prompt_template else "interactive"
+            execution_mode = (
+                "autonomous" if current_step.prompt_template else "interactive"
+            )
             session_logger.log_full_content(
                 content_type="prompt",
                 name=f"step_{current_step.step_id}_executor",
@@ -457,7 +481,9 @@ class PlanStepExecutor:
                 discovered_context={},
                 previous_results=self._step_results,
             )
-            logger.info(f"📝 Direct execution (autonomous): resolved template ({len(task)} chars), preview: {task[:100]}...")
+            logger.info(
+                f"📝 Direct execution (autonomous): resolved template ({len(task)} chars), preview: {task[:100]}..."
+            )
         else:
             task = current_step.description
             logger.info("📝 Direct execution (interactive): using description")
@@ -471,7 +497,9 @@ class PlanStepExecutor:
                 metadata={
                     "step_id": current_step.step_id,
                     "target_agent": "direct_execution",
-                    "execution_mode": "autonomous" if current_step.prompt_template else "interactive",
+                    "execution_mode": "autonomous"
+                    if current_step.prompt_template
+                    else "interactive",
                     "step_index": step_index,
                 },
             )
@@ -531,7 +559,9 @@ class PlanStepExecutor:
                 result = self._step_results[step.step_id]
                 previous_results[step.step_id] = {
                     "description": result.description,
-                    "result": result.result[:500] if result.result else None,  # Truncate for context
+                    "result": result.result[:500]
+                    if result.result
+                    else None,  # Truncate for context
                 }
 
         context: dict[str, Any] = {

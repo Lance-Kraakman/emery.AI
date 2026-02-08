@@ -11,8 +11,8 @@ Classification categories:
 """
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Tuple
 
 import dspy
 
@@ -32,10 +32,12 @@ class InterruptClassification:
     requires_replan: bool
     is_cancel: bool
     reasoning: str
-    suggested_action: Optional[str] = None
+    suggested_action: str | None = None
 
     @classmethod
-    def from_result(cls, result: InterruptClassificationResult) -> "InterruptClassification":
+    def from_result(
+        cls, result: InterruptClassificationResult
+    ) -> "InterruptClassification":
         """Convert from DSPy result model."""
         # Normalize classification
         classification_upper = result.classification.upper().strip()
@@ -83,7 +85,7 @@ class InterruptClassifier:
     ChainOfThought with ClassifyInterrupt signature.
     """
 
-    def __init__(self, lm: Optional[dspy.LM] = None):
+    def __init__(self, lm: dspy.LM | None = None):
         """
         Initialize classifier.
 
@@ -152,7 +154,7 @@ class InterruptClassifier:
 
 
 def create_interrupt_classifier(
-    lm: Optional[dspy.LM] = None,
+    lm: dspy.LM | None = None,
 ) -> InterruptClassifier:
     """
     Create an interrupt classifier.
@@ -167,7 +169,7 @@ def create_interrupt_classifier(
 
 
 def create_interrupt_classifier_factory(
-    lm: Optional[dspy.LM] = None,
+    lm: dspy.LM | None = None,
 ) -> Callable[[], InterruptClassifier]:
     """
     Create a factory function for interrupt classifiers.
@@ -178,6 +180,7 @@ def create_interrupt_classifier_factory(
     Returns:
         Callable that creates InterruptClassifier instances
     """
+
     def factory() -> InterruptClassifier:
         return create_interrupt_classifier(lm=lm)
 

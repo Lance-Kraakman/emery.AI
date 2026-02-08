@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any
 
 import requests
 
@@ -36,10 +36,10 @@ class AgentExecutionConfig:
     agent_api_key: str  # Required — no fallback to caller's key
     agent_name: str
     agent_description: str
-    agent_persona: Optional[str]
+    agent_persona: str | None
 
     @classmethod
-    def from_api_response(cls, data: Dict[str, Any]) -> AgentExecutionConfig:
+    def from_api_response(cls, data: dict[str, Any]) -> AgentExecutionConfig:
         """Parse execution-config API response into typed structure.
 
         Raises:
@@ -63,7 +63,7 @@ class AgentExecutionConfig:
 
 def execute_skill_by_id(
     skill_id: int,
-    inputs: Dict[str, Any],
+    inputs: dict[str, Any],
     api_key: str,
     org_id: str,
 ) -> str:
@@ -84,25 +84,31 @@ def execute_skill_by_id(
     Returns:
         Skill execution result as string
     """
-    logger.info(f"[DYNAMIC-EXEC] Executing skill {skill_id} with inputs: {list(inputs.keys())}")
+    logger.info(
+        f"[DYNAMIC-EXEC] Executing skill {skill_id} with inputs: {list(inputs.keys())}"
+    )
 
     # 1. Fetch skill config + credentials from API
     try:
         config_result = fetch_skill_execution_config(skill_id, api_key, org_id)
     except Exception as e:
         logger.error(f"[DYNAMIC-EXEC] Failed to fetch skill config: {e}")
-        return json.dumps({
-            "status": "error",
-            "error": f"Failed to fetch skill configuration: {e}",
-        })
+        return json.dumps(
+            {
+                "status": "error",
+                "error": f"Failed to fetch skill configuration: {e}",
+            }
+        )
 
     if not config_result.get("success"):
         error = config_result.get("error", "Unknown error")
         logger.error(f"[DYNAMIC-EXEC] API error: {error}")
-        return json.dumps({
-            "status": "error",
-            "error": error,
-        })
+        return json.dumps(
+            {
+                "status": "error",
+                "error": error,
+            }
+        )
 
     data = config_result.get("data", {})
     skill_dto = data.get("skill", {})
@@ -121,14 +127,16 @@ def execute_skill_by_id(
 
     # 3. Create SkillConfig from API response
     skill_config = SkillConfig.from_api_response(skill_dto)
-    logger.info(f"[DYNAMIC-EXEC] Skill config: {skill_config.name} (type={skill_config.execution_type})")
+    logger.info(
+        f"[DYNAMIC-EXEC] Skill config: {skill_config.name} (type={skill_config.execution_type})"
+    )
 
     # 4. Create executor and execute in-process
     try:
-        from emery_agents.tools.loader import UnifiedToolLoader
-        from emery_agents.services.models.provider import ModelProvider
         from emery_agents.services.agents.factory import AgentFactory
+        from emery_agents.services.models.provider import ModelProvider
         from emery_agents.services.skills.executor import SkillExecutorService
+        from emery_agents.tools.loader import UnifiedToolLoader
 
         tool_loader = UnifiedToolLoader()
         model_provider = ModelProvider()
@@ -150,27 +158,31 @@ def execute_skill_by_id(
         logger.info(f"[DYNAMIC-EXEC] Skill {skill_id} execution complete")
 
         # Wrap result in standard format
-        return json.dumps({
-            "status": "completed",
-            "result": result if isinstance(result, str) else str(result),
-            "skill_id": skill_id,
-            "credential_source": "agent" if agent_id else "user",
-        })
+        return json.dumps(
+            {
+                "status": "completed",
+                "result": result if isinstance(result, str) else str(result),
+                "skill_id": skill_id,
+                "credential_source": "agent" if agent_id else "user",
+            }
+        )
 
     except Exception as e:
         logger.error(f"[DYNAMIC-EXEC] Skill execution failed: {e}", exc_info=True)
-        return json.dumps({
-            "status": "error",
-            "error": str(e),
-            "skill_id": skill_id,
-        })
+        return json.dumps(
+            {
+                "status": "error",
+                "error": str(e),
+                "skill_id": skill_id,
+            }
+        )
 
 
 def fetch_skill_execution_config(
     skill_id: int,
     api_key: str,
     org_id: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Fetch skill execution config from API.
 
@@ -207,7 +219,7 @@ def fetch_skill_execution_config(
     elif response.status_code >= 400:
         return {"success": False, "error": f"API error: {response.status_code}"}
 
-    result: Dict[str, Any] = response.json()
+    result: dict[str, Any] = response.json()
     return result
 
 
@@ -241,16 +253,20 @@ def execute_agent_by_id(
         exec_config = fetch_agent_execution_config(agent_id, api_key, org_id)
     except ValueError as e:
         logger.error(f"[DYNAMIC-EXEC] Agent config/credential error: {e}")
-        return json.dumps({
-            "status": "error",
-            "error": str(e),
-        })
+        return json.dumps(
+            {
+                "status": "error",
+                "error": str(e),
+            }
+        )
     except Exception as e:
         logger.error(f"[DYNAMIC-EXEC] Failed to fetch agent config: {e}")
-        return json.dumps({
-            "status": "error",
-            "error": f"Failed to fetch agent configuration: {e}",
-        })
+        return json.dumps(
+            {
+                "status": "error",
+                "error": f"Failed to fetch agent configuration: {e}",
+            }
+        )
 
     logger.info(
         f"[DYNAMIC-EXEC] Agent config: {exec_config.agent_name} "
@@ -274,7 +290,7 @@ def execute_agent_by_id(
         agent_executor = AgentExecutor()
 
         # Collect results from async iterator
-        async def collect_results() -> Optional[str]:
+        async def collect_results() -> str | None:
             final_result = None
             async for update in agent_executor.execute_task(context):
                 if update.get("type") == "final_answer":
@@ -287,19 +303,23 @@ def execute_agent_by_id(
 
         logger.info(f"[DYNAMIC-EXEC] Agent {agent_id} execution complete")
 
-        return json.dumps({
-            "status": "completed",
-            "result": result,
-            "agent_id": agent_id,
-        })
+        return json.dumps(
+            {
+                "status": "completed",
+                "result": result,
+                "agent_id": agent_id,
+            }
+        )
 
     except Exception as e:
         logger.error(f"[DYNAMIC-EXEC] Agent execution failed: {e}", exc_info=True)
-        return json.dumps({
-            "status": "error",
-            "error": str(e),
-            "agent_id": agent_id,
-        })
+        return json.dumps(
+            {
+                "status": "error",
+                "error": str(e),
+                "agent_id": agent_id,
+            }
+        )
 
 
 def fetch_agent_execution_config(
@@ -346,7 +366,7 @@ def fetch_agent_execution_config(
     elif response.status_code >= 400:
         raise ValueError(f"API error: {response.status_code}")
 
-    result: Dict[str, Any] = response.json()
+    result: dict[str, Any] = response.json()
     if not result.get("success"):
         raise ValueError(result.get("error", "Unknown API error"))
 

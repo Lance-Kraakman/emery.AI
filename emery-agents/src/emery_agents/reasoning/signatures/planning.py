@@ -7,7 +7,7 @@ These signatures replace the Jinja2 planning templates with typed I/O contracts.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 import dspy
 from pydantic import BaseModel, Field
@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 class TaskDomain(str, Enum):
     """Domain classification for tasks."""
+
     EMERY = "emery"
     WEB = "web"
     AUTOMATION = "automation"
@@ -23,6 +24,7 @@ class TaskDomain(str, Enum):
 
 class TaskComplexity(str, Enum):
     """Complexity level for tasks."""
+
     SIMPLE = "simple"
     MEDIUM = "medium"
     COMPLEX = "complex"
@@ -30,12 +32,14 @@ class TaskComplexity(str, Enum):
 
 class TaskExecutionMode(str, Enum):
     """Execution mode for task routing."""
+
     DIRECT = "DIRECT"
     PLAN_AND_APPROVE = "PLAN_AND_APPROVE"
 
 
 class QuestionType(str, Enum):
     """Types of clarifying questions."""
+
     CHOICE = "choice"
     TEXT = "text"
     CONFIRMATION = "confirmation"
@@ -73,25 +77,25 @@ class PlanStepOutput(BaseModel):
             "If a step requires looking something up first, write that INTO the description "
             "(e.g., \"Look up the 'contacts' table schema, then add a 'phone' (phone) field\").\n\n"
             "BAD: 'Set up the contacts table with relevant fields'\n"
-            "GOOD: 'Create table \"contacts\" with fields: full_name (text), email (email), "
+            'GOOD: \'Create table "contacts" with fields: full_name (text), email (email), '
             "phone (phone), status (single-select: Active, Inactive, Lead). "
             "Verify: table exists with 4 fields.'"
         )
     )
-    tool_call: Optional[str] = Field(
+    tool_call: str | None = Field(
         default=None,
         description="Tool to invoke for this step (e.g., 'skill_crud' for skill execution). "
-                    "Include the specific tool name when the step calls an external integration.",
+        "Include the specific tool name when the step calls an external integration.",
     )
-    parameters: Optional[dict[str, Any]] = Field(
+    parameters: dict[str, Any] | None = Field(
         default=None,
         description="Parameters for the tool_call. Values can be strings, lists, or nested dicts. "
-                    "Use {{ variable }} placeholders for skill template inputs.",
+        "Use {{ variable }} placeholders for skill template inputs.",
     )
     required_context: list[str] = Field(
         default_factory=list,
         description="Step IDs whose outputs this step depends on "
-                    "(e.g., ['step_1_create_table'] if this step needs the table ID from step 1).",
+        "(e.g., ['step_1_create_table'] if this step needs the table ID from step 1).",
     )
     # Phase fields for execution control
     phase_name: str = Field(
@@ -106,14 +110,14 @@ class PlanStepOutput(BaseModel):
         default=False,
         description="Re-evaluate plan after this step completes",
     )
-    prompt_template: Optional[str] = Field(
+    prompt_template: str | None = Field(
         default=None,
         description="Jinja2 prompt template with {{ variable }} placeholders for skill inputs.",
     )
-    connection_required: Optional[str] = Field(
+    connection_required: str | None = Field(
         default=None,
         description="App slug requiring OAuth connection (e.g., 'gmail', 'slack', 'github'). "
-                    "Set when the step uses an external integration that needs user authorization.",
+        "Set when the step uses an external integration that needs user authorization.",
     )
 
 
@@ -123,15 +127,16 @@ class SkillTemplateStepOutput(BaseModel):
     step_id: str = Field(description="Unique identifier for this step")
     description: str = Field(
         description="Human-readable summary of the task AND key rules. "
-                    "MUST use {{ input_name }} for each defined skill input. "
-                    "Example: 'Generate report for {{ topic }} using {{ format }} style.' "
-                    "NO {% if %} - only {{ }} placeholders."
+        "MUST use {{ input_name }} for each defined skill input. "
+        "Example: 'Generate report for {{ topic }} using {{ format }} style.' "
+        "NO {% if %} - only {{ }} placeholders."
     )
-    tool_call: Optional[str] = Field(
+    tool_call: str | None = Field(
         default=None, description="Tool to call for this step (e.g., 'table_crud')"
     )
-    parameters: Optional[dict[str, Any]] = Field(
-        default=None, description="Parameters for the tool call (values can include {{ }} for inputs)"
+    parameters: dict[str, Any] | None = Field(
+        default=None,
+        description="Parameters for the tool call (values can include {{ }} for inputs)",
     )
     required_context: list[str] = Field(
         default_factory=list, description="Context keys required from previous steps"
@@ -151,15 +156,15 @@ class SkillTemplateStepOutput(BaseModel):
     # REQUIRED for templates (vs optional in PlanStepOutput)
     prompt_template: str = Field(
         description="REQUIRED: Must preserve EVERY rule from the user's request. "
-                    "If user says 'if X then Y' or 'use Z format' - include it verbatim. "
-                    "Do NOT summarize rules - copy them. "
-                    "Use {{ variable }} EVERYWHERE including inside {% if %} blocks: "
-                    "{% if family %}{{ name }} has {{ family }}{% endif %} (NOT: name has family)."
+        "If user says 'if X then Y' or 'use Z format' - include it verbatim. "
+        "Do NOT summarize rules - copy them. "
+        "Use {{ variable }} EVERYWHERE including inside {% if %} blocks: "
+        "{% if family %}{{ name }} has {{ family }}{% endif %} (NOT: name has family)."
     )
-    connection_required: Optional[str] = Field(
+    connection_required: str | None = Field(
         default=None,
         description="App slug requiring OAuth connection (e.g., 'gmail', 'slack', 'github'). "
-                    "Set when the step uses an external integration that needs user authorization.",
+        "Set when the step uses an external integration that needs user authorization.",
     )
 
 
@@ -169,15 +174,15 @@ class PlanOutput(BaseModel):
     plan_id: str = Field(description="Unique identifier (e.g., 'plan_crm_setup')")
     goal: str = Field(
         description="One-sentence goal starting with a verb "
-                    "(e.g., 'Create a CRM system with contacts table and dashboard app')"
+        "(e.g., 'Create a CRM system with contacts table and dashboard app')"
     )
     context: str = Field(
         description="What existing resources were found and how they inform this plan "
-                    "(e.g., 'Found existing contacts table — will add fields rather than recreate')"
+        "(e.g., 'Found existing contacts table — will add fields rather than recreate')"
     )
     analysis: str = Field(
         description="Brief reasoning for the chosen approach: why these steps, "
-                    "which capabilities, and any trade-offs considered"
+        "which capabilities, and any trade-offs considered"
     )
     steps: list[PlanStepOutput] = Field(
         description=(
@@ -191,16 +196,16 @@ class PlanOutput(BaseModel):
     auto_approve_policy: str = Field(
         default="confirm",
         description="Auto-approve policy from matched planning pattern. "
-                    "'auto': approve if conditions met, 'confirm': default require approval, "
-                    "'explicit': always require approval (OAuth, destructive). "
-                    "Use search_planning_patterns to find the appropriate policy for this task type."
+        "'auto': approve if conditions met, 'confirm': default require approval, "
+        "'explicit': always require approval (OAuth, destructive). "
+        "Use search_planning_patterns to find the appropriate policy for this task type.",
     )
     matched_conditions: list[str] = Field(
         default_factory=list,
         description="Conditions from matched planning pattern that should be checked at runtime. "
-                    "Common conditions: 'single_resource' (<=2 steps), 'explicit_values' (step descriptions "
-                    "contain parentheses with types), 'additive_only' (no destructive operations). "
-                    "Set based on the planning pattern's auto_approve_conditions."
+        "Common conditions: 'single_resource' (<=2 steps), 'explicit_values' (step descriptions "
+        "contain parentheses with types), 'additive_only' (no destructive operations). "
+        "Set based on the planning pattern's auto_approve_conditions.",
     )
 
 
@@ -223,7 +228,7 @@ class ClarifyingQuestionOutput(BaseModel):
     question_type: QuestionType = Field(
         description="Type of question: 'choice', 'text', or 'confirmation'"
     )
-    options: Optional[list[str]] = Field(
+    options: list[str] | None = Field(
         default=None, description="Available options for choice questions"
     )
     reason: str = Field(description="Why this clarification is needed")
@@ -232,8 +237,10 @@ class ClarifyingQuestionOutput(BaseModel):
 class PlanOrQuestionsOutput(BaseModel):
     """DSPy output schema: either a plan or clarifying questions."""
 
-    plan: Optional[PlanOutput] = Field(default=None, description="The execution plan if ready")
-    questions: Optional[list[ClarifyingQuestionOutput]] = Field(
+    plan: PlanOutput | None = Field(
+        default=None, description="The execution plan if ready"
+    )
+    questions: list[ClarifyingQuestionOutput] | None = Field(
         default=None, description="Questions if clarification is needed"
     )
 
@@ -279,30 +286,30 @@ class CreatePlan(dspy.Signature):  # type: ignore[misc]
     )
     workspace_context: str = dspy.InputField(
         desc="Summary of existing workspace resources (databases, tables with field counts, "
-             "apps, agents, skills). Check this BEFORE creating resources that may already exist. "
-             "For detailed field schemas, use system_research(resource_type='tables', query='<name>', include_details=True). "
-             "Do NOT guess field names or types — look them up if needed."
+        "apps, agents, skills). Check this BEFORE creating resources that may already exist. "
+        "For detailed field schemas, use system_research(resource_type='tables', query='<name>', include_details=True). "
+        "Do NOT guess field names or types — look them up if needed."
     )
     capability_guidance: str = dspy.InputField(
         desc="Routing table and instructions for system capabilities. "
-             "Shows what the system can do, when to use each capability, "
-             "which tools each capability uses, and step description templates. "
-             "Use the step description templates to write executor-ready step descriptions."
+        "Shows what the system can do, when to use each capability, "
+        "which tools each capability uses, and step description templates. "
+        "Use the step description templates to write executor-ready step descriptions."
     )
     planning_context: str = dspy.InputField(
         desc="Combined context for planning: task analysis (intent, domain, entities, approach), "
-             "proven strategies from past executions, background memories, and delegation hints. "
-             "Each section is labeled. Empty sections are omitted."
+        "proven strategies from past executions, background memories, and delegation hints. "
+        "Each section is labeled. Empty sections are omitted."
     )
     conversation_history: str = dspy.InputField(
         desc="Previous messages in this chat session for follow-up context."
     )
     configured_tools: str = dspy.InputField(
         desc="JSON list of tools explicitly configured for this skill. "
-             "When tools are listed here, you MUST use them in the plan steps. "
-             "Include the exact tool name in the step's tool_call field. "
-             "You may also discover additional tools via search_external if needed. "
-             "Empty string if no tools are configured."
+        "When tools are listed here, you MUST use them in the plan steps. "
+        "Include the exact tool name in the step's tool_call field. "
+        "You may also discover additional tools via search_external if needed. "
+        "Empty string if no tools are configured."
     )
 
     result: PlanOrQuestionsOutput = dspy.OutputField()
@@ -361,9 +368,9 @@ class CreateSkillTemplate(dspy.Signature):  # type: ignore[misc]
     )
     configured_tools: str = dspy.InputField(
         desc="JSON list of tools explicitly configured for this skill. "
-             "When tools are listed here, you MUST use them in the plan steps. "
-             "Include the exact tool name in the step's tool_call field. "
-             "Empty string if no tools are configured."
+        "When tools are listed here, you MUST use them in the plan steps. "
+        "Include the exact tool name in the step's tool_call field. "
+        "Empty string if no tools are configured."
     )
 
     result: SkillTemplatePlanOutput = dspy.OutputField()
@@ -392,31 +399,31 @@ class AnalyzeTask(dspy.Signature):  # type: ignore[misc]
     )
     context: str = dspy.InputField(
         desc="Workspace context JSON — existing resources that the request may reference. "
-             "Use to resolve ambiguous references like 'the table' or 'my app'."
+        "Use to resolve ambiguous references like 'the table' or 'my app'."
     )
 
     intent: str = dspy.OutputField(
         desc="One-sentence summary of the user's goal. Start with a verb "
-             "(e.g., 'Create a contacts table with name, email, and phone fields')."
+        "(e.g., 'Create a contacts table with name, email, and phone fields')."
     )
     domain: TaskDomain = dspy.OutputField(
         desc="Primary domain: 'emery', 'web', 'automation', or 'research'."
     )
     entities: list[str] = dspy.OutputField(
         desc="Concrete nouns: resource names, field names, service names. "
-             "Resolve references using context."
+        "Resolve references using context."
     )
     approach: str = dspy.OutputField(
         desc="Reasoning approach: 'analytical', 'systems-thinking', 'step-by-step', or 'creative'. "
-             "Guides how the planner structures the plan."
+        "Guides how the planner structures the plan."
     )
     external_services: list[str] = dspy.OutputField(
         desc="Third-party services mentioned (e.g., ['gmail', 'slack']). "
-             "Empty list if none. The planner will call search_external for each."
+        "Empty list if none. The planner will call search_external for each."
     )
     needs_clarification: bool = dspy.OutputField(
         desc="True only if the request is too vague to plan. "
-             "Missing details with sensible defaults = false."
+        "Missing details with sensible defaults = false."
     )
 
 
@@ -434,15 +441,20 @@ class TaskClassificationResult(BaseModel):
         default=1,
         description="Estimated number of execution steps (1-20)",
     )
-    primary_capability: Optional[str] = Field(
+    primary_capability: str | None = Field(
         default=None,
         description="Primary capability needed (e.g., 'schema_builder', 'app_builder', 'skill_builder'). None if unclear.",
     )
-    needs_clarification: bool = Field(description="Whether the task is too vague to proceed without user input")
-    clarification_questions: list[str] = Field(
-        default_factory=list, description="Questions to ask ONLY if needs_clarification is true"
+    needs_clarification: bool = Field(
+        description="Whether the task is too vague to proceed without user input"
     )
-    reasoning: str = Field(description="Brief explanation: what factors led to this classification")
+    clarification_questions: list[str] = Field(
+        default_factory=list,
+        description="Questions to ask ONLY if needs_clarification is true",
+    )
+    reasoning: str = Field(
+        description="Brief explanation: what factors led to this classification"
+    )
 
 
 class ClassifyTask(dspy.Signature):  # type: ignore[misc]
@@ -553,55 +565,51 @@ class TriageTask(dspy.Signature):  # type: ignore[misc]
     - "@skill-name" → plan
     """
 
-    task: str = dspy.InputField(
-        desc="The user's task or request in natural language"
-    )
+    task: str = dspy.InputField(desc="The user's task or request in natural language")
     workspace_context: str = dspy.InputField(
         desc="Current workspace state: existing resources (databases, tables, apps, agents, skills). "
-             "Check this before making routing decisions."
+        "Check this before making routing decisions."
     )
     memory_context: str = dspy.InputField(
         desc="Relevant memories from previous sessions. Lightweight background "
-             "context — use for continuity. Empty if none."
+        "context — use for continuity. Empty if none."
     )
     image_context: str = dspy.InputField(
         desc="Description of user-uploaded images available for visual analysis. "
-             "Empty string if no images. When present, 'direct' and 'plan' nodes "
-             "can analyze these images — 'respond' cannot.",
+        "Empty string if no images. When present, 'direct' and 'plan' nodes "
+        "can analyze these images — 'respond' cannot.",
         default="",
     )
 
-    execution_mode: str = dspy.OutputField(
-        desc="One of: 'direct', 'plan', 'respond'"
-    )
+    execution_mode: str = dspy.OutputField(desc="One of: 'direct', 'plan', 'respond'")
     reasoning: str = dspy.OutputField(
         desc="Brief explanation of why this route was chosen (1-2 sentences)"
     )
     context_notes: str = dspy.OutputField(
         desc="Key findings from any research tools called (resource IDs, capability matches, etc.). "
-             "Passed to the next node to avoid duplicate lookups. Empty string if no research done."
+        "Passed to the next node to avoid duplicate lookups. Empty string if no research done."
     )
     response: str = dspy.OutputField(
         desc="When execution_mode is 'respond': the complete, natural answer to give the user. "
-             "When execution_mode is 'direct' or 'plan': empty string."
+        "When execution_mode is 'direct' or 'plan': empty string."
     )
     # Task analysis fields — populated during triage to avoid a separate AnalyzeTask call
     intent: str = dspy.OutputField(
         desc="One-sentence summary of the user's goal. Start with a verb "
-             "(e.g., 'Create a contacts table with name, email, and phone fields'). "
-             "Always populated regardless of execution_mode."
+        "(e.g., 'Create a contacts table with name, email, and phone fields'). "
+        "Always populated regardless of execution_mode."
     )
     entities: list[str] = dspy.OutputField(
         desc="Concrete nouns from the request: resource names, field names, service names. "
-             "Resolve references using workspace_context (e.g., 'the table' → actual table name)."
+        "Resolve references using workspace_context (e.g., 'the table' → actual table name)."
     )
     approach: str = dspy.OutputField(
         desc="Reasoning approach: 'analytical', 'systems-thinking', 'step-by-step', or 'creative'. "
-             "Guides how the planner structures the plan."
+        "Guides how the planner structures the plan."
     )
     external_services: list[str] = dspy.OutputField(
         desc="Third-party services mentioned (e.g., ['gmail', 'slack']). "
-             "Empty list if none. The planner will call search_external for each."
+        "Empty list if none. The planner will call search_external for each."
     )
 
 
@@ -609,10 +617,14 @@ class GapItemOutput(BaseModel):
     """A single gap identified in request analysis."""
 
     concern_id: str = Field(description="ID of the concern that has a gap")
-    context_found: str = Field(default="", description="What context was found (if any)")
-    reason_unclear: str = Field(description="Why this concern is unclear from the request")
+    context_found: str = Field(
+        default="", description="What context was found (if any)"
+    )
+    reason_unclear: str = Field(
+        description="Why this concern is unclear from the request"
+    )
     suggested_question: str = Field(description="Question to ask to clarify this gap")
-    suggested_options: Optional[list[str]] = Field(
+    suggested_options: list[str] | None = Field(
         default=None, description="Suggested options if applicable"
     )
 
@@ -626,7 +638,9 @@ class GapAnalysisResultModel(BaseModel):
     gaps: list[GapItemOutput] = Field(
         default_factory=list, description="Gaps needing clarification questions"
     )
-    context_summary: str = Field(description="Summary of what was understood from the request")
+    context_summary: str = Field(
+        description="Summary of what was understood from the request"
+    )
 
 
 class AnalyzeGaps(dspy.Signature):  # type: ignore[misc]
@@ -664,7 +678,9 @@ class PlanDiffResult(BaseModel):
         default_factory=list, description="New steps to add at the end"
     )
     reasoning: str = Field(description="Why these changes are needed")
-    needs_clarification: bool = Field(default=False, description="Whether user input is needed")
+    needs_clarification: bool = Field(
+        default=False, description="Whether user input is needed"
+    )
     clarifying_questions: list[ClarifyingQuestionOutput] = Field(
         default_factory=list, description="Questions if clarification needed"
     )
@@ -684,15 +700,15 @@ class GeneratePlanDiff(dspy.Signature):  # type: ignore[misc]
     goal: str = dspy.InputField(desc="The plan's overall goal (same as original plan)")
     reason: str = dspy.InputField(
         desc="Why replanning was triggered: step failure, goal not fully achieved, "
-             "or replan_after flag on a completed step."
+        "or replan_after flag on a completed step."
     )
     failed_step_info: str = dspy.InputField(
         desc="Details about the failed step: step_id, description, error message, "
-             "and tool evidence. Empty string if replan was triggered by replan_after flag."
+        "and tool evidence. Empty string if replan was triggered by replan_after flag."
     )
     completed_context: str = dspy.InputField(
         desc="Summary of all completed step results so far. "
-             "Use to understand what has already been accomplished."
+        "Use to understand what has already been accomplished."
     )
     pending_steps_json: str = dspy.InputField(
         desc="JSON array of remaining pending steps. These can be skipped, modified, or kept as-is."

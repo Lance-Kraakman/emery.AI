@@ -8,10 +8,11 @@ filter specifications. Enables predicate pushdown to Delta Lake.
 import json
 import logging
 from dataclasses import dataclass
-from typing import List, Any, Optional, FrozenSet
+from typing import Any
+
 import pyarrow as pa
-import pyarrow.types as pat
 import pyarrow.compute as pc
+import pyarrow.types as pat
 
 from ..generated import table_service_pb2
 from .type_conversion import cast_value_to_column_type
@@ -29,20 +30,22 @@ def extract_filter_value(filter_value: table_service_pb2.RowDataValue) -> Any:
     Returns:
         Extracted Python value (str, float, bool, etc.) or None
     """
-    if filter_value.HasField('text_value'):
+    if filter_value.HasField("text_value"):
         return filter_value.text_value
-    elif filter_value.HasField('number_value'):
+    elif filter_value.HasField("number_value"):
         return filter_value.number_value
-    elif filter_value.HasField('boolean_value'):
+    elif filter_value.HasField("boolean_value"):
         return filter_value.boolean_value
-    elif filter_value.HasField('date_value'):
+    elif filter_value.HasField("date_value"):
         return filter_value.date_value
-    elif filter_value.HasField('json_value'):
+    elif filter_value.HasField("json_value"):
         return filter_value.json_value
     return None
 
 
-def extract_filter_values_list(filter_values: List[table_service_pb2.RowDataValue]) -> List[Any]:
+def extract_filter_values_list(
+    filter_values: list[table_service_pb2.RowDataValue],
+) -> list[Any]:
     """
     Extract Python values from list of protobuf RowDataValue oneofs.
 
@@ -54,24 +57,22 @@ def extract_filter_values_list(filter_values: List[table_service_pb2.RowDataValu
     """
     values_list = []
     for val in filter_values:
-        if val.HasField('text_value'):
+        if val.HasField("text_value"):
             values_list.append(val.text_value)
-        elif val.HasField('number_value'):
+        elif val.HasField("number_value"):
             values_list.append(val.number_value)
-        elif val.HasField('boolean_value'):
+        elif val.HasField("boolean_value"):
             values_list.append(val.boolean_value)
-        elif val.HasField('date_value'):
+        elif val.HasField("date_value"):
             values_list.append(val.date_value)
-        elif val.HasField('json_value'):
+        elif val.HasField("json_value"):
             values_list.append(val.json_value)
     return values_list
 
 
 def cast_and_normalize_value(
-    value: Any,
-    column_type: pa.DataType,
-    field_name: str
-) -> Optional[pa.Scalar]:
+    value: Any, column_type: pa.DataType, field_name: str
+) -> pa.Scalar | None:
     """
     Cast Python value to PyArrow scalar matching column type.
 
@@ -91,7 +92,11 @@ def cast_and_normalize_value(
 
         # Normalize ALL string types to large_string for filter compatibility
         # PyArrow's filter kernels don't support string_view comparison
-        if pat.is_string(column_type) or pat.is_large_string(column_type) or pat.is_string_view(column_type):
+        if (
+            pat.is_string(column_type)
+            or pat.is_large_string(column_type)
+            or pat.is_string_view(column_type)
+        ):
             filter_type = pa.large_string()
         else:
             filter_type = column_type
@@ -100,18 +105,20 @@ def cast_and_normalize_value(
         return pa.scalar(casted_value, type=filter_type)
 
     except KeyError:
-        logger.warning(f"[cast_and_normalize_value] Field '{field_name}' not found in schema")
+        logger.warning(
+            f"[cast_and_normalize_value] Field '{field_name}' not found in schema"
+        )
         return None
     except ValueError as e:
-        logger.error(f"[cast_and_normalize_value] Type casting error for field '{field_name}': {e}")
+        logger.error(
+            f"[cast_and_normalize_value] Type casting error for field '{field_name}': {e}"
+        )
         return None
 
 
 def build_comparison_predicate(
-    field_ref: Any,
-    operator: int,
-    value: pa.Scalar
-) -> Optional[Any]:
+    field_ref: Any, operator: int, value: pa.Scalar
+) -> Any | None:
     """
     Build comparison predicate (EQ, NE, GT, GTE, LT, LTE).
 
@@ -140,11 +147,11 @@ def build_comparison_predicate(
 
 def build_in_predicate(
     field_ref: Any,
-    values_list: List[Any],
+    values_list: list[Any],
     column_type: pa.DataType,
     field_name: str,
-    not_in: bool = False
-) -> Optional[Any]:
+    not_in: bool = False,
+) -> Any | None:
     """
     Build IN or NOT_IN predicate.
 
@@ -163,7 +170,11 @@ def build_in_predicate(
         casted_values = [cast_value_to_column_type(v, column_type) for v in values_list]
 
         # Normalize ALL string types to large_string for filter compatibility
-        if pat.is_string(column_type) or pat.is_large_string(column_type) or pat.is_string_view(column_type):
+        if (
+            pat.is_string(column_type)
+            or pat.is_large_string(column_type)
+            or pat.is_string_view(column_type)
+        ):
             filter_type = pa.large_string()
         else:
             filter_type = column_type
@@ -179,15 +190,21 @@ def build_in_predicate(
 
     except KeyError:
         op_name = "NOT_IN" if not_in else "IN"
-        logger.warning(f"[build_in_predicate] Field '{field_name}' not found in schema, skipping {op_name} filter")
+        logger.warning(
+            f"[build_in_predicate] Field '{field_name}' not found in schema, skipping {op_name} filter"
+        )
         return None
     except ValueError as e:
         op_name = "NOT_IN" if not_in else "IN"
-        logger.error(f"[build_in_predicate] Type casting error for {op_name} filter on field '{field_name}': {e}")
+        logger.error(
+            f"[build_in_predicate] Type casting error for {op_name} filter on field '{field_name}': {e}"
+        )
         return None
     except TypeError as e:
         op_name = "NOT_IN" if not_in else "IN"
-        logger.error(f"[build_in_predicate] PyArrow type error for {op_name} filter on field '{field_name}': {e}")
+        logger.error(
+            f"[build_in_predicate] PyArrow type error for {op_name} filter on field '{field_name}': {e}"
+        )
         return None
 
 
@@ -208,7 +225,7 @@ def build_null_predicate(field_ref: Any, is_null: bool = True) -> Any:
         return pc.is_valid(field_ref)
 
 
-def combine_predicates(predicates: List[Any]) -> Optional[Any]:
+def combine_predicates(predicates: list[Any]) -> Any | None:
     """
     Combine multiple predicates with AND logic.
 
@@ -248,11 +265,14 @@ class JsonbContainsFilter:
 
     The filter matches if the JSONB array contains ANY element with matching 'id'.
     """
+
     field_name: str
-    target_ids: FrozenSet[str]  # Normalized to strings for comparison
+    target_ids: frozenset[str]  # Normalized to strings for comparison
 
 
-def extract_jsonb_target_ids(filter_value: table_service_pb2.RowDataValue) -> FrozenSet[str]:
+def extract_jsonb_target_ids(
+    filter_value: table_service_pb2.RowDataValue,
+) -> frozenset[str]:
     """Extract target IDs from filter value protobuf for JSONB contains.
 
     Filter value format from TypeScript: '[{"id": "uuid"}]' or '[{"id": 123}]'
@@ -287,10 +307,10 @@ def extract_jsonb_target_ids(filter_value: table_service_pb2.RowDataValue) -> Fr
     # Extract IDs from parsed structure
     if isinstance(data, list):
         for item in data:
-            if isinstance(item, dict) and 'id' in item:
-                target_ids.add(str(item['id']))
-    elif isinstance(data, dict) and 'id' in data:
-        target_ids.add(str(data['id']))
+            if isinstance(item, dict) and "id" in item:
+                target_ids.add(str(item["id"]))
+    elif isinstance(data, dict) and "id" in data:
+        target_ids.add(str(data["id"]))
     else:
         # Scalar value in JSON
         target_ids.add(str(data))
@@ -298,7 +318,7 @@ def extract_jsonb_target_ids(filter_value: table_service_pb2.RowDataValue) -> Fr
     return frozenset(target_ids)
 
 
-def json_array_contains_id(json_str: Optional[str], target_ids: FrozenSet[str]) -> bool:
+def json_array_contains_id(json_str: str | None, target_ids: frozenset[str]) -> bool:
     """Check if JSONB array contains any element with matching 'id'.
 
     This is the core matching logic for JSONB contains filtering.
@@ -324,9 +344,9 @@ def json_array_contains_id(json_str: Optional[str], target_ids: FrozenSet[str]) 
 
         # Check each element for matching ID
         for item in data:
-            if isinstance(item, dict) and 'id' in item:
+            if isinstance(item, dict) and "id" in item:
                 # Normalize to string for comparison (int 42 == string "42")
-                if str(item['id']) in target_ids:
+                if str(item["id"]) in target_ids:
                     return True
 
         return False

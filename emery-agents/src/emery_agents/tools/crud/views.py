@@ -11,10 +11,13 @@ from typing import Any
 import dspy
 
 from emery_agents.api.http_client import make_request
+
 from ..mutation_guard import check_mutation_allowed
 
 
-def create_view_crud(api_key: str, org_id: str, extra_headers: dict[str, str] | None = None) -> dspy.Tool:
+def create_view_crud(
+    api_key: str, org_id: str, extra_headers: dict[str, str] | None = None
+) -> dspy.Tool:
     """
     Factory: Create view_crud tool with auth captured in closure.
 

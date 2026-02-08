@@ -17,15 +17,15 @@ import json
 import logging
 
 import dspy
-
 from ddgs import DDGS
 
-from .analysis.research import SystemResearchTool
 from emery_agents.api import WorkspaceAPI
-from .integrations.pipedream import get_pipedream_tool_info, list_pipedream_tools_by_app
-from .capability_registry import CapabilityRegistry
-from .knowledge import create_knowledge_search_tool
 from emery_agents.planning import PlanningRegistry
+
+from .analysis.research import SystemResearchTool
+from .capability_registry import CapabilityRegistry
+from .integrations.pipedream import get_pipedream_tool_info, list_pipedream_tools_by_app
+from .knowledge import create_knowledge_search_tool
 
 logger = logging.getLogger(__name__)
 
@@ -112,8 +112,7 @@ def create_workspace_overview_tool(api_key: str, org_id: str) -> dspy.Tool:
                                 "name": t.name,
                                 "field_count": t.field_count,
                                 "fields": [
-                                    {"name": f.name, "type": f.type}
-                                    for f in t.fields
+                                    {"name": f.name, "type": f.type} for f in t.fields
                                 ],
                             }
                             for t in d.tables
@@ -149,7 +148,7 @@ def create_workspace_overview_tool(api_key: str, org_id: str) -> dspy.Tool:
     )
 
 
-def create_capability_search_tool(registry: "CapabilityRegistry") -> dspy.Tool:
+def create_capability_search_tool(registry: CapabilityRegistry) -> dspy.Tool:
     """Create search_capabilities tool wrapping CapabilityRegistry.search()."""
 
     def search_capabilities(query: str, limit: int = 5) -> str:
@@ -183,7 +182,7 @@ def create_capability_search_tool(registry: "CapabilityRegistry") -> dspy.Tool:
         ),
         arg_desc={
             "query": "Natural language description of what you need to do "
-                     "(e.g., 'create database tables', 'send email', 'build a dashboard app')",
+            "(e.g., 'create database tables', 'send email', 'build a dashboard app')",
             "limit": "Max results to return (default: 5)",
         },
     )
@@ -274,9 +273,13 @@ def create_web_search_tool() -> dspy.Tool:
 def create_planning_search_tool(registry: PlanningRegistry) -> dspy.Tool:
     """Create search_planning_patterns tool wrapping PlanningRegistry.search()."""
 
-    def search_planning_patterns(query: str, capability_id: str = "", limit: int = 3) -> str:
+    def search_planning_patterns(
+        query: str, capability_id: str = "", limit: int = 3
+    ) -> str:
         """Search for relevant planning patterns."""
-        results = registry.search(query=query, capability_id=capability_id or None, limit=limit)
+        results = registry.search(
+            query=query, capability_id=capability_id or None, limit=limit
+        )
         return json.dumps(
             [
                 {
@@ -307,9 +310,9 @@ def create_planning_search_tool(registry: PlanningRegistry) -> dspy.Tool:
         ),
         arg_desc={
             "query": "Task description to match against planning patterns "
-                     "(e.g., 'create database tables', 'send email automation')",
+            "(e.g., 'create database tables', 'send email automation')",
             "capability_id": "Optional - filter to patterns for this capability "
-                            "(e.g., 'agent:schema_builder')",
+            "(e.g., 'agent:schema_builder')",
             "limit": "Max results to return (default: 3)",
         },
     )
@@ -318,7 +321,7 @@ def create_planning_search_tool(registry: PlanningRegistry) -> dspy.Tool:
 def create_discovery_tools(
     api_key: str,
     org_id: str,
-    capability_registry: "CapabilityRegistry | None" = None,
+    capability_registry: CapabilityRegistry | None = None,
     planning_registry: PlanningRegistry | None = None,
 ) -> list[dspy.Tool]:
     """

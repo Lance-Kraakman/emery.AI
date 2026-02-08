@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import builtins
 import json
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .http_client import make_request, unwrap_entity
 
@@ -33,12 +34,14 @@ class DatabaseAPI:
         new_db = api.create("My Database", "Description")
     """
 
-    def __init__(self, api_key: str, org_id: str, extra_headers: dict[str, str] | None = None):
+    def __init__(
+        self, api_key: str, org_id: str, extra_headers: dict[str, str] | None = None
+    ):
         self._api_key = api_key
         self._org_id = org_id
         self._extra_headers = extra_headers
 
-    def list(self, filters: Optional[Dict[str, Any]] = None) -> List[Database]:
+    def list(self, filters: dict[str, Any] | None = None) -> builtins.list[Database]:
         """List all databases.
 
         Args:
@@ -81,7 +84,7 @@ class DatabaseAPI:
             logger.warning(f"Database parse failed: {e}, raw: {result[:200]}")
             return []
 
-    def get(self, database_id: int) -> Optional[Database]:
+    def get(self, database_id: int) -> Database | None:
         """Get database by ID.
 
         Args:
@@ -119,7 +122,7 @@ class DatabaseAPI:
             logger.warning(f"Database get: missing field {e}: {result[:200]}")
             return None
 
-    def create(self, name: str, description: str = "") -> Optional[Database]:
+    def create(self, name: str, description: str = "") -> Database | None:
         """Create database.
 
         Args:
@@ -157,9 +160,7 @@ class DatabaseAPI:
             logger.warning(f"Database create: missing field {e}: {result[:200]}")
             return None
 
-    def update(
-        self, database_id: int, data: Dict[str, Any]
-    ) -> Optional[Database]:
+    def update(self, database_id: int, data: dict[str, Any]) -> Database | None:
         """Update database.
 
         Args:

@@ -28,7 +28,7 @@ import shutil
 import tarfile
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import boto3
 from botocore.exceptions import ClientError
@@ -63,7 +63,7 @@ class WorkspaceSync:
     def __init__(
         self,
         bucket: str,
-        local_base: Optional[Path] = None,
+        local_base: Path | None = None,
     ):
         """
         Initialize workspace sync.
@@ -89,10 +89,14 @@ class WorkspaceSync:
         internally and ensures path safety.
         """
         if workspace_id not in self._shell_cache:
-            self._shell_cache[workspace_id] = self._executor.get_shell_for_id(workspace_id)
+            self._shell_cache[workspace_id] = self._executor.get_shell_for_id(
+                workspace_id
+            )
         return self._shell_cache[workspace_id]
 
-    def _s3_key(self, organization_id: int, workspace_type: str, workspace_id: str) -> str:
+    def _s3_key(
+        self, organization_id: int, workspace_type: str, workspace_id: str
+    ) -> str:
         """Generate org-scoped S3 key for workspace.
 
         Key pattern: workspaces/{org_id}/{workspace_type}/{workspace_id}.tar.gz
@@ -120,7 +124,9 @@ class WorkspaceSync:
         """Get local path for workspace tar archive."""
         return self.local_base / f"{workspace_id}.tar.gz"
 
-    def download(self, organization_id: int, workspace_type: str, workspace_id: str) -> Path:
+    def download(
+        self, organization_id: int, workspace_type: str, workspace_id: str
+    ) -> Path:
         """
         Download and extract workspace from S3.
 
@@ -157,7 +163,7 @@ class WorkspaceSync:
             # Extract archive — filter='data' normalizes permissions
             # (prevents bwrap's restrictive 0o700 dirs from breaking ChromaDB writes)
             with tarfile.open(tar_path, "r:gz") as tar:
-                tar.extractall(local_path, filter='data')
+                tar.extractall(local_path, filter="data")
 
             tar_path.unlink()
             logger.info(f"Workspace extracted to {local_path}")
@@ -167,7 +173,9 @@ class WorkspaceSync:
             if error_code in ("404", "NoSuchKey", "403", "AccessDenied"):
                 # New workspace or no permissions yet - create empty workspace
                 # 403/AccessDenied can happen when file doesn't exist and bucket has restrictive policies
-                logger.info(f"No existing workspace for {workspace_id} (error: {error_code}), creating new one")
+                logger.info(
+                    f"No existing workspace for {workspace_id} (error: {error_code}), creating new one"
+                )
                 self._create_empty_workspace(workspace_id)
             else:
                 logger.error(f"S3 download failed: {e}")
@@ -199,7 +207,9 @@ class WorkspaceSync:
 
         logger.info(f"Created empty workspace at {local_path}")
 
-    def upload(self, organization_id: int, workspace_type: str, workspace_id: str) -> str:
+    def upload(
+        self, organization_id: int, workspace_type: str, workspace_id: str
+    ) -> str:
         """
         Tar and upload workspace to S3.
 
@@ -232,7 +242,7 @@ class WorkspaceSync:
 
             # Clean up local tar
             tar_path.unlink()
-            logger.info(f"Workspace uploaded successfully")
+            logger.info("Workspace uploaded successfully")
 
             return s3_key
 
@@ -260,15 +270,22 @@ class WorkspaceSync:
             tar_path.unlink()
             logger.info(f"Cleaned up tar file: {tar_path}")
 
-    def workspace_exists(self, organization_id: int, workspace_type: str, workspace_id: str) -> bool:
+    def workspace_exists(
+        self, organization_id: int, workspace_type: str, workspace_id: str
+    ) -> bool:
         """Check if workspace exists in S3."""
         try:
-            self.s3.head_object(Bucket=self.bucket, Key=self._s3_key(organization_id, workspace_type, workspace_id))
+            self.s3.head_object(
+                Bucket=self.bucket,
+                Key=self._s3_key(organization_id, workspace_type, workspace_id),
+            )
             return True
         except ClientError:
             return False
 
-    def delete_workspace(self, organization_id: int, workspace_type: str, workspace_id: str) -> None:
+    def delete_workspace(
+        self, organization_id: int, workspace_type: str, workspace_id: str
+    ) -> None:
         """Delete workspace from S3 and local storage."""
         s3_key = self._s3_key(organization_id, workspace_type, workspace_id)
 
@@ -332,7 +349,10 @@ class WorkspaceSync:
 
         # Create directory if needed and write result via sandbox
         shell.mkdir(relative_history_dir)
-        shell.write_file(f"{relative_history_dir}/result.json", json.dumps(result, indent=2, default=str))
+        shell.write_file(
+            f"{relative_history_dir}/result.json",
+            json.dumps(result, indent=2, default=str),
+        )
 
         return ws_path / "history" / date_str / task_id / "result.json"
 
@@ -362,4 +382,6 @@ class WorkspaceSync:
             entry["timestamp"] = datetime.now().isoformat()
 
         # Append to session log via sandbox
-        shell.append_file(f"{relative_history_dir}/session.jsonl", json.dumps(entry) + "\n")
+        shell.append_file(
+            f"{relative_history_dir}/session.jsonl", json.dumps(entry) + "\n"
+        )

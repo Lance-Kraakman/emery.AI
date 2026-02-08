@@ -11,8 +11,7 @@ from __future__ import annotations
 
 from typing import Any, Literal, TypedDict
 
-from ..reasoning.modules.step_tracker import TrackedStep, StepType
-
+from ..reasoning.modules.step_tracker import StepType, TrackedStep
 
 # Type for step progress type field
 StepProgressType = Literal["planning", "action", "final"]
@@ -154,11 +153,11 @@ def step_to_progress_dict(
             }
 
     # Handle generic objects with step-like attributes
-    if hasattr(step, 'step_type'):
-        step_type_val = getattr(step.step_type, 'value', str(step.step_type))
-        content = getattr(step, 'content', '') or ''
+    if hasattr(step, "step_type"):
+        step_type_val = getattr(step.step_type, "value", str(step.step_type))
+        content = getattr(step, "content", "") or ""
 
-        if step_type_val in ('planning', 'PLANNING'):
+        if step_type_val in ("planning", "PLANNING"):
             return {
                 "type": "planning",
                 "step_name": f"{name}: Planning",
@@ -166,7 +165,7 @@ def step_to_progress_dict(
                 "metadata": {name_key: name, status_key: "planning"},
                 "step_index": index,
             }
-        elif step_type_val in ('final', 'FINAL'):
+        elif step_type_val in ("final", "FINAL"):
             return {
                 "type": "final",
                 "step_name": f"{name}: Complete",

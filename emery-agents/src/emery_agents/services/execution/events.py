@@ -5,8 +5,8 @@ All event dataclasses emitted by ExecutionCoordinator during planning and execut
 These events enable UI feedback and external monitoring.
 """
 
-from dataclasses import dataclass, field
-from typing import List, Optional, Any, Dict
+from dataclasses import dataclass
+from typing import Any
 
 from ...entities.models.plan import Plan
 
@@ -19,15 +19,17 @@ class PendingContext:
     AIDEV-NOTE: Replaces the `original_task` hack in SessionManager.
     All state needed for resumption after user input lives here.
     """
+
     original_task: str
-    tools: List[Any]
-    managed_agents: List[Any]
-    clarification_response: Optional[str] = None
+    tools: list[Any]
+    managed_agents: list[Any]
+    clarification_response: str | None = None
 
 
 @dataclass
 class PlanCreatedEvent:
     """Event emitted when a plan has been created."""
+
     plan_id: str
     plan: Plan
 
@@ -35,12 +37,14 @@ class PlanCreatedEvent:
 @dataclass
 class PlanApprovedEvent:
     """Event emitted when a plan is approved."""
+
     plan_id: str
 
 
 @dataclass
 class StepStartedEvent:
     """Event emitted when a step starts execution."""
+
     plan_id: str
     step_id: str
     step_description: str
@@ -49,14 +53,16 @@ class StepStartedEvent:
 @dataclass
 class StepCompletedEvent:
     """Event emitted when a step completes."""
+
     plan_id: str
     step_id: str
-    result: Optional[str]
+    result: str | None
 
 
 @dataclass
 class StepFailedEvent:
     """Event emitted when a step fails."""
+
     plan_id: str
     step_id: str
     error: str
@@ -65,6 +71,7 @@ class StepFailedEvent:
 @dataclass
 class ExecutionCompletedEvent:
     """Event emitted when all execution is complete."""
+
     plan_id: str
     success: bool
 
@@ -72,6 +79,7 @@ class ExecutionCompletedEvent:
 @dataclass
 class FinalSynthesisEvent:
     """Event emitted with synthesized final answer from all step results."""
+
     plan_id: str
     synthesis: str
 
@@ -79,6 +87,7 @@ class FinalSynthesisEvent:
 @dataclass
 class EvaluationResult:
     """Result from evaluator agent."""
+
     goal_achieved: bool
     blocking_issues: bool
     should_continue: bool
@@ -89,6 +98,7 @@ class EvaluationResult:
 @dataclass
 class EvaluationCompletedEvent:
     """Event emitted when an evaluation completes."""
+
     plan_id: str
     evaluation: EvaluationResult
     evaluation_number: int
@@ -97,6 +107,7 @@ class EvaluationCompletedEvent:
 @dataclass
 class ReplanTriggeredEvent:
     """Event emitted when replanning is triggered."""
+
     plan_id: str
     reason: str
     replan_number: int
@@ -105,6 +116,7 @@ class ReplanTriggeredEvent:
 @dataclass
 class PlanUpdatedEvent:
     """Event emitted when the plan has been dynamically updated."""
+
     plan_id: str
     reason: str
     added_steps: int
@@ -115,6 +127,7 @@ class PlanUpdatedEvent:
 @dataclass
 class PhaseStartedEvent:
     """Event emitted when a new phase begins execution."""
+
     plan_id: str
     phase_name: str
     phase_goal: str
@@ -124,6 +137,7 @@ class PhaseStartedEvent:
 @dataclass
 class PhaseCompletedEvent:
     """Event emitted when a phase completes execution."""
+
     plan_id: str
     phase_name: str
     results_summary: str
@@ -133,6 +147,7 @@ class PhaseCompletedEvent:
 @dataclass
 class GoalAchievedEvent:
     """Event emitted when the goal is detected as achieved."""
+
     plan_id: str
     reason: str
 
@@ -140,6 +155,7 @@ class GoalAchievedEvent:
 @dataclass
 class ExecutionBlockedEvent:
     """Event emitted when execution is blocked."""
+
     plan_id: str
     reason: str
 
@@ -148,6 +164,7 @@ class ExecutionBlockedEvent:
 @dataclass
 class RecoveryAnalysisEvent:
     """Event emitted when recovery analysis completes."""
+
     step_id: str
     confidence: float  # 0.0-1.0
 
@@ -155,6 +172,7 @@ class RecoveryAnalysisEvent:
 @dataclass
 class AutoFixStartedEvent:
     """Event emitted when auto-fix begins (high confidence ≥0.8)."""
+
     step_id: str
     fix_description: str
     confidence: float
@@ -163,6 +181,7 @@ class AutoFixStartedEvent:
 @dataclass
 class AutoFixCompletedEvent:
     """Event emitted when auto-fix completes successfully."""
+
     step_id: str
     result: str
 
@@ -170,21 +189,24 @@ class AutoFixCompletedEvent:
 @dataclass
 class RecoveryPlanProposedEvent:
     """Event emitted when recovery plan needs approval (medium confidence 0.5-0.8)."""
+
     step_id: str
     fix_description: str
     confidence: float
-    gathered_context: Dict[str, Any]
+    gathered_context: dict[str, Any]
 
 
 @dataclass(frozen=True)
 class PlanRejectedEvent:
     """Event emitted when user rejects the plan."""
+
     plan_id: str
 
 
 @dataclass(frozen=True)
 class PlanFeedbackEvent:
     """Event emitted when user provides feedback on plan (not approval/rejection)."""
+
     plan_id: str
     feedback: str
 
@@ -192,6 +214,7 @@ class PlanFeedbackEvent:
 @dataclass(frozen=True)
 class ErrorEvent:
     """Generic error event for handle_message() routing errors."""
+
     error: str
     recoverable: bool = True
 
@@ -200,6 +223,7 @@ class ErrorEvent:
 @dataclass
 class InterruptQueuedEvent:
     """User sent message during planning - queued for processing after plan completes."""
+
     message: str
     phase: str  # "planning" or "executing"
 
@@ -207,6 +231,7 @@ class InterruptQueuedEvent:
 @dataclass
 class InterruptReceivedEvent:
     """User interrupt received during execution - being incorporated."""
+
     message: str
     step_index: int  # Which step we were about to execute
 
@@ -214,6 +239,7 @@ class InterruptReceivedEvent:
 @dataclass
 class InterruptProcessingEvent:
     """Processing queued interrupt after planning completed."""
+
     message: str
     classification: str  # CONTEXT_ADD | SCOPE_CHANGE | CANCEL
 
@@ -221,6 +247,7 @@ class InterruptProcessingEvent:
 @dataclass
 class PlanCancelledEvent:
     """User cancelled the plan via interrupt."""
+
     plan_id: str
     reason: str
 
@@ -228,6 +255,7 @@ class PlanCancelledEvent:
 @dataclass
 class ContextInjectedEvent:
     """User's context was injected into execution."""
+
     message: str
     step_index: int
 
@@ -244,10 +272,11 @@ class ClarifyingQuestion:
         required: Whether the question must be answered
         allow_other: Show "Or type your own..." option (default: True, like Claude)
     """
+
     question: str
     question_type: str = "text"  # 'text' | 'single_select' | 'multi_select'
-    options: Optional[List[str]] = None
-    context: Optional[str] = None
+    options: list[str] | None = None
+    context: str | None = None
     required: bool = True
     allow_other: bool = True  # Show custom input option (like Claude)
 
@@ -260,13 +289,14 @@ class ClarifyingQuestion:
 @dataclass
 class AwaitingClarificationEvent:
     """Event emitted when clarifying questions need to be asked before proceeding."""
-    questions: List[ClarifyingQuestion]
+
+    questions: list[ClarifyingQuestion]
     reasoning: str = "Need more information to proceed"
 
     def __init__(
         self,
-        questions: "List[ClarifyingQuestion] | List[str]",
-        reasoning: str = "Need more information to proceed"
+        questions: "list[ClarifyingQuestion] | list[str]",
+        reasoning: str = "Need more information to proceed",
     ):
         """Initialize with either ClarifyingQuestion objects or strings for backward compatibility."""
         if questions and isinstance(questions[0], str):
@@ -277,7 +307,9 @@ class AwaitingClarificationEvent:
         self.reasoning = reasoning
 
     @classmethod
-    def from_dict_list(cls, questions: List[Dict[str, Any]], reasoning: str = "") -> "AwaitingClarificationEvent":
+    def from_dict_list(
+        cls, questions: list[dict[str, Any]], reasoning: str = ""
+    ) -> "AwaitingClarificationEvent":
         """Create from list of question dicts (from AskQuestionTool)."""
         structured_questions = [
             ClarifyingQuestion(
@@ -296,6 +328,7 @@ class AwaitingClarificationEvent:
 @dataclass
 class ReflectionCompletedEvent:
     """Event emitted when step reflection completes (Reflexion pattern)."""
+
     step_id: str
     quality_score: float  # 0.0-1.0
     was_suboptimal: bool
@@ -305,4 +338,5 @@ class ReflectionCompletedEvent:
 @dataclass
 class PlanningStartedEvent:
     """Event emitted when planning begins."""
+
     goal: str

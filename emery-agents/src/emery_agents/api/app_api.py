@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import builtins
 import json
 import logging
-from dataclasses import dataclass, field as dataclass_field
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass
+from dataclasses import field as dataclass_field
+from typing import Any
 
 from .http_client import make_request, unwrap_entity
 
@@ -20,7 +22,7 @@ class App:
     name: str
     description: str = ""
     slug: str = ""
-    pages: List[Any] = dataclass_field(default_factory=list)
+    pages: list[Any] = dataclass_field(default_factory=list)
 
 
 class AppAPI:
@@ -36,7 +38,7 @@ class AppAPI:
         self._api_key = api_key
         self._org_id = org_id
 
-    def list(self, filters: Optional[Dict[str, Any]] = None) -> List[App]:
+    def list(self, filters: dict[str, Any] | None = None) -> builtins.list[App]:
         """List all apps.
 
         Args:
@@ -78,7 +80,7 @@ class AppAPI:
             logger.debug(f"App parse failed: {e}")
             return []
 
-    def get(self, app_id: int) -> Optional[App]:
+    def get(self, app_id: int) -> App | None:
         """Get app by ID.
 
         Args:
@@ -115,7 +117,7 @@ class AppAPI:
             logger.warning(f"App get: missing field {e}: {result[:200]}")
             return None
 
-    def create(self, name: str, description: str = "") -> Optional[App]:
+    def create(self, name: str, description: str = "") -> App | None:
         """Create app.
 
         Args:
@@ -152,7 +154,7 @@ class AppAPI:
             logger.warning(f"App create: missing field {e}: {result[:200]}")
             return None
 
-    def update(self, app_id: int, data: Dict[str, Any]) -> Optional[App]:
+    def update(self, app_id: int, data: dict[str, Any]) -> App | None:
         """Update app.
 
         Args:

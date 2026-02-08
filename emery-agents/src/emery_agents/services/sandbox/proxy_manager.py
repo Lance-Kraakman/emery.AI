@@ -13,7 +13,6 @@ import signal
 import subprocess
 import sys
 import time
-from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -44,7 +43,7 @@ class ProxyManager:
 
     def __init__(self, socket_path: str = DEFAULT_SOCKET_PATH):
         self.socket_path = socket_path
-        self._process: Optional[subprocess.Popen[bytes]] = None
+        self._process: subprocess.Popen[bytes] | None = None
 
     @classmethod
     def get_instance(cls) -> "ProxyManager":
@@ -96,7 +95,9 @@ class ProxyManager:
         while time.monotonic() - start_time < STARTUP_TIMEOUT:
             if self._process.poll() is not None:
                 # Process died during startup
-                stderr = self._process.stderr.read().decode() if self._process.stderr else ""
+                stderr = (
+                    self._process.stderr.read().decode() if self._process.stderr else ""
+                )
                 raise RuntimeError(
                     f"SandboxProxy died during startup (exit {self._process.returncode}): {stderr[:500]}"
                 )
@@ -109,9 +110,7 @@ class ProxyManager:
 
         # Timeout — kill and raise
         self._kill_process()
-        raise RuntimeError(
-            f"SandboxProxy failed to start within {STARTUP_TIMEOUT}s"
-        )
+        raise RuntimeError(f"SandboxProxy failed to start within {STARTUP_TIMEOUT}s")
 
     def _kill_process(self) -> None:
         """Kill the proxy subprocess."""

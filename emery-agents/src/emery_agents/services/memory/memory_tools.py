@@ -9,7 +9,7 @@ that DSPy ReAct can use as a tool.
 from __future__ import annotations
 
 import json
-from typing import Any, Callable
+from collections.abc import Callable
 
 from .memory_service import MemoryService
 

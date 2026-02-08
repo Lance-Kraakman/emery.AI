@@ -10,7 +10,7 @@ and only ask questions about the gaps.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -28,16 +28,17 @@ class DomainConcern:
         priority: Higher = ask first (1-10)
         required: If True, must be answered before planning
     """
+
     id: str
     category: str
     description: str
     check_prompt: str
     question_template: str
-    options_generator: Optional[str] = None
+    options_generator: str | None = None
     priority: int = 5
     required: bool = True
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "id": self.id,
@@ -58,13 +59,14 @@ class ConcernGap:
 
     Created during gap analysis when a concern is determined to be unclear.
     """
+
     concern: DomainConcern
     context_found: str  # What we found in context (if anything)
     reason_unclear: str  # Why it's still unclear
     suggested_question: str  # Formatted question to ask
-    suggested_options: Optional[List[str]] = None
+    suggested_options: list[str] | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "concernId": self.concern.id,
@@ -83,9 +85,10 @@ class GapAnalysisResult:
 
     Contains which concerns are clear and which need questions.
     """
+
     agent_name: str
-    clear_concerns: List[str] = field(default_factory=list)  # IDs of clear concerns
-    gaps: List[ConcernGap] = field(default_factory=list)
+    clear_concerns: list[str] = field(default_factory=list)  # IDs of clear concerns
+    gaps: list[ConcernGap] = field(default_factory=list)
     context_summary: str = ""  # Summary of what we understood
 
     @property
@@ -94,11 +97,11 @@ class GapAnalysisResult:
         return len(self.gaps) > 0
 
     @property
-    def required_gaps(self) -> List[ConcernGap]:
+    def required_gaps(self) -> list[ConcernGap]:
         """Get only required gaps that must be answered."""
         return [g for g in self.gaps if g.concern.required]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "agentName": self.agent_name,
@@ -113,7 +116,7 @@ class GapAnalysisResult:
 # Domain Concern Definitions per Agent Type
 # =============================================================================
 
-SCHEMA_BUILDER_CONCERNS: List[DomainConcern] = [
+SCHEMA_BUILDER_CONCERNS: list[DomainConcern] = [
     DomainConcern(
         id="tables_needed",
         category="structure",
@@ -182,7 +185,7 @@ SCHEMA_BUILDER_CONCERNS: List[DomainConcern] = [
     ),
 ]
 
-SKILL_BUILDER_CONCERNS: List[DomainConcern] = [
+SKILL_BUILDER_CONCERNS: list[DomainConcern] = [
     DomainConcern(
         id="skill_purpose",
         category="purpose",
@@ -250,7 +253,7 @@ SKILL_BUILDER_CONCERNS: List[DomainConcern] = [
     ),
 ]
 
-DOCUMENT_BUILDER_CONCERNS: List[DomainConcern] = [
+DOCUMENT_BUILDER_CONCERNS: list[DomainConcern] = [
     DomainConcern(
         id="document_type",
         category="structure",
@@ -300,14 +303,14 @@ DOCUMENT_BUILDER_CONCERNS: List[DomainConcern] = [
 ]
 
 # Registry mapping agent names to their concerns
-AGENT_CONCERNS: Dict[str, List[DomainConcern]] = {
+AGENT_CONCERNS: dict[str, list[DomainConcern]] = {
     "schema_builder": SCHEMA_BUILDER_CONCERNS,
     "skill_builder": SKILL_BUILDER_CONCERNS,
     "document_builder": DOCUMENT_BUILDER_CONCERNS,
 }
 
 
-def get_concerns_for_agent(agent_name: str) -> List[DomainConcern]:
+def get_concerns_for_agent(agent_name: str) -> list[DomainConcern]:
     """
     Get domain concerns for an agent type.
 
@@ -321,6 +324,6 @@ def get_concerns_for_agent(agent_name: str) -> List[DomainConcern]:
     return sorted(concerns, key=lambda c: c.priority, reverse=True)
 
 
-def get_required_concerns(agent_name: str) -> List[DomainConcern]:
+def get_required_concerns(agent_name: str) -> list[DomainConcern]:
     """Get only required concerns for an agent."""
     return [c for c in get_concerns_for_agent(agent_name) if c.required]

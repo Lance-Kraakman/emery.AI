@@ -14,7 +14,7 @@ This cache stores DeltaTable instances with TTL-based invalidation:
 import logging
 import threading
 import time
-from typing import Dict, Optional, Tuple, Any
+from typing import Any
 
 from deltalake import DeltaTable
 
@@ -37,14 +37,14 @@ class DeltaTableCache:
             ttl_seconds: Time-to-live for cached entries (default: 30s)
             max_size: Maximum number of cached tables (default: 100)
         """
-        self._cache: Dict[str, Tuple[DeltaTable, float]] = {}
+        self._cache: dict[str, tuple[DeltaTable, float]] = {}
         self._ttl = ttl_seconds
         self._max_size = max_size
         self._lock = threading.RLock()
         self._hits = 0
         self._misses = 0
 
-    def get(self, s3_uri: str, storage_options: Dict[str, str]) -> DeltaTable:
+    def get(self, s3_uri: str, storage_options: dict[str, str]) -> DeltaTable:
         """
         Get a DeltaTable, using cache if available and not expired.
 
@@ -62,11 +62,15 @@ class DeltaTableCache:
                 table, cached_at = self._cache[s3_uri]
                 if now - cached_at < self._ttl:
                     self._hits += 1
-                    logger.debug(f"[DeltaCache] HIT for {s3_uri} (age: {now - cached_at:.1f}s)")
+                    logger.debug(
+                        f"[DeltaCache] HIT for {s3_uri} (age: {now - cached_at:.1f}s)"
+                    )
                     return table
                 else:
                     # Expired - remove and reload
-                    logger.debug(f"[DeltaCache] EXPIRED for {s3_uri} (age: {now - cached_at:.1f}s)")
+                    logger.debug(
+                        f"[DeltaCache] EXPIRED for {s3_uri} (age: {now - cached_at:.1f}s)"
+                    )
                     del self._cache[s3_uri]
 
             # Cache miss - load from S3
@@ -85,7 +89,7 @@ class DeltaTableCache:
             self._cache[s3_uri] = (table, now)
             return table
 
-    def get_fresh(self, s3_uri: str, storage_options: Dict[str, str]) -> DeltaTable:
+    def get_fresh(self, s3_uri: str, storage_options: dict[str, str]) -> DeltaTable:
         """
         Get a fresh DeltaTable, bypassing and updating the cache.
 
@@ -136,7 +140,7 @@ class DeltaTableCache:
         del self._cache[oldest_uri]
         logger.debug(f"[DeltaCache] EVICTED oldest: {oldest_uri}")
 
-    def stats(self) -> Dict[str, Any]:
+    def stats(self) -> dict[str, Any]:
         """Get cache statistics."""
         with self._lock:
             total = self._hits + self._misses
@@ -157,7 +161,7 @@ class DeltaTableCache:
 _delta_cache = DeltaTableCache(ttl_seconds=300, max_size=100)
 
 
-def get_delta_table_cached(s3_uri: str, storage_options: Dict[str, str]) -> DeltaTable:
+def get_delta_table_cached(s3_uri: str, storage_options: dict[str, str]) -> DeltaTable:
     """
     Get a DeltaTable using the global cache.
 
@@ -171,7 +175,7 @@ def get_delta_table_cached(s3_uri: str, storage_options: Dict[str, str]) -> Delt
     return _delta_cache.get(s3_uri, storage_options)
 
 
-def get_delta_table_fresh(s3_uri: str, storage_options: Dict[str, str]) -> DeltaTable:
+def get_delta_table_fresh(s3_uri: str, storage_options: dict[str, str]) -> DeltaTable:
     """
     Get a fresh DeltaTable, bypassing and updating the cache.
 
@@ -202,6 +206,6 @@ def invalidate_all_delta_cache() -> None:
     _delta_cache.invalidate_all()
 
 
-def get_delta_cache_stats() -> Dict[str, Any]:
+def get_delta_cache_stats() -> dict[str, Any]:
     """Get cache statistics."""
     return _delta_cache.stats()

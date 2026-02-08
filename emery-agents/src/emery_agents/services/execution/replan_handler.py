@@ -7,25 +7,25 @@ Extracted from ExecutionCoordinator for maintainability.
 """
 
 import logging
-from typing import Any, List, Optional
-
-from emery_agents.services.analysis.llm_usage import LlmUsageTracker
+from typing import Any
 
 from emery_agents.entities.models.plan import Plan, PlanStatus, PlanStep, PlanStepStatus
+from emery_agents.services.analysis.llm_usage import LlmUsageTracker
 
-from ..planning.plan_differ import PlanDiffer, PlanDiff
-from ..protocols import ModelProviderProtocol
 from ...reasoning.config import get_dspy_lm
 from ...utils.session_logger import get_session_logger
+from ..planning.plan_differ import PlanDiffer
+from ..protocols import ModelProviderProtocol
 
 
 class ReplanNeedsClarificationError(Exception):
     """Raised when replan requires user clarification before proceeding."""
 
-    def __init__(self, questions: List[Any], reasoning: str = ""):
+    def __init__(self, questions: list[Any], reasoning: str = ""):
         self.questions = questions
         self.reasoning = reasoning
         super().__init__(f"Replan needs clarification: {len(questions)} question(s)")
+
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +40,8 @@ class ReplanHandler:
 
     def __init__(
         self,
-        model_provider: Optional[ModelProviderProtocol] = None,
-        org_model: Optional[str] = None,
+        model_provider: ModelProviderProtocol | None = None,
+        org_model: str | None = None,
     ):
         """
         Initialize replan handler.
@@ -56,10 +56,10 @@ class ReplanHandler:
     async def handle_replan(
         self,
         current_plan: Plan,
-        failed_step: Optional[PlanStep],
+        failed_step: PlanStep | None,
         reason: str,
-        tools: List[Any],
-        llm_tracker: Optional[LlmUsageTracker] = None,
+        tools: list[Any],
+        llm_tracker: LlmUsageTracker | None = None,
     ) -> Plan:
         """
         Handle replanning using diff-based approach.
@@ -81,13 +81,18 @@ class ReplanHandler:
 
         # Build completed context for the differ
         completed_steps = [
-            s for s in current_plan.steps
-            if s.status == PlanStepStatus.COMPLETED.value
+            s for s in current_plan.steps if s.status == PlanStepStatus.COMPLETED.value
         ]
-        completed_context = "\n".join([
-            f"- {s.description}: {s.result[:200] if s.result else 'completed'}"
-            for s in completed_steps
-        ]) if completed_steps else None
+        completed_context = (
+            "\n".join(
+                [
+                    f"- {s.description}: {s.result[:200] if s.result else 'completed'}"
+                    for s in completed_steps
+                ]
+            )
+            if completed_steps
+            else None
+        )
 
         # Use PlanDiffer for minimal changes
         lm = get_dspy_lm(org_model=self.org_model)
@@ -105,7 +110,9 @@ class ReplanHandler:
 
             # Check if replan needs user clarification
             if diff.needs_clarification:
-                logger.info(f"❓ Replan detected missing information, needs {len(diff.clarifying_questions)} clarification(s)")
+                logger.info(
+                    f"❓ Replan detected missing information, needs {len(diff.clarifying_questions)} clarification(s)"
+                )
                 raise ReplanNeedsClarificationError(
                     questions=diff.clarifying_questions,
                     reasoning=diff.reasoning,
@@ -114,15 +121,18 @@ class ReplanHandler:
             # Log the diff for debugging
             session_logger = get_session_logger()
             if session_logger:
-                session_logger.log_event("plan_diff_generated", {
-                    "plan_id": current_plan.id,
-                    "reason": reason,
-                    "diff_summary": diff.summary(),
-                    "steps_to_skip": diff.steps_to_skip,
-                    "steps_to_modify": len(diff.steps_to_modify),
-                    "steps_to_append": len(diff.steps_to_append),
-                    "reasoning": diff.reasoning[:200] if diff.reasoning else "",
-                })
+                session_logger.log_event(
+                    "plan_diff_generated",
+                    {
+                        "plan_id": current_plan.id,
+                        "reason": reason,
+                        "diff_summary": diff.summary(),
+                        "steps_to_skip": diff.steps_to_skip,
+                        "steps_to_modify": len(diff.steps_to_modify),
+                        "steps_to_append": len(diff.steps_to_append),
+                        "reasoning": diff.reasoning[:200] if diff.reasoning else "",
+                    },
+                )
 
             # Apply the diff
             updated_plan = differ.apply_diff(current_plan, diff)
@@ -141,7 +151,7 @@ class ReplanHandler:
     def _fallback_replan(
         self,
         current_plan: Plan,
-        failed_step: Optional[PlanStep],
+        failed_step: PlanStep | None,
         reason: str,
     ) -> Plan:
         """
@@ -197,5 +207,7 @@ class ReplanHandler:
             analysis=f"{current_plan.analysis}\n\n[Replan v{current_plan.version + 1}] Fallback: {reason}",
         )
 
-        logger.info(f"📋 Replan complete (fallback): skipped failed step -> v{updated_plan.version}")
+        logger.info(
+            f"📋 Replan complete (fallback): skipped failed step -> v{updated_plan.version}"
+        )
         return updated_plan

@@ -7,17 +7,17 @@ not for actual execution (which uses DSPy ExecutorModule).
 """
 
 from dataclasses import dataclass
-from typing import List
 
 
 @dataclass
 class AgentDescriptor:
     """Simple descriptor for agent capabilities - used in prompts only."""
+
     name: str
     description: str
 
 
-def get_builder_descriptors() -> List[AgentDescriptor]:
+def get_builder_descriptors() -> list[AgentDescriptor]:
     """
     Return descriptors for all builder agents.
 

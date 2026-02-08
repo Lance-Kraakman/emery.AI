@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
+import builtins
 import json
 import logging
 import os
 import uuid
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import httpx
 import requests
 
-from .http_client import make_request, unwrap_entity
 from ..entities.workspace import WorkspaceAgent, WorkspaceSkill
+from .http_client import make_request, unwrap_entity
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,9 @@ class AgentAPI:
         self._api_key = api_key
         self._org_id = org_id
 
-    def list(self, filters: Optional[Dict[str, Any]] = None) -> List[WorkspaceAgent]:
+    def list(
+        self, filters: dict[str, Any] | None = None
+    ) -> builtins.list[WorkspaceAgent]:
         """List all agents.
 
         Args:
@@ -74,7 +77,7 @@ class AgentAPI:
             logger.debug(f"Agent parse failed: {e}")
             return []
 
-    def get(self, agent_id: int) -> Optional[WorkspaceAgent]:
+    def get(self, agent_id: int) -> WorkspaceAgent | None:
         """Get agent by ID.
 
         Args:
@@ -127,17 +130,14 @@ class AgentAPIService:
     """
 
     def __init__(
-        self,
-        api_key: str,
-        organization_id: Optional[int] = None,
-        timeout: float = 15.0
+        self, api_key: str, organization_id: int | None = None, timeout: float = 15.0
     ):
         self.api_key = api_key
         self.organization_id = organization_id
         self.timeout = timeout
         self.base_url = os.getenv("NEXTJS_BASE_URL", "http://localhost:3000")
 
-    def _build_headers(self, call_id: str) -> Dict[str, str]:
+    def _build_headers(self, call_id: str) -> dict[str, str]:
         """Build request headers with auth, RLS, and observability."""
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -150,10 +150,8 @@ class AgentAPIService:
         return headers
 
     async def fetch_agents(
-        self,
-        agent_id: Optional[str] = None,
-        agent_name: Optional[str] = None
-    ) -> List[WorkspaceAgent]:
+        self, agent_id: str | None = None, agent_name: str | None = None
+    ) -> list[WorkspaceAgent]:
         """
         Fetch agents from API.
 
@@ -172,7 +170,9 @@ class AgentAPIService:
         if agent_name:
             params["name"] = agent_name
 
-        logger.info(f"[AGENT-API] Fetching agents - call_id: {call_id}, params: {params}")
+        logger.info(
+            f"[AGENT-API] Fetching agents - call_id: {call_id}, params: {params}"
+        )
 
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
@@ -183,13 +183,17 @@ class AgentAPIService:
                 )
 
                 if not response.is_success:
-                    logger.warning(f"[AGENT-API] Failed to fetch agents - call_id: {call_id}, status: {response.status_code}")
+                    logger.warning(
+                        f"[AGENT-API] Failed to fetch agents - call_id: {call_id}, status: {response.status_code}"
+                    )
                     return []
 
                 try:
                     data = response.json()
                 except json.JSONDecodeError as e:
-                    logger.warning(f"[AGENT-API] Invalid JSON response - call_id: {call_id}, error: {e}")
+                    logger.warning(
+                        f"[AGENT-API] Invalid JSON response - call_id: {call_id}, error: {e}"
+                    )
                     return []
 
                 # Handle both single agent (by name) and list responses
@@ -205,29 +209,37 @@ class AgentAPIService:
                             name=agent.get("name", "Unknown"),
                             description=agent.get("description", ""),
                             persona=agent.get("persona"),
-                            database_id=int(agent["databaseId"]) if agent.get("databaseId") else None,
+                            database_id=int(agent["databaseId"])
+                            if agent.get("databaseId")
+                            else None,
                         )
                         for agent in raw_data
                     ]
-                    logger.info(f"[AGENT-API] Fetched {len(agents)} agents - call_id: {call_id}")
+                    logger.info(
+                        f"[AGENT-API] Fetched {len(agents)} agents - call_id: {call_id}"
+                    )
                     return agents
 
                 logger.info(f"[AGENT-API] No agents found - call_id: {call_id}")
                 return []
 
         except httpx.RequestError as e:
-            logger.warning(f"[AGENT-API] HTTP error fetching agents - call_id: {call_id}, error: {e}")
+            logger.warning(
+                f"[AGENT-API] HTTP error fetching agents - call_id: {call_id}, error: {e}"
+            )
             return []
         except Exception as e:
-            logger.warning(f"[AGENT-API] Unexpected error fetching agents - call_id: {call_id}, error: {e}")
+            logger.warning(
+                f"[AGENT-API] Unexpected error fetching agents - call_id: {call_id}, error: {e}"
+            )
             return []
 
-    async def fetch_agent_by_name(self, name: str) -> Optional[WorkspaceAgent]:
+    async def fetch_agent_by_name(self, name: str) -> WorkspaceAgent | None:
         """Fetch a single agent by name."""
         agents = await self.fetch_agents(agent_name=name)
         return agents[0] if agents else None
 
-    async def fetch_skills(self, agent_id: str) -> List[WorkspaceSkill]:
+    async def fetch_skills(self, agent_id: str) -> list[WorkspaceSkill]:
         """
         Fetch skills for a specific agent.
 
@@ -239,7 +251,9 @@ class AgentAPIService:
         """
         call_id = str(uuid.uuid4())[:8]
 
-        logger.debug(f"[AGENT-API] Fetching skills for agent {agent_id} - call_id: {call_id}")
+        logger.debug(
+            f"[AGENT-API] Fetching skills for agent {agent_id} - call_id: {call_id}"
+        )
 
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
@@ -250,13 +264,17 @@ class AgentAPIService:
                 )
 
                 if not response.is_success:
-                    logger.warning(f"[AGENT-API] Failed to fetch skills - call_id: {call_id}, agent_id: {agent_id}, status: {response.status_code}")
+                    logger.warning(
+                        f"[AGENT-API] Failed to fetch skills - call_id: {call_id}, agent_id: {agent_id}, status: {response.status_code}"
+                    )
                     return []
 
                 try:
                     data = response.json()
                 except json.JSONDecodeError as e:
-                    logger.warning(f"[AGENT-API] Invalid JSON for skills - call_id: {call_id}, error: {e}")
+                    logger.warning(
+                        f"[AGENT-API] Invalid JSON for skills - call_id: {call_id}, error: {e}"
+                    )
                     return []
 
                 raw_skills = data.get("data", [])
@@ -270,17 +288,25 @@ class AgentAPIService:
                     for skill in raw_skills
                 ]
 
-                logger.debug(f"[AGENT-API] Fetched {len(skills)} skills for agent {agent_id} - call_id: {call_id}")
+                logger.debug(
+                    f"[AGENT-API] Fetched {len(skills)} skills for agent {agent_id} - call_id: {call_id}"
+                )
                 return skills
 
         except httpx.RequestError as e:
-            logger.warning(f"[AGENT-API] HTTP error fetching skills - call_id: {call_id}, error: {e}")
+            logger.warning(
+                f"[AGENT-API] HTTP error fetching skills - call_id: {call_id}, error: {e}"
+            )
             return []
         except Exception as e:
-            logger.warning(f"[AGENT-API] Unexpected error fetching skills - call_id: {call_id}, error: {e}")
+            logger.warning(
+                f"[AGENT-API] Unexpected error fetching skills - call_id: {call_id}, error: {e}"
+            )
             return []
 
-    async def fetch_agents_with_skills(self) -> List[Tuple[WorkspaceAgent, List[WorkspaceSkill]]]:
+    async def fetch_agents_with_skills(
+        self,
+    ) -> list[tuple[WorkspaceAgent, list[WorkspaceSkill]]]:
         """Fetch all agents with their skills in one operation."""
         agents = await self.fetch_agents()
 
@@ -292,7 +318,7 @@ class AgentAPIService:
         logger.info(f"[AGENT-API] Total: {len(results)} agents with skills loaded")
         return results
 
-    async def fetch_agent_by_id(self, agent_id: int) -> Optional[WorkspaceAgent]:
+    async def fetch_agent_by_id(self, agent_id: int) -> WorkspaceAgent | None:
         """Fetch a single agent by ID."""
         agents = await self.fetch_agents(agent_id=str(agent_id))
         return agents[0] if agents else None
@@ -300,7 +326,7 @@ class AgentAPIService:
 
 def fetch_agent_by_id_sync(
     agent_id: int, api_key: str, organization_id: int
-) -> Optional[WorkspaceAgent]:
+) -> WorkspaceAgent | None:
     """
     Sync fetch of agent by ID. For use in sync contexts (tool loading).
 

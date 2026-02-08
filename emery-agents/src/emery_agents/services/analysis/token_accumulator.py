@@ -14,7 +14,6 @@ async/threading contexts created by DSPy.
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from ..models.provider import TokenUsage
 from ..models.registry import calculate_token_cost
@@ -41,7 +40,7 @@ class TokenAccumulator:
         """Get the embedding usage tracker for the current request."""
         return self.embedding_tracker
 
-    def extract_llm_usage(self) -> Optional[TokenUsage]:
+    def extract_llm_usage(self) -> TokenUsage | None:
         """Extract accumulated LLM usage for the current request."""
         input_tokens, output_tokens, model_name = self.llm_tracker.get_totals()
         if input_tokens == 0 and output_tokens == 0:
@@ -60,7 +59,7 @@ class TokenAccumulator:
             model_name=model_name,
         )
 
-    def extract_embedding_usage(self) -> Optional[TokenUsage]:
+    def extract_embedding_usage(self) -> TokenUsage | None:
         """Extract accumulated embedding usage for the current request."""
         total_tokens, model_name = self.embedding_tracker.get_totals()
         if total_tokens == 0:
@@ -81,9 +80,9 @@ class TokenAccumulator:
 
     @staticmethod
     def merge_usage(
-        base: Optional[TokenUsage],
-        additional: Optional[TokenUsage],
-    ) -> Optional[TokenUsage]:
+        base: TokenUsage | None,
+        additional: TokenUsage | None,
+    ) -> TokenUsage | None:
         """Merge two TokenUsage objects by summing their values."""
         if base is None:
             return additional

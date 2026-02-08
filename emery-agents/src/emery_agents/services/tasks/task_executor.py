@@ -18,19 +18,21 @@ from __future__ import annotations
 import logging
 import os
 import time
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import AsyncIterator, Dict, List, Literal, Optional, TypedDict
+from typing import Literal, TypedDict
 
 from emery_agents.api import AgentAPIService, SkillAPIService
 from emery_agents.entities.skill_config import SkillConfig
 from emery_agents.tools.execution.dynamic_execution import fetch_skill_execution_config
 from emery_agents.tools.provider import ToolProvider
-from ..agents.executor import AgentExecutor
-from ..credentials import ResolvedCredentials, CredentialSource
+
 from ...entities.execution_context import ExecutionContext
 from ...entities.task import TaskRequest
 from ...types import ExecutionMode
+from ..agents.executor import AgentExecutor
+from ..credentials import ResolvedCredentials
 
 logger = logging.getLogger(__name__)
 
@@ -42,21 +44,23 @@ logger = logging.getLogger(__name__)
 
 class TaskProgressDict(TypedDict, total=False):
     """Progress event yielded during task execution."""
+
     status: str  # "in_progress", "completed", "failed"
     output: str  # JSON-encoded output data
     error_message: str
     timestamp_ms: int
     progress_percent: float
     task_id: str  # Added by TaskExecutor
-    token_usage: Optional[Dict[str, int]]
+    token_usage: dict[str, int] | None
 
 
 class TaskInstructionsDict(TypedDict, total=False):
     """Task instructions structure."""
+
     task: str
-    images: Optional[List[Dict[str, str]]]
-    tools: Optional[List[Dict[str, object]]]
-    metadata: Optional[Dict[str, object]]
+    images: list[dict[str, str]] | None
+    tools: list[dict[str, object]] | None
+    metadata: dict[str, object] | None
 
 
 @dataclass
@@ -73,30 +77,32 @@ class TaskData:
     organization_id: int
 
     # Assignment - None = org-level task
-    agent_id: Optional[int] = None
-    skill_id: Optional[int] = None
+    agent_id: int | None = None
+    skill_id: int | None = None
 
     # Execution details
-    instructions: TaskInstructionsDict = field(default_factory=lambda: TaskInstructionsDict(task=""))
-    skill_inputs: Dict[str, object] = field(default_factory=dict)
+    instructions: TaskInstructionsDict = field(
+        default_factory=lambda: TaskInstructionsDict(task="")
+    )
+    skill_inputs: dict[str, object] = field(default_factory=dict)
 
     # Metadata
-    created_by: Optional[str] = None
+    created_by: str | None = None
     trigger_type: Literal["manual", "automation", "chat", "api", "webhook"] = "manual"
 
     # Model selection
-    agent_model: Optional[str] = None
-    org_model: Optional[str] = None
+    agent_model: str | None = None
+    org_model: str | None = None
 
     # Workspace
-    workspace_path: Optional[Path] = None
+    workspace_path: Path | None = None
 
     # API key for tool auth (passed via proto, agent key for agent tasks)
-    user_api_key: Optional[str] = None
+    user_api_key: str | None = None
 
     # Original TaskRequest (for full context building via AgentExecutor)
     # Used for background tasks where we need full proto context
-    _task_request: Optional[TaskRequest] = None
+    _task_request: TaskRequest | None = None
 
 
 class TaskExecutor:
@@ -126,8 +132,8 @@ class TaskExecutor:
 
     def __init__(
         self,
-        agent_executor: "AgentExecutor",
-        api_service: Optional[AgentAPIService] = None,
+        agent_executor: AgentExecutor,
+        api_service: AgentAPIService | None = None,
     ):
         """
         Initialize task executor.
@@ -188,8 +194,10 @@ class TaskExecutor:
             # 4. Pre-fetch skill config from API if task executes a skill
             # Skills are no longer sent via gRPC proto — fetch from API with resolved credentials
             pre_fetched_skill = None
-            if (task_data._task_request is not None
-                    and task_data._task_request.skill_name):
+            if (
+                task_data._task_request is not None
+                and task_data._task_request.skill_name
+            ):
                 pre_fetched_skill = await self._fetch_skill_for_task(
                     skill_id=task_data._task_request.skill_id,
                     skill_name=task_data._task_request.skill_name,
@@ -248,7 +256,7 @@ class TaskExecutor:
     async def execute_with_context(
         self,
         task_id: str,
-        context: "ExecutionContext",
+        context: ExecutionContext,
     ) -> AsyncIterator[TaskProgressDict]:
         """
         Execute with a pre-built ExecutionContext.
@@ -341,7 +349,9 @@ class TaskExecutor:
 
         if task_data.agent_id is None:
             # Org-level task - use user credentials
-            logger.debug(f"[TASK-{task_data.task_id[:8]}] Org-level task, using user credentials")
+            logger.debug(
+                f"[TASK-{task_data.task_id[:8]}] Org-level task, using user credentials"
+            )
             return await self._load_user_credentials(
                 task_data.created_by,
                 task_data.organization_id,
@@ -359,7 +369,7 @@ class TaskExecutor:
 
     async def _load_user_credentials(
         self,
-        user_id: Optional[str],
+        user_id: str | None,
         organization_id: int,
     ) -> ResolvedCredentials:
         """
@@ -440,7 +450,7 @@ class TaskExecutor:
                 source="agent",
             )
 
-    def _extract_api_key_from_agent(self, agent_data: Dict[str, object]) -> Optional[str]:
+    def _extract_api_key_from_agent(self, agent_data: dict[str, object]) -> str | None:
         """Extract api_key from agent's tool configurations."""
         tools = agent_data.get("tools", [])
         if not isinstance(tools, list):
@@ -456,11 +466,11 @@ class TaskExecutor:
 
     async def _fetch_skill_for_task(
         self,
-        skill_id: Optional[int],
+        skill_id: int | None,
         skill_name: str,
         api_key: str,
         org_id: str,
-    ) -> Optional[SkillConfig]:
+    ) -> SkillConfig | None:
         """
         Fetch full skill config from API for task execution.
 
@@ -505,7 +515,7 @@ class TaskExecutor:
         self,
         task_data: TaskData,
         credentials: ResolvedCredentials,
-    ) -> "ExecutionContext":
+    ) -> ExecutionContext:
         """
         Build ExecutionContext for AgentExecutor.
 
@@ -554,7 +564,7 @@ class TaskExecutor:
         instructions: TaskInstructionsDict = {"task": task_text}
 
         # Extract skill inputs from trigger_data
-        skill_inputs: Dict[str, object] = {}
+        skill_inputs: dict[str, object] = {}
         if task_request.trigger_data and task_request.trigger_data.skill_inputs:
             for input_val in task_request.trigger_data.skill_inputs:
                 skill_inputs[input_val.name] = input_val.value

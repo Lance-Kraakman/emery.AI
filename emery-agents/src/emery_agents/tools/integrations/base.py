@@ -9,13 +9,14 @@ from __future__ import annotations
 import ast
 import math
 import operator
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any
 
 from emery_agents.services.sandbox import BwrapExecutor
 
 
-def create_file_reader_tool(workspace_path: Optional[Path] = None) -> Callable[[str], str]:
+def create_file_reader_tool(workspace_path: Path | None = None) -> Callable[[str], str]:
     """Factory: Create file reader that uses bwrap sandbox when workspace_path is provided.
 
     Args:
@@ -40,7 +41,7 @@ def create_file_reader_tool(workspace_path: Optional[Path] = None) -> Callable[[
         else:
             # Fallback for non-sandboxed context (shouldn't happen in production)
             try:
-                with open(file_path, "r", encoding="utf-8") as f:
+                with open(file_path, encoding="utf-8") as f:
                     return f.read()
             except FileNotFoundError:
                 return f"Error: File '{file_path}' not found."
@@ -112,7 +113,9 @@ def create_calculator_tool() -> Callable[[str], str]:
                 operand = _eval_node(node.operand)
                 op = safe_ops.get(type(node.op))
                 if op is None:
-                    raise ValueError(f"Unsupported unary operator: {type(node.op).__name__}")
+                    raise ValueError(
+                        f"Unsupported unary operator: {type(node.op).__name__}"
+                    )
                 return op(operand)
             elif isinstance(node, ast.Call):
                 if not isinstance(node.func, ast.Name):

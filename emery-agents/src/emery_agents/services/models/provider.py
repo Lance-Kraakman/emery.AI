@@ -8,18 +8,17 @@ Supports model selection hierarchy: skill > agent > organization > default.
 
 from __future__ import annotations
 
-import os
 import logging
-from typing import Optional
+import os
 from dataclasses import dataclass
 
 import dspy
 
 from .registry import (
-    get_model_metadata,
+    ModelTier,
     get_default_model_for_tier,
     get_default_vision_model,
-    ModelTier,
+    get_model_metadata,
 )
 
 logger = logging.getLogger(__name__)
@@ -28,6 +27,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class TokenUsage:
     """Token usage information with cost tracking."""
+
     input_tokens: int = 0
     output_tokens: int = 0
     total_tokens: int = 0
@@ -52,9 +52,9 @@ class ModelProvider:
 
     def resolve_model_selection(
         self,
-        skill_model: Optional[str] = None,
-        agent_model: Optional[str] = None,
-        org_model: Optional[str] = None,
+        skill_model: str | None = None,
+        agent_model: str | None = None,
+        org_model: str | None = None,
         has_images: bool = False,
     ) -> str:
         """
@@ -76,7 +76,7 @@ class ModelProvider:
         Returns:
             Model ID to use for execution
         """
-        logger.info(f"[MODEL-PROVIDER] resolve_model_selection called with:")
+        logger.info("[MODEL-PROVIDER] resolve_model_selection called with:")
         logger.info(f"[MODEL-PROVIDER] - skill_model: {repr(skill_model)}")
         logger.info(f"[MODEL-PROVIDER] - agent_model: {repr(agent_model)}")
         logger.info(f"[MODEL-PROVIDER] - org_model: {repr(org_model)}")
@@ -107,9 +107,9 @@ class ModelProvider:
 
     def _get_hf_token(self) -> str:
         """Get HuggingFace token from environment."""
-        token = os.getenv('HF_TOKEN')
+        token = os.getenv("HF_TOKEN")
         if not token:
-            raise EnvironmentError(
+            raise OSError(
                 "HF_TOKEN environment variable is required for HuggingFace API access. "
                 "Get your token from https://huggingface.co/settings/tokens"
             )
@@ -145,7 +145,7 @@ class ModelProvider:
             gemini_model_id = actual_model_id.replace("google/", "")
             gemini_api_key = os.environ.get("GEMINI_API_KEY")
             if not gemini_api_key:
-                raise EnvironmentError("GEMINI_API_KEY required for Gemini models")
+                raise OSError("GEMINI_API_KEY required for Gemini models")
             logger.info(f"Creating DSPy LM for Gemini (native): {gemini_model_id}")
             return dspy.LM(
                 f"gemini/{gemini_model_id}",
@@ -181,6 +181,7 @@ class ModelProvider:
                 result = module(...)
         """
         import warnings
+
         warnings.warn(
             "configure_dspy() uses global dspy.settings.configure() which fails under "
             "concurrent async tasks. Use get_dspy_lm() + dspy.context() instead.",

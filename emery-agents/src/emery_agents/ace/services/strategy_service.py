@@ -11,18 +11,21 @@ import hashlib
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
 
 import dspy
 
-from emery_agents.services.protocols import ModelProviderProtocol
-
-from emery_agents.ace.models.strategy_accumulation import ExecutionPattern, StrategyOutcome, StrategyRecord, StrategyRegistry
+from emery_agents.ace.models.strategy_accumulation import (
+    ExecutionPattern,
+    StrategyOutcome,
+    StrategyRecord,
+    StrategyRegistry,
+)
 from emery_agents.entities.models.plan import Plan
 from emery_agents.reasoning.signatures.evaluation import (
     RankStrategies,
     StrategyRankingsResult,
 )
+from emery_agents.services.protocols import ModelProviderProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -50,9 +53,9 @@ class StrategyAccumulationService:
     """
 
     registry: StrategyRegistry = field(default_factory=StrategyRegistry)
-    lm: Optional[dspy.LM] = None
-    model_provider: Optional[ModelProviderProtocol] = None
-    org_model: Optional[str] = None
+    lm: dspy.LM | None = None
+    model_provider: ModelProviderProtocol | None = None
+    org_model: str | None = None
 
     def __post_init__(self) -> None:
         self._module = StrategyRankingModule()
@@ -61,9 +64,9 @@ class StrategyAccumulationService:
         self,
         plan: Plan,
         outcome: StrategyOutcome,
-        success_factors: Optional[List[str]] = None,
-        failure_patterns: Optional[List[str]] = None,
-    ) -> Optional[StrategyRecord]:
+        success_factors: list[str] | None = None,
+        failure_patterns: list[str] | None = None,
+    ) -> StrategyRecord | None:
         """Record execution pattern from a completed plan."""
         if not plan or not plan.steps:
             logger.warning("Cannot record pattern from empty plan")
@@ -99,13 +102,14 @@ class StrategyAccumulationService:
         goal: str,
         max_results: int = 10,
         min_confidence: float = 0.3,
-    ) -> List[StrategyRecord]:
+    ) -> list[StrategyRecord]:
         """
         Find strategies relevant to a goal using DSPy semantic matching.
         """
         # Filter by confidence first
         candidates = [
-            r for r in self.registry.strategies.values()
+            r
+            for r in self.registry.strategies.values()
             if r.confidence_score >= min_confidence
         ]
 
@@ -125,20 +129,24 @@ class StrategyAccumulationService:
     def _llm_rank_strategies(
         self,
         goal: str,
-        candidates: List[StrategyRecord],
-    ) -> List[StrategyRecord]:
+        candidates: list[StrategyRecord],
+    ) -> list[StrategyRecord]:
         """Use DSPy to rank strategies by semantic relevance."""
         # Prepare strategy summaries as JSON
         strategy_summaries = []
         for record in candidates:
             pattern = record.pattern
-            strategy_summaries.append({
-                "pattern_id": pattern.pattern_id,
-                "goal_signature": pattern.goal_signature[:200],
-                "step_count": len(pattern.step_sequence),
-                "agents": ", ".join(set(pattern.agent_sequence)) if pattern.agent_sequence else "none",
-                "success_rate": f"{record.success_rate:.0%}",
-            })
+            strategy_summaries.append(
+                {
+                    "pattern_id": pattern.pattern_id,
+                    "goal_signature": pattern.goal_signature[:200],
+                    "step_count": len(pattern.step_sequence),
+                    "agents": ", ".join(set(pattern.agent_sequence))
+                    if pattern.agent_sequence
+                    else "none",
+                    "success_rate": f"{record.success_rate:.0%}",
+                }
+            )
 
         strategies_json = json.dumps(strategy_summaries)
 
@@ -165,7 +173,7 @@ class StrategyAccumulationService:
             logger.warning(f"Strategy ranking failed: {e}")
             return []
 
-    def format_for_planner(self, strategies: List[StrategyRecord]) -> str:
+    def format_for_planner(self, strategies: list[StrategyRecord]) -> str:
         """Format strategies as guidance text for the planner prompt."""
         if not strategies:
             return ""
@@ -206,14 +214,18 @@ class StrategyAccumulationService:
                 lines.append("")
 
         lines.append("---")
-        lines.append("Consider these patterns when planning, but adapt to the specific context.")
+        lines.append(
+            "Consider these patterns when planning, but adapt to the specific context."
+        )
         lines.append("")
         return "\n".join(lines)
 
     def record_outcome(self, pattern_id: str, outcome: StrategyOutcome) -> None:
         """Record the outcome of using a strategy."""
         self.registry.record_outcome(pattern_id, outcome)
-        logger.info(f"📊 Updated outcome for pattern {pattern_id[:8]}...: {outcome.value}")
+        logger.info(
+            f"📊 Updated outcome for pattern {pattern_id[:8]}...: {outcome.value}"
+        )
 
     def _generate_pattern_id(self, plan: Plan) -> str:
         """Generate a unique pattern ID from plan structure."""
@@ -222,7 +234,7 @@ class StrategyAccumulationService:
 
     def _extract_tool_sequence(self, plan: Plan) -> tuple[str, ...]:
         """Extract tool names from plan steps."""
-        tools: List[str] = []
+        tools: list[str] = []
         for step in plan.steps:
             if step.tool_call:
                 tools.append(step.tool_call)
@@ -232,10 +244,10 @@ class StrategyAccumulationService:
 
 
 def create_strategy_accumulation_service(
-    registry: Optional[StrategyRegistry] = None,
-    lm: Optional[dspy.LM] = None,
-    model_provider: Optional[ModelProviderProtocol] = None,
-    org_model: Optional[str] = None,
+    registry: StrategyRegistry | None = None,
+    lm: dspy.LM | None = None,
+    model_provider: ModelProviderProtocol | None = None,
+    org_model: str | None = None,
 ) -> StrategyAccumulationService:
     """Factory function to create StrategyAccumulationService."""
     return StrategyAccumulationService(

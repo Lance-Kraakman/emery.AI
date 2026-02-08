@@ -8,31 +8,34 @@ DSPy Migration: Uses native ChatMessage format from message_types.py.
 Images are downloaded from S3 URLs and converted to PIL.Image for vision model support.
 Files (PDFs, audio, documents) are processed to extract text content.
 """
-import logging
-import asyncio
-from typing import List, Dict, Any
-from io import BytesIO
-from concurrent.futures import ThreadPoolExecutor
 
-from emery_agents.services.execution.events import ClarifyingQuestion
+import asyncio
+import logging
+from concurrent.futures import ThreadPoolExecutor
+from io import BytesIO
+from typing import Any
 
 import requests
 from PIL import Image
 
+from emery_agents.services.execution.events import ClarifyingQuestion
+
 from ...grpc.generated import agent_worker_pb2
+from ...services.data.file_processor import process_file
 from .message_types import (
     ChatMessage,
-    MessageRole,
-    MessageContentList,
-    TextContentPart,
     ImageContentPart,
+    MessageContentList,
+    MessageRole,
+    TextContentPart,
 )
-from ...services.data.file_processor import process_file
 
 logger = logging.getLogger(__name__)
 
 # Shared thread pool for image downloads to prevent blocking gRPC event loop
-_image_download_pool = ThreadPoolExecutor(max_workers=5, thread_name_prefix="image-download")
+_image_download_pool = ThreadPoolExecutor(
+    max_workers=5, thread_name_prefix="image-download"
+)
 
 
 def _download_image_sync(url: str) -> Image.Image:
@@ -70,7 +73,7 @@ async def download_image_from_url(url: str) -> Image.Image:
 
 
 async def proto_parts_to_content(
-    message_parts: List[agent_worker_pb2.MessagePart]
+    message_parts: list[agent_worker_pb2.MessagePart],
 ) -> MessageContentList:
     """
     Convert protobuf MessageParts to ChatMessage content format.
@@ -90,23 +93,24 @@ async def proto_parts_to_content(
     content_parts: MessageContentList = []
 
     for part in message_parts:
-        if part.HasField('text'):
-            content_parts.append(TextContentPart(
-                type="text",
-                text=part.text.text
-            ))
-        elif part.HasField('image_url'):
+        if part.HasField("text"):
+            content_parts.append(TextContentPart(type="text", text=part.text.text))
+        elif part.HasField("image_url"):
             # Download S3 image and convert to PIL Image with error handling
             image_url = part.image_url.url
             logger.info(f"Processing image URL: {image_url[:80]}...")
 
             try:
                 pil_image = await download_image_from_url(image_url)
-                content_parts.append(ImageContentPart(
-                    type="image",
-                    image=pil_image  # PIL Image object, not URL
-                ))
-                logger.info(f"Successfully added image to content: {pil_image.size} {pil_image.mode}")
+                content_parts.append(
+                    ImageContentPart(
+                        type="image",
+                        image=pil_image,  # PIL Image object, not URL
+                    )
+                )
+                logger.info(
+                    f"Successfully added image to content: {pil_image.size} {pil_image.mode}"
+                )
             except requests.exceptions.RequestException as e:
                 logger.error(f"Failed to download image from URL: {str(e)}")
                 logger.warning("Skipping image, continuing with text-only message")
@@ -114,7 +118,7 @@ async def proto_parts_to_content(
                 logger.error(f"Unexpected error processing image: {str(e)}")
                 logger.warning("Skipping image, continuing with text-only message")
 
-        elif part.HasField('file'):
+        elif part.HasField("file"):
             # Process file (PDF, Word, Excel, audio) and extract content
             file_url = part.file.url
             mime_type = part.file.mime_type
@@ -126,33 +130,31 @@ async def proto_parts_to_content(
 
                 # Add extracted text content
                 if result.text:
-                    content_parts.append(TextContentPart(
-                        type="text",
-                        text=result.text
-                    ))
+                    content_parts.append(TextContentPart(type="text", text=result.text))
                     logger.info(f"Extracted text from file: {len(result.text)} chars")
 
                 # Add page images (scanned PDFs → vision model)
                 if result.images:
                     for img in result.images:
-                        content_parts.append(ImageContentPart(
-                            type="image",
-                            image=img
-                        ))
-                    logger.info(f"Added {len(result.images)} page images from scanned file")
+                        content_parts.append(ImageContentPart(type="image", image=img))
+                    logger.info(
+                        f"Added {len(result.images)} page images from scanned file"
+                    )
 
             except Exception as e:
                 logger.error(f"Failed to process file: {str(e)}")
-                content_parts.append(TextContentPart(
-                    type="text",
-                    text=f'<file_content filename="{filename}" type="error">\n(Processing failed: {str(e)})\n</file_content>'
-                ))
+                content_parts.append(
+                    TextContentPart(
+                        type="text",
+                        text=f'<file_content filename="{filename}" type="error">\n(Processing failed: {str(e)})\n</file_content>',
+                    )
+                )
 
     # Always return list format (no string optimization)
     return content_parts
 
 
-def extract_text_from_parts(message_parts: List[agent_worker_pb2.MessagePart]) -> str:
+def extract_text_from_parts(message_parts: list[agent_worker_pb2.MessagePart]) -> str:
     """
     Extract all text content from message parts for logging/preview.
 
@@ -164,12 +166,12 @@ def extract_text_from_parts(message_parts: List[agent_worker_pb2.MessagePart]) -
     """
     texts = []
     for part in message_parts:
-        if part.HasField('text'):
+        if part.HasField("text"):
             texts.append(part.text.text)
-    return ' '.join(texts)
+    return " ".join(texts)
 
 
-def has_images(message_parts: List[agent_worker_pb2.MessagePart]) -> bool:
+def has_images(message_parts: list[agent_worker_pb2.MessagePart]) -> bool:
     """
     Check if any message part contains an image.
 
@@ -183,17 +185,17 @@ def has_images(message_parts: List[agent_worker_pb2.MessagePart]) -> bool:
         True if images present, False otherwise
     """
     for part in message_parts:
-        if part.HasField('image_url'):
+        if part.HasField("image_url"):
             return True
-        if part.HasField('file') and part.file.mime_type.startswith('image/'):
+        if part.HasField("file") and part.file.mime_type.startswith("image/"):
             return True
     return False
 
 
 async def build_conversation_messages(
-    history: List[agent_worker_pb2.HistoryMessage],
-    current_message_parts: List[agent_worker_pb2.MessagePart]
-) -> List[ChatMessage]:
+    history: list[agent_worker_pb2.HistoryMessage],
+    current_message_parts: list[agent_worker_pb2.MessagePart],
+) -> list[ChatMessage]:
     """
     Build complete conversation as ChatMessage objects.
 
@@ -213,22 +215,20 @@ async def build_conversation_messages(
     # Add conversation history
     for hist_msg in history:
         content = await proto_parts_to_content(hist_msg.content_parts)
-        messages.append(ChatMessage(
-            role=MessageRole(hist_msg.role.lower()),
-            content=content
-        ))
+        messages.append(
+            ChatMessage(role=MessageRole(hist_msg.role.lower()), content=content)
+        )
 
     # Add current user message
     content = await proto_parts_to_content(current_message_parts)
-    messages.append(ChatMessage(
-        role=MessageRole.USER,
-        content=content
-    ))
+    messages.append(ChatMessage(role=MessageRole.USER, content=content))
 
     return messages
 
 
-def format_clarifying_questions(questions: "List[ClarifyingQuestion]") -> List[Dict[str, Any]]:
+def format_clarifying_questions(
+    questions: "list[ClarifyingQuestion]",
+) -> list[dict[str, Any]]:
     """
     Format ClarifyingQuestion objects as structured data for serialization.
 
@@ -239,9 +239,9 @@ def format_clarifying_questions(questions: "List[ClarifyingQuestion]") -> List[D
         List of dicts with questionId, question, questionType, required, allowOther,
         and optional options/context
     """
-    questions_data: List[Dict[str, Any]] = []
+    questions_data: list[dict[str, Any]] = []
     for i, q in enumerate(questions):
-        q_dict: Dict[str, Any] = {
+        q_dict: dict[str, Any] = {
             "questionId": f"q_{i}",
             "question": q.question,
             "questionType": q.question_type,  # 'text' | 'single_select' | 'multi_select'

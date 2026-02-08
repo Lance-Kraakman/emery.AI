@@ -8,13 +8,12 @@ supporting dedicated endpoints, Inference API, and Google Gemini models.
 from __future__ import annotations
 
 import os
-from typing import Optional
 
 import dspy
 
 from emery_agents.services.models import (
-    ModelTier,
     ModelMetadata,
+    ModelTier,
     get_default_model_for_tier,
     get_model_metadata,
 )
@@ -38,10 +37,10 @@ class DSPyModelProvider:
 
     def get_dspy_lm(
         self,
-        model_id: Optional[str] = None,
-        skill_model: Optional[str] = None,
-        agent_model: Optional[str] = None,
-        org_model: Optional[str] = None,
+        model_id: str | None = None,
+        skill_model: str | None = None,
+        agent_model: str | None = None,
+        org_model: str | None = None,
     ) -> dspy.LM:
         """
         Get DSPy LM using the model selection hierarchy.
@@ -113,10 +112,10 @@ class DSPyModelProvider:
 
 
 def get_dspy_lm(
-    model_id: Optional[str] = None,
-    skill_model: Optional[str] = None,
-    agent_model: Optional[str] = None,
-    org_model: Optional[str] = None,
+    model_id: str | None = None,
+    skill_model: str | None = None,
+    agent_model: str | None = None,
+    org_model: str | None = None,
 ) -> dspy.LM:
     """
     Get a DSPy LM without calling dspy.configure() (safe for async contexts).
@@ -146,10 +145,10 @@ def get_dspy_lm(
 
 
 def configure_dspy(
-    model_id: Optional[str] = None,
-    skill_model: Optional[str] = None,
-    agent_model: Optional[str] = None,
-    org_model: Optional[str] = None,
+    model_id: str | None = None,
+    skill_model: str | None = None,
+    agent_model: str | None = None,
+    org_model: str | None = None,
 ) -> dspy.LM:
     """
     Configure DSPy with a model from the registry (for sync contexts only).

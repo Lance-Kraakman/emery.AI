@@ -7,7 +7,8 @@ Ported from tools/step_output_tool.py as DSPy-compatible function.
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -77,18 +78,22 @@ def create_step_output_tool(
         normalized_steps: list[dict[str, Any]] = []
         for step in steps:
             if isinstance(step, dict):
-                normalized_steps.append({
-                    "description": step.get("description", str(step)),
-                    "target_agent": step.get("target_agent"),
-                    "phase_name": step.get("phase_name"),
-                    "phase_order": step.get("phase_order"),
-                })
+                normalized_steps.append(
+                    {
+                        "description": step.get("description", str(step)),
+                        "target_agent": step.get("target_agent"),
+                        "phase_name": step.get("phase_name"),
+                        "phase_order": step.get("phase_order"),
+                    }
+                )
             else:
                 logger.warning(f"Unexpected step format: {type(step).__name__}")
-                normalized_steps.append({
-                    "description": str(step),
-                    "target_agent": None,
-                })
+                normalized_steps.append(
+                    {
+                        "description": str(step),
+                        "target_agent": None,
+                    }
+                )
 
         collector._steps = normalized_steps
         collector._analysis = analysis or ""

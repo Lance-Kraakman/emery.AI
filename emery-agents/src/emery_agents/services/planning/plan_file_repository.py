@@ -11,7 +11,6 @@ plans are stored here.
 import json
 import logging
 from pathlib import Path
-from typing import Optional
 
 from ...entities.models.plan import Plan
 
@@ -46,7 +45,7 @@ class PlanFileRepository:
         logger.info(f"Saved plan {plan.id} to {path}")
         return path
 
-    def load(self, plan_id: str) -> Optional[Plan]:
+    def load(self, plan_id: str) -> Plan | None:
         """Load plan from filesystem by ID.
 
         Args:
@@ -73,7 +72,7 @@ class PlanFileRepository:
         """
         return [p.stem for p in self._plans_dir.glob("*.json")]
 
-    def load_latest(self) -> Optional[Plan]:
+    def load_latest(self) -> Plan | None:
         """Load the most recently modified plan.
 
         Returns:

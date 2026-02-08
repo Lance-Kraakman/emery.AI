@@ -13,21 +13,25 @@ Extended with ACE-inspired execution tracking:
 - ExecutionEvolutionTracker: Context change detection
 """
 
+import json
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Optional, Dict, Any, TYPE_CHECKING
 from enum import Enum
-
-import json
+from typing import TYPE_CHECKING, Any, Optional
 
 from emery_agents.entities.models.plan import PlanStepStatus
 
 if TYPE_CHECKING:
-    from emery_agents.ace import ExecutionContext, ExecutionEvolutionTracker, StrategyRegistry
+    from emery_agents.ace import (
+        ExecutionContext,
+        ExecutionEvolutionTracker,
+        StrategyRegistry,
+    )
 
 
 class LedgerEventType(Enum):
     """Types of events recorded in the ledger."""
+
     PLAN_CREATED = "plan_created"
     PLAN_APPROVED = "plan_approved"
     PLAN_REJECTED = "plan_rejected"
@@ -44,13 +48,14 @@ class LedgerEventType(Enum):
 @dataclass
 class LedgerEvent:
     """A single event in the execution ledger."""
+
     event_type: LedgerEventType
     timestamp: datetime
-    step_id: Optional[str] = None
-    step_name: Optional[str] = None
-    data: Optional[Dict[str, Any]] = None
+    step_id: str | None = None
+    step_name: str | None = None
+    data: dict[str, Any] | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize to dictionary."""
         return {
             "event_type": self.event_type.value,
@@ -64,15 +69,16 @@ class LedgerEvent:
 @dataclass
 class StepState:
     """Current state of a step in the ledger."""
+
     step_id: str
     step_name: str
     status: str  # Uses PlanStepStatus.value for consistency
-    result: Optional[str] = None
-    error: Optional[str] = None
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
+    result: str | None = None
+    error: str | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize to dictionary."""
         return {
             "step_id": self.step_id,
@@ -81,7 +87,9 @@ class StepState:
             "result": self.result,
             "error": self.error,
             "started_at": self.started_at.isoformat() if self.started_at else None,
-            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "completed_at": self.completed_at.isoformat()
+            if self.completed_at
+            else None,
         }
 
 
@@ -96,10 +104,11 @@ class TaskLedger:
     - Decide if goal is achieved
     - Determine if replanning is needed
     """
+
     task_id: str
     goal: str
-    steps: Dict[str, StepState] = field(default_factory=dict)
-    events: List[LedgerEvent] = field(default_factory=list)
+    steps: dict[str, StepState] = field(default_factory=dict)
+    events: list[LedgerEvent] = field(default_factory=list)
     created_at: datetime = field(default_factory=datetime.utcnow)
 
     # Execution metadata
@@ -108,7 +117,9 @@ class TaskLedger:
     evaluation_count: int = 0
 
     # Planning metadata for evaluator visibility
-    strategy_guidance: Optional[str] = None  # ACE: Proven patterns from past executions that influenced planning
+    strategy_guidance: str | None = (
+        None  # ACE: Proven patterns from past executions that influenced planning
+    )
 
     # ACE-inspired execution tracking (initialized via init_execution_tracking)
     execution_context: Optional["ExecutionContext"] = None
@@ -125,7 +136,11 @@ class TaskLedger:
         - Evolution tracking (detect context degradation)
         """
         # Import from ACE package (avoid circular imports at module level)
-        from emery_agents.ace import ExecutionContext, ExecutionEvolutionTracker, StrategyRegistry
+        from emery_agents.ace import (
+            ExecutionContext,
+            ExecutionEvolutionTracker,
+            StrategyRegistry,
+        )
 
         if self.execution_context is None:
             self.execution_context = ExecutionContext(task_id=self.task_id)
@@ -157,7 +172,7 @@ class TaskLedger:
             step_name=self.steps[step_id].step_name,
         )
 
-    def complete_step(self, step_id: str, result: Optional[str] = None) -> None:
+    def complete_step(self, step_id: str, result: str | None = None) -> None:
         """Mark a step as completed."""
         if step_id not in self.steps:
             raise ValueError(f"Step {step_id} not found in ledger")
@@ -191,7 +206,7 @@ class TaskLedger:
             data={"error": error},
         )
 
-    def skip_step(self, step_id: str, reason: Optional[str] = None) -> None:
+    def skip_step(self, step_id: str, reason: str | None = None) -> None:
         """Mark a step as skipped."""
         if step_id not in self.steps:
             raise ValueError(f"Step {step_id} not found in ledger")
@@ -207,7 +222,7 @@ class TaskLedger:
             data={"reason": reason} if reason else None,
         )
 
-    def record_plan_created(self, plan_data: Optional[Dict[str, Any]] = None) -> None:
+    def record_plan_created(self, plan_data: dict[str, Any] | None = None) -> None:
         """Record that a plan was created."""
         self._record_event(LedgerEventType.PLAN_CREATED, data=plan_data)
 
@@ -223,7 +238,7 @@ class TaskLedger:
             data={"reason": reason, "replan_number": self.replan_count},
         )
 
-    def record_evaluation(self, evaluation_result: Dict[str, Any]) -> None:
+    def record_evaluation(self, evaluation_result: dict[str, Any]) -> None:
         """Record an evaluation run."""
         self.evaluation_count += 1
         self._record_event(
@@ -237,35 +252,43 @@ class TaskLedger:
     def _record_event(
         self,
         event_type: LedgerEventType,
-        step_id: Optional[str] = None,
-        step_name: Optional[str] = None,
-        data: Optional[Dict[str, Any]] = None,
+        step_id: str | None = None,
+        step_name: str | None = None,
+        data: dict[str, Any] | None = None,
     ) -> None:
         """Record an event in the ledger."""
-        self.events.append(LedgerEvent(
-            event_type=event_type,
-            timestamp=datetime.utcnow(),
-            step_id=step_id,
-            step_name=step_name,
-            data=data,
-        ))
+        self.events.append(
+            LedgerEvent(
+                event_type=event_type,
+                timestamp=datetime.utcnow(),
+                step_id=step_id,
+                step_name=step_name,
+                data=data,
+            )
+        )
 
     # Query methods for evaluator
 
     @property
     def completed_steps(self) -> int:
         """Count of completed steps."""
-        return sum(1 for s in self.steps.values() if s.status == PlanStepStatus.COMPLETED.value)
+        return sum(
+            1 for s in self.steps.values() if s.status == PlanStepStatus.COMPLETED.value
+        )
 
     @property
     def failed_steps(self) -> int:
         """Count of failed steps."""
-        return sum(1 for s in self.steps.values() if s.status == PlanStepStatus.FAILED.value)
+        return sum(
+            1 for s in self.steps.values() if s.status == PlanStepStatus.FAILED.value
+        )
 
     @property
     def pending_steps(self) -> int:
         """Count of pending steps."""
-        return sum(1 for s in self.steps.values() if s.status == PlanStepStatus.PENDING.value)
+        return sum(
+            1 for s in self.steps.values() if s.status == PlanStepStatus.PENDING.value
+        )
 
     @property
     def is_complete(self) -> bool:
@@ -295,7 +318,7 @@ class TaskLedger:
         done = sum(1 for s in self.steps.values() if s.status in terminal_statuses)
         return (done / self.total_steps) * 100
 
-    def get_step_results(self) -> Dict[str, Optional[str]]:
+    def get_step_results(self) -> dict[str, str | None]:
         """Get results from all completed steps (including empty results)."""
         return {
             step_id: step.result
@@ -303,19 +326,19 @@ class TaskLedger:
             if step.status == PlanStepStatus.COMPLETED.value
         }
 
-    def get_recent_events(self, limit: int = 10) -> List[LedgerEvent]:
+    def get_recent_events(self, limit: int = 10) -> list[LedgerEvent]:
         """Get most recent events."""
         return self.events[-limit:] if self.events else []
 
     # Serialization for evaluator
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Serialize ledger to dictionary for evaluator input.
 
         This is what gets passed to the evaluator agent to assess progress.
         """
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "task_id": self.task_id,
             "goal": self.goal,
             "created_at": self.created_at.isoformat(),
@@ -330,10 +353,7 @@ class TaskLedger:
                 "replan_count": self.replan_count,
                 "evaluation_count": self.evaluation_count,
             },
-            "steps": {
-                step_id: step.to_dict()
-                for step_id, step in self.steps.items()
-            },
+            "steps": {step_id: step.to_dict() for step_id, step in self.steps.items()},
             "recent_events": [e.to_dict() for e in self.get_recent_events()],
             "step_results": self.get_step_results(),
         }
@@ -364,7 +384,7 @@ class TaskLedger:
         - Curated insights from step results
         - Degradation warnings if context is degrading
         """
-        summary: Dict[str, Any] = {
+        summary: dict[str, Any] = {
             "goal": self.goal,
             "progress": f"{self.completed_steps}/{self.total_steps}",
             "has_failures": self.has_failures,
@@ -381,13 +401,19 @@ class TaskLedger:
 
         # Add degradation warning if context is degrading
         if self.evolution_tracker and self.evolution_tracker.detect_degradation():
-            summary["context_warning"] = "Context degradation detected - consider recovery"
-            summary["degradation_warnings"] = self.evolution_tracker.degradation_warnings[-3:]
+            summary["context_warning"] = (
+                "Context degradation detected - consider recovery"
+            )
+            summary["degradation_warnings"] = (
+                self.evolution_tracker.degradation_warnings[-3:]
+            )
 
-        return json.dumps(summary, separators=(',', ':'))
+        return json.dumps(summary, separators=(",", ":"))
 
 
-def create_ledger_from_plan(task_id: str, goal: str, plan_steps: List[Dict[str, Any]]) -> TaskLedger:
+def create_ledger_from_plan(
+    task_id: str, goal: str, plan_steps: list[dict[str, Any]]
+) -> TaskLedger:
     """
     Create a TaskLedger from a plan's steps.
 

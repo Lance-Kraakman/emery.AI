@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import builtins
 import json
 import logging
-from dataclasses import dataclass, field as dataclass_field
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass
+from dataclasses import field as dataclass_field
+from typing import Any
 
 from .http_client import make_request, unwrap_entity
 
@@ -18,10 +20,10 @@ class Table:
 
     id: int
     name: str
-    database_id: Optional[int] = None
+    database_id: int | None = None
     description: str = ""
     field_count: int = 0
-    fields: List[Any] = dataclass_field(default_factory=list)
+    fields: list[Any] = dataclass_field(default_factory=list)
     slug: str = ""
 
 
@@ -35,16 +37,18 @@ class TableAPI:
         table = api.get(456)
     """
 
-    def __init__(self, api_key: str, org_id: str, extra_headers: dict[str, str] | None = None):
+    def __init__(
+        self, api_key: str, org_id: str, extra_headers: dict[str, str] | None = None
+    ):
         self._api_key = api_key
         self._org_id = org_id
         self._extra_headers = extra_headers
 
     def list(
         self,
-        database_id: Optional[int] = None,
-        filters: Optional[Dict[str, Any]] = None,
-    ) -> List[Table]:
+        database_id: int | None = None,
+        filters: dict[str, Any] | None = None,
+    ) -> builtins.list[Table]:
         """List tables, optionally filtered by database.
 
         Args:
@@ -94,7 +98,7 @@ class TableAPI:
             logger.debug(f"Table parse failed: {e}")
             return []
 
-    def get(self, table_id: int) -> Optional[Table]:
+    def get(self, table_id: int) -> Table | None:
         """Get table by ID.
 
         Args:
@@ -136,7 +140,7 @@ class TableAPI:
 
     def create(
         self, name: str, database_id: int, description: str = ""
-    ) -> Optional[Table]:
+    ) -> Table | None:
         """Create table.
 
         Args:
@@ -180,7 +184,7 @@ class TableAPI:
             logger.warning(f"Table create: missing field {e}: {result[:200]}")
             return None
 
-    def update(self, table_id: int, data: Dict[str, Any]) -> Optional[Table]:
+    def update(self, table_id: int, data: dict[str, Any]) -> Table | None:
         """Update table.
 
         Args:

@@ -8,7 +8,7 @@ Not to be confused with StepToolConfig (skill step tool references in skill_conf
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict
+from typing import Any
 
 
 @dataclass
@@ -20,6 +20,7 @@ class ToolConfig:
         version: Tool version string
         config: Key-value configuration (api_key, base_url, skill_id, etc.)
     """
+
     name: str
     version: str = ""
-    config: Dict[str, Any] = field(default_factory=dict)
+    config: dict[str, Any] = field(default_factory=dict)

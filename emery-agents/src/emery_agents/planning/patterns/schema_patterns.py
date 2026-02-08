@@ -4,15 +4,14 @@ Planning patterns for schema_builder capability.
 Migrated from: reasoning/capabilities/schema_builder.py PLANNING_GUIDANCE
 """
 
-from emery_agents.planning.pattern import PlanningPattern, AutoApprovePolicy
-
+from emery_agents.planning.pattern import AutoApprovePolicy, PlanningPattern
 
 SCHEMA_DESIGN_PATTERN = PlanningPattern(
     id="plan:schema_design",
     name="Database Schema Design",
     description="Planning patterns for creating database tables and fields. "
-                "Use Emery field types (text, number, boolean, single-select, etc.), "
-                "NOT SQL types (VARCHAR, INT, etc.).",
+    "Use Emery field types (text, number, boolean, single-select, etc.), "
+    "NOT SQL types (VARCHAR, INT, etc.).",
     triggers=[
         "create table",
         "database schema",
@@ -57,7 +56,9 @@ RELATIONSHIPS:
     examples=[
         {
             "request": "Add a phone field to the contacts table",
-            "plan_steps": ["Add field 'phone' (phone) to table 'contacts'. Verify: phone field exists."],
+            "plan_steps": [
+                "Add field 'phone' (phone) to table 'contacts'. Verify: phone field exists."
+            ],
         },
         {
             "request": "Create a contacts table with name and email",
@@ -89,7 +90,7 @@ SCHEMA_MODIFICATION_PATTERN = PlanningPattern(
     id="plan:schema_modify",
     name="Schema Modification",
     description="Patterns for modifying existing tables - adding, updating, or removing fields. "
-                "Check workspace_context for existing tables before modifying.",
+    "Check workspace_context for existing tables before modifying.",
     triggers=[
         "add field",
         "add column",
@@ -118,7 +119,9 @@ IMPORTANT:
     examples=[
         {
             "request": "Add a phone number to my contacts",
-            "plan_steps": ["Add field 'phone' (phone) to table 'contacts'. Verify: phone field exists on contacts."],
+            "plan_steps": [
+                "Add field 'phone' (phone) to table 'contacts'. Verify: phone field exists on contacts."
+            ],
         },
     ],
     common_mistakes=[
@@ -159,7 +162,9 @@ DESTRUCTIVE OPERATION - Always requires user approval.
     examples=[
         {
             "request": "Delete the old_data table",
-            "plan_steps": ["Delete table 'old_data'. WARNING: All data will be permanently deleted. Verify: table no longer exists."],
+            "plan_steps": [
+                "Delete table 'old_data'. WARNING: All data will be permanently deleted. Verify: table no longer exists."
+            ],
         },
     ],
     common_mistakes=[
@@ -175,7 +180,7 @@ DATABASE_CREATE_PATTERN = PlanningPattern(
     id="plan:database_create",
     name="Database Creation",
     description="Planning patterns for creating new databases (containers for tables). "
-                "Databases are organizational containers that group related tables together.",
+    "Databases are organizational containers that group related tables together.",
     triggers=[
         "create database",
         "new database",

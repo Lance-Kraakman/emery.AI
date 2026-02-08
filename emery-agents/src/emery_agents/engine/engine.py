@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from .paths import EnginePaths
 
@@ -39,9 +39,9 @@ class AgentEngine:
         self.base_path = base_path
         self.paths = EnginePaths(base_path / workspace_id)
 
-        self._memory: Optional["MemoryService"] = None
-        self._plans: Optional["PlanFileRepository"] = None
-        self._sandbox: Optional["BwrapExecutor"] = None
+        self._memory: MemoryService | None = None
+        self._plans: PlanFileRepository | None = None
+        self._sandbox: BwrapExecutor | None = None
         self._initialized = False
 
     def initialize(self) -> None:
@@ -51,7 +51,9 @@ class AgentEngine:
         self.paths.ensure_structure()
         self.paths.fix_permissions()
         self._initialized = True
-        logger.info(f"AgentEngine initialized: {self.workspace_type}/{self.workspace_id}")
+        logger.info(
+            f"AgentEngine initialized: {self.workspace_type}/{self.workspace_id}"
+        )
 
     def _ensure_initialized(self) -> None:
         if not self._initialized:
@@ -63,6 +65,7 @@ class AgentEngine:
         self._ensure_initialized()
         if self._memory is None:
             from ..services.memory import MemoryService
+
             self._memory = MemoryService(
                 workspace_type=self.workspace_type,
                 workspace_id=self.workspace_id,
@@ -76,6 +79,7 @@ class AgentEngine:
         self._ensure_initialized()
         if self._plans is None:
             from ..services.planning.plan_file_repository import PlanFileRepository
+
             self._plans = PlanFileRepository(
                 base_path=self.base_path,
                 workspace_id=self.workspace_id,
@@ -88,10 +92,13 @@ class AgentEngine:
         self._ensure_initialized()
         if self._sandbox is None:
             from ..services.sandbox.bwrap_executor import BwrapExecutor
+
             self._sandbox = BwrapExecutor(base_path=self.base_path)
         return self._sandbox
 
-    def execute_command(self, command: str, allow_network: bool = False, timeout: int = 300) -> str:
+    def execute_command(
+        self, command: str, allow_network: bool = False, timeout: int = 300
+    ) -> str:
         """Execute command in sandboxed workspace."""
         result = self.sandbox.execute(
             command=command,
@@ -115,9 +122,9 @@ class AgentEngine:
 
     def __exit__(
         self,
-        exc_type: Optional[type],
-        exc_val: Optional[BaseException],
-        exc_tb: Optional[object],
+        exc_type: type | None,
+        exc_val: BaseException | None,
+        exc_tb: object | None,
     ) -> None:
         self.cleanup()
 

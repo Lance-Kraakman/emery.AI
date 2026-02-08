@@ -4,14 +4,13 @@ Planning patterns for external service integrations.
 These patterns always require explicit approval due to OAuth requirements.
 """
 
-from emery_agents.planning.pattern import PlanningPattern, AutoApprovePolicy
-
+from emery_agents.planning.pattern import AutoApprovePolicy, PlanningPattern
 
 EXTERNAL_INTEGRATION_PATTERN = PlanningPattern(
     id="plan:external_integration",
     name="External Service Integration",
     description="Patterns for connecting to external services like Gmail, Slack, etc. "
-                "Requires OAuth connection and always needs user approval.",
+    "Requires OAuth connection and always needs user approval.",
     triggers=[
         "send email",
         "slack message",

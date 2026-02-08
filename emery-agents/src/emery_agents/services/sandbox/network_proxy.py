@@ -21,7 +21,6 @@ import logging
 import os
 import socket
 from ipaddress import IPv4Network, IPv6Network, ip_address
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -30,13 +29,13 @@ TUNNEL_BUFFER = 65536
 
 # Blocked IP ranges beyond what ipaddress.is_private/is_reserved covers
 BLOCKED_EXTRA_V4 = [
-    IPv4Network("100.64.0.0/10"),       # Carrier-grade NAT / AWS internal
-    IPv4Network("169.254.169.254/32"),   # AWS EC2 instance metadata (IAM creds)
-    IPv4Network("169.254.170.2/32"),     # ECS task credential endpoint
+    IPv4Network("100.64.0.0/10"),  # Carrier-grade NAT / AWS internal
+    IPv4Network("169.254.169.254/32"),  # AWS EC2 instance metadata (IAM creds)
+    IPv4Network("169.254.170.2/32"),  # ECS task credential endpoint
 ]
 
 BLOCKED_EXTRA_V6 = [
-    IPv6Network("fd00::/8"),             # Unique local (sometimes missed by is_private)
+    IPv6Network("fd00::/8"),  # Unique local (sometimes missed by is_private)
 ]
 
 
@@ -63,7 +62,7 @@ def is_blocked_ip(ip_str: str) -> bool:
         return any(addr in net for net in BLOCKED_EXTRA_V6)
 
 
-def resolve_and_check(host: str, port: int) -> Optional[str]:
+def resolve_and_check(host: str, port: int) -> str | None:
     """Resolve hostname and check ALL resolved IPs against blocklist.
 
     Returns the first allowed IP address, or None if all are blocked.
@@ -151,7 +150,7 @@ async def handle_client(
                 client_reader, client_writer, method, parts[1], parts[2], raw_line, peer
             )
 
-    except asyncio.TimeoutError:
+    except TimeoutError:
         logger.debug(f"Client {peer} timed out waiting for request")
     except Exception as e:
         logger.error(f"Error handling client {peer}: {e}")
@@ -326,7 +325,7 @@ class SandboxProxy:
     def __init__(self, socket_path: str, max_connections: int = 50):
         self.socket_path = socket_path
         self._semaphore = asyncio.Semaphore(max_connections)
-        self._server: Optional[asyncio.AbstractServer] = None
+        self._server: asyncio.AbstractServer | None = None
 
     async def _accept_client(
         self,

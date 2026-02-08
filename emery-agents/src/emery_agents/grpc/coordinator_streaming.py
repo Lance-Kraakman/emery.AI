@@ -6,53 +6,57 @@ Replaces the old ExecutionCoordinator-based two-phase execution.
 """
 
 import logging
+from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import AsyncIterator, Optional, List, Any, Dict
+from typing import Any
 
 from langgraph.types import Command
 from PIL import Image
 
+from emery_agents.planning.registry import PlanningRegistry
+from emery_agents.services.analysis.token_accumulator import TokenAccumulator
+from emery_agents.tools.capability_bootstrap import (
+    populate_external_tools,
+    populate_user_skills,
+)
+from emery_agents.tools.capability_registry import CapabilityRegistry
+
+from ..engine import AgentEngine
+from ..entities.execution_context import ExecutionContext
+from ..entities.models.plan import Plan
+from ..orchestrators import RuntimeContext, create_session_graph
+from ..orchestrators.nodes.planning import _build_workspace_context
+from ..orchestrators.state import DEFAULT_STATE
+from ..services.agents.executor import AgentExecutor
+
+# MemoryService now accessed via engine.memory
+from ..services.context import ConversationMessage, WorkspaceContext
 from ..services.execution.events import (
     ExecutionCompletedEvent,
     FinalSynthesisEvent,
     PlanCreatedEvent,
 )
-from ..entities.models.plan import Plan
-from ..entities.execution_context import ExecutionContext
 from ..tools.tool_modes import ToolMode
-from ..services.agents.executor import AgentExecutor
-from .coordinator_event_converter import convert_coordinator_event
 from .approval_handler import is_approval_response
+from .coordinator_event_converter import convert_coordinator_event
 from .response_types import create_error_response
-from ..orchestrators import create_session_graph, RuntimeContext
-from ..services.context import ConversationMessage
-from emery_agents.services.analysis.token_accumulator import TokenAccumulator
-from ..orchestrators.state import DEFAULT_STATE
-# MemoryService now accessed via engine.memory
-from ..services.context import WorkspaceContext
-from emery_agents.tools.capability_registry import CapabilityRegistry
-from emery_agents.tools.capability_bootstrap import populate_user_skills, populate_external_tools
-from emery_agents.planning.registry import PlanningRegistry
-from ..orchestrators.nodes.planning import _build_workspace_context
-from ..services.planning import PlanFileRepository
-from ..engine import AgentEngine
 
 logger = logging.getLogger(__name__)
 
 # Session-scoped graph cache keyed by thread_id.
 # Each session gets its own graph with RuntimeContext bound via closures.
-_session_cache: Dict[str, Any] = {}
+_session_cache: dict[str, Any] = {}
 
 
 def _convert_history(
-    conversation_history: Optional[List[Any]],
-) -> Optional[List[ConversationMessage]]:
+    conversation_history: list[Any] | None,
+) -> list[ConversationMessage] | None:
     """Convert HistoryMessage entities to typed ConversationMessage dataclasses."""
     from ..entities.message import TextPart
 
     if not conversation_history:
         return None
-    messages: List[ConversationMessage] = []
+    messages: list[ConversationMessage] = []
     for msg in conversation_history:
         if isinstance(msg, ConversationMessage):
             messages.append(msg)
@@ -60,14 +64,13 @@ def _convert_history(
             role = getattr(msg, "role", "unknown")
             content_parts = getattr(msg, "content_parts", [])
             text = " ".join(
-                part.text for part in content_parts
-                if isinstance(part, TextPart)
+                part.text for part in content_parts if isinstance(part, TextPart)
             )
             messages.append(ConversationMessage(role=role, content=text))
     return messages
 
 
-def _format_plan_for_message(plan: 'Plan') -> str:
+def _format_plan_for_message(plan: "Plan") -> str:
     """Format plan as markdown for the message body."""
     lines = [f"## Plan: {plan.goal}\n"]
     if plan.context:
@@ -84,7 +87,7 @@ def _format_plan_for_message(plan: 'Plan') -> str:
 
 def _get_or_create_session_graph(
     thread_id: str,
-    runtime: Optional[RuntimeContext] = None,
+    runtime: RuntimeContext | None = None,
 ) -> Any:
     """Get a cached session graph or create a new one with RuntimeContext."""
     if thread_id not in _session_cache:
@@ -113,27 +116,27 @@ class CoordinatorStreamingHandler:
 
     async def stream_response(
         self,
-        context: 'ExecutionContext',
-        tools: List[Any],
+        context: "ExecutionContext",
+        tools: list[Any],
         task: str,
-        session_id: Optional[str],
-        org_model: Optional[str],
+        session_id: str | None,
+        org_model: str | None,
         capability_registry: CapabilityRegistry,
-        planning_registry: Optional[PlanningRegistry],
+        planning_registry: PlanningRegistry | None,
         token_accumulator: TokenAccumulator,
-        sm: Optional[Any] = None,
-        managed_agents: Optional[List[Any]] = None,
-        stored_plan: Optional[Plan] = None,
-        conversation_history: Optional[List[Any]] = None,
-        user_id: Optional[str] = None,
-        workspace_type: Optional[str] = None,
-        workspace_id: Optional[str] = None,
-        runtime_skill_inputs: Optional[Dict[str, str]] = None,
-        images: Optional[List[Image.Image]] = None,
+        sm: Any | None = None,
+        managed_agents: list[Any] | None = None,
+        stored_plan: Plan | None = None,
+        conversation_history: list[Any] | None = None,
+        user_id: str | None = None,
+        workspace_type: str | None = None,
+        workspace_id: str | None = None,
+        runtime_skill_inputs: dict[str, str] | None = None,
+        images: list[Image.Image] | None = None,
         has_images: bool = False,
-        pre_selected_skill: Optional[str] = None,
-        pre_selected_agent: Optional[str] = None,
-        pre_selected_tool: Optional[str] = None,
+        pre_selected_skill: str | None = None,
+        pre_selected_agent: str | None = None,
+        pre_selected_tool: str | None = None,
     ) -> AsyncIterator[Any]:
         """
         Main entry point for coordinator-driven execution.
@@ -162,7 +165,9 @@ class CoordinatorStreamingHandler:
                 # Fetch relevant memories (passed separately to planner, not mixed into task)
                 memory_context_str = engine.memory.get_context_summary(task)
                 if memory_context_str:
-                    logger.info(f"Found relevant memory context ({len(memory_context_str)} chars)")
+                    logger.info(
+                        f"Found relevant memory context ({len(memory_context_str)} chars)"
+                    )
             except Exception as e:
                 logger.warning(f"Failed to initialize AgentEngine: {e}")
 
@@ -230,7 +235,9 @@ class CoordinatorStreamingHandler:
         # === POPULATE CAPABILITY REGISTRY (per-request: user skills + external tools) ===
         org_id_str = str(context.tool_provider.organization_id)
         if workspace.existing_skills:
-            populate_user_skills(capability_registry, workspace.existing_skills, org_id_str)
+            populate_user_skills(
+                capability_registry, workspace.existing_skills, org_id_str
+            )
         if tools:
             populate_external_tools(capability_registry, tools, org_id_str)
         capability_registry.enable_all_system_agents(org_id_str)
@@ -254,18 +261,18 @@ class CoordinatorStreamingHandler:
 
     async def stream_with_graph(
         self,
-        context: 'ExecutionContext',
+        context: "ExecutionContext",
         runtime: RuntimeContext,
         task: str,
-        org_model: Optional[str],
-        stored_plan: Optional[Plan] = None,
-        thread_id: Optional[str] = None,
-        runtime_skill_inputs: Optional[Dict[str, str]] = None,
+        org_model: str | None,
+        stored_plan: Plan | None = None,
+        thread_id: str | None = None,
+        runtime_skill_inputs: dict[str, str] | None = None,
         memory_context: str = "",
-        workspace_context: Optional[WorkspaceContext] = None,
-        pre_selected_skill: Optional[str] = None,
-        pre_selected_agent: Optional[str] = None,
-        pre_selected_tool: Optional[str] = None,
+        workspace_context: WorkspaceContext | None = None,
+        pre_selected_skill: str | None = None,
+        pre_selected_agent: str | None = None,
+        pre_selected_tool: str | None = None,
     ) -> AsyncIterator[Any]:
         """
         LangGraph-based execution path.
@@ -284,7 +291,9 @@ class CoordinatorStreamingHandler:
             "api_key": runtime.api_key,
             "org_id": runtime.org_id,
             "org_model": org_model,
-            "organization_id": context.tool_provider.organization_id if context.tool_provider else None,
+            "organization_id": context.tool_provider.organization_id
+            if context.tool_provider
+            else None,
             "stored_plan": stored_plan,
             "runtime_skill_inputs": runtime_skill_inputs,
             "workspace_context": workspace_context,
@@ -310,10 +319,10 @@ class CoordinatorStreamingHandler:
     async def _resume_graph(
         self,
         graph: Any,
-        config: Dict[str, Any],
+        config: dict[str, Any],
         response: str,
-        context: 'ExecutionContext',
-        tools: List[Any],
+        context: "ExecutionContext",
+        tools: list[Any],
         thread_id: str,
     ) -> AsyncIterator[Any]:
         """
@@ -322,7 +331,9 @@ class CoordinatorStreamingHandler:
         Called when the graph has a pending interrupt (approval, clarification, recovery).
         Uses LangGraph's Command(resume=response) to continue execution.
         """
-        logger.info(f"Resuming graph for thread {thread_id} with response: {response[:100]}")
+        logger.info(
+            f"Resuming graph for thread {thread_id} with response: {response[:100]}"
+        )
 
         # Set execution context for tool mode
         if context.tool_provider:
@@ -346,10 +357,10 @@ class CoordinatorStreamingHandler:
         self,
         graph: Any,
         input_data: Any,
-        config: Dict[str, Any],
-        context: 'ExecutionContext',
+        config: dict[str, Any],
+        context: "ExecutionContext",
         thread_id: str,
-        tools: Optional[List[Any]] = None,
+        tools: list[Any] | None = None,
     ) -> AsyncIterator[Any]:
         """
         Stream events from graph execution (shared by initial invocation and resume).
@@ -360,12 +371,14 @@ class CoordinatorStreamingHandler:
         - Detecting completion and yielding final summary
         """
         step_index = 0
-        final_synthesis: Optional[str] = None
+        final_synthesis: str | None = None
         execution_success = False
         awaiting_ui_sent = False  # Track whether we sent an awaiting_input UI event
 
         try:
-            async for event_chunk in graph.astream(input_data, config=config, stream_mode="updates"):
+            async for event_chunk in graph.astream(
+                input_data, config=config, stream_mode="updates"
+            ):
                 for node_name, state_update in event_chunk.items():
                     if node_name == "__end__":
                         continue
@@ -390,7 +403,10 @@ class CoordinatorStreamingHandler:
                         if converted:
                             # For plan events, yield plan content as message body
                             if isinstance(event, PlanCreatedEvent) and event.plan:
-                                yield {"type": "content_chunk", "content": _format_plan_for_message(event.plan)}
+                                yield {
+                                    "type": "content_chunk",
+                                    "content": _format_plan_for_message(event.plan),
+                                }
                             yield converted
                             step_index += 1
 
@@ -430,33 +446,27 @@ class CoordinatorStreamingHandler:
 
         # Graph completed (not paused) — send final summary and clean up
         if execution_success:
-            summary = final_synthesis or f"Plan executed successfully with {step_index} steps."
-            yield {
-                "type": "content_chunk",
-                "content": f"\n\n{summary}"
-            }
+            summary = (
+                final_synthesis
+                or f"Plan executed successfully with {step_index} steps."
+            )
+            yield {"type": "content_chunk", "content": f"\n\n{summary}"}
         elif step_index > 0:
             yield {
                 "type": "content_chunk",
-                "content": "\n\nExecution completed with issues. Some steps may have failed."
+                "content": "\n\nExecution completed with issues. Some steps may have failed.",
             }
         elif final_synthesis:
             # Triage → direct or respond path completed with a synthesis
-            yield {
-                "type": "content_chunk",
-                "content": f"\n\n{final_synthesis}"
-            }
+            yield {"type": "content_chunk", "content": f"\n\n{final_synthesis}"}
         else:
             # No steps and no synthesis — graph terminated without producing output
             logger.warning("Graph completed without producing any output")
-            yield {
-                "type": "content_chunk",
-                "content": "Task completed."
-            }
+            yield {"type": "content_chunk", "content": "Task completed."}
 
         _clear_session(thread_id)
 
-    def _get_managed_agents_list(self, managed_agents: Optional[List[Any]]) -> List[Any]:
+    def _get_managed_agents_list(self, managed_agents: list[Any] | None) -> list[Any]:
         """Convert managed_agents to list format."""
         if managed_agents:
             if isinstance(managed_agents, dict):

@@ -62,7 +62,7 @@ def create_seccomp_fd() -> int:
     Raises:
         ImportError: If the seccomp library is not installed.
     """
-    import seccomp  # type: ignore[import-not-found]
+    import pyseccomp as seccomp  # type: ignore[import-not-found]
 
     # Default action: ALLOW. We only block specific dangerous syscalls.
     f = seccomp.SyscallFilter(seccomp.ALLOW)
@@ -75,9 +75,13 @@ def create_seccomp_fd() -> int:
         except Exception:
             # Syscall doesn't exist on this architecture — skip it.
             # e.g. kexec_load may not exist on aarch64.
-            logger.debug(f"Seccomp: syscall '{syscall_name}' not available on this arch")
+            logger.debug(
+                f"Seccomp: syscall '{syscall_name}' not available on this arch"
+            )
 
-    logger.info(f"Seccomp filter: blocking {blocked_count}/{len(BLOCKED_SYSCALLS)} syscalls")
+    logger.info(
+        f"Seccomp filter: blocking {blocked_count}/{len(BLOCKED_SYSCALLS)} syscalls"
+    )
 
     # Export compiled BPF to a pipe. bwrap reads from the fd.
     r_fd, w_fd = os.pipe()

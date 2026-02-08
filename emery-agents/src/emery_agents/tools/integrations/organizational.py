@@ -6,7 +6,7 @@ Ported from tools/organizational_tools.py - removes smolagents.Tool dependency.
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any
 
 from emery_agents.entities.tool_config import ToolConfig
 
@@ -38,7 +38,11 @@ class EmeryDatabaseTool:
             "description": "Organization ID for get/update operations",
             "nullable": True,
         },
-        "updates": {"type": "object", "description": "Updates for update_organization", "nullable": True},
+        "updates": {
+            "type": "object",
+            "description": "Updates for update_organization",
+            "nullable": True,
+        },
         "capabilities": {
             "type": "object",
             "description": "Capabilities data for save_analysis_capabilities",
@@ -53,7 +57,12 @@ class EmeryDatabaseTool:
             1: {"id": 1, "name": "Customers", "organization_id": 1, "field_count": 15},
             2: {"id": 2, "name": "Orders", "organization_id": 1, "field_count": 8},
             3: {"id": 3, "name": "Products", "organization_id": 1, "field_count": 12},
-            4: {"id": 4, "name": "Analysis_Results", "organization_id": 1, "field_count": 20},
+            4: {
+                "id": 4,
+                "name": "Analysis_Results",
+                "organization_id": 1,
+                "field_count": 20,
+            },
         }
 
     def __call__(self, **kwargs: Any) -> dict[str, Any]:
@@ -70,7 +79,11 @@ class EmeryDatabaseTool:
     ) -> dict[str, Any]:
         """Execute database operations."""
         if action == "list_tables":
-            return {"success": True, "tables": list(self.tables.values()), "count": len(self.tables)}
+            return {
+                "success": True,
+                "tables": list(self.tables.values()),
+                "count": len(self.tables),
+            }
 
         elif action == "create_organization":
             org_data = organization_data or {}
@@ -89,7 +102,11 @@ class EmeryDatabaseTool:
             }
 
             self.organizations[org_id] = organization
-            return {"success": True, "organization": organization, "organization_id": org_id}
+            return {
+                "success": True,
+                "organization": organization,
+                "organization_id": org_id,
+            }
 
         elif action == "get_organization":
             org_id = organization_id
@@ -117,7 +134,11 @@ class EmeryDatabaseTool:
             self.organizations[org_id]["capabilities"] = capabilities_data
             self.organizations[org_id]["analysis_status"] = "completed"
 
-            return {"success": True, "organization": self.organizations[org_id], "capabilities_saved": True}
+            return {
+                "success": True,
+                "organization": self.organizations[org_id],
+                "capabilities_saved": True,
+            }
 
         else:
             return {"success": False, "error": f"Unknown action: {action}"}
@@ -145,27 +166,87 @@ class TableSchemaTool:
         self.field_definitions = {
             1: {  # Customers table
                 "fields": [
-                    {"id": 10, "name": "customer_name", "type": "text", "required": True},
+                    {
+                        "id": 10,
+                        "name": "customer_name",
+                        "type": "text",
+                        "required": True,
+                    },
                     {"id": 11, "name": "email", "type": "email", "required": True},
                     {"id": 12, "name": "company", "type": "text", "required": False},
                     {"id": 13, "name": "industry", "type": "text", "required": False},
-                    {"id": 14, "name": "annual_revenue", "type": "number", "required": False},
-                    {"id": 15, "name": "employee_count", "type": "number", "required": False},
+                    {
+                        "id": 14,
+                        "name": "annual_revenue",
+                        "type": "number",
+                        "required": False,
+                    },
+                    {
+                        "id": 15,
+                        "name": "employee_count",
+                        "type": "number",
+                        "required": False,
+                    },
                 ],
                 "count": 6,
             },
             4: {  # Analysis_Results table
                 "fields": [
-                    {"id": 40, "name": "analysis_type", "type": "text", "required": True},
+                    {
+                        "id": 40,
+                        "name": "analysis_type",
+                        "type": "text",
+                        "required": True,
+                    },
                     {"id": 41, "name": "website_url", "type": "url", "required": False},
-                    {"id": 42, "name": "industry_classification", "type": "text", "required": False},
-                    {"id": 43, "name": "business_model", "type": "text", "required": False},
-                    {"id": 44, "name": "key_insights", "type": "text", "required": False},
-                    {"id": 45, "name": "confidence_score", "type": "number", "required": False},
-                    {"id": 46, "name": "recommendations", "type": "text", "required": False},
-                    {"id": 47, "name": "measurement_framework", "type": "text", "required": False},
-                    {"id": 48, "name": "kpi_definitions", "type": "text", "required": False},
-                    {"id": 49, "name": "process_definitions", "type": "text", "required": False},
+                    {
+                        "id": 42,
+                        "name": "industry_classification",
+                        "type": "text",
+                        "required": False,
+                    },
+                    {
+                        "id": 43,
+                        "name": "business_model",
+                        "type": "text",
+                        "required": False,
+                    },
+                    {
+                        "id": 44,
+                        "name": "key_insights",
+                        "type": "text",
+                        "required": False,
+                    },
+                    {
+                        "id": 45,
+                        "name": "confidence_score",
+                        "type": "number",
+                        "required": False,
+                    },
+                    {
+                        "id": 46,
+                        "name": "recommendations",
+                        "type": "text",
+                        "required": False,
+                    },
+                    {
+                        "id": 47,
+                        "name": "measurement_framework",
+                        "type": "text",
+                        "required": False,
+                    },
+                    {
+                        "id": 48,
+                        "name": "kpi_definitions",
+                        "type": "text",
+                        "required": False,
+                    },
+                    {
+                        "id": 49,
+                        "name": "process_definitions",
+                        "type": "text",
+                        "required": False,
+                    },
                 ],
                 "count": 10,
             },
@@ -203,13 +284,36 @@ class TableDataTool:
     name = "table_data"
     description = "Mock table data tool for storing/retrieving organizational context. Supports actions: get_rows, create_row, update_row, search_rows with tableId parameter."
     inputs = {
-        "action": {"type": "string", "description": "Action to perform: get_rows, create_row, update_row, search_rows"},
+        "action": {
+            "type": "string",
+            "description": "Action to perform: get_rows, create_row, update_row, search_rows",
+        },
         "tableId": {"type": "integer", "description": "Table ID to operate on"},
-        "limit": {"type": "integer", "description": "Limit for get_rows", "nullable": True},
-        "offset": {"type": "integer", "description": "Offset for get_rows", "nullable": True},
-        "row_data": {"type": "object", "description": "Row data for create_row/update_row", "nullable": True},
-        "row_id": {"type": "integer", "description": "Row ID for update_row", "nullable": True},
-        "criteria": {"type": "object", "description": "Search criteria for search_rows", "nullable": True},
+        "limit": {
+            "type": "integer",
+            "description": "Limit for get_rows",
+            "nullable": True,
+        },
+        "offset": {
+            "type": "integer",
+            "description": "Offset for get_rows",
+            "nullable": True,
+        },
+        "row_data": {
+            "type": "object",
+            "description": "Row data for create_row/update_row",
+            "nullable": True,
+        },
+        "row_id": {
+            "type": "integer",
+            "description": "Row ID for update_row",
+            "nullable": True,
+        },
+        "criteria": {
+            "type": "object",
+            "description": "Search criteria for search_rows",
+            "nullable": True,
+        },
     }
     output_type = "object"
 
@@ -218,9 +322,30 @@ class TableDataTool:
         # Uses numeric field IDs as column keys for immutability
         self.table_data: dict[int, dict[int, dict[int, Any]]] = {
             1: {  # Customers table data
-                1: {10: "Acme Corp", 11: "contact@acme.com", 12: "Technology Solutions", 13: "software", 14: 5000000, 15: 50},
-                2: {10: "Beta Industries", 11: "info@beta.com", 12: "Manufacturing", 13: "manufacturing", 14: 15000000, 15: 200},
-                3: {10: "Gamma Services", 11: "hello@gamma.com", 12: "Consulting", 13: "consulting", 14: 2000000, 15: 25},
+                1: {
+                    10: "Acme Corp",
+                    11: "contact@acme.com",
+                    12: "Technology Solutions",
+                    13: "software",
+                    14: 5000000,
+                    15: 50,
+                },
+                2: {
+                    10: "Beta Industries",
+                    11: "info@beta.com",
+                    12: "Manufacturing",
+                    13: "manufacturing",
+                    14: 15000000,
+                    15: 200,
+                },
+                3: {
+                    10: "Gamma Services",
+                    11: "hello@gamma.com",
+                    12: "Consulting",
+                    13: "consulting",
+                    14: 2000000,
+                    15: 25,
+                },
             },
             4: {},  # Analysis_Results table - empty initially
         }
@@ -269,7 +394,12 @@ class TableDataTool:
 
             self.table_data[tableId][new_row_id] = row_data
 
-            return {"success": True, "row_id": new_row_id, "row_data": row_data, "table_id": tableId}
+            return {
+                "success": True,
+                "row_id": new_row_id,
+                "row_data": row_data,
+                "table_id": tableId,
+            }
 
         elif action == "update_row":
             row_data = row_data or {}
@@ -278,11 +408,19 @@ class TableDataTool:
                 return {"success": False, "error": f"Table {tableId} not found"}
 
             if row_id not in self.table_data[tableId]:
-                return {"success": False, "error": f"Row {row_id} not found in table {tableId}"}
+                return {
+                    "success": False,
+                    "error": f"Row {row_id} not found in table {tableId}",
+                }
 
             self.table_data[tableId][row_id].update(row_data)
 
-            return {"success": True, "row_id": row_id, "row_data": self.table_data[tableId][row_id], "table_id": tableId}
+            return {
+                "success": True,
+                "row_id": row_id,
+                "row_data": self.table_data[tableId][row_id],
+                "table_id": tableId,
+            }
 
         elif action == "search_rows":
             search_criteria = criteria or {}
@@ -294,7 +432,10 @@ class TableDataTool:
             for rid, rdata in self.table_data[tableId].items():
                 match = True
                 for field, value in search_criteria.items():
-                    if field not in rdata or str(rdata[field]).lower() != str(value).lower():
+                    if (
+                        field not in rdata
+                        or str(rdata[field]).lower() != str(value).lower()
+                    ):
                         match = False
                         break
                 if match:

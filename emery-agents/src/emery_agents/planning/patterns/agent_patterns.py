@@ -5,14 +5,13 @@ Migrated from:
 - reasoning/capabilities/agent_builder.py PLANNING_GUIDANCE
 """
 
-from emery_agents.planning.pattern import PlanningPattern, AutoApprovePolicy
-
+from emery_agents.planning.pattern import AutoApprovePolicy, PlanningPattern
 
 AGENT_CREATE_PATTERN = PlanningPattern(
     id="plan:agent_create",
     name="Agent Creation",
     description="Planning patterns for creating and configuring AI agents with custom capabilities. "
-                "Agents have personas, instructions, attached skills, and data access permissions.",
+    "Agents have personas, instructions, attached skills, and data access permissions.",
     triggers=[
         "create agent",
         "build agent",
@@ -74,7 +73,7 @@ AGENT_EXECUTE_PATTERN = PlanningPattern(
     id="plan:agent_execute",
     name="Agent Execution",
     description="Planning patterns for executing existing agents with tasks. "
-                "Execute agents by ID, not by replicating their logic.",
+    "Execute agents by ID, not by replicating their logic.",
     triggers=[
         "run agent",
         "execute agent",

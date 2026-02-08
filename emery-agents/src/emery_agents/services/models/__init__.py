@@ -9,19 +9,18 @@ LLM/Model management services.
 
 from .provider import ModelProvider, TokenUsage
 from .registry import (
-    ModelCategory,
-    ModelTier,
     ModelCapabilities,
-    ModelPricing,
+    ModelCategory,
     ModelEndpoint,
     ModelMetadata,
-    normalize_model_id,
-    get_model_metadata,
-    get_default_model_for_tier,
+    ModelPricing,
+    ModelTier,
     get_all_models,
+    get_default_model_for_tier,
+    get_model_metadata,
     get_models_for_tier,
+    normalize_model_id,
 )
-
 
 __all__ = [
     # Provider

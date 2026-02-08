@@ -8,7 +8,6 @@ and is now accessed via the search_planning_patterns tool.
 
 from __future__ import annotations
 
-
 # Quick-reference routing table prepended to all capability guidance.
 # Helps the planner match user intent to the correct target_agent.
 CAPABILITY_ROUTING_HEADER = """

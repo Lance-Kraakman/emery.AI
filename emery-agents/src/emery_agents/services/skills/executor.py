@@ -7,37 +7,48 @@ Executor accepts SkillConfig entity only. Proto converted at boundary.
 
 import json
 import logging
-from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union, overload
+from collections.abc import Callable
+from typing import Any, Literal, overload
 
 import dspy
 from PIL import Image
 
+from emery_agents.api import TableAPI
+from emery_agents.tools.loader import UnifiedToolLoader
+
+from ...entities.models.plan import Plan
 from ...entities.skill_config import (
-    SkillConfig, SkillStep,
     AgenticStepConfig as AgenticStepConfigDTO,
-    ReadConfig as ReadConfigDTO, WriteConfig as WriteConfigDTO,
-    RowIdSource, ReadFieldMapping, WriteFieldMapping,
 )
-from ...entities.task import SkillOutputValue
+from ...entities.skill_config import (
+    ReadConfig as ReadConfigDTO,
+)
+from ...entities.skill_config import (
+    ReadFieldMapping,
+    RowIdSource,
+    SkillConfig,
+    SkillStep,
+    WriteFieldMapping,
+)
+from ...entities.skill_config import (
+    WriteConfig as WriteConfigDTO,
+)
+from ...reasoning.config import get_dspy_lm
 from ...reasoning.modules.extractor import OutputExtractorModule
 from ...reasoning.signatures.extraction import TargetFieldMeta
-from emery_agents.api import TableAPI
 from ...types import SkillExecutionResult
-from ...utils.step_utils import step_to_progress_dict, RawProgressDict
-from ..agents.factory import AgentFactory, AgentConfig
+from ...utils import run_async_in_thread
+from ...utils.step_utils import RawProgressDict, step_to_progress_dict
+from ..agents.factory import AgentConfig, AgentFactory
 from .step_executor import StepExecutorService, execute_steps_sync
-from emery_agents.tools.loader import UnifiedToolLoader
-from ...entities.models.plan import Plan
-from ...reasoning.config import get_dspy_lm
-
 
 logger = logging.getLogger(__name__)
 
 
 def _coerce_extracted_values(
-    values: Dict[str, Any],
-    field_metadata: Dict[str, TargetFieldMeta],
-) -> Dict[str, Any]:
+    values: dict[str, Any],
+    field_metadata: dict[str, TargetFieldMeta],
+) -> dict[str, Any]:
     """Deterministic coercion of extracted values based on target field constraints.
 
     Normalizes LLM output to match backend expectations:
@@ -45,7 +56,7 @@ def _coerce_extracted_values(
     - multi-select: same, per item
     - boolean: normalize string representations
     """
-    coerced: Dict[str, Any] = {}
+    coerced: dict[str, Any] = {}
     for name, value in values.items():
         if value is None:
             coerced[name] = value
@@ -62,7 +73,8 @@ def _coerce_extracted_values(
             lookup = {o.lower(): o for o in meta.options}
             if isinstance(value, list):
                 coerced[name] = [
-                    v for v in (lookup.get(str(v).strip().lower()) for v in value)
+                    v
+                    for v in (lookup.get(str(v).strip().lower()) for v in value)
                     if v is not None
                 ]
             else:
@@ -78,9 +90,8 @@ def _coerce_extracted_values(
 
 
 def map_node_outputs_to_skill_outputs(
-    all_node_outputs: Dict[str, Dict[str, Any]],
-    skill_outputs: List[Any]
-) -> Dict[str, Any]:
+    all_node_outputs: dict[str, dict[str, Any]], skill_outputs: list[Any]
+) -> dict[str, Any]:
     """Map captured node outputs to skill outputs via source config.
 
     Args:
@@ -93,8 +104,8 @@ def map_node_outputs_to_skill_outputs(
     result = {}
 
     for output in skill_outputs:
-        source = getattr(output, 'source', None)
-        if source and getattr(source, 'type', None) == 'node_output':
+        source = getattr(output, "source", None)
+        if source and getattr(source, "type", None) == "node_output":
             node_id = source.node_id
             output_name = source.output_name
             node_outputs = all_node_outputs.get(node_id, {})
@@ -125,7 +136,7 @@ class SkillExecutorService:
     def _extract_plan_from_skill(
         self,
         skill_config: SkillConfig,
-    ) -> Optional[Plan]:
+    ) -> Plan | None:
         """Extract stored plan from skill's agentic step configuration.
 
         Returns:
@@ -149,8 +160,8 @@ class SkillExecutorService:
     def _build_wrapper_dag(
         self,
         skill_config: SkillConfig,
-        runtime_inputs: Dict[str, Any],
-    ) -> List[SkillStep]:
+        runtime_inputs: dict[str, Any],
+    ) -> list[SkillStep]:
         """Build wrapper DAG from agentic skill config.
 
         Generates:
@@ -163,7 +174,7 @@ class SkillExecutorService:
         Returns:
             List of SkillStep for DAG execution
         """
-        steps: List[SkillStep] = []
+        steps: list[SkillStep] = []
 
         # Step 1: Generate Read step from input mappings
         read_step = self._build_read_step_from_inputs(skill_config)
@@ -193,21 +204,22 @@ class SkillExecutorService:
         )
         steps.append(agentic_step)
 
-        logger.info(f"📋 Built wrapper DAG: {len(steps)} steps for skill {skill_config.name}")
+        logger.info(
+            f"📋 Built wrapper DAG: {len(steps)} steps for skill {skill_config.name}"
+        )
         return steps
 
     def _build_read_step_from_inputs(
         self,
         skill_config: SkillConfig,
-    ) -> Optional[SkillStep]:
+    ) -> SkillStep | None:
         """Generate Read step from skill input mappings.
 
         Returns:
             SkillStep with read_config, or None if no input mappings
         """
         inputs_with_mapping = [
-            inp for inp in skill_config.inputs
-            if inp.input_mapping is not None
+            inp for inp in skill_config.inputs if inp.input_mapping is not None
         ]
 
         if not inputs_with_mapping:
@@ -231,10 +243,12 @@ class SkillExecutorService:
         for inp in inputs_with_mapping:
             if inp.input_mapping is not None and "source" in inp.input_mapping:
                 source = inp.input_mapping["source"]
-                field_mappings.append(ReadFieldMapping(
-                    source_field_id=source["field_id"],
-                    target_variable=inp.name,
-                ))
+                field_mappings.append(
+                    ReadFieldMapping(
+                        source_field_id=source["field_id"],
+                        target_variable=inp.name,
+                    )
+                )
 
         read_config = ReadConfigDTO(
             mode="single_row",
@@ -253,14 +267,15 @@ class SkillExecutorService:
     def _build_write_step_from_outputs(
         self,
         skill_config: SkillConfig,
-    ) -> Optional[SkillStep]:
+    ) -> SkillStep | None:
         """Generate Write step from skill output mappings.
 
         Returns:
             SkillStep with write_config, or None if no output mappings
         """
         outputs_with_mapping = [
-            out for out in skill_config.outputs
+            out
+            for out in skill_config.outputs
             if out.output_mapping is not None
             and len(out.output_mapping.table_mappings) > 0
         ]
@@ -273,15 +288,17 @@ class SkillExecutorService:
         target_table_id = first_table.target_table_id
 
         # Collect field mappings from ALL outputs targeting the same table
-        field_mappings: List[WriteFieldMapping] = []
+        field_mappings: list[WriteFieldMapping] = []
         for out in outputs_with_mapping:
             for tm in out.output_mapping.table_mappings:
                 if tm.target_table_id == target_table_id:
                     for fm in tm.mappings:
-                        field_mappings.append(WriteFieldMapping(
-                            skill_input_name=fm.source.name,
-                            target_field_id=fm.target_field_id,
-                        ))
+                        field_mappings.append(
+                            WriteFieldMapping(
+                                skill_input_name=fm.source.name,
+                                target_field_id=fm.target_field_id,
+                            )
+                        )
 
         if not field_mappings:
             return None
@@ -298,7 +315,10 @@ class SkillExecutorService:
             name=f"Write outputs for {skill_config.name}",
             step_type="write",
             write_config=write_config,
-            inputs={fm.skill_input_name: f"{{{{{fm.skill_input_name}}}}}" for fm in field_mappings},
+            inputs={
+                fm.skill_input_name: f"{{{{{fm.skill_input_name}}}}}"
+                for fm in field_mappings
+            },
         )
 
     def _build_target_field_metadata(
@@ -307,7 +327,7 @@ class SkillExecutorService:
         target_table_id: int,
         api_key: str,
         org_id: int,
-    ) -> Dict[str, TargetFieldMeta]:
+    ) -> dict[str, TargetFieldMeta]:
         """Fetch table schema and build typed metadata for output fields.
 
         Maps each output name to its target field constraints (type, select options).
@@ -322,7 +342,7 @@ class SkillExecutorService:
             return {}
 
         fields_by_id = {f["id"]: f for f in table.fields}
-        metadata: Dict[str, TargetFieldMeta] = {}
+        metadata: dict[str, TargetFieldMeta] = {}
 
         for out in skill_config.outputs:
             if not out.output_mapping:
@@ -335,7 +355,11 @@ class SkillExecutorService:
                     raw_opts = (field.get("metadata") or {}).get("options", [])
                     metadata[fm.source.name] = TargetFieldMeta(
                         type=field.get("type", "text"),
-                        options=[o["value"] for o in raw_opts if isinstance(o, dict) and "value" in o],
+                        options=[
+                            o["value"]
+                            for o in raw_opts
+                            if isinstance(o, dict) and "value" in o
+                        ],
                     )
 
         return metadata
@@ -345,10 +369,10 @@ class SkillExecutorService:
         skill_config: SkillConfig,
         result: SkillExecutionResult,
         step_executor: StepExecutorService,
-        org_model: Optional[str],
+        org_model: str | None,
         api_key: str,
         organization_id: int,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Unified post-DAG pipeline for both agentic and workflow flows.
 
         Three steps:
@@ -364,7 +388,7 @@ class SkillExecutorService:
 
         # Build write step early to get target_table_id for metadata fetch
         write_step = self._build_write_step_from_outputs(skill_config)
-        target_field_metadata: Dict[str, TargetFieldMeta] = {}
+        target_field_metadata: dict[str, TargetFieldMeta] = {}
         if write_step and write_step.write_config:
             target_field_metadata = self._build_target_field_metadata(
                 skill_config,
@@ -378,27 +402,33 @@ class SkillExecutorService:
                 )
 
         # Step 1: Source mapping (works when captured_outputs has structured data)
-        skill_outputs: Optional[Dict[str, Any]] = None
+        skill_outputs: dict[str, Any] | None = None
         if result.captured_outputs:
             skill_outputs = map_node_outputs_to_skill_outputs(
                 all_node_outputs=result.captured_outputs,
-                skill_outputs=list(skill_config.outputs)
+                skill_outputs=list(skill_config.outputs),
             )
             mapped_count = sum(1 for v in skill_outputs.values() if v is not None)
-            logger.info(f"📤 Source mapping: {mapped_count}/{len(skill_outputs)} outputs mapped")
+            logger.info(
+                f"📤 Source mapping: {mapped_count}/{len(skill_outputs)} outputs mapped"
+            )
 
         # Step 2: Extraction for unmapped outputs (agentic text results)
         if result.result:
             unmapped = [
-                o for o in skill_config.outputs
+                o
+                for o in skill_config.outputs
                 if not skill_outputs or skill_outputs.get(o.name) is None
             ]
             if unmapped:
-                logger.info(f"🔍 Extracting {len(unmapped)} unmapped outputs from text result")
+                logger.info(
+                    f"🔍 Extracting {len(unmapped)} unmapped outputs from text result"
+                )
                 extractor = OutputExtractorModule(
-                    skill_outputs=[{
-                        'name': o.name, 'type': o.type, 'description': o.description
-                    } for o in unmapped],
+                    skill_outputs=[
+                        {"name": o.name, "type": o.type, "description": o.description}
+                        for o in unmapped
+                    ],
                     target_field_metadata=target_field_metadata or None,
                 )
                 lm = get_dspy_lm(skill_model=skill_config.model, org_model=org_model)
@@ -406,20 +436,28 @@ class SkillExecutorService:
                     extracted = extractor.extract(content=result.result)
                 # Coerce extracted values to match target field constraints
                 if extracted and target_field_metadata:
-                    extracted = _coerce_extracted_values(extracted, target_field_metadata)
+                    extracted = _coerce_extracted_values(
+                        extracted, target_field_metadata
+                    )
                 if extracted:
                     if skill_outputs is None:
                         skill_outputs = {}
-                    skill_outputs.update({
-                        k: v for k, v in extracted.items() if v is not None
-                    })
-                    extracted_count = sum(1 for v in extracted.values() if v is not None)
-                    logger.info(f"🔍 Extracted {extracted_count}/{len(unmapped)} outputs")
+                    skill_outputs.update(
+                        {k: v for k, v in extracted.items() if v is not None}
+                    )
+                    extracted_count = sum(
+                        1 for v in extracted.values() if v is not None
+                    )
+                    logger.info(
+                        f"🔍 Extracted {extracted_count}/{len(unmapped)} outputs"
+                    )
 
         # Step 3: Write (if output mappings configured and we have values)
         if skill_outputs and any(v is not None for v in skill_outputs.values()):
             if write_step:
-                logger.info(f"📝 Post-DAG: writing output mappings for {skill_config.name}")
+                logger.info(
+                    f"📝 Post-DAG: writing output mappings for {skill_config.name}"
+                )
                 try:
                     execute_steps_sync(
                         step_executor=step_executor,
@@ -443,42 +481,42 @@ class SkillExecutorService:
     def execute_skill(
         self,
         skill_config: SkillConfig,
-        runtime_inputs: Dict[str, Any],
-        org_model: Optional[str] = None,
+        runtime_inputs: dict[str, Any],
+        org_model: str | None = None,
         capture_outputs: Literal[False] = False,
-        attachments: Optional[List[Any]] = None,
+        attachments: list[Any] | None = None,
         return_message_parts: bool = False,
         api_key: str = "",
         organization_id: int = 0,
-        progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None
+        progress_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> str: ...
 
     @overload
     def execute_skill(
         self,
         skill_config: SkillConfig,
-        runtime_inputs: Dict[str, Any],
-        org_model: Optional[str] = None,
+        runtime_inputs: dict[str, Any],
+        org_model: str | None = None,
         capture_outputs: Literal[True] = ...,
-        attachments: Optional[List[Any]] = None,
+        attachments: list[Any] | None = None,
         return_message_parts: bool = False,
         api_key: str = "",
         organization_id: int = 0,
-        progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None
+        progress_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> SkillExecutionResult: ...
 
     def execute_skill(
         self,
         skill_config: SkillConfig,
-        runtime_inputs: Dict[str, Any],
-        org_model: Optional[str] = None,
+        runtime_inputs: dict[str, Any],
+        org_model: str | None = None,
         capture_outputs: bool = False,
-        attachments: Optional[List[Any]] = None,
+        attachments: list[Any] | None = None,
         return_message_parts: bool = False,
         api_key: str = "",
         organization_id: int = 0,
-        progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None
-    ) -> Union[str, SkillExecutionResult]:
+        progress_callback: Callable[[dict[str, Any]], None] | None = None,
+    ) -> str | SkillExecutionResult:
         """Execute a skill.
 
         Args:
@@ -496,26 +534,38 @@ class SkillExecutorService:
             str if capture_outputs=False
             SkillExecutionResult if capture_outputs=True
         """
-        logger.info(f"🎯 Executing skill: {skill_config.name} (capture_outputs={capture_outputs})")
+        logger.info(
+            f"🎯 Executing skill: {skill_config.name} (capture_outputs={capture_outputs})"
+        )
 
         try:
             if skill_config.is_workflow():
                 return self._execute_steps(
-                    skill_config, runtime_inputs, org_model,
-                    api_key=api_key, organization_id=organization_id
+                    skill_config,
+                    runtime_inputs,
+                    org_model,
+                    api_key=api_key,
+                    organization_id=organization_id,
                 )
             else:
                 # Use wrapper DAG if skill has a stored plan, otherwise fall back
                 # to direct LLM agent execution with instructions
                 if self._extract_plan_from_skill(skill_config):
                     return self._execute_agentic(
-                        skill_config, runtime_inputs, org_model,
-                        capture_outputs, api_key, organization_id
+                        skill_config,
+                        runtime_inputs,
+                        org_model,
+                        capture_outputs,
+                        api_key,
+                        organization_id,
                     )
                 else:
                     return self._execute_agent(
-                        skill_config, runtime_inputs, org_model,
-                        capture_outputs, attachments=attachments,
+                        skill_config,
+                        runtime_inputs,
+                        org_model,
+                        capture_outputs,
+                        attachments=attachments,
                         return_message_parts=return_message_parts,
                         progress_callback=progress_callback,
                         api_key=api_key,
@@ -531,12 +581,12 @@ class SkillExecutorService:
     def _execute_agentic(
         self,
         skill_config: SkillConfig,
-        runtime_inputs: Dict[str, Any],
-        org_model: Optional[str],
+        runtime_inputs: dict[str, Any],
+        org_model: str | None,
         capture_outputs: bool,
         api_key: str,
         organization_id: int,
-    ) -> Union[str, SkillExecutionResult]:
+    ) -> str | SkillExecutionResult:
         """Execute agentic skill via unified StepExecutorService path.
 
         Builds a wrapper DAG: [Read Node?] → [Agentic Node]
@@ -546,7 +596,9 @@ class SkillExecutorService:
         steps = self._build_wrapper_dag(skill_config, runtime_inputs)
 
         if not steps:
-            raise ValueError(f"Failed to build wrapper DAG for skill {skill_config.name}")
+            raise ValueError(
+                f"Failed to build wrapper DAG for skill {skill_config.name}"
+            )
 
         # Create step executor with callback for skill delegation
         step_executor = StepExecutorService(
@@ -556,8 +608,8 @@ class SkillExecutorService:
                 org_model=org_model,
                 return_message_parts=False,
                 api_key=api_key,
-                organization_id=organization_id
-            )
+                organization_id=organization_id,
+            ),
         )
 
         # Execute wrapper DAG
@@ -568,7 +620,7 @@ class SkillExecutorService:
             initial_inputs=runtime_inputs,
             org_model=org_model,
             api_key=api_key,
-            organization_id=organization_id
+            organization_id=organization_id,
         )
 
         logger.info(f"✅ Agentic skill execution complete: {skill_config.name}")
@@ -584,7 +636,9 @@ class SkillExecutorService:
         )
 
         if skill_outputs:
-            return SkillExecutionResult(result=result.result, captured_outputs=skill_outputs)
+            return SkillExecutionResult(
+                result=result.result, captured_outputs=skill_outputs
+            )
         if capture_outputs:
             return result
         return result.result
@@ -592,15 +646,15 @@ class SkillExecutorService:
     def _execute_agent(
         self,
         skill_config: SkillConfig,
-        runtime_inputs: Dict[str, Any],
-        org_model: Optional[str],
+        runtime_inputs: dict[str, Any],
+        org_model: str | None,
         capture_outputs: bool,
-        attachments: Optional[List[Any]],
+        attachments: list[Any] | None,
         return_message_parts: bool,
-        progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+        progress_callback: Callable[[dict[str, Any]], None] | None = None,
         api_key: str = "",
         organization_id: int = 0,
-    ) -> Union[str, SkillExecutionResult]:
+    ) -> str | SkillExecutionResult:
         """Execute skill via LLM agent orchestration.
 
         Args:
@@ -614,9 +668,11 @@ class SkillExecutorService:
             skill_tools = self.tool_loader.load_tools_from_configs(
                 tool_configs=list(skill_config.tools),
                 api_key=api_key,
-                api_key_mode="user"
+                api_key_mode="user",
             )
-            logger.info(f"🔧 Loaded {len(skill_tools)} tools for skill {skill_config.name}")
+            logger.info(
+                f"🔧 Loaded {len(skill_tools)} tools for skill {skill_config.name}"
+            )
 
         # 2. Note: Output capture now uses separate extraction step after execution
         # This is cleaner than requiring the agent to call a submit_result tool
@@ -657,26 +713,33 @@ class SkillExecutorService:
             use_code_execution=skill_agent_type == "code_agent",
         )
         executor_module = self.agent_factory.create_agent(agent_config)
-        logger.info(f"✨ Created DSPy executor for skill {skill_config.name} (has_images={has_images})")
+        logger.info(
+            f"✨ Created DSPy executor for skill {skill_config.name} (has_images={has_images})"
+        )
 
         # 6. Execute using DSPy module
         # Build context with task and image info
         import json as json_module
-        context_str = json_module.dumps({
-            "task": task,
-            "skill": skill_config.name,
-            "has_images": len(images) > 0 if images else False,
-            "image_count": len(images) if images else 0,
-        })
+
+        context_str = json_module.dumps(
+            {
+                "task": task,
+                "skill": skill_config.name,
+                "has_images": len(images) > 0 if images else False,
+                "image_count": len(images) if images else 0,
+            }
+        )
 
         # Emit progress start if callback provided
         if progress_callback:
-            progress_callback({
-                "skill_name": skill_config.name,
-                "step_type": "action",
-                "step_index": 0,
-                "content": f"Executing skill: {skill_config.name}",
-            })
+            progress_callback(
+                {
+                    "skill_name": skill_config.name,
+                    "step_type": "action",
+                    "step_index": 0,
+                    "content": f"Executing skill: {skill_config.name}",
+                }
+            )
 
         with dspy.context(lm=executor_module._lm):
             result = executor_module.forward(
@@ -686,12 +749,14 @@ class SkillExecutorService:
 
         # Emit progress complete if callback provided
         if progress_callback:
-            progress_callback({
-                "skill_name": skill_config.name,
-                "step_type": "final",
-                "step_index": 1,
-                "content": "Skill execution completed",
-            })
+            progress_callback(
+                {
+                    "skill_name": skill_config.name,
+                    "step_type": "final",
+                    "step_index": 1,
+                    "content": "Skill execution completed",
+                }
+            )
 
         logger.info(f"🔍 Skill output type: {type(result).__name__}")
 
@@ -707,11 +772,10 @@ class SkillExecutorService:
         if capture_outputs and skill_config.outputs:
             # Extract outputs using DSPy module (separate extraction step)
             extractor = OutputExtractorModule(
-                skill_outputs=[{
-                    'name': o.name,
-                    'type': o.type,
-                    'description': o.description
-                } for o in skill_config.outputs]
+                skill_outputs=[
+                    {"name": o.name, "type": o.type, "description": o.description}
+                    for o in skill_config.outputs
+                ]
             )
             lm = get_dspy_lm(skill_model=skill_config.model, org_model=org_model)
             with dspy.context(lm=lm):
@@ -722,7 +786,7 @@ class SkillExecutorService:
                 logger.error("No data was extracted - all fields were null")
                 return SkillExecutionResult(
                     result="FAILED: No data could be extracted from the input.",
-                    captured_outputs=None
+                    captured_outputs=None,
                 )
 
             if captured:
@@ -736,21 +800,18 @@ class SkillExecutorService:
             return result_json
 
     def _step_to_progress_dict(
-        self,
-        step: Any,
-        index: int,
-        skill_name: str
-    ) -> Optional[RawProgressDict]:
+        self, step: Any, index: int, skill_name: str
+    ) -> RawProgressDict | None:
         """Delegate to shared utility for step-to-dict conversion."""
         return step_to_progress_dict(step, index, skill_name, name_key="skill_name")
 
     def _execute_steps(
         self,
         skill_config: SkillConfig,
-        runtime_inputs: Dict[str, Any],
-        org_model: Optional[str] = None,
+        runtime_inputs: dict[str, Any],
+        org_model: str | None = None,
         api_key: str = "",
-        organization_id: int = 0
+        organization_id: int = 0,
     ) -> SkillExecutionResult:
         """Execute skill via step-based DAG workflow.
 
@@ -769,7 +830,9 @@ class SkillExecutorService:
         Returns:
             SkillExecutionResult with results from all steps
         """
-        logger.info(f"🚀 Step-based execution: {skill_config.name} ({len(skill_config.steps)} steps)")
+        logger.info(
+            f"🚀 Step-based execution: {skill_config.name} ({len(skill_config.steps)} steps)"
+        )
 
         # Create step executor with callback for skill delegation
         step_executor = StepExecutorService(
@@ -779,8 +842,8 @@ class SkillExecutorService:
                 org_model=org_model,
                 return_message_parts=False,
                 api_key=api_key,
-                organization_id=organization_id
-            )
+                organization_id=organization_id,
+            ),
         )
 
         enriched_inputs = dict(runtime_inputs)
@@ -796,17 +859,17 @@ class SkillExecutorService:
                 initial_inputs=enriched_inputs,
                 org_model=org_model,
                 api_key=api_key,
-                organization_id=organization_id
+                organization_id=organization_id,
             )
             # Merge read outputs into inputs for the DAG
             if read_result.captured_outputs:
                 for node_outputs in read_result.captured_outputs.values():
                     if isinstance(node_outputs, dict):
                         enriched_inputs.update(node_outputs)
-                logger.info(f"📖 Pre-DAG: merged read outputs into inputs")
+                logger.info("📖 Pre-DAG: merged read outputs into inputs")
 
         # Phase 2: Execute canvas DAG
-        available_skills: Dict[int, Any] = {}
+        available_skills: dict[int, Any] = {}
         result = execute_steps_sync(
             step_executor=step_executor,
             steps=list(skill_config.steps),
@@ -814,7 +877,7 @@ class SkillExecutorService:
             initial_inputs=enriched_inputs,
             org_model=org_model,
             api_key=api_key,
-            organization_id=organization_id
+            organization_id=organization_id,
         )
 
         logger.info(f"✅ Step-based execution complete: {skill_config.name}")
@@ -831,8 +894,7 @@ class SkillExecutorService:
 
         if skill_outputs:
             return SkillExecutionResult(
-                result=result.result,
-                captured_outputs=skill_outputs
+                result=result.result, captured_outputs=skill_outputs
             )
 
         return result
@@ -840,9 +902,9 @@ class SkillExecutorService:
     def _process_skill_attachments(
         self,
         skill_config: SkillConfig,
-    ) -> Tuple[List[Image.Image], List[str]]:
+    ) -> tuple[list[Image.Image], list[str]]:
         """Process attachments from skill_config.content (entity MessagePart objects)."""
-        from ...entities.message import TextPart, ImagePart
+        from ...entities.message import ImagePart, TextPart
         from ..data.image_processor import ImageProcessor
 
         images = []
@@ -851,7 +913,9 @@ class SkillExecutorService:
         if not skill_config.content:
             return images, text_parts
 
-        logger.info(f"📎 Processing {len(skill_config.content)} attachments from skill config")
+        logger.info(
+            f"📎 Processing {len(skill_config.content)} attachments from skill config"
+        )
 
         try:
             image_urls = []
@@ -867,7 +931,9 @@ class SkillExecutorService:
                 )
                 images.extend(pil_images)
 
-            logger.info(f"✅ Processed: {len(images)} images, {len(text_parts)} text parts")
+            logger.info(
+                f"✅ Processed: {len(images)} images, {len(text_parts)} text parts"
+            )
         except Exception as e:
             logger.error(f"❌ Failed to process attachments: {e}")
 
@@ -889,16 +955,18 @@ class SkillExecutorService:
             elif "audio" in result or "audio_url" in result:
                 url = result.get("audio") or result.get("audio_url")
                 logger.info(f"🔊 Skill generated audio: {url}")
-                message_parts.append({
-                    "type": "file",
-                    "url": url,
-                    "mime_type": "audio/wav",
-                    "filename": "audio.wav",
-                })
+                message_parts.append(
+                    {
+                        "type": "file",
+                        "url": url,
+                        "mime_type": "audio/wav",
+                        "filename": "audio.wav",
+                    }
+                )
             else:
                 # Convert dict to text
                 text_content = json.dumps(result)
-                logger.info(f"📝 Skill generated dict result")
+                logger.info("📝 Skill generated dict result")
                 message_parts.append({"type": "text", "text": text_content})
         else:
             # String or other type - convert to text
@@ -910,10 +978,10 @@ class SkillExecutorService:
 
     def create_executor_callback(
         self,
-        org_model: Optional[str] = None,
+        org_model: str | None = None,
         return_message_parts: bool = False,
         api_key: str = "",
-        organization_id: int = 0
+        organization_id: int = 0,
     ) -> Callable:
         """Create callback for SkillTool delegation.
 
@@ -922,11 +990,12 @@ class SkillExecutorService:
         Returns:
             Callable that takes (skill_config, inputs, capture_outputs) and returns result
         """
+
         def callback(
             skill_config: SkillConfig,
-            runtime_inputs: Dict[str, Any],
-            capture_outputs: bool = False
-        ) -> Union[str, SkillExecutionResult]:
+            runtime_inputs: dict[str, Any],
+            capture_outputs: bool = False,
+        ) -> str | SkillExecutionResult:
             return self.execute_skill(
                 skill_config=skill_config,
                 runtime_inputs=runtime_inputs,
@@ -934,7 +1003,7 @@ class SkillExecutorService:
                 capture_outputs=capture_outputs,
                 return_message_parts=return_message_parts,
                 api_key=api_key,
-                organization_id=organization_id
+                organization_id=organization_id,
             )
 
         return callback

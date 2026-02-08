@@ -23,10 +23,10 @@ from typing import Any
 import httpx
 from tenacity import (
     AsyncRetrying,
+    RetryCallState,
+    retry_if_result,
     stop_after_attempt,
     wait_exponential,
-    retry_if_result,
-    RetryCallState,
 )
 
 from emery_agents.utils.permission_error_parser import (
@@ -102,6 +102,7 @@ class HTTPClient:
 
     def _start_event_loop_thread(self) -> None:
         """Start event loop in dedicated thread."""
+
         def run_loop() -> None:
             self._loop = asyncio.new_event_loop()
             asyncio.set_event_loop(self._loop)
@@ -250,7 +251,9 @@ class HTTPClient:
                         elif "message" in error_body:
                             error_detail = error_body["message"]
                     except (json.JSONDecodeError, KeyError, TypeError):
-                        error_detail = response.text[:200] if response.text else error_detail
+                        error_detail = (
+                            response.text[:200] if response.text else error_detail
+                        )
 
                     logger.error(
                         f"[DSPY-HTTP] {method} {endpoint} - call_id: {call_id}, "
@@ -259,7 +262,9 @@ class HTTPClient:
 
                     # Special handling for 403 permission errors
                     if response.status_code == 403:
-                        perm_error = parse_permission_error(error_body or {"error": error_detail})
+                        perm_error = parse_permission_error(
+                            error_body or {"error": error_detail}
+                        )
                         if perm_error:
                             user_message = format_permission_error_for_user(perm_error)
                             return f"PERMISSION_DENIED: {user_message}"

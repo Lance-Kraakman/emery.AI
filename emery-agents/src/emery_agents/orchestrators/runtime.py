@@ -13,17 +13,20 @@ via Python closures when the session graph is created.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from PIL import Image as PILImage
 
 from emery_agents.services.analysis.token_accumulator import TokenAccumulator
-from emery_agents.services.context import ConversationMessage, format_conversation_history
+from emery_agents.services.context import (
+    ConversationMessage,
+    format_conversation_history,
+)
 
 if TYPE_CHECKING:
-    from emery_agents.tools.capability_registry import CapabilityRegistry
-    from emery_agents.planning.registry import PlanningRegistry
     from emery_agents.engine import AgentEngine
+    from emery_agents.planning.registry import PlanningRegistry
+    from emery_agents.tools.capability_registry import CapabilityRegistry
 
 # Re-export so existing `from ..runtime import ConversationMessage` still works
 __all__ = ["ConversationMessage", "format_conversation_history", "RuntimeContext"]
@@ -50,29 +53,32 @@ class RuntimeContext:
         workspace_type: "agents" or "users" — determines PII filtering
         workspace_id: Agent ID or user ID for workspace path resolution
     """
+
     # Agent Engine (unified workspace management)
-    engine: Optional["AgentEngine"] = None
+    engine: AgentEngine | None = None
 
     # Tools and agents
-    tools: List[Any] = field(default_factory=list)
-    managed_agents: List[Any] = field(default_factory=list)
+    tools: list[Any] = field(default_factory=list)
+    managed_agents: list[Any] = field(default_factory=list)
 
     # Authentication
     api_key: str = ""
     org_id: str = ""
-    org_model: Optional[str] = None
+    org_model: str | None = None
 
     # Registries
-    capability_registry: Optional[CapabilityRegistry] = None
-    planning_registry: Optional["PlanningRegistry"] = None
+    capability_registry: CapabilityRegistry | None = None
+    planning_registry: PlanningRegistry | None = None
 
     # Context
-    conversation_history: Optional[List[ConversationMessage]] = None
-    user_id: Optional[str] = None
-    workspace_type: Optional[str] = None
-    workspace_id: Optional[str] = None
+    conversation_history: list[ConversationMessage] | None = None
+    user_id: str | None = None
+    workspace_type: str | None = None
+    workspace_id: str | None = None
 
     # Additional context
-    images: List[PILImage.Image] = field(default_factory=list)
-    extra_headers: Optional[Dict[str, str]] = None  # Audit trail headers for CRUD tool calls
-    token_accumulator: Optional[TokenAccumulator] = None
+    images: list[PILImage.Image] = field(default_factory=list)
+    extra_headers: dict[str, str] | None = (
+        None  # Audit trail headers for CRUD tool calls
+    )
+    token_accumulator: TokenAccumulator | None = None

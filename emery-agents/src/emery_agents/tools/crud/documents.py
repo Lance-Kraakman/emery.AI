@@ -12,10 +12,13 @@ from typing import Any
 import dspy
 
 from emery_agents.api.http_client import make_request
+
 from ..mutation_guard import check_mutation_allowed
 
 
-def _build_paragraph(text: str, bold: bool = False, italic: bool = False) -> dict[str, Any]:
+def _build_paragraph(
+    text: str, bold: bool = False, italic: bool = False
+) -> dict[str, Any]:
     """Build a TipTap paragraph node with optional formatting."""
     marks = []
     if bold:
@@ -35,7 +38,7 @@ def _build_heading(text: str, level: int) -> dict[str, Any]:
     return {
         "type": "heading",
         "attrs": {"level": level},
-        "content": [{"type": "text", "text": text}]
+        "content": [{"type": "text", "text": text}],
     }
 
 
@@ -46,17 +49,16 @@ def _build_list(items: list[str], ordered: bool = False) -> dict[str, Any]:
             "type": "listItem",
             "content": [
                 {"type": "paragraph", "content": [{"type": "text", "text": item}]}
-            ]
+            ],
         }
         for item in items
     ]
-    return {
-        "type": "orderedList" if ordered else "bulletList",
-        "content": list_items
-    }
+    return {"type": "orderedList" if ordered else "bulletList", "content": list_items}
 
 
-def create_document_crud(api_key: str, org_id: str, extra_headers: dict[str, str] | None = None) -> dspy.Tool:
+def create_document_crud(
+    api_key: str, org_id: str, extra_headers: dict[str, str] | None = None
+) -> dspy.Tool:
     """
     Factory: Create document_crud tool with auth captured in closure.
 
@@ -126,7 +128,7 @@ def create_document_crud(api_key: str, org_id: str, extra_headers: dict[str, str
             create_data: dict[str, Any] = {
                 "tableId": int(table_id),
                 "fieldId": int(field_id),
-                "title": title
+                "title": title,
             }
             if row_id:
                 create_data["rowId"] = row_id
@@ -172,7 +174,16 @@ def create_document_crud(api_key: str, org_id: str, extra_headers: dict[str, str
             if not text:
                 return "ERROR: text is required for append_text"
             node = _build_paragraph(text, bold=bool(bold), italic=bool(italic))
-            return _modify_content(document_id, table_id_str, field_id_str, node, None, api_key, org_id, extra_headers=extra_headers)
+            return _modify_content(
+                document_id,
+                table_id_str,
+                field_id_str,
+                node,
+                None,
+                api_key,
+                org_id,
+                extra_headers=extra_headers,
+            )
 
         elif method == "append_heading":
             if not document_id or not table_id_str or not field_id_str:
@@ -181,7 +192,16 @@ def create_document_crud(api_key: str, org_id: str, extra_headers: dict[str, str
                 return "ERROR: text is required for append_heading"
             heading_level = level if level and 1 <= level <= 6 else 2
             node = _build_heading(text, heading_level)
-            return _modify_content(document_id, table_id_str, field_id_str, node, None, api_key, org_id, extra_headers=extra_headers)
+            return _modify_content(
+                document_id,
+                table_id_str,
+                field_id_str,
+                node,
+                None,
+                api_key,
+                org_id,
+                extra_headers=extra_headers,
+            )
 
         elif method == "append_list":
             if not document_id or not table_id_str or not field_id_str:
@@ -189,7 +209,16 @@ def create_document_crud(api_key: str, org_id: str, extra_headers: dict[str, str
             if not items or not isinstance(items, list):
                 return "ERROR: items (array of strings) is required for append_list"
             node = _build_list(items, ordered=bool(ordered))
-            return _modify_content(document_id, table_id_str, field_id_str, node, None, api_key, org_id, extra_headers=extra_headers)
+            return _modify_content(
+                document_id,
+                table_id_str,
+                field_id_str,
+                node,
+                None,
+                api_key,
+                org_id,
+                extra_headers=extra_headers,
+            )
 
         elif method == "update_text":
             if not document_id or not table_id_str or not field_id_str:
@@ -199,7 +228,16 @@ def create_document_crud(api_key: str, org_id: str, extra_headers: dict[str, str
             if not text:
                 return "ERROR: text is required for update_text"
             node = _build_paragraph(text, bold=bool(bold), italic=bool(italic))
-            return _modify_content(document_id, table_id_str, field_id_str, node, position, api_key, org_id, extra_headers=extra_headers)
+            return _modify_content(
+                document_id,
+                table_id_str,
+                field_id_str,
+                node,
+                position,
+                api_key,
+                org_id,
+                extra_headers=extra_headers,
+            )
 
         elif method == "update_heading":
             if not document_id or not table_id_str or not field_id_str:
@@ -210,7 +248,16 @@ def create_document_crud(api_key: str, org_id: str, extra_headers: dict[str, str
                 return "ERROR: text is required for update_heading"
             heading_level = level if level and 1 <= level <= 6 else 2
             node = _build_heading(text, heading_level)
-            return _modify_content(document_id, table_id_str, field_id_str, node, position, api_key, org_id, extra_headers=extra_headers)
+            return _modify_content(
+                document_id,
+                table_id_str,
+                field_id_str,
+                node,
+                position,
+                api_key,
+                org_id,
+                extra_headers=extra_headers,
+            )
 
         else:
             return (
@@ -283,7 +330,7 @@ def _modify_content(
         if 0 <= position < len(content):
             content[position] = node
         else:
-            return f"ERROR: Position {position} out of range (0-{len(content)-1})"
+            return f"ERROR: Position {position} out of range (0-{len(content) - 1})"
     else:
         content.append(node)
 

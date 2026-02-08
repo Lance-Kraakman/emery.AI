@@ -7,16 +7,16 @@ Downloads files from S3 URLs and routes to type-specific extractors.
 Returns FileProcessingResult with extracted text and optionally page images
 (for scanned PDFs that have no text layer — sent to vision model for OCR).
 """
+
 import logging
 from dataclasses import dataclass, field
 from io import BytesIO
-from typing import List
 
 import httpx
-import pymupdf
-from PIL import Image
-from docx import Document as DocxDocument
 import openpyxl
+import pymupdf
+from docx import Document as DocxDocument
+from PIL import Image
 
 from ..http import transcribe_audio
 
@@ -32,19 +32,22 @@ SCANNED_PDF_TEXT_THRESHOLD = 100
 @dataclass
 class FileProcessingResult:
     """Result of file processing — text content and optionally page images."""
+
     text: str
-    images: List[Image.Image] = field(default_factory=list)
+    images: list[Image.Image] = field(default_factory=list)
     filename: str = ""
     is_scanned: bool = False
 
 
 class FileProcessingError(Exception):
     """Raised when file processing fails."""
+
     pass
 
 
 class FileTooLargeError(FileProcessingError):
     """Raised when file exceeds size limit."""
+
     pass
 
 
@@ -54,10 +57,10 @@ async def download_file(url: str, max_size: int = MAX_FILE_SIZE_BYTES) -> bytes:
 
     try:
         async with httpx.AsyncClient() as client:
-            async with client.stream('GET', url, timeout=30.0) as response:
+            async with client.stream("GET", url, timeout=30.0) as response:
                 response.raise_for_status()
 
-                content_length = response.headers.get('content-length')
+                content_length = response.headers.get("content-length")
                 if content_length and int(content_length) > max_size:
                     raise FileTooLargeError(
                         f"File size {int(content_length)} bytes exceeds limit {max_size} bytes"
@@ -104,8 +107,10 @@ def extract_text_from_pdf(pdf_bytes: bytes) -> FileProcessingResult:
 
         # Check if this is a scanned PDF (no meaningful text extracted)
         if len(full_text.strip()) < SCANNED_PDF_TEXT_THRESHOLD and page_count > 0:
-            logger.info(f"PDF has {len(full_text)} chars text across {page_count} pages — treating as scanned, extracting page images")
-            page_images: List[Image.Image] = []
+            logger.info(
+                f"PDF has {len(full_text)} chars text across {page_count} pages — treating as scanned, extracting page images"
+            )
+            page_images: list[Image.Image] = []
             for page_num in range(page_count):
                 page = pdf_document[page_num]
                 pix = page.get_pixmap(dpi=150)
@@ -128,7 +133,7 @@ def extract_text_from_pdf(pdf_bytes: bytes) -> FileProcessingResult:
         raise FileProcessingError(f"PDF processing failed: {str(e)}") from e
 
 
-def extract_text_from_text_file(file_bytes: bytes, encoding: str = 'utf-8') -> str:
+def extract_text_from_text_file(file_bytes: bytes, encoding: str = "utf-8") -> str:
     """Extract text from plain text file."""
     try:
         text = file_bytes.decode(encoding)
@@ -144,7 +149,7 @@ def extract_text_from_docx(file_bytes: bytes) -> str:
 
     try:
         doc = DocxDocument(BytesIO(file_bytes))
-        parts: List[str] = []
+        parts: list[str] = []
 
         for para in doc.paragraphs:
             if para.text.strip():
@@ -171,7 +176,7 @@ def extract_text_from_xlsx(file_bytes: bytes) -> str:
 
     try:
         wb = openpyxl.load_workbook(BytesIO(file_bytes), read_only=True, data_only=True)
-        parts: List[str] = []
+        parts: list[str] = []
 
         for sheet_name in wb.sheetnames:
             ws = wb[sheet_name]
@@ -212,13 +217,15 @@ async def process_file(url: str, mime_type: str, filename: str) -> FileProcessin
     file_bytes = await download_file(url)
 
     # --- PDF ---
-    if mime_type == 'application/pdf':
+    if mime_type == "application/pdf":
         result = extract_text_from_pdf(file_bytes)
         result.filename = filename
 
         if result.is_scanned:
             result.text = _wrap_content(
-                filename, "pdf", "(no text content)",
+                filename,
+                "pdf",
+                "(no text content)",
                 note="Scanned PDF - no text could be extracted. Page images are attached for visual analysis.",
             )
         else:
@@ -226,7 +233,7 @@ async def process_file(url: str, mime_type: str, filename: str) -> FileProcessin
         return result
 
     # --- Text ---
-    if mime_type.startswith('text/'):
+    if mime_type.startswith("text/"):
         text = extract_text_from_text_file(file_bytes)
         return FileProcessingResult(
             text=_wrap_content(filename, "text", text),
@@ -234,7 +241,7 @@ async def process_file(url: str, mime_type: str, filename: str) -> FileProcessin
         )
 
     # --- Audio ---
-    if mime_type.startswith('audio/'):
+    if mime_type.startswith("audio/"):
         try:
             text = await transcribe_audio(file_bytes, content_type=mime_type)
             return FileProcessingResult(
@@ -244,14 +251,16 @@ async def process_file(url: str, mime_type: str, filename: str) -> FileProcessin
         except Exception as e:
             logger.error(f"Audio transcription failed: {str(e)}")
             return FileProcessingResult(
-                text=_wrap_content(filename, "audio", f"(Transcription failed: {str(e)})"),
+                text=_wrap_content(
+                    filename, "audio", f"(Transcription failed: {str(e)})"
+                ),
                 filename=filename,
             )
 
     # --- Word documents ---
     if mime_type in (
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'application/msword',
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/msword",
     ):
         text = extract_text_from_docx(file_bytes)
         return FileProcessingResult(
@@ -261,8 +270,8 @@ async def process_file(url: str, mime_type: str, filename: str) -> FileProcessin
 
     # --- Excel spreadsheets ---
     if mime_type in (
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'application/vnd.ms-excel',
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.ms-excel",
     ):
         text = extract_text_from_xlsx(file_bytes)
         return FileProcessingResult(
@@ -273,6 +282,8 @@ async def process_file(url: str, mime_type: str, filename: str) -> FileProcessin
     # --- Unsupported ---
     logger.warning(f"Unsupported MIME type: {mime_type}")
     return FileProcessingResult(
-        text=_wrap_content(filename, mime_type, f"(Type {mime_type} not supported for text extraction)"),
+        text=_wrap_content(
+            filename, mime_type, f"(Type {mime_type} not supported for text extraction)"
+        ),
         filename=filename,
     )

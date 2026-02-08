@@ -6,8 +6,6 @@ Handles goal evaluation, recovery analysis, and answer synthesis.
 
 from __future__ import annotations
 
-from typing import Optional
-
 import dspy
 
 from emery_agents.reasoning.signatures.evaluation import (
@@ -55,7 +53,7 @@ class EvaluatorModule(dspy.Module):  # type: ignore[misc]
         original_goal: str,
         plan_steps: list[str],
         step_results: list[str],
-        step_outcomes: Optional[list[StepOutcome]] = None,
+        step_outcomes: list[StepOutcome] | None = None,
     ) -> GoalEvaluation:
         """
         Evaluate whether the original goal was achieved.
@@ -184,7 +182,7 @@ class EvaluatorModule(dspy.Module):  # type: ignore[misc]
         original_goal: str,
         plan_steps: list[str],
         step_results: list[str],
-        step_outcomes: Optional[list[StepOutcome]] = None,
+        step_outcomes: list[StepOutcome] | None = None,
     ) -> GoalEvaluation:
         """
         Default forward pass evaluates goal achievement.
@@ -198,4 +196,6 @@ class EvaluatorModule(dspy.Module):  # type: ignore[misc]
         Returns:
             GoalEvaluation with achievement status
         """
-        return self.evaluate_goal(original_goal, plan_steps, step_results, step_outcomes)
+        return self.evaluate_goal(
+            original_goal, plan_steps, step_results, step_outcomes
+        )

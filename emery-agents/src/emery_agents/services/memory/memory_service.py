@@ -18,7 +18,7 @@ import logging
 import re
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import chromadb
 from chromadb.api.types import Documents, EmbeddingFunction, Embeddings
@@ -73,15 +73,19 @@ class MemoryService:
         """
         self._workspace_type = workspace_type
         self._workspace_id = self._validate_id(workspace_id)
-        self._chroma_path = base_path / self._workspace_id / ".engine" / "memory" / "chroma"
+        self._chroma_path = (
+            base_path / self._workspace_id / ".engine" / "memory" / "chroma"
+        )
 
         # PII filter only for shared agent memories
-        self._pii_filter: Optional[PIIFilter] = None
+        self._pii_filter: PIIFilter | None = None
         if workspace_type == "agents":
             try:
                 self._pii_filter = PIIFilter()
             except Exception as e:
-                logger.warning(f"Failed to initialize PIIFilter, agent memories will not be PII-filtered: {e}")
+                logger.warning(
+                    f"Failed to initialize PIIFilter, agent memories will not be PII-filtered: {e}"
+                )
 
         # Ensure directory exists with write permissions
         # (tar.gz roundtrip can leave restrictive permissions from bwrap)
@@ -95,7 +99,9 @@ class MemoryService:
             try:
                 workspace_root.chmod(0o700)
             except PermissionError:
-                logger.warning(f"Cannot fix permissions on workspace root {workspace_root}")
+                logger.warning(
+                    f"Cannot fix permissions on workspace root {workspace_root}"
+                )
 
         self._chroma_path.mkdir(parents=True, exist_ok=True)
 
@@ -129,7 +135,9 @@ class MemoryService:
         except Exception:
             # Collection was created with a different embedding function
             # (e.g., sentence_transformer → HF API migration). Delete and recreate.
-            logger.warning("Embedding function conflict — recreating memories collection")
+            logger.warning(
+                "Embedding function conflict — recreating memories collection"
+            )
             self._client.delete_collection("memories")
             self._collection = self._client.get_or_create_collection(
                 name="memories",
@@ -175,7 +183,7 @@ class MemoryService:
         self,
         content: str,
         memory_type: str = "general",
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> str:
         """Store a new memory.
 
@@ -193,7 +201,9 @@ class MemoryService:
             raise ValueError("Memory content cannot be empty")
 
         if memory_type not in MEMORY_TYPES:
-            logger.warning(f"Unknown memory_type '{memory_type}', defaulting to 'general'")
+            logger.warning(
+                f"Unknown memory_type '{memory_type}', defaulting to 'general'"
+            )
             memory_type = "general"
 
         # Strip PII for agent memories
@@ -213,8 +223,7 @@ class MemoryService:
 
         # ChromaDB metadata values must be str, int, float, or bool
         sanitized_meta = {
-            k: v for k, v in meta.items()
-            if isinstance(v, (str, int, float, bool))
+            k: v for k, v in meta.items() if isinstance(v, (str, int, float, bool))
         }
 
         self._collection.add(
@@ -230,8 +239,8 @@ class MemoryService:
         self,
         query: str,
         n_results: int = 5,
-        memory_type: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        memory_type: str | None = None,
+    ) -> list[dict[str, Any]]:
         """Search memories by semantic similarity.
 
         Args:
@@ -245,7 +254,7 @@ class MemoryService:
         if not query:
             return []
 
-        where_filter: Optional[Dict[str, str]] = None
+        where_filter: dict[str, str] | None = None
         if memory_type:
             where_filter = {"memory_type": memory_type}
 
@@ -262,16 +271,24 @@ class MemoryService:
         memories = []
         if results and results["ids"] and results["ids"][0]:
             for i, memory_id in enumerate(results["ids"][0]):
-                memories.append({
-                    "id": memory_id,
-                    "content": results["documents"][0][i] if results["documents"] else "",
-                    "metadata": results["metadatas"][0][i] if results["metadatas"] else {},
-                    "distance": results["distances"][0][i] if results["distances"] else None,
-                })
+                memories.append(
+                    {
+                        "id": memory_id,
+                        "content": results["documents"][0][i]
+                        if results["documents"]
+                        else "",
+                        "metadata": results["metadatas"][0][i]
+                        if results["metadatas"]
+                        else {},
+                        "distance": results["distances"][0][i]
+                        if results["distances"]
+                        else None,
+                    }
+                )
 
         return memories
 
-    def get_all(self, limit: int = 50) -> List[Dict[str, Any]]:
+    def get_all(self, limit: int = 50) -> list[dict[str, Any]]:
         """Get all memories (up to limit).
 
         Args:
@@ -295,11 +312,17 @@ class MemoryService:
         memories = []
         if results and results["ids"]:
             for i, memory_id in enumerate(results["ids"]):
-                memories.append({
-                    "id": memory_id,
-                    "content": results["documents"][i] if results["documents"] else "",
-                    "metadata": results["metadatas"][i] if results["metadatas"] else {},
-                })
+                memories.append(
+                    {
+                        "id": memory_id,
+                        "content": results["documents"][i]
+                        if results["documents"]
+                        else "",
+                        "metadata": results["metadatas"][i]
+                        if results["metadatas"]
+                        else {},
+                    }
+                )
 
         return memories
 
@@ -351,7 +374,8 @@ class MemoryService:
 
         # Filter by relevance — skip memories that aren't meaningfully similar
         memories = [
-            m for m in memories
+            m
+            for m in memories
             if m.get("distance") is not None
             and m["distance"] <= self._RELEVANCE_DISTANCE_THRESHOLD
         ]

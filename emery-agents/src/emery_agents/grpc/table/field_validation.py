@@ -6,32 +6,27 @@ metadata-only change detection, and comprehensive error messaging.
 """
 
 import logging
-from typing import Tuple, Optional, Set
+
 from ..generated import table_service_pb2
 
 logger = logging.getLogger(__name__)
 
 # Type Conversion Compatibility Matrix
 # Defines which field type conversions are allowed with data migration
-ALLOWED_TYPE_CONVERSIONS: Set[Tuple[int, int]] = {
+ALLOWED_TYPE_CONVERSIONS: set[tuple[int, int]] = {
     # Text conversions
     (table_service_pb2.FIELD_TYPE_TEXT, table_service_pb2.FIELD_TYPE_NUMBER),
     (table_service_pb2.FIELD_TYPE_TEXT, table_service_pb2.FIELD_TYPE_BOOLEAN),
     (table_service_pb2.FIELD_TYPE_TEXT, table_service_pb2.FIELD_TYPE_EMAIL),
     (table_service_pb2.FIELD_TYPE_TEXT, table_service_pb2.FIELD_TYPE_PHONE),
-
     # Number conversions
     (table_service_pb2.FIELD_TYPE_NUMBER, table_service_pb2.FIELD_TYPE_TEXT),
-
     # Boolean conversions
     (table_service_pb2.FIELD_TYPE_BOOLEAN, table_service_pb2.FIELD_TYPE_TEXT),
-
     # Email conversions
     (table_service_pb2.FIELD_TYPE_EMAIL, table_service_pb2.FIELD_TYPE_TEXT),
-
     # Phone conversions
     (table_service_pb2.FIELD_TYPE_PHONE, table_service_pb2.FIELD_TYPE_TEXT),
-
     # Date/Timestamp conversions
     (table_service_pb2.FIELD_TYPE_DATE, table_service_pb2.FIELD_TYPE_LAST_UPDATED),
     (table_service_pb2.FIELD_TYPE_DATE, table_service_pb2.FIELD_TYPE_CREATED_AT),
@@ -40,7 +35,7 @@ ALLOWED_TYPE_CONVERSIONS: Set[Tuple[int, int]] = {
 }
 
 # Complex field types that cannot be converted
-COMPLEX_FIELD_TYPES: Set[int] = {
+COMPLEX_FIELD_TYPES: set[int] = {
     table_service_pb2.FIELD_TYPE_SINGLE_SELECT,
     table_service_pb2.FIELD_TYPE_MULTI_SELECT,
     table_service_pb2.FIELD_TYPE_RELATION,
@@ -71,10 +66,7 @@ FIELD_TYPE_NAMES = {
 }
 
 
-def validate_field_type_change(
-    from_type: int,
-    to_type: int
-) -> Tuple[bool, Optional[str]]:
+def validate_field_type_change(from_type: int, to_type: int) -> tuple[bool, str | None]:
     """Validate if a field type change is allowed.
 
     Checks if the requested type conversion is in the allowed conversions set.
@@ -103,19 +95,20 @@ def validate_field_type_change(
 
     # Check if conversion is in allowed set
     if (from_type, to_type) in ALLOWED_TYPE_CONVERSIONS:
-        logger.info(f"[validate_field_type_change] Allowed conversion: {FIELD_TYPE_NAMES.get(from_type)} → {FIELD_TYPE_NAMES.get(to_type)}")
+        logger.info(
+            f"[validate_field_type_change] Allowed conversion: {FIELD_TYPE_NAMES.get(from_type)} → {FIELD_TYPE_NAMES.get(to_type)}"
+        )
         return True, None
 
     # Generate error message for blocked conversion
     error_msg = get_type_change_error_message(from_type, to_type)
-    logger.warning(f"[validate_field_type_change] Blocked conversion: {FIELD_TYPE_NAMES.get(from_type)} → {FIELD_TYPE_NAMES.get(to_type)}")
+    logger.warning(
+        f"[validate_field_type_change] Blocked conversion: {FIELD_TYPE_NAMES.get(from_type)} → {FIELD_TYPE_NAMES.get(to_type)}"
+    )
     return False, error_msg
 
 
-def is_metadata_only_change(
-    current_field_type: int,
-    updated_field_type: int
-) -> bool:
+def is_metadata_only_change(current_field_type: int, updated_field_type: int) -> bool:
     """Check if a field update is metadata-only (no data migration needed).
 
     Metadata-only changes include:
@@ -169,9 +162,7 @@ def get_type_change_error_message(from_type: int, to_type: int) -> str:
 
 
 def get_field_operation_description(
-    current_field_type: int,
-    updated_field_type: int,
-    migrate_data: bool
+    current_field_type: int, updated_field_type: int, migrate_data: bool
 ) -> str:
     """Get a description of the field operation for logging.
 
@@ -186,7 +177,9 @@ def get_field_operation_description(
     if current_field_type == updated_field_type:
         return "Metadata-only update (no data migration)"
 
-    from_name = FIELD_TYPE_NAMES.get(current_field_type, f"UNKNOWN({current_field_type})")
+    from_name = FIELD_TYPE_NAMES.get(
+        current_field_type, f"UNKNOWN({current_field_type})"
+    )
     to_name = FIELD_TYPE_NAMES.get(updated_field_type, f"UNKNOWN({updated_field_type})")
 
     if migrate_data:

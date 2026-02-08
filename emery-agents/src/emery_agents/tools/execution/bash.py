@@ -7,8 +7,8 @@ Ported from tools/bash_tool.py as DSPy-compatible function.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from emery_agents.services.sandbox.bwrap_executor import BwrapExecutor
 

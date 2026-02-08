@@ -9,12 +9,13 @@ Used for:
 - Workspace context filtering (planning node)
 - Agent memory (ChromaDB vector storage)
 """
+
 from __future__ import annotations
 
 import logging
 import os
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any, Optional, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from .embedding_usage import EmbeddingUsageTracker
 
@@ -25,9 +26,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Provider state
-_provider: Optional[str] = None
-_gemini_client: Optional["GeminiClient"] = None
-_hf_client: Optional["InferenceClient"] = None
+_provider: str | None = None
+_gemini_client: GeminiClient | None = None
+_hf_client: InferenceClient | None = None
 
 
 # Gemini config
@@ -49,9 +50,12 @@ def _init_provider() -> str:
     if gemini_key:
         try:
             from google import genai
+
             _gemini_client = genai.Client(api_key=gemini_key)
             _provider = "gemini"
-            logger.info(f"Embedding service initialized with Gemini model: {GEMINI_MODEL}")
+            logger.info(
+                f"Embedding service initialized with Gemini model: {GEMINI_MODEL}"
+            )
             return _provider
         except Exception as e:
             logger.warning(f"Failed to initialize Gemini embeddings: {e}")
@@ -60,6 +64,7 @@ def _init_provider() -> str:
     hf_token = os.getenv("HF_TOKEN")
     if hf_token:
         from huggingface_hub import InferenceClient
+
         _hf_client = InferenceClient(token=hf_token)
         _provider = "huggingface"
         logger.info(f"Embedding service initialized with HuggingFace model: {HF_MODEL}")
@@ -120,7 +125,7 @@ def _embed_huggingface(text: str) -> tuple[float, ...]:
 
 @lru_cache(maxsize=5000)
 def get_embedding(
-    text: str, tracker: Optional[EmbeddingUsageTracker] = None
+    text: str, tracker: EmbeddingUsageTracker | None = None
 ) -> tuple[float, ...]:
     """
     Get embedding for text (cached).
@@ -149,13 +154,15 @@ def get_embedding(
         if tracker:
             tracker.record(text, HF_MODEL)
 
-    logger.debug(f"Generated embedding: {len(embedding)} dims for '{text[:50]}...' (provider={provider})")
+    logger.debug(
+        f"Generated embedding: {len(embedding)} dims for '{text[:50]}...' (provider={provider})"
+    )
     return embedding
 
 
 def get_embeddings_batch(
     texts: list[str],
-    tracker: Optional[EmbeddingUsageTracker] = None,
+    tracker: EmbeddingUsageTracker | None = None,
     batch_size: int = 100,
 ) -> list[tuple[float, ...]]:
     """Compute embeddings for multiple texts, chunked for API limits.
@@ -190,9 +197,7 @@ def get_embeddings_batch(
 
         if tracker:
             for text in chunk:
-                tracker.record(
-                    text, GEMINI_MODEL if provider == "gemini" else HF_MODEL
-                )
+                tracker.record(text, GEMINI_MODEL if provider == "gemini" else HF_MODEL)
 
         elapsed = _time.monotonic() - start
         logger.info(
@@ -201,7 +206,9 @@ def get_embeddings_batch(
         )
 
     elapsed = _time.monotonic() - start
-    logger.info(f"Batch embedded {total} texts in {num_batches} API calls, {elapsed:.1f}s (provider={provider})")
+    logger.info(
+        f"Batch embedded {total} texts in {num_batches} API calls, {elapsed:.1f}s (provider={provider})"
+    )
     return results
 
 

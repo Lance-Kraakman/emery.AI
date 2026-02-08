@@ -20,7 +20,7 @@ Everything lives inside `.engine/` for consistent S3 sync:
     ├── cache/                   # [future]
     ├── debug/{session}.log      # [future]
     ├── workspace/               # Sandbox working directory
-    └── context/{table}.parquet  # Synced table embeddings
+    └── context/{table}.parquet  # Synced table &|| table embeddings
 ```
 
 ## Current Implementation

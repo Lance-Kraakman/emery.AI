@@ -15,7 +15,6 @@ from .validator import (
     create_validator_from_skills,
 )
 
-
 __all__ = [
     # Validator (lightweight, safe to eagerly import)
     "SkillPermissions",

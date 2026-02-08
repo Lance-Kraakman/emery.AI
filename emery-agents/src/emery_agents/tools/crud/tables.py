@@ -13,10 +13,13 @@ from typing import Any
 import dspy
 
 from emery_agents.api import TableAPI
+
 from ..mutation_guard import check_mutation_allowed
 
 
-def create_table_crud(api_key: str, org_id: str, extra_headers: dict[str, str] | None = None) -> dspy.Tool:
+def create_table_crud(
+    api_key: str, org_id: str, extra_headers: dict[str, str] | None = None
+) -> dspy.Tool:
     """
     Factory: Create table_crud tool with auth captured in closure.
 

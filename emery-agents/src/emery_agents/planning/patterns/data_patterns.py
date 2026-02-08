@@ -6,14 +6,13 @@ Migrated from:
 - reasoning/capabilities/document_builder.py PLANNING_GUIDANCE
 """
 
-from emery_agents.planning.pattern import PlanningPattern, AutoApprovePolicy
-
+from emery_agents.planning.pattern import AutoApprovePolicy, PlanningPattern
 
 TABLE_MODIFY_PATTERN = PlanningPattern(
     id="plan:table_modify",
     name="Table Modification",
     description="Planning patterns for quick modifications to existing tables. "
-                "For complex schema design with multiple tables, use schema_builder instead.",
+    "For complex schema design with multiple tables, use schema_builder instead.",
     triggers=[
         "add field to table",
         "add column",
@@ -111,7 +110,7 @@ DOCUMENT_CREATE_PATTERN = PlanningPattern(
     id="plan:document_create",
     name="Document Creation",
     description="Planning patterns for creating rich-text documents, templates, and content. "
-                "Documents can be standalone or linked to table records.",
+    "Documents can be standalone or linked to table records.",
     triggers=[
         "create document",
         "write document",
@@ -167,7 +166,7 @@ ROW_OPERATIONS_PATTERN = PlanningPattern(
     id="plan:row_operations",
     name="Row/Record Operations",
     description="Planning patterns for adding, updating, or deleting records in tables. "
-                "Use for data entry and record management operations.",
+    "Use for data entry and record management operations.",
     triggers=[
         "add record",
         "create entry",
@@ -237,7 +236,7 @@ FILE_OPERATIONS_PATTERN = PlanningPattern(
     id="plan:file_operations",
     name="File Operations",
     description="Planning patterns for uploading, managing, and linking files to records. "
-                "Files can be standalone or attached to table records.",
+    "Files can be standalone or attached to table records.",
     triggers=[
         "upload file",
         "attach file",

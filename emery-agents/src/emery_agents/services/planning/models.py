@@ -13,16 +13,20 @@ and outputs for plan generation. This enables:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import json
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
 
 from emery_agents.entities.models.context_mapping import ResolvedContext
-from emery_agents.entities.models.plan import Plan, SkillInputDefinition, SkillOutputDefinition
-from emery_agents.services.protocols import Tool, ManagedAgent
-from emery_agents.tools.capability_registry import CapabilityRegistry
+from emery_agents.entities.models.plan import (
+    Plan,
+    SkillInputDefinition,
+    SkillOutputDefinition,
+)
 from emery_agents.services.analysis.token_accumulator import TokenAccumulator
 from emery_agents.services.context import SessionConfig, WorkspaceContext
+from emery_agents.services.protocols import ManagedAgent, Tool
+from emery_agents.tools.capability_registry import CapabilityRegistry
 
 if TYPE_CHECKING:
     from emery_agents.services.context import ConversationMessage
@@ -35,7 +39,7 @@ class ToolResultSummary:
     tool: str
     summary: str
 
-    def to_dict(self) -> Dict[str, str]:
+    def to_dict(self) -> dict[str, str]:
         """Convert to dict for Jinja template."""
         return {"tool": self.tool, "summary": self.summary}
 
@@ -56,44 +60,44 @@ class PlanGenerationRequest:
     basic_instructions: str
 
     # Context
-    context_tables: Optional[ResolvedContext] = None
-    goal: Optional[str] = None
-    conversation_history: Optional[List[ConversationMessage]] = None
+    context_tables: ResolvedContext | None = None
+    goal: str | None = None
+    conversation_history: list[ConversationMessage] | None = None
 
     # Available resources
-    tools: List[Tool] = field(default_factory=list)
-    managed_agents: List[ManagedAgent] = field(default_factory=list)
+    tools: list[Tool] = field(default_factory=list)
+    managed_agents: list[ManagedAgent] = field(default_factory=list)
 
     # Template generation mode (for reusable skills with {{ variable }} placeholders)
-    skill_inputs: List[SkillInputDefinition] = field(default_factory=list)
-    skill_outputs: List[SkillOutputDefinition] = field(default_factory=list)
+    skill_inputs: list[SkillInputDefinition] = field(default_factory=list)
+    skill_outputs: list[SkillOutputDefinition] = field(default_factory=list)
     is_template_generation: bool = False
 
     # Regeneration
-    previous_plan_json: Optional[str] = None
-    user_feedback: Optional[str] = None
+    previous_plan_json: str | None = None
+    user_feedback: str | None = None
 
     # Auth & identity (unified in SessionConfig)
-    config: Optional[SessionConfig] = None
+    config: SessionConfig | None = None
 
     # Capability discovery
-    capability_registry: Optional[CapabilityRegistry] = None
+    capability_registry: CapabilityRegistry | None = None
 
     # Pre-resolved workspace state (agents, tables - eliminates discovery calls)
-    workspace: Optional[WorkspaceContext] = None
+    workspace: WorkspaceContext | None = None
 
     # Memory context (relevant memories, passed separately from task)
     memory_context: str = ""
 
     # Pre-computed triage analysis (intent, entities, approach, external_services)
     # Avoids duplicate AnalyzeTask call in PlannerModule
-    triage_analysis: Optional[Dict[str, Any]] = None
+    triage_analysis: dict[str, Any] | None = None
 
     # Tools explicitly configured for the skill (from UI tools[] array).
     # Passed to the planner so it uses these tools in generated plan steps.
-    configured_tools: Optional[List[Dict[str, Any]]] = None
+    configured_tools: list[dict[str, Any]] | None = None
 
-    token_accumulator: Optional[TokenAccumulator] = None
+    token_accumulator: TokenAccumulator | None = None
 
     @property
     def configured_tools_json(self) -> str:
@@ -101,7 +105,6 @@ class PlanGenerationRequest:
         if not self.configured_tools:
             return ""
         return json.dumps(self.configured_tools)
-
 
 
 @dataclass
@@ -114,17 +117,19 @@ class PlanGenerationResult:
     needs more information from the user.
     """
 
-    plan: Optional[Plan] = None
-    strategy_guidance: Optional[str] = None
-    context_gathered: Optional[str] = None
-    analysis: Optional[str] = None
-    tool_results: List[Dict[str, Any]] = field(default_factory=list)
-    clarifying_questions: Optional[List[Dict[str, Any]]] = None
+    plan: Plan | None = None
+    strategy_guidance: str | None = None
+    context_gathered: str | None = None
+    analysis: str | None = None
+    tool_results: list[dict[str, Any]] = field(default_factory=list)
+    clarifying_questions: list[dict[str, Any]] | None = None
 
     @property
     def needs_clarification(self) -> bool:
         """Check if we need clarification from user instead of having a plan."""
-        return self.clarifying_questions is not None and len(self.clarifying_questions) > 0
+        return (
+            self.clarifying_questions is not None and len(self.clarifying_questions) > 0
+        )
 
 
 @dataclass
@@ -143,10 +148,10 @@ class FailureAnalysisRequest:
 
     # Plan context
     plan_goal: str
-    plan_context: Optional[str] = None
+    plan_context: str | None = None
 
     # Execution state (serialized ledger summary)
     ledger_summary: str = ""
 
     # Auth & identity (unified in SessionConfig)
-    config: Optional[SessionConfig] = None
+    config: SessionConfig | None = None

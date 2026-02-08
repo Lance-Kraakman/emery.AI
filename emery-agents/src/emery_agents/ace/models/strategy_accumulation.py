@@ -9,15 +9,16 @@ Used in BOTH phases:
 - Execution: record_execution() captures successful patterns
 """
 
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Optional, Dict, Any, Set
 from enum import Enum
-import re
+from typing import Any
 
 
 class StrategyOutcome(Enum):
     """Outcome of a strategy execution."""
+
     SUCCESS = "success"
     PARTIAL = "partial"  # Some steps failed but goal partially achieved
     FAILURE = "failure"
@@ -31,15 +32,16 @@ class ExecutionPattern:
     Captures the structure of how a goal was achieved,
     abstracted from specific parameter values.
     """
+
     pattern_id: str
-    goal_signature: str           # Normalized goal (keywords extracted)
-    step_sequence: tuple[str, ...]    # Ordered list of step descriptions
-    agent_sequence: tuple[str, ...]   # Ordered list of target agents used
-    tool_sequence: tuple[str, ...]    # Ordered list of tools used
+    goal_signature: str  # Normalized goal (keywords extracted)
+    step_sequence: tuple[str, ...]  # Ordered list of step descriptions
+    agent_sequence: tuple[str, ...]  # Ordered list of target agents used
+    tool_sequence: tuple[str, ...]  # Ordered list of tools used
     success_factors: tuple[str, ...]  # What made this successful
     failure_patterns: tuple[str, ...]  # What to avoid (from prior failures)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize to dictionary."""
         return {
             "pattern_id": self.pattern_id,
@@ -52,7 +54,7 @@ class ExecutionPattern:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ExecutionPattern":
+    def from_dict(cls, data: dict[str, Any]) -> "ExecutionPattern":
         """Create from dictionary."""
         return cls(
             pattern_id=data["pattern_id"],
@@ -72,12 +74,13 @@ class StrategyRecord:
 
     Tracks how often a pattern is used and its success rate.
     """
+
     pattern: ExecutionPattern
     success_count: int = 0
     failure_count: int = 0
     partial_count: int = 0
-    last_used_at: Optional[datetime] = None
-    goal_keywords: Set[str] = field(default_factory=set)
+    last_used_at: datetime | None = None
+    goal_keywords: set[str] = field(default_factory=set)
     created_at: datetime = field(default_factory=datetime.utcnow)
 
     @property
@@ -113,7 +116,7 @@ class StrategyRecord:
             self.partial_count += 1
         self.last_used_at = datetime.utcnow()
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize to dictionary."""
         return {
             "pattern": self.pattern.to_dict(),
@@ -123,13 +126,15 @@ class StrategyRecord:
             "total_uses": self.total_uses,
             "success_rate": self.success_rate,
             "confidence_score": self.confidence_score,
-            "last_used_at": self.last_used_at.isoformat() if self.last_used_at else None,
+            "last_used_at": self.last_used_at.isoformat()
+            if self.last_used_at
+            else None,
             "goal_keywords": list(self.goal_keywords),
             "created_at": self.created_at.isoformat(),
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "StrategyRecord":
+    def from_dict(cls, data: dict[str, Any]) -> "StrategyRecord":
         """Create from dictionary."""
         pattern = ExecutionPattern.from_dict(data["pattern"])
         last_used = None
@@ -158,23 +163,72 @@ class StrategyRegistry:
 
     Indexes strategies by goal keywords for quick lookup.
     """
-    strategies: Dict[str, StrategyRecord] = field(default_factory=dict)
-    keyword_index: Dict[str, Set[str]] = field(default_factory=dict)
+
+    strategies: dict[str, StrategyRecord] = field(default_factory=dict)
+    keyword_index: dict[str, set[str]] = field(default_factory=dict)
 
     # Common stopwords to exclude from keyword extraction
-    STOPWORDS: Set[str] = field(default_factory=lambda: {
-        'a', 'an', 'the', 'is', 'are', 'was', 'were', 'be', 'been',
-        'to', 'for', 'of', 'and', 'or', 'in', 'on', 'at', 'by', 'with',
-        'that', 'this', 'it', 'from', 'as', 'can', 'will', 'would',
-        'should', 'could', 'may', 'might', 'must', 'do', 'does', 'did',
-        'have', 'has', 'had', 'i', 'you', 'we', 'they', 'he', 'she',
-        'my', 'your', 'our', 'their', 'me', 'us', 'them', 'please',
-    })
+    STOPWORDS: set[str] = field(
+        default_factory=lambda: {
+            "a",
+            "an",
+            "the",
+            "is",
+            "are",
+            "was",
+            "were",
+            "be",
+            "been",
+            "to",
+            "for",
+            "of",
+            "and",
+            "or",
+            "in",
+            "on",
+            "at",
+            "by",
+            "with",
+            "that",
+            "this",
+            "it",
+            "from",
+            "as",
+            "can",
+            "will",
+            "would",
+            "should",
+            "could",
+            "may",
+            "might",
+            "must",
+            "do",
+            "does",
+            "did",
+            "have",
+            "has",
+            "had",
+            "i",
+            "you",
+            "we",
+            "they",
+            "he",
+            "she",
+            "my",
+            "your",
+            "our",
+            "their",
+            "me",
+            "us",
+            "them",
+            "please",
+        }
+    )
 
     def register_pattern(
         self,
         pattern: ExecutionPattern,
-        goal_keywords: Set[str],
+        goal_keywords: set[str],
     ) -> StrategyRecord:
         """
         Register a new pattern or update existing.
@@ -214,7 +268,7 @@ class StrategyRegistry:
         if pattern_id in self.strategies:
             self.strategies[pattern_id].record_outcome(outcome)
 
-    def extract_keywords(self, text: str) -> Set[str]:
+    def extract_keywords(self, text: str) -> set[str]:
         """
         Extract searchable keywords from text.
 
@@ -224,24 +278,19 @@ class StrategyRegistry:
         - Filters short words (<3 chars)
         """
         # Extract words
-        words = re.findall(r'\b\w+\b', text.lower())
+        words = re.findall(r"\b\w+\b", text.lower())
 
         # Filter stopwords and short words
-        return {
-            w for w in words
-            if w not in self.STOPWORDS and len(w) > 2
-        }
+        return {w for w in words if w not in self.STOPWORDS and len(w) > 2}
 
-    def get_top_strategies(self, limit: int = 10) -> List[StrategyRecord]:
+    def get_top_strategies(self, limit: int = 10) -> list[StrategyRecord]:
         """Get top strategies by confidence score."""
         sorted_records = sorted(
-            self.strategies.values(),
-            key=lambda r: r.confidence_score,
-            reverse=True
+            self.strategies.values(), key=lambda r: r.confidence_score, reverse=True
         )
         return sorted_records[:limit]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize to dictionary."""
         return {
             "total_strategies": len(self.strategies),
@@ -250,7 +299,7 @@ class StrategyRegistry:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "StrategyRegistry":
+    def from_dict(cls, data: dict[str, Any]) -> "StrategyRegistry":
         """Create from dictionary."""
         registry = cls()
 

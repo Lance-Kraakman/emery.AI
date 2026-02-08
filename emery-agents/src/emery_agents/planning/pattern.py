@@ -57,7 +57,9 @@ class PlanningPattern:
     # How to plan
     strategy: str  # Planning approach text
     tool_sequence: list[str] = field(default_factory=list)  # Typical tool order
-    step_templates: list[str] = field(default_factory=list)  # Step description templates
+    step_templates: list[str] = field(
+        default_factory=list
+    )  # Step description templates
 
     # Examples (serialized dspy.Example format for compatibility)
     examples: list[dict[str, Any]] = field(default_factory=list)
@@ -103,7 +105,9 @@ class PlanningPattern:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> PlanningPattern:
         """Create from dictionary."""
-        policy_str = data.get("autoApprovePolicy", data.get("auto_approve_policy", "confirm"))
+        policy_str = data.get(
+            "autoApprovePolicy", data.get("auto_approve_policy", "confirm")
+        )
         return cls(
             id=data["id"],
             name=data["name"],

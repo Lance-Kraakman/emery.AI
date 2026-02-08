@@ -5,14 +5,8 @@ Resolves context mappings for agent/skill/step execution.
 Respects hierarchy: agent -> skill -> step (later levels override).
 """
 
-from dataclasses import dataclass
-from typing import Dict, List, Optional
-
 from emery_agents.entities.models.context_mapping import (
     ContextMapping,
-    ContextMappingTargetType,
-    ContextMappingAccessMode,
-    ContextMappingSyncMode,
     ResolvedContext,
 )
 
@@ -38,8 +32,8 @@ class ContextResolver:
         self,
         organization_id: int,
         agent_id: int,
-        skill_id: Optional[int] = None,
-        step_id: Optional[str] = None,
+        skill_id: int | None = None,
+        step_id: str | None = None,
     ) -> ResolvedContext:
         """
         Resolve all context mappings for execution.
@@ -73,8 +67,8 @@ class ContextResolver:
         self,
         organization_id: int,
         agent_id: int,
-        skill_id: Optional[int],
-        step_id: Optional[str],
+        skill_id: int | None,
+        step_id: str | None,
     ) -> ResolvedContext:
         """Resolve context mappings via gRPC call to Next.js."""
         # Fetch mappings via gRPC
@@ -86,15 +80,9 @@ class ContextResolver:
         )
 
         # Convert proto messages to domain objects
-        agent_mappings = [
-            ContextMapping.from_proto(m) for m in response.agent_mappings
-        ]
-        skill_mappings = [
-            ContextMapping.from_proto(m) for m in response.skill_mappings
-        ]
-        step_mappings = [
-            ContextMapping.from_proto(m) for m in response.step_mappings
-        ]
+        agent_mappings = [ContextMapping.from_proto(m) for m in response.agent_mappings]
+        skill_mappings = [ContextMapping.from_proto(m) for m in response.skill_mappings]
+        step_mappings = [ContextMapping.from_proto(m) for m in response.step_mappings]
 
         # Merge with hierarchy priority
         merged = self._merge_mappings(agent_mappings, skill_mappings, step_mappings)
@@ -108,17 +96,17 @@ class ContextResolver:
 
     def _merge_mappings(
         self,
-        agent_mappings: List[ContextMapping],
-        skill_mappings: List[ContextMapping],
-        step_mappings: List[ContextMapping],
-    ) -> List[ContextMapping]:
+        agent_mappings: list[ContextMapping],
+        skill_mappings: list[ContextMapping],
+        step_mappings: list[ContextMapping],
+    ) -> list[ContextMapping]:
         """
         Merge mappings with hierarchy priority.
 
         Later levels override earlier levels for the same table.
         Priority: step > skill > agent
         """
-        by_table_id: Dict[int, ContextMapping] = {}
+        by_table_id: dict[int, ContextMapping] = {}
 
         # Agent level (lowest priority)
         for mapping in agent_mappings:
@@ -136,9 +124,9 @@ class ContextResolver:
 
     def resolve_context_sync(
         self,
-        agent_mappings: List[ContextMapping],
-        skill_mappings: Optional[List[ContextMapping]] = None,
-        step_mappings: Optional[List[ContextMapping]] = None,
+        agent_mappings: list[ContextMapping],
+        skill_mappings: list[ContextMapping] | None = None,
+        step_mappings: list[ContextMapping] | None = None,
     ) -> ResolvedContext:
         """
         Synchronous version of resolve_context for use with pre-fetched mappings.

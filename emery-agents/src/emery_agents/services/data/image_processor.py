@@ -7,9 +7,10 @@ Provides consistent image handling for vision model support.
 """
 
 import logging
-import aiohttp
 from io import BytesIO
-from typing import Any, List, Optional
+from typing import Any
+
+import aiohttp
 from PIL import Image
 
 from ...entities.message import ImageAttachment
@@ -21,7 +22,7 @@ class ImageProcessor:
     """Utility class for downloading and processing images for AI vision models."""
 
     @staticmethod
-    async def download_images_from_urls(urls: List[str]) -> List[Image.Image]:
+    async def download_images_from_urls(urls: list[str]) -> list[Image.Image]:
         """
         Download images from URLs and convert to PIL.Image objects.
 
@@ -50,7 +51,9 @@ class ImageProcessor:
                             pil_images.append(pil_img)
                             logger.info(f"Successfully loaded image: {pil_img.size}")
                         else:
-                            logger.warning(f"Failed to download image: HTTP {response.status}")
+                            logger.warning(
+                                f"Failed to download image: HTTP {response.status}"
+                            )
                 except Exception as e:
                     logger.error(f"Error downloading image from {url}: {e}")
                     continue
@@ -60,8 +63,8 @@ class ImageProcessor:
 
     @staticmethod
     async def download_images_from_attachments(
-        image_attachments: List[ImageAttachment]
-    ) -> List[Image.Image]:
+        image_attachments: list[ImageAttachment],
+    ) -> list[Image.Image]:
         """
         Download images from ImageAttachment entities.
 
@@ -75,7 +78,7 @@ class ImageProcessor:
         return await ImageProcessor.download_images_from_urls(urls)
 
     @staticmethod
-    def extract_images_from_message(message: Any) -> List[Image.Image]:
+    def extract_images_from_message(message: Any) -> list[Image.Image]:
         """
         Extract PIL Image objects from ChatMessage content.
 
@@ -94,7 +97,7 @@ class ImageProcessor:
         content = message.content
 
         # Extract all images from content parts
-        images: List[Image.Image] = []
+        images: list[Image.Image] = []
         for part in content:
             if part.get("type") == "image":
                 images.append(part["image"])

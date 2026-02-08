@@ -16,11 +16,9 @@ logger = logging.getLogger(__name__)
 
 from emery_agents.reasoning.signatures.planning import (
     AnalyzeTask,
-    ClarifyingQuestionOutput,
     CreatePlan,
     CreateSkillTemplate,
     PlanOrQuestionsOutput,
-    QuestionType,
     SkillInputSpec,
     SkillOutputSpec,
     SkillTemplatePlanOutput,
@@ -183,7 +181,9 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
 
         # Delegation hint
         if has_delegation:
-            sections.append("## Delegation\nUser delegated decisions — propose sensible defaults, do not ask questions.")
+            sections.append(
+                "## Delegation\nUser delegated decisions — propose sensible defaults, do not ask questions."
+            )
 
         return "\n\n".join(sections)
 
@@ -231,7 +231,9 @@ class SkillTemplatePlannerModule(PlannerModule):
         """
         super().__init__(discovery_tools=discovery_tools)
         # ReAct with discovery tools so the template planner can call system_research
-        self.template_planner = dspy.ReAct(CreateSkillTemplate, tools=self.discovery_tools, max_iters=5)
+        self.template_planner = dspy.ReAct(
+            CreateSkillTemplate, tools=self.discovery_tools, max_iters=5
+        )
 
     def forward(  # type: ignore[override]
         self,
@@ -318,7 +320,9 @@ VARIABLE SYNTAX:
         """
         for step in plan.steps:
             if not step.prompt_template:
-                raise ValueError(f"Step {step.step_id} missing required prompt_template")
+                raise ValueError(
+                    f"Step {step.step_id} missing required prompt_template"
+                )
 
             # Warn if no {{ }} but inputs provided
             if skill_inputs and "{{" not in step.prompt_template:

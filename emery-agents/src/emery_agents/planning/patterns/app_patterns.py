@@ -7,14 +7,13 @@ Migrated from:
 - reasoning/capabilities/view_builder.py PLANNING_GUIDANCE
 """
 
-from emery_agents.planning.pattern import PlanningPattern, AutoApprovePolicy
-
+from emery_agents.planning.pattern import AutoApprovePolicy, PlanningPattern
 
 APP_DESIGN_PATTERN = PlanningPattern(
     id="plan:app_design",
     name="App Design",
     description="Planning patterns for creating visual interfaces, dashboards, and multi-page apps. "
-                "Apps contain pages, pages contain views (grids, forms, detail blocks).",
+    "Apps contain pages, pages contain views (grids, forms, detail blocks).",
     triggers=[
         "create app",
         "build app",
@@ -81,7 +80,7 @@ PAGE_DESIGN_PATTERN = PlanningPattern(
     id="plan:page_design",
     name="Page Design",
     description="Planning patterns for adding or modifying pages within existing apps. "
-                "Pages are visual layouts with Puck blocks (Hero, Stats, Grid, Form, etc.).",
+    "Pages are visual layouts with Puck blocks (Hero, Stats, Grid, Form, etc.).",
     triggers=[
         "add page",
         "create page",
@@ -139,7 +138,7 @@ VIEW_DESIGN_PATTERN = PlanningPattern(
     id="plan:view_design",
     name="View Design",
     description="Planning patterns for creating data views (grids, forms, calendars, kanbans). "
-                "Views are different ways to visualize and interact with table data.",
+    "Views are different ways to visualize and interact with table data.",
     triggers=[
         "create view",
         "grid view",

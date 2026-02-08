@@ -5,8 +5,9 @@ Dynamic signature factory for extracting typed outputs from agent execution resu
 """
 
 import re
-from dataclasses import dataclass, field as dataclass_field
-from typing import Any, Type
+from dataclasses import dataclass
+from dataclasses import field as dataclass_field
+from typing import Any
 
 import dspy
 from pydantic import Field, create_model
@@ -48,8 +49,8 @@ FORMAT_HINTS: dict[str, str] = {
 
 def _sanitize_field_name(name: str) -> str:
     """Convert output name to a valid Python identifier for Pydantic model fields."""
-    sanitized = re.sub(r'[^a-zA-Z0-9_]', '_', name).strip('_')
-    sanitized = re.sub(r'_+', '_', sanitized).lower()
+    sanitized = re.sub(r"[^a-zA-Z0-9_]", "_", name).strip("_")
+    sanitized = re.sub(r"_+", "_", sanitized).lower()
     if not sanitized or sanitized[0].isdigit():
         sanitized = f"field_{sanitized}"
     return sanitized
@@ -58,7 +59,7 @@ def _sanitize_field_name(name: str) -> str:
 def create_extraction_signature(
     skill_outputs: list[dict[str, Any]],
     target_field_metadata: dict[str, TargetFieldMeta] | None = None,
-) -> tuple[Type[dspy.Signature], dict[str, str]]:
+) -> tuple[type[dspy.Signature], dict[str, str]]:
     """
     Create a dynamic DSPy signature for extracting skill outputs.
 
@@ -87,7 +88,11 @@ def create_extraction_signature(
             description += f" Must be one of: {', '.join(target.options)}"
 
         # Include original name in description so LLM knows what to extract
-        field_desc = f"{original_name}: {description}".strip(": ") if description else original_name
+        field_desc = (
+            f"{original_name}: {description}".strip(": ")
+            if description
+            else original_name
+        )
 
         # Append format hint for the output type
         format_hint = FORMAT_HINTS.get(output_type, "")
@@ -98,7 +103,10 @@ def create_extraction_signature(
         python_type = SKILL_TYPE_MAP.get(output_type, str)
 
         # Make all outputs Optional to allow null for missing data
-        output_fields[sanitized_name] = (python_type | None, Field(description=field_desc))
+        output_fields[sanitized_name] = (
+            python_type | None,
+            Field(description=field_desc),
+        )
 
     # Create dynamic Pydantic model for outputs
     OutputModel = create_model("SkillOutputs", **output_fields)

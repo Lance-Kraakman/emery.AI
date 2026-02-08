@@ -41,9 +41,15 @@ ADMIN_TOOLS = {"team_crud"}
 
 # Discovery tools — always included in direct execution
 DISCOVERY_TOOL_NAMES = {
-    "system_research", "workspace_overview", "search_capabilities",
-    "search_external", "web_search", "memory_crud",
-    "conversation_history", "search_knowledge", "search_planning_patterns",
+    "system_research",
+    "workspace_overview",
+    "search_capabilities",
+    "search_external",
+    "web_search",
+    "memory_crud",
+    "conversation_history",
+    "search_knowledge",
+    "search_planning_patterns",
 }
 
 # Non-CRUD tools that should always pass through (ask_question, memory, etc.)
@@ -67,8 +73,18 @@ _KEYWORD_GROUPS: list[tuple[set[str], set[str]]] = [
         DATA_TOOLS | SCHEMA_TOOLS,
     ),
     (
-        {"app", "application", "page", "view", "grid", "kanban", "calendar",
-         "dashboard", "layout", "form"},
+        {
+            "app",
+            "application",
+            "page",
+            "view",
+            "grid",
+            "kanban",
+            "calendar",
+            "dashboard",
+            "layout",
+            "form",
+        },
         APP_TOOLS,
     ),
     (
@@ -130,15 +146,19 @@ def select_tools_for_task(
         logger.debug("No tool profile matched, using all tools")
         return all_tools
 
-    logger.info(f"Tool profile selected {len(matched_tools)} CRUD tools: {sorted(matched_tools)}")
+    logger.info(
+        f"Tool profile selected {len(matched_tools)} CRUD tools: {sorted(matched_tools)}"
+    )
 
     # Filter: keep matched CRUD tools + all discovery/passthrough tools + unknown tools
     filtered: list[dspy.Tool] = []
     for tool in all_tools:
         name = getattr(tool, "name", "").lower()
-        if name in matched_tools:
-            filtered.append(tool)
-        elif name in DISCOVERY_TOOL_NAMES or name in PASSTHROUGH_TOOL_NAMES:
+        if (
+            name in matched_tools
+            or name in DISCOVERY_TOOL_NAMES
+            or name in PASSTHROUGH_TOOL_NAMES
+        ):
             filtered.append(tool)
         elif not name.endswith("_crud"):
             # Non-CRUD tools (external tools, etc.) — always include

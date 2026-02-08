@@ -5,22 +5,22 @@ Handles plan approval, clarification, and recovery responses using LangGraph int
 """
 
 import logging
-from typing import Any, Dict, List
+from typing import Any
 
 from langgraph.types import interrupt
 
 from ...services.execution.events import (
-    PlanApprovedEvent,
-    PlanRejectedEvent,
-    PlanFeedbackEvent,
     ErrorEvent,
+    PlanApprovedEvent,
+    PlanFeedbackEvent,
+    PlanRejectedEvent,
 )
 from ..state import PlanExecuteState
 
 logger = logging.getLogger(__name__)
 
 
-async def await_approval_node(state: PlanExecuteState) -> Dict[str, Any]:
+async def await_approval_node(state: PlanExecuteState) -> dict[str, Any]:
     """
     Pause execution for human input using LangGraph interrupt.
 
@@ -34,7 +34,7 @@ async def await_approval_node(state: PlanExecuteState) -> Dict[str, Any]:
     plan = state.get("plan")
     task = state.get("task", "")
 
-    events: List[Any] = []
+    events: list[Any] = []
 
     if awaiting_type == "approval":
         # Pause for plan approval
@@ -43,12 +43,14 @@ async def await_approval_node(state: PlanExecuteState) -> Dict[str, Any]:
             events.append(ErrorEvent(error="No plan available for approval"))
             return {"awaiting_input": None, "events": events}
 
-        response = interrupt({
-            "type": "approval",
-            "plan_id": plan.id,
-            "plan": plan.to_dict() if hasattr(plan, "to_dict") else str(plan),
-            "message": "Please approve this plan before execution begins.",
-        })
+        response = interrupt(
+            {
+                "type": "approval",
+                "plan_id": plan.id,
+                "plan": plan.to_dict() if hasattr(plan, "to_dict") else str(plan),
+                "message": "Please approve this plan before execution begins.",
+            }
+        )
 
         response_lower = str(response).lower().strip()
 
@@ -102,11 +104,13 @@ async def await_approval_node(state: PlanExecuteState) -> Dict[str, Any]:
         # Pause for clarification
         questions = state.get("clarifying_questions", [])
 
-        response = interrupt({
-            "type": "clarification",
-            "questions": questions,
-            "message": "Please provide clarification.",
-        })
+        response = interrupt(
+            {
+                "type": "clarification",
+                "questions": questions,
+                "message": "Please provide clarification.",
+            }
+        )
 
         logger.info("Clarification received, will re-plan with combined task")
 
@@ -121,11 +125,13 @@ async def await_approval_node(state: PlanExecuteState) -> Dict[str, Any]:
 
     elif awaiting_type == "recovery":
         # Pause for recovery decision
-        response = interrupt({
-            "type": "recovery",
-            "error": state.get("error"),
-            "message": "How would you like to handle this error?",
-        })
+        response = interrupt(
+            {
+                "type": "recovery",
+                "error": state.get("error"),
+                "message": "How would you like to handle this error?",
+            }
+        )
 
         logger.info(f"Recovery response received: {str(response)[:50]}")
 

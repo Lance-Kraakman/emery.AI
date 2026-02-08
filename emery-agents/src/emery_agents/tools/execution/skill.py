@@ -12,10 +12,14 @@ import json
 import logging
 import os
 import threading
-from typing import Any, Callable, TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from emery_agents.entities.skill_config import SkillConfig
-from emery_agents.services.data.output_mapping import MappingContext, OutputMappingService
+from emery_agents.services.data.output_mapping import (
+    MappingContext,
+    OutputMappingService,
+)
 from emery_agents.types import SkillExecutionResult
 from emery_agents.utils import run_async_in_thread
 
@@ -60,15 +64,15 @@ class SkillTool:
 
         # Tool metadata for the LLM
         self.name = f"skill_{skill_config.name.replace('-', '_').replace(' ', '_')}"
-        self.description = skill_config.description or f"Execute the {skill_config.name} skill"
+        self.description = (
+            skill_config.description or f"Execute the {skill_config.name} skill"
+        )
         self.output_type = "string"
 
         # Convert skill inputs to tool input schema
         self.inputs = self._build_inputs_schema()
 
-        logger.info(
-            f"Created SkillTool: {self.name} with {len(self.inputs)} inputs"
-        )
+        logger.info(f"Created SkillTool: {self.name} with {len(self.inputs)} inputs")
 
     def __call__(self, **kwargs: Any) -> str:
         """Make the tool callable for DSPy ReAct."""
@@ -145,7 +149,10 @@ class SkillTool:
             else:
                 description = f"{required_prefix}{skill_input.name}"
 
-            inputs_schema[skill_input.name] = {"type": input_type, "description": description}
+            inputs_schema[skill_input.name] = {
+                "type": input_type,
+                "description": description,
+            }
 
         if not inputs_schema:
             inputs_schema["task"] = {
@@ -213,12 +220,16 @@ class SkillTool:
                         run_async_in_thread(
                             self._apply_agent_output_mappings(captured_outputs)
                         )
-                        result = self._build_result_with_outputs(result, captured_outputs)
+                        result = self._build_result_with_outputs(
+                            result, captured_outputs
+                        )
                 else:
                     result = executor_result
             else:
                 result = self.skill_executor(
-                    self.skill_config, enriched_kwargs, progress_callback=progress_callback
+                    self.skill_config,
+                    enriched_kwargs,
+                    progress_callback=progress_callback,
                 )
 
             logger.info(f"Skill {self.name} completed successfully")
@@ -259,7 +270,9 @@ class SkillTool:
             result_parts.append("\n".join(extracted_lines))
 
         if not_found_lines:
-            result_parts.append(f"\n**Not found in input ({len(not_found_lines)} fields):**")
+            result_parts.append(
+                f"\n**Not found in input ({len(not_found_lines)} fields):**"
+            )
             result_parts.append("\n".join(not_found_lines))
 
         if extracted_lines:
@@ -267,7 +280,9 @@ class SkillTool:
 
         return "\n".join(result_parts)
 
-    async def _apply_agent_output_mappings(self, captured_values: dict[str, Any]) -> None:
+    async def _apply_agent_output_mappings(
+        self, captured_values: dict[str, Any]
+    ) -> None:
         """Apply output mappings for agent mode skills using captured OutputTool values."""
         if not self.api_key or not self.organization_id:
             logger.debug("No API auth available, skipping agent output mappings")
@@ -277,7 +292,9 @@ class SkillTool:
             logger.debug("No captured values for agent output mappings")
             return
 
-        ctx = MappingContext(api_key=self.api_key, organization_id=str(self.organization_id))
+        ctx = MappingContext(
+            api_key=self.api_key, organization_id=str(self.organization_id)
+        )
 
         outputs_with_mappings = [
             output
@@ -353,7 +370,9 @@ class SkillTool:
 
         return resolved
 
-    def _resolve_row_id(self, row_source: dict[str, Any], context: dict[str, Any]) -> str | None:
+    def _resolve_row_id(
+        self, row_source: dict[str, Any], context: dict[str, Any]
+    ) -> str | None:
         """Resolve row ID from row source configuration."""
         from emery_agents.services.agents.executor import AgentExecutor
 
@@ -369,7 +388,9 @@ class SkillTool:
             ):
                 return str(parent_ctx.source_row_id)
 
-            logger.warning("use_source_row specified but no row ID available in context")
+            logger.warning(
+                "use_source_row specified but no row ID available in context"
+            )
             return None
         elif row_source.get("static_id"):
             return row_source["static_id"]
@@ -385,13 +406,13 @@ class SkillTool:
 
         return None
 
-    async def _read_table_field(
-        self, table_id: int, field_id: int, row_id: str
-    ) -> Any:
+    async def _read_table_field(self, table_id: int, field_id: int, row_id: str) -> Any:
         """Read a single field value from a table row."""
         import httpx
 
-        ctx = MappingContext(api_key=self.api_key, organization_id=str(self.organization_id))
+        ctx = MappingContext(
+            api_key=self.api_key, organization_id=str(self.organization_id)
+        )
 
         url = f"{ctx.api_base_url}/rows"
         params = {"tableId": str(table_id), "rowId": row_id}
@@ -401,7 +422,9 @@ class SkillTool:
                 response = await client.get(url, headers=ctx.headers, params=params)
 
                 if response.status_code >= 400:
-                    logger.warning(f"Failed to fetch row {row_id}: {response.status_code}")
+                    logger.warning(
+                        f"Failed to fetch row {row_id}: {response.status_code}"
+                    )
                     return None
 
                 data = response.json()

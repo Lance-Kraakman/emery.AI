@@ -6,19 +6,19 @@ Handles bidirectional sync between local workspace (parquet) and dynamic tables.
 
 import logging
 from datetime import datetime
-from typing import List, Optional, Any, Dict
+from typing import Any
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
-from emery_agents.infrastructure.workspace import (
-    WorkspaceConfig,
-    ContextCache,
-    TableMetadata,
-)
 from emery_agents.entities.models.context_mapping import (
     ContextMapping,
     ResolvedContext,
+)
+from emery_agents.infrastructure.workspace import (
+    ContextCache,
+    TableMetadata,
+    WorkspaceConfig,
 )
 
 logger = logging.getLogger(__name__)
@@ -51,7 +51,7 @@ class ContextSyncService:
 
     async def sync_to_local(
         self,
-        mappings: List[ContextMapping],
+        mappings: list[ContextMapping],
     ) -> ContextCache:
         """
         Sync remote tables to local parquet files.
@@ -76,9 +76,7 @@ class ContextSyncService:
             try:
                 await self._sync_table_to_local(cache, mapping)
             except Exception as e:
-                logger.error(
-                    f"Failed to sync table {mapping.table_name} to local: {e}"
-                )
+                logger.error(f"Failed to sync table {mapping.table_name} to local: {e}")
                 # Continue with other tables even if one fails
 
         return cache
@@ -111,22 +109,20 @@ class ContextSyncService:
             synced_at=datetime.utcnow(),
             row_count=len(df),
             field_names=list(df.columns),
-            has_embeddings=any(
-                f.type == "embedding" for f in response.fields
-            ) if hasattr(response, 'fields') else False,
+            has_embeddings=any(f.type == "embedding" for f in response.fields)
+            if hasattr(response, "fields")
+            else False,
         )
 
         # Write to local cache
         cache.write_table(mapping.table_name, df, metadata)
 
-        logger.info(
-            f"Synced table {mapping.table_name} to local: {len(df)} rows"
-        )
+        logger.info(f"Synced table {mapping.table_name} to local: {len(df)} rows")
 
     async def sync_to_remote(
         self,
         cache: ContextCache,
-        mappings: List[ContextMapping],
+        mappings: list[ContextMapping],
     ) -> None:
         """
         Sync modified local tables back to dynamic tables.
@@ -190,9 +186,7 @@ class ContextSyncService:
                 f"{response.inserted_count} inserted, {response.updated_count} updated"
             )
         else:
-            logger.error(
-                f"Failed to sync table {mapping.table_name}: {response.error}"
-            )
+            logger.error(f"Failed to sync table {mapping.table_name}: {response.error}")
 
     def _proto_to_dataframe(self, response) -> pd.DataFrame:
         """
@@ -200,16 +194,18 @@ class ContextSyncService:
 
         Handles various field types including embeddings.
         """
-        if not hasattr(response, 'rows') or not response.rows:
+        if not hasattr(response, "rows") or not response.rows:
             return pd.DataFrame()
 
         rows = []
-        field_map = {f.id: f for f in response.fields} if hasattr(response, 'fields') else {}
+        field_map = (
+            {f.id: f for f in response.fields} if hasattr(response, "fields") else {}
+        )
 
         for row in response.rows:
             row_dict = {"id": row.id}
 
-            if hasattr(row, 'values'):
+            if hasattr(row, "values"):
                 for field_id, value in row.values.items():
                     field = field_map.get(field_id)
                     if not field:
@@ -218,20 +214,20 @@ class ContextSyncService:
                     field_name = field.name
 
                     # Handle different value types
-                    if hasattr(value, 'embedding_value') and value.embedding_value:
+                    if hasattr(value, "embedding_value") and value.embedding_value:
                         # Convert bytes to numpy array
                         row_dict[field_name] = np.frombuffer(
                             value.embedding_value, dtype=np.float32
                         )
-                    elif hasattr(value, 'string_value'):
+                    elif hasattr(value, "string_value"):
                         row_dict[field_name] = value.string_value
-                    elif hasattr(value, 'int_value'):
+                    elif hasattr(value, "int_value"):
                         row_dict[field_name] = value.int_value
-                    elif hasattr(value, 'float_value'):
+                    elif hasattr(value, "float_value"):
                         row_dict[field_name] = value.float_value
-                    elif hasattr(value, 'bool_value'):
+                    elif hasattr(value, "bool_value"):
                         row_dict[field_name] = value.bool_value
-                    elif hasattr(value, 'json_value'):
+                    elif hasattr(value, "json_value"):
                         row_dict[field_name] = value.json_value
                     else:
                         row_dict[field_name] = None
@@ -240,7 +236,7 @@ class ContextSyncService:
 
         return pd.DataFrame(rows)
 
-    def _dataframe_to_proto_rows(self, df: pd.DataFrame) -> List[Dict[str, Any]]:
+    def _dataframe_to_proto_rows(self, df: pd.DataFrame) -> list[dict[str, Any]]:
         """
         Convert DataFrame to proto-compatible row format.
 

@@ -6,17 +6,19 @@ Uses direct types (int, str) with validation in constructors.
 """
 
 import uuid
-from datetime import datetime
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from datetime import datetime
+from typing import Any
 
 from emery_agents.entities.models.context_mapping import ResolvedContext
-from ..types import AgentId, OrganizationId, TaskId, OwnerId, InstructionConfig
+
+from ..types import AgentId, InstructionConfig, OrganizationId, OwnerId, TaskId
 
 
 @dataclass
 class SkillInputValue:
     """A typed skill input value for task execution."""
+
     name: str
     type: str  # 'text', 'number', 'boolean', 'json', etc.
     value: Any  # The actual value (type depends on the type field)
@@ -25,28 +27,32 @@ class SkillInputValue:
 @dataclass
 class SkillOutputValue:
     """A single skill output value at runtime."""
+
     name: str
     value: Any
-    value_type: Optional[str] = None
+    value_type: str | None = None
 
 
 @dataclass
 class RowMappingContext:
     """Context for row mapping operations."""
-    source_row_id: Optional[str] = None
-    item_index: Optional[int] = None
+
+    source_row_id: str | None = None
+    item_index: int | None = None
     current_item: Any = None
 
 
 @dataclass
 class TriggerData:
     """Trigger data with typed skill inputs for task execution."""
-    skill_inputs: List[SkillInputValue]
+
+    skill_inputs: list[SkillInputValue]
 
 
 @dataclass
 class TaskRequest:
     """Request to execute a task - simplified DTO from protobuf."""
+
     task_id: TaskId
     agent_id: AgentId
     agent_config: Any  # AgentConfig from protobuf or dict
@@ -55,44 +61,50 @@ class TaskRequest:
     owner_id: OwnerId
     timeout_seconds: int
     name: str
-    skill_name: Optional[str] = None
-    skill_id: Optional[int] = None
-    instruction_config: Optional[InstructionConfig] = None
-    organization_model: Optional[str] = None  # For model selection
-    agent_model: Optional[str] = None  # For model selection
-    resolved_context: Optional[ResolvedContext] = None  # Context table mappings
+    skill_name: str | None = None
+    skill_id: int | None = None
+    instruction_config: InstructionConfig | None = None
+    organization_model: str | None = None  # For model selection
+    agent_model: str | None = None  # For model selection
+    resolved_context: ResolvedContext | None = None  # Context table mappings
     # Trigger context for audit trail (flows from TS → proto → Python → HTTP headers)
-    trigger_type: Optional[str] = None           # 'manual' | 'webhook' | 'database_event' | 'calendar' | 'public_api'
-    triggered_by_user_id: Optional[str] = None   # Root-cause user ID
-    triggered_by_user_name: Optional[str] = None # Root-cause user display name
-    user_api_key: Optional[str] = None  # API key for tool auth (agent key for agent tasks, rotated per-task)
+    trigger_type: str | None = (
+        None  # 'manual' | 'webhook' | 'database_event' | 'calendar' | 'public_api'
+    )
+    triggered_by_user_id: str | None = None  # Root-cause user ID
+    triggered_by_user_name: str | None = None  # Root-cause user display name
+    user_api_key: str | None = (
+        None  # API key for tool auth (agent key for agent tasks, rotated per-task)
+    )
 
 
 @dataclass
 class TaskInstructions:
     """Task execution instructions."""
+
     instructions: str
-    tools: Optional[List[Dict[str, Any]]] = None
-    servers: Optional[List[Dict[str, Any]]] = None
-    metadata: Optional[Dict[str, Any]] = None
+    tools: list[dict[str, Any]] | None = None
+    servers: list[dict[str, Any]] | None = None
+    metadata: dict[str, Any] | None = None
 
 
 @dataclass
 class TaskConfig:
     """Configuration for creating a new task - simplified."""
+
     agent_id: AgentId
     organization_id: OrganizationId
     name: str
     instructions: TaskInstructions
-    id: Optional[TaskId] = None
-    skill_name: Optional[str] = None
-    status: Optional[str] = None
-    result: Optional[Any] = None
-    error: Optional[str] = None
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-    created_by: Optional[OwnerId] = None
-    created_at: Optional[datetime] = None
+    id: TaskId | None = None
+    skill_name: str | None = None
+    status: str | None = None
+    result: Any | None = None
+    error: str | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    created_by: OwnerId | None = None
+    created_at: datetime | None = None
 
 
 class Task:
@@ -104,15 +116,15 @@ class Task:
         agent_id: AgentId,
         organization_id: OrganizationId,
         name: str,
-        skill_name: Optional[str],
+        skill_name: str | None,
         instructions: TaskInstructions,
         status: str,
-        result: Optional[Any],
-        error: Optional[str],
-        started_at: Optional[datetime],
-        completed_at: Optional[datetime],
-        created_by: Optional[OwnerId],
-        created_at: datetime
+        result: Any | None,
+        error: str | None,
+        started_at: datetime | None,
+        completed_at: datetime | None,
+        created_by: OwnerId | None,
+        created_at: datetime,
     ):
         # Validation
         if not name or not name.strip():
@@ -157,11 +169,11 @@ class Task:
             started_at=config.started_at,
             completed_at=config.completed_at,
             created_by=config.created_by,
-            created_at=config.created_at or now
+            created_at=config.created_at or now,
         )
 
     @classmethod
-    def from_persistence(cls, data: Dict[str, Any]) -> "Task":
+    def from_persistence(cls, data: dict[str, Any]) -> "Task":
         """Create task from persistence data (dict from gRPC/DB)."""
         # Reconstruct TaskInstructions from dict
         instructions_data = data.get("instructions", {})
@@ -170,7 +182,7 @@ class Task:
                 instructions=instructions_data.get("instructions", ""),
                 tools=instructions_data.get("tools"),
                 servers=instructions_data.get("servers"),
-                metadata=instructions_data.get("metadata")
+                metadata=instructions_data.get("metadata"),
             )
         else:
             # Handle string instructions (legacy)
@@ -189,10 +201,10 @@ class Task:
             started_at=data.get("started_at"),
             completed_at=data.get("completed_at"),
             created_by=data.get("created_by"),
-            created_at=data.get("created_at", datetime.utcnow())
+            created_at=data.get("created_at", datetime.utcnow()),
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert task to dictionary for persistence/serialization."""
         return {
             "id": self.id,
@@ -204,15 +216,17 @@ class Task:
                 "instructions": self.instructions.instructions,
                 "tools": self.instructions.tools,
                 "servers": self.instructions.servers,
-                "metadata": self.instructions.metadata
+                "metadata": self.instructions.metadata,
             },
             "status": self._status,
             "result": self._result,
             "error": self._error,
             "started_at": self._started_at.isoformat() if self._started_at else None,
-            "completed_at": self._completed_at.isoformat() if self._completed_at else None,
+            "completed_at": self._completed_at.isoformat()
+            if self._completed_at
+            else None,
             "created_by": self.created_by,
-            "created_at": self.created_at.isoformat() if self.created_at else None
+            "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
     # Properties
@@ -222,22 +236,22 @@ class Task:
         return self._status
 
     @property
-    def result(self) -> Optional[Any]:
+    def result(self) -> Any | None:
         """Get task result."""
         return self._result
 
     @property
-    def error(self) -> Optional[str]:
+    def error(self) -> str | None:
         """Get task error."""
         return self._error
 
     @property
-    def started_at(self) -> Optional[datetime]:
+    def started_at(self) -> datetime | None:
         """Get task start time."""
         return self._started_at
 
     @property
-    def completed_at(self) -> Optional[datetime]:
+    def completed_at(self) -> datetime | None:
         """Get task completion time."""
         return self._completed_at
 

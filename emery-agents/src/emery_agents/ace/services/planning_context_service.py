@@ -8,12 +8,14 @@ Uses DSPy ChainOfThought with ExtractPlanningInsights signature.
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
 
 import dspy
 
-
-from emery_agents.ace.models.planning_context import PlanningContext, PlanningInsight, PlanningInsightType
+from emery_agents.ace.models.planning_context import (
+    PlanningContext,
+    PlanningInsight,
+    PlanningInsightType,
+)
 from emery_agents.reasoning.signatures.evaluation import (
     ExtractPlanningInsights,
     PlanningInsightsResult,
@@ -53,7 +55,7 @@ class PlanningContextService:
     PlanningContext for use by subsequent phases.
     """
 
-    lm: Optional[dspy.LM] = None
+    lm: dspy.LM | None = None
 
     def __post_init__(self) -> None:
         self._module = PlanningInsightExtractorModule()
@@ -96,9 +98,7 @@ class PlanningContextService:
         # Mark phase as completed
         planning_context.mark_phase_completed(phase_name)
 
-        logger.info(
-            f"Curated {len(new_insights)} insights from phase '{phase_name}'"
-        )
+        logger.info(f"Curated {len(new_insights)} insights from phase '{phase_name}'")
 
         return planning_context
 
@@ -107,7 +107,7 @@ class PlanningContextService:
         phase_name: str,
         context: str,
         analysis: str,
-    ) -> List[PlanningInsight]:
+    ) -> list[PlanningInsight]:
         """
         Use DSPy to extract planning insights from phase output.
 
@@ -145,14 +145,19 @@ class PlanningContextService:
         self,
         phase_name: str,
         result: PlanningInsightsResult,
-    ) -> List[PlanningInsight]:
+    ) -> list[PlanningInsight]:
         """Convert DSPy result to PlanningInsight objects."""
         insights = []
         for i, ins in enumerate(result.insights):
             try:
                 insight_type_str = ins.insight_type.lower()
                 # Map to valid enum value
-                if insight_type_str not in ("entity", "decision", "constraint", "dependency"):
+                if insight_type_str not in (
+                    "entity",
+                    "decision",
+                    "constraint",
+                    "dependency",
+                ):
                     insight_type_str = "entity"
 
                 insights.append(

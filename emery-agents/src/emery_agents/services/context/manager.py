@@ -18,13 +18,13 @@ from typing import Optional
 
 from ...entities.execution_context import ExecutionContext
 
-
 # Async-safe context variable for ExecutionContext
-_context_var: contextvars.ContextVar[Optional[ExecutionContext]] = \
-    contextvars.ContextVar('execution_context', default=None)
+_context_var: contextvars.ContextVar[ExecutionContext | None] = contextvars.ContextVar(
+    "execution_context", default=None
+)
 
 
-def set_current_context(context: Optional[ExecutionContext]) -> None:
+def set_current_context(context: ExecutionContext | None) -> None:
     """Store execution context for skill access in current async context."""
     _context_var.set(context)
 
@@ -38,14 +38,14 @@ def get_current_context() -> Optional["ExecutionContext"]:
 def execution_scope(context: "ExecutionContext"):
     """Context manager ensuring proper cleanup of execution context.
 
-SECURITY: Always cleans up context even on exception,
-    preventing sensitive data from leaking between requests.
+    SECURITY: Always cleans up context even on exception,
+        preventing sensitive data from leaking between requests.
 
-    Usage:
-        with execution_scope(context):
-            # Execute agent task
-            pass
-        # Context is automatically cleaned up
+        Usage:
+            with execution_scope(context):
+                # Execute agent task
+                pass
+            # Context is automatically cleaned up
     """
     token = _context_var.set(context)
     try:

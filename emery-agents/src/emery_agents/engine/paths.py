@@ -50,13 +50,28 @@ class EnginePaths:
 
     def ensure_structure(self) -> None:
         """Create required directories."""
-        for path in [self.engine, self.memory, self.plans, self.history, self.workspace, self.context]:
+        for path in [
+            self.engine,
+            self.memory,
+            self.plans,
+            self.history,
+            self.workspace,
+            self.context,
+        ]:
             path.mkdir(parents=True, exist_ok=True)
         logger.debug(f"Engine structure created: {self.root}")
 
     def fix_permissions(self, mode: int = 0o700) -> None:
         """Fix permissions after tar extraction (owner-only for security)."""
-        for path in [self.root, self.engine, self.memory, self.plans, self.history, self.workspace, self.context]:
+        for path in [
+            self.root,
+            self.engine,
+            self.memory,
+            self.plans,
+            self.history,
+            self.workspace,
+            self.context,
+        ]:
             if path.exists():
                 try:
                     path.chmod(mode)

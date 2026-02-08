@@ -11,13 +11,14 @@ instead of Jinja2 templates. Instructions are now part of signature docstrings.
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 import dspy
 
+from ...reasoning.modules import DelegatingExecutorModule, ExecutorModule
 from ..models import ModelProvider
-from ...reasoning.modules import ExecutorModule, DelegatingExecutorModule
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,9 @@ class AgentConfig:
     agent_name: str = "executor"
     agent_description: str = "DSPy ReAct executor with tools"
     enable_caching: bool = False
-    agent_modules: dict[str, dspy.Module] | None = None  # Specialized agent modules for delegation
+    agent_modules: dict[str, dspy.Module] | None = (
+        None  # Specialized agent modules for delegation
+    )
     use_code_execution: bool = False  # Use ProgramOfThought instead of ReAct
 
 
@@ -77,7 +80,9 @@ class AgentFactory:
                 agent_modules=config.agent_modules,
                 default_executor=base_executor,
             )
-            logger.info(f"🔀 Created DelegatingExecutorModule with {len(config.agent_modules)} agents")
+            logger.info(
+                f"🔀 Created DelegatingExecutorModule with {len(config.agent_modules)} agents"
+            )
         else:
             # Standard executor with ReAct
             module = ExecutorModule(
@@ -131,10 +136,12 @@ class AgentFactory:
     def _get_cache_key(self, config: AgentConfig) -> str:
         """Generate cache key for module configuration."""
         model_id = self._resolve_model(config)
-        tool_names = sorted([
-            getattr(tool, "name", getattr(tool, "__name__", str(tool)))
-            for tool in config.tools
-        ])
+        tool_names = sorted(
+            [
+                getattr(tool, "name", getattr(tool, "__name__", str(tool)))
+                for tool in config.tools
+            ]
+        )
         return f"{model_id}_{','.join(tool_names)}_{config.max_iters}"
 
     def clear_cache(self) -> None:
