@@ -253,6 +253,7 @@ async def _handle_step_failure(
             api_key=api_key,
             organization_id=organization_id,
             capability_registry=capability_registry,
+            tracker=tracker,
         )
         events.append(
             RecoveryAnalysisEvent(

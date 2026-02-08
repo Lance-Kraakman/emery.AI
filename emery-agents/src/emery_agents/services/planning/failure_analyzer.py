@@ -6,7 +6,10 @@ ChainOfThought with AnalyzeRecovery signature.
 """
 
 import logging
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from emery_agents.services.analysis.llm_usage import LlmUsageTracker
 
 import dspy
 
@@ -78,6 +81,7 @@ class FailureAnalyzer:
         api_key: str | None = None,
         organization_id: int | None = None,
         capability_registry: CapabilityRegistry | None = None,
+        tracker: Optional["LlmUsageTracker"] = None,
     ) -> RecoveryResult:
         """
         Analyze a failed step and determine how to fix it.
@@ -125,7 +129,8 @@ Execution State:
                         error_message=error_message,
                         context=context,
                     )
-                record_from_lm(lm)
+                if tracker:
+                    record_from_lm(lm, tracker)
             else:
                 result = self._module(
                     failed_step=failed_step.description,

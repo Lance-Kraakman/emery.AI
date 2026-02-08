@@ -204,6 +204,7 @@ class PlanService:
         api_key: str | None = None,
         organization_id: int | None = None,
         capability_registry: CapabilityRegistry | None = None,
+        tracker: Any | None = None,
     ) -> RecoveryResult:
         """Analyze a failed step and determine recovery strategy."""
         return self._analyzer.analyze(
@@ -216,6 +217,7 @@ class PlanService:
             api_key=api_key,
             organization_id=organization_id,
             capability_registry=capability_registry,
+            tracker=tracker,
         )
 
     @property

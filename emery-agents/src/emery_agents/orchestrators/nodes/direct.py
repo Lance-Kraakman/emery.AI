@@ -26,10 +26,14 @@ from ...services.execution.events import (
     ExecutionCompletedEvent,
     FinalSynthesisEvent,
 )
+from ...entities.execution_context import ExecutionContext
+from ...services.context import execution_scope
 from ...services.memory import create_memory_crud
+from ...types import ExecutionMode
 from ...tools.factories import create_all_tools
 from ...tools.output import QuestionCollector, create_ask_question_tool
 from ...tools.profiles import select_tools_for_task
+from ...types import ToolMode
 from ..runtime import RuntimeContext
 from ..state import PlanExecuteState
 
@@ -125,9 +129,19 @@ async def direct_execute_node(
     if dspy_images:
         logger.info(f"Direct execution: passing {len(dspy_images)} image(s) to LLM")
 
+    # Create execution context with PLANNING mode to block mutations
+    # Direct execution is for read-only research, Q&A, information gathering
+    ctx = ExecutionContext(
+        mode=ExecutionMode.INTERACTIVE,
+        task=task,
+        available_tools=[t.name for t in all_tools if hasattr(t, "name")],
+        tool_mode=ToolMode.PLANNING,  # Block mutations in direct mode
+        organization_id=int(org_id) if org_id else None,
+    )
+
     try:
         lm = get_dspy_lm(org_model=org_model)
-        with dspy.context(lm=lm):
+        with execution_scope(ctx), dspy.context(lm=lm):
             result = executor(
                 step_description=task,
                 context=json.dumps(execution_context),
