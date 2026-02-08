@@ -279,6 +279,27 @@ class CreatePlan(dspy.Signature):  # type: ignore[misc]
     - search_external: Gets specific tool names/inputs for a known service (e.g., after finding it via search_capabilities).
     - system_research: Gets field schemas, page content, resource details for existing workspace resources.
     - web_search: Researches industry practices, business requirements, domain knowledge.
+
+    WHEN TO USE TOOLS vs ADD STEPS:
+    Detect user intent to decide whether to USE research tools NOW or ADD research steps to the plan.
+
+    USE tools NOW (do research during planning):
+    - Signals: "first", "before", "check first", "analyze before", "what does X look like", "then show me"
+    - User feedback rejecting a plan that had analysis steps
+    - Action: Call system_research, search_capabilities, etc. during this ReAct loop
+    - Then: Generate a plan with only mutation/action steps (research already done)
+    - Include findings in the plan's analysis field
+
+    ADD steps to plan (self-contained plan for later):
+    - Signals: "create a plan to...", "add steps for...", initial request without feedback
+    - User explicitly wants a comprehensive plan they can review/re-run
+    - Action: Add research steps to the plan for execution after approval
+    - Result: Plan contains both research and mutation steps
+
+    Examples:
+    - "Update tables to match questionnaire" → ADD analysis steps to plan
+    - Feedback: "analyze first, then show me changes" → USE tools NOW, then plan mutations only
+    - "Create a plan to research and update everything" → ADD both types of steps
     """
 
     request: str = dspy.InputField(
