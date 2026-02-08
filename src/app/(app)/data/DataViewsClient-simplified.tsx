@@ -13,7 +13,7 @@ import { useEmery, useEmeryTable } from "@/contexts/EmeryStoreProvider"
 import { dataStore, dataSelectors } from '@/stores/data-management.store'
 import { dataActions } from '@/stores/actions'
 import { getFields } from "@/app/actions/fields"
-import { getRowsDSG, searchRowsDSG, createRows, updateRowsData, deleteRowData } from "@/app/actions/rows"
+import { getRowsDSG, searchRowsDSG, createRows, updateRowsData, deleteRowsData } from "@/app/actions/rows"
 import { getView, getViewsForTable } from "@/app/actions/views"
 import { useBulkRowUpdate } from "@/hooks/use-bulk-row-update"
 import { GRID_CONFIG } from "@/lib/constants/grid"
@@ -529,12 +529,12 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
     // No onSettled invalidation - optimistic updates handle everything
   })
 
-  const deleteRowMutation = useMutation({
-    mutationFn: async (rowId: string) => {
+  const deleteRowsMutation = useMutation({
+    mutationFn: async (rowIds: string[]) => {
       if (!effectiveTableId) throw new Error('No table selected')
-      return deleteRowData(effectiveTableId, rowId)
+      return deleteRowsData(effectiveTableId, rowIds)
     },
-    onMutate: async (rowId) => {
+    onMutate: async (rowIds) => {
       // Cancel any outgoing refetches to prevent race conditions
       await queryClient.cancelQueries({ queryKey: rowQueryKeys.all(effectiveTableId!) })
 
@@ -542,32 +542,34 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
       const queryKey = rowQueryKeys.infinite(effectiveTableId!, sortBy, activeFilters ?? [])
       const previousData = queryClient.getQueryData(queryKey)
 
-      // Optimistically remove the row from cache
+      // Optimistically remove all rows from cache
+      const rowIdSet = new Set(rowIds)
       queryClient.setQueryData(queryKey, (old: any) => {
         if (!old?.pages) return old
         return {
           ...old,
           pages: old.pages.map((page: any) => ({
             ...page,
-            rows: page.rows.filter((row: DSGRow) => row.id !== rowId)
+            rows: page.rows.filter((row: DSGRow) => !rowIdSet.has(row.id))
           }))
         }
       })
 
       return { previousData }
     },
-    onSuccess: () => {
-      toast.success("Row deleted")
+    onSuccess: (data, rowIds) => {
+      const count = rowIds.length
+      toast.success(`Deleted ${count} ${count === 1 ? 'row' : 'rows'}`)
     },
-    onError: (err, rowId, context) => {
+    onError: (err, rowIds, context) => {
       // Rollback to previous data on error
       if (context?.previousData && effectiveTableId) {
         const queryKey = rowQueryKeys.infinite(effectiveTableId, sortBy, activeFilters ?? [])
         queryClient.setQueryData(queryKey, context.previousData)
       }
-      logger.error("Failed to delete row:", err)
-      toast.error("Failed to delete row", {
-        description: err instanceof Error ? err.message : "An error occurred while deleting the row"
+      logger.error("Failed to delete rows:", err)
+      toast.error("Failed to delete rows", {
+        description: err instanceof Error ? err.message : "An error occurred while deleting rows"
       })
     },
     // No onSettled invalidation - optimistic updates handle everything
@@ -577,8 +579,8 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
     await addRowsMutation.mutateAsync(rowsData)
   }
 
-  const handleDeleteRow = (rowId: string) => {
-    deleteRowMutation.mutate(rowId)
+  const handleDeleteRows = (rowIds: string[]) => {
+    deleteRowsMutation.mutate(rowIds)
   }
 
   // Filter handlers - use store actions
@@ -687,7 +689,7 @@ export function DataViewsClientSimplified({ tableId }: DataViewsClientSimplified
             onRefresh={refreshTableData}
             onUpdateRow={handleUpdateRow}
             onAddRows={handleAddRows}
-            onDeleteRow={handleDeleteRow}
+            onDeleteRows={handleDeleteRows}
             onScroll={handleScrollThrottled}
             isLoading={isSearching}
             error={error ? String(error) : null}

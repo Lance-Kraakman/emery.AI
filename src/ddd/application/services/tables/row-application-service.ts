@@ -58,6 +58,11 @@ export interface BulkUpdateRowsCommand {
   updatedBy?: import('@/ddd/domain/shared/value-objects').UserId;
 }
 
+export interface BulkDeleteRowsCommand {
+  tableId: TableId;
+  rowIds: RowId[];
+}
+
 export interface SearchTableRowsCommand {
   tableId: TableId;
   query: string;
@@ -420,6 +425,65 @@ export class RowApplicationService {
     } catch (error) {
       logger.error('Error deleting row:', error);
       return ResultHelpers.failure(error instanceof Error ? error.message : 'Failed to delete row');
+    }
+  }
+
+  /**
+   * Delete multiple rows from a table (bulk delete)
+   * OPTIMIZED: Single Delta Lake delete operation
+   */
+  async deleteRows(command: BulkDeleteRowsCommand): Promise<Result<void>> {
+    try {
+      const { tableId, rowIds } = command;
+
+      if (rowIds.length === 0) {
+        return ResultHelpers.success(undefined);
+      }
+
+      // Verify table exists
+      const table = await this.dynamicTableService.getTable(tableId);
+      if (!table) {
+        return ResultHelpers.failure(`Table ${tableId.value} not found`);
+      }
+
+      // Fetch all rows before deletion for DELETE trigger events
+      const rowsToDelete = await Promise.all(
+        rowIds.map(rowId => this.dynamicTableRepository.getRow(tableId, rowId.value))
+      );
+      const rowsMap = new Map(
+        rowsToDelete
+          .filter(row => row !== null)
+          .map(row => [row!.id.value, row])
+      );
+
+      // Delete rows using repository (single Delta Lake delete)
+      await this.dynamicTableRepository.deleteRows(tableId, rowIds.map(id => id.value));
+
+      // Emit table trigger events for each deleted row (non-blocking)
+      for (const rowId of rowIds) {
+        const deletedRow = rowsMap.get(rowId.value);
+        if (deletedRow) {
+          await this.emitTableTrigger({
+            tableId: tableId.value,
+            tableName: table.name,
+            operation: 'DELETE',
+            organizationId: table.organizationId,
+            rowId: rowId.value,
+            rowData: deletedRow.toPlainObject(table.fields),
+            timestamp: new Date()
+          });
+        }
+      }
+
+      logger.summary('Bulk delete completed', {
+        rows: rowIds.length,
+        tableId: tableId.value
+      });
+      return ResultHelpers.success(undefined);
+
+    } catch (error) {
+      logger.error('Error bulk deleting rows:', error);
+      return ResultHelpers.failure(error instanceof Error ? error.message : 'Failed to bulk delete rows');
     }
   }
 

@@ -750,6 +750,112 @@ export async function deleteRowData(tableId: number, rowId: string, revalidateUr
   });
 }
 
+/**
+ * Bulk delete multiple rows (optimized for batch operations)
+ * PERFORMANCE: Single Delta Lake delete operation
+ */
+export async function deleteRowsData(
+  tableId: number,
+  rowIds: string[],
+  revalidateUrl?: string,
+  actorOverride?: ActorOverride
+): Promise<Result> {
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("table:manage");
+
+      if (!tableId || !rowIds || rowIds.length === 0) {
+        return {
+          success: false,
+          error: "tableId and rowIds array are required",
+        };
+      }
+
+      // Use application services for row and table operations
+      const tableAppService = getTableApplicationService();
+      const rowAppService = getRowApplicationService();
+
+      // Get table for audit logging
+      const table = await tableAppService.getTable(TableId.fromNumber(tableId));
+      if (!table) {
+        return {
+          success: false,
+          error: "Table not found"
+        };
+      }
+
+      // AUDIT: Capture existing row data BEFORE deletion (batch fetch)
+      const existingRows = await rowAppService.getRows(
+        TableId.fromNumber(tableId),
+        {
+          filters: [{ field: 'id', operator: 'in' as const, value: rowIds }]
+        }
+      );
+      const rowSnapshotsMap = new Map(
+        existingRows.map((row: Row) => [row.id.value, row.toNamedObject(table.fields)])
+      );
+
+      const result = await rowAppService.deleteRows({
+        tableId: TableId.fromNumber(tableId),
+        rowIds: rowIds.map(id => RowId.fromString(id))
+      });
+
+      if (!result.success) {
+        return {
+          success: false,
+          error: result.error || "Failed to delete rows"
+        };
+      }
+
+      // AUDIT: Log each row deletion
+      const auditContext: RowAuditContext = {
+        organizationId: table.organizationId.value,
+        tableId,
+        tableName: table.name,
+        actor: actorOverride?.actor ?? {
+          type: 'user',
+          id: session.user.id,
+          name: session.user.name || session.user.email || undefined,
+        },
+        triggerMetadata: actorOverride?.triggerMetadata,
+      };
+
+      for (const rowId of rowIds) {
+        const rowSnapshot = rowSnapshotsMap.get(rowId);
+        if (rowSnapshot) {
+          logRowDelete(auditContext, { rowId, rowSnapshot });
+        }
+      }
+
+      // Invalidate caches for this table
+      const cacheService = getCacheService();
+      if (cacheService.isConnected()) {
+        await Promise.all([
+          cacheService.invalidateByTag(CACHE_TAGS.tableStats(tableId)),
+          cacheService.invalidateByTag(CACHE_TAGS.table(tableId)),
+        ]);
+      }
+
+      if (revalidateUrl) {
+        revalidatePath(revalidateUrl);
+      }
+
+      return {
+        success: true,
+        data: {
+          message: `${rowIds.length} row(s) deleted successfully`,
+          deletedIds: rowIds
+        },
+      };
+    } catch (error) {
+      console.error("Error bulk deleting rows:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to delete rows",
+      };
+    }
+  });
+}
 
 /**
  * Get rows in DataSheetGrid format with pagination
