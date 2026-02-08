@@ -2,8 +2,11 @@
  * Agent Workspace Download API
  *
  * GET /api/agents/[id]/workspace/download
+ * HEAD /api/agents/[id]/workspace/download
  *
- * Streams the agent's workspace tar.gz archive from S3.
+ * GET: Streams the agent's workspace tar.gz archive from S3.
+ * HEAD: Returns metadata (Last-Modified, Content-Length) without body.
+ *
  * Workspace is written by the Python WorkspaceSync service after each task execution.
  *
  * Authentication: withAuthenticatedRoute (session or API key)
@@ -113,5 +116,71 @@ export async function GET(
       { success: false, error: 'Failed to download workspace' },
       { status: 500 }
     );
+  }
+}
+
+/**
+ * HEAD handler - Returns metadata without downloading the archive.
+ * Used by Tauri to check remote modification time for sync status.
+ */
+export async function HEAD(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+): Promise<Response> {
+  try {
+    // Authenticate
+    const authResult = await authenticateRequest(request);
+    if (!authResult.success || !authResult.user) {
+      return new Response(null, { status: 401 });
+    }
+
+    const { id } = await params;
+    const agentId = parseInt(id, 10);
+    if (isNaN(agentId)) {
+      return new Response(null, { status: 400 });
+    }
+
+    if (!authResult.user.organizationId) {
+      return new Response(null, { status: 400 });
+    }
+
+    // Verify agent exists and belongs to user's organization
+    const agent = await contextManager.withContext(
+      OrganizationId.fromNumber(authResult.user.organizationId),
+      async () => {
+        const agentService = getAgentApplicationService();
+        return agentService.getAgent(AgentId.fromNumber(agentId));
+      },
+      UserId.fromString(authResult.user.id)
+    );
+
+    if (!agent) {
+      return new Response(null, { status: 404 });
+    }
+
+    // Get metadata from S3
+    const orgId = agent.organizationId.value;
+    const metadata = await WorkspaceS3Service.getMetadata(orgId, agentId);
+
+    if (!metadata) {
+      return new Response(null, { status: 404 });
+    }
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/gzip',
+    };
+
+    if (metadata.contentLength > 0) {
+      headers['Content-Length'] = metadata.contentLength.toString();
+    }
+
+    if (metadata.lastModified) {
+      headers['Last-Modified'] = metadata.lastModified.toUTCString();
+    }
+
+    return new Response(null, { status: 200, headers });
+  } catch (error) {
+    console.error('[WORKSPACE-HEAD] Error:', error);
+    return new Response(null, { status: 500 });
   }
 }

@@ -7,7 +7,7 @@
  * S3 key pattern: workspaces/{orgId}/agents/{agentId}.tar.gz
  */
 
-import { GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { GetObjectCommand, HeadObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { s3Client, BUCKET_NAME } from '@/lib/s3/client';
 import { getAgentWorkspaceKey } from '@/lib/s3/path-registry';
 import type { Readable } from 'stream';
@@ -35,6 +35,32 @@ export class WorkspaceS3Service {
       return true;
     } catch {
       return false;
+    }
+  }
+
+  /**
+   * Get metadata for an agent's workspace archive without downloading.
+   *
+   * @returns Object with content length and last modified date, or null if not exists
+   */
+  static async getMetadata(organizationId: number, agentId: number): Promise<{
+    contentLength: number;
+    lastModified?: Date;
+  } | null> {
+    try {
+      const response = await s3Client.send(
+        new HeadObjectCommand({
+          Bucket: BUCKET_NAME,
+          Key: this.getWorkspaceKey(organizationId, agentId),
+        })
+      );
+
+      return {
+        contentLength: response.ContentLength ?? 0,
+        lastModified: response.LastModified,
+      };
+    } catch {
+      return null;
     }
   }
 
@@ -68,5 +94,31 @@ export class WorkspaceS3Service {
       contentLength: response.ContentLength ?? 0,
       lastModified: response.LastModified,
     };
+  }
+
+  /**
+   * Upload a workspace archive to S3.
+   *
+   * @param organizationId - The organization ID
+   * @param agentId - The agent ID
+   * @param body - The tar.gz archive data
+   * @returns The last modified date after upload
+   */
+  static async uploadArchive(
+    organizationId: number,
+    agentId: number,
+    body: Buffer | Uint8Array
+  ): Promise<{ lastModified: Date }> {
+    await s3Client.send(
+      new PutObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: this.getWorkspaceKey(organizationId, agentId),
+        Body: body,
+        ContentType: 'application/gzip',
+      })
+    );
+
+    // Return current time as the effective last modified
+    return { lastModified: new Date() };
   }
 }
