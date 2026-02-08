@@ -265,7 +265,6 @@ class GVisorExecutor:
         workspace_path: Path,
         timeout: int = 300,
         allow_network: bool = False,
-        env: dict[str, str] | None = None,
     ) -> ExecutionResult:
         """
         Execute a command in a gVisor sandbox.
@@ -275,7 +274,6 @@ class GVisorExecutor:
             workspace_path: Path to agent's workspace (mounted at /workspace)
             timeout: Maximum execution time in seconds (default 5 minutes)
             allow_network: Whether to allow filtered network access (default False)
-            env: Optional additional environment variables
 
         Returns:
             ExecutionResult with stdout, stderr, exit code, and timeout status
