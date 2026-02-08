@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import Any, Optional
 
 from ...grpc.agents.agent_models import ChatAgent
-from ...infrastructure.workspace_sync import WorkspaceSync
 from ..execution.state_machine import CoordinatorStateMachine
 
 logger = logging.getLogger(__name__)
@@ -67,7 +66,6 @@ class SessionManager:
         self,
         idle_timeout: int = 1800,
         max_lifetime: int = 14400,
-        workspace_sync: Optional["WorkspaceSync"] = None,
     ):
         """
         Initialize session manager.
@@ -75,7 +73,6 @@ class SessionManager:
         Args:
             idle_timeout: Seconds of inactivity before cleanup (default 30 min)
             max_lifetime: Maximum session lifetime in seconds (default 4 hours)
-            workspace_sync: WorkspaceSync instance for S3 workspace persistence
         """
         self.agents: dict[str, ChatAgent] = {}
         self.metadata: dict[str, SessionMetadata] = {}
@@ -83,14 +80,12 @@ class SessionManager:
         self.state_machines: dict[str, CoordinatorStateMachine] = {}
         self.idle_timeout = idle_timeout
         self.max_lifetime = max_lifetime
-        self.workspace_sync = workspace_sync
         # Plan generation sessions (for HITL question/answer flow)
         self._plan_sessions: dict[str, dict[str, Any]] = {}
         self._cleanup_task: asyncio.Task | None = None
         logger.info(
             f"SessionManager initialized: "
-            f"idle_timeout={idle_timeout}s, max_lifetime={max_lifetime}s, "
-            f"workspace_sync={'enabled' if workspace_sync else 'disabled'}"
+            f"idle_timeout={idle_timeout}s, max_lifetime={max_lifetime}s"
         )
 
     def start_cleanup_task(self):
@@ -133,28 +128,8 @@ class SessionManager:
                 )
 
         for session_id, reason in sessions_to_remove:
-            # Upload workspace to S3 before removing session
-            meta = self.metadata.get(session_id)
-            if (
-                meta
-                and self.workspace_sync
-                and meta.workspace_id
-                and meta.workspace_type
-                and meta.workspace_org_id
-            ):
-                try:
-                    self.workspace_sync.upload(
-                        meta.workspace_org_id, meta.workspace_type, meta.workspace_id
-                    )
-                    self.workspace_sync.cleanup(meta.workspace_id)
-                    logger.info(
-                        f"📤 Uploaded workspace for session {session_id} before cleanup"
-                    )
-                except Exception as e:
-                    logger.error(
-                        f"Failed to upload workspace for session {session_id}: {e}"
-                    )
-
+            # With EFS-based storage, workspace changes are already persisted
+            # No upload needed - just remove the session from memory
             await self.remove_session(session_id, reason)
 
         if sessions_to_remove:

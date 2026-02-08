@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, ClassVar, Optional
 
-from .workspace_storage import WorkspaceStorage
+from .workspace_storage import WorkspaceStorage, WorkspaceType
 
 logger = logging.getLogger(__name__)
 
@@ -26,18 +26,25 @@ class SharedFilesystemStorage(WorkspaceStorage):
     Directory structure:
         {base_path}/
         └── {org_id}/
-            └── {agent_id}/
-                ├── .agent/
-                │   ├── config.json
-                │   ├── memory.jsonl
-                │   ├── plans/
-                │   └── memory/chroma/
-                ├── workspace/
-                │   ├── context/
-                │   ├── scratch/
-                │   └── outputs/
-                └── history/
-                    └── {date}/{task_id}/
+            ├── agents/
+            │   └── {agent_id}/
+            │       ├── .agent/
+            │       │   ├── config.json
+            │       │   ├── memory.jsonl
+            │       │   ├── plans/
+            │       │   └── memory/chroma/
+            │       ├── workspace/
+            │       │   ├── context/
+            │       │   ├── scratch/
+            │       │   └── outputs/
+            │       └── history/
+            │           └── {date}/{task_id}/
+            └── users/
+                └── {user_id}/
+                    ├── .user/
+                    │   └── config.json
+                    ├── workspace/
+                    └── history/
     """
 
     DEFAULT_DIRS: ClassVar[list[str]] = [
@@ -52,8 +59,8 @@ class SharedFilesystemStorage(WorkspaceStorage):
         "history",
     ]
 
-    # Regex for validating agent IDs (alphanumeric, underscore, hyphen)
-    AGENT_ID_PATTERN: ClassVar[re.Pattern[str]] = re.compile(r"^[a-zA-Z0-9_-]+$")
+    # Regex for validating workspace IDs (alphanumeric, underscore, hyphen)
+    WORKSPACE_ID_PATTERN: ClassVar[re.Pattern[str]] = re.compile(r"^[a-zA-Z0-9_-]+$")
 
     def __init__(self, base_path: Optional[str] = None):
         """
@@ -71,59 +78,74 @@ class SharedFilesystemStorage(WorkspaceStorage):
         self.base_path.mkdir(parents=True, exist_ok=True)
         logger.info(f"SharedFilesystemStorage initialized at {self.base_path}")
 
-    def _validate_agent_id(self, agent_id: str) -> None:
-        """Validate agent ID to prevent path traversal."""
-        if not self.AGENT_ID_PATTERN.match(agent_id):
+    def _validate_workspace_id(self, workspace_id: str) -> None:
+        """Validate workspace ID to prevent path traversal."""
+        if not self.WORKSPACE_ID_PATTERN.match(workspace_id):
             raise ValueError(
-                f"Invalid agent_id: {agent_id}. "
+                f"Invalid workspace_id: {workspace_id}. "
                 "Must contain only alphanumeric characters, underscores, and hyphens."
             )
-        if ".." in agent_id or agent_id.startswith("/"):
-            raise ValueError(f"Invalid agent_id: {agent_id}. Path traversal detected.")
+        if ".." in workspace_id or workspace_id.startswith("/"):
+            raise ValueError(f"Invalid workspace_id: {workspace_id}. Path traversal detected.")
 
-    def _workspace_path(self, org_id: int, agent_id: str) -> Path:
+    def _workspace_path(
+        self, org_id: int, workspace_type: WorkspaceType, workspace_id: str
+    ) -> Path:
         """Get path without creating."""
-        self._validate_agent_id(agent_id)
-        return self.base_path / str(org_id) / agent_id
+        self._validate_workspace_id(workspace_id)
+        return self.base_path / str(org_id) / workspace_type.value / workspace_id
 
-    def get_workspace_path(self, org_id: int, agent_id: str) -> Path:
+    def get_workspace_path(
+        self, org_id: int, workspace_type: WorkspaceType, workspace_id: str
+    ) -> Path:
         """Get workspace path, creating with default structure if needed."""
-        path = self._workspace_path(org_id, agent_id)
+        path = self._workspace_path(org_id, workspace_type, workspace_id)
 
         if not path.exists():
             logger.info(f"Creating new workspace: {path}")
-            self._create_workspace(path, agent_id)
+            self._create_workspace(path, workspace_type, workspace_id)
 
         return path
 
-    def _create_workspace(self, path: Path, agent_id: str) -> None:
+    def _create_workspace(
+        self, path: Path, workspace_type: WorkspaceType, workspace_id: str
+    ) -> None:
         """Create workspace with default directory structure."""
         for subdir in self.DEFAULT_DIRS:
             (path / subdir).mkdir(parents=True, exist_ok=True)
 
-        # Create initial config
+        # Create initial config (use .agent for agents, .user for users)
+        config_dir = ".agent" if workspace_type == WorkspaceType.AGENTS else ".user"
         config = {
-            "workspace_id": agent_id,
+            "workspace_id": workspace_id,
+            "workspace_type": workspace_type.value,
             "created_at": datetime.now().isoformat(),
             "version": 1,
         }
-        config_path = path / ".agent" / "config.json"
+        config_path = path / config_dir / "config.json"
+        config_path.parent.mkdir(parents=True, exist_ok=True)
         config_path.write_text(json.dumps(config, indent=2))
 
-    def workspace_exists(self, org_id: int, agent_id: str) -> bool:
+    def workspace_exists(
+        self, org_id: int, workspace_type: WorkspaceType, workspace_id: str
+    ) -> bool:
         """Check if workspace exists."""
-        return self._workspace_path(org_id, agent_id).exists()
+        return self._workspace_path(org_id, workspace_type, workspace_id).exists()
 
-    def delete_workspace(self, org_id: int, agent_id: str) -> None:
+    def delete_workspace(
+        self, org_id: int, workspace_type: WorkspaceType, workspace_id: str
+    ) -> None:
         """Delete a workspace entirely."""
-        path = self._workspace_path(org_id, agent_id)
+        path = self._workspace_path(org_id, workspace_type, workspace_id)
         if path.exists():
             shutil.rmtree(path)
             logger.info(f"Deleted workspace: {path}")
 
-    def get_last_modified(self, org_id: int, agent_id: str) -> Optional[datetime]:
+    def get_last_modified(
+        self, org_id: int, workspace_type: WorkspaceType, workspace_id: str
+    ) -> Optional[datetime]:
         """Get most recent modification time in workspace."""
-        path = self._workspace_path(org_id, agent_id)
+        path = self._workspace_path(org_id, workspace_type, workspace_id)
         if not path.exists():
             return None
 
@@ -135,9 +157,15 @@ class SharedFilesystemStorage(WorkspaceStorage):
                     latest = mtime
         return latest
 
-    def rotate_history(self, org_id: int, agent_id: str, max_days: int = 30) -> int:
+    def rotate_history(
+        self,
+        org_id: int,
+        workspace_type: WorkspaceType,
+        workspace_id: str,
+        max_days: int = 30,
+    ) -> int:
         """Delete history older than max_days."""
-        workspace_path = self._workspace_path(org_id, agent_id)
+        workspace_path = self._workspace_path(org_id, workspace_type, workspace_id)
         history_dir = workspace_path / "history"
 
         if not history_dir.exists():
@@ -158,11 +186,17 @@ class SharedFilesystemStorage(WorkspaceStorage):
                 continue
 
         if deleted:
-            logger.info(f"Rotated {deleted} old history dirs for {agent_id}")
+            logger.info(f"Rotated {deleted} old history dirs for {workspace_id}")
 
         return deleted
 
-    def prepare_task_history(self, org_id: int, agent_id: str, task_id: str) -> Path:
+    def prepare_task_history(
+        self,
+        org_id: int,
+        workspace_type: WorkspaceType,
+        workspace_id: str,
+        task_id: str,
+    ) -> Path:
         """
         Prepare history directory for a new task execution.
 
@@ -170,13 +204,14 @@ class SharedFilesystemStorage(WorkspaceStorage):
 
         Args:
             org_id: Organization ID
-            agent_id: Agent ID
+            workspace_type: Type of workspace (AGENTS or USERS)
+            workspace_id: Workspace identifier
             task_id: Task ID
 
         Returns:
             Path to task history directory
         """
-        workspace_path = self.get_workspace_path(org_id, agent_id)
+        workspace_path = self.get_workspace_path(org_id, workspace_type, workspace_id)
         date_str = datetime.now().strftime("%Y-%m-%d")
         history_dir = workspace_path / "history" / date_str / task_id
 
@@ -188,7 +223,8 @@ class SharedFilesystemStorage(WorkspaceStorage):
     def save_task_result(
         self,
         org_id: int,
-        agent_id: str,
+        workspace_type: WorkspaceType,
+        workspace_id: str,
         task_id: str,
         result: dict[str, Any],
     ) -> Path:
@@ -197,14 +233,15 @@ class SharedFilesystemStorage(WorkspaceStorage):
 
         Args:
             org_id: Organization ID
-            agent_id: Agent ID
+            workspace_type: Type of workspace (AGENTS or USERS)
+            workspace_id: Workspace identifier
             task_id: Task ID
             result: Result data to save
 
         Returns:
             Path to result file
         """
-        workspace_path = self.get_workspace_path(org_id, agent_id)
+        workspace_path = self.get_workspace_path(org_id, workspace_type, workspace_id)
         date_str = datetime.now().strftime("%Y-%m-%d")
         history_dir = workspace_path / "history" / date_str / task_id
 
@@ -217,7 +254,8 @@ class SharedFilesystemStorage(WorkspaceStorage):
     def append_to_session_log(
         self,
         org_id: int,
-        agent_id: str,
+        workspace_type: WorkspaceType,
+        workspace_id: str,
         task_id: str,
         entry: dict[str, Any],
     ) -> None:
@@ -226,11 +264,12 @@ class SharedFilesystemStorage(WorkspaceStorage):
 
         Args:
             org_id: Organization ID
-            agent_id: Agent ID
+            workspace_type: Type of workspace (AGENTS or USERS)
+            workspace_id: Workspace identifier
             task_id: Task ID
             entry: Log entry to append
         """
-        workspace_path = self.get_workspace_path(org_id, agent_id)
+        workspace_path = self.get_workspace_path(org_id, workspace_type, workspace_id)
         date_str = datetime.now().strftime("%Y-%m-%d")
         session_log = workspace_path / "history" / date_str / task_id / "session.jsonl"
 

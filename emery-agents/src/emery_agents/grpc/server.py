@@ -13,7 +13,11 @@ from grpc import aio
 
 from emery_agents.tools.loader import UnifiedToolLoader
 
-from ..infrastructure.storage import create_workspace_storage, WorkspaceStorage
+from ..infrastructure.storage import (
+    create_workspace_storage,
+    WorkspaceStorage,
+    WorkspaceType,
+)
 from ..services.agents.executor import AgentExecutor
 from ..services.tasks import TaskExecutor
 from .generated import (
@@ -117,7 +121,7 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
             if task_data.agent_id:
                 try:
                     workspace_path = self.workspace_storage.get_workspace_path(
-                        task_data.organization_id, workspace_id
+                        task_data.organization_id, WorkspaceType.AGENTS, workspace_id
                     )
                     logger.info(
                         f"📁 [TASK-{task_data.task_id[:8]}] Workspace ready at {workspace_path}"
@@ -126,7 +130,8 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
                     # Prepare task history directory
                     self.workspace_storage.prepare_task_history(
                         org_id=task_data.organization_id,
-                        agent_id=workspace_id,
+                        workspace_type=WorkspaceType.AGENTS,
+                        workspace_id=workspace_id,
                         task_id=task_data.task_id,
                     )
 
@@ -152,7 +157,8 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
 
                         self.workspace_storage.append_to_session_log(
                             org_id=task_data.organization_id,
-                            agent_id=workspace_id,
+                            workspace_type=WorkspaceType.AGENTS,
+                            workspace_id=workspace_id,
                             task_id=task_data.task_id,
                             entry={
                                 "type": "workspace_manifest",
@@ -236,7 +242,10 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
                 try:
                     # Rotate old history (non-blocking, best effort)
                     self.workspace_storage.rotate_history(
-                        task_data.organization_id, workspace_id, max_days=30
+                        task_data.organization_id,
+                        WorkspaceType.AGENTS,
+                        workspace_id,
+                        max_days=30,
                     )
                     logger.info(
                         f"✅ [TASK-{task_data.task_id[:8]}] Workspace changes persisted"

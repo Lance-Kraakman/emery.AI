@@ -29,7 +29,7 @@ from emery_agents.tools.loader import UnifiedToolLoader
 from emery_agents.tools.provider import ToolProvider
 
 from ..entities.models.plan import Plan, SkillInputDefinition, SkillOutputDefinition
-from ..infrastructure.workspace_sync import WorkspaceSync
+from ..infrastructure.storage import create_workspace_storage, WorkspaceType
 from ..orchestrators.nodes.planning import generate_plan_node
 from ..orchestrators.runtime import RuntimeContext
 from ..orchestrators.state import PlanExecuteState
@@ -77,20 +77,16 @@ class ChatProcessingServiceImplementation(
         self.organization_id = organization_id
         self.active_streams: dict[str, bool] = {}
 
-        # Initialize workspace sync for persistent filesystem
-        s3_bucket = os.getenv("S3_BUCKET_NAME")
-        if s3_bucket:
-            self.workspace_sync = WorkspaceSync(bucket=s3_bucket)
-            logger.info(f"✅ WorkspaceSync initialized with bucket: {s3_bucket}")
-        else:
-            self.workspace_sync = None
-            logger.warning("⚠️ S3_BUCKET_NAME not set, workspace sync disabled for chat")
+        # Initialize workspace storage (EFS/NFS/local filesystem)
+        # Workspaces are stored directly on shared filesystem - no S3 needed
+        self.workspace_storage = create_workspace_storage()
+        logger.info("✅ WorkspaceStorage initialized for chat")
 
         # Initialize knowledge base for discovery
         self._initialize_knowledge_base()
 
         self.session_manager = SessionManager(
-            idle_timeout=1800, max_lifetime=14400, workspace_sync=self.workspace_sync
+            idle_timeout=1800, max_lifetime=14400
         )
         self.session_manager.start_cleanup_task()
 
@@ -274,13 +270,13 @@ class ChatProcessingServiceImplementation(
 
     def _get_workspace_id(
         self, request: agent_worker_pb2.ProcessMessageRequest
-    ) -> tuple[str, str, int]:
+    ) -> tuple[WorkspaceType, str, int]:
         """
         Determine workspace type and ID from skill's agent ownership.
 
         Returns:
             Tuple of (workspace_type, workspace_id, organization_id)
-            - workspace_type: "agents" or "users"
+            - workspace_type: WorkspaceType.AGENTS or WorkspaceType.USERS
             - workspace_id: agent_id or user_id
             - organization_id: org that owns this workspace
         """
@@ -288,11 +284,11 @@ class ChatProcessingServiceImplementation(
         agent_id = self._resolve_agent_id(request)
 
         if agent_id:
-            workspace_type = "agents"
+            workspace_type = WorkspaceType.AGENTS
             workspace_id = str(agent_id)
         else:
             # Org-level - use user's personal workspace
-            workspace_type = "users"
+            workspace_type = WorkspaceType.USERS
             workspace_id = request.user_id
 
         organization_id = int(request.organization_id)
@@ -359,26 +355,25 @@ class ChatProcessingServiceImplementation(
         else:
             logger.info("⚠️ No AgentConfig provided, using empty tools")
 
-        # Download workspace from S3 if workspace sync is enabled
+        # Get workspace path from shared filesystem (EFS/NFS/local)
         workspace_path: Path | None = None
-        workspace_type: str | None = None
+        workspace_type: WorkspaceType | None = None
         workspace_id: str | None = None
         workspace_org_id: int | None = None
 
-        if self.workspace_sync:
-            try:
-                workspace_type, workspace_id, workspace_org_id = self._get_workspace_id(
-                    request
-                )
-                workspace_path = self.workspace_sync.download(
-                    workspace_org_id, workspace_type, workspace_id
-                )
-                logger.info(
-                    f"📁 Workspace downloaded: {workspace_path} (type={workspace_type}, id={workspace_id})"
-                )
-            except Exception as e:
-                logger.error(f"Failed to download workspace: {e}")
-                # Continue without workspace - chat can still work
+        try:
+            workspace_type, workspace_id, workspace_org_id = self._get_workspace_id(
+                request
+            )
+            workspace_path = self.workspace_storage.get_workspace_path(
+                workspace_org_id, workspace_type, workspace_id
+            )
+            logger.info(
+                f"📁 Workspace ready: {workspace_path} (type={workspace_type.value}, id={workspace_id})"
+            )
+        except Exception as e:
+            logger.error(f"Failed to access workspace: {e}")
+            # Continue without workspace - chat can still work
 
         try:
             conversation_messages = await build_conversation_messages(
@@ -478,9 +473,9 @@ class ChatProcessingServiceImplementation(
                 user_api_key=effective_api_key,  # Resolved credentials (user or agent)
                 file_attachments=file_attachments,  # File attachments for skill context injection
                 workspace_path=workspace_path,  # Workspace filesystem path
-                workspace_id=workspace_id,  # Workspace ID for S3 (user_id or agent_id)
-                workspace_type=workspace_type,  # "agents" or "users" — determines memory PII filtering
-                workspace_org_id=workspace_org_id,  # Organization ID for org-scoped S3 keys
+                workspace_id=workspace_id,  # Workspace ID (user_id or agent_id)
+                workspace_type=workspace_type.value if workspace_type else None,  # "agents" or "users"
+                workspace_org_id=workspace_org_id,  # Organization ID
                 extra_headers=chat_audit_headers,  # Audit trail headers for CRUD tool calls
             ):
                 # Check for cancellation
@@ -520,21 +515,10 @@ class ChatProcessingServiceImplementation(
                     if should_break:
                         break
 
-            # Upload workspace after message processing (crash-safe persistence)
-            if (
-                self.workspace_sync
-                and workspace_path
-                and workspace_id
-                and workspace_org_id
-                and workspace_type
-            ):
-                try:
-                    self.workspace_sync.upload(
-                        workspace_org_id, workspace_type, workspace_id
-                    )
-                    logger.info(f"📤 Workspace uploaded: {workspace_id}")
-                except Exception as e:
-                    logger.error(f"Failed to upload workspace: {e}")
+            # With EFS-based storage, workspace changes are already persisted
+            # No upload needed - filesystem changes are immediately available
+            if workspace_path:
+                logger.info(f"✅ Workspace changes persisted: {workspace_id}")
 
             processing_time = int((time.time() - start_time) * 1000)
             # Extract accumulated LLM + embedding usage for this request

@@ -82,8 +82,9 @@ export async function GET(
     }
 
     // Get workspace path on shared filesystem
+    // Directory structure: /{org_id}/agents/{agent_id}/
     const orgId = agent.organizationId.value;
-    const workspacePath = join(WORKSPACE_BASE, String(orgId), String(agentId));
+    const workspacePath = join(WORKSPACE_BASE, String(orgId), 'agents', String(agentId));
 
     // Check if workspace exists
     try {
