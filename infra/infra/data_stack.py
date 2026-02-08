@@ -264,6 +264,8 @@ class DataStack(Stack):
             "GRPC_SERVER_KEY": ecs.Secret.from_secrets_manager(self.app_secrets_object, "GRPC_SERVER_KEY"),
             "GRPC_CLIENT_CERT": ecs.Secret.from_secrets_manager(self.app_secrets_object, "GRPC_CLIENT_CERT"),
             "GRPC_CLIENT_KEY": ecs.Secret.from_secrets_manager(self.app_secrets_object, "GRPC_CLIENT_KEY"),
+            # Admin configuration
+            "ADMIN_EMAILS": ecs.Secret.from_secrets_manager(self.app_secrets_object, "ADMIN_EMAILS"),
         }
 
         # ========== CLOUD MAP ==========
