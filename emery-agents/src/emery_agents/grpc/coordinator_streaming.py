@@ -44,8 +44,8 @@ from .response_types import create_error_response
 logger = logging.getLogger(__name__)
 
 # Session-scoped graph cache keyed by thread_id.
-# Each session gets its own graph with RuntimeContext bound via closures.
-_session_cache: dict[str, Any] = {}
+# Stores (graph, runtime) tuple so credentials can be refreshed on resume.
+_session_cache: dict[str, tuple[Any, RuntimeContext]] = {}
 
 
 def _convert_history(
@@ -87,17 +87,27 @@ def _format_plan_for_message(plan: "Plan") -> str:
 
 def _get_or_create_session_graph(
     thread_id: str,
-    runtime: RuntimeContext | None = None,
+    runtime: RuntimeContext,
 ) -> Any:
-    """Get a cached session graph or create a new one with RuntimeContext."""
-    if thread_id not in _session_cache:
-        assert runtime is not None, "RuntimeContext required for new session graph"
-        _session_cache[thread_id] = create_session_graph(runtime)
-    return _session_cache[thread_id]
+    """Get cached session graph, refreshing credentials from current request."""
+    if thread_id in _session_cache:
+        cached_graph, cached_runtime = _session_cache[thread_id]
+        # Refresh credentials from the new request's runtime
+        # This ensures approval/resume requests use fresh auth tokens
+        logger.info(f"Refreshing credentials for cached session {thread_id}")
+        cached_runtime.api_key = runtime.api_key
+        cached_runtime.org_id = runtime.org_id
+        cached_runtime.extra_headers = runtime.extra_headers
+        return cached_graph
+
+    # New session - create graph and cache with runtime
+    graph = create_session_graph(runtime)
+    _session_cache[thread_id] = (graph, runtime)
+    return graph
 
 
 def _clear_session(thread_id: str) -> None:
-    """Remove a cached session graph after completion."""
+    """Remove cached session graph after completion."""
     _session_cache.pop(thread_id, None)
 
 
