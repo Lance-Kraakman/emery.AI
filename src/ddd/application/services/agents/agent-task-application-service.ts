@@ -159,6 +159,7 @@ export class AgentTaskApplicationService {
         instructions,
         skillId: dto.skillId, // Optional skill to execute
         triggerContext,
+        chatMessageId: dto.chatMessageId, // Link to ChatMessage for ExecutionSteps
         createdBy,
         status: TaskStatus.pending()
       });
@@ -171,6 +172,7 @@ export class AgentTaskApplicationService {
         name: task.name,
         instructions: task.instructions,
         skillId: task.skillId, // Optional skill to execute
+        chatMessageId: task.chatMessageId, // Link to ChatMessage for ExecutionSteps
         status: task.status.value,
         createdBy: task.createdBy?.value || null,
         createdAt: task.createdAt,
