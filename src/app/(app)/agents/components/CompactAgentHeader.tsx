@@ -54,20 +54,30 @@ export function CompactAgentHeader({
   const activeSchedules = agent.automations?.filter((s: { enabled: boolean }) => s.enabled).length || 0;
   const totalSchedules = agent.automations?.length || 0;
 
-  // Container-based responsive behavior
+  // Container-based responsive behavior with debouncing
   useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+
     const updateCompactMode = () => {
-      if (containerRef.current) {
-        const width = containerRef.current.offsetWidth;
-        // Switch to compact mode when container is less than 900px wide
-        // This accounts for chat panel reducing available space
-        setIsCompact(width < 900);
-        setIsVeryCompact(width < 640);
-      }
+      // Debounce to prevent rapid state updates during resize
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        if (containerRef.current) {
+          const width = containerRef.current.offsetWidth;
+          // Switch to compact mode when container is less than 900px wide
+          // This accounts for chat panel reducing available space
+          setIsCompact(width < 900);
+          setIsVeryCompact(width < 640);
+        }
+      }, 100);
     };
 
-    // Initial check
-    updateCompactMode();
+    // Initial check (no debounce)
+    if (containerRef.current) {
+      const width = containerRef.current.offsetWidth;
+      setIsCompact(width < 900);
+      setIsVeryCompact(width < 640);
+    }
 
     // Set up ResizeObserver to watch container width changes
     const resizeObserver = new ResizeObserver(updateCompactMode);
@@ -75,7 +85,10 @@ export function CompactAgentHeader({
       resizeObserver.observe(containerRef.current);
     }
 
-    return () => resizeObserver.disconnect();
+    return () => {
+      clearTimeout(timeoutId);
+      resizeObserver.disconnect();
+    };
   }, []);
 
   const handleAddSkill = async () => {
@@ -416,7 +429,7 @@ export function CompactAgentHeader({
 
         {/* Workspace Sync (Tauri) or Download (Web) */}
         {isTauri() ? (
-          <WorkspaceSyncControls agentId={agent.id} />
+          <WorkspaceSyncControls agentId={agent.id} orgId={agent.organizationId!} />
         ) : (
           <button
             onClick={handleDownloadWorkspace}

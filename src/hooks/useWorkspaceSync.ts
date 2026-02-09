@@ -102,7 +102,7 @@ async function invokeTauri<T>(command: string, args?: Record<string, unknown>): 
 // Hook
 // ============================================================================
 
-export function useWorkspaceSync(agentId: number): UseWorkspaceSyncReturn {
+export function useWorkspaceSync(agentId: number, orgId: number): UseWorkspaceSyncReturn {
   // Connection state
   const [isConnected, setIsConnected] = useState(false);
   const [isWatching, setIsWatching] = useState(false);
@@ -184,6 +184,7 @@ export function useWorkspaceSync(agentId: number): UseWorkspaceSyncReturn {
 
       await invokeTauri('sftp_connect', {
         agentId,
+        orgId,
         apiKey,
         apiBase,
       });

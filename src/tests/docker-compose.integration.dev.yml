@@ -23,3 +23,5 @@ services:
       - /app/node_modules
       # Keep container's .next directory to avoid permission/cache issues
       - /app/.next
+      # Shared workspace storage (same as agent services)
+      - workspace_data:/mnt/storage/workspaces

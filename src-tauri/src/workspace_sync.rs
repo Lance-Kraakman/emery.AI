@@ -37,6 +37,29 @@ const API_KEY_STORE_KEY: &str = "api_key";
 const LOCK_FILE_NAME: &str = ".emery-lock";
 const LOCK_TTL_SECS: i64 = 3600; // 1 hour - ignore stale locks
 
+// Files to skip during sync (OS metadata, editor temp files)
+// Note: .git and .gitignore are intentionally NOT ignored - users want these synced
+fn should_ignore_file(filename: &str) -> bool {
+    let ignored_exact = [".DS_Store", "Thumbs.db", "desktop.ini", ".AppleDouble", ".LSOverride"];
+    let ignored_prefixes = ["._"];  // macOS resource forks
+    let ignored_suffixes = [".swp", ".swo", "~"];  // vim swap files, backup files
+
+    if ignored_exact.contains(&filename) {
+        return true;
+    }
+    for prefix in ignored_prefixes {
+        if filename.starts_with(prefix) {
+            return true;
+        }
+    }
+    for suffix in ignored_suffixes {
+        if filename.ends_with(suffix) {
+            return true;
+        }
+    }
+    false
+}
+
 // ============================================================================
 // Error Types
 // ============================================================================
@@ -336,6 +359,14 @@ fn get_local_files(local_dir: &Path) -> Result<Vec<FileInfo>, SyncError> {
         .filter(|e| e.file_type().is_file())
     {
         let path = entry.path();
+
+        // Skip ignored files (OS metadata, editor temp files)
+        if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
+            if should_ignore_file(filename) {
+                continue;
+            }
+        }
+
         let relative = path
             .strip_prefix(local_dir)
             .map_err(|e| SyncError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?
@@ -474,6 +505,7 @@ pub async fn get_api_key(app: AppHandle) -> Result<Option<String>, String> {
 pub async fn sftp_connect(
     _app: AppHandle,
     agent_id: i64,
+    org_id: i64,
     api_key: String,
     api_base: String,
 ) -> Result<(), String> {
@@ -500,8 +532,8 @@ pub async fn sftp_connect(
         log::info!("API returned {}, falling back to local dev credentials", response.status());
 
         // Fall back to local dev credentials (linuxserver/openssh-server)
-        // Path: {SFTP_WORKSPACE_ROOT}/agents/{agent_id}
-        let remote_path = format!("{}/agents/{}", sftp_root, agent_id);
+        // Path: {SFTP_WORKSPACE_ROOT}/{org_id}/agents/{agent_id}
+        let remote_path = format!("{}/{}/agents/{}", sftp_root, org_id, agent_id);
 
         let creds = SftpCredentials {
             host: "localhost".to_string(),
@@ -824,22 +856,25 @@ pub async fn push_workspace(
         // Write to remote (always send full file for now since SFTP doesn't support apply)
         // In production with delta, we'd send to a server-side apply endpoint
         log::debug!("push_workspace: Writing file to {:?}", remote_path);
-        let mut remote_file = conn
-            .sftp
-            .create(remote_path)
-            .map_err(|e| {
-                log::error!("push_workspace: Failed to create remote file {:?}: {}", remote_path, e);
-                SyncError::Sftp(format!("Failed to create remote file {:?}: {}", remote_path, e))
-            })?;
-        remote_file
-            .write_all(&local_content)
-            .map_err(|e| {
-                log::error!("push_workspace: Failed to write to remote file {:?}: {}", remote_path, e);
-                SyncError::Io(e)
-            })?;
 
-        files_synced += 1;
-        log::debug!("push_workspace: Synced file {} ({} bytes)", file_info.path, local_content.len());
+        // Continue on file errors (permission denied, etc.) instead of aborting entire sync
+        let remote_file_result = conn.sftp.create(remote_path);
+        match remote_file_result {
+            Ok(mut remote_file) => {
+                match remote_file.write_all(&local_content) {
+                    Ok(_) => {
+                        files_synced += 1;
+                        log::debug!("push_workspace: Synced file {} ({} bytes)", file_info.path, local_content.len());
+                    }
+                    Err(e) => {
+                        log::warn!("push_workspace: Failed to write {:?}, skipping: {}", remote_path, e);
+                    }
+                }
+            }
+            Err(e) => {
+                log::warn!("push_workspace: Failed to create {:?}, skipping: {}", remote_path, e);
+            }
+        }
     }
 
     // Clear pending changes since we just synced

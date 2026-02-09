@@ -31,9 +31,10 @@ import { useWorkspaceSync } from '@/hooks/useWorkspaceSync';
 
 interface WorkspaceSyncControlsProps {
   agentId: number;
+  orgId: number;
 }
 
-export function WorkspaceSyncControls({ agentId }: WorkspaceSyncControlsProps) {
+export function WorkspaceSyncControls({ agentId, orgId }: WorkspaceSyncControlsProps) {
   const {
     isAvailable,
     isConnected,
@@ -50,7 +51,7 @@ export function WorkspaceSyncControls({ agentId }: WorkspaceSyncControlsProps) {
     disconnect,
     pull,
     push,
-  } = useWorkspaceSync(agentId);
+  } = useWorkspaceSync(agentId, orgId);
 
   const [popoverOpen, setPopoverOpen] = React.useState(false);
 

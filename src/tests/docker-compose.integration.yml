@@ -32,8 +32,8 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:integration_test_password@postgres-integration:5432/emery_integration_test
       NODE_ENV: production
-      GRPC_INSECURE: "true"                                                                                                                                                            
-      ENCRYPTION_PASSTHROUGH: "true" 
+      GRPC_INSECURE: "true"
+      ENCRYPTION_PASSTHROUGH: "true"
       # Override WORKER_ADDRESS for internal container network
       WORKER_ADDRESS: agent-chat-integration:50051
       GRPC_TOOLS_ADDRESS: agent-table-integration:50052    # Table operations (internal network)
@@ -45,6 +45,11 @@ services:
       AWS_SECRET_ACCESS_KEY: minioadmin
       # Redis for caching (ioredis)
       REDIS_URL: redis://redis-integration:6379
+      # Workspace storage (shared with agents)
+      WORKSPACE_STORAGE_PATH: /mnt/storage/workspaces
+    volumes:
+      # Shared workspace storage (same as agent services)
+      - workspace_data:/mnt/storage/workspaces
     depends_on:
       postgres-integration:
         condition: service_healthy
@@ -106,6 +111,7 @@ services:
       context: ../../emery-agents
       dockerfile: Dockerfile
     container_name: emery-integration-chat-agent
+    user: "1000:1000"  # Match SFTP server UID for workspace write permissions
     ports:
       - "127.0.0.1:50053:50051"  # Chat processing service
     env_file:
@@ -146,6 +152,7 @@ services:
       context: ../../emery-agents
       dockerfile: Dockerfile
     container_name: emery-integration-table-agent
+    user: "1000:1000"  # Match SFTP server UID for workspace write permissions
     ports:
       - "127.0.0.1:50054:50052"  # Table operations service
     env_file:
