@@ -20,6 +20,8 @@ from emery_agents.reasoning.signatures.planning import (
     CreatePlan,
     CreateSkillTemplate,
     PlanOrQuestionsOutput,
+    PlanReflection,
+    ReflectOnPlan,
     SkillInputSpec,
     SkillOutputSpec,
     SkillTemplatePlanOutput,
@@ -69,8 +71,10 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         self.analyzer = dspy.ChainOfThought(AnalyzeTask)
         self.discovery_tools = discovery_tools or []
         self.planner = dspy.ReAct(
-            CreatePlan, tools=self.discovery_tools, max_iters=5, demos=PLANNING_DEMOS
+            CreatePlan, tools=self.discovery_tools, max_iters=8, demos=PLANNING_DEMOS
         )
+        # Reflexion module for extended thinking - critiques and improves plans
+        self.reflector = dspy.ChainOfThought(ReflectOnPlan)
 
     def forward(
         self,
@@ -137,6 +141,52 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         )
 
         plan_result = result.result
+
+        # Reflexion loop (max 2 iterations) - like extended thinking
+        # Critiques the plan and triggers re-planning if improvements needed
+        for iteration in range(2):
+            if plan_result.plan is None:
+                # Questions returned, user needs to answer - skip reflexion
+                break
+
+            reflection = self.reflector(
+                request=request,
+                draft_plan=plan_result.plan.model_dump_json(),
+                research_done="(research performed during ReAct planning)",
+                workspace_context=workspace_context,
+            )
+
+            if not reflection.reflection.should_iterate:
+                # Plan is ready for user
+                logger.debug(
+                    f"Plan ready after iteration {iteration}: "
+                    f"quality={reflection.reflection.quality_score}"
+                )
+                break
+
+            # Plan needs improvement - re-run planner with reflection context
+            logger.info(
+                f"Reflexion iteration {iteration + 1}: {reflection.reflection.critique}"
+            )
+
+            # Add reflection to planning context for next iteration
+            reflection_context = (
+                f"\n\n## Reflection (Iteration {iteration + 1})\n"
+                f"Critique: {reflection.reflection.critique}\n"
+                f"Missing info: {', '.join(reflection.reflection.missing_info)}\n"
+                f"Suggested improvements: {reflection.reflection.suggested_improvements}"
+            )
+
+            result = self.planner(
+                request=request,
+                workspace_context=workspace_context,
+                capability_guidance=capability_guidance,
+                planning_context=planning_context + reflection_context,
+                conversation_history=conversation_history,
+                configured_tools=configured_tools,
+            )
+            plan_result = result.result
+
         self._ensure_valid_output(plan_result)
 
         return plan_result  # type: ignore[no-any-return]

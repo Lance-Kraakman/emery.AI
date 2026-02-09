@@ -263,6 +263,117 @@ External services: email""",
 
 
 # =============================================================================
+# Example 6: Research DURING planning (not as a plan step)
+# =============================================================================
+EXAMPLE_RESEARCH_THEN_PLAN = _create_example(
+    request="Create a project management system",
+    workspace_context='{"_summary": "Empty workspace", "resources": []}',
+    planning_context="""## Task Analysis
+Intent: Create project management system with tables and app
+Domain: emery
+Entities: projects, tasks, team members
+Approach: systems-thinking""",
+    # This example shows research DONE during planning, reflected in analysis field
+    result=PlanOrQuestionsOutput(
+        plan=PlanOutput(
+            plan_id="plan_pm_system",
+            goal="Create project management system based on research",
+            context="Empty workspace. Researched PM best practices: need projects, tasks, team assignments.",
+            analysis=(
+                "Researched via web_search: PM systems need projects (name, status, dates), "
+                "tasks (title, status, assignee, project link), and team members (name, role). "
+                "Found via search_capabilities: schema_builder for tables, app_builder for UI. "
+                "Will create minimal viable structure first."
+            ),
+            steps=[
+                # Note: NO research steps - research was done during planning
+                PlanStepOutput(
+                    step_id="step_1_projects_table",
+                    description=(
+                        'Create table "projects" with fields: name (text), '
+                        "status (single-select: Planning, Active, Complete), "
+                        "start_date (date), end_date (date). Verify: table exists."
+                    ),
+                    phase_name="Execution",
+                    phase_order=1,
+                ),
+                PlanStepOutput(
+                    step_id="step_2_tasks_table",
+                    description=(
+                        'Create table "tasks" with fields: title (text), '
+                        "description (long-text), status (single-select: To Do, In Progress, Done), "
+                        "due_date (date), project (link to projects). Verify: table exists with link field."
+                    ),
+                    required_context=["step_1_projects_table"],
+                    phase_name="Execution",
+                    phase_order=2,
+                ),
+                PlanStepOutput(
+                    step_id="step_3_pm_app",
+                    description=(
+                        'Create app "Project Manager" with page "Dashboard" showing '
+                        "projects table view and tasks table view. Verify: app accessible."
+                    ),
+                    required_context=["step_1_projects_table", "step_2_tasks_table"],
+                    phase_name="Execution",
+                    phase_order=3,
+                ),
+            ],
+            auto_approve_policy="confirm",
+            matched_conditions=["explicit_values", "additive_only"],
+        ),
+        questions=None,
+    ),
+)
+
+
+# =============================================================================
+# Example 7: Integration research DURING planning
+# =============================================================================
+EXAMPLE_INTEGRATION_RESEARCH = _create_example(
+    request="Set up automatic email notifications when tasks are completed",
+    workspace_context=(
+        '{"_summary": "1 table: tasks", '
+        '"resources": [{"type": "table", "name": "tasks", "fields": ["title", "status"]}]}'
+    ),
+    planning_context="""## Task Analysis
+Intent: Create automation for email notifications on task completion
+Domain: automation
+Entities: tasks, email, notifications
+External services: email""",
+    result=PlanOrQuestionsOutput(
+        plan=PlanOutput(
+            plan_id="plan_email_notifications",
+            goal="Set up email notifications when tasks marked complete",
+            context="tasks table exists with status field. Researched Gmail integration via search_external.",
+            analysis=(
+                'Called search_external("gmail") - found gmail_send_email requires: to, subject, body. '
+                'Called search_capabilities("automation trigger") - found skill_builder for creating triggers. '
+                'Plan: Create skill that triggers on tasks.status = "Done" and calls gmail_send_email.'
+            ),
+            steps=[
+                # Research was done - steps use exact tool names from research
+                PlanStepOutput(
+                    step_id="step_1_create_notification_skill",
+                    description=(
+                        'Create skill "Task Complete Notifier" with trigger: tasks table, '
+                        'when status changes to "Done". Action: call gmail_send_email with '
+                        'to={{assignee_email}}, subject="Task Complete: {{title}}", '
+                        'body="The task {{title}} has been marked complete."'
+                    ),
+                    phase_name="Execution",
+                    phase_order=1,
+                ),
+            ],
+            auto_approve_policy="confirm",
+            matched_conditions=["single_resource"],
+        ),
+        questions=None,
+    ),
+)
+
+
+# =============================================================================
 # Collected demos for export
 # =============================================================================
 PLANNING_DEMOS: list[dspy.Example] = [
@@ -271,4 +382,6 @@ PLANNING_DEMOS: list[dspy.Example] = [
     EXAMPLE_ADD_FIELD,
     EXAMPLE_RESEARCH_TASK,
     EXAMPLE_NEEDS_CLARIFICATION,
+    EXAMPLE_RESEARCH_THEN_PLAN,
+    EXAMPLE_INTEGRATION_RESEARCH,
 ]

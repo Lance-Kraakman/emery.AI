@@ -281,25 +281,31 @@ class CreatePlan(dspy.Signature):  # type: ignore[misc]
     - web_search: Researches industry practices, business requirements, domain knowledge.
 
     WHEN TO USE TOOLS vs ADD STEPS:
-    Detect user intent to decide whether to USE research tools NOW or ADD research steps to the plan.
 
-    USE tools NOW (do research during planning):
-    - Signals: "first", "before", "check first", "analyze before", "what does X look like", "then show me"
-    - User feedback rejecting a plan that had analysis steps
-    - Action: Call system_research, search_capabilities, etc. during this ReAct loop
-    - Then: Generate a plan with only mutation/action steps (research already done)
-    - Include findings in the plan's analysis field
+    DEFAULT: USE TOOLS NOW (research during planning)
+    For most requests, call research tools FIRST, then generate an informed plan:
+    - Call web_search for domain best practices (CRM design, project management, etc.)
+    - Call search_capabilities to find available tools/integrations
+    - Call search_external for specific tool names and schemas
+    - Call system_research to check existing resource details
+    - THEN generate plan steps based on what you learned
+    - Include findings in the plan's `analysis` field
 
-    ADD steps to plan (self-contained plan for later):
-    - Signals: "create a plan to...", "add steps for...", initial request without feedback
-    - User explicitly wants a comprehensive plan they can review/re-run
-    - Action: Add research steps to the plan for execution after approval
-    - Result: Plan contains both research and mutation steps
+    The plan should contain ACTION steps only (create, update, delete).
+    Research has already been done - don't add "research X" as a plan step.
+
+    EXCEPTION: ADD research steps to plan
+    Only defer research to plan steps when user EXPLICITLY wants this:
+    - "create a plan to research and then..." → ADD research steps
+    - "I want to review the research first" → ADD research steps
+    - "make a comprehensive plan I can re-run" → ADD research steps
+
+    These signals mean the user wants research as part of a replayable plan.
 
     Examples:
-    - "Update tables to match questionnaire" → ADD analysis steps to plan
-    - Feedback: "analyze first, then show me changes" → USE tools NOW, then plan mutations only
-    - "Create a plan to research and update everything" → ADD both types of steps
+    - "Create a CRM" → USE web_search NOW, then plan informed tables/apps
+    - "Set up email notifications" → USE search_external NOW, then plan with exact tool names
+    - "Create a plan to analyze our data and suggest improvements" → ADD analysis steps to plan
     """
 
     request: str = dspy.InputField(
@@ -736,3 +742,54 @@ class GeneratePlanDiff(dspy.Signature):  # type: ignore[misc]
     )
 
     diff: PlanDiffResult = dspy.OutputField()
+
+
+# === Plan Reflexion Signatures ===
+
+
+class PlanReflection(BaseModel):
+    """Simple reflection on a draft plan - like Claude's extended thinking."""
+
+    quality_score: float = Field(
+        ge=0.0,
+        le=1.0,
+        description="Overall plan quality. 1.0=ready, <0.7=needs improvement",
+    )
+    critique: str = Field(
+        description="What's good and what could be better about this plan"
+    )
+    missing_info: list[str] = Field(
+        description="Information gaps that should be researched before finalizing"
+    )
+    suggested_improvements: str = Field(
+        description="How to improve the plan (more research, better steps, etc.)"
+    )
+    should_iterate: bool = Field(
+        description="True if plan needs improvement, False if ready for user"
+    )
+
+
+class ReflectOnPlan(dspy.Signature):  # type: ignore[misc]
+    """Reflect on a draft plan - like Claude's extended thinking.
+
+    REFLECTION PROCESS:
+    1. Read the draft plan critically
+    2. Ask: Is this plan complete and well-informed?
+    3. Identify gaps that need more research
+    4. Suggest improvements
+
+    WHAT TO CHECK:
+    - Are step descriptions specific (exact names, types) or vague?
+    - Was enough research done to inform the plan?
+    - Does it address the full scope of the user's request?
+    - Are there assumptions that should be validated?
+    """
+
+    request: str = dspy.InputField(desc="Original user request")
+    draft_plan: str = dspy.InputField(desc="JSON of the draft plan")
+    research_done: str = dspy.InputField(
+        desc="Summary of research already performed during planning"
+    )
+    workspace_context: str = dspy.InputField(desc="Existing resources")
+
+    reflection: PlanReflection = dspy.OutputField()
