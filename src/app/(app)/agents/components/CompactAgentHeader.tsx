@@ -50,7 +50,13 @@ export function CompactAgentHeader({
   const [overflowOpen, setOverflowOpen] = useState(false);
   const [isCompact, setIsCompact] = useState(false);
   const [isVeryCompact, setIsVeryCompact] = useState(false);
+  const [isTauriClient, setIsTauriClient] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Detect Tauri after hydration to prevent mismatch
+  useEffect(() => {
+    setIsTauriClient(isTauri());
+  }, []);
 
   const activeSchedules = agent.automations?.filter((s: { enabled: boolean }) => s.enabled).length || 0;
   const totalSchedules = agent.automations?.length || 0;
@@ -426,7 +432,7 @@ export function CompactAgentHeader({
         )}
 
         {/* Workspace Sync (Tauri) or Download (Web) */}
-        {isTauri() ? (
+        {isTauriClient ? (
           <WorkspaceSyncControls agentId={agent.id} orgId={agent.organizationId!} />
         ) : (
           <button
