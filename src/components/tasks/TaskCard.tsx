@@ -11,7 +11,7 @@ interface TaskCardProps {
     name: string;
     status: string;
     triggerContext?: {
-      type: 'DATABASE_EVENT' | 'CALENDAR' | 'WEBHOOK' | 'MANUAL';
+      type: 'DATABASE_EVENT' | 'CALENDAR' | 'WEBHOOK' | 'MANUAL' | 'CHAT';
       scheduleName?: string;
       tableChange?: any;
     } | null;

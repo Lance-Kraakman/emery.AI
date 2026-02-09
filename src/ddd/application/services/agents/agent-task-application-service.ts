@@ -38,6 +38,7 @@ function mapTriggerType(type: string | undefined): string | undefined {
     'WEBHOOK': 'webhook',
     'DATABASE_EVENT': 'database_event',
     'CALENDAR': 'calendar',
+    'CHAT': 'chat',
   };
   return TRIGGER_TYPE_MAP[type] || type.toLowerCase();
 }
@@ -49,6 +50,7 @@ function buildTriggerContextFromType(triggerType: string): TriggerContext {
     'webhook': 'WEBHOOK',
     'database_event': 'DATABASE_EVENT',
     'calendar': 'CALENDAR',
+    'chat': 'CHAT',
   };
   const type = VALID_TRIGGER_TYPES[triggerType.toLowerCase()];
   if (!type) {
@@ -516,6 +518,59 @@ export class AgentTaskApplicationService {
     });
 
     logger.summary(`Cancelled task ${taskId.substring(0, 8)}`);
+  }
+
+  /**
+   * Update task status with optional result or error
+   * Used by chat route to update task status after completion/failure
+   */
+  async updateTaskStatus(
+    taskId: string,
+    status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled' | 'timeout' | 'awaiting_human',
+    result?: any,
+    error?: string
+  ): Promise<void> {
+    logger.summary(`Updating task ${taskId.substring(0, 8)} to ${status}`);
+
+    const task = await this.taskRepository.findById(TaskId.fromString(taskId));
+    if (!task) {
+      throw new Error(`Task ${taskId} not found`);
+    }
+
+    // Apply domain transitions based on status
+    switch (status) {
+      case 'in_progress':
+        task.start();
+        break;
+      case 'completed':
+        task.complete(result);
+        break;
+      case 'failed':
+        task.fail(error || 'Task failed');
+        break;
+      case 'cancelled':
+        task.cancel(error);
+        break;
+      case 'timeout':
+        task.timeout();
+        break;
+      case 'awaiting_human':
+        // Status is set directly for awaiting_human
+        break;
+      default:
+        throw new Error(`Cannot update task to status: ${status}`);
+    }
+
+    // Persist updates
+    await this.taskRepository.update(task.id, {
+      status: task.status.value,
+      result: task.result,
+      error: task.error,
+      startedAt: task.startedAt,
+      completedAt: task.completedAt
+    });
+
+    logger.summary(`Updated task ${taskId.substring(0, 8)} to ${status}`);
   }
 
   /**

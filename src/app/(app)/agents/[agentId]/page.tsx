@@ -6,13 +6,13 @@ import { Suspense } from "react";
 import { AgentPageClient } from "../components/AgentPageClient";
 import { AgentHeaderWrapper } from "../components/AgentHeaderWrapper";
 import { AgentHeaderSkeleton } from "../components/AgentHeaderSkeleton";
-import { TimelineWrapper } from "../components/TimelineWrapper";
-import { TimelineSkeleton } from "../components/TimelineSkeleton";
+import { SplitViewWrapper } from "../components/SplitViewWrapper";
+import { SplitViewSkeleton } from "../components/SplitViewSkeleton";
 
 // AIDEV-NOTE: Agent detail page with React streaming for fast perceived load
-// Uses Suspense boundaries to stream header and timeline independently
+// Uses Suspense boundaries to stream header and split view independently
 // Header shows immediately with agent info, then skills/connections load
-// Timeline streams in separately with its own loading state
+// Split view streams in with tasks list + detail panel
 
 interface AgentPageProps {
   params: Promise<{ agentId: string }>;
@@ -49,9 +49,9 @@ export default async function AgentPage({ params }: AgentPageProps) {
           <AgentHeaderWrapper agent={agent} />
         </Suspense>
 
-        {/* Timeline streams separately - shows skeleton while tasks load */}
-        <Suspense fallback={<TimelineSkeleton />}>
-          <TimelineWrapper agentId={agent.id} schedules={agent.automations} />
+        {/* Split view streams separately - shows skeleton while tasks load */}
+        <Suspense fallback={<SplitViewSkeleton />}>
+          <SplitViewWrapper agentId={agent.id} automations={agent.automations} />
         </Suspense>
       </AgentPageClient>
     </CanvasBase>

@@ -39,7 +39,7 @@ export { TaskStatus };
  * ```
  */
 export interface TriggerContext {
-  type: 'DATABASE_EVENT' | 'CALENDAR' | 'WEBHOOK' | 'MANUAL';
+  type: 'DATABASE_EVENT' | 'CALENDAR' | 'WEBHOOK' | 'MANUAL' | 'CHAT';
   scheduleName?: string; // Name of the schedule that triggered this task
   tableChange?: TableChangeEvent; // For DATABASE_EVENT triggers
   calendarData?: {  // For CALENDAR triggers
