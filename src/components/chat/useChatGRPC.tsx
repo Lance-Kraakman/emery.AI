@@ -31,6 +31,39 @@ import type { PendingPlanApproval, ActivePlanExecution, PlanExecutionStatus, Awa
 const logger = createDebugLogger('ChatGRPC')
 
 /**
+ * Track blob URLs for cleanup to prevent memory leaks
+ * Blob URLs created with URL.createObjectURL() must be revoked when no longer needed
+ */
+const blobUrlRegistry = new Set<string>()
+
+/**
+ * Create a blob URL and register it for cleanup
+ */
+function createTrackedBlobUrl(blob: Blob | File): string {
+  const url = URL.createObjectURL(blob)
+  blobUrlRegistry.add(url)
+  return url
+}
+
+/**
+ * Revoke a specific blob URL and remove from registry
+ */
+function revokeTrackedBlobUrl(url: string): void {
+  if (blobUrlRegistry.has(url)) {
+    URL.revokeObjectURL(url)
+    blobUrlRegistry.delete(url)
+  }
+}
+
+/**
+ * Revoke all tracked blob URLs (call on unmount)
+ */
+function revokeAllBlobUrls(): void {
+  blobUrlRegistry.forEach(url => URL.revokeObjectURL(url))
+  blobUrlRegistry.clear()
+}
+
+/**
  * Helper to create an image MessagePart from attachment metadata
  */
 function createImagePart(attachment: AnyAttachmentMetadata): MessagePart {
@@ -194,6 +227,14 @@ export function useChatGRPC(
   useEffect(() => {
     setIsClient(true)
   }, [])
+
+  // AIDEV-NOTE: Cleanup blob URLs on unmount to prevent memory leaks
+  // Blob URLs created with URL.createObjectURL() hold references to File objects in memory
+  useEffect(() => {
+    return () => {
+      revokeAllBlobUrls()
+    }
+  }, [])
   
   // Load chat when chatId changes
   useEffect(() => {
@@ -323,7 +364,7 @@ export function useChatGRPC(
               data: {
                 filename: file.name,
                 mediaType: file.type,
-                url: URL.createObjectURL(file)  // Temporary blob URL for preview
+                url: createTrackedBlobUrl(file)  // Tracked blob URL for preview (auto-cleanup on unmount)
               }
             }))
           ],

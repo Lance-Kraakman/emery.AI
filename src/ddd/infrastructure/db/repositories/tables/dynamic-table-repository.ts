@@ -14,7 +14,7 @@ import { createDebugLogger } from '@/lib/utils/debug-logger';
 
 const logger = createDebugLogger('TableRepo');
 import { tables, fields } from '@/ddd/infrastructure/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import type { InferSelectModel } from 'drizzle-orm';
 import { TableId, DatabaseId, OrganizationId } from '@/ddd/domain/shared/value-objects';
 import type { 
@@ -155,19 +155,34 @@ export class DynamicTableRepository implements IDynamicTableRepository {
 
   async findByOrganization(organizationId: OrganizationId): Promise<DynamicTable[]> {
     try {
+      // AIDEV-NOTE: N+1 query fix - fetch tables and fields in 2 queries instead of N+1
+      // 1. Get all tables for the organization
       const tableRecords = await this.db.query.tables.findMany({
         where: eq(tables.organizationId, organizationId.value)
       });
 
-      // Load all tables with their fields for complete functionality
-      const tablesWithFields: DynamicTable[] = [];
-      
-      for (const tableRecord of tableRecords) {
-        // Load fields for each table
-        const fieldRecords = await this.db.query.fields.findMany({
-          where: eq(fields.tableId, tableRecord.id),
-          orderBy: [fields.orderIndex]
-        });
+      if (tableRecords.length === 0) {
+        return [];
+      }
+
+      // 2. Get all fields for ALL tables in one query (instead of N separate queries)
+      const tableIds = tableRecords.map((t: TableRow) => t.id);
+      const allFieldRecords = await this.db.query.fields.findMany({
+        where: inArray(fields.tableId, tableIds),
+        orderBy: [fields.orderIndex]
+      });
+
+      // 3. Group fields by tableId in memory for O(1) lookup
+      const fieldsByTableId = new Map<number, FieldRow[]>();
+      for (const fieldRecord of allFieldRecords) {
+        const existing = fieldsByTableId.get(fieldRecord.tableId) || [];
+        existing.push(fieldRecord);
+        fieldsByTableId.set(fieldRecord.tableId, existing);
+      }
+
+      // 4. Build domain entities with their fields
+      const tablesWithFields: DynamicTable[] = tableRecords.map((tableRecord: TableRow) => {
+        const fieldRecords = fieldsByTableId.get(tableRecord.id) || [];
 
         // Convert field persistence records to domain TableField objects
         const tableFields = fieldRecords.map((fieldRecord: FieldRow) => {
@@ -193,7 +208,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
           });
         });
 
-        const dynamicTable = DynamicTable.fromPersistence({
+        return DynamicTable.fromPersistence({
           id: tableRecord.id,
           databaseId: tableRecord.databaseId,
           organizationId: tableRecord.organizationId,
@@ -206,9 +221,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
           updatedAt: tableRecord.updatedAt!,
           fields: tableFields
         });
-
-        tablesWithFields.push(dynamicTable);
-      }
+      });
 
       return tablesWithFields;
 
@@ -220,18 +233,34 @@ export class DynamicTableRepository implements IDynamicTableRepository {
 
   async findByDatabase(databaseId: DatabaseId): Promise<DynamicTable[]> {
     try {
+      // AIDEV-NOTE: N+1 query fix - fetch tables and fields in 2 queries instead of N+1
+      // 1. Get all tables for the database
       const tableRecords = await this.db.query.tables.findMany({
         where: eq(tables.databaseId, databaseId.value)
       });
 
-      const tablesWithFields: DynamicTable[] = [];
+      if (tableRecords.length === 0) {
+        return [];
+      }
 
-      for (const tableRecord of tableRecords) {
-        // Load fields for each table
-        const fieldRecords = await this.db.query.fields.findMany({
-          where: eq(fields.tableId, tableRecord.id),
-          orderBy: [fields.orderIndex]
-        });
+      // 2. Get all fields for ALL tables in one query (instead of N separate queries)
+      const tableIds = tableRecords.map((t: TableRow) => t.id);
+      const allFieldRecords = await this.db.query.fields.findMany({
+        where: inArray(fields.tableId, tableIds),
+        orderBy: [fields.orderIndex]
+      });
+
+      // 3. Group fields by tableId in memory for O(1) lookup
+      const fieldsByTableId = new Map<number, FieldRow[]>();
+      for (const fieldRecord of allFieldRecords) {
+        const existing = fieldsByTableId.get(fieldRecord.tableId) || [];
+        existing.push(fieldRecord);
+        fieldsByTableId.set(fieldRecord.tableId, existing);
+      }
+
+      // 4. Build domain entities with their fields
+      const tablesWithFields: DynamicTable[] = tableRecords.map((tableRecord: TableRow) => {
+        const fieldRecords = fieldsByTableId.get(tableRecord.id) || [];
 
         const tableFields = fieldRecords.map((fieldRecord: FieldRow) => {
           return TableField.fromPersistence({
@@ -247,7 +276,7 @@ export class DynamicTableRepository implements IDynamicTableRepository {
           });
         });
 
-        tablesWithFields.push(DynamicTable.fromPersistence({
+        return DynamicTable.fromPersistence({
           id: tableRecord.id,
           databaseId: tableRecord.databaseId,
           organizationId: tableRecord.organizationId,
@@ -259,8 +288,8 @@ export class DynamicTableRepository implements IDynamicTableRepository {
           createdAt: tableRecord.createdAt!,
           updatedAt: tableRecord.updatedAt!,
           fields: tableFields
-        }));
-      }
+        });
+      });
 
       return tablesWithFields;
 

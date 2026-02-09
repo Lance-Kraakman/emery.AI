@@ -8,7 +8,7 @@
  */
 
 import { NextRequest } from 'next/server';
-import { withAuthenticatedRoute, parseJsonBody } from '@/lib/api/base';
+import { withAuthenticatedRoute, parseJsonBody, parsePaginationParams, paginateResults, type ApiResponse } from '@/lib/api/base';
 import { logAgentMutation } from '@/lib/api/agent-context';
 import { getAgentApplicationService } from '@/ddd/application/di/container';
 import type { CreateAgentDTO } from '@/app/dtos/agent.dto';
@@ -90,9 +90,11 @@ export async function POST(request: NextRequest): Promise<Response> {
  * Query params:
  * - name: Filter by agent name (exact match, case-insensitive)
  * - search: Filter by agent name/description (fuzzy search)
+ * - page: Page number (default: 1)
+ * - limit: Items per page (default: 20, max: 100)
  */
 export async function GET(request: NextRequest): Promise<Response> {
-  return withAuthenticatedRoute(request, async (user): Promise<any> => {
+  return withAuthenticatedRoute(request, async (user): Promise<ApiResponse> => {
     const { searchParams } = new URL(request.url);
     const nameFilter = searchParams.get('name');
     const searchQuery = searchParams.get('search');
@@ -126,10 +128,15 @@ export async function GET(request: NextRequest): Promise<Response> {
       searchQuery: searchQuery || undefined
     });
 
-    // Return agents list
+    // AIDEV-NOTE: Apply pagination to results
+    const paginationParams = parsePaginationParams(request);
+    const paginatedResult = paginateResults(userAgents, paginationParams);
+
+    // Return paginated agents list
     return {
       success: true,
-      data: userAgents,
+      data: paginatedResult.data,
+      pagination: paginatedResult.pagination,
     };
   });
 }

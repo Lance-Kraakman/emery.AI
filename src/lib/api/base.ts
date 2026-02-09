@@ -19,10 +19,12 @@ import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 // Response Types
 // ============================================================================
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export interface ApiSuccessResponse<T = any> {
   success: true;
   data: T;
   message?: string;
+  pagination?: PaginationMetadata;
 }
 
 export interface ApiErrorResponse {
@@ -31,7 +33,16 @@ export interface ApiErrorResponse {
   status?: number;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type ApiResponse<T = any> = ApiSuccessResponse<T> | ApiErrorResponse;
+
+// Forward declaration for pagination (defined below)
+export interface PaginationMetadata {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
 
 // ============================================================================
 // Error Handling
@@ -205,10 +216,67 @@ export function validateRequestBody<T extends Record<string, any>>(
  * Safely parse JSON request body
  * Returns error response if parsing fails
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function parseJsonBody<T = any>(request: NextRequest): Promise<T | null> {
   try {
     return await request.json();
   } catch (error) {
     throw new Error('Invalid JSON in request body');
   }
+}
+
+// ============================================================================
+// Pagination Helpers
+// ============================================================================
+
+/**
+ * Pagination parameters for API requests
+ */
+export interface PaginationParams {
+  page: number;
+  limit: number;
+  offset: number;
+}
+
+// PaginationMetadata is defined at the top of the file with other response types
+
+/**
+ * Paginated response wrapper
+ */
+export interface PaginatedResponse<T> {
+  data: T[];
+  pagination: PaginationMetadata;
+}
+
+/**
+ * Parse pagination parameters from request URL
+ * AIDEV-NOTE: Returns pagination params with sensible defaults (page=1, limit=20, max=100)
+ */
+export function parsePaginationParams(request: NextRequest): PaginationParams {
+  const { searchParams } = new URL(request.url);
+  const page = Math.max(1, parseOptionalIntParam(searchParams.get('page'), 1));
+  const limit = Math.min(100, Math.max(1, parseOptionalIntParam(searchParams.get('limit'), 20)));
+  const offset = (page - 1) * limit;
+
+  return { page, limit, offset };
+}
+
+/**
+ * Apply pagination to an array of items
+ * Returns paginated data with metadata
+ */
+export function paginateResults<T>(items: T[], params: PaginationParams): PaginatedResponse<T> {
+  const total = items.length;
+  const totalPages = Math.ceil(total / params.limit);
+  const paginatedData = items.slice(params.offset, params.offset + params.limit);
+
+  return {
+    data: paginatedData,
+    pagination: {
+      page: params.page,
+      limit: params.limit,
+      total,
+      totalPages,
+    },
+  };
 }

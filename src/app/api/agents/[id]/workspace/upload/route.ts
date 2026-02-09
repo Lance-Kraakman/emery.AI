@@ -135,7 +135,22 @@ export async function POST(
     await writeFile(tempFile, Buffer.from(bytes));
 
     try {
-      await tar.extract({ file: tempFile, cwd: workspacePath });
+      // AIDEV-NOTE: Path traversal protection
+      // - preservePaths: false (default) - prevents absolute paths
+      // - filter: rejects any path containing '..' to prevent directory escape
+      await tar.extract({
+        file: tempFile,
+        cwd: workspacePath,
+        preservePaths: false,
+        filter: (path: string) => {
+          // Block path traversal attempts
+          if (path.includes('..') || path.startsWith('/')) {
+            console.warn(`[WORKSPACE-UPLOAD] Blocked path traversal attempt: ${path}`);
+            return false;
+          }
+          return true;
+        },
+      });
       await unlink(tempFile);
     } catch (err) {
       await unlink(tempFile).catch(() => {}); // cleanup on error
