@@ -81,6 +81,37 @@ function safeFormatDate(date: Date | string | null | undefined, formatStr: strin
   }
 }
 
+/**
+ * Format task result for display
+ * Extracts 'result' key from JSON objects for cleaner display
+ */
+function formatResult(result: unknown): { display: string; isJson: boolean } {
+  // If it's a string, try to parse as JSON first
+  if (typeof result === 'string') {
+    try {
+      const parsed = JSON.parse(result);
+      // If parsed successfully, recursively format
+      return formatResult(parsed);
+    } catch {
+      // Not JSON, return as-is
+      return { display: result, isJson: false };
+    }
+  }
+  if (typeof result === 'object' && result !== null) {
+    const obj = result as Record<string, unknown>;
+    // If it has a 'result' key with string value, extract for clean display
+    if ('result' in obj && typeof obj.result === 'string') {
+      return { display: obj.result, isJson: false };
+    }
+    // If it has a 'message' key, use that
+    if ('message' in obj && typeof obj.message === 'string') {
+      return { display: obj.message, isJson: false };
+    }
+  }
+  // Fallback to formatted JSON
+  return { display: JSON.stringify(result, null, 2), isJson: true };
+}
+
 // Component to render a single ExecutionStep
 function ExecutionStepItemRich({ step, isLast }: { step: ExecutionStep; isLast: boolean }) {
   const config = getStepConfig(step.type);
@@ -127,6 +158,16 @@ export function TaskDetailPanel({ task, agentId }: TaskDetailPanelProps) {
   const [executionSteps, setExecutionSteps] = useState<ExecutionStep[]>([]);
   const [isLoadingSteps, setIsLoadingSteps] = useState(false);
 
+  // Formatted date (set after hydration to prevent timezone mismatch)
+  const [formattedDate, setFormattedDate] = useState<string>('');
+
+  // Format date after hydration to avoid server/client timezone mismatch
+  useEffect(() => {
+    if (task.createdAt) {
+      setFormattedDate(safeFormatDate(task.createdAt, 'MMM d, h:mm a'));
+    }
+  }, [task.createdAt]);
+
   // Fetch execution steps from ChatMessage when chatMessageId is present
   useEffect(() => {
     if (task.chatMessageId) {
@@ -158,7 +199,7 @@ export function TaskDetailPanel({ task, agentId }: TaskDetailPanelProps) {
   const hasLogs = task.logs && task.logs.length > 0;
 
   return (
-    <div className="p-4 space-y-6">
+    <div className="p-4 space-y-4">
       {/* Header */}
       <div className="space-y-3">
         <div className="flex items-start justify-between gap-4">
@@ -175,10 +216,10 @@ export function TaskDetailPanel({ task, agentId }: TaskDetailPanelProps) {
             <span>{trigger.label}</span>
           </div>
 
-          {task.createdAt && (
+          {formattedDate && (
             <div className="flex items-center gap-1.5">
               <Clock className="h-4 w-4" />
-              <span>{safeFormatDate(task.createdAt, 'MMM d, h:mm a')}</span>
+              <span>{formattedDate}</span>
             </div>
           )}
 
@@ -254,11 +295,19 @@ export function TaskDetailPanel({ task, agentId }: TaskDetailPanelProps) {
       {task.result && task.status === 'completed' && (
         <div className="space-y-2">
           <h3 className="text-sm font-medium">Result</h3>
-          <pre className="text-xs bg-muted/50 p-3 rounded-md overflow-auto max-h-48">
-            {typeof task.result === 'string'
-              ? task.result
-              : JSON.stringify(task.result, null, 2)}
-          </pre>
+          {(() => {
+            // Extract result text if available, otherwise show formatted JSON
+            const { display, isJson } = formatResult(task.result);
+            return isJson ? (
+              <pre className="text-xs font-mono bg-muted/50 p-3 rounded-md overflow-auto max-h-48 whitespace-pre-wrap break-words">
+                {display}
+              </pre>
+            ) : (
+              <p className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-md whitespace-pre-wrap break-words">
+                {display}
+              </p>
+            );
+          })()}
         </div>
       )}
     </div>
