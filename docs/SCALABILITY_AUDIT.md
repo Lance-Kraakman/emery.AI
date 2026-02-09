@@ -20,18 +20,19 @@ This audit covers 13 major areas of the application. The system has a solid arch
 | 3 | **Migration init container** | Deployment | ✅ **CORRECT** - `essential=False` is correct (see explanation below) |
 | 4 | **Health check endpoint** | Deployment | ✅ **EXISTS** - `/api/health` returns status + uptime |
 | 5 | **Plaintext API key storage in Tauri** | Security | 🔲 Desktop app stores API keys unencrypted on disk |
-| 6 | **Path traversal in tar extraction** | Security | 🔲 Malicious archives could escape directory |
+| 6 | **Path traversal in tar extraction** | Security | ✅ **FIXED** - `filter` + `preservePaths: false` in upload route (see notes) |
 | 7 | **Task-level timeout** | Agent Execution | ✅ **FIXED** - 1 hour timeout via `TASK_TIMEOUT_SECONDS` env var |
-| 8 | **Blob URL memory leaks** | Frontend | 🔲 `URL.createObjectURL()` never revoked in 8+ files |
+| 8 | **Blob URL memory leaks** | Frontend | ✅ **FIXED** - Module-level registry + unmount cleanup (see notes) |
 
 ---
 
 ## High Severity Issues
 
 ### Database Layer
-- **N+1 queries** in `dynamic-table-repository.ts` - 100 tables = 101 queries
-- **Unbounded queries** - `findAll()`, `getTasksForOrganization()` return everything
-- **Missing pagination** on `/api/agents`, `/api/tasks`, `/api/tables`
+- ✅ **N+1 queries FIXED** - `dynamic-table-repository.ts` now uses 2 queries with `inArray()` batching
+- ✅ **API pagination ADDED** - `/api/agents`, `/api/tasks`, `/api/tables` support `?page=1&limit=20`
+- ⚠️ **In-memory pagination** - Still fetches ALL from DB then slices (DB-level pagination is future work)
+- **Unbounded queries** - `findAll()`, `getTasksForOrganization()` return everything (internal use only)
 - ✅ **Connection pool size** - Increased from 5 → 15, idle timeout 30 → 60
 
 ### gRPC/API Layer
@@ -872,23 +873,105 @@ export async function register() {
 
 ---
 
+---
+
+## TIER 3 Implementation Notes (2026-02-10)
+
+### Path Traversal Fix
+**File:** `src/app/api/agents/[id]/workspace/upload/route.ts`
+
+**Implementation:**
+```typescript
+await tar.extract({
+  file: tempFile,
+  cwd: workspacePath,
+  preservePaths: false,
+  filter: (path: string) => {
+    if (path.includes('..') || path.startsWith('/')) {
+      console.warn(`[WORKSPACE-UPLOAD] Blocked path traversal attempt: ${path}`);
+      return false;
+    }
+    return true;
+  },
+});
+```
+
+**Known limitations:**
+- ⚠️ Does not prevent symlink attacks (archive could contain `link -> /etc/passwd`)
+- Future: Consider adding `noSymlinks: true` or post-extraction symlink validation
+
+---
+
+### Blob URL Memory Leak Fix
+**File:** `src/components/chat/useChatGRPC.tsx`
+
+**Implementation:**
+- Module-level `blobUrlRegistry` Set tracks all created URLs
+- `createTrackedBlobUrl()` registers URLs
+- `revokeAllBlobUrls()` called in useEffect cleanup on unmount
+
+**Known limitations:**
+- ⚠️ Module-level state is shared across ALL hook instances
+- ⚠️ No cleanup on chat switch (URLs persist until full unmount)
+- OK for typical single-ChatProvider usage, but multiple instances would share registry
+
+**Other files already clean:** CodeViewer, MarkdownViewer, CreditBreakdownTabs, TemplateGallery, ExportTemplateDialog (all revoke immediately after download)
+
+---
+
+### N+1 Query Fix
+**File:** `src/ddd/infrastructure/db/repositories/tables/dynamic-table-repository.ts`
+
+**Implementation:**
+```typescript
+// 2 queries instead of N+1:
+const tableRecords = await this.db.query.tables.findMany({...});
+const allFieldRecords = await this.db.query.fields.findMany({
+  where: inArray(fields.tableId, tableIds),
+});
+// Group in memory with Map for O(1) lookup
+```
+
+**Known limitations:**
+- ⚠️ Large orgs with 1000+ tables may hit query size limits
+- PostgreSQL handles large `IN` clauses well, but monitor performance
+
+---
+
+### API Pagination
+**Files:** `/api/agents`, `/api/tasks`, `/api/tables` + `src/lib/api/base.ts`
+
+**Implementation:**
+- `parsePaginationParams()` extracts `page` and `limit` from query string
+- `paginateResults()` slices array and returns pagination metadata
+- Defaults: page=1, limit=20, max=100
+
+**Known limitations:**
+- ⚠️ **In-memory pagination**: Still fetches ALL records from DB, then slices
+- Does not reduce database load for large datasets
+- Future: Add repository-level `findByOrganizationPaginated(limit, offset)` methods
+
+---
+
 ## Conclusion
 
-> **✅ UPDATE (2026-02-09):** Major scalability fixes completed. See details below.
+> **✅ UPDATE (2026-02-10):** TIER 3 scalability fixes completed.
 
 The application has a solid foundation. Progress made:
 
 1. ✅ **Concurrency controls** - workspace locking implemented (asyncio.Lock + .emery-lock file)
 2. ✅ **Resource efficiency** - EFS replaced S3 (no transfer needed), SFTP + rsync for Tauri
 3. ✅ **gRPC scalability** - 100MB message limits, task timeout, increased workers (40 chat, 30 table)
-4. ✅ **Database scalability** - Connection pool 5→15, idle timeout 30→60
+4. ✅ **Database scalability** - Connection pool 5→15, idle timeout 30→60, N+1 query fixed
 5. ✅ **Deployment safety** - Health endpoint exists, graceful shutdown handlers added
 6. ✅ **Task reliability** - 1 hour timeout prevents hung agents
-7. 🔲 **Memory management** - cleanup blob URLs, limit caches (still needed)
+7. ✅ **Memory management** - Blob URL cleanup on unmount
+8. ✅ **API scalability** - Pagination on list endpoints (in-memory for now)
+9. ✅ **Security** - Path traversal protection in upload route
 
-**Remaining priorities:**
-- Blob URL cleanup (8+ files)
-- Database pagination
-- N+1 query fixes
-- Tauri keychain storage
-- Path traversal validation
+**Remaining priorities (TIER 4):**
+- Tauri keychain storage (security)
+- ChatProcessingClientRegistry eviction (memory)
+- Frontend virtualization (performance)
+- DB-level pagination (scalability)
+- Retry logic with backoff (reliability)
