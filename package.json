@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --turbopack",
     "dev:prod": "pnpm build && pnpm start",
     "build": "next build",
     "start": "next start",
@@ -196,6 +196,7 @@
   "devDependencies": {
     "@electric-sql/pglite": "^0.3.7",
     "@eslint/eslintrc": "^3.3.3",
+    "@next/bundle-analyzer": "^16.1.6",
     "@tauri-apps/api": "^2.9.1",
     "@tauri-apps/cli": "^2.10.0",
     "@testing-library/jest-dom": "^6.7.0",

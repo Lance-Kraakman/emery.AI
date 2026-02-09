@@ -16,7 +16,9 @@ RUN git config --global url."https://github.com/".insteadOf "git@github.com:"
 RUN npm i -g pnpm
 
 # AIDEV-NOTE: Install dependencies with frozen lockfile for cache efficiency
-RUN pnpm install --frozen-lockfile
+# Uses BuildKit cache mount for pnpm store - run with DOCKER_BUILDKIT=1
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile
 
 # Copy source code after dependencies are installed
 COPY . .

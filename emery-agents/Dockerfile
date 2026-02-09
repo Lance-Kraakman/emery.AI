@@ -41,8 +41,9 @@ RUN pip install uv==0.5.30
 COPY ./pyproject.toml ./uv.lock ./README.md ./
 
 # AIDEV-NOTE: Install dependencies with uv for exact reproducibility
-# This ensures package versions are properly resolved
-RUN uv pip install . --system
+# Uses BuildKit cache mount for pip cache - run with DOCKER_BUILDKIT=1
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install . --system
 
 # Pre-download models for memory features (avoids first-run delay)
 # spaCy model for Presidio PII detection
