@@ -951,6 +951,11 @@ export interface ProcessMessageRequest {
   taskId: string;
   /** User display name for audit trail */
   userName: string;
+  /**
+   * Link tasks to chat messages for ExecutionSteps retrieval
+   * AIDEV-NOTE: When Python creates tasks, it should include this as chatMessageId
+   */
+  assistantMessageId: string;
 }
 
 /** Streaming response from AI processing */
@@ -7471,6 +7476,7 @@ function createBaseProcessMessageRequest(): ProcessMessageRequest {
     userApiKey: "",
     taskId: "",
     userName: "",
+    assistantMessageId: "",
   };
 }
 
@@ -7508,6 +7514,9 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
     }
     if (message.userName !== "") {
       writer.uint32(170).string(message.userName);
+    }
+    if (message.assistantMessageId !== "") {
+      writer.uint32(178).string(message.assistantMessageId);
     }
     return writer;
   },
@@ -7607,6 +7616,14 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
           message.userName = reader.string();
           continue;
         }
+        case 22: {
+          if (tag !== 178) {
+            break;
+          }
+
+          message.assistantMessageId = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -7633,6 +7650,7 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
       userApiKey: isSet(object.userApiKey) ? globalThis.String(object.userApiKey) : "",
       taskId: isSet(object.taskId) ? globalThis.String(object.taskId) : "",
       userName: isSet(object.userName) ? globalThis.String(object.userName) : "",
+      assistantMessageId: isSet(object.assistantMessageId) ? globalThis.String(object.assistantMessageId) : "",
     };
   },
 
@@ -7671,6 +7689,9 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
     if (message.userName !== "") {
       obj.userName = message.userName;
     }
+    if (message.assistantMessageId !== "") {
+      obj.assistantMessageId = message.assistantMessageId;
+    }
     return obj;
   },
 
@@ -7692,6 +7713,7 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
     message.userApiKey = object.userApiKey ?? "";
     message.taskId = object.taskId ?? "";
     message.userName = object.userName ?? "";
+    message.assistantMessageId = object.assistantMessageId ?? "";
     return message;
   },
 };

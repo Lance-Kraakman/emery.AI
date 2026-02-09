@@ -45,6 +45,7 @@ export interface ChatProcessingOptions {
   userApiKey?: string;           // User API key for managed agents (skill_builder, etc.)
   taskId?: string;               // Task tracking ID (if set, execution is task-tracked with DB record)
   userName?: string;             // User display name for audit trail
+  assistantMessageId?: string;   // Link tasks to this ChatMessage for ExecutionSteps retrieval
 }
 
 export interface StreamingChatResponse {
@@ -201,7 +202,8 @@ export class ChatProcessingClient {
       sessionId: actualSessionId, // Session ID for stateful agent persistence
       userApiKey: options.userApiKey || '', // User API key for managed agents (skill_builder, etc.)
       taskId: options.taskId || '', // Task tracking (empty = not task-tracked)
-      userName: options.userName || '' // User display name for audit trail
+      userName: options.userName || '', // User display name for audit trail
+      assistantMessageId: options.assistantMessageId || '' // Link tasks to ChatMessage for ExecutionSteps
     };
 
     // Context removed - agentId is resolved from skill.agent_id in Python

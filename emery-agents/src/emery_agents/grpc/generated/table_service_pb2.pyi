@@ -1,11 +1,9 @@
-from collections.abc import Iterable as _Iterable
-from collections.abc import Mapping as _Mapping
-from typing import ClassVar as _ClassVar
-
-from google.protobuf import descriptor as _descriptor
-from google.protobuf import message as _message
 from google.protobuf.internal import containers as _containers
 from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
+from google.protobuf import descriptor as _descriptor
+from google.protobuf import message as _message
+from collections.abc import Iterable as _Iterable, Mapping as _Mapping
+from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
@@ -59,7 +57,6 @@ class AggregationType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     AGG_TYPE_COUNT_DISTINCT: _ClassVar[AggregationType]
     AGG_TYPE_COUNT_EMPTY: _ClassVar[AggregationType]
     AGG_TYPE_COUNT_NOT_EMPTY: _ClassVar[AggregationType]
-
 FIELD_TYPE_UNSPECIFIED: FieldType
 FIELD_TYPE_TEXT: FieldType
 FIELD_TYPE_NUMBER: FieldType
@@ -111,8 +108,7 @@ class TableField(_message.Message):
         VALUE_FIELD_NUMBER: _ClassVar[int]
         key: str
         value: str
-        def __init__(self, key: str | None = ..., value: str | None = ...) -> None: ...
-
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
     NAME_FIELD_NUMBER: _ClassVar[int]
     TYPE_FIELD_NUMBER: _ClassVar[int]
     REQUIRED_FIELD_NUMBER: _ClassVar[int]
@@ -123,14 +119,7 @@ class TableField(_message.Message):
     required: bool
     metadata: _containers.ScalarMap[str, str]
     field_id: int
-    def __init__(
-        self,
-        name: str | None = ...,
-        type: FieldType | str | None = ...,
-        required: bool = ...,
-        metadata: _Mapping[str, str] | None = ...,
-        field_id: int | None = ...,
-    ) -> None: ...
+    def __init__(self, name: _Optional[str] = ..., type: _Optional[_Union[FieldType, str]] = ..., required: bool = ..., metadata: _Optional[_Mapping[str, str]] = ..., field_id: _Optional[int] = ...) -> None: ...
 
 class TableSchema(_message.Message):
     __slots__ = ("schema_id", "name", "version", "fields", "metadata")
@@ -140,8 +129,7 @@ class TableSchema(_message.Message):
         VALUE_FIELD_NUMBER: _ClassVar[int]
         key: str
         value: str
-        def __init__(self, key: str | None = ..., value: str | None = ...) -> None: ...
-
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
     SCHEMA_ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     VERSION_FIELD_NUMBER: _ClassVar[int]
@@ -152,38 +140,17 @@ class TableSchema(_message.Message):
     version: str
     fields: _containers.RepeatedCompositeFieldContainer[TableField]
     metadata: _containers.ScalarMap[str, str]
-    def __init__(
-        self,
-        schema_id: str | None = ...,
-        name: str | None = ...,
-        version: str | None = ...,
-        fields: _Iterable[TableField | _Mapping] | None = ...,
-        metadata: _Mapping[str, str] | None = ...,
-    ) -> None: ...
+    def __init__(self, schema_id: _Optional[str] = ..., name: _Optional[str] = ..., version: _Optional[str] = ..., fields: _Optional[_Iterable[_Union[TableField, _Mapping]]] = ..., metadata: _Optional[_Mapping[str, str]] = ...) -> None: ...
 
 class Table(_message.Message):
-    __slots__ = (
-        "table_id",
-        "name",
-        "schema",
-        "description",
-        "created_by",
-        "updated_by",
-        "created_at_ms",
-        "updated_at_ms",
-        "organization_id",
-        "metadata",
-        "is_deleted",
-        "s3_path",
-    )
+    __slots__ = ("table_id", "name", "schema", "description", "created_by", "updated_by", "created_at_ms", "updated_at_ms", "organization_id", "metadata", "is_deleted", "s3_path")
     class MetadataEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
         VALUE_FIELD_NUMBER: _ClassVar[int]
         key: str
         value: str
-        def __init__(self, key: str | None = ..., value: str | None = ...) -> None: ...
-
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
     TABLE_ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     SCHEMA_FIELD_NUMBER: _ClassVar[int]
@@ -208,34 +175,10 @@ class Table(_message.Message):
     metadata: _containers.ScalarMap[str, str]
     is_deleted: bool
     s3_path: str
-    def __init__(
-        self,
-        table_id: str | None = ...,
-        name: str | None = ...,
-        schema: TableSchema | _Mapping | None = ...,
-        description: str | None = ...,
-        created_by: str | None = ...,
-        updated_by: str | None = ...,
-        created_at_ms: int | None = ...,
-        updated_at_ms: int | None = ...,
-        organization_id: str | None = ...,
-        metadata: _Mapping[str, str] | None = ...,
-        is_deleted: bool = ...,
-        s3_path: str | None = ...,
-    ) -> None: ...
+    def __init__(self, table_id: _Optional[str] = ..., name: _Optional[str] = ..., schema: _Optional[_Union[TableSchema, _Mapping]] = ..., description: _Optional[str] = ..., created_by: _Optional[str] = ..., updated_by: _Optional[str] = ..., created_at_ms: _Optional[int] = ..., updated_at_ms: _Optional[int] = ..., organization_id: _Optional[str] = ..., metadata: _Optional[_Mapping[str, str]] = ..., is_deleted: bool = ..., s3_path: _Optional[str] = ...) -> None: ...
 
 class Row(_message.Message):
-    __slots__ = (
-        "row_id",
-        "table_id",
-        "row_data",
-        "created_by",
-        "updated_by",
-        "created_at_ms",
-        "updated_at_ms",
-        "organization_id",
-        "is_deleted",
-    )
+    __slots__ = ("row_id", "table_id", "row_data", "created_by", "updated_by", "created_at_ms", "updated_at_ms", "organization_id", "is_deleted")
     ROW_ID_FIELD_NUMBER: _ClassVar[int]
     TABLE_ID_FIELD_NUMBER: _ClassVar[int]
     ROW_DATA_FIELD_NUMBER: _ClassVar[int]
@@ -254,37 +197,17 @@ class Row(_message.Message):
     updated_at_ms: int
     organization_id: str
     is_deleted: bool
-    def __init__(
-        self,
-        row_id: str | None = ...,
-        table_id: str | None = ...,
-        row_data: RowData | _Mapping | None = ...,
-        created_by: str | None = ...,
-        updated_by: str | None = ...,
-        created_at_ms: int | None = ...,
-        updated_at_ms: int | None = ...,
-        organization_id: str | None = ...,
-        is_deleted: bool = ...,
-    ) -> None: ...
+    def __init__(self, row_id: _Optional[str] = ..., table_id: _Optional[str] = ..., row_data: _Optional[_Union[RowData, _Mapping]] = ..., created_by: _Optional[str] = ..., updated_by: _Optional[str] = ..., created_at_ms: _Optional[int] = ..., updated_at_ms: _Optional[int] = ..., organization_id: _Optional[str] = ..., is_deleted: bool = ...) -> None: ...
 
 class CreateTableRequest(_message.Message):
-    __slots__ = (
-        "name",
-        "schema",
-        "description",
-        "user_id",
-        "organization_id",
-        "metadata",
-        "s3_path",
-    )
+    __slots__ = ("name", "schema", "description", "user_id", "organization_id", "metadata", "s3_path")
     class MetadataEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
         VALUE_FIELD_NUMBER: _ClassVar[int]
         key: str
         value: str
-        def __init__(self, key: str | None = ..., value: str | None = ...) -> None: ...
-
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
     NAME_FIELD_NUMBER: _ClassVar[int]
     SCHEMA_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
@@ -299,16 +222,7 @@ class CreateTableRequest(_message.Message):
     organization_id: str
     metadata: _containers.ScalarMap[str, str]
     s3_path: str
-    def __init__(
-        self,
-        name: str | None = ...,
-        schema: TableSchema | _Mapping | None = ...,
-        description: str | None = ...,
-        user_id: str | None = ...,
-        organization_id: str | None = ...,
-        metadata: _Mapping[str, str] | None = ...,
-        s3_path: str | None = ...,
-    ) -> None: ...
+    def __init__(self, name: _Optional[str] = ..., schema: _Optional[_Union[TableSchema, _Mapping]] = ..., description: _Optional[str] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[str] = ..., metadata: _Optional[_Mapping[str, str]] = ..., s3_path: _Optional[str] = ...) -> None: ...
 
 class GetTableRequest(_message.Message):
     __slots__ = ("table_id", "user_id", "organization_id")
@@ -318,32 +232,17 @@ class GetTableRequest(_message.Message):
     table_id: str
     user_id: str
     organization_id: str
-    def __init__(
-        self,
-        table_id: str | None = ...,
-        user_id: str | None = ...,
-        organization_id: str | None = ...,
-    ) -> None: ...
+    def __init__(self, table_id: _Optional[str] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[str] = ...) -> None: ...
 
 class UpdateTableRequest(_message.Message):
-    __slots__ = (
-        "table_id",
-        "name",
-        "schema",
-        "description",
-        "user_id",
-        "organization_id",
-        "metadata",
-        "s3_path",
-    )
+    __slots__ = ("table_id", "name", "schema", "description", "user_id", "organization_id", "metadata", "s3_path")
     class MetadataEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
         VALUE_FIELD_NUMBER: _ClassVar[int]
         key: str
         value: str
-        def __init__(self, key: str | None = ..., value: str | None = ...) -> None: ...
-
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
     TABLE_ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     SCHEMA_FIELD_NUMBER: _ClassVar[int]
@@ -360,17 +259,7 @@ class UpdateTableRequest(_message.Message):
     organization_id: str
     metadata: _containers.ScalarMap[str, str]
     s3_path: str
-    def __init__(
-        self,
-        table_id: str | None = ...,
-        name: str | None = ...,
-        schema: TableSchema | _Mapping | None = ...,
-        description: str | None = ...,
-        user_id: str | None = ...,
-        organization_id: str | None = ...,
-        metadata: _Mapping[str, str] | None = ...,
-        s3_path: str | None = ...,
-    ) -> None: ...
+    def __init__(self, table_id: _Optional[str] = ..., name: _Optional[str] = ..., schema: _Optional[_Union[TableSchema, _Mapping]] = ..., description: _Optional[str] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[str] = ..., metadata: _Optional[_Mapping[str, str]] = ..., s3_path: _Optional[str] = ...) -> None: ...
 
 class DeleteTableRequest(_message.Message):
     __slots__ = ("table_id", "user_id", "organization_id", "soft_delete")
@@ -382,13 +271,7 @@ class DeleteTableRequest(_message.Message):
     user_id: str
     organization_id: str
     soft_delete: bool
-    def __init__(
-        self,
-        table_id: str | None = ...,
-        user_id: str | None = ...,
-        organization_id: str | None = ...,
-        soft_delete: bool = ...,
-    ) -> None: ...
+    def __init__(self, table_id: _Optional[str] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[str] = ..., soft_delete: bool = ...) -> None: ...
 
 class ListTablesRequest(_message.Message):
     __slots__ = ("user_id", "organization_id", "limit", "offset", "search_term")
@@ -402,24 +285,10 @@ class ListTablesRequest(_message.Message):
     limit: int
     offset: int
     search_term: str
-    def __init__(
-        self,
-        user_id: str | None = ...,
-        organization_id: str | None = ...,
-        limit: int | None = ...,
-        offset: int | None = ...,
-        search_term: str | None = ...,
-    ) -> None: ...
+    def __init__(self, user_id: _Optional[str] = ..., organization_id: _Optional[str] = ..., limit: _Optional[int] = ..., offset: _Optional[int] = ..., search_term: _Optional[str] = ...) -> None: ...
 
 class CreateRowsRequest(_message.Message):
-    __slots__ = (
-        "table_id",
-        "rows_data",
-        "user_id",
-        "organization_id",
-        "s3_path",
-        "mode",
-    )
+    __slots__ = ("table_id", "rows_data", "user_id", "organization_id", "s3_path", "mode")
     TABLE_ID_FIELD_NUMBER: _ClassVar[int]
     ROWS_DATA_FIELD_NUMBER: _ClassVar[int]
     USER_ID_FIELD_NUMBER: _ClassVar[int]
@@ -432,15 +301,7 @@ class CreateRowsRequest(_message.Message):
     organization_id: str
     s3_path: str
     mode: str
-    def __init__(
-        self,
-        table_id: str | None = ...,
-        rows_data: _Iterable[RowData | _Mapping] | None = ...,
-        user_id: str | None = ...,
-        organization_id: str | None = ...,
-        s3_path: str | None = ...,
-        mode: str | None = ...,
-    ) -> None: ...
+    def __init__(self, table_id: _Optional[str] = ..., rows_data: _Optional[_Iterable[_Union[RowData, _Mapping]]] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[str] = ..., s3_path: _Optional[str] = ..., mode: _Optional[str] = ...) -> None: ...
 
 class GetRowsRequest(_message.Message):
     __slots__ = ("table_id", "row_ids", "user_id", "organization_id")
@@ -452,13 +313,7 @@ class GetRowsRequest(_message.Message):
     row_ids: _containers.RepeatedScalarFieldContainer[str]
     user_id: str
     organization_id: str
-    def __init__(
-        self,
-        table_id: str | None = ...,
-        row_ids: _Iterable[str] | None = ...,
-        user_id: str | None = ...,
-        organization_id: str | None = ...,
-    ) -> None: ...
+    def __init__(self, table_id: _Optional[str] = ..., row_ids: _Optional[_Iterable[str]] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[str] = ...) -> None: ...
 
 class UpdateRowsRequest(_message.Message):
     __slots__ = ("table_id", "rows_data", "user_id", "organization_id", "s3_path")
@@ -472,14 +327,7 @@ class UpdateRowsRequest(_message.Message):
     user_id: str
     organization_id: str
     s3_path: str
-    def __init__(
-        self,
-        table_id: str | None = ...,
-        rows_data: _Iterable[RowData | _Mapping] | None = ...,
-        user_id: str | None = ...,
-        organization_id: str | None = ...,
-        s3_path: str | None = ...,
-    ) -> None: ...
+    def __init__(self, table_id: _Optional[str] = ..., rows_data: _Optional[_Iterable[_Union[RowData, _Mapping]]] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[str] = ..., s3_path: _Optional[str] = ...) -> None: ...
 
 class DeleteRowsRequest(_message.Message):
     __slots__ = ("table_id", "row_ids", "user_id", "organization_id", "s3_path")
@@ -493,14 +341,7 @@ class DeleteRowsRequest(_message.Message):
     user_id: str
     organization_id: str
     s3_path: str
-    def __init__(
-        self,
-        table_id: str | None = ...,
-        row_ids: _Iterable[str] | None = ...,
-        user_id: str | None = ...,
-        organization_id: str | None = ...,
-        s3_path: str | None = ...,
-    ) -> None: ...
+    def __init__(self, table_id: _Optional[str] = ..., row_ids: _Optional[_Iterable[str]] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[str] = ..., s3_path: _Optional[str] = ...) -> None: ...
 
 class RowFilter(_message.Message):
     __slots__ = ("field", "operator", "value", "values")
@@ -512,13 +353,7 @@ class RowFilter(_message.Message):
     operator: FilterOperator
     value: RowDataValue
     values: _containers.RepeatedCompositeFieldContainer[RowDataValue]
-    def __init__(
-        self,
-        field: str | None = ...,
-        operator: FilterOperator | str | None = ...,
-        value: RowDataValue | _Mapping | None = ...,
-        values: _Iterable[RowDataValue | _Mapping] | None = ...,
-    ) -> None: ...
+    def __init__(self, field: _Optional[str] = ..., operator: _Optional[_Union[FilterOperator, str]] = ..., value: _Optional[_Union[RowDataValue, _Mapping]] = ..., values: _Optional[_Iterable[_Union[RowDataValue, _Mapping]]] = ...) -> None: ...
 
 class AggregationFunction(_message.Message):
     __slots__ = ("field_id", "type", "alias", "format_type")
@@ -530,13 +365,7 @@ class AggregationFunction(_message.Message):
     type: AggregationType
     alias: str
     format_type: str
-    def __init__(
-        self,
-        field_id: str | None = ...,
-        type: AggregationType | str | None = ...,
-        alias: str | None = ...,
-        format_type: str | None = ...,
-    ) -> None: ...
+    def __init__(self, field_id: _Optional[str] = ..., type: _Optional[_Union[AggregationType, str]] = ..., alias: _Optional[str] = ..., format_type: _Optional[str] = ...) -> None: ...
 
 class AggregationConfig(_message.Message):
     __slots__ = ("group_by_fields", "aggregations")
@@ -544,25 +373,10 @@ class AggregationConfig(_message.Message):
     AGGREGATIONS_FIELD_NUMBER: _ClassVar[int]
     group_by_fields: _containers.RepeatedScalarFieldContainer[str]
     aggregations: _containers.RepeatedCompositeFieldContainer[AggregationFunction]
-    def __init__(
-        self,
-        group_by_fields: _Iterable[str] | None = ...,
-        aggregations: _Iterable[AggregationFunction | _Mapping] | None = ...,
-    ) -> None: ...
+    def __init__(self, group_by_fields: _Optional[_Iterable[str]] = ..., aggregations: _Optional[_Iterable[_Union[AggregationFunction, _Mapping]]] = ...) -> None: ...
 
 class QueryRowsRequest(_message.Message):
-    __slots__ = (
-        "table_id",
-        "s3_path",
-        "filters",
-        "order_by",
-        "order_direction",
-        "limit",
-        "offset",
-        "user_id",
-        "organization_id",
-        "aggregation",
-    )
+    __slots__ = ("table_id", "s3_path", "filters", "order_by", "order_direction", "limit", "offset", "user_id", "organization_id", "aggregation")
     TABLE_ID_FIELD_NUMBER: _ClassVar[int]
     S3_PATH_FIELD_NUMBER: _ClassVar[int]
     FILTERS_FIELD_NUMBER: _ClassVar[int]
@@ -583,19 +397,7 @@ class QueryRowsRequest(_message.Message):
     user_id: str
     organization_id: str
     aggregation: AggregationConfig
-    def __init__(
-        self,
-        table_id: str | None = ...,
-        s3_path: str | None = ...,
-        filters: _Iterable[RowFilter | _Mapping] | None = ...,
-        order_by: str | None = ...,
-        order_direction: str | None = ...,
-        limit: int | None = ...,
-        offset: int | None = ...,
-        user_id: str | None = ...,
-        organization_id: str | None = ...,
-        aggregation: AggregationConfig | _Mapping | None = ...,
-    ) -> None: ...
+    def __init__(self, table_id: _Optional[str] = ..., s3_path: _Optional[str] = ..., filters: _Optional[_Iterable[_Union[RowFilter, _Mapping]]] = ..., order_by: _Optional[str] = ..., order_direction: _Optional[str] = ..., limit: _Optional[int] = ..., offset: _Optional[int] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[str] = ..., aggregation: _Optional[_Union[AggregationConfig, _Mapping]] = ...) -> None: ...
 
 class TableResponse(_message.Message):
     __slots__ = ("success", "table", "message")
@@ -605,12 +407,7 @@ class TableResponse(_message.Message):
     success: bool
     table: Table
     message: str
-    def __init__(
-        self,
-        success: bool = ...,
-        table: Table | _Mapping | None = ...,
-        message: str | None = ...,
-    ) -> None: ...
+    def __init__(self, success: bool = ..., table: _Optional[_Union[Table, _Mapping]] = ..., message: _Optional[str] = ...) -> None: ...
 
 class DeleteTableResponse(_message.Message):
     __slots__ = ("success", "message")
@@ -618,7 +415,7 @@ class DeleteTableResponse(_message.Message):
     MESSAGE_FIELD_NUMBER: _ClassVar[int]
     success: bool
     message: str
-    def __init__(self, success: bool = ..., message: str | None = ...) -> None: ...
+    def __init__(self, success: bool = ..., message: _Optional[str] = ...) -> None: ...
 
 class ListTablesResponse(_message.Message):
     __slots__ = ("success", "tables", "total_count", "message")
@@ -630,13 +427,7 @@ class ListTablesResponse(_message.Message):
     tables: _containers.RepeatedCompositeFieldContainer[Table]
     total_count: int
     message: str
-    def __init__(
-        self,
-        success: bool = ...,
-        tables: _Iterable[Table | _Mapping] | None = ...,
-        total_count: int | None = ...,
-        message: str | None = ...,
-    ) -> None: ...
+    def __init__(self, success: bool = ..., tables: _Optional[_Iterable[_Union[Table, _Mapping]]] = ..., total_count: _Optional[int] = ..., message: _Optional[str] = ...) -> None: ...
 
 class CreateRowsResponse(_message.Message):
     __slots__ = ("success", "rows", "rows_created", "message")
@@ -648,13 +439,7 @@ class CreateRowsResponse(_message.Message):
     rows: _containers.RepeatedCompositeFieldContainer[Row]
     rows_created: int
     message: str
-    def __init__(
-        self,
-        success: bool = ...,
-        rows: _Iterable[Row | _Mapping] | None = ...,
-        rows_created: int | None = ...,
-        message: str | None = ...,
-    ) -> None: ...
+    def __init__(self, success: bool = ..., rows: _Optional[_Iterable[_Union[Row, _Mapping]]] = ..., rows_created: _Optional[int] = ..., message: _Optional[str] = ...) -> None: ...
 
 class GetRowsResponse(_message.Message):
     __slots__ = ("success", "rows", "total_count", "message")
@@ -666,13 +451,7 @@ class GetRowsResponse(_message.Message):
     rows: _containers.RepeatedCompositeFieldContainer[Row]
     total_count: int
     message: str
-    def __init__(
-        self,
-        success: bool = ...,
-        rows: _Iterable[Row | _Mapping] | None = ...,
-        total_count: int | None = ...,
-        message: str | None = ...,
-    ) -> None: ...
+    def __init__(self, success: bool = ..., rows: _Optional[_Iterable[_Union[Row, _Mapping]]] = ..., total_count: _Optional[int] = ..., message: _Optional[str] = ...) -> None: ...
 
 class UpdateRowsResponse(_message.Message):
     __slots__ = ("success", "rows", "rows_updated", "message")
@@ -684,13 +463,7 @@ class UpdateRowsResponse(_message.Message):
     rows: _containers.RepeatedCompositeFieldContainer[Row]
     rows_updated: int
     message: str
-    def __init__(
-        self,
-        success: bool = ...,
-        rows: _Iterable[Row | _Mapping] | None = ...,
-        rows_updated: int | None = ...,
-        message: str | None = ...,
-    ) -> None: ...
+    def __init__(self, success: bool = ..., rows: _Optional[_Iterable[_Union[Row, _Mapping]]] = ..., rows_updated: _Optional[int] = ..., message: _Optional[str] = ...) -> None: ...
 
 class DeleteRowsResponse(_message.Message):
     __slots__ = ("success", "rows_deleted", "message")
@@ -700,12 +473,7 @@ class DeleteRowsResponse(_message.Message):
     success: bool
     rows_deleted: int
     message: str
-    def __init__(
-        self,
-        success: bool = ...,
-        rows_deleted: int | None = ...,
-        message: str | None = ...,
-    ) -> None: ...
+    def __init__(self, success: bool = ..., rows_deleted: _Optional[int] = ..., message: _Optional[str] = ...) -> None: ...
 
 class QueryRowsResponse(_message.Message):
     __slots__ = ("success", "arrow_ipc_stream", "total_count", "message")
@@ -717,29 +485,16 @@ class QueryRowsResponse(_message.Message):
     arrow_ipc_stream: bytes
     total_count: int
     message: str
-    def __init__(
-        self,
-        success: bool = ...,
-        arrow_ipc_stream: bytes | None = ...,
-        total_count: int | None = ...,
-        message: str | None = ...,
-    ) -> None: ...
+    def __init__(self, success: bool = ..., arrow_ipc_stream: _Optional[bytes] = ..., total_count: _Optional[int] = ..., message: _Optional[str] = ...) -> None: ...
 
 class FloatArray(_message.Message):
     __slots__ = ("values",)
     VALUES_FIELD_NUMBER: _ClassVar[int]
     values: _containers.RepeatedScalarFieldContainer[float]
-    def __init__(self, values: _Iterable[float] | None = ...) -> None: ...
+    def __init__(self, values: _Optional[_Iterable[float]] = ...) -> None: ...
 
 class RowDataValue(_message.Message):
-    __slots__ = (
-        "text_value",
-        "number_value",
-        "boolean_value",
-        "date_value",
-        "json_value",
-        "embedding_value",
-    )
+    __slots__ = ("text_value", "number_value", "boolean_value", "date_value", "json_value", "embedding_value")
     TEXT_VALUE_FIELD_NUMBER: _ClassVar[int]
     NUMBER_VALUE_FIELD_NUMBER: _ClassVar[int]
     BOOLEAN_VALUE_FIELD_NUMBER: _ClassVar[int]
@@ -752,15 +507,7 @@ class RowDataValue(_message.Message):
     date_value: int
     json_value: str
     embedding_value: FloatArray
-    def __init__(
-        self,
-        text_value: str | None = ...,
-        number_value: float | None = ...,
-        boolean_value: bool = ...,
-        date_value: int | None = ...,
-        json_value: str | None = ...,
-        embedding_value: FloatArray | _Mapping | None = ...,
-    ) -> None: ...
+    def __init__(self, text_value: _Optional[str] = ..., number_value: _Optional[float] = ..., boolean_value: bool = ..., date_value: _Optional[int] = ..., json_value: _Optional[str] = ..., embedding_value: _Optional[_Union[FloatArray, _Mapping]] = ...) -> None: ...
 
 class RowData(_message.Message):
     __slots__ = ("id", "data")
@@ -770,17 +517,12 @@ class RowData(_message.Message):
         VALUE_FIELD_NUMBER: _ClassVar[int]
         key: str
         value: RowDataValue
-        def __init__(
-            self, key: str | None = ..., value: RowDataValue | _Mapping | None = ...
-        ) -> None: ...
-
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[_Union[RowDataValue, _Mapping]] = ...) -> None: ...
     ID_FIELD_NUMBER: _ClassVar[int]
     DATA_FIELD_NUMBER: _ClassVar[int]
     id: str
     data: _containers.MessageMap[str, RowDataValue]
-    def __init__(
-        self, id: str | None = ..., data: _Mapping[str, RowDataValue] | None = ...
-    ) -> None: ...
+    def __init__(self, id: _Optional[str] = ..., data: _Optional[_Mapping[str, RowDataValue]] = ...) -> None: ...
 
 class GetTableStatsRequest(_message.Message):
     __slots__ = ("table_id", "s3_path", "organization_id")
@@ -790,12 +532,7 @@ class GetTableStatsRequest(_message.Message):
     table_id: str
     s3_path: str
     organization_id: str
-    def __init__(
-        self,
-        table_id: str | None = ...,
-        s3_path: str | None = ...,
-        organization_id: str | None = ...,
-    ) -> None: ...
+    def __init__(self, table_id: _Optional[str] = ..., s3_path: _Optional[str] = ..., organization_id: _Optional[str] = ...) -> None: ...
 
 class GetTableStatsResponse(_message.Message):
     __slots__ = ("success", "row_count", "size_bytes", "message")
@@ -807,13 +544,7 @@ class GetTableStatsResponse(_message.Message):
     row_count: int
     size_bytes: int
     message: str
-    def __init__(
-        self,
-        success: bool = ...,
-        row_count: int | None = ...,
-        size_bytes: int | None = ...,
-        message: str | None = ...,
-    ) -> None: ...
+    def __init__(self, success: bool = ..., row_count: _Optional[int] = ..., size_bytes: _Optional[int] = ..., message: _Optional[str] = ...) -> None: ...
 
 class AddFieldRequest(_message.Message):
     __slots__ = ("table_id", "field", "organization_id", "s3_path")
@@ -825,23 +556,10 @@ class AddFieldRequest(_message.Message):
     field: TableField
     organization_id: str
     s3_path: str
-    def __init__(
-        self,
-        table_id: str | None = ...,
-        field: TableField | _Mapping | None = ...,
-        organization_id: str | None = ...,
-        s3_path: str | None = ...,
-    ) -> None: ...
+    def __init__(self, table_id: _Optional[str] = ..., field: _Optional[_Union[TableField, _Mapping]] = ..., organization_id: _Optional[str] = ..., s3_path: _Optional[str] = ...) -> None: ...
 
 class UpdateFieldRequest(_message.Message):
-    __slots__ = (
-        "table_id",
-        "field_id",
-        "updated_field",
-        "organization_id",
-        "s3_path",
-        "migrate_data",
-    )
+    __slots__ = ("table_id", "field_id", "updated_field", "organization_id", "s3_path", "migrate_data")
     TABLE_ID_FIELD_NUMBER: _ClassVar[int]
     FIELD_ID_FIELD_NUMBER: _ClassVar[int]
     UPDATED_FIELD_FIELD_NUMBER: _ClassVar[int]
@@ -854,15 +572,7 @@ class UpdateFieldRequest(_message.Message):
     organization_id: str
     s3_path: str
     migrate_data: bool
-    def __init__(
-        self,
-        table_id: str | None = ...,
-        field_id: int | None = ...,
-        updated_field: TableField | _Mapping | None = ...,
-        organization_id: str | None = ...,
-        s3_path: str | None = ...,
-        migrate_data: bool = ...,
-    ) -> None: ...
+    def __init__(self, table_id: _Optional[str] = ..., field_id: _Optional[int] = ..., updated_field: _Optional[_Union[TableField, _Mapping]] = ..., organization_id: _Optional[str] = ..., s3_path: _Optional[str] = ..., migrate_data: bool = ...) -> None: ...
 
 class DeleteFieldRequest(_message.Message):
     __slots__ = ("table_id", "field_id", "organization_id", "s3_path", "backup_data")
@@ -876,14 +586,7 @@ class DeleteFieldRequest(_message.Message):
     organization_id: str
     s3_path: str
     backup_data: bool
-    def __init__(
-        self,
-        table_id: str | None = ...,
-        field_id: int | None = ...,
-        organization_id: str | None = ...,
-        s3_path: str | None = ...,
-        backup_data: bool = ...,
-    ) -> None: ...
+    def __init__(self, table_id: _Optional[str] = ..., field_id: _Optional[int] = ..., organization_id: _Optional[str] = ..., s3_path: _Optional[str] = ..., backup_data: bool = ...) -> None: ...
 
 class GetFieldsRequest(_message.Message):
     __slots__ = ("table_id", "organization_id")
@@ -891,9 +594,7 @@ class GetFieldsRequest(_message.Message):
     ORGANIZATION_ID_FIELD_NUMBER: _ClassVar[int]
     table_id: str
     organization_id: str
-    def __init__(
-        self, table_id: str | None = ..., organization_id: str | None = ...
-    ) -> None: ...
+    def __init__(self, table_id: _Optional[str] = ..., organization_id: _Optional[str] = ...) -> None: ...
 
 class FieldResponse(_message.Message):
     __slots__ = ("success", "field", "message")
@@ -903,12 +604,7 @@ class FieldResponse(_message.Message):
     success: bool
     field: TableField
     message: str
-    def __init__(
-        self,
-        success: bool = ...,
-        field: TableField | _Mapping | None = ...,
-        message: str | None = ...,
-    ) -> None: ...
+    def __init__(self, success: bool = ..., field: _Optional[_Union[TableField, _Mapping]] = ..., message: _Optional[str] = ...) -> None: ...
 
 class DeleteFieldResponse(_message.Message):
     __slots__ = ("success", "message", "backup_location")
@@ -918,12 +614,7 @@ class DeleteFieldResponse(_message.Message):
     success: bool
     message: str
     backup_location: str
-    def __init__(
-        self,
-        success: bool = ...,
-        message: str | None = ...,
-        backup_location: str | None = ...,
-    ) -> None: ...
+    def __init__(self, success: bool = ..., message: _Optional[str] = ..., backup_location: _Optional[str] = ...) -> None: ...
 
 class GetFieldsResponse(_message.Message):
     __slots__ = ("success", "fields", "message")
@@ -933,9 +624,4 @@ class GetFieldsResponse(_message.Message):
     success: bool
     fields: _containers.RepeatedCompositeFieldContainer[TableField]
     message: str
-    def __init__(
-        self,
-        success: bool = ...,
-        fields: _Iterable[TableField | _Mapping] | None = ...,
-        message: str | None = ...,
-    ) -> None: ...
+    def __init__(self, success: bool = ..., fields: _Optional[_Iterable[_Union[TableField, _Mapping]]] = ..., message: _Optional[str] = ...) -> None: ...

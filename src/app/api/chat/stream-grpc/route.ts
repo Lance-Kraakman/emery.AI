@@ -772,6 +772,11 @@ export async function POST(req: NextRequest) {
         // - 1 task = 1 direct skill execution
         // Task creation happens in Python when skills are executed
 
+        // Pass assistantMessageId to Python so tasks can link to ChatMessage for ExecutionSteps
+        if (assistantMessageId) {
+          processingOptions.assistantMessageId = assistantMessageId;
+        }
+
         // Process message with gRPC service (now accepts MessagePart[])
         grpcClient.processMessage(
           currentMessageParts,

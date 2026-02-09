@@ -191,7 +191,7 @@ class TokenUsage(_message.Message):
     def __init__(self, model_name: _Optional[str] = ..., input_tokens: _Optional[int] = ..., output_tokens: _Optional[int] = ..., total_tokens: _Optional[int] = ..., cost_usd: _Optional[float] = ...) -> None: ...
 
 class AgentConfig(_message.Message):
-    __slots__ = ("name", "role", "description", "persona", "tools", "servers", "default_model")
+    __slots__ = ("name", "role", "description", "persona", "tools", "servers", "default_model", "allow_network")
     NAME_FIELD_NUMBER: _ClassVar[int]
     ROLE_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
@@ -199,6 +199,7 @@ class AgentConfig(_message.Message):
     TOOLS_FIELD_NUMBER: _ClassVar[int]
     SERVERS_FIELD_NUMBER: _ClassVar[int]
     DEFAULT_MODEL_FIELD_NUMBER: _ClassVar[int]
+    ALLOW_NETWORK_FIELD_NUMBER: _ClassVar[int]
     name: str
     role: str
     description: str
@@ -206,7 +207,8 @@ class AgentConfig(_message.Message):
     tools: _containers.RepeatedCompositeFieldContainer[ToolConfig]
     servers: _containers.RepeatedCompositeFieldContainer[ServerConfig]
     default_model: str
-    def __init__(self, name: _Optional[str] = ..., role: _Optional[str] = ..., description: _Optional[str] = ..., persona: _Optional[str] = ..., tools: _Optional[_Iterable[_Union[ToolConfig, _Mapping]]] = ..., servers: _Optional[_Iterable[_Union[ServerConfig, _Mapping]]] = ..., default_model: _Optional[str] = ...) -> None: ...
+    allow_network: bool
+    def __init__(self, name: _Optional[str] = ..., role: _Optional[str] = ..., description: _Optional[str] = ..., persona: _Optional[str] = ..., tools: _Optional[_Iterable[_Union[ToolConfig, _Mapping]]] = ..., servers: _Optional[_Iterable[_Union[ServerConfig, _Mapping]]] = ..., default_model: _Optional[str] = ..., allow_network: bool = ...) -> None: ...
 
 class SkillConfig(_message.Message):
     __slots__ = ("id", "name", "description", "inputs", "outputs", "instructions", "tools", "model", "content", "agent_type", "execution_type", "steps")
@@ -708,7 +710,7 @@ class ClarificationAnswer(_message.Message):
     def __init__(self, question_id: _Optional[str] = ..., answer: _Optional[str] = ...) -> None: ...
 
 class ProcessMessageRequest(_message.Message):
-    __slots__ = ("message_parts", "user_id", "organization_id", "conversation_history", "agent_config", "model", "message_id", "session_id", "user_api_key", "task_id", "user_name")
+    __slots__ = ("message_parts", "user_id", "organization_id", "conversation_history", "agent_config", "model", "message_id", "session_id", "user_api_key", "task_id", "user_name", "assistant_message_id")
     MESSAGE_PARTS_FIELD_NUMBER: _ClassVar[int]
     USER_ID_FIELD_NUMBER: _ClassVar[int]
     ORGANIZATION_ID_FIELD_NUMBER: _ClassVar[int]
@@ -720,6 +722,7 @@ class ProcessMessageRequest(_message.Message):
     USER_API_KEY_FIELD_NUMBER: _ClassVar[int]
     TASK_ID_FIELD_NUMBER: _ClassVar[int]
     USER_NAME_FIELD_NUMBER: _ClassVar[int]
+    ASSISTANT_MESSAGE_ID_FIELD_NUMBER: _ClassVar[int]
     message_parts: _containers.RepeatedCompositeFieldContainer[MessagePart]
     user_id: str
     organization_id: int
@@ -731,7 +734,8 @@ class ProcessMessageRequest(_message.Message):
     user_api_key: str
     task_id: str
     user_name: str
-    def __init__(self, message_parts: _Optional[_Iterable[_Union[MessagePart, _Mapping]]] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[int] = ..., conversation_history: _Optional[_Iterable[_Union[HistoryMessage, _Mapping]]] = ..., agent_config: _Optional[_Union[AgentConfig, _Mapping]] = ..., model: _Optional[str] = ..., message_id: _Optional[str] = ..., session_id: _Optional[str] = ..., user_api_key: _Optional[str] = ..., task_id: _Optional[str] = ..., user_name: _Optional[str] = ...) -> None: ...
+    assistant_message_id: str
+    def __init__(self, message_parts: _Optional[_Iterable[_Union[MessagePart, _Mapping]]] = ..., user_id: _Optional[str] = ..., organization_id: _Optional[int] = ..., conversation_history: _Optional[_Iterable[_Union[HistoryMessage, _Mapping]]] = ..., agent_config: _Optional[_Union[AgentConfig, _Mapping]] = ..., model: _Optional[str] = ..., message_id: _Optional[str] = ..., session_id: _Optional[str] = ..., user_api_key: _Optional[str] = ..., task_id: _Optional[str] = ..., user_name: _Optional[str] = ..., assistant_message_id: _Optional[str] = ...) -> None: ...
 
 class ProcessMessageResponse(_message.Message):
     __slots__ = ("content_chunk", "complete", "error", "step_progress", "awaiting_input", "awaiting_human_skill", "timestamp", "task_id", "task_progress")

@@ -14,11 +14,11 @@ Separation of concerns:
 
 from __future__ import annotations
 
-import fnmatch
 import logging
 import re
-from collections.abc import Callable
 from pathlib import Path
+
+import dspy
 
 logger = logging.getLogger(__name__)
 

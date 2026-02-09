@@ -544,6 +544,10 @@ message ProcessMessageRequest {
   string task_id = 20;
 
   string user_name = 21;           // User display name for audit trail
+
+  // Link tasks to chat messages for ExecutionSteps retrieval
+  // AIDEV-NOTE: When Python creates tasks, it should include this as chatMessageId
+  string assistant_message_id = 22;
 }
 
 // Streaming response from AI processing
