@@ -21,7 +21,8 @@ logger = logging.getLogger(__name__)
 DEFAULT_SOCKET_PATH = "/tmp/sandbox-proxy.sock"
 
 # How long to wait for proxy to start (seconds)
-STARTUP_TIMEOUT = 5.0
+# Cold starts in containers can take 5-10s due to Python imports/asyncio init
+STARTUP_TIMEOUT = 15.0
 
 # How often to check if proxy is alive
 HEALTH_CHECK_INTERVAL = 0.1

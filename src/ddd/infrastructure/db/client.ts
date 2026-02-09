@@ -29,8 +29,8 @@ declare global {
 }
 
 export const rawClient = global.__emeryDbClient || postgres(connectionString, {
-  max: 5, // Small pool for container environment
-  idle_timeout: 30,
+  max: 15, // Increased from 5 for better concurrency
+  idle_timeout: 60, // Increased from 30 to reduce reconnection overhead
   max_lifetime: 60 * 60,
   connect_timeout: connectTimeout, // Short timeout for build-time dummy URLs
   prepare: false, // Disable prepared statements

@@ -255,7 +255,7 @@ class AppStack(Stack):
                 stream_prefix=f"{prefix}-Migration-Init",
                 log_retention=log_retention,
             ),
-            essential=False  # If this fails, don't start the main container
+            essential=False  # Must be False: migration exits after success, essential=True would kill the whole task
         )
 
         # Add main frontend container (starts after init container succeeds)
@@ -335,7 +335,7 @@ class AppStack(Stack):
         # Configure the health check for the frontend service (Blue target group)
         frontend_service.target_group.configure_health_check(
             path="/api/health",
-            timeout=Duration.seconds(10),
+            timeout=Duration.seconds(5),  # Reduced from 10s for faster failure detection
             healthy_threshold_count=2,
             unhealthy_threshold_count=3,
             interval=Duration.seconds(30),
@@ -395,7 +395,7 @@ class AppStack(Stack):
                 target_type=elbv2.TargetType.IP,
                 health_check=elbv2.HealthCheck(
                     path="/api/health",
-                    timeout=Duration.seconds(10),
+                    timeout=Duration.seconds(5),  # Reduced from 10s for faster failure detection
                     healthy_threshold_count=2,
                     unhealthy_threshold_count=3,
                     interval=Duration.seconds(30),
@@ -672,7 +672,7 @@ class AppStack(Stack):
             command=["python", "-m", "emery_agents.grpc.server", "--mode=chat", "--port=50051"],
             port_mappings=[ecs.PortMapping(container_port=50051)],
             environment={
-                "GRPC_CHAT_MAX_WORKERS": "20",
+                "GRPC_CHAT_MAX_WORKERS": "40",  # Increased from 20 for better concurrency
                 "WORKSPACE_STORAGE_PATH": "/mnt/storage/workspaces",  # EFS mount for workspaces
             },
             secrets={
@@ -706,7 +706,7 @@ class AppStack(Stack):
             command=["python", "-m", "emery_agents.grpc.server", "--mode=table", "--port=50052"],
             port_mappings=[ecs.PortMapping(container_port=50052)],
             environment={
-                "GRPC_TABLE_MAX_WORKERS": "15",
+                "GRPC_TABLE_MAX_WORKERS": "30",  # Increased from 15 for better concurrency
             },
             secrets={
                 "DATABASE_URL": ecs.Secret.from_secrets_manager(data_stack.db_instance.secret),
@@ -728,7 +728,7 @@ class AppStack(Stack):
             cluster=cluster,
             service_name=f"{prefix}-Agent",
             task_definition=agent_task_definition,
-            desired_count=1,
+            desired_count=2,  # Increased from 1 for better availability
             vpc_subnets=ec2.SubnetSelection(
                 subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS
             ),

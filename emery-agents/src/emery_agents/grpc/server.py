@@ -13,6 +13,7 @@ from grpc import aio
 
 from emery_agents.tools.loader import UnifiedToolLoader
 
+from ..services.sandbox.proxy_manager import ProxyManager
 from ..infrastructure.storage import (
     create_workspace_storage,
     WorkspaceStorage,
@@ -191,10 +192,15 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
             # Set workspace path in task data
             task_data.workspace_path = workspace_path
 
+            # AIDEV-NOTE: Task timeout - prevents runaway tasks from consuming resources
+            task_timeout = int(os.getenv("TASK_TIMEOUT_SECONDS", "3600"))  # Default 1 hour
+            task_start_time = time.time()
+
             self.active_tasks[task_data.task_id] = {
                 "agent_id": task_data.agent_id,
-                "start_time": time.time(),
+                "start_time": task_start_time,
                 "workspace_path": workspace_path,
+                "timeout": task_timeout,
             }
 
             logger.info(
@@ -203,6 +209,13 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
 
             # Stream execution progress via shared TaskExecutor
             async for progress_dict in self.task_executor.execute(task_data):
+                # Check task timeout
+                elapsed = time.time() - task_start_time
+                if elapsed > task_timeout:
+                    raise TimeoutError(
+                        f"Task exceeded {task_timeout}s timeout (elapsed: {elapsed:.1f}s)"
+                    )
+
                 # Map status string to protobuf enum
                 status_map = {
                     "in_progress": agent_worker_pb2.TASK_IN_PROGRESS,
@@ -356,6 +369,15 @@ def register_table_services(server):
 
 async def serve_chat_server(port: int):
     """Chat processing server (port 50051) - AgentWorker + ChatProcessing only."""
+    # Pre-warm the network proxy at startup (avoids 5-10s delay on first networked task)
+    # This runs in background - if it fails, tasks will retry lazily
+    try:
+        proxy_mgr = ProxyManager.get_instance()
+        proxy_mgr.ensure_running()
+        logger.info("Network proxy pre-warmed at server startup")
+    except Exception as e:
+        logger.warning(f"Failed to pre-warm network proxy (will retry on first use): {e}")
+
     # Create dedicated thread pool for chat server to prevent resource contention
     # Configurable via GRPC_CHAT_MAX_WORKERS environment variable
     chat_max_workers = int(os.getenv("GRPC_CHAT_MAX_WORKERS", "20"))
@@ -382,6 +404,9 @@ async def serve_chat_server(port: int):
                 "grpc.http2.min_recv_ping_interval_without_data_ms",
                 20000,
             ),  # Accept client pings as frequent as 20s
+            # AIDEV-NOTE: Message size limits for large payloads (e.g., file uploads)
+            ("grpc.max_send_message_length", 100 * 1024 * 1024),  # 100MB
+            ("grpc.max_receive_message_length", 100 * 1024 * 1024),  # 100MB
         ],
     )
 
@@ -435,6 +460,9 @@ async def serve_table_server(port: int):
                 "grpc.http2.min_recv_ping_interval_without_data_ms",
                 20000,
             ),  # Accept client pings as frequent as 20s
+            # AIDEV-NOTE: Message size limits for large payloads (e.g., bulk data inserts)
+            ("grpc.max_send_message_length", 100 * 1024 * 1024),  # 100MB
+            ("grpc.max_receive_message_length", 100 * 1024 * 1024),  # 100MB
         ],
     )
 
