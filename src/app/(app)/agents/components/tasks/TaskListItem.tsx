@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { CheckCircle2, XCircle, Clock, Loader2, User, Calendar, MessageSquare, Webhook, Database } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
@@ -116,8 +116,15 @@ export function TaskListItem({ task, isSelected, onSelect }: TaskListItemProps) 
   const StatusIcon = status.icon;
   const trigger = getTriggerDisplay(task);
   const TriggerIcon = trigger.icon;
-  const duration = formatDuration(task.startedAt, task.completedAt);
-  const timeAgo = safeFormatTimeAgo(task.createdAt);
+
+  // Defer time-dependent calculations to avoid hydration mismatch
+  const [duration, setDuration] = useState<string | null>(null);
+  const [timeAgo, setTimeAgo] = useState('');
+
+  useEffect(() => {
+    setDuration(formatDuration(task.startedAt, task.completedAt));
+    setTimeAgo(safeFormatTimeAgo(task.createdAt));
+  }, [task.startedAt, task.completedAt, task.createdAt]);
 
   return (
     <button
@@ -142,7 +149,7 @@ export function TaskListItem({ task, isSelected, onSelect }: TaskListItemProps) 
 
         {/* Content */}
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-medium truncate">{task.name}</div>
+          <div className="text-sm font-medium line-clamp-2 leading-tight">{task.name}</div>
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
             <TriggerIcon className="h-3 w-3" />
             <span className="truncate">{trigger.label}</span>

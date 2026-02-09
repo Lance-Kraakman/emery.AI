@@ -192,7 +192,13 @@ export function TaskDetailPanel({ task, agentId }: TaskDetailPanelProps) {
   const status = statusConfig[task.status as keyof typeof statusConfig] || statusConfig.pending;
   const trigger = getTriggerDisplay(task);
   const TriggerIcon = trigger.icon;
-  const duration = formatDuration(task.startedAt, task.completedAt);
+
+  // Defer duration calculation to avoid hydration mismatch (uses new Date())
+  const [duration, setDuration] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDuration(formatDuration(task.startedAt, task.completedAt));
+  }, [task.startedAt, task.completedAt]);
 
   // Use rich execution steps if available, otherwise fall back to logs
   const hasExecutionSteps = executionSteps.length > 0;
