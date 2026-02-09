@@ -11,7 +11,7 @@
  */
 
 import { NextRequest } from 'next/server';
-import { authenticateRequest } from '@/lib/auth/test-auth';
+import { withAuthenticatedRoute } from '@/lib/api/base';
 import { getSkillApplicationService, getAgentApplicationService } from '@/ddd/application/di/container';
 import { SkillMapper } from '@/app/mappers/skill-mapper';
 import { logAgentMutation } from '@/lib/api/agent-context';
@@ -25,23 +25,10 @@ import { AgentId } from '@/ddd/domain/shared/value-objects/agent-id';
  * - agent_id: Filter skills for a specific agent
  */
 export async function GET(request: NextRequest): Promise<Response> {
-  try {
-    const authResult = await authenticateRequest(request);
-
-    if (!authResult.success || !authResult.user) {
-      return Response.json({ error: authResult.error || 'Unauthorized' }, { status: 401 });
-    }
-
+  return withAuthenticatedRoute(request, async (user) => {
     const { searchParams } = new URL(request.url);
     const agentIdParam = searchParams.get('agent_id');
-    const organizationId = authResult.user.organizationId;
-
-    if (!organizationId) {
-      return Response.json({
-        success: false,
-        error: 'No organization context'
-      }, { status: 400 });
-    }
+    const organizationId = user.organizationId!;
 
     const skillService = getSkillApplicationService();
 
@@ -49,53 +36,29 @@ export async function GET(request: NextRequest): Promise<Response> {
     if (agentIdParam) {
       const agentId = parseInt(agentIdParam, 10);
       if (isNaN(agentId)) {
-        return Response.json({
-          success: false,
-          error: 'Invalid agent_id parameter'
-        }, { status: 400 });
+        return { success: false, error: 'Invalid agent_id parameter', status: 400 };
       }
 
       const result = await skillService.getSkillsByAgent(agentId);
 
       if (!result.success) {
-        return Response.json({
-          success: false,
-          error: result.error || 'Failed to fetch skills'
-        }, { status: 400 });
+        return { success: false, error: result.error || 'Failed to fetch skills' };
       }
 
       const skills = SkillMapper.toDTOList(result.data || []);
-
-      return Response.json({
-        success: true,
-        data: skills
-      });
+      return { success: true, data: skills };
     }
 
     // Otherwise, get all organization skills
     const result = await skillService.getSkillsByOrganization(organizationId);
 
     if (!result.success) {
-      return Response.json({
-        success: false,
-        error: result.error || 'Failed to fetch skills'
-      }, { status: 400 });
+      return { success: false, error: result.error || 'Failed to fetch skills' };
     }
 
     const skills = SkillMapper.toDTOList(result.data || []);
-
-    return Response.json({
-      success: true,
-      data: skills
-    });
-
-  } catch (error) {
-    console.error('Error fetching skills:', error);
-    return Response.json({
-      success: false,
-      error: 'Internal server error'
-    }, { status: 500 });
-  }
+    return { success: true, data: skills };
+  });
 }
 
 /**
@@ -112,46 +75,28 @@ export async function GET(request: NextRequest): Promise<Response> {
  *   toolExecutionConfig, writeConfig, readConfig
  */
 export async function POST(request: NextRequest): Promise<Response> {
-  try {
-    const authResult = await authenticateRequest(request);
-
-    if (!authResult.success || !authResult.user) {
-      return Response.json({ error: authResult.error || 'Unauthorized' }, { status: 401 });
-    }
-
+  return withAuthenticatedRoute(request, async (user) => {
     const body = await request.json();
     const { name, agentId } = body;
 
     if (!name?.trim()) {
-      return Response.json({
-        success: false,
-        error: 'Missing required field: name'
-      }, { status: 400 });
+      return { success: false, error: 'Missing required field: name', status: 400 };
     }
 
     if (!agentId) {
-      return Response.json({
-        success: false,
-        error: 'Missing required field: agentId'
-      }, { status: 400 });
+      return { success: false, error: 'Missing required field: agentId', status: 400 };
     }
 
     const parsedAgentId = parseInt(agentId, 10);
     if (isNaN(parsedAgentId)) {
-      return Response.json({
-        success: false,
-        error: 'Invalid agentId: must be a number'
-      }, { status: 400 });
+      return { success: false, error: 'Invalid agentId: must be a number', status: 400 };
     }
 
     // Get agent to retrieve organizationId
     const agentService = getAgentApplicationService();
     const agent = await agentService.getAgent(AgentId.fromNumber(parsedAgentId));
     if (!agent) {
-      return Response.json({
-        success: false,
-        error: 'Agent not found'
-      }, { status: 404 });
+      return { success: false, error: 'Agent not found', status: 404 };
     }
 
     // Normalize tools: convert string entries to {name: string} objects
@@ -174,39 +119,26 @@ export async function POST(request: NextRequest): Promise<Response> {
     });
 
     if (!result.success) {
-      return Response.json({
-        success: false,
-        error: result.error || 'Failed to create skill'
-      }, { status: 400 });
+      return { success: false, error: result.error || 'Failed to create skill' };
     }
 
     // Fetch the created skill to return full DTO
     const skillResult = await skillService.getSkill(result.data!.value);
     if (!skillResult.success || !skillResult.data) {
-      return Response.json({
-        success: false,
-        error: 'Failed to fetch created skill'
-      }, { status: 500 });
+      return { success: false, error: 'Failed to fetch created skill', status: 500 };
     }
 
-    logAgentMutation(request, authResult.user, {
+    logAgentMutation(request, user, {
       action: 'create',
       resourceType: 'skill',
       resourceId: String(result.data!.value),
       resourceName: name,
     });
 
-    return Response.json({
+    return {
       success: true,
       data: SkillMapper.toDTO(skillResult.data),
       message: 'Skill created successfully'
-    });
-
-  } catch (error) {
-    console.error('Error creating skill:', error);
-    return Response.json({
-      success: false,
-      error: 'Internal server error'
-    }, { status: 500 });
-  }
+    };
+  });
 }
