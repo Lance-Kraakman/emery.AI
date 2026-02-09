@@ -1,0 +1,23 @@
+# Python virtual environment (1.3GB)
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Test/example data
+TaskStream/
+examples/
+outputs/
+
+# Development files
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
