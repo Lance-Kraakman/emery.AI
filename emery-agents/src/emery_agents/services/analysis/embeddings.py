@@ -251,3 +251,22 @@ def get_cache_info() -> dict[str, int | None]:
         "size": info.currsize,
         "maxsize": info.maxsize,
     }
+
+
+def create_dspy_embedder() -> Any:
+    """Create DSPy-compatible Embedder using existing Gemini embeddings.
+
+    Used for KNNFewShot to dynamically select demos based on semantic similarity.
+    Wraps get_embedding() which uses Gemini (preferred) or HuggingFace (fallback).
+
+    Returns:
+        dspy.Embedder instance for use with KNNFewShot
+    """
+    from dspy import Embedder  # type: ignore[import-untyped]
+
+    def embed_fn(text: str) -> list[float]:
+        """Wrapper that converts tuple to list for DSPy compatibility."""
+        embedding = get_embedding(text)
+        return list(embedding)
+
+    return Embedder(embed_fn)

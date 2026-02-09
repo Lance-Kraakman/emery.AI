@@ -11,11 +11,12 @@ import logging
 from typing import Any
 
 import dspy
-from dspy import LabeledFewShot
+from dspy import KNNFewShot
 
 logger = logging.getLogger(__name__)
 
 from emery_agents.reasoning.examples.planning import PLANNING_DEMOS
+from emery_agents.services.analysis.embeddings import create_dspy_embedder
 from emery_agents.reasoning.signatures.planning import (
     AnalyzeTask,
     CreatePlan,
@@ -77,11 +78,15 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
             CreatePlan, tools=self.discovery_tools, max_iters=8
         )
 
-        # Compile with labeled demos (fast ~2ms, no LLM calls)
-        # This sets demos on base_planner.react.demos for few-shot learning
-        self.planner = LabeledFewShot(k=5).compile(
-            base_planner, trainset=PLANNING_DEMOS
-        )
+        # Compile with KNNFewShot for dynamic demo selection per request
+        # At each forward() call, KNN finds the most similar examples from trainset
+        # and attaches them as demos - different requests get different demos
+        embedder = create_dspy_embedder()
+        self.planner = KNNFewShot(
+            k=5,
+            trainset=PLANNING_DEMOS,
+            vectorizer=embedder,
+        ).compile(base_planner)
 
         # Reflexion module for extended thinking - critiques and improves plans
         self.reflector = dspy.ChainOfThought(ReflectOnPlan)
