@@ -39,6 +39,7 @@ import type { ToolSearchApplicationService } from '@/ddd/application/services/to
 import type { ToolConfigurationApplicationService } from '@/ddd/application/services/tools/tool-configuration-application-service';
 import type { ConnectionApplicationService } from '@/ddd/application/services/connections/connection-application-service';
 import type { OAuthProxyApplicationService } from '@/ddd/application/services/connections/oauth-proxy-application-service';
+import type { CredentialDelegationApplicationService } from '@/ddd/application/services/delegations/credential-delegation-application-service';
 
 import type { DynamicTableService } from '@/ddd/domain/tables/services/dynamic-table-service';
 
@@ -114,6 +115,9 @@ type ServiceMap = {
   // Connection Services
   ConnectionRepository: IConnectionRepository;
   ConnectionApplicationService: ConnectionApplicationService;
+
+  // Delegation Services
+  DelegationApplicationService: CredentialDelegationApplicationService;
 
   // Puck Services
   AppRepository: IAppRepository;
@@ -267,6 +271,16 @@ export const getOAuthProxyApplicationService = (): OAuthProxyApplicationService 
   const service = diContainer.get('OAuthProxyApplicationService');
   if (!service) {
     throw new Error('OAuth proxy service not available. Pipedream client not configured. This is expected during build time.');
+  }
+  return service;
+};
+
+// Delegation service getter
+export const getDelegationApplicationService = (): CredentialDelegationApplicationService => {
+  const diContainer = DIContainer.getInstance(); // Lazy access
+  const service = diContainer.get('CredentialDelegationApplicationService');
+  if (!service) {
+    throw new Error('Delegation service not available.');
   }
   return service;
 };
