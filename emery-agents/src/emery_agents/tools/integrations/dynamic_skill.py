@@ -9,12 +9,14 @@ Executes skill in-process via execute_skill_by_id().
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
 import requests
 
 from emery_agents.api.http_client import get_base_url
+from emery_agents.tools.execution.skill import HumanSkillAwaitingException
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +84,9 @@ class DynamicSkillTool:
 
         Returns:
             Skill execution result as string
+
+        Raises:
+            HumanSkillAwaitingException: If skill is a human skill awaiting input
         """
         from ..execution.dynamic_execution import execute_skill_by_id
 
@@ -89,12 +94,34 @@ class DynamicSkillTool:
             f"[DYNAMIC-SKILL] Executing skill {self.skill_id} with inputs: {list(kwargs.keys())}"
         )
 
-        return execute_skill_by_id(
+        result_str = execute_skill_by_id(
             skill_id=self.skill_id,
             inputs=kwargs,
             api_key=self.api_key,
             org_id=str(self.organization_id),
         )
+
+        # Check if human skill is awaiting input
+        try:
+            result_dict = json.loads(result_str)
+            if result_dict.get("status") == "awaiting_human":
+                logger.info(
+                    f"[DYNAMIC-SKILL] Human skill {self.skill_id} awaiting input - "
+                    f"raising exception to pause execution"
+                )
+                raise HumanSkillAwaitingException(
+                    skill_id=result_dict.get("skill_id", self.skill_id),
+                    skill_name=result_dict.get("skill_name", self.name),
+                    step_id="",  # Will be set by execution node
+                    instructions=result_dict.get("instructions", ""),
+                    inputs=result_dict.get("inputs", kwargs),
+                    output_schema=result_dict.get("output_schema", []),
+                    assigned_to=result_dict.get("assigned_to", ""),
+                )
+        except json.JSONDecodeError:
+            pass  # Not JSON, just return as-is
+
+        return result_str
 
     def _fetch_skill_metadata(self) -> dict[str, Any]:
         """
