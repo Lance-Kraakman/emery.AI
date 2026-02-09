@@ -69,6 +69,10 @@ def get_builder_descriptors() -> list[AgentDescriptor]:
             name="discover_tools",
             description="Discovers available integrations and checks OAuth connections",
         ),
+        AgentDescriptor(
+            name="executor",
+            description="Executes filesystem operations in agent workspace - read, search, write, and edit files using bash, glob, grep, read_file, write_file, edit_file tools",
+        ),
     ]
 
 

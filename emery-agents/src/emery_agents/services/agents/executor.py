@@ -1076,8 +1076,7 @@ class AgentExecutor:
 
             # Add filesystem tools (read_file, glob, grep, write_file, edit_file)
             fs_tools = create_filesystem_tools(workspace)
-            for name, func in fs_tools.items():
-                tools.append(func)
+            tools.extend(fs_tools)
 
             logger.info(
                 f"Added bash + filesystem tools with workspace: {context.workspace_path}, network={'enabled' if allow_net else 'disabled'}"
@@ -1144,8 +1143,7 @@ class AgentExecutor:
 
             # Add filesystem tools (read_file, glob, grep, write_file, edit_file)
             fs_tools = create_filesystem_tools(workspace)
-            for name, func in fs_tools.items():
-                tools.append(func)
+            tools.extend(fs_tools)
 
             logger.info(
                 f"Added bash + filesystem tools with workspace: {context.workspace_path}, network={'enabled' if allow_net else 'disabled'}"

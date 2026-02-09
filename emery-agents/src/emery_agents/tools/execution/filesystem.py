@@ -31,7 +31,7 @@ DEFAULT_MAX_LINES = 200
 
 def create_filesystem_tools(
     workspace_path: Path,
-) -> dict[str, Callable[..., str]]:
+) -> list[dspy.Tool]:
     """
     Factory: Create filesystem tools with workspace captured in closure.
 
@@ -39,7 +39,7 @@ def create_filesystem_tools(
         workspace_path: Path to agent's workspace (all operations confined here)
 
     Returns:
-        Dictionary of tool name -> callable function
+        List of dspy.Tool instances for filesystem operations
     """
     logger.info(f"FilesystemTools initialized: workspace={workspace_path}")
 
@@ -485,10 +485,55 @@ def create_filesystem_tools(
             logger.exception(f"edit_file failed: {e}")
             return f"Error editing file: {str(e)}"
 
-    return {
-        "read_file": read_file,
-        "glob": glob_files,
-        "grep": grep_content,
-        "write_file": write_file,
-        "edit_file": edit_file,
-    }
+    return [
+        dspy.Tool(
+            func=read_file,
+            name="read_file",
+            desc=read_file.__doc__,
+            arg_desc={
+                "path": "File path relative to workspace (e.g., 'src/main.py')",
+                "start_line": "Line to start from (1-indexed, default 1)",
+                "max_lines": "Maximum lines to return (default 200)",
+            },
+        ),
+        dspy.Tool(
+            func=glob_files,
+            name="glob",
+            desc=glob_files.__doc__,
+            arg_desc={
+                "pattern": "Glob pattern (e.g., '**/*.py', 'src/**/*.ts')",
+                "path": "Directory to search in (default: workspace root)",
+            },
+        ),
+        dspy.Tool(
+            func=grep_content,
+            name="grep",
+            desc=grep_content.__doc__,
+            arg_desc={
+                "pattern": "Regex pattern to search for",
+                "path": "Directory or file to search (default: workspace root)",
+                "file_pattern": "Filter files by glob (e.g., '*.py')",
+                "context": "Lines of context around matches (default 0)",
+                "max_results": "Maximum results to return (default 50)",
+            },
+        ),
+        dspy.Tool(
+            func=write_file,
+            name="write_file",
+            desc=write_file.__doc__,
+            arg_desc={
+                "path": "File path relative to workspace",
+                "content": "Content to write to the file",
+            },
+        ),
+        dspy.Tool(
+            func=edit_file,
+            name="edit_file",
+            desc=edit_file.__doc__,
+            arg_desc={
+                "path": "File path relative to workspace",
+                "old_content": "Exact content to find and replace",
+                "new_content": "Content to replace it with",
+            },
+        ),
+    ]

@@ -78,6 +78,10 @@ AGENT_METADATA: dict[str, dict[str, list[str]]] = {
         "actions": ["discover", "list", "check"],
         "entities": ["integrations", "connections"],
     },
+    "executor": {
+        "actions": ["read", "write", "search", "edit", "execute"],
+        "entities": ["files", "directories", "workspace", "code", "content"],
+    },
 }
 
 
