@@ -354,6 +354,10 @@ export async function PUT(
     // Write file
     await writeFile(targetPath, content, 'utf-8');
 
+    // Write sync version file to notify Tauri clients of remote changes
+    const syncVersionPath = join(validation.workspaceRoot!, '.emery-sync-version');
+    await writeFile(syncVersionPath, Date.now().toString(), 'utf-8');
+
     return Response.json({
       success: true,
       data: {

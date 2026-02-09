@@ -116,6 +116,9 @@ export function useWorkspaceSync(agentId: number, orgId: number): UseWorkspaceSy
   // Track previous lock state for auto-pull on release
   const prevLockedRef = useRef<boolean>(false);
 
+  // Track remote sync version for detecting web portal changes
+  const lastSyncVersionRef = useRef<number>(0);
+
   const isAvailable = isTauri();
 
   // ---------------------------------------------------------------------------
@@ -332,14 +335,18 @@ export function useWorkspaceSync(agentId: number, orgId: number): UseWorkspaceSy
   }, [agentId, isWatching, push]);
 
   // ---------------------------------------------------------------------------
-  // Lock Status Polling
+  // Lock Status Polling + Remote Sync Version Check
   // ---------------------------------------------------------------------------
 
   useEffect(() => {
     if (!isConnected) return;
 
-    const checkLock = async () => {
+    const checkLockAndVersion = async () => {
       try {
+        const apiKey = await getApiKey();
+        const apiBase = getApiBase();
+
+        // Check lock state via Tauri
         const state = await invokeTauri<WorkspaceLockState>('check_workspace_lock', {
           agentId,
         });
@@ -351,9 +358,6 @@ export function useWorkspaceSync(agentId: number, orgId: number): UseWorkspaceSy
 
         if (wasLocked && isNowUnlocked) {
           console.log('Lock released, auto-pulling agent changes...');
-          // Pull first to get agent's changes
-          const apiKey = await getApiKey();
-          const apiBase = getApiBase();
           try {
             await invokeTauri('pull_workspace', {
               agentId,
@@ -376,16 +380,45 @@ export function useWorkspaceSync(agentId: number, orgId: number): UseWorkspaceSy
 
         // Update previous lock state
         prevLockedRef.current = state.locked;
+
+        // Check remote sync version (web portal changes) - only when not locked
+        if (!state.locked) {
+          try {
+            const versionRes = await fetch(
+              `${apiBase}/api/agents/${agentId}/workspace/file?path=/.emery-sync-version`,
+              { headers: { 'Authorization': `Bearer ${apiKey}` } }
+            );
+            if (versionRes.ok) {
+              const versionData = await versionRes.json();
+              if (versionData.success && versionData.data?.content) {
+                const remoteVersion = parseInt(versionData.data.content, 10);
+                if (remoteVersion > lastSyncVersionRef.current) {
+                  console.log('Remote sync version changed, auto-pulling web changes...');
+                  lastSyncVersionRef.current = remoteVersion;
+                  await invokeTauri('pull_workspace', {
+                    agentId,
+                    localPath: syncPath,
+                    apiKey,
+                    apiBase,
+                  });
+                  setLastSync(Math.floor(Date.now() / 1000));
+                }
+              }
+            }
+          } catch (versionErr) {
+            // Version file may not exist yet - that's OK
+          }
+        }
       } catch (err) {
-        console.error('Failed to check lock status:', err);
+        console.error('Failed to check lock/version status:', err);
       }
     };
 
     // Check immediately
-    checkLock();
+    checkLockAndVersion();
 
     // Poll every 5 seconds
-    lockPollIntervalRef.current = setInterval(checkLock, 5000);
+    lockPollIntervalRef.current = setInterval(checkLockAndVersion, 5000);
 
     return () => {
       if (lockPollIntervalRef.current) {
