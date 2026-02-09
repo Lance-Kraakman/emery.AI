@@ -14,7 +14,6 @@ import dspy
 
 logger = logging.getLogger(__name__)
 
-from emery_agents.reasoning.examples.planning import PLANNING_DEMOS
 from emery_agents.reasoning.signatures.planning import (
     AnalyzeTask,
     CreatePlan,
@@ -71,7 +70,7 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         self.analyzer = dspy.ChainOfThought(AnalyzeTask)
         self.discovery_tools = discovery_tools or []
         self.planner = dspy.ReAct(
-            CreatePlan, tools=self.discovery_tools, max_iters=8, demos=PLANNING_DEMOS
+            CreatePlan, tools=self.discovery_tools, max_iters=8
         )
         # Reflexion module for extended thinking - critiques and improves plans
         self.reflector = dspy.ChainOfThought(ReflectOnPlan)

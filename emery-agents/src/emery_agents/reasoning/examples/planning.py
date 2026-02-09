@@ -1,14 +1,14 @@
 """
 Canonical planning examples for few-shot learning.
 
-These examples are passed to the PlannerModule as demos to improve
-planning quality. They demonstrate good step descriptions, proper
-tool selection, and appropriate plan structure.
+These examples demonstrate good step descriptions, proper tool selection,
+and appropriate plan structure. They can be used for:
+- Documentation and reference
+- Future DSPy optimization (BootstrapFewShot when supported)
+- Testing plan generation quality
 
-Usage:
-    from emery_agents.reasoning.examples.planning import PLANNING_DEMOS
-
-    planner = dspy.ReAct(CreatePlan, tools=tools, demos=PLANNING_DEMOS)
+Note: DSPy ReAct does not support demos= parameter directly.
+Examples can be used via signature-level injection or optimization.
 """
 
 import dspy
