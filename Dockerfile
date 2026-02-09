@@ -58,7 +58,7 @@ ENV MALLOC_ARENA_MAX=2
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/src/public ./public
+COPY --from=builder /app/public ./public
 
 # AIDEV-NOTE: Copy source files needed for tsx execution
 COPY --from=builder /app/src/scripts ./src/scripts
