@@ -18,6 +18,7 @@ export interface CreateTaskData {
   skillId?: number | null; // Optional skill to execute
   instructions: any; // JSONB from database
   triggerContext?: any; // JSONB trigger context
+  chatMessageId?: string | null; // Link to ChatMessage for ExecutionSteps
   status?: string;
   result?: any;
   error?: string | null;

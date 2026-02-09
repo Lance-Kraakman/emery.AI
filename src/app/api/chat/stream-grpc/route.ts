@@ -29,8 +29,7 @@ import { contextManager } from '@/ddd/infrastructure/db/context-manager';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 
 // Import existing chat services (DIContainer now auto-initializes)
-import { getChatApplicationService, getToolConfigurationApplicationService, getOrganizationRepository, getStorageQuotaApplicationService, getAuditApplicationService, getAgentTaskApplicationService } from '@/ddd/application/di/container';
-import type { CreateTaskDTO } from '@/app/dtos/task.dto';
+import { getChatApplicationService, getToolConfigurationApplicationService, getOrganizationRepository, getStorageQuotaApplicationService, getAuditApplicationService } from '@/ddd/application/di/container';
 import { TokenUsageApplicationService } from '@/ddd/application/services/billing/token-usage-application-service';
 import { getTokenUsageRepository } from '@/ddd/application/di/getters';
 import type { CreateChatDTO, SendMessageDTO, UpdateMessageDTO, ExecutionStep } from '@/app/dtos/chat.dto';
@@ -577,7 +576,6 @@ export async function POST(req: NextRequest) {
     let messageAwaitingInput: any = null; // HITL awaiting input state (for UI)
     let assistantMessageId: string | null = null; // Track message ID for incremental updates
     let messageFinalized = false; // Guard against double-finalization between error handlers and flush()
-    let chatTaskId: string | null = null; // Task ID for agent chat executions
 
     // Create debounced updater for incremental saves (2.5 second delay)
     const debouncedUpdater = createDebouncedUpdater(2500);
@@ -767,46 +765,12 @@ export async function POST(req: NextRequest) {
 
         const grpcClient = getChatProcessingClient(organizationId.toString());
 
-        // AIDEV-NOTE: Create task for agent chat executions to enable task tracking in UI
-        // Only create task when chatting with a specific agent (domainType === 'agent')
-        // Note: Use explicit null/undefined check since domainId=0 is a valid agent ID
-        if (domainType === 'agent' && domainId !== undefined && domainId !== null) {
-          try {
-            console.log(`[CHAT-GRPC-API] Creating task for agent chat execution (agentId=${domainId})`);
-
-            // Generate task name from first part of the message (truncated)
-            const taskName = latestMessage.length > 50
-              ? `${latestMessage.substring(0, 50)}...`
-              : latestMessage;
-
-            const taskApplicationService = getAgentTaskApplicationService();
-            const createTaskDTO: CreateTaskDTO = {
-              agentId: domainId,
-              name: taskName,
-              instructions: { task: latestMessage },
-              createdBy: userId,
-              organizationId: organizationId,
-              triggerType: 'chat',
-              triggeredByUserId: userId,
-              triggeredByUserName: session.user.name || session.user.email || undefined,
-            };
-
-            const taskResult = await taskApplicationService.createTask(createTaskDTO);
-
-            if (taskResult.success && taskResult.data) {
-              chatTaskId = taskResult.data.id;
-              // Update processing options with taskId
-              processingOptions.taskId = chatTaskId;
-              console.log(`[CHAT-GRPC-API] Created chat task: ${chatTaskId}`);
-            } else {
-              console.warn('[CHAT-GRPC-API] Failed to create chat task:', taskResult.error);
-              // Continue without task tracking - don't fail the chat
-            }
-          } catch (taskError) {
-            console.error('[CHAT-GRPC-API] Error creating chat task:', taskError);
-            // Continue without task tracking - don't fail the chat
-          }
-        }
+        // AIDEV-NOTE: Task creation removed from per-message flow
+        // Tasks are now created per agent invocation/skill execution, not per chat message
+        // This prevents database bloat and aligns with the domain model where:
+        // - 1 task = 1 agent invocation (which may run multiple skills)
+        // - 1 task = 1 direct skill execution
+        // Task creation happens in Python when skills are executed
 
         // Process message with gRPC service (now accepts MessagePart[])
         grpcClient.processMessage(
@@ -980,18 +944,6 @@ export async function POST(req: NextRequest) {
                   durationMs: Date.now() - startTime,
                   success: true,
                 });
-
-                // Update chat task status to completed (if task was created)
-                if (chatTaskId) {
-                  const taskApplicationService = getAgentTaskApplicationService();
-                  taskApplicationService.updateTaskStatus(chatTaskId, 'completed', {
-                    response: fullAssistantResponse.substring(0, 500), // Truncate for storage
-                    model: response.complete.modelUsed,
-                    executionSteps: collectedSteps.length,
-                  })
-                    .then(() => console.log(`[CHAT-GRPC-API] Updated chat task ${chatTaskId} to completed`))
-                    .catch((taskError) => console.error('[CHAT-GRPC-API] Failed to update task status:', taskError));
-                }
 
                 // Send completion event with execution steps metadata to frontend
                 const completionEvent = processCompletion(
@@ -1169,14 +1121,6 @@ export async function POST(req: NextRequest) {
                   chatApplicationService.updateMessage(errorUpdateDTO)
                     .then(() => console.log(`[CHAT-GRPC-API] Updated message with error status: ${assistantMessageId}`))
                     .catch((updateError) => console.error('[CHAT-GRPC-API] Failed to update message with error status:', updateError));
-
-                  // Update chat task status to failed (if task was created)
-                  if (chatTaskId) {
-                    const taskApplicationService = getAgentTaskApplicationService();
-                    taskApplicationService.updateTaskStatus(chatTaskId, 'failed', undefined, response.error.errorMessage)
-                      .then(() => console.log(`[CHAT-GRPC-API] Updated chat task ${chatTaskId} to failed`))
-                      .catch((taskError) => console.error('[CHAT-GRPC-API] Failed to update task status:', taskError));
-                  }
                 }
 
                 // Send error as SSE event with user-friendly message + hint

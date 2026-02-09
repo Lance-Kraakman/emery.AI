@@ -16,6 +16,7 @@ export interface TaskDTO {
   instructions: TaskInstructions;
   skillId: number | null;             // Optional skill to execute
   triggerContext: TriggerContext | null; // What triggered this task (schedule, manual, etc.)
+  chatMessageId: string | null;       // Link to ChatMessage for ExecutionSteps
   status: string;                     // Converted from TaskStatus value object
   result: any;
   error: string | null;
@@ -41,6 +42,7 @@ export function taskToDTO(task: TaskEntity): TaskDTO {
     instructions: task.instructions,
     skillId: task.skillId,
     triggerContext: task.triggerContext,
+    chatMessageId: task.chatMessageId,
     status: task.status.value,
     result: task.result,
     error: task.error,

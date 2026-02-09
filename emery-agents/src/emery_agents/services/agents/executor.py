@@ -16,6 +16,7 @@ import dspy
 from PIL import Image
 
 from emery_agents.tools.execution.bash import create_bash_tool
+from emery_agents.tools.execution.filesystem import create_filesystem_tools
 from emery_agents.tools.execution.skill import SkillTool
 from emery_agents.tools.loader import UnifiedToolLoader
 
@@ -1058,20 +1059,28 @@ class AgentExecutor:
             )
             tools = self.tool_loader.load_tools(tool_configs)
 
-        # Add bash tool if workspace_path is available (filesystem-based execution)
+        # Add workspace tools if workspace_path is available (filesystem-based execution)
         if context.workspace_path:
             from pathlib import Path
+
+            workspace = Path(context.workspace_path)
 
             # Use context.allow_network (from agent config, defaults to True)
             allow_net = context.allow_network
             bash_tool = create_bash_tool(
-                workspace_path=Path(context.workspace_path),
+                workspace_path=workspace,
                 allow_network=allow_net,
                 timeout=300,
             )
             tools.append(bash_tool)
+
+            # Add filesystem tools (read_file, glob, grep, write_file, edit_file)
+            fs_tools = create_filesystem_tools(workspace)
+            for name, func in fs_tools.items():
+                tools.append(func)
+
             logger.info(
-                f"Added bash tool with workspace: {context.workspace_path}, network={'enabled' if allow_net else 'disabled'}"
+                f"Added bash + filesystem tools with workspace: {context.workspace_path}, network={'enabled' if allow_net else 'disabled'}"
             )
 
         # Create DSPy executor module using AgentFactory
@@ -1119,19 +1128,27 @@ class AgentExecutor:
             except Exception as e:
                 logger.warning(f"Failed to load some tools for skill {skill.name}: {e}")
 
-        # Add bash tool if workspace_path is available (filesystem-based execution)
+        # Add workspace tools if workspace_path is available (filesystem-based execution)
         if context.workspace_path:
             from pathlib import Path
 
+            workspace = Path(context.workspace_path)
+
             allow_net = skill.allow_network if skill else False
             bash_tool = create_bash_tool(
-                workspace_path=Path(context.workspace_path),
+                workspace_path=workspace,
                 allow_network=allow_net,
                 timeout=300,
             )
             tools.append(bash_tool)
+
+            # Add filesystem tools (read_file, glob, grep, write_file, edit_file)
+            fs_tools = create_filesystem_tools(workspace)
+            for name, func in fs_tools.items():
+                tools.append(func)
+
             logger.info(
-                f"Added bash tool with workspace: {context.workspace_path}, network={'enabled' if allow_net else 'disabled'}"
+                f"Added bash + filesystem tools with workspace: {context.workspace_path}, network={'enabled' if allow_net else 'disabled'}"
             )
 
         # Load available skills as SkillTools for delegation

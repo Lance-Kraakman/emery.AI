@@ -96,13 +96,28 @@ function formatDuration(startedAt: Date | null, completedAt: Date | null): strin
   return `${Math.round(durationMs / 3600000)}h`;
 }
 
+/**
+ * Safely format a date to relative time string
+ * Returns 'Unknown' if date is null/undefined or invalid
+ */
+function safeFormatTimeAgo(date: Date | string | null | undefined): string {
+  if (!date) return 'Unknown';
+  try {
+    const d = new Date(date);
+    if (isNaN(d.getTime())) return 'Invalid date';
+    return formatDistanceToNow(d, { addSuffix: true });
+  } catch {
+    return 'Unknown';
+  }
+}
+
 export function TaskListItem({ task, isSelected, onSelect }: TaskListItemProps) {
   const status = statusConfig[task.status] || statusConfig.pending;
   const StatusIcon = status.icon;
   const trigger = getTriggerDisplay(task);
   const TriggerIcon = trigger.icon;
   const duration = formatDuration(task.startedAt, task.completedAt);
-  const timeAgo = formatDistanceToNow(new Date(task.createdAt), { addSuffix: true });
+  const timeAgo = safeFormatTimeAgo(task.createdAt);
 
   return (
     <button

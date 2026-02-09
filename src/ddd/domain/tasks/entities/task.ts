@@ -111,6 +111,7 @@ export interface TaskConfig {
   instructions: TaskInstructions;
   skillId?: number; // Optional - execute this skill instead of raw instructions
   triggerContext?: TriggerContext; // Optional - what triggered this task
+  chatMessageId?: string; // Optional - link to ChatMessage for ExecutionSteps
   status?: TaskStatus;
   result?: any;
   error?: string;
@@ -129,6 +130,7 @@ export interface CreateTaskData {
   instructions: TaskInstructions; // Task configuration
   skillId?: number; // Optional - execute this skill instead of raw instructions
   triggerContext?: TriggerContext; // What triggered this task
+  chatMessageId?: string; // Optional - link to ChatMessage for ExecutionSteps
   createdBy?: UserId;
 }
 
@@ -141,6 +143,7 @@ export class Task {
     public readonly instructions: TaskInstructions,
     public readonly skillId: number | null, // Optional skill to execute
     public readonly triggerContext: TriggerContext | null,
+    public readonly chatMessageId: string | null, // Link to ChatMessage for ExecutionSteps
     private _status: TaskStatus,
     private _result: any | null,
     private _error: string | null,
@@ -173,6 +176,7 @@ export class Task {
       config.instructions,
       config.skillId || null,
       config.triggerContext || null,
+      config.chatMessageId || null,
       config.status || TaskStatus.pending(),
       config.result || null,
       config.error || null,
@@ -194,6 +198,7 @@ export class Task {
     instructions: any; // JSONB from database
     skillId?: number | null; // Optional skill reference
     triggerContext?: any; // JSONB from database
+    chatMessageId?: string | null; // Link to ChatMessage
     status: string;
     result?: any;
     error?: string | null;
@@ -213,6 +218,7 @@ export class Task {
       data.instructions as TaskInstructions,
       data.skillId || null,
       data.triggerContext as TriggerContext | null || null,
+      data.chatMessageId || null,
       TaskStatus.fromString(data.status),
       data.result || null,
       data.error || null,
@@ -234,6 +240,7 @@ export class Task {
     instructions: any;
     skillId: number | null;
     triggerContext: TriggerContext | null;
+    chatMessageId: string | null;
     status: string;
     result: any;
     error: string | null;
@@ -253,6 +260,7 @@ export class Task {
       instructions: this.instructions,
       skillId: this.skillId,
       triggerContext: this.triggerContext,
+      chatMessageId: this.chatMessageId,
       status: this._status.value,
       result: this._result,
       error: this._error,

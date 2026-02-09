@@ -1243,6 +1243,7 @@ export const tasks = pgTable("tasks", {
   instructions: jsonb("instructions").notNull(), // Task instructions with tools: {task: string, images?: ImageAttachment[], tools?: ToolConfig[], metadata?: Record<string, any>}
   skillId: integer("skill_id").references(() => skills.id, { onDelete: 'set null' }), // Optional skill to execute instead of raw instructions
   triggerContext: jsonb("trigger_context"), // What triggered this task: {type: 'DATABASE_EVENT' | 'CALENDAR' | 'WEBHOOK' | 'MANUAL', scheduleName?: string, tableChange?: TableChangeEvent}
+  chatMessageId: uuid("chat_message_id").references(() => chatMessages.id, { onDelete: 'set null' }), // Link to ChatMessage for ExecutionSteps
   status: text("status").notNull().default("pending"), // pending, in_progress, awaiting_human, completed, failed, cancelled, timeout
   result: jsonb("result"), // Final output data
   error: text("error"),

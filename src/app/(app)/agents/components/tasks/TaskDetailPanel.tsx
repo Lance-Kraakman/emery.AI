@@ -1,15 +1,18 @@
 'use client';
 
-import React from 'react';
-import { CheckCircle2, XCircle, Clock, Loader2, User, Calendar, MessageSquare, Webhook, Database, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { CheckCircle2, XCircle, Clock, Loader2, User, Calendar, MessageSquare, Webhook, Database, AlertCircle, Brain, Wrench, Lightbulb, Code } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { format, formatDistanceToNow } from 'date-fns';
+import { format } from 'date-fns';
 import { TaskStepItem } from './TaskStepItem';
 import type { TaskDTO } from '@/app/mappers/task-mapper';
+import { getChatMessageExecutionSteps } from '@/app/actions/chat-history';
+import type { ExecutionStep } from '@/ddd/domain/chat/value-objects/execution-step';
+import { getStepConfig } from '@/lib/chat/step-config';
 
 // AIDEV-NOTE: Right panel task detail view
-// Shows: task info header, execution steps (from logs for now, will add ExecutionSteps later)
+// Shows: task info header, execution steps from ChatMessage (rich) or logs (fallback)
 
 interface TaskDetailPanelProps {
   task: TaskDTO;
@@ -63,11 +66,96 @@ function formatDuration(startedAt: Date | null, completedAt: Date | null): strin
   return `${Math.round(durationMs / 3600000)}h`;
 }
 
+/**
+ * Safely format a date with a given format string
+ * Returns 'Unknown' if date is null/undefined or invalid
+ */
+function safeFormatDate(date: Date | string | null | undefined, formatStr: string): string {
+  if (!date) return 'Unknown';
+  try {
+    const d = new Date(date);
+    if (isNaN(d.getTime())) return 'Invalid date';
+    return format(d, formatStr);
+  } catch {
+    return 'Unknown';
+  }
+}
+
+// Component to render a single ExecutionStep
+function ExecutionStepItemRich({ step, isLast }: { step: ExecutionStep; isLast: boolean }) {
+  const config = getStepConfig(step.type);
+  const StepIcon = config.icon;
+
+  return (
+    <div className={cn(
+      'relative pl-6 pb-4',
+      !isLast && 'border-l border-border ml-2'
+    )}>
+      <div className={cn(
+        'absolute left-0 top-0 w-4 h-4 rounded-full flex items-center justify-center -translate-x-1/2',
+        config.bgColor
+      )}>
+        <StepIcon className={cn('h-2.5 w-2.5', config.color)} />
+      </div>
+      <div className="space-y-1">
+        <div className="flex items-center gap-2">
+          <span className={cn('text-sm font-medium', config.color)}>{step.name}</span>
+          {step.metadata?.tool && (
+            <Badge variant="outline" className="text-xs px-1.5 py-0">
+              {step.metadata.tool}
+            </Badge>
+          )}
+        </div>
+        {step.content && (
+          <p className="text-xs text-muted-foreground line-clamp-3">{step.content}</p>
+        )}
+        {step.metadata?.skill_name && (
+          <p className="text-xs text-muted-foreground">
+            Skill: {step.metadata.skill_name}
+            {step.metadata.skill_status && ` (${step.metadata.skill_status})`}
+          </p>
+        )}
+        {step.metadata?.error && (
+          <p className="text-xs text-red-500">{step.metadata.error}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function TaskDetailPanel({ task, agentId }: TaskDetailPanelProps) {
+  const [executionSteps, setExecutionSteps] = useState<ExecutionStep[]>([]);
+  const [isLoadingSteps, setIsLoadingSteps] = useState(false);
+
+  // Fetch execution steps from ChatMessage when chatMessageId is present
+  useEffect(() => {
+    if (task.chatMessageId) {
+      setIsLoadingSteps(true);
+      getChatMessageExecutionSteps(task.chatMessageId)
+        .then((result) => {
+          if (result.success && result.data) {
+            setExecutionSteps(result.data);
+          }
+        })
+        .catch((error) => {
+          console.error('Failed to fetch execution steps:', error);
+        })
+        .finally(() => {
+          setIsLoadingSteps(false);
+        });
+    } else {
+      setExecutionSteps([]);
+    }
+  }, [task.chatMessageId]);
+
   const status = statusConfig[task.status as keyof typeof statusConfig] || statusConfig.pending;
   const trigger = getTriggerDisplay(task);
   const TriggerIcon = trigger.icon;
   const duration = formatDuration(task.startedAt, task.completedAt);
+
+  // Use rich execution steps if available, otherwise fall back to logs
+  const hasExecutionSteps = executionSteps.length > 0;
+  const hasLogs = task.logs && task.logs.length > 0;
 
   return (
     <div className="p-4 space-y-6">
@@ -90,7 +178,7 @@ export function TaskDetailPanel({ task, agentId }: TaskDetailPanelProps) {
           {task.createdAt && (
             <div className="flex items-center gap-1.5">
               <Clock className="h-4 w-4" />
-              <span>{format(new Date(task.createdAt), 'MMM d, h:mm a')}</span>
+              <span>{safeFormatDate(task.createdAt, 'MMM d, h:mm a')}</span>
             </div>
           )}
 
@@ -130,7 +218,24 @@ export function TaskDetailPanel({ task, agentId }: TaskDetailPanelProps) {
       <div className="space-y-3">
         <h3 className="text-sm font-medium">Execution</h3>
 
-        {task.logs && task.logs.length > 0 ? (
+        {isLoadingSteps ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span>Loading execution steps...</span>
+          </div>
+        ) : hasExecutionSteps ? (
+          // Rich execution steps from ChatMessage
+          <div className="space-y-0">
+            {executionSteps.map((step, index) => (
+              <ExecutionStepItemRich
+                key={`${step.index}-${step.type}`}
+                step={step}
+                isLast={index === executionSteps.length - 1}
+              />
+            ))}
+          </div>
+        ) : hasLogs ? (
+          // Fallback to simple logs
           <div className="space-y-2">
             {task.logs.map((log, index) => (
               <TaskStepItem

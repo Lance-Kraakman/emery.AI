@@ -15,8 +15,10 @@ import type {
   ChatSessionDTO,
   ChatWithMessagesDTO,
   ChatActionResult,
-  CreateChatSessionDTO
+  CreateChatSessionDTO,
+  ChatMessageDTO
 } from '@/app/mappers/chat-mapper'
+import type { ExecutionStep } from '@/app/dtos/chat.dto'
 import { ChatUtils } from '@/ddd/domain/chat/entities/chat'
 import type { DomainType } from '@/ddd/domain/shared/types/domain-type'
 
@@ -382,6 +384,48 @@ export async function archiveChatSession(chatId: string): Promise<ChatActionResu
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to archive chat session'
+      }
+    }
+  })
+}
+
+/**
+ * Get execution steps from a chat message by its ID
+ * Used by TaskDetailPanel to display rich ExecutionSteps when task is linked to a ChatMessage
+ */
+export async function getChatMessageExecutionSteps(messageId: string): Promise<ChatActionResult<ExecutionStep[]>> {
+  return withAuthContext(async () => {
+    try {
+      // Authenticate user
+      const session = await auth()
+      if (!session?.user?.id) {
+        return { success: false, error: 'Authentication required' }
+      }
+
+      const chatApplicationService = getChatApplicationService()
+
+      // Get the message by ID
+      const result = await chatApplicationService.getMessage({
+        messageId,
+        userId: session.user.id,
+        organizationId: session.user.currentOrganizationId!
+      })
+
+      if (!result.success || !result.data) {
+        return { success: false, error: result.error || 'Message not found' }
+      }
+
+      // Extract execution steps from message metadata
+      const message = result.data
+      const executionSteps = message.metadata?.executionSteps || []
+
+      return { success: true, data: executionSteps }
+
+    } catch (error) {
+      console.error('[CHAT-ACTIONS] Error getting chat message execution steps:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get execution steps'
       }
     }
   })

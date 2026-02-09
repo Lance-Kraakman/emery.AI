@@ -40,31 +40,98 @@ def create_bash_tool(
     )
 
     def bash(command: str) -> str:
-        """Execute a bash command in the agent's isolated workspace.
+        """Execute bash commands in the agent's isolated workspace.
 
-        Commands run in /workspace with access to standard Linux tools.
-        The workspace contains:
-        - workspace/: Working files, outputs, and scratch space
-        - .agent/: Agent config and persistent memory
-        - history/: Execution logs and previous results
+        USE WHEN:
+        - Running system commands, scripts, or build tools
+        - Complex file operations that combine multiple steps
+        - Network operations (curl, wget) when enabled
+        - Data processing pipelines with multiple tools
 
-        Available tools in sandbox:
-        - File operations: cat, head, tail, echo, sed, cp, mv, rm, mkdir
-        - Search: grep, find, ls, tree
-        - Data processing: jq, awk, sort, uniq, wc
-        - Network (if enabled): curl, wget
+        DON'T USE (prefer specialized tools):
+        - For simple file reading (use read_file instead)
+        - For file/pattern search (use glob/grep instead)
+        - For simple file writing (use write_file instead)
+        - For targeted edits (use edit_file instead)
 
-        Examples:
-        - List files: ls -la workspace/
-        - Search: grep -r "pattern" workspace/
-        - Create file: echo "content" > workspace/output.txt
-        - Process JSON: cat data.json | jq '.field'
+        WORKSPACE STRUCTURE:
+        /workspace/               <- Current working directory
+        ├── workspace/            <- Working files, outputs, scratch space
+        ├── .agent/               <- Agent config, persistent memory
+        └── history/              <- Execution logs, previous results
+
+        AVAILABLE TOOLS:
+        File Operations:
+          cat, head, tail, less   - Read files
+          echo, printf            - Output text
+          cp, mv, rm, mkdir       - File management
+          touch, chmod            - Create/permissions
+          tar, gzip, unzip        - Archives
+
+        Search & Discovery:
+          find                    - Find files by criteria
+          grep, rg                - Search file contents
+          ls, tree                - List directories
+          wc, du                  - Counts and sizes
+
+        Data Processing:
+          jq                      - JSON processing
+          awk, sed                - Text transformation
+          sort, uniq, cut         - Line processing
+          xargs                   - Build commands from input
+
+        Network (if enabled):
+          curl, wget              - HTTP requests
+          nc                      - Network connections
+
+        COMMON PATTERNS:
+
+        1. EXPLORE DIRECTORY STRUCTURE:
+           tree -L 2                           # Tree view, 2 levels deep
+           ls -la                              # Detailed file listing
+           find . -type f -name "*.py" | head  # Find Python files
+
+        2. SEARCH FILE CONTENTS:
+           grep -rn "pattern" .                # Recursive with line numbers
+           grep -rl "pattern" .                # List files only
+           grep -A3 -B3 "pattern" file.txt    # With context lines
+
+        3. PROCESS JSON DATA:
+           cat data.json | jq '.'              # Pretty print
+           cat data.json | jq '.items[]'       # Iterate array
+           cat data.json | jq '.field.nested'  # Access nested field
+           cat data.json | jq 'keys'           # Get object keys
+
+        4. RUN SCRIPTS:
+           python script.py                    # Run Python
+           node script.js                      # Run JavaScript
+           bash script.sh                      # Run shell script
+
+        5. BUILD/TEST COMMANDS:
+           pip install -r requirements.txt     # Install Python deps
+           npm install                         # Install Node deps
+           make build                          # Run makefile
+
+        6. CHAIN COMMANDS:
+           cmd1 && cmd2                        # Run cmd2 if cmd1 succeeds
+           cmd1 || cmd2                        # Run cmd2 if cmd1 fails
+           cmd1 | cmd2                         # Pipe output to cmd2
+           cmd1 ; cmd2                         # Run both regardless
+
+        BEST PRACTICES:
+        - Always use full paths from /workspace/ for clarity
+        - Quote paths with spaces: "path/with spaces/file.txt"
+        - Use 'ls' before 'rm' to verify targets
+        - For large files, use head/tail instead of cat
+        - Prefer grep over find+cat for content search
+        - Check exit status with $? if needed
+        - Use -n flag with sed for safety (don't edit in place blindly)
 
         Args:
-            command: The bash command to execute. Command runs in /workspace directory.
+            command: Bash command to execute (runs in /workspace/ directory)
 
         Returns:
-            Command stdout on success, or error message on failure
+            stdout on success, error message with stderr on failure
         """
         if not command or not command.strip():
             return "Error: Empty command"
