@@ -4,6 +4,7 @@ Human-in-the-Loop Node
 Handles plan approval, clarification, and recovery responses using LangGraph interrupt.
 """
 
+import json
 import logging
 from typing import Any
 
@@ -140,6 +141,58 @@ async def await_approval_node(state: PlanExecuteState) -> dict[str, Any]:
             "awaiting_input": None,
             "user_response": str(response),
             "error": None,
+            "events": events,
+        }
+
+    elif awaiting_type == "human_skill":
+        # Pause for human skill completion
+        skill_info = state.get("human_skill_info", {})
+        skill_name = skill_info.get("skill_name", "unknown")
+
+        response = interrupt(
+            {
+                "type": "human_skill",
+                "skill_id": skill_info.get("skill_id"),
+                "skill_name": skill_name,
+                "step_id": skill_info.get("step_id"),
+                "instructions": skill_info.get("instructions"),
+                "inputs": skill_info.get("inputs"),
+                "output_schema": skill_info.get("output_schema"),
+                "assigned_to": skill_info.get("assigned_to"),
+                "message": f"Human skill '{skill_name}' requires your input.",
+            }
+        )
+
+        logger.info(f"Human skill {skill_name} completed with response: {str(response)[:100]}")
+
+        # The response contains the human's outputs as JSON or dict
+        # Inject into task context so the next step knows the skill completed
+        if isinstance(response, str):
+            try:
+                human_outputs = json.loads(response)
+            except json.JSONDecodeError:
+                human_outputs = {"result": response}
+        else:
+            human_outputs = response if isinstance(response, dict) else {"result": str(response)}
+
+        # Format outputs for task context
+        outputs_summary = ", ".join(
+            f"{k}: {str(v)[:100]}" for k, v in human_outputs.items()
+        )
+
+        # Set human_skill_completed so execute_step knows to complete this step
+        step_id = skill_info.get("step_id", "")
+
+        return {
+            "task": f"{task}\n\nHuman completed skill '{skill_name}' with outputs: {outputs_summary}",
+            "awaiting_input": None,
+            "human_skill_info": None,
+            "human_skill_completed": {
+                "step_id": step_id,
+                "skill_name": skill_name,
+                "outputs": human_outputs,
+            },
+            "user_response": str(response),
             "events": events,
         }
 

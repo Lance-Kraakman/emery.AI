@@ -1,17 +1,18 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { getAgent } from "@/app/actions/agents";
-import { getTasks } from "@/app/actions/tasks";
-import { getSkillsByAgent } from "@/app/actions/skills";
-import { getUserOAuthConnections } from "@/app/actions/connections";
 import { CanvasBase } from "@/components/canvas/CanvasBase";
-import { AgentDetailsWrapper } from "../components/AgentDetailsWrapper";
 import { Suspense } from "react";
-import { Loading } from "@/components/ui/loading";
+import { AgentPageClient } from "../components/AgentPageClient";
+import { AgentHeaderWrapper } from "../components/AgentHeaderWrapper";
+import { AgentHeaderSkeleton } from "../components/AgentHeaderSkeleton";
+import { TimelineWrapper } from "../components/TimelineWrapper";
+import { TimelineSkeleton } from "../components/TimelineSkeleton";
 
-// AIDEV-NOTE: Agent detail page - renders new timeline-focused layout
-// Shows full-screen timeline with compact header containing agent info, skills, connections, schedules
-// Uses CanvasBase for full-page layout without padding
+// AIDEV-NOTE: Agent detail page with React streaming for fast perceived load
+// Uses Suspense boundaries to stream header and timeline independently
+// Header shows immediately with agent info, then skills/connections load
+// Timeline streams in separately with its own loading state
 
 interface AgentPageProps {
   params: Promise<{ agentId: string }>;
@@ -31,32 +32,28 @@ export default async function AgentPage({ params }: AgentPageProps) {
     redirect("/mission-control/dashboard");
   }
 
+  // Only fetch agent initially - required for auth check and basic display
   const agent = await getAgent(parsedAgentId);
 
   if (!agent) {
     redirect("/mission-control/dashboard");
   }
 
-  // Fetch all data in parallel
-  const [tasksResult, skillsResult, connectionsResult] = await Promise.all([
-    getTasks(parsedAgentId),
-    getSkillsByAgent(parsedAgentId),
-    getUserOAuthConnections()
-  ]);
-  const tasks = tasksResult.success ? (tasksResult.data || []) : [];
-  const skills = skillsResult.success ? (skillsResult.data || []) : [];
-  const connections = connectionsResult.success ? (connectionsResult.data || []) : [];
-
+  // Stream the page with independent Suspense boundaries
+  // Header and Timeline load in parallel, showing content as it becomes available
   return (
     <CanvasBase>
-      <Suspense fallback={<Loading text="Loading agent..." />}>
-        <AgentDetailsWrapper
-          agent={agent}
-          tasks={tasks}
-          skills={skills}
-          connections={connections}
-        />
-      </Suspense>
+      <AgentPageClient>
+        {/* Header streams first - shows agent info immediately, skills/connections load async */}
+        <Suspense fallback={<AgentHeaderSkeleton agent={agent} />}>
+          <AgentHeaderWrapper agent={agent} />
+        </Suspense>
+
+        {/* Timeline streams separately - shows skeleton while tasks load */}
+        <Suspense fallback={<TimelineSkeleton />}>
+          <TimelineWrapper agentId={agent.id} schedules={agent.automations} />
+        </Suspense>
+      </AgentPageClient>
     </CanvasBase>
   );
 }

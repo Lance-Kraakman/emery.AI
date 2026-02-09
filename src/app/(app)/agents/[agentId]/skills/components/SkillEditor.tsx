@@ -6,7 +6,7 @@ import { X, Settings2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { InputDefinition, OutputDefinition, ToolConfigDTO } from '@/app/mappers/skill-mapper';
-import type { SkillStep, CanvasMetadata, SkillExecutionType, StoredPlan } from '@/ddd/domain/skills/entities/skill';
+import type { SkillStep, CanvasMetadata, SkillExecutionType, StoredPlan, HumanSkillConfig } from '@/ddd/domain/skills/entities/skill';
 import type { FlowToStepsResult } from '@/components/workflow-canvas/utils/flow-converters';
 import type { WorkflowNode, WorkflowNodeData, WorkflowEdge } from '@/components/workflow-canvas/types';
 import type { WorkflowVariable } from '@/components/workflow-canvas/WorkflowVariableInput';
@@ -16,6 +16,7 @@ import { generateSkillPlan } from '@/app/actions/skills';
 import { NodeConfigContent } from './NodeConfigContent';
 import { RootSkillConfig } from './RootSkillConfig';
 import { AgenticSkillEditor } from './AgenticSkillEditor';
+import { HumanSkillEditor } from './HumanSkillEditor';
 
 /**
  * SkillFormData - supports both workflow (DAG) and agentic (single-step) modes
@@ -39,6 +40,8 @@ export interface SkillFormData {
   agentType?: string | null;
   // Stored plan (for autonomous execution)
   plan?: StoredPlan;
+  // Human skill config (for human execution)
+  humanSkillConfig?: HumanSkillConfig;
 }
 
 interface SkillEditorProps {
@@ -191,6 +194,20 @@ export function SkillEditor({
 
   // For I/O nodes, show RootSkillConfig (treat as if no regular node selected)
   const showRootConfig = !selectedNode || isIONode;
+
+  // Human mode: show human skill configuration editor
+  if (value.executionType === 'human') {
+    return (
+      <HumanSkillEditor
+        value={value}
+        onChange={onChange}
+        skillId={skillId}
+        organizationTier={organizationTier}
+        isReadOnly={isReadOnly}
+        hasFloatingHeader={hasFloatingHeader}
+      />
+    );
+  }
 
   // Agentic mode: show simplified single-step editor
   if (value.executionType !== 'agent') {

@@ -135,7 +135,10 @@ def execute_skill_by_id(
     try:
         from emery_agents.services.agents.factory import AgentFactory
         from emery_agents.services.models.provider import ModelProvider
-        from emery_agents.services.skills.executor import SkillExecutorService
+        from emery_agents.services.skills.executor import (
+            SkillExecutorService,
+            SkillExecutionResult,
+        )
         from emery_agents.tools.loader import UnifiedToolLoader
 
         tool_loader = UnifiedToolLoader()
@@ -147,21 +150,58 @@ def execute_skill_by_id(
             agent_factory=agent_factory,
         )
 
+        # Use capture_outputs=True to get SkillExecutionResult with status
         result = skill_executor.execute_skill(
             skill_config=skill_config,
             runtime_inputs=inputs,
-            capture_outputs=False,
+            capture_outputs=True,  # Changed: get full result with status
             api_key=execution_api_key,
             organization_id=int(org_id),
         )
 
         logger.info(f"[DYNAMIC-EXEC] Skill {skill_id} execution complete")
 
-        # Wrap result in standard format
+        # Check if human skill is awaiting human input
+        if isinstance(result, SkillExecutionResult) and result.status == "awaiting_human":
+            logger.info(f"[DYNAMIC-EXEC] Human skill {skill_id} awaiting input")
+
+            # Get human skill config for instructions and assignee
+            human_config = skill_config.human_skill_config
+            instructions = (
+                human_config.instructions if human_config else skill_config.instructions
+            )
+            assigned_to = ""
+            if human_config:
+                if human_config.assignee_type == "specific_user" and human_config.assignee_id:
+                    assigned_to = human_config.assignee_id
+                elif human_config.assignee_type == "role" and human_config.assignee_role:
+                    assigned_to = f"role:{human_config.assignee_role}"
+
+            return json.dumps(
+                {
+                    "status": "awaiting_human",
+                    "skill_id": skill_id,
+                    "skill_name": skill_config.name,
+                    "instructions": instructions,
+                    "inputs": inputs,
+                    "output_schema": [
+                        {"name": out.name, "type": out.type}
+                        for out in skill_config.outputs
+                    ],
+                    "assigned_to": assigned_to,
+                    "credential_source": "agent" if agent_id else "user",
+                }
+            )
+
+        # Wrap completed result in standard format
+        result_str = (
+            result.result if isinstance(result, SkillExecutionResult)
+            else (result if isinstance(result, str) else str(result))
+        )
         return json.dumps(
             {
                 "status": "completed",
-                "result": result if isinstance(result, str) else str(result),
+                "result": result_str,
                 "skill_id": skill_id,
                 "credential_source": "agent" if agent_id else "user",
             }

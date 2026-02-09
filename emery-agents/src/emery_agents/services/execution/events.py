@@ -5,8 +5,8 @@ All event dataclasses emitted by ExecutionCoordinator during planning and execut
 These events enable UI feedback and external monitoring.
 """
 
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Any, Dict, List
 
 from ...entities.models.plan import Plan
 

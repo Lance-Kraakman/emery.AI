@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import type { TaskDTO } from '@/app/mappers/task-mapper';
 import type { SkillDTO } from '@/app/mappers/skill-mapper';
-import type { ConnectionDTO } from '@/app/mappers/connection-mapper';
 import { CompactAgentHeader } from './CompactAgentHeader';
 import { AgentExecutionTimeline } from '@/components/timeline/AgentExecutionTimeline';
 import { ModalProvider } from './modals/ModalContext';
@@ -17,11 +16,11 @@ interface NewAgentDetailsViewProps {
   agent: AgentDTO;
   tasks: TaskDTO[];
   skills: SkillDTO[];
-  connections: ConnectionDTO[];
+  connectionCount: number;
   onUpdate?: () => void;
 }
 
-export function NewAgentDetailsView({ agent, tasks, skills, connections, onUpdate }: NewAgentDetailsViewProps) {
+export function NewAgentDetailsView({ agent, tasks, skills, connectionCount, onUpdate }: NewAgentDetailsViewProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const returnTo = searchParams.get('returnTo');
@@ -61,7 +60,7 @@ export function NewAgentDetailsView({ agent, tasks, skills, connections, onUpdat
         <CompactAgentHeader
           agent={agent}
           skills={skills}
-          connections={connections}
+          connectionCount={connectionCount}
         />
 
         {/* Full-width Timeline */}

@@ -13,6 +13,7 @@ import logging
 import os
 import threading
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from emery_agents.entities.skill_config import SkillConfig
@@ -27,6 +28,30 @@ if TYPE_CHECKING:
     from emery_agents.entities.task import SkillOutputValue
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class HumanSkillAwaitingException(Exception):
+    """
+    Raised when a human skill requires human action.
+
+    This exception interrupts agent execution and signals that the graph
+    should pause for human input. The execution node catches this and
+    sets up a LangGraph interrupt.
+    """
+
+    skill_id: int
+    skill_name: str
+    step_id: str
+    instructions: str
+    inputs: dict[str, Any]
+    output_schema: list[dict[str, str]]
+    assigned_to: str
+    external_links: list[str] = field(default_factory=list)
+    session_id: str = ""
+
+    def __post_init__(self) -> None:
+        super().__init__(f"Human skill awaiting input: {self.skill_name}")
 
 
 class SkillTool:
@@ -205,36 +230,75 @@ class SkillTool:
             parent_ctx = AgentExecutor.get_current_context()
             progress_callback = parent_ctx.progress_callback if parent_ctx else None
 
-            if self._has_output_mappings():
-                executor_result = self.skill_executor(
-                    self.skill_config,
-                    enriched_kwargs,
-                    capture_outputs=True,
-                    progress_callback=progress_callback,
-                )
+            # Always use capture_outputs=True to get SkillExecutionResult with status
+            # This allows detection of human skills (status="awaiting_human")
+            executor_result = self.skill_executor(
+                self.skill_config,
+                enriched_kwargs,
+                capture_outputs=True,
+                progress_callback=progress_callback,
+            )
 
-                if isinstance(executor_result, SkillExecutionResult):
-                    result = executor_result.result
-                    captured_outputs = executor_result.captured_outputs
-                    if captured_outputs:
-                        run_async_in_thread(
-                            self._apply_agent_output_mappings(captured_outputs)
-                        )
-                        result = self._build_result_with_outputs(
-                            result, captured_outputs
-                        )
-                else:
-                    result = executor_result
+            # Check for human skill awaiting input
+            if isinstance(executor_result, SkillExecutionResult):
+                if executor_result.status == "awaiting_human":
+                    # Human skill detected - raise exception to pause execution
+                    logger.info(
+                        f"Human skill {self.name} awaiting input - raising exception"
+                    )
+                    human_config = self.skill_config.human_skill_config
+                    instructions = (
+                        human_config.instructions
+                        if human_config
+                        else self.skill_config.instructions
+                    )
+                    assigned_to = ""
+                    if human_config:
+                        if (
+                            human_config.assignee_type == "specific_user"
+                            and human_config.assignee_id
+                        ):
+                            assigned_to = human_config.assignee_id
+                        elif (
+                            human_config.assignee_type == "role"
+                            and human_config.assignee_role
+                        ):
+                            assigned_to = f"role:{human_config.assignee_role}"
+
+                    raise HumanSkillAwaitingException(
+                        skill_id=self.skill_config.id,
+                        skill_name=self.skill_config.name,
+                        step_id="",  # Will be set by execution node
+                        instructions=instructions,
+                        inputs=enriched_kwargs,
+                        output_schema=[
+                            {"name": out.name, "type": out.type}
+                            for out in self.skill_config.outputs
+                        ],
+                        assigned_to=assigned_to,
+                    )
+
+                # Normal completed skill - process result
+                result = executor_result.result
+                captured_outputs = executor_result.captured_outputs
+
+                # Apply output mappings if available
+                if captured_outputs and self._has_output_mappings():
+                    run_async_in_thread(
+                        self._apply_agent_output_mappings(captured_outputs)
+                    )
+                    result = self._build_result_with_outputs(result, captured_outputs)
             else:
-                result = self.skill_executor(
-                    self.skill_config,
-                    enriched_kwargs,
-                    progress_callback=progress_callback,
-                )
+                result = executor_result
 
             logger.info(f"Skill {self.name} completed successfully")
             cache[call_key] = result
             return result
+
+        except HumanSkillAwaitingException:
+            # Re-raise human skill exception to propagate to execution node
+            call_stack.discard(skill_name)
+            raise
 
         except Exception as e:
             error_msg = f"Skill execution failed: {str(e)}"

@@ -13,7 +13,6 @@ import { s3Client, BUCKET_NAME } from '@/lib/s3/client';
 import {
   getOrgPrefixes,
   getTaskAttachmentPrefix,
-  getWorkspacePrefix,
   getDatabaseFileKey,
   extractOrgIdFromKey,
   type StorageCategory,
@@ -302,9 +301,8 @@ export class S3FileStorageRepository implements IFileStorageRepository {
    *   - org_{id}/               → database storage (tables, files, delta-lake)
    *   - chat-attachments/{id}/  → chat attachment storage
    *   - skill-attachments/{id}/ → skill attachment storage
-   *   - workspaces/agents/      → agent workspace archives (via HeadObject per agent)
-   *   - workspaces/users/       → user workspace archives (via HeadObject per member)
    *
+   * Note: Workspaces are stored on EFS (SharedFilesystemStorage), not S3.
    * Results are cached for 1 hour to reduce expensive S3 calls.
    * Cache is invalidated on file upload/delete.
    */
@@ -326,14 +324,14 @@ export class S3FileStorageRepository implements IFileStorageRepository {
     };
 
     try {
-      // Scan all org-scoped prefixes (including workspaces)
+      // Scan all org-scoped prefixes in S3
+      // Note: Workspaces are on EFS, not S3 - workspaceStorageBytes is always 0 here
       const prefixes = getOrgPrefixes(organizationId);
       const prefixEntries: Array<{ prefix: string; category: StorageCategory }> = [
         { prefix: prefixes.database, category: 'database' },
         { prefix: prefixes.chat, category: 'chat' },
         { prefix: prefixes.skill, category: 'skill' },
         { prefix: getTaskAttachmentPrefix(organizationId), category: 'database' },
-        { prefix: getWorkspacePrefix(organizationId), category: 'workspace' },
       ];
 
       for (const { prefix, category } of prefixEntries) {
@@ -367,9 +365,7 @@ export class S3FileStorageRepository implements IFileStorageRepository {
                 case 'skill':
                   breakdown.skillStorageBytes += size;
                   break;
-                case 'workspace':
-                  breakdown.workspaceStorageBytes += size;
-                  break;
+                // Note: workspace storage is on EFS, not S3
               }
             }
           }

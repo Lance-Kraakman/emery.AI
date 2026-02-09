@@ -44,16 +44,6 @@ interface FileChangeEvent {
   timestamp: number;
 }
 
-/** Sync status from Tauri */
-interface SyncStatus {
-  connected: boolean;
-  locked: boolean;
-  locked_by_task: string | null;
-  local_modified: number | null;
-  remote_modified: number | null;
-  pending_changes: number;
-}
-
 export type SyncState = 'idle' | 'connecting' | 'syncing' | 'watching' | 'error';
 
 export interface UseWorkspaceSyncReturn {
@@ -122,6 +112,9 @@ export function useWorkspaceSync(agentId: number, orgId: number): UseWorkspaceSy
   // Refs for cleanup
   const fileChangeUnlistenRef = useRef<(() => void) | null>(null);
   const lockPollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Track previous lock state for auto-pull on release
+  const prevLockedRef = useRef<boolean>(false);
 
   const isAvailable = isTauri();
 
@@ -199,7 +192,7 @@ export function useWorkspaceSync(agentId: number, orgId: number): UseWorkspaceSy
       setIsConnected(false);
       return false;
     }
-  }, [agentId, isAvailable, syncPath, getApiKey, getApiBase]);
+  }, [agentId, orgId, isAvailable, syncPath, getApiKey, getApiBase]);
 
   const disconnect = useCallback(async () => {
     if (!isAvailable) return;
@@ -352,14 +345,37 @@ export function useWorkspaceSync(agentId: number, orgId: number): UseWorkspaceSy
         });
         setLockState(state);
 
-        // If lock just released and we have pending changes, sync them
-        if (!state.locked && pendingChanges > 0) {
-          console.log('Lock released, syncing pending changes...');
+        // Detect lock transition: true → false (agent finished working)
+        const wasLocked = prevLockedRef.current;
+        const isNowUnlocked = !state.locked;
+
+        if (wasLocked && isNowUnlocked) {
+          console.log('Lock released, auto-pulling agent changes...');
+          // Pull first to get agent's changes
           const apiKey = await getApiKey();
           const apiBase = getApiBase();
-          await invokeTauri('sync_pending_changes', { agentId, apiKey, apiBase });
-          setPendingChanges(0);
+          try {
+            await invokeTauri('pull_workspace', {
+              agentId,
+              localPath: syncPath,
+              apiKey,
+              apiBase,
+            });
+            setLastSync(Math.floor(Date.now() / 1000));
+          } catch (pullErr) {
+            console.error('Auto-pull failed:', pullErr);
+          }
+
+          // Then sync any pending local changes
+          if (pendingChanges > 0) {
+            console.log('Syncing pending local changes...');
+            await invokeTauri('sync_pending_changes', { agentId, apiKey, apiBase });
+            setPendingChanges(0);
+          }
         }
+
+        // Update previous lock state
+        prevLockedRef.current = state.locked;
       } catch (err) {
         console.error('Failed to check lock status:', err);
       }
@@ -377,7 +393,7 @@ export function useWorkspaceSync(agentId: number, orgId: number): UseWorkspaceSy
         lockPollIntervalRef.current = null;
       }
     };
-  }, [agentId, isConnected, pendingChanges, getApiKey, getApiBase]);
+  }, [agentId, isConnected, pendingChanges, syncPath, getApiKey, getApiBase]);
 
   // ---------------------------------------------------------------------------
   // Actions

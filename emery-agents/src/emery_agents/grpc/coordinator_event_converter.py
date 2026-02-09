@@ -14,6 +14,7 @@ from ..services.execution.events import (
     AutoFixCompletedEvent,
     AutoFixStartedEvent,
     AwaitingClarificationEvent,
+    AwaitingHumanSkillEvent,
     ContextInjectedEvent,
     ErrorEvent,
     EvaluationCompletedEvent,
@@ -474,6 +475,21 @@ def convert_coordinator_event(
                 "type": "context_injected",
             },
             "step_index": step_index,
+        }
+
+    elif isinstance(event, AwaitingHumanSkillEvent):
+        # Human skill requires human action - stream should close after this
+        return {
+            "type": "awaiting_human_skill",
+            "skill_id": event.skill_id,
+            "skill_name": event.skill_name,
+            "step_id": event.step_id,
+            "instructions": event.instructions,
+            "inputs": event.inputs,
+            "output_schema": event.output_schema,
+            "assigned_to": event.assigned_to,
+            "external_links": event.external_links,
+            "session_id": event.session_id,
         }
 
     return None  # Unknown event type

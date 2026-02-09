@@ -176,13 +176,20 @@ class AppStack(Stack):
         # ========== SHARED FILESYSTEM (EFS) FOR WORKSPACES ==========
         # Provides persistent workspace storage shared between agent and frontend services.
         # Eliminates S3 transfer costs and enables instant workspace access.
+        #
+        # Lifecycle policies for cost optimization:
+        # - Files unused for 7 days → move to Infrequent Access ($0.025/GB vs $0.30/GB = 92% savings)
+        # - On first access → auto-promote back to Standard (transparent to applications)
+        # - Note: IA has 128KB minimum read charge, optimal for files >128KB
+        # - Note: 7 days is the most aggressive option available in CDK (3 days not supported)
         workspace_fs = efs.FileSystem(
             self, f"{prefix}WorkspaceFS",
             vpc=data_stack.vpc,
             removal_policy=RemovalPolicy.RETAIN,  # Keep data on stack deletion
             performance_mode=efs.PerformanceMode.GENERAL_PURPOSE,
             throughput_mode=efs.ThroughputMode.BURSTING,
-            lifecycle_policy=efs.LifecyclePolicy.AFTER_30_DAYS,  # Move old files to cheaper tier
+            lifecycle_policy=efs.LifecyclePolicy.AFTER_7_DAYS,  # Move inactive files to IA tier
+            out_of_infrequent_access_policy=efs.OutOfInfrequentAccessPolicy.AFTER_1_ACCESS,  # Auto-restore on use
             encrypted=True,
         )
 

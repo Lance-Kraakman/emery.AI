@@ -66,8 +66,10 @@ class PlanExecuteState(TypedDict, total=False):
     max_replans: int
 
     # === Human-in-the-loop (primitives/dicts) ===
-    awaiting_input: str | None  # "approval", "clarification", "recovery"
+    awaiting_input: str | None  # "approval", "clarification", "recovery", "human_skill"
     clarifying_questions: list[dict[str, Any]]
+    human_skill_info: dict[str, Any] | None  # Info for human skill interrupt
+    human_skill_completed: dict[str, Any] | None  # {step_id, outputs} - set after human completes
 
     # === Event accumulator (append-only for UI streaming) ===
     events: Annotated[list[Any], operator.add]
@@ -130,6 +132,8 @@ DEFAULT_STATE: dict[str, Any] = {
     # Human-in-the-loop
     "awaiting_input": None,
     "clarifying_questions": [],
+    "human_skill_info": None,
+    "human_skill_completed": None,
     # Event accumulator
     "events": [],
     # Configured tools

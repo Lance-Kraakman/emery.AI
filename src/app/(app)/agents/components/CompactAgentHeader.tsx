@@ -4,7 +4,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Settings, Zap, Calendar, Link2, Plus, ChevronRight, ClipboardList, Edit2, Trash2, MoreHorizontal, Globe, Download, Key } from 'lucide-react';
 import type { AgentDTO } from '@/app/dtos/agent.dto';
 import type { SkillDTO } from '@/app/mappers/skill-mapper';
-import type { ConnectionDTO } from '@/app/mappers/connection-mapper';
 import { useModal } from './modals/ModalContext';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useRouter } from 'next/navigation';
@@ -21,7 +20,8 @@ import { isTauri } from '@/hooks/useDeviceFlow';
 interface CompactAgentHeaderProps {
   agent: AgentDTO;
   skills: SkillDTO[];
-  connections: ConnectionDTO[];
+  connectionCount: number;
+  resolvedModel?: string | null;
   className?: string;
 }
 
@@ -34,7 +34,8 @@ const STATUS_COLORS = {
 export function CompactAgentHeader({
   agent,
   skills,
-  connections,
+  connectionCount,
+  resolvedModel,
   className = ''
 }: CompactAgentHeaderProps) {
   const { openModal } = useModal();
@@ -185,6 +186,9 @@ export function CompactAgentHeader({
           <div className="min-w-0">
             <h1 className="text-base sm:text-lg font-semibold truncate">{agent.name}</h1>
             <p className="text-xs text-muted-foreground truncate">{agent.role || 'Assistant'}</p>
+            {resolvedModel && (
+              <p className="text-[10px] text-muted-foreground/70 truncate">{resolvedModel}</p>
+            )}
           </div>
         </div>
 
@@ -197,13 +201,7 @@ export function CompactAgentHeader({
           {(agent.status || 'active').charAt(0).toUpperCase() + (agent.status || 'active').slice(1)}
         </span>
 
-        {/* Model Badge - Hidden on small screens */}
-        {agent.defaultModel && (
-          <span className="hidden md:inline-flex px-2 py-1 text-xs bg-muted rounded-full">
-            {agent.defaultModel}
-          </span>
-        )}
-      </div>
+              </div>
 
       {/* Right side - Settings and action badges */}
       <div className="flex items-center gap-1 min-w-0 overflow-hidden">
@@ -249,7 +247,7 @@ export function CompactAgentHeader({
                 className="flex items-center gap-2 w-full px-3 py-2 text-sm rounded-md hover:bg-accent transition-colors text-left"
               >
                 <Link2 className="h-4 w-4" />
-                Connections ({connections.length})
+                Connections ({connectionCount})
               </button>
               <button
                 onClick={() => { setOverflowOpen(false); handleDownloadWorkspace(); }}
@@ -415,13 +413,13 @@ export function CompactAgentHeader({
             <button
               onClick={() => openModal('authorized-connections', { agent })}
               className="flex group relative items-center gap-1 px-2 py-1.5 text-sm border rounded-md hover:bg-accent transition-colors"
-              title={`${connections.length} connections`}
+              title={`${connectionCount} connections`}
             >
               <Link2 className="h-4 w-4 shrink-0" />
               {!isCompact && <span>Connections</span>}
-              <span className={`${connections.length > 0 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}
+              <span className={`${connectionCount > 0 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}
                 text-xs font-medium px-1.5 rounded-full min-w-[1.25rem] text-center`}>
-                {connections.length}
+                {connectionCount}
               </span>
             </button>
           </>

@@ -200,37 +200,41 @@ export async function acceptInvitation(token: string): Promise<Result> {
 // AIDEV-NOTE: This functionality is now handled by the OrganizationRepository
 // through the getMembers method. Consider moving this to organization actions.
 export async function getOrganizationMembers(): Promise<Array<OrganizationMemberDTO>> {
-  try {
-    const session = await requirePermission("users:view");
-    const currentOrg = await requireCurrentOrganization();
-    
-    const userOrganizationApplicationService = getUserRoleApplicationService();
-    const members = await userOrganizationApplicationService.getOrganizationMembers({
-      organizationId: currentOrg.id
-    });
-    
-    // Convert domain objects to DTOs for UI
-    return members.map(member => (OrganizationMapper.memberToDTO(member)));
-  } catch (error) {
-    console.error("Error fetching organization members:", error);
-    return [];
-  }
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("users:view");
+      const currentOrg = await requireCurrentOrganization();
+
+      const userOrganizationApplicationService = getUserRoleApplicationService();
+      const members = await userOrganizationApplicationService.getOrganizationMembers({
+        organizationId: currentOrg.id
+      });
+
+      // Convert domain objects to DTOs for UI
+      return members.map(member => (OrganizationMapper.memberToDTO(member)));
+    } catch (error) {
+      console.error("Error fetching organization members:", error);
+      return [];
+    }
+  });
 }
 
 export async function getPendingInvitations(): Promise<InvitationDTO[]> {
-  try {
-    const session = await requirePermission("users:view");
-    const currentOrg = await requireCurrentOrganization();
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("users:view");
+      const currentOrg = await requireCurrentOrganization();
 
-    const invitationApplicationService = getInvitationApplicationService();
-    const invitations = await invitationApplicationService.getPendingInvitations(currentOrg.id);
+      const invitationApplicationService = getInvitationApplicationService();
+      const invitations = await invitationApplicationService.getPendingInvitations(currentOrg.id);
 
-    // Convert domain objects to DTOs for UI
-    return toInvitationDTOs(invitations);
-  } catch (error) {
-    console.error("Error fetching pending invitations:", error);
-    throw new Error("Failed to fetch pending invitations");
-  }
+      // Convert domain objects to DTOs for UI
+      return toInvitationDTOs(invitations);
+    } catch (error) {
+      console.error("Error fetching pending invitations:", error);
+      throw new Error("Failed to fetch pending invitations");
+    }
+  });
 }
 
 /**
@@ -361,48 +365,52 @@ export async function resendInvitation(invitationId: number): Promise<Result> {
  * Get invitation statistics for the current organization
  */
 export async function getInvitationStats() {
-  try {
-    const session = await requirePermission("users:view");
-    const currentOrg = await requireCurrentOrganization();
-    
-    const invitationApplicationService = getInvitationApplicationService();
-    return await invitationApplicationService.getInvitationStats(currentOrg.id);
-  } catch (error) {
-    console.error("Error fetching invitation stats:", error);
-    throw new Error("Failed to fetch invitation stats");
-  }
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("users:view");
+      const currentOrg = await requireCurrentOrganization();
+
+      const invitationApplicationService = getInvitationApplicationService();
+      return await invitationApplicationService.getInvitationStats(currentOrg.id);
+    } catch (error) {
+      console.error("Error fetching invitation stats:", error);
+      throw new Error("Failed to fetch invitation stats");
+    }
+  });
 }
 
 /**
  * Clean up expired invitations for the current organization
  */
 export async function cleanupExpiredInvitations(): Promise<Result> {
-  try {
-    const session = await requirePermission("users:manage");
-    const currentOrg = await requireCurrentOrganization();
-    
-    const invitationApplicationService = getInvitationApplicationService();
-    const result = await invitationApplicationService.cleanupExpiredInvitations(currentOrg.id);
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("users:manage");
+      const currentOrg = await requireCurrentOrganization();
 
-    if (!result.success) {
+      const invitationApplicationService = getInvitationApplicationService();
+      const result = await invitationApplicationService.cleanupExpiredInvitations(currentOrg.id);
+
+      if (!result.success) {
+        return {
+          success: false,
+          error: result.error || "Failed to cleanup expired invitations"
+        };
+      }
+
+      revalidatePath("/organization/settings/users");
+      return {
+        success: true,
+        data: { cleanedCount: result.data }
+      };
+    } catch (error) {
+      console.error("Error cleaning up expired invitations:", error);
       return {
         success: false,
-        error: result.error || "Failed to cleanup expired invitations"
+        error: "Failed to cleanup expired invitations"
       };
     }
-
-    revalidatePath("/organization/settings/users");
-    return {
-      success: true,
-      data: { cleanedCount: result.data }
-    };
-  } catch (error) {
-    console.error("Error cleaning up expired invitations:", error);
-    return {
-      success: false,
-      error: "Failed to cleanup expired invitations"
-    };
-  }
+  });
 }
 
 /**

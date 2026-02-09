@@ -11,6 +11,7 @@ from typing import Any
 from ...ace import StepResult
 from ...reasoning.utils import StepOutcome
 from ...services.execution.events import (
+    AwaitingHumanSkillEvent,
     StepCompletedEvent,
     StepFailedEvent,
     StepStartedEvent,
@@ -19,6 +20,7 @@ from ...services.execution.plan_step_executor import PlanStepExecutor
 from ...services.execution.step_executor import StepExecutor
 from ...services.memory import create_memory_crud
 from ...services.plan_service import PlanService
+from ...tools.execution.skill import HumanSkillAwaitingException
 from ..runtime import RuntimeContext
 from ..state import PlanExecuteState
 
@@ -50,6 +52,58 @@ async def execute_step_node(
     events: list[Any] = []
 
     assert plan is not None, "Cannot execute without a plan"
+
+    # Check if we're resuming after a human skill completion
+    human_skill_completed = state.get("human_skill_completed")
+    if human_skill_completed:
+        completed_step_id = human_skill_completed.get("step_id")
+        skill_name = human_skill_completed.get("skill_name", "unknown")
+        human_outputs = human_skill_completed.get("outputs", {})
+
+        logger.info(
+            f"Human skill '{skill_name}' completed for step {completed_step_id} - "
+            f"marking step as done"
+        )
+
+        # Format outputs for result
+        outputs_str = ", ".join(
+            f"{k}: {str(v)[:100]}" for k, v in human_outputs.items()
+        )
+        result_summary = f"Human skill '{skill_name}' completed with: {outputs_str}"
+
+        # Update step outcome
+        step_outcomes[completed_step_id] = {
+            "summary": result_summary,
+            "success": True,
+            "tool_calls": [],
+            "human_skill_outputs": human_outputs,
+        }
+
+        # Mark step as completed
+        plan_service = PlanService()
+        plan = await plan_service.update_step_status(
+            plan, completed_step_id, "completed", result=result_summary
+        )
+
+        if ledger:
+            ledger.complete_step(completed_step_id, result_summary)
+
+        events.append(
+            StepCompletedEvent(
+                plan_id=plan.id,
+                step_id=completed_step_id,
+                result=result_summary,
+            )
+        )
+
+        # Clear the flag and return to replan
+        return {
+            "plan": plan,
+            "step_outcomes": step_outcomes,
+            "ledger": ledger,
+            "human_skill_completed": None,
+            "events": events,
+        }
 
     # Get pending steps
     pending_steps = plan.get_pending_steps()
@@ -173,6 +227,45 @@ async def execute_step_node(
                 "error": error_msg,
                 "events": events,
             }
+
+    except HumanSkillAwaitingException as e:
+        # Human skill requires human input - set up interrupt
+        logger.info(
+            f"Human skill {e.skill_name} requires input - setting up interrupt"
+        )
+
+        # Emit the awaiting human skill event
+        events.append(
+            AwaitingHumanSkillEvent(
+                skill_id=e.skill_id,
+                skill_name=e.skill_name,
+                step_id=step.step_id,  # Associate with current plan step
+                instructions=e.instructions,
+                inputs=e.inputs,
+                output_schema=e.output_schema,
+                assigned_to=e.assigned_to,
+                external_links=e.external_links,
+                session_id=e.session_id,
+            )
+        )
+
+        # Set state for human skill interrupt
+        return {
+            "plan": plan,
+            "step_outcomes": step_outcomes,
+            "ledger": ledger,
+            "awaiting_input": "human_skill",
+            "human_skill_info": {
+                "skill_id": e.skill_id,
+                "skill_name": e.skill_name,
+                "step_id": step.step_id,
+                "instructions": e.instructions,
+                "inputs": e.inputs,
+                "output_schema": e.output_schema,
+                "assigned_to": e.assigned_to,
+            },
+            "events": events,
+        }
 
     except Exception as e:
         error_msg = str(e)

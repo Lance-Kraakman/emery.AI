@@ -14,6 +14,7 @@ export interface OrganizationDTO {
   stripeSubscriptionId?: string | null;
   stripeSubscriptionStatus?: string | null;
   analysisCapabilities?: any | null; // Keep complex nested objects as-is for now
+  defaultModel?: string | null; // Organization-wide default model
   createdAt?: Date | null;
   userRoles?: Array<{id: number; name: string; isSystem: boolean}>; // Multi-role support
   hasRoleError?: boolean; // Added for getCurrentOrganization response
@@ -60,6 +61,7 @@ export class OrganizationMapper {
       stripeSubscriptionId: organization.stripeSubscriptionId,
       stripeSubscriptionStatus: organization.stripeSubscriptionStatus,
       analysisCapabilities: organization.analysisCapabilities,
+      defaultModel: organization.defaultModel,
       createdAt: organization.createdAt,
       userRoles: organization.userRoles,
       hasRoleError: organization.hasRoleError

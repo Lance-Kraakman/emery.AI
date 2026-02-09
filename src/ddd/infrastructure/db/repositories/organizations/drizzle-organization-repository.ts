@@ -155,8 +155,12 @@ export class DrizzleOrganizationRepository
   }
 
   async createWithOwner(data: CreateOrganizationData, ownerId: UserId): Promise<Organization> {
-    // Always use transaction for data consistency
-    return await this.db.transaction(async (tx: any) => {
+    // Organization creation is a bootstrap operation that happens before
+    // the user has an organization context. Use rawDb to bypass RLS.
+    if (!this.rawDb) {
+      throw new Error('Raw DB required for createWithOwner(). This is a bootstrap operation.');
+    }
+    return await this.rawDb.transaction(async (tx: any) => {
       return this.createWithOwnerBootstrap(data, ownerId, tx);
     });
   }
@@ -338,7 +342,10 @@ export class DrizzleOrganizationRepository
   }
 
   async existsBySlug(slug: string): Promise<boolean> {
-    const result = await this.db.query.organizations.findFirst({
+    // Slug uniqueness is global (not org-scoped), use rawDb to allow
+    // checking during bootstrap (before user has an org context)
+    const dbToUse = this.rawDb || this.db;
+    const result = await dbToUse.query.organizations.findFirst({
       where: eq(organizations.slug, slug.toLowerCase()),
       columns: { id: true } // Only select id for performance
     });
@@ -346,7 +353,9 @@ export class DrizzleOrganizationRepository
   }
 
   async findBySlug(slug: string): Promise<Organization | null> {
-    const result = await this.db.query.organizations.findFirst({
+    // Looking up orgs by slug is a global operation, use rawDb
+    const dbToUse = this.rawDb || this.db;
+    const result = await dbToUse.query.organizations.findFirst({
       where: eq(organizations.slug, slug.toLowerCase())
     });
     return result ? this.fromPersistence(result) : null;

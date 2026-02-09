@@ -34,6 +34,26 @@ interface WorkspaceSyncControlsProps {
   orgId: number;
 }
 
+/**
+ * Abbreviate a file path for display.
+ * /Users/lance/Documents/Projects/MyAgent → ~/Documents/.../MyAgent
+ */
+function abbreviatePath(path: string): string {
+  // Replace home directory with ~
+  const homeDir = path.match(/^\/Users\/[^/]+/)?.[0];
+  let abbreviated = homeDir ? path.replace(homeDir, '~') : path;
+
+  // If still too long, show first part + ... + last folder
+  const parts = abbreviated.split('/').filter(Boolean);
+  if (parts.length > 3) {
+    const first = parts[0]; // ~ or root
+    const last = parts[parts.length - 1];
+    abbreviated = `${first}/.../${last}`;
+  }
+
+  return abbreviated;
+}
+
 export function WorkspaceSyncControls({ agentId, orgId }: WorkspaceSyncControlsProps) {
   const {
     isAvailable,
@@ -148,31 +168,31 @@ export function WorkspaceSyncControls({ agentId, orgId }: WorkspaceSyncControlsP
           <div className="space-y-2">
             <h4 className="font-medium leading-none">Workspace Sync</h4>
             <p
-              className="text-sm text-muted-foreground truncate max-w-full"
+              className="text-sm text-muted-foreground break-all"
               title={syncPath}
             >
-              {syncPath}
+              {abbreviatePath(syncPath)}
             </p>
           </div>
 
-          {/* Status indicators */}
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            <div className="flex items-center gap-2">
-              {isConnected ? (
-                <Wifi className="h-3 w-3 text-success" />
-              ) : (
-                <WifiOff className="h-3 w-3 text-muted-foreground" />
-              )}
-              <span>{isConnected ? 'Connected' : 'Disconnected'}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              {isWatching ? (
+          {/* Status indicator */}
+          <div className="flex items-center gap-2 text-sm">
+            {isWatching ? (
+              <>
                 <Eye className="h-3 w-3 text-success" />
-              ) : (
-                <Eye className="h-3 w-3 text-muted-foreground" />
-              )}
-              <span>{isWatching ? 'Watching' : 'Not watching'}</span>
-            </div>
+                <span>Auto-sync active</span>
+              </>
+            ) : isConnected ? (
+              <>
+                <Wifi className="h-3 w-3 text-success" />
+                <span>Connected</span>
+              </>
+            ) : (
+              <>
+                <WifiOff className="h-3 w-3 text-muted-foreground" />
+                <span>Disconnected</span>
+              </>
+            )}
           </div>
 
           {/* Error message */}
@@ -184,15 +204,19 @@ export function WorkspaceSyncControls({ agentId, orgId }: WorkspaceSyncControlsP
 
           {/* Lock status */}
           {isLocked && (
-            <div className="rounded-md bg-warning/10 p-2 text-sm text-warning flex items-center gap-2">
-              <Lock className="h-4 w-4" />
-              <div>
-                <div>Agent is working</div>
+            <div className="rounded-md bg-warning/10 p-2 text-sm text-warning">
+              <div className="flex items-center gap-2">
+                <Lock className="h-4 w-4 flex-shrink-0" />
+                <div className="font-medium">Agent is working</div>
+              </div>
+              <div className="mt-1 text-xs opacity-75 ml-6">
                 {lockState?.task_id && (
-                  <div className="text-xs opacity-75">
-                    Task: {lockState.task_id.slice(0, 8)}...
-                  </div>
+                  <div>Task: {lockState.task_id.slice(0, 8)}...</div>
                 )}
+                <div className="mt-1">
+                  Your edits will be queued and synced when the agent finishes.
+                  Agent changes will auto-pull when done.
+                </div>
               </div>
             </div>
           )}

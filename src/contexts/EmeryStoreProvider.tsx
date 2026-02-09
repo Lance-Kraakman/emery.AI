@@ -20,6 +20,7 @@ import {
   appStateActions,
   type DatabaseWithTables
 } from '@/stores/app-state.store'
+import { chatActions } from '@/stores/chat.store'
 import { storeActions } from '@/stores/actions'
 
 // Maintain backwards compatibility with existing EmeryData interface
@@ -72,6 +73,7 @@ export function EmeryStoreProvider({ children }: { children: ReactNode }) {
     // Only reinitialize if organization actually changed
     if (currentOrgId && currentOrgId !== prevOrgIdRef.current) {
       prevOrgIdRef.current = currentOrgId
+      chatActions.reset()  // Clear chat state from previous org
       storeActions.initializeApplication(currentOrgId)
     }
   }, [session, router])

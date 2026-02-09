@@ -8,7 +8,7 @@ Executor accepts SkillConfig entity only. Proto converted at boundary.
 import json
 import logging
 from collections.abc import Callable
-from typing import Any, Literal, overload
+from typing import Any, Dict, Literal, Optional, Union, overload
 
 import dspy
 from PIL import Image

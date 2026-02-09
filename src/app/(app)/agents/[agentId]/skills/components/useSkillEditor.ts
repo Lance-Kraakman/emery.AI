@@ -43,6 +43,8 @@ export function useSkillEditor({ skill, agentId, onDeleteRedirect }: UseSkillEdi
     agentType: skill.agentType,
     // Stored plan (from first agentic step)
     plan: initialPlan,
+    // Human skill config
+    humanSkillConfig: skill.humanSkillConfig,
   });
 
   // Ref to always have current formData (fixes stale closure in auto-save)
@@ -158,6 +160,7 @@ export function useSkillEditor({ skill, agentId, onDeleteRedirect }: UseSkillEdi
           tools: dataToSave.tools,
           agentType: dataToSave.agentType,
           allowNetwork: dataToSave.agentType === 'code_agent',
+          humanSkillConfig: dataToSave.humanSkillConfig,
         });
 
         if (result.success) {
@@ -242,6 +245,7 @@ export function useSkillEditor({ skill, agentId, onDeleteRedirect }: UseSkillEdi
         tools: currentFormData.tools,
         agentType: currentFormData.agentType,
         allowNetwork: currentFormData.agentType === 'code_agent',
+        humanSkillConfig: currentFormData.humanSkillConfig,
       });
 
       if (!result.success) {

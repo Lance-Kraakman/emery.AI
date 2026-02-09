@@ -2,7 +2,7 @@ import { ISkillRepository } from '@/ddd/domain/skills/repositories/skill-reposit
 import { SkillId } from '@/ddd/domain/skills/value-objects/skill-id';
 import { AgentId } from '@/ddd/domain/shared/value-objects/agent-id';
 import { OrganizationId } from '@/ddd/domain/shared/value-objects/organization-id';
-import { type Skill, type InputDefinition, type OutputDefinition, type ToolConfig, type SkillExecutionType, type TaskModelConfig, type SkillStep, type ToolExecutionConfig, type WriteConfig, type ReadConfig, type CanvasMetadata } from '@/ddd/domain/skills/entities/skill';
+import { type Skill, type InputDefinition, type OutputDefinition, type ToolConfig, type SkillExecutionType, type TaskModelConfig, type SkillStep, type ToolExecutionConfig, type WriteConfig, type ReadConfig, type CanvasMetadata, type HumanSkillConfig } from '@/ddd/domain/skills/entities/skill';
 import type { Result } from '@/ddd/domain/shared/result';
 import { createDebugLogger } from '@/lib/utils/debug-logger';
 import type { MessagePart } from '@/ddd/infrastructure/grpc/generated/agent_worker';
@@ -31,6 +31,7 @@ export interface CreateSkillCommand {
   toolExecutionConfig?: ToolExecutionConfig; // Config for 'tool' execution
   writeConfig?: WriteConfig; // Config for 'write' execution
   readConfig?: ReadConfig; // Config for 'read' execution
+  humanSkillConfig?: HumanSkillConfig; // Config for 'human' execution
   steps?: SkillStep[]; // Steps for 'agent' (step-based) execution
   canvasMetadata?: CanvasMetadata; // Canvas annotations (sticky notes)
 }
@@ -54,6 +55,7 @@ export interface UpdateSkillCommand {
   toolExecutionConfig?: ToolExecutionConfig | null; // Config for 'tool' execution
   writeConfig?: WriteConfig | null; // Config for 'write' execution
   readConfig?: ReadConfig | null; // Config for 'read' execution
+  humanSkillConfig?: HumanSkillConfig | null; // Config for 'human' execution
   steps?: SkillStep[] | null; // Steps for 'agent' (step-based) execution
   canvasMetadata?: CanvasMetadata | null; // Canvas annotations (sticky notes)
 }

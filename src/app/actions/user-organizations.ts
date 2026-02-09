@@ -34,7 +34,8 @@ import type {
 export async function switchCurrentOrganization(organizationId: number): Promise<Result> {
   return withAuthContext(async () => {
     try {
-      const session = await requirePermission("users:manage");
+      // Only require auth, not admin permission - any member can switch to their orgs
+      const session = await requireAuth();
     
     if (!organizationId) {
       return {

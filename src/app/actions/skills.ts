@@ -17,7 +17,7 @@ import type { SkillDTO } from '@/app/mappers/skill-mapper';
 import { s3SkillAttachmentService } from '@/ddd/infrastructure/multimodal/s3-skill-attachment-service';
 import type { AttachmentMetadata, AttachmentType } from '@/ddd/domain/multimodal/value-objects/attachment-metadata';
 import type { MessagePart, AwaitingInput } from '@/ddd/infrastructure/grpc/generated/agent_worker';
-import type { SkillExecutionType, ToolExecutionConfig, WriteConfig, ReadConfig, SkillStep, CanvasMetadata, StoredPlan } from '@/ddd/domain/skills/entities/skill';
+import type { SkillExecutionType, ToolExecutionConfig, WriteConfig, ReadConfig, SkillStep, CanvasMetadata, StoredPlan, HumanSkillConfig } from '@/ddd/domain/skills/entities/skill';
 import { getChatProcessingClient, type ClarificationAnswer } from '@/ddd/infrastructure/grpc/chat-processing-client';
 
 /**
@@ -323,6 +323,7 @@ export async function updateSkill(
     toolExecutionConfig?: ToolExecutionConfig | null;
     writeConfig?: WriteConfig | null;
     readConfig?: ReadConfig | null; // Config for 'read' execution
+    humanSkillConfig?: HumanSkillConfig | null; // Config for 'human' execution
     steps?: SkillStep[] | null; // Steps for 'agent' (step-based) execution
     canvasMetadata?: CanvasMetadata | null; // Canvas annotations (sticky notes)
     content?: MessagePart[]; // Skill-level attachments

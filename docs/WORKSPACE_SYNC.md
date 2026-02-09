@@ -1,73 +1,77 @@
 # Workspace Sync Feature
 
-Bidirectional file sync between local folders and agent workspaces in the Tauri desktop app.
+Bidirectional file sync between local folders and agent workspaces via SFTP in the Tauri desktop app.
 
-## Status: Implemented
+## Status: Phase 1 Complete
 
-All phases completed. Ready for testing.
+- Phase 1 (Local Dev): Complete - SFTP + rsync working locally
+- Phase 2 (Cloud Deploy): Not started - AWS Transfer Family needed
 
 ## Architecture
 
 ### Storage
-- **Remote**: S3 as tar.gz archives at `workspaces/{orgId}/agents/{agentId}.tar.gz`
+- **Remote**: EFS filesystem at `/mnt/storage/workspaces/{orgId}/agents/{agentId}/`
 - **Local**: User-selected folder synced with Tauri store config
+- **Sync Protocol**: SFTP with rsync algorithm (byte-level delta sync)
 
 ### Workspace Structure
 ```
 {workspace_root}/
-└── .engine/
-    ├── config.json
-    ├── memory/chroma/        # Agent memory (ChromaDB)
-    ├── plans/{id}.json       # Execution plans
-    ├── workspace/            # User files
-    └── context/{table}.parquet
+├── {AgentName}.enhancd.json    # Agent identifier (visible in folder)
+├── .agent/
+│   ├── config.json
+│   ├── memory/chroma/          # Agent memory (ChromaDB)
+│   └── plans/{id}.json         # Execution plans
+├── workspace/
+│   ├── context/                # Synced tables/data
+│   ├── scratch/                # Working files
+│   └── outputs/                # Generated artifacts
+└── history/
+    └── {date}/{task_id}/
+        ├── session.jsonl       # Execution log
+        └── result.json         # Task result
 ```
 
 ## UI Behavior
 
 ### Web (Cloud)
 - Download button only (existing behavior)
-- Downloads tar.gz archive
+- Downloads tar.gz archive via HTTP
+- No real-time sync
 
 ### Tauri (Desktop)
 - **Not connected**: Shows "Connect Folder" button
 - **Connected**: Shows sync popover with:
-  - Folder path
+  - Connection status (SFTP)
+  - File watcher status
+  - Lock status (agent working)
   - Pull/Push buttons
-  - Status indicator
-  - Refresh status
-  - Open folder in file manager
+  - Pending changes count
+  - Last sync timestamp
   - Disconnect option
 
-### Conflict Detection
-Compares `lastModified` timestamps:
-- **Local**: File system mtime
-- **Remote**: S3 LastModified header
+### Workspace Locking
+File-based locking prevents sync conflicts during agent execution:
 
-| Local Changed | Remote Changed | Action |
-|---------------|----------------|--------|
-| No | No | No sync needed |
-| Yes | No | Push allowed |
-| No | Yes | Pull allowed |
-| Yes | Yes | Conflict dialog |
-
-### Conflict Resolution
-Modal with 3 options:
-1. **Keep Local** - Push local, overwrite remote
-2. **Keep Remote** - Pull remote, overwrite local
-3. **Cancel** - Do nothing
+- **Lock file**: `.emery-lock` in workspace root
+- **Created by**: Agent when task starts
+- **Deleted by**: Agent when task completes
+- **Tauri behavior**: Queues changes locally, shows "Agent working..."
+- **Stale locks**: Ignored after 1 hour (agent crashed)
 
 ## API Endpoints
 
-### GET /api/agents/[id]/workspace/download
-Streams tar.gz archive from S3.
+### EFS-based (Current)
+- `GET /api/agents/[id]/workspace/download` - Streams tar.gz from EFS
+- `HEAD /api/agents/[id]/workspace/download` - Returns metadata
+- `POST /api/agents/[id]/workspace/upload` - Extracts tar.gz to EFS
+- `GET /api/agents/[id]/workspace/signatures` - SHA256 manifest for delta sync
+- `POST /api/agents/[id]/workspace/sync/push` - Delta push (changed files only)
+- `POST /api/agents/[id]/workspace/sync/pull` - Delta pull (changed files only)
 
-### HEAD /api/agents/[id]/workspace/download
-Returns metadata (Last-Modified, Content-Length) without body.
-Used by Tauri to check remote mtime.
-
-### POST /api/agents/[id]/workspace/upload
-Uploads tar.gz archive to S3.
+### Phase 2 (Planned)
+- `GET /api/agents/[id]/sftp-credentials` - Generate temp SFTP credentials
+- `POST /api/sftp/authenticate` - Validate SFTP login (for AWS Transfer Family)
 
 ## Authentication for Tauri
 
@@ -78,56 +82,70 @@ Solution: API key auto-generated during device flow login.
 2. Server generates API key, returns in response
 3. Tauri stores key in secure store
 4. Rust commands use key for authenticated requests
+5. SFTP uses temporary credentials from API
 
 ## Files
 
 ### Tauri (Rust)
-- `src-tauri/Cargo.toml` - Dependencies
-- `src-tauri/capabilities/default.json` - Permissions
+- `src-tauri/Cargo.toml` - Dependencies (fast-rsync, ssh2, notify)
+- `src-tauri/.cargo/config.toml` - RUST_LOG=debug enabled
 - `src-tauri/src/lib.rs` - Plugin registration
-- `src-tauri/src/workspace_sync.rs` - Sync commands
+- `src-tauri/src/workspace_sync.rs` - SFTP sync + file watcher
 
 ### Backend (TypeScript)
-- `src/app/api/agents/[id]/workspace/download/route.ts` - GET/HEAD
-- `src/app/api/agents/[id]/workspace/upload/route.ts` - POST
-- `src/lib/workspace/workspace-s3.ts` - S3 operations
+- `src/app/api/agents/[id]/workspace/download/route.ts` - GET/HEAD (EFS)
+- `src/app/api/agents/[id]/workspace/upload/route.ts` - POST (EFS)
+- `src/app/api/agents/[id]/workspace/signatures/route.ts` - SHA256 manifest
+- `src/app/api/agents/[id]/workspace/sync/push/route.ts` - Delta push
+- `src/app/api/agents/[id]/workspace/sync/pull/route.ts` - Delta pull
+
+### Python (Agent)
+- `emery-agents/.../infrastructure/storage/shared_filesystem_storage.py` - EFS storage
+- `emery-agents/.../services/tasks/workspace_lock.py` - File-based locking
 
 ### Frontend (React)
-- `src/hooks/useWorkspaceSync.ts` - Sync hook
+- `src/hooks/useWorkspaceSync.ts` - SFTP sync hook
 - `src/hooks/useDeviceFlow.ts` - API key storage
 - `src/components/workspace/WorkspaceSyncControls.tsx` - Sync UI
-- `src/components/workspace/ConflictDialog.tsx` - Conflict modal
-- `src/app/(app)/agents/components/CompactAgentHeader.tsx` - Integration
 
 ## Rust Commands
 
 ```rust
+// SFTP Connection
+sftp_connect(agent_id, api_key, api_base) -> ()
+sftp_disconnect(agent_id) -> ()
+
+// Sync Operations
+pull_workspace(agent_id, local_path, api_key, api_base) -> SyncResult
+push_workspace(agent_id, local_path, api_key, api_base) -> SyncResult
+check_workspace_lock(agent_id) -> WorkspaceLockState
+
+// File Watcher
+start_watching(agent_id, local_path) -> ()
+stop_watching(agent_id) -> ()
+
+// Config
 select_sync_folder() -> String
 get_sync_config(agent_id) -> Option<SyncConfig>
 set_sync_config(agent_id, folder_path) -> ()
-check_sync_status(agent_id, api_key, api_base) -> SyncStatus
-pull_workspace(agent_id, local_path, api_key, api_base) -> PullResult
-push_workspace(agent_id, local_path, api_key, api_base) -> PushResult
 store_api_key(api_key) -> ()
 get_api_key() -> Option<String>
 ```
 
 ## Testing
 
-### Manual Testing
-1. Build Tauri: `cd src-tauri && cargo tauri build`
-2. Run desktop app
+### Local Development
+1. Start SFTP: `docker-compose -f src/tests/docker-compose.integration.yml up sftp-integration`
+2. Run Tauri: `pnpm tauri:dev`
 3. Navigate to an agent
 4. Click "Connect Folder" and select directory
-5. Click "Pull" - verify extraction
-6. Modify a local file
-7. Click "Push" - verify upload
-8. Run agent task (creates remote changes)
-9. Click "Pull" with local changes - verify conflict dialog
-10. Test each conflict resolution option
+5. Click "Pull" - verify files appear
+6. Modify a local file - verify auto-sync
+7. Run agent task - verify lock status shows
+8. Verify `{AgentName}.enhancd.json` appears in folder
 
-## Future Enhancements
-- File watcher for auto-sync
-- Selective sync (only `.engine/workspace/`)
-- Sync history/log
-- Background sync service
+## See Also
+
+- Plan file: `.claude/plans/goofy-wobbling-waterfall.md`
+- Phase 2 details: AWS Transfer Family deployment
+- Phase 3 (planned): File-based event triggers

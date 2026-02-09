@@ -4,7 +4,7 @@
 import grpc
 import warnings
 
-import agent_worker_pb2 as agent__worker__pb2
+from . import agent_worker_pb2 as agent__worker__pb2
 
 GRPC_GENERATED_VERSION = "1.74.0"
 GRPC_VERSION = grpc.__version__

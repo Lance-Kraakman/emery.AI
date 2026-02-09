@@ -2,7 +2,7 @@
 
 import json
 import time
-from typing import Any, NamedTuple
+from typing import Any, Dict, NamedTuple
 
 from .generated import agent_worker_pb2
 from .response_types import StreamResponseDict
