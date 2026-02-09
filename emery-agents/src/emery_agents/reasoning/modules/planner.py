@@ -11,9 +11,11 @@ import logging
 from typing import Any
 
 import dspy
+from dspy import LabeledFewShot
 
 logger = logging.getLogger(__name__)
 
+from emery_agents.reasoning.examples.planning import PLANNING_DEMOS
 from emery_agents.reasoning.signatures.planning import (
     AnalyzeTask,
     CreatePlan,
@@ -69,9 +71,18 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         super().__init__()
         self.analyzer = dspy.ChainOfThought(AnalyzeTask)
         self.discovery_tools = discovery_tools or []
-        self.planner = dspy.ReAct(
+
+        # Create base planner with ReAct for tool use
+        base_planner = dspy.ReAct(
             CreatePlan, tools=self.discovery_tools, max_iters=8
         )
+
+        # Compile with labeled demos (fast ~2ms, no LLM calls)
+        # This sets demos on base_planner.react.demos for few-shot learning
+        self.planner = LabeledFewShot(k=5).compile(
+            base_planner, trainset=PLANNING_DEMOS
+        )
+
         # Reflexion module for extended thinking - critiques and improves plans
         self.reflector = dspy.ChainOfThought(ReflectOnPlan)
 
