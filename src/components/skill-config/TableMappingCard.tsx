@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { ChevronDown, ChevronUp, GripVertical, Plus, X } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectGroup, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -12,10 +12,12 @@ import type { TableMapping, FieldMapping, InputDefinition } from '@/app/mappers/
 import type { TableDTO } from '@/app/mappers/table-mapper';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
 import type { OutputFieldDef } from '@/lib/constants/task-output-schemas';
+import type { DatabaseDTO } from '@/app/dtos/database.dto';
 
 export interface TableMappingCardProps {
   tableMapping: TableMapping;
   tables: TableDTO[];
+  databases?: DatabaseDTO[];
   tableFieldsMap: Map<number, FieldDTO[]>;
   skillOutputs: OutputFieldDef[];
   skillInputs?: InputDefinition[];
@@ -36,6 +38,7 @@ export interface TableMappingCardProps {
 export function TableMappingCard({
   tableMapping,
   tables,
+  databases = [],
   tableFieldsMap,
   skillOutputs,
   skillInputs = [],
@@ -50,6 +53,17 @@ export function TableMappingCard({
   const [expanded, setExpanded] = useState(true);
   const targetFields = tableFieldsMap.get(tableMapping.targetTableId) || [];
   const tableName = tables.find((t) => t.id === tableMapping.targetTableId)?.name || 'Unknown';
+
+  // Group tables by database
+  const tablesByDatabase = useMemo(() => {
+    const grouped = new Map<number, TableDTO[]>();
+    tables.forEach((table) => {
+      const list = grouped.get(table.databaseId) || [];
+      list.push(table);
+      grouped.set(table.databaseId, list);
+    });
+    return grouped;
+  }, [tables]);
 
   const handleAddMapping = () => {
     const newMapping: FieldMapping = {
@@ -124,11 +138,27 @@ export function TableMappingCard({
               <SelectValue placeholder="Table..." />
             </SelectTrigger>
             <SelectContent>
-              {tables.map((table) => (
-                <SelectItem key={table.id} value={table.id.toString()}>
-                  {table.name}
-                </SelectItem>
-              ))}
+              {databases.length > 0 ? (
+                Array.from(tablesByDatabase.entries()).map(([dbId, dbTables]) => {
+                  const db = databases.find((d) => d.id === dbId);
+                  return (
+                    <SelectGroup key={dbId}>
+                      <SelectLabel className="text-[10px] text-muted-foreground">{db?.name || 'Unknown'}</SelectLabel>
+                      {dbTables.map((table) => (
+                        <SelectItem key={table.id} value={table.id.toString()}>
+                          {table.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  );
+                })
+              ) : (
+                tables.map((table) => (
+                  <SelectItem key={table.id} value={table.id.toString()}>
+                    {table.name}
+                  </SelectItem>
+                ))
+              )}
             </SelectContent>
           </Select>
         )}

@@ -12,8 +12,10 @@ import { fieldTypeToInputType } from './field-type-maps';
 import { serializeRowIdSource, deserializeRowIdSource } from './mapping-serializers';
 import { useTableFields } from './hooks/useTableFields';
 import { getTables } from '@/app/actions/tables';
+import { getDatabases } from '@/app/actions/databases';
 import type { InputDefinition } from '@/app/mappers/skill-mapper';
 import type { TableDTO } from '@/app/mappers/table-mapper';
+import type { DatabaseDTO } from '@/app/dtos/database.dto';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
 import type { FieldType } from '@/ddd/domain/tables/value-objects/table-field';
 
@@ -29,15 +31,19 @@ export function TableGroupedInputPanel({
   isReadOnly = false,
 }: TableGroupedInputPanelProps) {
   const [tables, setTables] = useState<TableDTO[]>([]);
+  const [databases, setDatabases] = useState<DatabaseDTO[]>([]);
   const [tablesLoading, setTablesLoading] = useState(true);
   const [showAddManual, setShowAddManual] = useState(false);
   const [newInputName, setNewInputName] = useState('');
   const [expandedTables, setExpandedTables] = useState<Set<number>>(new Set());
 
-  // Load tables for selectors
+  // Load tables and databases for selectors
   useEffect(() => {
-    getTables()
-      .then(setTables)
+    Promise.all([getTables(), getDatabases()])
+      .then(([tablesData, databasesData]) => {
+        setTables(tablesData);
+        setDatabases(databasesData);
+      })
       .finally(() => setTablesLoading(false));
   }, []);
 
@@ -296,6 +302,7 @@ export function TableGroupedInputPanel({
           {!tablesLoading && tables.length > 0 && (
             <AddFromTableButton
               tables={tables}
+              databases={databases}
               onSelectTable={(tableId) => fetchFieldsForTable(tableId)}
               onAddFields={(tableId, fields) => handleAddInputsFromTable(tableId, fields)}
             />
@@ -440,14 +447,27 @@ function InputMappingRow({
 /** Button to add inputs from a new table (table picker → field picker) */
 function AddFromTableButton({
   tables,
+  databases,
   onSelectTable,
   onAddFields,
 }: {
   tables: TableDTO[];
+  databases: DatabaseDTO[];
   onSelectTable: (tableId: number) => void;
   onAddFields: (tableId: number, fields: FieldDTO[]) => void;
 }) {
   const [selectedTableId, setSelectedTableId] = useState<number | null>(null);
+
+  // Group tables by database
+  const tablesByDatabase = useMemo(() => {
+    const grouped = new Map<number, TableDTO[]>();
+    tables.forEach((table) => {
+      const list = grouped.get(table.databaseId) || [];
+      list.push(table);
+      grouped.set(table.databaseId, list);
+    });
+    return grouped;
+  }, [tables]);
 
   if (selectedTableId) {
     return (
@@ -488,11 +508,19 @@ function AddFromTableButton({
         <SelectValue placeholder="+ Add from table" />
       </SelectTrigger>
       <SelectContent>
-        {tables.map((table) => (
-          <SelectItem key={table.id} value={table.id.toString()}>
-            {table.name}
-          </SelectItem>
-        ))}
+        {Array.from(tablesByDatabase.entries()).map(([dbId, dbTables]) => {
+          const db = databases.find((d) => d.id === dbId);
+          return (
+            <SelectGroup key={dbId}>
+              <SelectLabel className="text-[10px] text-muted-foreground">{db?.name || 'Unknown'}</SelectLabel>
+              {dbTables.map((table) => (
+                <SelectItem key={table.id} value={table.id.toString()}>
+                  {table.name}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          );
+        })}
       </SelectContent>
     </Select>
   );

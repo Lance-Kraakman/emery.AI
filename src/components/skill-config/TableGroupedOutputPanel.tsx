@@ -20,13 +20,15 @@ import {
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectGroup, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SortableTableMappingCard } from './SortableTableMappingCard';
 import { ManualOutputItem } from './ManualOutputItem';
 import { FieldPickerPopover } from './FieldPickerPopover';
 import { fieldTypeToOutputType } from './field-type-maps';
 import { useTableFields } from './hooks/useTableFields';
 import { getTables } from '@/app/actions/tables';
+import { getDatabases } from '@/app/actions/databases';
+import type { DatabaseDTO } from '@/app/dtos/database.dto';
 import type {
   OutputDefinition,
   InputDefinition,
@@ -76,15 +78,19 @@ export function TableGroupedOutputPanel({
   isReadOnly = false,
 }: TableGroupedOutputPanelProps) {
   const [tables, setTables] = useState<TableDTO[]>([]);
+  const [databases, setDatabases] = useState<DatabaseDTO[]>([]);
   const [tablesLoading, setTablesLoading] = useState(true);
   const [showAddManual, setShowAddManual] = useState(false);
   const [newOutputName, setNewOutputName] = useState('');
   const [expandedTables, setExpandedTables] = useState<Set<number>>(new Set());
 
-  // Load tables
+  // Load tables and databases
   useEffect(() => {
-    getTables()
-      .then(setTables)
+    Promise.all([getTables(), getDatabases()])
+      .then(([tablesData, databasesData]) => {
+        setTables(tablesData);
+        setDatabases(databasesData);
+      })
       .finally(() => setTablesLoading(false));
   }, []);
 
@@ -456,6 +462,7 @@ export function TableGroupedOutputPanel({
                             id={tm.order}
                             tableMapping={tm}
                             tables={tables}
+                            databases={databases}
                             tableFieldsMap={tableFieldsMap}
                             skillOutputs={sourceFields}
                             skillInputs={inputs}
@@ -563,6 +570,7 @@ export function TableGroupedOutputPanel({
           {!tablesLoading && tables.length > 0 && (
             <AddToTableButton
               tables={tables}
+              databases={databases}
               onAddFields={(tableId, fields) => handleAddOutputsToTable(tableId, fields)}
             />
           )}
@@ -586,12 +594,25 @@ export function TableGroupedOutputPanel({
 /** Button to add outputs to a new table (table picker → field picker) */
 function AddToTableButton({
   tables,
+  databases,
   onAddFields,
 }: {
   tables: TableDTO[];
+  databases: DatabaseDTO[];
   onAddFields: (tableId: number, fields: FieldDTO[]) => void;
 }) {
   const [selectedTableId, setSelectedTableId] = useState<number | null>(null);
+
+  // Group tables by database
+  const tablesByDatabase = useMemo(() => {
+    const grouped = new Map<number, TableDTO[]>();
+    tables.forEach((table) => {
+      const list = grouped.get(table.databaseId) || [];
+      list.push(table);
+      grouped.set(table.databaseId, list);
+    });
+    return grouped;
+  }, [tables]);
 
   if (selectedTableId) {
     return (
@@ -630,11 +651,19 @@ function AddToTableButton({
         <SelectValue placeholder="+ Add to table" />
       </SelectTrigger>
       <SelectContent>
-        {tables.map((table) => (
-          <SelectItem key={table.id} value={table.id.toString()}>
-            {table.name}
-          </SelectItem>
-        ))}
+        {Array.from(tablesByDatabase.entries()).map(([dbId, dbTables]) => {
+          const db = databases.find((d) => d.id === dbId);
+          return (
+            <SelectGroup key={dbId}>
+              <SelectLabel className="text-[10px] text-muted-foreground">{db?.name || 'Unknown'}</SelectLabel>
+              {dbTables.map((table) => (
+                <SelectItem key={table.id} value={table.id.toString()}>
+                  {table.name}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          );
+        })}
       </SelectContent>
     </Select>
   );
