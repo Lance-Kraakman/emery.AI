@@ -239,6 +239,14 @@ export function TriggerConfigModal({
   const [sampleRowData, setSampleRowData] = useState<Record<string, any> | null>(null);
   const [isLoadingSampleData, setIsLoadingSampleData] = useState(false);
 
+  // Webhook origin (set after hydration to prevent mismatch)
+  const [webhookOrigin, setWebhookOrigin] = useState('');
+
+  // Set webhook origin after hydration
+  useEffect(() => {
+    setWebhookOrigin(window.location.origin);
+  }, []);
+
   // Initialize with current schedule or start fresh for create mode
   useEffect(() => {
     if (!isOpen) return;
@@ -917,7 +925,7 @@ export function TriggerConfigModal({
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <h4 className="font-medium text-blue-900 mb-2">Webhook URL</h4>
                 <div className="font-mono text-sm text-blue-800 bg-blue-100 p-3 rounded border break-all">
-                  {`${typeof window !== 'undefined' ? window.location.origin : ''}/api/webhooks/agents/${agent.id}/trigger`}
+                  {`${webhookOrigin}/api/webhooks/agents/${agent.id}/trigger`}
                 </div>
                 <p className="text-xs text-blue-700 mt-2">
                   Use this URL to trigger the agent externally
