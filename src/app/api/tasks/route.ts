@@ -52,12 +52,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 export async function POST(request: NextRequest) {
   try {
     const authResult = await authenticateRequest(request);
-    
+
     if (!authResult.success || !authResult.user) {
       return NextResponse.json({ error: authResult.error || 'Unauthorized' }, { status: 401 });
     }
     const body = await request.json();
-    const { agentId, name, instructions } = body;
+    const { agentId, name, instructions, chatMessageId: bodyChatMessageId } = body;
 
     // Validate required fields
     if (!agentId || !name || !instructions) {
@@ -70,6 +70,11 @@ export async function POST(request: NextRequest) {
     if (!authResult.user.organizationId || !await hasResourcePermission(authResult.user.id, 'tasks:create', authResult.user.organizationId, 'agent', parseInt(agentId))) {
       return NextResponse.json({ error: 'Permission denied' }, { status: 403 });
     }
+
+    // Extract chatMessageId from header or body
+    // AIDEV-NOTE: X-Chat-Message-ID is set by Python when creating tasks from chat execution
+    // This links the task to the originating ChatMessage for ExecutionSteps retrieval
+    const chatMessageId = bodyChatMessageId || request.headers.get('X-Chat-Message-ID') || undefined;
 
     // Check token quota before creating task
     const organizationId = authResult.user.organizationId!;
@@ -104,7 +109,8 @@ export async function POST(request: NextRequest) {
       name,
       instructions: instructions || {},
       organizationId: authResult.user.organizationId!,
-      createdBy: authResult.user.id
+      createdBy: authResult.user.id,
+      chatMessageId, // Link to ChatMessage for ExecutionSteps retrieval
     };
 
     const result = await agentTaskApplicationService.createTask(dto);

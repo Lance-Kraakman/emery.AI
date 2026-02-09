@@ -167,6 +167,7 @@ class ChatProcessingServiceImplementation(
         task_id: str | None,
         user_name: str | None = None,
         agent_name: str | None = None,
+        assistant_message_id: str | None = None,
     ) -> dict[str, str] | None:
         """
         Build HTTP headers for audit trail in chat-initiated executions.
@@ -174,6 +175,9 @@ class ChatProcessingServiceImplementation(
         When a user executes a skill from chat, CRUD tool calls should
         carry context so the TypeScript API can attribute the action
         correctly in the audit log.
+
+        AIDEV-NOTE: assistant_message_id is the ChatMessage ID for linking
+        tasks created during execution back to the originating chat message.
         """
         if not agent_id:
             # Org-level (no agent) - user is the actor; no extra headers needed
@@ -190,6 +194,8 @@ class ChatProcessingServiceImplementation(
             headers["X-Agent-Name"] = agent_name
         if task_id:
             headers["X-Task-ID"] = task_id
+        if assistant_message_id:
+            headers["X-Chat-Message-ID"] = assistant_message_id
         return headers
 
     def _initialize_knowledge_base(self) -> None:
@@ -349,6 +355,17 @@ class ChatProcessingServiceImplementation(
         if task_id:
             logger.info(f"📋 Task-tracked execution: task_id={task_id[:8]}...")
 
+        # ChatMessage link for ExecutionSteps retrieval
+        # AIDEV-NOTE: assistant_message_id links this execution to a ChatMessage in TypeScript
+        # Tasks created from this execution should include this as chatMessageId
+        assistant_message_id = (
+            request.assistant_message_id if request.assistant_message_id else None
+        )
+        if assistant_message_id:
+            logger.info(
+                f"💬 Chat-linked execution: assistant_message_id={assistant_message_id[:8]}..."
+            )
+
         # Create a new token accumulator for this request
         accumulator = TokenAccumulator()
 
@@ -476,7 +493,12 @@ class ChatProcessingServiceImplementation(
                 agent_config.name if agent_config and agent_config.name else None
             )
             chat_audit_headers = self._build_chat_audit_headers(
-                user_id, agent_id, task_id, user_name=user_name, agent_name=agent_name
+                user_id,
+                agent_id,
+                task_id,
+                user_name=user_name,
+                agent_name=agent_name,
+                assistant_message_id=assistant_message_id,
             )
 
             async for response_dict in self._agent_handler.stream_response(
