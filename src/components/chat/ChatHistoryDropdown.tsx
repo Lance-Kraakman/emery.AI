@@ -64,6 +64,15 @@ interface ChatItemProps {
 function ChatItem({ session, isActive, onClick, onArchive, onSettings }: ChatItemProps) {
   const [isDeleting, setIsDeleting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [formattedDate, setFormattedDate] = useState('')
+
+  // Format date after hydration to avoid server/client mismatch
+  useEffect(() => {
+    const dateStr = session.lastMessageAt || session.createdAt
+    if (dateStr) {
+      setFormattedDate(formatDate(new Date(dateStr)))
+    }
+  }, [session.lastMessageAt, session.createdAt])
 
   const handleDeleteClick = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -121,13 +130,12 @@ function ChatItem({ session, isActive, onClick, onArchive, onSettings }: ChatIte
               <MessageSquare className="h-3 w-3" />
               {session.messageCount}
             </div>
-            <div className="flex items-center gap-1">
-              <Calendar className="h-3 w-3" />
-              {session.lastMessageAt
-                ? formatDate(new Date(session.lastMessageAt))
-                : formatDate(new Date(session.createdAt))
-              }
-            </div>
+            {formattedDate && (
+              <div className="flex items-center gap-1">
+                <Calendar className="h-3 w-3" />
+                {formattedDate}
+              </div>
+            )}
             {session.model && (
               <div className="truncate max-w-[80px] bg-muted/50 px-1.5 py-0.5 rounded text-[10px]">
                 {session.model.split('/').pop()?.substring(0, 12)}

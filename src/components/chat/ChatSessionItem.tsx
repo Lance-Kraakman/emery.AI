@@ -7,7 +7,7 @@
  * Displays chat metadata and handles session switching.
  */
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { MoreHorizontal, MessageSquare, Calendar, Archive } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -28,6 +28,15 @@ interface ChatSessionItemProps {
 
 export function ChatSessionItem({ session, isActive, onClick, onArchive }: ChatSessionItemProps) {
   const [isArchiving, setIsArchiving] = useState(false)
+  const [formattedDate, setFormattedDate] = useState('')
+
+  // Format date after hydration to avoid server/client mismatch
+  useEffect(() => {
+    const dateStr = session.lastMessageAt || session.createdAt
+    if (dateStr) {
+      setFormattedDate(formatDate(new Date(dateStr)))
+    }
+  }, [session.lastMessageAt, session.createdAt])
 
   const handleArchive = async (e: React.MouseEvent) => {
     e.preventDefault()
@@ -92,13 +101,12 @@ export function ChatSessionItem({ session, isActive, onClick, onArchive }: ChatS
               {session.messageCount}
             </div>
 
-            <div className="flex items-center gap-1">
-              <Calendar className="h-3 w-3" />
-              {session.lastMessageAt
-                ? formatDate(new Date(session.lastMessageAt))
-                : formatDate(new Date(session.createdAt))
-              }
-            </div>
+            {formattedDate && (
+              <div className="flex items-center gap-1">
+                <Calendar className="h-3 w-3" />
+                {formattedDate}
+              </div>
+            )}
           </div>
         </div>
 
