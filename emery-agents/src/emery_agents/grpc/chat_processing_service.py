@@ -75,19 +75,25 @@ def _configure_dspy_cache() -> None:
     """Configure DSPy caching with disk persistence."""
     import dspy
 
-    # Use EFS path if available (production), otherwise local cache (dev)
-    efs_cache = Path("/mnt/storage/cache/dspy")
-    if efs_cache.parent.exists():
-        cache_dir = str(efs_cache)
+    # EFS (production) or ~/.cache (local dev)
+    efs_path = Path("/mnt/storage")
+    if efs_path.exists() and efs_path.is_dir():
+        cache_dir = Path("/mnt/storage/cache/dspy")
     else:
-        cache_dir = str(Path.home() / ".cache" / "dspy")
+        cache_dir = Path.home() / ".cache" / "dspy"
 
-    dspy.configure_cache(
-        enable_disk_cache=True,
-        enable_memory_cache=True,
-        disk_cache_dir=cache_dir,
-    )
-    logger.info(f"DSPy cache configured: {cache_dir}")
+    # Try to create cache directory, fall back to memory-only if it fails
+    try:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        dspy.configure_cache(
+            enable_disk_cache=True,
+            enable_memory_cache=True,
+            disk_cache_dir=str(cache_dir),
+        )
+        logger.info(f"DSPy disk cache configured: {cache_dir}")
+    except (PermissionError, OSError) as e:
+        logger.warning(f"Cannot create cache dir {cache_dir}: {e}, using memory-only")
+        dspy.configure_cache(enable_disk_cache=False, enable_memory_cache=True)
 
 
 _configure_dspy_cache()
