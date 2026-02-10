@@ -248,6 +248,17 @@ class PlanOrQuestionsOutput(BaseModel):
 class CreatePlan(dspy.Signature):  # type: ignore[misc]
     """Create an execution plan or ask clarifying questions.
 
+    ## YOUR CALLABLE TOOLS (use during planning research)
+
+    You have EXACTLY 4 tools available:
+    1. system_research - Read existing tables, fields, pages from workspace
+    2. search_external - Find Pipedream integrations by service name
+    3. web_search - Research domain best practices, industry standards
+    4. finish - Complete planning and output your plan
+
+    >>> STOP: agent:schema_builder, agent:app_builder, table_crud, skill_tool are NOT callable.
+    >>> They are EXECUTION targets, not planning tools.
+
     STEP QUALITY RULES:
     - Each step description must be a COMPLETE executor instruction (see PlanStepOutput.description).
     - The plan step executor cannot see the plan goal, workspace context, or capability guidance.
@@ -258,13 +269,21 @@ class CreatePlan(dspy.Signature):  # type: ignore[misc]
       (e.g., "Look up the 'contacts' table schema, then add a 'phone' (phone) field").
     - One step per distinct action. Never combine multiple actions into one step.
 
+    ## How to Write Plan Steps
+
+    Plan steps describe WHAT to do, not WHICH agent to call:
+
+    GOOD: "Create table 'contacts' with fields: name (text), email (email), phone (phone)"
+    BAD: "Use agent:schema_builder to create contacts table"
+
+    The executor will automatically route steps to the appropriate agent.
+
     PLANNING PROCESS:
     - Check workspace_context for existing resources before creating new ones.
     - Use capability_guidance to understand what the system can do and which tools each capability uses.
     - Use task_analysis for pre-analyzed intent, approach, and external service hints.
 
     EXTERNAL INTEGRATIONS: If task_analysis lists external services (Gmail, Slack, etc.),
-    call search_capabilities first to verify which integrations are available, then
     call search_external(service="<name>") to get specific tool names and input schemas.
     Include the specific tool name (e.g., gmail_send_email) in step descriptions.
     Set connection_required to the service slug for OAuth services.
@@ -275,8 +294,7 @@ class CreatePlan(dspy.Signature):  # type: ignore[misc]
     destructive operations, ambiguous business rules, multiple valid approaches.
 
     RESEARCH TOOLS (call as needed, in any order — re-call to refine):
-    - search_capabilities: Discovers platform agents, external integrations, user skills. Good starting point.
-    - search_external: Gets specific tool names/inputs for a known service (e.g., after finding it via search_capabilities).
+    - search_external: Gets specific tool names/inputs for a service (e.g., gmail, slack).
     - system_research: Gets field schemas, page content, resource details for existing workspace resources.
     - web_search: Researches industry practices, business requirements, domain knowledge.
 
@@ -541,7 +559,8 @@ class ClassifyTask(dspy.Signature):  # type: ignore[misc]
 class TriageTask(dspy.Signature):  # type: ignore[misc]
     """Analyze the user's task, extract intent/entities, and determine the best execution approach.
 
-    You have access to discovery tools — use them to research before deciding.
+    Uses KNNFewShot demos to learn routing patterns. No tool calls needed — route based on
+    task keywords and workspace context.
 
     ALWAYS output intent, entities, approach, and external_services — these are used
     by the planner if the task is routed to "plan" mode. This avoids a separate analysis step.
@@ -550,7 +569,7 @@ class TriageTask(dspy.Signature):  # type: ignore[misc]
 
     "direct" — Read-only research, Q&A, information gathering:
     - Research/information tasks (web search, summarize, explain)
-    - Conversational queries (greetings, questions, help)
+    - Conversational queries (questions, help, explanations)
     - Lookups that don't modify workspace state
     - Visual analysis of images ("what's in this image/PDF")
     - NEVER route skill execution or CRUD modifications here
@@ -568,11 +587,6 @@ class TriageTask(dspy.Signature):  # type: ignore[misc]
     - Questions about what the platform can do
     - Requests for clarification on previous responses
     - Never route to "respond" when images are present — respond cannot process images
-
-    RESEARCH BEFORE DECIDING:
-    - Use search_capabilities to check what capabilities exist for the task
-    - Use system_research to check if referenced resources exist
-    - Don't guess — verify when uncertain
 
     WHEN IN DOUBT: prefer "direct" for questions, research, and read-only tasks.
     Only use "plan" for EXPLICIT state modifications (create, update, delete, execute skill).

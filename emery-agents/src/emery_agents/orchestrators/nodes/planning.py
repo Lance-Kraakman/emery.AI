@@ -9,7 +9,7 @@ import logging
 from typing import Any
 
 from emery_agents.api import WorkspaceAPI
-from emery_agents.reasoning.modules.retrievers import create_retrievers
+from emery_agents.reasoning.modules.retrievers import get_or_create_retrievers
 from emery_agents.tools.discovery import create_discovery_tools
 
 from ...entities.models.plan import (
@@ -479,7 +479,7 @@ async def generate_plan_node(
 
     if org_id and (capability_registry or runtime.planning_registry):
         try:
-            retrievers = create_retrievers(
+            retrievers = get_or_create_retrievers(
                 org_id=org_id,
                 capability_registry=capability_registry,
                 planning_registry=runtime.planning_registry,

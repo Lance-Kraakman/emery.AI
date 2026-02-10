@@ -69,6 +69,30 @@ from .response_types import StreamResponseDict
 logger = logging.getLogger(__name__)
 
 
+# Configure DSPy disk caching at module load time.
+# This enables persistent caching for embeddings and LM calls across requests.
+def _configure_dspy_cache() -> None:
+    """Configure DSPy caching with disk persistence."""
+    import dspy
+
+    # Use EFS path if available (production), otherwise local cache (dev)
+    efs_cache = Path("/mnt/storage/cache/dspy")
+    if efs_cache.parent.exists():
+        cache_dir = str(efs_cache)
+    else:
+        cache_dir = str(Path.home() / ".cache" / "dspy")
+
+    dspy.configure_cache(
+        enable_disk_cache=True,
+        enable_memory_cache=True,
+        disk_cache_dir=cache_dir,
+    )
+    logger.info(f"DSPy cache configured: {cache_dir}")
+
+
+_configure_dspy_cache()
+
+
 class ChatProcessingServiceImplementation(
     agent_worker_pb2_grpc.ChatProcessingServiceServicer
 ):
