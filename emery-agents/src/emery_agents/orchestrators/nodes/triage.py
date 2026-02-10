@@ -1,8 +1,8 @@
 """
 Triage Node
 
-Classifies tasks with discovery tools available. Replaces the external
-ChainOfThought classifier that had no tool access.
+Classifies tasks using KNNFewShot for fast routing without tool calls.
+Falls back to ReAct with discovery tools for complex/uncertain cases.
 
 Routes to: "direct" | "plan" | "respond"
 """
@@ -11,18 +11,18 @@ import logging
 from typing import Any
 
 import dspy
+from dspy import KNNFewShot
 
 from ...reasoning.config import get_dspy_lm
+from ...reasoning.examples.triage import TRIAGE_DEMOS
 from ...reasoning.signatures.planning import TriageTask
+from ...services.analysis.embeddings import create_dspy_embedder
 from ...services.analysis.llm_usage import record_from_lm
 from ...services.execution.events import (
     ErrorEvent,
     ExecutionCompletedEvent,
     FinalSynthesisEvent,
 )
-from ...services.memory import create_memory_crud
-from ...tools.discovery import create_discovery_tools
-from ...tools.output import create_conversation_history_tool
 from ..runtime import RuntimeContext
 from ..state import PlanExecuteState
 
@@ -31,14 +31,31 @@ logger = logging.getLogger(__name__)
 VALID_MODES = {"direct", "plan", "respond"}
 
 
+def _create_triage_module() -> dspy.Module:
+    """Create KNNFewShot triage module.
+
+    Uses ChainOfThought wrapped with KNNFewShot for fast routing.
+    No ReAct/tool calls needed - demos teach the model how to route.
+    Embeddings are disk-cached so creation is fast after first startup.
+    """
+    base_triage = dspy.ChainOfThought(TriageTask)
+    embedder = create_dspy_embedder()
+    return KNNFewShot(
+        k=5,
+        trainset=TRIAGE_DEMOS,
+        vectorizer=embedder,
+    ).compile(base_triage)
+
+
 async def triage_node(
     state: PlanExecuteState, runtime: RuntimeContext
 ) -> dict[str, Any]:
     """
-    Triage node: classify task with discovery tools available.
+    Triage node: classify task using KNNFewShot for fast routing.
 
-    Uses DSPy ReAct with discovery tools (search_capabilities, system_research,
-    workspace_overview) to understand the task before routing.
+    Uses ChainOfThought wrapped with KNNFewShot - demos teach the model
+    how to route based on task similarity. No tool calls needed for most
+    common patterns.
 
     Returns state update with execution_mode, triage_reasoning, triage_context.
     """
@@ -66,44 +83,21 @@ async def triage_node(
     if runtime.images:
         image_context = f"{len(runtime.images)} image(s) uploaded by the user, available for visual analysis in direct/plan execution."
 
-    # Create discovery tools for ReAct triage (exclude web_search and workspace_overview —
-    # triage only needs system_research, search_capabilities, search_external for routing)
-    discovery_tools: list[dspy.Tool] = []
-    if api_key and org_id:
-        discovery_tools = create_discovery_tools(
-            api_key, org_id, runtime.capability_registry, runtime.planning_registry
-        )
-        discovery_tools = [
-            t
-            for t in discovery_tools
-            if t.name not in ("web_search", "workspace_overview")
-        ]
-
-    # Add memory_crud tool so triage can search_memories for deeper context
-    if runtime.engine:
-        discovery_tools.append(create_memory_crud(runtime.engine.memory))
-
-    # Add conversation history tool for current session context
-    discovery_tools.append(
-        create_conversation_history_tool(runtime.conversation_history or [])
-    )
-
-    # Create ReAct module with discovery tools for informed routing
-    react = dspy.ReAct(
-        TriageTask,
-        tools=discovery_tools,
-        max_iters=3,  # Quick research, not deep
-    )
+    # Use KNNFewShot triage module - no tool calls needed for most patterns
+    # Demos teach the model how to route based on task similarity
+    triage_module = _create_triage_module()
 
     try:
         lm = get_dspy_lm(org_model=org_model)
         with dspy.context(lm=lm):
-            result = react(
+            result = triage_module(
                 task=task,
                 workspace_context=workspace_summary,
                 memory_context=memory_context,
                 image_context=image_context,
             )
+        if not runtime.token_accumulator:
+            raise ValueError("token_accumulator is required for triage")
         record_from_lm(lm, runtime.token_accumulator.get_llm_tracker())
 
         execution_mode = getattr(result, "execution_mode", "direct").strip().lower()
