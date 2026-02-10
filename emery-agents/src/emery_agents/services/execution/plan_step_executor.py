@@ -193,7 +193,6 @@ class PlanStepExecutor:
         self._crud_tools = create_all_tools(
             api_key=api_key,
             org_id=org_id,
-            capability_registry=capability_registry,
             extra_headers=extra_headers,
         )
 

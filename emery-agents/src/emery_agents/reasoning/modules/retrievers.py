@@ -33,7 +33,11 @@ _org_retrievers: dict[str, dict[str, BaseRetriever[Any]]] = {}
 
 def _create_embedder() -> dspy.Embedder:
     """Create DSPy Embedder with built-in caching."""
-    return dspy.Embedder(model="gemini/gemini-embedding-001", caching=True)
+    return dspy.Embedder(
+        model="gemini/gemini-embedding-001",
+        caching=True,
+        batch_size=100,  # Gemini max batch size
+    )
 
 
 class BaseRetriever(Generic[T]):

@@ -22,10 +22,12 @@ from ...services.analysis.llm_usage import record_from_lm
 from ...services.context import format_conversation_history
 from ...services.execution.events import (
     AwaitingClarificationEvent,
+    AwaitingHumanSkillEvent,
     ErrorEvent,
     ExecutionCompletedEvent,
     FinalSynthesisEvent,
 )
+from ...tools.execution.skill import HumanSkillAwaitingException
 from ...entities.execution_context import ExecutionContext
 from ...services.context import execution_scope
 from ...services.memory import create_memory_crud
@@ -63,12 +65,7 @@ async def direct_execute_node(
     events: list[Any] = []
 
     # Create all tools with auth
-    tools = create_all_tools(
-        api_key=api_key,
-        org_id=org_id,
-        capability_registry=runtime.capability_registry,
-        planning_registry=runtime.planning_registry,
-    )
+    tools = create_all_tools(api_key=api_key, org_id=org_id)
 
     # Include external tools from runtime (skill tools, Pipedream, etc.)
     if runtime.tools:
@@ -189,6 +186,40 @@ async def direct_execute_node(
         return {
             "response": result_str,
             "success": True,
+            "events": events,
+        }
+
+    except HumanSkillAwaitingException as e:
+        # Human skill requires human input - set up interrupt
+        logger.info(
+            f"Human skill {e.skill_name} requires input - setting up interrupt"
+        )
+
+        events.append(
+            AwaitingHumanSkillEvent(
+                skill_id=e.skill_id,
+                skill_name=e.skill_name,
+                step_id="direct",  # No step in direct mode
+                instructions=e.instructions,
+                inputs=e.inputs,
+                output_schema=e.output_schema,
+                assigned_to=e.assigned_to,
+                external_links=e.external_links,
+                session_id=e.session_id,
+            )
+        )
+
+        return {
+            "awaiting_input": "human_skill",
+            "human_skill_info": {
+                "skill_id": e.skill_id,
+                "skill_name": e.skill_name,
+                "step_id": "direct",
+                "instructions": e.instructions,
+                "inputs": e.inputs,
+                "output_schema": e.output_schema,
+                "assigned_to": e.assigned_to,
+            },
             "events": events,
         }
 

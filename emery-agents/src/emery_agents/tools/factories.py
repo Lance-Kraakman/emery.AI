@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import dspy
 
 from .crud import (
@@ -21,11 +19,6 @@ from .crud import (
     create_view_crud,
 )
 from .discovery import create_discovery_tools
-
-if TYPE_CHECKING:
-    from emery_agents.planning.registry import PlanningRegistry
-
-    from .capability_registry import CapabilityRegistry
 
 
 def create_crud_tools(
@@ -53,14 +46,10 @@ def create_crud_tools(
 def create_all_tools(
     api_key: str,
     org_id: str,
-    capability_registry: CapabilityRegistry | None = None,
-    planning_registry: PlanningRegistry | None = None,
     extra_headers: dict[str, str] | None = None,
 ) -> list[dspy.Tool]:
     """Create all DSPy tool functions with auth captured."""
     tools: list[dspy.Tool] = []
     tools.extend(create_crud_tools(api_key, org_id, extra_headers=extra_headers))
-    tools.extend(
-        create_discovery_tools(api_key, org_id, capability_registry, planning_registry)
-    )
+    tools.extend(create_discovery_tools(api_key, org_id))
     return tools
