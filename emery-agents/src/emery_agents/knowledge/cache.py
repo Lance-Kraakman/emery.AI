@@ -1,10 +1,11 @@
 """
-S3 cache for KnowledgeBase.
+S3/EFS cache for KnowledgeBase.
 
-Follows same pattern as services/analysis/embedding_cache.py:
-- gzip JSON storage
-- Content hash for invalidation
-- Load at startup, save after ingestion
+Stores knowledge items (text, metadata) in gzip JSON format.
+Embeddings are NOT stored here - they're cached separately in the
+unified disk cache at /mnt/storage/workspaces/.cache/embeddings/
+
+Content hash used for cache invalidation.
 """
 
 from __future__ import annotations
@@ -44,7 +45,10 @@ def _deserialize_example(data: dict[str, Any]) -> dspy.Example:
 
 
 def _serialize_item(item: KnowledgeItem) -> dict[str, Any]:
-    """Serialize KnowledgeItem to JSON-compatible dict."""
+    """Serialize KnowledgeItem to JSON-compatible dict.
+
+    Note: Embeddings are NOT stored here - they're in the unified disk cache.
+    """
     return {
         "id": item.id,
         "type": item.type.value,  # StrEnum → string
@@ -54,12 +58,14 @@ def _serialize_item(item: KnowledgeItem) -> dict[str, Any]:
         "tags": item.tags,
         "examples": [_serialize_example(ex) for ex in item.examples],
         "metadata": item.metadata,
-        "embedding": list(item.embedding) if item.embedding else None,
     }
 
 
 def _deserialize_item(data: dict[str, Any]) -> KnowledgeItem:
-    """Deserialize KnowledgeItem from dict."""
+    """Deserialize KnowledgeItem from dict.
+
+    Note: Embeddings are NOT loaded here - they're computed from disk cache.
+    """
     examples = [_deserialize_example(ex_data) for ex_data in data.get("examples", [])]
 
     return KnowledgeItem(
@@ -71,7 +77,7 @@ def _deserialize_item(data: dict[str, Any]) -> KnowledgeItem:
         tags=data.get("tags", []),
         examples=examples,
         metadata=data.get("metadata", {}),
-        embedding=tuple(data["embedding"]) if data.get("embedding") else None,
+        embedding=None,  # Computed from disk cache in _build_index()
     )
 
 
