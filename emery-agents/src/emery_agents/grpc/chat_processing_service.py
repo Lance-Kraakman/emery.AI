@@ -29,7 +29,7 @@ from emery_agents.tools.capability_bootstrap import (
     populate_system_agents,
 )
 from emery_agents.tools.capability_registry import CapabilityRegistry
-from emery_agents.tools.knowledge import set_knowledge_base
+from emery_agents.tools.knowledge import get_knowledge_base, set_knowledge_base
 from emery_agents.tools.loader import UnifiedToolLoader
 from emery_agents.tools.provider import ToolProvider
 
@@ -197,6 +197,55 @@ class ChatProcessingServiceImplementation(
         if assistant_message_id:
             headers["X-Chat-Message-ID"] = assistant_message_id
         return headers
+
+    async def _resolve_execution_credentials(
+        self,
+        request: agent_worker_pb2.ProcessMessageRequest,
+        agent_id: int | None,
+        task_id: str | None,
+        org_id: int | str,
+    ) -> str | None:
+        """
+        Resolve API key for execution based on context.
+
+        Priority:
+        1. Task-tracked execution → use task's resolved credentials
+        2. Agent-owned skill → use agent's stored credentials
+        3. Org-level → use user's API key from request
+
+        Returns:
+            API key string or None if no credentials available
+        """
+        org_id_int = int(org_id) if isinstance(org_id, str) else org_id
+
+        if task_id:
+            task_data = TaskData(
+                task_id=task_id,
+                organization_id=org_id_int,
+                agent_id=agent_id,
+            )
+            credentials = await self._task_executor._resolve_credentials(task_data)
+            logger.info(
+                f"🔑 Using {credentials.source} credentials for task {task_id[:8]}..."
+            )
+            return credentials.api_key
+
+        if agent_id:
+            credentials = await self._task_executor._load_agent_credentials(
+                agent_id, org_id_int
+            )
+            logger.info(f"🔑 Using agent credentials (agent_id={agent_id})")
+            return credentials.api_key
+
+        # Org-level - use user's credentials from request
+        effective_api_key = request.user_api_key or None
+        if effective_api_key:
+            logger.info("🔑 User API key provided for managed agents")
+        else:
+            logger.warning(
+                "⚠️ No user API key provided - managed agents may fail auth"
+            )
+        return effective_api_key
 
     def _initialize_knowledge_base(self) -> None:
         """Eagerly load knowledge base at startup.
@@ -454,38 +503,10 @@ class ChatProcessingServiceImplementation(
                 )
 
             # Resolve credentials based on skill's agent ownership
-            # agentId is resolved from skill.agent_id (set during enrichment in Next.js)
-            # - Org-level skill (no agent_id) → User's credentials
-            # - Agent skill (agent_id set) → Agent's stored credentials
             agent_id = self._resolve_agent_id(request)
-
-            if task_id:
-                task_data = TaskData(
-                    task_id=task_id,
-                    organization_id=int(org_id),
-                    agent_id=agent_id,
-                )
-                credentials = await self._task_executor._resolve_credentials(task_data)
-                effective_api_key = credentials.api_key
-                logger.info(
-                    f"🔑 Using {credentials.source} credentials for task {task_id[:8]}..."
-                )
-            elif agent_id:
-                # No task tracking but skill is agent-owned - use agent credentials
-                credentials = await self._task_executor._load_agent_credentials(
-                    agent_id, int(org_id)
-                )
-                effective_api_key = credentials.api_key
-                logger.info(f"🔑 Using agent credentials (agent_id={agent_id})")
-            else:
-                # Org-level - use user's credentials from request
-                effective_api_key = request.user_api_key or None
-                if effective_api_key:
-                    logger.info("🔑 User API key provided for managed agents")
-                else:
-                    logger.warning(
-                        "⚠️ No user API key provided - managed agents may fail auth"
-                    )
+            effective_api_key = await self._resolve_execution_credentials(
+                request, agent_id, task_id, org_id
+            )
 
             # Build audit headers for chat-initiated tool calls
             user_name = request.user_name if request.user_name else None
@@ -788,6 +809,7 @@ class ChatProcessingServiceImplementation(
                 org_model=request.model or None,
                 capability_registry=capability_registry,
                 planning_registry=self.planning_registry,
+                knowledge_base=get_knowledge_base(),
                 token_accumulator=TokenAccumulator(),
             )
 

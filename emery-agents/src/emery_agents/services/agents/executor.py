@@ -18,6 +18,7 @@ from PIL import Image
 from emery_agents.tools.execution.bash import create_bash_tool
 from emery_agents.tools.execution.filesystem import create_filesystem_tools
 from emery_agents.tools.execution.skill import SkillTool
+from emery_agents.tools.knowledge import get_knowledge_base
 from emery_agents.tools.loader import UnifiedToolLoader
 
 from ...entities.execution_context import ExecutionContext
@@ -767,6 +768,7 @@ class AgentExecutor:
             api_key=api_key,
             org_id=org_id,
             org_model=context.org_model,
+            knowledge_base=get_knowledge_base(),
         )
 
         # Phase 1: Generate plan using generate_plan_node directly

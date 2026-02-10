@@ -9,6 +9,7 @@ import logging
 from typing import Any
 
 from emery_agents.api import WorkspaceAPI
+from emery_agents.reasoning.modules.retrievers import create_retrievers
 from emery_agents.tools.discovery import create_discovery_tools
 
 from ...entities.models.plan import (
@@ -438,12 +439,11 @@ async def generate_plan_node(
     # Filter tools to read-only for planning
     planning_tools = filter_tools_for_mode(tools, ToolMode.PLANNING)
 
-    # Create discovery tools for ReAct planner (system_research, search_capabilities, search_external)
+    # Create external discovery tools for ReAct planner
+    # Internal search tools removed - replaced by KNN retrievers called below
     # Exclude workspace_overview — redundant with the static workspace_context below
     if api_key and org_id:
-        discovery_tools = create_discovery_tools(
-            api_key, org_id, capability_registry, runtime.planning_registry
-        )
+        discovery_tools = create_discovery_tools(api_key, org_id)
         discovery_tools = [t for t in discovery_tools if t.name != "workspace_overview"]
     else:
         discovery_tools = []
@@ -469,6 +469,51 @@ async def generate_plan_node(
     workspace_context = _filter_relevant_context(
         full_workspace, task, runtime.token_accumulator
     )
+
+    # === KNN Retrieval: Get relevant context from registries ===
+    # Creates retrievers for available registries and retrieves context
+    retrieved_capabilities = ""
+    retrieved_patterns = ""
+    retrieved_knowledge = ""
+    retrieved_strategies = ""
+
+    if org_id and (capability_registry or runtime.planning_registry):
+        try:
+            retrievers = create_retrievers(
+                org_id=org_id,
+                capability_registry=capability_registry,
+                planning_registry=runtime.planning_registry,
+                knowledge_base=runtime.knowledge_base,
+                ace_service=None,  # ACE service deferred
+            )
+
+            # Retrieve relevant context for the task
+            if "capabilities" in retrievers:
+                caps = retrievers["capabilities"](enriched_task)
+                retrieved_capabilities = retrievers["capabilities"].format_for_planner(
+                    caps
+                )
+                logger.debug(f"Retrieved {len(caps)} capabilities for planning")
+
+            if "patterns" in retrievers:
+                patterns = retrievers["patterns"](enriched_task)
+                retrieved_patterns = retrievers["patterns"].format_for_planner(patterns)
+                logger.debug(f"Retrieved {len(patterns)} patterns for planning")
+
+            if "knowledge" in retrievers:
+                items = retrievers["knowledge"](enriched_task)
+                retrieved_knowledge = retrievers["knowledge"].format_for_planner(items)
+                logger.debug(f"Retrieved {len(items)} knowledge items for planning")
+
+            if "strategies" in retrievers:
+                strategies = retrievers["strategies"](enriched_task)
+                retrieved_strategies = retrievers["strategies"].format_for_planner(
+                    strategies
+                )
+                logger.debug(f"Retrieved {len(strategies)} strategies for planning")
+
+        except Exception as e:
+            logger.warning(f"KNN retrieval failed, continuing without: {e}")
 
     # Build session config
     config = SessionConfig(
@@ -514,6 +559,10 @@ async def generate_plan_node(
             triage_analysis=triage_analysis,
             configured_tools=configured_tools,
             token_accumulator=runtime.token_accumulator,
+            retrieved_capabilities=retrieved_capabilities,
+            retrieved_patterns=retrieved_patterns,
+            retrieved_knowledge=retrieved_knowledge,
+            retrieved_strategies=retrieved_strategies,
         )
     except Exception as e:
         logger.error(f"Plan generation failed: {e}")

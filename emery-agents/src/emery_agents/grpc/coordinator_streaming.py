@@ -20,6 +20,7 @@ from emery_agents.tools.capability_bootstrap import (
     populate_user_skills,
 )
 from emery_agents.tools.capability_registry import CapabilityRegistry
+from emery_agents.tools.knowledge import get_knowledge_base
 
 from ..engine import AgentEngine
 from ..entities.execution_context import ExecutionContext
@@ -194,6 +195,7 @@ class CoordinatorStreamingHandler:
             # Registries
             capability_registry=capability_registry,
             planning_registry=planning_registry,
+            knowledge_base=get_knowledge_base(),
             # Context
             conversation_history=_convert_history(conversation_history),
             user_id=user_id,

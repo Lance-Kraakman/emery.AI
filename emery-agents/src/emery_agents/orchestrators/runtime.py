@@ -25,6 +25,7 @@ from emery_agents.services.context import (
 
 if TYPE_CHECKING:
     from emery_agents.engine import AgentEngine
+    from emery_agents.knowledge.base import KnowledgeBase
     from emery_agents.planning.registry import PlanningRegistry
     from emery_agents.tools.capability_registry import CapabilityRegistry
 
@@ -48,6 +49,7 @@ class RuntimeContext:
         org_model: Optional model override
         capability_registry: Stateful service with HF embeddings (NOT serializable)
         planning_registry: PlanningRegistry with searchable patterns (NOT serializable)
+        knowledge_base: KnowledgeBase with org knowledge items (NOT serializable)
         conversation_history: Chat history for context
         user_id: User ID for memory scoping
         workspace_type: "agents" or "users" — determines PII filtering
@@ -69,6 +71,7 @@ class RuntimeContext:
     # Registries
     capability_registry: CapabilityRegistry | None = None
     planning_registry: PlanningRegistry | None = None
+    knowledge_base: KnowledgeBase | None = None
 
     # Context
     conversation_history: list[ConversationMessage] | None = None
