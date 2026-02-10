@@ -70,6 +70,14 @@ export function FileArtifactViewer({
   const [textContent, setTextContent] = useState<string | null>(null)
   const [loadingText, setLoadingText] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
+  const [formattedDate, setFormattedDate] = useState('')
+
+  // Format date after hydration to avoid server/client mismatch
+  useEffect(() => {
+    if (fileField?.uploadedAt) {
+      setFormattedDate(new Date(fileField.uploadedAt).toLocaleDateString())
+    }
+  }, [fileField?.uploadedAt])
 
   // Load text content for text files (hook must be before any returns)
   useEffect(() => {
@@ -403,10 +411,12 @@ export function FileArtifactViewer({
         style={{ ...getThemedSectionStyle(theme), color: theme ? 'var(--theme-text-muted)' : undefined }}
       >
         <div className="flex items-center gap-4">
-          <span className="flex items-center gap-1">
-            <Calendar className="w-3 h-3" />
-            {new Date(fileField.uploadedAt).toLocaleDateString()}
-          </span>
+          {formattedDate && (
+            <span className="flex items-center gap-1">
+              <Calendar className="w-3 h-3" />
+              {formattedDate}
+            </span>
+          )}
 
           <span>{fileField.mimeType}</span>
         </div>

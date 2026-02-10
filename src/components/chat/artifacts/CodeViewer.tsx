@@ -85,6 +85,14 @@ export function CodeViewer({
   const [isEditing, setIsEditing] = useState(false)
   const [hasChanges, setHasChanges] = useState(false)
   const [showSaveDialog, setShowSaveDialog] = useState(false)
+  const [formattedDate, setFormattedDate] = useState('')
+
+  // Format date after hydration to avoid server/client mismatch
+  useEffect(() => {
+    if (fileField?.uploadedAt) {
+      setFormattedDate(new Date(fileField.uploadedAt).toLocaleDateString())
+    }
+  }, [fileField?.uploadedAt])
 
   const displayInfo = getFileDisplayInfo(artifact)
   const language = getCodeLanguage(fileName)
@@ -265,7 +273,7 @@ export function CodeViewer({
         style={getThemedSectionStyle(theme)}
       >
         <div className="flex items-center gap-3 min-w-0 flex-1">
-          <Code className="w-5 h-5 text-purple-600 flex-shrink-0" />
+          <Code className="w-5 h-5 text-primary flex-shrink-0" />
           <div className="min-w-0 flex-1">
             <h3 className="font-medium text-sm truncate">{displayInfo.title}</h3>
             <p className="text-xs text-muted-foreground truncate">
@@ -381,7 +389,7 @@ export function CodeViewer({
       <div className="flex-1 overflow-auto">
         {loading ? (
           <div className="flex items-center justify-center h-32">
-            <div className="text-sm text-gray-500">Loading code...</div>
+            <div className="text-sm text-muted-foreground">Loading code...</div>
           </div>
         ) : language && isEditing ? (
           <CodeEditor
@@ -393,7 +401,7 @@ export function CodeViewer({
         ) : (
           // Fallback to pre-formatted text for unsupported languages or view mode
           <pre
-            className={`p-4 text-sm font-mono whitespace-pre-wrap break-words overflow-auto h-full ${!theme ? 'bg-gray-50' : ''}`}
+            className={`p-4 text-sm font-mono whitespace-pre-wrap break-words overflow-auto h-full ${!theme ? 'bg-muted/50' : ''}`}
             style={getThemedBackground(theme, 'surface')}
           >
             {content}
@@ -407,10 +415,12 @@ export function CodeViewer({
         style={{ ...getThemedSectionStyle(theme), color: theme ? 'var(--theme-text-muted)' : undefined }}
       >
         <div className="flex items-center gap-4">
-          <span className="flex items-center gap-1">
-            <Calendar className="w-3 h-3" />
-            {new Date(fileField.uploadedAt).toLocaleDateString()}
-          </span>
+          {formattedDate && (
+            <span className="flex items-center gap-1">
+              <Calendar className="w-3 h-3" />
+              {formattedDate}
+            </span>
+          )}
           <span>{fileField.mimeType}</span>
         </div>
 
