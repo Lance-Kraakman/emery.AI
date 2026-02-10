@@ -16,6 +16,7 @@ from dspy import KNNFewShot
 logger = logging.getLogger(__name__)
 
 from emery_agents.reasoning.examples.planning import PLANNING_DEMOS
+from emery_agents.reasoning.examples.skill_templates import SKILL_TEMPLATE_DEMOS
 from emery_agents.services.analysis.embeddings import create_dspy_embedder
 from emery_agents.reasoning.signatures.planning import (
     AnalyzeTask,
@@ -298,10 +299,20 @@ class SkillTemplatePlannerModule(PlannerModule):
             discovery_tools: List of tools available during planning phase
         """
         super().__init__(discovery_tools=discovery_tools)
-        # ReAct with discovery tools so the template planner can call system_research
-        self.template_planner = dspy.ReAct(
+
+        # Create base template planner with ReAct for tool use
+        base_template_planner = dspy.ReAct(
             CreateSkillTemplate, tools=self.discovery_tools, max_iters=5
         )
+
+        # Compile with KNNFewShot for dynamic demo selection per request
+        # Different skill requests get different template examples
+        embedder = create_dspy_embedder()
+        self.template_planner = KNNFewShot(
+            k=3,  # Fewer demos for skill templates (more focused)
+            trainset=SKILL_TEMPLATE_DEMOS,
+            vectorizer=embedder,
+        ).compile(base_template_planner)
 
     def forward(  # type: ignore[override]
         self,

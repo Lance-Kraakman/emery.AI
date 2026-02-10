@@ -264,9 +264,9 @@ def create_dspy_embedder() -> Any:
     """
     from dspy import Embedder  # type: ignore[import-untyped]
 
-    def embed_fn(text: str) -> list[float]:
-        """Wrapper that converts tuple to list for DSPy compatibility."""
-        embedding = get_embedding(text)
-        return list(embedding)
+    def embed_fn(texts: list[str]) -> list[list[float]]:
+        """Batch embedding wrapper for DSPy compatibility."""
+        embeddings = get_embeddings_batch(texts)
+        return [list(emb) for emb in embeddings]
 
     return Embedder(embed_fn)
