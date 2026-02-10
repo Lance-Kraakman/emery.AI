@@ -1,11 +1,43 @@
+# Configure DSPy cache FIRST, before any module imports dspy
+import logging
+from pathlib import Path
+
+
+def _configure_dspy_cache() -> None:
+    """Configure DSPy cache before any other imports trigger dspy initialization."""
+    import dspy
+
+    # EFS (production) or ~/.cache (local dev)
+    efs_path = Path("/mnt/storage")
+    if efs_path.exists() and efs_path.is_dir():
+        cache_dir = Path("/mnt/storage/cache/dspy")
+    else:
+        cache_dir = Path.home() / ".cache" / "dspy"
+
+    try:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        dspy.configure_cache(
+            enable_disk_cache=True,
+            enable_memory_cache=True,
+            disk_cache_dir=str(cache_dir),
+        )
+        logging.getLogger(__name__).info(f"DSPy disk cache configured: {cache_dir}")
+    except (PermissionError, OSError) as e:
+        logging.getLogger(__name__).warning(
+            f"Cannot create cache dir {cache_dir}: {e}, using memory-only"
+        )
+        dspy.configure_cache(enable_disk_cache=False, enable_memory_cache=True)
+
+
+_configure_dspy_cache()
+
+# Now safe to import other modules that may use dspy
 import asyncio
 import concurrent.futures
-import logging
 import os
 import sys
 import time
 from collections.abc import AsyncIterator
-from pathlib import Path
 from typing import Any
 
 import grpc
