@@ -7,10 +7,10 @@ def _configure_dspy_cache() -> None:
     """Configure DSPy cache before any other imports trigger dspy initialization."""
     import dspy
 
-    # EFS (production) or ~/.cache (local dev)
-    efs_path = Path("/mnt/storage")
+    # EFS workspaces (writable in production) or ~/.cache (local dev)
+    efs_path = Path("/mnt/storage/workspaces")
     if efs_path.exists() and efs_path.is_dir():
-        cache_dir = Path("/mnt/storage/cache/dspy")
+        cache_dir = Path("/mnt/storage/workspaces/.cache/dspy")
     else:
         cache_dir = Path.home() / ".cache" / "dspy"
 
