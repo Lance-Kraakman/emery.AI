@@ -23,7 +23,10 @@ import requests
 from emery_agents.api.http_client import get_base_url
 from emery_agents.entities.execution_context import ExecutionContext
 from emery_agents.entities.skill_config import SkillConfig
+from emery_agents.services.context import get_current_context, signal_human_skill_awaiting
+from emery_agents.tools.execution.skill import HumanSkillAwaitingException
 from emery_agents.types import ExecutionMode
+from emery_agents.utils import run_async_in_thread
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +136,8 @@ def execute_skill_by_id(
 
     # 4. Create executor and execute in-process
     try:
+        # Lazy imports to avoid circular dependency:
+        # tools/loader -> tools/crud -> dynamic_execution -> services/skills/executor -> tools/loader
         from emery_agents.services.agents.factory import AgentFactory
         from emery_agents.services.models.provider import ModelProvider
         from emery_agents.services.skills.executor import (
@@ -163,7 +168,10 @@ def execute_skill_by_id(
 
         # Check if human skill is awaiting human input
         if isinstance(result, SkillExecutionResult) and result.status == "awaiting_human":
-            logger.info(f"[DYNAMIC-EXEC] Human skill {skill_id} awaiting input")
+            logger.info(
+                f"[DYNAMIC-EXEC] Human skill {skill_id} awaiting input - "
+                "signaling via context for executor to handle"
+            )
 
             # Get human skill config for instructions and assignee
             human_config = skill_config.human_skill_config
@@ -177,21 +185,24 @@ def execute_skill_by_id(
                 elif human_config.assignee_type == "role" and human_config.assignee_role:
                     assigned_to = f"role:{human_config.assignee_role}"
 
-            return json.dumps(
-                {
-                    "status": "awaiting_human",
-                    "skill_id": skill_id,
-                    "skill_name": skill_config.name,
-                    "instructions": instructions,
-                    "inputs": inputs,
-                    "output_schema": [
-                        {"name": out.name, "type": out.type}
-                        for out in skill_config.outputs
-                    ],
-                    "assigned_to": assigned_to,
-                    "credential_source": "agent" if agent_id else "user",
-                }
+            # Signal via context variable (executor will raise after ReAct completes)
+            # DSPy ReAct catches tool exceptions, so we signal via context instead
+            exception = HumanSkillAwaitingException(
+                skill_id=skill_id,
+                skill_name=skill_config.name,
+                step_id="",  # Set by execution node
+                instructions=instructions,
+                inputs=inputs,
+                output_schema=[
+                    {"name": out.name, "type": out.type}
+                    for out in skill_config.outputs
+                ],
+                assigned_to=assigned_to,
             )
+            signal_human_skill_awaiting(exception)
+
+            # Return marker so DSPy treats as success (stops further tool calls)
+            return f"Human skill '{skill_config.name}' requires human input. Execution paused."
 
         # Wrap completed result in standard format
         result_str = (
@@ -313,19 +324,23 @@ def execute_agent_by_id(
         f"(using agent's own API key)"
     )
 
-    # 2. Build ExecutionContext
+    # 2. Build ExecutionContext - inherit org_model from parent context
+    parent_context = get_current_context()
+    parent_org_model = parent_context.org_model if parent_context else None
+
     context = ExecutionContext(
         mode=ExecutionMode.INTERACTIVE,
         task=task,
         available_tools=[],
         agent_id=agent_id,
         organization_id=int(org_id),
+        org_model=parent_org_model,  # Inherit from parent execution
     )
 
     # 3. Execute in-process using AgentExecutor
     try:
+        # Lazy import to avoid circular dependency
         from emery_agents.services.agents.executor import AgentExecutor
-        from emery_agents.utils import run_async_in_thread
 
         agent_executor = AgentExecutor()
 

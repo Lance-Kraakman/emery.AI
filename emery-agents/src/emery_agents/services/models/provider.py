@@ -3,7 +3,15 @@ Model Provider with DSPy and Model Registry Support.
 
 AIDEV-NOTE: Centralized model provider for DSPy-based execution.
 Integrates with model registry for pricing, capabilities, and access control.
-Supports model selection hierarchy: skill > agent > organization > default.
+Supports model selection hierarchy: skill > agent > organization > context > default.
+
+Model resolution checks (in order):
+1. Explicit skill_model parameter
+2. Explicit agent_model parameter
+3. Explicit org_model parameter
+4. ExecutionContext.org_model (from context variable - set at request entry)
+5. Vision model (if has_images=True)
+6. System default
 """
 
 from __future__ import annotations
@@ -14,6 +22,7 @@ from dataclasses import dataclass
 
 import dspy
 
+from ..context import get_current_context
 from .registry import (
     ModelTier,
     get_default_model_for_tier,
@@ -63,9 +72,10 @@ class ModelProvider:
         Priority:
         1. skill_model (if provided)
         2. agent_model (if provided)
-        3. org_model (if provided)
-        4. vision_model (if has_images=True and no explicit model)
-        5. default model
+        3. org_model (if provided explicitly)
+        4. org_model from ExecutionContext (set at request entry point)
+        5. vision_model (if has_images=True and no explicit model)
+        6. default model
 
         Args:
             skill_model: Model override from skill configuration
@@ -93,6 +103,16 @@ class ModelProvider:
         if org_model:
             logger.info(f"Using organization default model: {org_model}")
             return org_model
+
+        # Check execution context for org_model (set at request entry point)
+        # This enables sub-executions (skills, agents) to inherit the org's model
+        # without explicitly passing it through the entire call chain
+        exec_context = get_current_context()
+        if exec_context and exec_context.org_model:
+            logger.info(
+                f"Using org model from execution context: {exec_context.org_model}"
+            )
+            return exec_context.org_model
 
         # Smart selection: vision model if images present, otherwise default
         if has_images:
