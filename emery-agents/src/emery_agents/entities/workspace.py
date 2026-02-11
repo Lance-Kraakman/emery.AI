@@ -174,3 +174,14 @@ class WorkspaceData:
     skills: list[WorkspaceSkill] = field(default_factory=list)
     databases: list[WorkspaceDatabase] = field(default_factory=list)
     views: list[WorkspaceView] = field(default_factory=list)
+    fetch_error: str | None = None  # Stores error message if fetch failed
+
+    def is_empty(self) -> bool:
+        """Check if workspace has no resources (possibly due to fetch failure)."""
+        return (
+            not self.apps
+            and not self.agents
+            and not self.skills
+            and not self.databases
+            and not self.views
+        )

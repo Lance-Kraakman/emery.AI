@@ -58,7 +58,7 @@ class WorkspaceAPI:
 
         if result.startswith("ERROR"):
             logger.warning(f"Workspace API failed: {result}")
-            return WorkspaceData()
+            return WorkspaceData(fetch_error=result)
 
         try:
             response = json.loads(result)

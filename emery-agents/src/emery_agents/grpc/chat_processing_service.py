@@ -491,6 +491,9 @@ class ChatProcessingServiceImplementation(
                 assistant_message_id=assistant_message_id,
             )
 
+            # Cancellation callback - checked every heartbeat interval (~15s)
+            is_cancelled = lambda: self.active_streams.get(message_id, False)
+
             async for response_dict in self._agent_handler.stream_response(
                 conversation_messages,
                 tools_to_use,
@@ -512,6 +515,7 @@ class ChatProcessingServiceImplementation(
                 workspace_type=workspace_type.value if workspace_type else None,  # "agents" or "users"
                 workspace_org_id=workspace_org_id,  # Organization ID
                 extra_headers=chat_audit_headers,  # Audit trail headers for CRUD tool calls
+                is_cancelled=is_cancelled,  # Cancellation check for heartbeat loop
             ):
                 # Check for cancellation
                 if self.active_streams.get(message_id, False):

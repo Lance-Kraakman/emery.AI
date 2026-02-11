@@ -5,7 +5,7 @@ Agent Streaming Handler - Handles the core agent execution flow with streaming r
 import asyncio
 import json
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 from typing import Any, cast
 
@@ -53,6 +53,7 @@ from .message_processor import (
 from .response_types import (
     StreamResponseDict,
 )
+from .stream_health import stream_with_heartbeat
 from .types import CoordinatorStreamingParams
 
 logger = logging.getLogger(__name__)
@@ -104,6 +105,7 @@ class AgentStreamingHandler:
         workspace_type: str | None = None,
         workspace_org_id: int | None = None,
         extra_headers: dict[str, str] | None = None,
+        is_cancelled: Callable[[], bool] | None = None,
     ) -> AsyncIterator[StreamResponseDict]:
         """Stream AI response with HOT/COLD session path management."""
         SkillTool.reset_call_stack()
@@ -180,25 +182,28 @@ class AgentStreamingHandler:
                 )
                 pre_selected_tool = tool_mention
 
-            async for event in self._execute_with_streaming(
-                agent=agent,
-                tools=smolagents_tools,
-                tool_provider=tool_provider,
-                current_task=current_task,
-                images=images,
-                session_id=session_id,
-                org_model=org_model,
-                agent_config=agent_config,
-                file_attachments=file_attachments,
-                conversation_history=conversation_history,
-                workspace_path=workspace_path,
-                user_id=user_id,
-                workspace_type=workspace_type,
-                workspace_id=workspace_id,
-                pre_selected_skill=pre_selected_skill,
-                pre_selected_agent=pre_selected_agent,
-                pre_selected_tool=pre_selected_tool,
-                token_accumulator=token_accumulator,
+            async for event in stream_with_heartbeat(
+                self._execute_with_streaming(
+                    agent=agent,
+                    tools=smolagents_tools,
+                    tool_provider=tool_provider,
+                    current_task=current_task,
+                    images=images,
+                    session_id=session_id,
+                    org_model=org_model,
+                    agent_config=agent_config,
+                    file_attachments=file_attachments,
+                    conversation_history=conversation_history,
+                    workspace_path=workspace_path,
+                    user_id=user_id,
+                    workspace_type=workspace_type,
+                    workspace_id=workspace_id,
+                    pre_selected_skill=pre_selected_skill,
+                    pre_selected_agent=pre_selected_agent,
+                    pre_selected_tool=pre_selected_tool,
+                    token_accumulator=token_accumulator,
+                ),
+                is_cancelled=is_cancelled,
             ):
                 yield event
 
@@ -303,6 +308,7 @@ class AgentStreamingHandler:
             organization_id=tool_provider.organization_id,
             tool_provider=tool_provider,
             workspace_path=kwargs.get("workspace_path"),
+            org_model=kwargs.get("org_model"),  # Propagate to sub-executions
         )
         AgentExecutor.set_current_context(context)
 

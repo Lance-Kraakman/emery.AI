@@ -19,6 +19,7 @@ from ...entities.models.plan import (
 )
 from ...entities.models.task_ledger import create_ledger_from_plan
 from ...entities.workspace import WorkspaceTable
+from ...services.analysis.embedding_usage import set_current_tracker
 from ...services.analysis.embeddings import cosine_similarity, get_embedding
 from ...services.analysis.token_accumulator import TokenAccumulator
 from ...services.context import (
@@ -63,6 +64,18 @@ def _build_workspace_context(
 
     workspace_api = WorkspaceAPI(api_key, org_id)
     data = workspace_api.get_all()
+
+    # Log warning if workspace fetch failed or returned empty
+    if data.fetch_error:
+        logger.warning(
+            f"Workspace fetch failed: {data.fetch_error}. "
+            "Check NEXTJS_BASE_URL env var and ensure Next.js is running."
+        )
+    elif data.is_empty():
+        logger.warning(
+            "Workspace is empty - no databases, apps, agents, skills, or views. "
+            "This may indicate a configuration issue or new organization."
+        )
 
     logger.info(
         f"Workspace context: {len(data.databases)} databases, "
@@ -478,39 +491,50 @@ async def generate_plan_node(
     retrieved_strategies = ""
 
     if org_id and (capability_registry or runtime.planning_registry):
+        # Set embedding tracker context so retrievers track to this request
+        embedding_tracker = (
+            runtime.token_accumulator.get_embedding_tracker()
+            if runtime.token_accumulator
+            else None
+        )
         try:
-            retrievers = get_or_create_retrievers(
-                org_id=org_id,
-                capability_registry=capability_registry,
-                planning_registry=runtime.planning_registry,
-                knowledge_base=runtime.knowledge_base,
-                ace_service=None,  # ACE service deferred
-            )
-
-            # Retrieve relevant context for the task
-            if "capabilities" in retrievers:
-                caps = retrievers["capabilities"](enriched_task)
-                retrieved_capabilities = retrievers["capabilities"].format_for_planner(
-                    caps
+            with set_current_tracker(embedding_tracker):
+                retrievers = get_or_create_retrievers(
+                    org_id=org_id,
+                    capability_registry=capability_registry,
+                    planning_registry=runtime.planning_registry,
+                    knowledge_base=runtime.knowledge_base,
+                    ace_service=None,  # ACE service deferred
                 )
-                logger.debug(f"Retrieved {len(caps)} capabilities for planning")
 
-            if "patterns" in retrievers:
-                patterns = retrievers["patterns"](enriched_task)
-                retrieved_patterns = retrievers["patterns"].format_for_planner(patterns)
-                logger.debug(f"Retrieved {len(patterns)} patterns for planning")
+                # Retrieve relevant context for the task
+                if "capabilities" in retrievers:
+                    caps = retrievers["capabilities"](enriched_task)
+                    retrieved_capabilities = retrievers[
+                        "capabilities"
+                    ].format_for_planner(caps)
+                    logger.debug(f"Retrieved {len(caps)} capabilities for planning")
 
-            if "knowledge" in retrievers:
-                items = retrievers["knowledge"](enriched_task)
-                retrieved_knowledge = retrievers["knowledge"].format_for_planner(items)
-                logger.debug(f"Retrieved {len(items)} knowledge items for planning")
+                if "patterns" in retrievers:
+                    patterns = retrievers["patterns"](enriched_task)
+                    retrieved_patterns = retrievers["patterns"].format_for_planner(
+                        patterns
+                    )
+                    logger.debug(f"Retrieved {len(patterns)} patterns for planning")
 
-            if "strategies" in retrievers:
-                strategies = retrievers["strategies"](enriched_task)
-                retrieved_strategies = retrievers["strategies"].format_for_planner(
-                    strategies
-                )
-                logger.debug(f"Retrieved {len(strategies)} strategies for planning")
+                if "knowledge" in retrievers:
+                    items = retrievers["knowledge"](enriched_task)
+                    retrieved_knowledge = retrievers["knowledge"].format_for_planner(
+                        items
+                    )
+                    logger.debug(f"Retrieved {len(items)} knowledge items for planning")
+
+                if "strategies" in retrievers:
+                    strategies = retrievers["strategies"](enriched_task)
+                    retrieved_strategies = retrievers["strategies"].format_for_planner(
+                        strategies
+                    )
+                    logger.debug(f"Retrieved {len(strategies)} strategies for planning")
 
         except Exception as e:
             logger.warning(f"KNN retrieval failed, continuing without: {e}")
