@@ -24,6 +24,7 @@ from emery_agents.services.context import (
 )
 
 if TYPE_CHECKING:
+    from emery_agents.ace.services.strategy_service import StrategyAccumulationService
     from emery_agents.engine import AgentEngine
     from emery_agents.knowledge.base import KnowledgeBase
     from emery_agents.planning.registry import PlanningRegistry
@@ -85,3 +86,6 @@ class RuntimeContext:
         None  # Audit trail headers for CRUD tool calls
     )
     token_accumulator: TokenAccumulator | None = None
+
+    # ACE (Agentic Context Engineering) - per-agent strategy accumulation
+    ace_service: StrategyAccumulationService | None = None

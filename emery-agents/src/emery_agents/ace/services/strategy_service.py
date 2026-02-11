@@ -5,12 +5,16 @@ Records successful execution patterns and surfaces them to the planner.
 Part of the ACE (Agentic Context Engineering) pattern.
 
 Uses DSPy ChainOfThought with RankStrategies signature.
+
+Per-agent scoping: Each agent has its own strategy registry stored in
+{workspace_path}/.agent/strategies.json
 """
 
 import hashlib
 import json
 import logging
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import dspy
 
@@ -50,8 +54,13 @@ class StrategyAccumulationService:
 
     Records successful execution patterns and surfaces them to planner
     using semantic matching via DSPy.
+
+    Per-agent scoping: Each agent has its own strategy registry stored in
+    {workspace_path}/.agent/strategies.json. Strategies are loaded on init
+    and saved after each recording.
     """
 
+    workspace_path: Path  # Agent workspace root (e.g., /efs/workspaces/agents/{agent_id})
     registry: StrategyRegistry = field(default_factory=StrategyRegistry)
     lm: dspy.LM | None = None
     model_provider: ModelProviderProtocol | None = None
@@ -59,6 +68,25 @@ class StrategyAccumulationService:
 
     def __post_init__(self) -> None:
         self._module = StrategyRankingModule()
+        self._load()  # Load existing strategies on init
+
+    @property
+    def _storage_path(self) -> Path:
+        """Path to strategies file within agent workspace."""
+        return self.workspace_path / ".agent" / "strategies.json"
+
+    def _load(self) -> None:
+        """Load registry from filesystem."""
+        self.registry = StrategyRegistry.load(self._storage_path)
+        logger.info(
+            f"ACE: Loaded {len(self.registry.strategies)} strategies "
+            f"for workspace {self.workspace_path.name}"
+        )
+
+    def _save(self) -> None:
+        """Persist registry to filesystem."""
+        self.registry.save(self._storage_path)
+        logger.debug(f"ACE: Saved strategies to {self._storage_path}")
 
     def record_execution(
         self,
@@ -90,6 +118,9 @@ class StrategyAccumulationService:
         goal_keywords = self.registry.extract_keywords(plan.goal or "")
         record = self.registry.register_pattern(pattern, goal_keywords)
         record.record_outcome(outcome)
+
+        # Persist after recording
+        self._save()
 
         logger.info(
             f"📊 Recorded execution pattern: {pattern_id[:8]}... "
@@ -223,6 +254,7 @@ class StrategyAccumulationService:
     def record_outcome(self, pattern_id: str, outcome: StrategyOutcome) -> None:
         """Record the outcome of using a strategy."""
         self.registry.record_outcome(pattern_id, outcome)
+        self._save()  # Persist after outcome update
         logger.info(
             f"📊 Updated outcome for pattern {pattern_id[:8]}...: {outcome.value}"
         )
@@ -244,14 +276,24 @@ class StrategyAccumulationService:
 
 
 def create_strategy_accumulation_service(
-    registry: StrategyRegistry | None = None,
+    workspace_path: Path,
     lm: dspy.LM | None = None,
     model_provider: ModelProviderProtocol | None = None,
     org_model: str | None = None,
 ) -> StrategyAccumulationService:
-    """Factory function to create StrategyAccumulationService."""
+    """Factory function to create StrategyAccumulationService.
+
+    Args:
+        workspace_path: Agent workspace root (e.g., /efs/workspaces/agents/{agent_id})
+        lm: Optional DSPy LM for strategy ranking
+        model_provider: Optional model provider protocol
+        org_model: Optional org model override
+
+    Returns:
+        StrategyAccumulationService with strategies loaded from workspace
+    """
     return StrategyAccumulationService(
-        registry=registry or StrategyRegistry(),
+        workspace_path=workspace_path,
         lm=lm,
         model_provider=model_provider,
         org_model=org_model,

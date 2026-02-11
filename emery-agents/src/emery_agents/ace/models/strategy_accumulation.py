@@ -9,11 +9,16 @@ Used in BOTH phases:
 - Execution: record_execution() captures successful patterns
 """
 
+import json
+import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 class StrategyOutcome(Enum):
@@ -315,3 +320,37 @@ class StrategyRegistry:
                 registry.keyword_index[keyword].add(pattern_id)
 
         return registry
+
+    def save(self, path: Path) -> None:
+        """Save registry to JSON file.
+
+        Args:
+            path: Path to save the registry to (e.g., .agent/strategies.json)
+        """
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w") as f:
+            json.dump(self.to_dict(), f, indent=2)
+        logger.debug(f"Saved {len(self.strategies)} strategies to {path}")
+
+    @classmethod
+    def load(cls, path: Path) -> "StrategyRegistry":
+        """Load registry from JSON file.
+
+        Args:
+            path: Path to load the registry from
+
+        Returns:
+            StrategyRegistry loaded from file, or empty registry if file doesn't exist
+        """
+        if not path.exists():
+            logger.debug(f"No strategies file at {path}, starting fresh")
+            return cls()
+        try:
+            with open(path) as f:
+                data = json.load(f)
+            registry = cls.from_dict(data)
+            logger.debug(f"Loaded {len(registry.strategies)} strategies from {path}")
+            return registry
+        except (json.JSONDecodeError, KeyError) as e:
+            logger.warning(f"Failed to load strategies from {path}: {e}, starting fresh")
+            return cls()

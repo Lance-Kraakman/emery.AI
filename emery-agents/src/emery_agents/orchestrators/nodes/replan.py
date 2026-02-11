@@ -22,6 +22,7 @@ from typing import Any
 
 import dspy
 
+from ...ace.models.strategy_accumulation import StrategyOutcome
 from ...entities.models.plan import Plan, PlanStep, PlanStepStatus
 from ...reasoning.config import get_dspy_lm
 from ...reasoning.modules.evaluator import EvaluatorModule
@@ -385,6 +386,26 @@ async def _finish(
 
     if runtime.engine:
         runtime.engine.plans.save(plan)
+
+    # === ACE: Record execution pattern for future learning ===
+    if runtime.ace_service and plan and plan.steps:
+        try:
+            outcome = StrategyOutcome.SUCCESS if success else StrategyOutcome.FAILURE
+            # Extract success factors from step reflections if available
+            reflections = state.get("step_reflections", {})
+            success_factors = []
+            for step_id, ref in reflections.items():
+                if pattern := ref.get("pattern_learned"):
+                    success_factors.append(pattern)
+
+            runtime.ace_service.record_execution(
+                plan=plan,
+                outcome=outcome,
+                success_factors=success_factors if success else None,
+            )
+            logger.info(f"ACE: Recorded {outcome.value} pattern from plan {plan.id[:8]}")
+        except Exception as e:
+            logger.warning(f"ACE: Failed to record pattern: {e}")
 
     final_response = None
     if ledger:

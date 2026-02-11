@@ -8,6 +8,7 @@ Wraps existing PlanService for plan creation.
 import logging
 from typing import Any
 
+from emery_agents.ace.services.strategy_service import StrategyAccumulationService
 from emery_agents.api import WorkspaceAPI
 from emery_agents.reasoning.modules.retrievers import get_or_create_retrievers
 from emery_agents.tools.discovery import create_discovery_tools
@@ -483,6 +484,18 @@ async def generate_plan_node(
         full_workspace, task, runtime.token_accumulator
     )
 
+    # === ACE Service: Per-agent strategy accumulation ===
+    # Create ACE service for agent workspaces to track execution patterns
+    ace_service = None
+    if runtime.engine and runtime.workspace_type == "agents" and runtime.workspace_id:
+        try:
+            workspace_path = runtime.engine.paths.root
+            ace_service = StrategyAccumulationService(workspace_path=workspace_path)
+            runtime.ace_service = ace_service  # Store for replan node
+            logger.debug(f"ACE service created for agent {runtime.workspace_id}")
+        except Exception as e:
+            logger.warning(f"Failed to create ACE service: {e}")
+
     # === KNN Retrieval: Get relevant context from registries ===
     # Creates retrievers for available registries and retrieves context
     retrieved_capabilities = ""
@@ -504,7 +517,7 @@ async def generate_plan_node(
                     capability_registry=capability_registry,
                     planning_registry=runtime.planning_registry,
                     knowledge_base=runtime.knowledge_base,
-                    ace_service=None,  # ACE service deferred
+                    ace_service=ace_service,  # NOW WIRED
                 )
 
                 # Retrieve relevant context for the task
