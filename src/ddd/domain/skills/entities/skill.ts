@@ -355,23 +355,38 @@ export type SkillParameterType =
   | 'image' | 'file' | 'audio' | 'video' | 'document';
 
 // =============================================================================
-// Input Mapping Types (read from tables into skill inputs)
+// Input Mapping Types (read from tables or trigger context into skill inputs)
 // =============================================================================
 
 /**
  * Source for reading a value from a table field
  */
 export interface InputFieldSource {
+  type: 'table_field';
   tableId: number;
   fieldId: number;
   rowSource: RowIdSource;  // Reuses existing RowIdSource type
 }
 
 /**
- * Input mapping configuration - maps table field to skill input
+ * Source for reading a value from a trigger context variable
+ * Used with automations to pass trigger data (e.g., $row.email, $event.operation) as skill inputs
+ */
+export interface TriggerVariableSource {
+  type: 'trigger_variable';
+  variable: string;  // e.g., '$row.email', '$event.operation', '$table.name'
+}
+
+/**
+ * Union type for input sources - can be from table fields or trigger variables
+ */
+export type InputSource = InputFieldSource | TriggerVariableSource;
+
+/**
+ * Input mapping configuration - maps table field or trigger variable to skill input
  */
 export interface InputMappingConfig {
-  source: InputFieldSource;
+  source: InputSource;
 }
 
 // =============================================================================

@@ -41,8 +41,8 @@ export default async function OrganizationPage() {
     // Skill-level I/O mappings for edge generation (reads FROM / writes TO tables)
     inputs: Array.isArray(skill.inputs) ? skill.inputs.map((input) => ({
       name: input.name,
-      inputMapping: input.inputMapping ? {
-        source: { tableId: input.inputMapping.source?.tableId }
+      inputMapping: input.inputMapping?.source?.type === 'table_field' ? {
+        source: { tableId: input.inputMapping.source.tableId }
       } : undefined,
     })) : [],
     outputs: Array.isArray(skill.outputs) ? skill.outputs.map((output) => ({

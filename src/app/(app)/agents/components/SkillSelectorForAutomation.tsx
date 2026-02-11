@@ -1,12 +1,14 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Zap, AlertCircle, ChevronDown, ChevronRight, Plus, ArrowRight } from 'lucide-react';
+import { Zap, AlertCircle, ChevronDown, ChevronRight, Plus, ArrowRight, Loader2, X } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { getSkillsByAgent } from '@/app/actions/skills';
+import { getSkillsByAgent, createSkill } from '@/app/actions/skills';
 import type { SkillDTO } from '@/app/mappers/skill-mapper';
 import type { TriggerType } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 import type { AutomationInputMappingDTO } from '@/app/dtos/automation.dto';
@@ -45,6 +47,13 @@ export function SkillSelectorForAutomation({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showMappings, setShowMappings] = useState(false);
+
+  // Inline skill creation state
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [newSkillName, setNewSkillName] = useState('');
+  const [newSkillInstructions, setNewSkillInstructions] = useState('');
+  const [isCreatingSkill, setIsCreatingSkill] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   // Load agent skills on mount
   useEffect(() => {
@@ -134,6 +143,57 @@ export function SkillSelectorForAutomation({
     return inputMappings.find(m => m.skillInputName === inputName);
   };
 
+  // Handle inline skill creation
+  const handleCreateSkill = async () => {
+    if (!newSkillName.trim()) {
+      setCreateError('Skill name is required');
+      return;
+    }
+    if (!newSkillInstructions.trim()) {
+      setCreateError('Instructions are required');
+      return;
+    }
+
+    setIsCreatingSkill(true);
+    setCreateError(null);
+
+    try {
+      const result = await createSkill({
+        agentId,
+        name: newSkillName.trim(),
+        instructions: newSkillInstructions.trim(),
+        executionType: 'agentic'
+      });
+
+      if (result.success && result.data) {
+        // Add new skill to list and select it
+        setSkills(prev => [...prev, result.data!]);
+        onSkillSelect(result.data.id);
+        onInputMappingsChange([]);
+
+        // Reset form
+        setShowCreateForm(false);
+        setNewSkillName('');
+        setNewSkillInstructions('');
+      } else {
+        setCreateError(result.error || 'Failed to create skill');
+      }
+    } catch (err) {
+      console.error('Error creating skill:', err);
+      setCreateError('Failed to create skill');
+    } finally {
+      setIsCreatingSkill(false);
+    }
+  };
+
+  // Cancel inline skill creation
+  const handleCancelCreate = () => {
+    setShowCreateForm(false);
+    setNewSkillName('');
+    setNewSkillInstructions('');
+    setCreateError(null);
+  };
+
   if (isLoading) {
     return (
       <div className="p-4 text-center text-muted-foreground">
@@ -205,7 +265,94 @@ export function SkillSelectorForAutomation({
         <p className="text-xs text-muted-foreground">
           Select which skill to execute when this automation triggers.
         </p>
+
+        {/* Create new skill toggle */}
+        {!showCreateForm && !selectedSkill && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowCreateForm(true)}
+            disabled={disabled}
+            className="text-primary hover:text-primary/80 p-0 h-auto"
+          >
+            <Plus className="h-3 w-3 mr-1" />
+            Create new skill
+          </Button>
+        )}
       </div>
+
+      {/* Inline Skill Creation Form */}
+      {showCreateForm && (
+        <div className="border rounded-lg p-4 bg-muted/30 space-y-4">
+          <div className="flex items-center justify-between">
+            <Label className="text-sm font-medium">Create New Skill</Label>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleCancelCreate}
+              disabled={isCreatingSkill}
+              className="h-6 w-6"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+
+          <div className="space-y-3">
+            <div>
+              <Label htmlFor="new-skill-name" className="text-xs">Name *</Label>
+              <Input
+                id="new-skill-name"
+                value={newSkillName}
+                onChange={(e) => setNewSkillName(e.target.value)}
+                placeholder="e.g., Process New Lead"
+                disabled={isCreatingSkill}
+                className="h-8 mt-1"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="new-skill-instructions" className="text-xs">Instructions *</Label>
+              <Textarea
+                id="new-skill-instructions"
+                value={newSkillInstructions}
+                onChange={(e) => setNewSkillInstructions(e.target.value)}
+                placeholder="Describe what this skill should do..."
+                disabled={isCreatingSkill}
+                className="mt-1 min-h-[80px]"
+              />
+            </div>
+
+            {createError && (
+              <p className="text-xs text-destructive">{createError}</p>
+            )}
+
+            <div className="flex gap-2 justify-end">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCancelCreate}
+                disabled={isCreatingSkill}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleCreateSkill}
+                disabled={isCreatingSkill || !newSkillName.trim() || !newSkillInstructions.trim()}
+              >
+                {isCreatingSkill ? (
+                  <>
+                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  'Create & Select'
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Selected Skill Info */}
       {selectedSkill && (

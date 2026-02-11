@@ -56,7 +56,7 @@ export const SkillInputNode = memo(function SkillInputNode({
           </div>
         ) : (
           inputs.map((input, index) => {
-            const hasTableMapping = Boolean(input.inputMapping?.source?.tableId);
+            const hasTableMapping = input.inputMapping?.source?.type === 'table_field';
             // Calculate handle position as percentage
             const handleLeft = `${((index + 0.5) / inputs.length) * 100}%`;
 
