@@ -55,10 +55,19 @@ def create_bash_tool(
         - For targeted edits (use edit_file instead)
 
         WORKSPACE STRUCTURE:
-        /workspace/               <- Current working directory
-        ├── workspace/            <- Working files, outputs, scratch space
-        ├── .agent/               <- Agent config, persistent memory
-        └── history/              <- Execution logs, previous results
+        /workspace/               <- Current working directory (YOUR FILES ARE HERE!)
+        ├── [your files]          <- Documents, code, data synced from local folder
+        ├── .agent/               <- Agent config & memory (don't modify)
+        ├── history/              <- Execution logs (read-only)
+        └── scratch/              <- Your working space for outputs
+            ├── context/          <- Store processed data here
+            └── outputs/          <- Save generated files here
+
+        FINDING YOUR FILES - User files are in the ROOT, not nested!
+          ls -la                   # Lists YOUR synced files directly
+          cat document.pdf         # Read a user file (in root)
+          mkdir -p scratch/outputs # Create your working directory
+          echo "result" > scratch/outputs/result.txt
 
         AVAILABLE TOOLS:
         File Operations:
@@ -136,7 +145,7 @@ def create_bash_tool(
         if not command or not command.strip():
             return "Error: Empty command"
 
-        logger.debug(f"Executing bash command: {command[:100]}...")
+        logger.info(f"[BASH] Executing in gVisor: {command[:200]}")
 
         try:
             result = executor.execute(
@@ -145,9 +154,11 @@ def create_bash_tool(
                 timeout=timeout,
                 allow_network=allow_network,
             )
-            return str(result)
+            result_str = str(result)
+            logger.info(f"[BASH] Result ({len(result_str)} chars): {result_str[:300]}")
+            return result_str
         except Exception as e:
-            logger.exception(f"Bash command failed: {e}")
+            logger.exception(f"[BASH] Command failed: {e}")
             return f"Error executing command: {str(e)}"
 
     return bash

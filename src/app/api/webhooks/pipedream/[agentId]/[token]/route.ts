@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AgentId } from '@/ddd/domain/shared/value-objects';
-import { getAgentRepository, getAgentTaskApplicationService } from '@/ddd/application/di/container';
+import { getOrganizationRepository, getAgentTaskApplicationService } from '@/ddd/application/di/container';
 import { withSystemContext } from '@/ddd/infrastructure/db/system-context';
 import { PipedreamEventTriggerConfig, TriggerConfigFromJSON } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 import { timingSafeEqual } from '@/lib/security/timing-safe';
@@ -33,23 +33,23 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     console.log(`[PipedreamWebhook] Received event for agent ${agentIdParam}`);
 
-    // Get agent and validate webhook token
-    const agentRepository = getAgentRepository();
-    const agent = await agentRepository.findById(agentId);
+    // Get agent by webhook token (bypasses RLS for cross-org auth)
+    const organizationRepository = getOrganizationRepository();
+    const agent = await organizationRepository.findAgentByWebhookToken(token);
 
     if (!agent) {
-      console.error('[PipedreamWebhook] Agent not found:', agentIdParam);
+      console.error('[PipedreamWebhook] Invalid webhook token');
       return NextResponse.json(
-        { error: 'Agent not found' },
-        { status: 404 }
+        { error: 'Unauthorized: Invalid webhook token' },
+        { status: 401 }
       );
     }
 
-    // SECURITY: Validate webhook token
-    if (!timingSafeEqual(agent.webhookToken, token)) {
-      console.error('[PipedreamWebhook] Invalid webhook token for agent:', agentIdParam);
+    // SECURITY: Validate agentId in URL matches the agent found by token
+    if (agent.id.value !== agentId.value) {
+      console.error('[PipedreamWebhook] Agent ID mismatch:', agentIdParam);
       return NextResponse.json(
-        { error: 'Unauthorized: Invalid webhook token' },
+        { error: 'Unauthorized: Agent ID mismatch' },
         { status: 401 }
       );
     }
@@ -238,20 +238,22 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { agentId: agentIdParam, token } = await params;
     const agentId = AgentId.fromNumber(parseInt(agentIdParam));
-    const agentRepository = getAgentRepository();
-    const agent = await agentRepository.findById(agentId);
+
+    // Get agent by webhook token (bypasses RLS for cross-org auth)
+    const organizationRepository = getOrganizationRepository();
+    const agent = await organizationRepository.findAgentByWebhookToken(token);
 
     if (!agent) {
       return NextResponse.json(
-        { error: 'Agent not found' },
-        { status: 404 }
+        { error: 'Unauthorized: Invalid webhook token' },
+        { status: 401 }
       );
     }
 
-    // SECURITY: Validate webhook token
-    if (!timingSafeEqual(agent.webhookToken, token)) {
+    // SECURITY: Validate agentId in URL matches the agent found by token
+    if (agent.id.value !== agentId.value) {
       return NextResponse.json(
-        { error: 'Unauthorized: Invalid webhook token' },
+        { error: 'Unauthorized: Agent ID mismatch' },
         { status: 401 }
       );
     }

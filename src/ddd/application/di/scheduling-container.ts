@@ -23,6 +23,10 @@ import { ISchedulerService, SchedulerService } from '@/ddd/domain/tasks/services
 import { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
 import { DrizzleAgentRepository } from '@/ddd/infrastructure/db/repositories/agents/drizzle-agent-repository';
 
+// Organization repository for cross-org queries
+import { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
+import { DrizzleOrganizationRepository } from '@/ddd/infrastructure/db/repositories/organizations/drizzle-organization-repository';
+
 
 /**
  * Container interface for task scheduling services
@@ -78,9 +82,11 @@ export class TaskSchedulingContainer {
     // Register repositories
     // Task repository gets rawDb for cross-org queries (scheduler cleanup, orphan detection)
     const taskRepository = new DrizzleTaskRepository(db, rawDb);
-    // Agent repository gets rawDb for cross-org queries (finding all agents for calendar automations)
-    const agentRepository = new DrizzleAgentRepository(db, rawDb);
-    
+    // Agent repository (no rawDb - cross-org queries go through org repository)
+    const agentRepository = new DrizzleAgentRepository(db);
+    // Organization repository gets rawDb for cross-org queries (findAllAgentsRaw, findAgentByApiKey)
+    const organizationRepository = new DrizzleOrganizationRepository(db, rawDb);
+
     this.services.set('ITaskRepository', taskRepository);
     this.services.set('IAgentRepository', agentRepository);
 
@@ -91,8 +97,8 @@ export class TaskSchedulingContainer {
       maxRetries: 3,
       timeoutMs: 300000
     });
-    
-    const schedulerService = new SchedulerService(agentRepository);
+
+    const schedulerService = new SchedulerService(agentRepository, organizationRepository);
     
     this.services.set('ITaskQueueService', taskQueueService);
     this.services.set('ISchedulerService', schedulerService);

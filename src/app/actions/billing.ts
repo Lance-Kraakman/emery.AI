@@ -407,12 +407,7 @@ export async function setSpendingLimit(limitUsd: number | null): Promise<Spendin
   });
 }
 
-/**
- * Storage usage result type - re-exports StorageUsageBreakdown for type compatibility
- */
 import type { StorageUsageBreakdown } from '@/ddd/application/services/billing/storage-quota-application-service';
-
-export type { StorageUsageBreakdown };
 
 export interface StorageUsageResult {
   success: boolean;

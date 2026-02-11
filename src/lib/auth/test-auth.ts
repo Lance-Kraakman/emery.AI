@@ -11,7 +11,7 @@ import { validateUserApiKey, extractApiKeyFromHeader } from './user-api-keys';
 import { db } from '@/ddd/infrastructure/db/client';
 import { users } from '@/ddd/infrastructure/db/schema';
 import { eq } from 'drizzle-orm';
-import { getAgentRepository, getUserRepository } from '@/ddd/application/di/container';
+import { getOrganizationRepository, getUserRepository } from '@/ddd/application/di/container';
 import { ApiKey } from '@/ddd/domain/shared/value-objects';
 
 export interface AuthResult {
@@ -54,9 +54,10 @@ export async function authenticateWithApiKey(apiKeyString: string): Promise<Auth
 
   // Try agent API key (uses agent owner's identity)
   try {
-    const agentRepository = getAgentRepository();
+    const organizationRepository = getOrganizationRepository();
     const apiKey = ApiKey.fromString(apiKeyString);
-    const agent = await agentRepository.findByApiKey(apiKey);
+    // Use org repository for cross-org API key lookup (bypasses RLS)
+    const agent = await organizationRepository.findAgentByApiKey(apiKey);
 
     if (!agent) {
       return { success: false, error: 'Invalid API key' };

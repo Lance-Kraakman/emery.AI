@@ -1,24 +1,22 @@
 import { getTasks } from '@/app/actions/tasks';
 import { AgentSplitView } from './AgentSplitView';
-import type { AutomationConfigurationDTO } from '@/app/dtos/automation.dto';
+import type { AgentDTO } from '@/app/mappers/agent-mapper';
 
 // AIDEV-NOTE: Server component wrapper for AgentSplitView
 // Fetches tasks asynchronously, enabling React streaming
 
 interface SplitViewWrapperProps {
-  agentId: number;
-  automations: AutomationConfigurationDTO[];
+  agent: AgentDTO;
 }
 
-export async function SplitViewWrapper({ agentId, automations }: SplitViewWrapperProps) {
-  const tasksResult = await getTasks(agentId);
+export async function SplitViewWrapper({ agent }: SplitViewWrapperProps) {
+  const tasksResult = await getTasks(agent.id);
   const tasks = tasksResult.success ? (tasksResult.data || []) : [];
 
   return (
     <AgentSplitView
-      agentId={agentId}
+      agent={agent}
       tasks={tasks}
-      automations={automations}
     />
   );
 }

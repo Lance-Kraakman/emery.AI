@@ -108,6 +108,45 @@ function isBinaryFile(filename: string): boolean {
   return BINARY_EXTENSIONS.has(ext);
 }
 
+// MIME type mapping for binary files
+const MIME_TYPE_MAP: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.bmp': 'image/bmp',
+  '.ico': 'image/x-icon',
+  '.svg': 'image/svg+xml',
+  '.pdf': 'application/pdf',
+  '.doc': 'application/msword',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.xls': 'application/vnd.ms-excel',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.ppt': 'application/vnd.ms-powerpoint',
+  '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  '.zip': 'application/zip',
+  '.tar': 'application/x-tar',
+  '.gz': 'application/gzip',
+  '.rar': 'application/vnd.rar',
+  '.7z': 'application/x-7z-compressed',
+  '.mp3': 'audio/mpeg',
+  '.mp4': 'video/mp4',
+  '.wav': 'audio/wav',
+  '.avi': 'video/x-msvideo',
+  '.mov': 'video/quicktime',
+  '.webm': 'video/webm',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+  '.otf': 'font/otf',
+  '.eot': 'application/vnd.ms-fontobject',
+};
+
+function getMimeType(ext: string): string {
+  return MIME_TYPE_MAP[ext] || 'application/octet-stream';
+}
+
 async function validateAgentAccess(
   request: NextRequest,
   agentIdStr: string
@@ -200,12 +239,19 @@ export async function GET(
       );
     }
 
-    // SECURITY: Block binary files (they can't be read as text)
+    // For binary files, return metadata with URL for raw streaming endpoint
     if (isBinaryFile(relativePath)) {
-      return Response.json(
-        { success: false, error: 'Binary files cannot be displayed as text' },
-        { status: 415 }
-      );
+      const ext = extname(relativePath).toLowerCase();
+      const mimeType = getMimeType(ext);
+      return Response.json({
+        success: true,
+        data: {
+          path: relativePath,
+          mimeType,
+          url: `/api/agents/${id}/workspace/file/raw?path=${encodeURIComponent(relativePath)}`,
+          isBinary: true
+        }
+      });
     }
 
     // Check file exists and is not a symlink pointing outside workspace

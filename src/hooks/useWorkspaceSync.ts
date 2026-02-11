@@ -12,6 +12,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { isTauri } from './useDeviceFlow';
 
+// Rate limiting constant - minimum time between syncs in ms
+const MIN_SYNC_INTERVAL_MS = 1000;
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -42,6 +45,18 @@ interface FileChangeEvent {
   agent_id: number;
   paths: string[];
   timestamp: number;
+}
+
+/** SSE lock changed event from Tauri */
+interface AgentLockChangedEvent {
+  agent_id: number;
+  locked: boolean;
+}
+
+/** SSE workspace updated event from Tauri */
+interface AgentWorkspaceUpdatedEvent {
+  agent_id: number;
+  version: string;
 }
 
 export type SyncState = 'idle' | 'connecting' | 'syncing' | 'watching' | 'error';
@@ -112,12 +127,18 @@ export function useWorkspaceSync(agentId: number, orgId: number): UseWorkspaceSy
   // Refs for cleanup
   const fileChangeUnlistenRef = useRef<(() => void) | null>(null);
   const lockPollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const sseUnlistenLockRef = useRef<(() => void) | null>(null);
+  const sseUnlistenWorkspaceRef = useRef<(() => void) | null>(null);
 
   // Track previous lock state for auto-pull on release
   const prevLockedRef = useRef<boolean>(false);
 
   // Track remote sync version for detecting web portal changes
   const lastSyncVersionRef = useRef<number>(0);
+
+  // Rate limiting: track last push time to prevent rapid successive syncs
+  const lastPushTimeRef = useRef<number>(0);
+  const pendingPushRef = useRef<NodeJS.Timeout | null>(null);
 
   const isAvailable = isTauri();
 
@@ -133,7 +154,29 @@ export function useWorkspaceSync(agentId: number, orgId: number): UseWorkspaceSy
   }, []);
 
   const getApiKey = useCallback(async (): Promise<string> => {
-    const apiKey = await invokeTauri<string | null>('get_api_key');
+    let apiKey = await invokeTauri<string | null>('get_api_key');
+
+    // If no API key stored, try to fetch one from existing session
+    if (!apiKey) {
+      console.log('[WorkspaceSync] No stored API key, fetching from session...');
+      try {
+        const res = await fetch('/api/user/refresh-api-key', {
+          method: 'POST',
+          credentials: 'include',
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.apiKey) {
+            apiKey = data.apiKey;
+            await invokeTauri('store_api_key', { apiKey });
+            console.log('[WorkspaceSync] API key fetched and stored');
+          }
+        }
+      } catch (err) {
+        console.error('[WorkspaceSync] Failed to fetch API key:', err);
+      }
+    }
+
     if (!apiKey) {
       throw new Error('No API key configured. Please sign out and sign in again.');
     }
@@ -271,7 +314,8 @@ export function useWorkspaceSync(agentId: number, orgId: number): UseWorkspaceSy
   // File Change Event Listener
   // ---------------------------------------------------------------------------
 
-  const push = useCallback(async (): Promise<SyncResult | null> => {
+  // Internal push function without rate limiting
+  const pushInternal = useCallback(async (): Promise<SyncResult | null> => {
     if (!isAvailable || !syncPath || !isConnected) return null;
 
     try {
@@ -289,6 +333,7 @@ export function useWorkspaceSync(agentId: number, orgId: number): UseWorkspaceSy
       });
 
       setLastSync(result.timestamp);
+      lastPushTimeRef.current = Date.now();
 
       // If queued due to lock, update pending count
       if (result.direction === 'queued') {
@@ -305,6 +350,37 @@ export function useWorkspaceSync(agentId: number, orgId: number): UseWorkspaceSy
       return null;
     }
   }, [agentId, isAvailable, isConnected, isWatching, syncPath, getApiKey, getApiBase]);
+
+  // Rate-limited push function
+  const push = useCallback(async (): Promise<SyncResult | null> => {
+    if (!isAvailable || !syncPath || !isConnected) return null;
+
+    const now = Date.now();
+    const timeSinceLastPush = now - lastPushTimeRef.current;
+
+    // If enough time has passed, push immediately
+    if (timeSinceLastPush >= MIN_SYNC_INTERVAL_MS) {
+      // Clear any pending scheduled push
+      if (pendingPushRef.current) {
+        clearTimeout(pendingPushRef.current);
+        pendingPushRef.current = null;
+      }
+      return pushInternal();
+    }
+
+    // Otherwise, schedule a push for later (debounce)
+    // If there's already a pending push scheduled, don't schedule another
+    if (!pendingPushRef.current) {
+      const delay = MIN_SYNC_INTERVAL_MS - timeSinceLastPush;
+      pendingPushRef.current = setTimeout(() => {
+        pendingPushRef.current = null;
+        pushInternal().catch(console.error);
+      }, delay);
+    }
+
+    // Return null since the actual push is deferred
+    return null;
+  }, [isAvailable, isConnected, syncPath, pushInternal]);
 
   // Listen for file change events and auto-push
   useEffect(() => {
@@ -335,98 +411,140 @@ export function useWorkspaceSync(agentId: number, orgId: number): UseWorkspaceSy
   }, [agentId, isWatching, push]);
 
   // ---------------------------------------------------------------------------
-  // Lock Status Polling + Remote Sync Version Check
+  // SSE Subscription for Real-Time Lock & Workspace Updates
   // ---------------------------------------------------------------------------
 
-  useEffect(() => {
-    if (!isConnected) return;
+  // Handle lock change (from SSE via Tauri event)
+  const handleLockChange = useCallback(async (locked: boolean) => {
+    const wasLocked = prevLockedRef.current;
+    prevLockedRef.current = locked;
 
-    const checkLockAndVersion = async () => {
+    setLockState((prev) => ({ ...(prev || { task_id: null, started_at: null, agent_id: null }), locked }));
+
+    // Detect lock transition: true → false (agent finished working)
+    if (wasLocked && !locked) {
+      console.log('[WorkspaceSync] Lock released, auto-pulling agent changes...');
       try {
         const apiKey = await getApiKey();
         const apiBase = getApiBase();
 
-        // Check lock state via Tauri
+        await invokeTauri('pull_workspace', {
+          agentId,
+          localPath: syncPath,
+          apiKey,
+          apiBase,
+        });
+        setLastSync(Math.floor(Date.now() / 1000));
+
+        // Then sync any pending local changes
+        if (pendingChanges > 0) {
+          console.log('[WorkspaceSync] Syncing pending local changes...');
+          await invokeTauri('sync_pending_changes', { agentId, apiKey, apiBase });
+          setPendingChanges(0);
+        }
+      } catch (pullErr) {
+        console.error('[WorkspaceSync] Auto-pull failed:', pullErr);
+      }
+    }
+  }, [agentId, syncPath, pendingChanges, getApiKey, getApiBase]);
+
+  // Handle workspace version change (from SSE via Tauri event)
+  const handleWorkspaceUpdate = useCallback(async (version: string) => {
+    const newVersion = parseInt(version, 10);
+    if (isNaN(newVersion) || newVersion <= lastSyncVersionRef.current) {
+      return; // Not a new version
+    }
+
+    console.log('[WorkspaceSync] Remote workspace updated, auto-pulling...');
+    lastSyncVersionRef.current = newVersion;
+
+    try {
+      const apiKey = await getApiKey();
+      const apiBase = getApiBase();
+
+      await invokeTauri('pull_workspace', {
+        agentId,
+        localPath: syncPath,
+        apiKey,
+        apiBase,
+      });
+      setLastSync(Math.floor(Date.now() / 1000));
+    } catch (pullErr) {
+      console.error('[WorkspaceSync] Auto-pull on workspace update failed:', pullErr);
+    }
+  }, [agentId, syncPath, getApiKey, getApiBase]);
+
+  useEffect(() => {
+    if (!isConnected) return;
+
+    let mounted = true;
+
+    const setupSse = async () => {
+      try {
+        const apiKey = await getApiKey();
+        const apiBase = getApiBase();
+        const { listen } = await import('@tauri-apps/api/event');
+
+        // Start SSE subscription via Tauri
+        await invokeTauri('start_agent_sse', {
+          agentId,
+          apiKey,
+          apiBase,
+        });
+        console.log('[WorkspaceSync] SSE subscription started for agent', agentId);
+
+        // Listen for lock change events from Tauri
+        const unlistenLock = await listen<AgentLockChangedEvent>('agent-lock-changed', (event) => {
+          if (event.payload.agent_id === agentId && mounted) {
+            console.log('[WorkspaceSync] Lock changed:', event.payload.locked);
+            handleLockChange(event.payload.locked);
+          }
+        });
+        sseUnlistenLockRef.current = unlistenLock;
+
+        // Listen for workspace update events from Tauri
+        const unlistenWorkspace = await listen<AgentWorkspaceUpdatedEvent>('agent-workspace-updated', (event) => {
+          if (event.payload.agent_id === agentId && mounted) {
+            console.log('[WorkspaceSync] Workspace updated:', event.payload.version);
+            handleWorkspaceUpdate(event.payload.version);
+          }
+        });
+        sseUnlistenWorkspaceRef.current = unlistenWorkspace;
+
+        // Fetch initial lock state (one-time, not polling)
         const state = await invokeTauri<WorkspaceLockState>('check_workspace_lock', {
           agentId,
+          apiKey,
+          apiBase,
         });
-        setLockState(state);
-
-        // Detect lock transition: true → false (agent finished working)
-        const wasLocked = prevLockedRef.current;
-        const isNowUnlocked = !state.locked;
-
-        if (wasLocked && isNowUnlocked) {
-          console.log('Lock released, auto-pulling agent changes...');
-          try {
-            await invokeTauri('pull_workspace', {
-              agentId,
-              localPath: syncPath,
-              apiKey,
-              apiBase,
-            });
-            setLastSync(Math.floor(Date.now() / 1000));
-          } catch (pullErr) {
-            console.error('Auto-pull failed:', pullErr);
-          }
-
-          // Then sync any pending local changes
-          if (pendingChanges > 0) {
-            console.log('Syncing pending local changes...');
-            await invokeTauri('sync_pending_changes', { agentId, apiKey, apiBase });
-            setPendingChanges(0);
-          }
-        }
-
-        // Update previous lock state
-        prevLockedRef.current = state.locked;
-
-        // Check remote sync version (web portal changes) - only when not locked
-        if (!state.locked) {
-          try {
-            const versionRes = await fetch(
-              `${apiBase}/api/agents/${agentId}/workspace/file?path=/.emery-sync-version`,
-              { headers: { 'Authorization': `Bearer ${apiKey}` } }
-            );
-            if (versionRes.ok) {
-              const versionData = await versionRes.json();
-              if (versionData.success && versionData.data?.content) {
-                const remoteVersion = parseInt(versionData.data.content, 10);
-                if (remoteVersion > lastSyncVersionRef.current) {
-                  console.log('Remote sync version changed, auto-pulling web changes...');
-                  lastSyncVersionRef.current = remoteVersion;
-                  await invokeTauri('pull_workspace', {
-                    agentId,
-                    localPath: syncPath,
-                    apiKey,
-                    apiBase,
-                  });
-                  setLastSync(Math.floor(Date.now() / 1000));
-                }
-              }
-            }
-          } catch (versionErr) {
-            // Version file may not exist yet - that's OK
-          }
+        if (mounted) {
+          setLockState(state);
+          prevLockedRef.current = state.locked;
         }
       } catch (err) {
-        console.error('Failed to check lock/version status:', err);
+        console.error('[WorkspaceSync] Failed to setup SSE:', err);
       }
     };
 
-    // Check immediately
-    checkLockAndVersion();
-
-    // Poll every 5 seconds
-    lockPollIntervalRef.current = setInterval(checkLockAndVersion, 5000);
+    setupSse();
 
     return () => {
-      if (lockPollIntervalRef.current) {
-        clearInterval(lockPollIntervalRef.current);
-        lockPollIntervalRef.current = null;
+      mounted = false;
+
+      // Stop SSE subscription
+      invokeTauri('stop_agent_sse', { agentId }).catch(console.error);
+
+      // Cleanup event listeners
+      if (sseUnlistenLockRef.current) {
+        sseUnlistenLockRef.current();
+        sseUnlistenLockRef.current = null;
+      }
+      if (sseUnlistenWorkspaceRef.current) {
+        sseUnlistenWorkspaceRef.current();
+        sseUnlistenWorkspaceRef.current = null;
       }
     };
-  }, [agentId, isConnected, pendingChanges, syncPath, getApiKey, getApiBase]);
+  }, [agentId, isConnected, getApiBase, getApiKey, handleLockChange, handleWorkspaceUpdate]);
 
   // ---------------------------------------------------------------------------
   // Actions
@@ -521,9 +639,22 @@ export function useWorkspaceSync(agentId: number, orgId: number): UseWorkspaceSy
       if (fileChangeUnlistenRef.current) {
         fileChangeUnlistenRef.current();
       }
-      // Cleanup lock polling
+      // Cleanup lock polling (legacy fallback)
       if (lockPollIntervalRef.current) {
         clearInterval(lockPollIntervalRef.current);
+      }
+      // Cleanup SSE event listeners
+      if (sseUnlistenLockRef.current) {
+        sseUnlistenLockRef.current();
+      }
+      if (sseUnlistenWorkspaceRef.current) {
+        sseUnlistenWorkspaceRef.current();
+      }
+      // Stop SSE subscription
+      invokeTauri('stop_agent_sse', { agentId }).catch(() => {});
+      // Cleanup pending push timeout
+      if (pendingPushRef.current) {
+        clearTimeout(pendingPushRef.current);
       }
       // Disconnect SFTP
       if (isConnected) {

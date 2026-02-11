@@ -1,13 +1,15 @@
-import { eq, ilike, and } from 'drizzle-orm';
+import { eq, ilike, and, or, gte } from 'drizzle-orm';
 import type { InferSelectModel } from 'drizzle-orm';
 
 import { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
 import { DrizzleBaseRepository } from '../base/drizzle-base-repository';
 import { Organization, CreateOrganizationData, UpdateOrganizationData, OrganizationWithMembers, OrganizationMember } from '@/ddd/domain/organizations/entities/organization';
 import type { DbClient } from '@/ddd/infrastructure/db/client';
-import { organizations, users, userOrganizations, roles, userRoles } from '@/ddd/infrastructure/db/schema';
-import { OrganizationId, UserId, OrganizationName, EmailAddress } from '@/ddd/domain/shared/value-objects';
+import { organizations, users, userOrganizations, roles, userRoles, agents } from '@/ddd/infrastructure/db/schema';
+import { OrganizationId, UserId, OrganizationName, EmailAddress, ApiKey } from '@/ddd/domain/shared/value-objects';
 import { SystemRoleType, SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
+import type { Agent } from '@/ddd/domain/agents/entities/agent';
+import { AgentFactory } from '@/ddd/domain/agents/entities/agent';
 
 type OrganizationRow = InferSelectModel<typeof organizations>;
 
@@ -76,6 +78,87 @@ export class DrizzleOrganizationRepository
       .from(organizations);
 
     return result.map((org: OrganizationRow) => this.fromPersistence(org));
+  }
+
+  /**
+   * Find agent by API key (cross-org authentication query)
+   * Used during API key authentication before user context is established.
+   * Bypasses RLS because this is how we establish the user context.
+   */
+  async findAgentByApiKey(apiKey: ApiKey): Promise<Agent | null> {
+    if (!this.rawDb) {
+      throw new Error('Raw DB required for findAgentByApiKey(). Pass rawDb to constructor.');
+    }
+    try {
+      const hash = ApiKey.hash(apiKey.value);
+      const now = new Date();
+
+      const [record] = await this.rawDb
+        .select()
+        .from(agents)
+        .where(
+          or(
+            eq(agents.apiKeyHash, hash),
+            and(
+              eq(agents.previousApiKeyHash, hash),
+              gte(agents.previousApiKeyExpiresAt, now)
+            )
+          )
+        )
+        .limit(1);
+
+      if (!record) {
+        return null;
+      }
+
+      return AgentFactory.fromPersistence(record);
+    } catch (error) {
+      console.error('Error finding agent by API key:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Find agent by webhook token (cross-org authentication query)
+   * Used during webhook authentication before user context is established.
+   * Bypasses RLS because this is how we establish the user context.
+   */
+  async findAgentByWebhookToken(token: string): Promise<Agent | null> {
+    if (!this.rawDb) {
+      throw new Error('Raw DB required for findAgentByWebhookToken(). Pass rawDb to constructor.');
+    }
+    try {
+      const [record] = await this.rawDb
+        .select()
+        .from(agents)
+        .where(eq(agents.webhookToken, token))
+        .limit(1);
+
+      if (!record) {
+        return null;
+      }
+
+      return AgentFactory.fromPersistence(record);
+    } catch (error) {
+      console.error('Error finding agent by webhook token:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Find all agents bypassing RLS (system scheduler use only)
+   * WARNING: Completely bypasses row-level security.
+   * ONLY use for cross-org batch operations in trusted system processes.
+   */
+  async findAllAgentsRaw(): Promise<Agent[]> {
+    if (!this.rawDb) {
+      throw new Error('Raw DB required for findAllAgentsRaw(). Pass rawDb to constructor.');
+    }
+    const results = await this.rawDb
+      .select()
+      .from(agents);
+
+    return results.map((record: any) => AgentFactory.fromPersistence(record));
   }
 
   async findByIdWithMembers(id: OrganizationId): Promise<OrganizationWithMembers | null> {

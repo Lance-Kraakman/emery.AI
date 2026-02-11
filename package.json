@@ -44,7 +44,13 @@
     "generate:blocks-schema": "tsx scripts/generate-blocks-schema.ts",
     "stripe:listen": "source .env.local && stripe listen --forward-to $NEXTAUTH_URL/api/webhooks/stripe",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "dev:services": "docker compose --env-file .env.local -f src/tests/docker-compose.integration.yml -f src/tests/docker-compose.integration.dev.yml up -d",
+    "dev:services:full": "docker compose --env-file .env.local -f src/tests/docker-compose.integration.yml -f src/tests/docker-compose.integration.dev.yml --profile app up -d",
+    "dev:services:stop": "docker compose --env-file .env.local -f src/tests/docker-compose.integration.yml -f src/tests/docker-compose.integration.dev.yml --profile app down",
+    "dev:services:logs": "docker compose --env-file .env.local -f src/tests/docker-compose.integration.yml -f src/tests/docker-compose.integration.dev.yml logs -f",
+    "dev:local": "concurrently -n next,sched -c blue,green \"pnpm dev -p 3002\" \"pnpm scheduler:start\"",
+    "dev:local:run": "pnpm build && concurrently -n next,sched -c blue,green \"pnpm start -p 3002\" \"pnpm scheduler:start\""
   },
   "packageManager": "pnpm@10.14.0",
   "dependencies": {
@@ -173,6 +179,7 @@
     "react-dom": "18.3.1",
     "react-hook-form": "^7.62.0",
     "react-markdown": "^10.1.0",
+    "react-pdf": "^9.2.1",
     "react-resizable-panels": "^3.0.4",
     "react-syntax-highlighter": "^16.1.0",
     "react-timezone-select": "^3.2.8",
@@ -217,6 +224,7 @@
     "@vitejs/plugin-react": "^5.1.2",
     "@vitest/ui": "^3.2.4",
     "autoprefixer": "10.4.21",
+    "concurrently": "^9.2.1",
     "drizzle-kit": "0.31.4",
     "drizzle-orm": "0.44.4",
     "esbuild": "^0.25.9",

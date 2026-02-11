@@ -21,17 +21,6 @@ export class DrizzleAgentRepository
   protected readonly idColumn = agents.id;
   protected readonly organizationColumn = agents.organizationId;
 
-  /**
-   * @param db - Context-aware database client (with RLS enforcement)
-   * @param rawDb - Optional raw database client for cross-org queries (bypasses RLS)
-   */
-  constructor(
-    db: DbClient,
-    private readonly rawDb?: DbClient
-  ) {
-    super(db);
-  }
-
   async create(data: CreateAgentData): Promise<Agent> {
     const [record] = await this.db
       .insert(agents)
@@ -141,22 +130,6 @@ export class DrizzleAgentRepository
     return results.map(result => this.fromPersistence(result));
   }
 
-  /**
-   * Find all agents bypassing RLS (system scheduler use only)
-   * WARNING: Completely bypasses row-level security.
-   * ONLY use for cross-org batch operations in trusted system processes.
-   */
-  async findAllRaw(): Promise<Agent[]> {
-    if (!this.rawDb) {
-      throw new Error('Raw DB required for findAllRaw(). Pass rawDb to constructor when cross-org queries are needed.');
-    }
-    const results: AgentRow[] = await this.rawDb
-      .select()
-      .from(agents);
-
-    return results.map(result => this.fromPersistence(result));
-  }
-
   protected fromPersistence(record: any): Agent {
     return AgentFactory.fromPersistence(record);
   }
@@ -189,6 +162,9 @@ export class DrizzleAgentRepository
       const hash = ApiKey.hash(apiKey.value);
       const now = new Date();
 
+      // NOTE: For cross-org API key lookups (authentication), use
+      // organizationRepository.findAgentByApiKey() which bypasses RLS.
+      // This method requires RLS context to be set.
       const [record] = await this.db
         .select()
         .from(agents)
@@ -216,6 +192,9 @@ export class DrizzleAgentRepository
 
   async findByWebhookToken(token: string): Promise<Agent | null> {
     try {
+      // NOTE: For cross-org webhook token lookups (authentication), use
+      // organizationRepository.findAgentByWebhookToken() which bypasses RLS.
+      // This method requires RLS context to be set.
       const [record] = await this.db
         .select()
         .from(agents)

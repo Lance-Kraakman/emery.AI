@@ -1,34 +1,39 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ChevronDown, ChevronRight, FolderOpen, Zap, Filter } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { ChevronDown, ChevronRight, FolderOpen, Zap } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { TaskListItem } from '../tasks/TaskListItem';
 import { AutomationsSection } from '../automations/AutomationsSection';
 import { WorkspaceSection } from '../workspace/WorkspaceSection';
 import type { TaskDTO } from '@/app/mappers/task-mapper';
+import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import type { AutomationConfigurationDTO } from '@/app/dtos/automation.dto';
 
 // AIDEV-NOTE: Left panel of split view
 // Contains: Tasks list (primary) + collapsible Workspace & Automations sections
 
 interface LeftPanelProps {
-  agentId: number;
+  agent: AgentDTO;
   tasks: TaskDTO[];
   automations: AutomationConfigurationDTO[];
   selectedTaskId: string | null;
   onSelectTask: (taskId: string | null) => void;
+  onFileSelect: (path: string) => void;
+  selectedFilePath?: string;
 }
 
 export function LeftPanel({
-  agentId,
+  agent,
   tasks,
   automations,
   selectedTaskId,
   onSelectTask,
+  onFileSelect,
+  selectedFilePath,
 }: LeftPanelProps) {
+  const agentId = agent.id;
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [automationsOpen, setAutomationsOpen] = useState(false);
 
@@ -79,7 +84,11 @@ export function LeftPanel({
             </button>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <WorkspaceSection agentId={agentId} />
+            <WorkspaceSection
+              agentId={agentId}
+              onFileSelect={onFileSelect}
+              selectedFilePath={selectedFilePath}
+            />
           </CollapsibleContent>
         </Collapsible>
 
@@ -102,7 +111,7 @@ export function LeftPanel({
             </button>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <AutomationsSection automations={automations} />
+            <AutomationsSection agent={agent} automations={automations} />
           </CollapsibleContent>
         </Collapsible>
       </div>

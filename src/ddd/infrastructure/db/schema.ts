@@ -2659,3 +2659,27 @@ export const publishedAgentUsageLogs = pgTable("published_agent_usage_logs", {
   index("published_agent_usage_logs_published_agent_idx").on(table.publishedAgentId),
   index("published_agent_usage_logs_created_at_idx").on(table.createdAt),
 ]);
+
+/**
+ * User SSH Keys - SSH public keys for workspace sync (rsync over SSH)
+ *
+ * Keys are registered by the Tauri desktop app and synced to the SSH container's
+ * authorized_keys file via Lambda/cron.
+ */
+export const userSshKeys = pgTable("user_ssh_keys", {
+  id: serial("id").primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  organizationId: integer("organization_id").references(() => organizations.id, { onDelete: 'cascade' }), // Restricts key to this org for SSH ForceCommand
+
+  publicKey: text("public_key").notNull(),
+  fingerprint: text("fingerprint").notNull(), // SHA256 fingerprint for deduplication
+  name: text("name").notNull().default('Desktop Sync'), // User-friendly name
+
+  lastUsedAt: timestamp("last_used_at"), // Updated by SSH container
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  unique("user_ssh_keys_user_fingerprint_unique").on(table.userId, table.fingerprint),
+  index("user_ssh_keys_user_idx").on(table.userId),
+  index("user_ssh_keys_fingerprint_idx").on(table.fingerprint),
+  index("user_ssh_keys_org_idx").on(table.organizationId),
+]);

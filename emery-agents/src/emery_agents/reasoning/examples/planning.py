@@ -1,14 +1,11 @@
 """
-Canonical planning examples for few-shot learning.
+Planning examples for KNNFewShot demo selection.
 
-These examples demonstrate good step descriptions, proper tool selection,
-and appropriate plan structure. They can be used for:
-- Documentation and reference
-- Future DSPy optimization (BootstrapFewShot when supported)
-- Testing plan generation quality
+Each example shows: given a request, produce this plan.
+KNN matches on request similarity to select relevant demos.
 
-Note: DSPy ReAct does not support demos= parameter directly.
-Examples can be used via signature-level injection or optimization.
+IMPORTANT: Examples only have `request` (input) and `result` (output).
+Runtime context (workspace, capabilities, etc.) is NOT in examples.
 """
 
 import dspy
@@ -22,69 +19,79 @@ from emery_agents.reasoning.signatures.planning import (
 )
 
 
-# Input field names for CreatePlan signature
-_INPUT_FIELDS = (
-    "request",
-    "workspace_context",
-    "capability_guidance",
-    "planning_context",
-    "conversation_history",
-    "configured_tools",
-)
-
-
-def _create_example(
-    request: str,
-    workspace_context: str,
-    planning_context: str,
-    result: PlanOrQuestionsOutput,
-    capability_guidance: str = "",
-    conversation_history: str = "",
-    configured_tools: str = "",
-) -> dspy.Example:
-    """Helper to create a properly-typed dspy.Example."""
-    return dspy.Example(
-        request=request,
-        workspace_context=workspace_context,
-        capability_guidance=capability_guidance,
-        planning_context=planning_context,
-        conversation_history=conversation_history,
-        configured_tools=configured_tools,
-        result=result,
-    ).with_inputs(*_INPUT_FIELDS)
+def _example(request: str, result: PlanOrQuestionsOutput) -> dspy.Example:
+    """Create a planning example with request (input) and result (output)."""
+    return dspy.Example(request=request, result=result).with_inputs("request")
 
 
 # =============================================================================
-# Example 1: Simple table creation (single step, explicit values)
+# Skill Execution Examples (high priority - should match skill requests)
 # =============================================================================
-EXAMPLE_CREATE_TABLE = _create_example(
-    request="Create a contacts table with name, email, and phone",
-    workspace_context='{"_summary": "Empty workspace", "resources": []}',
-    planning_context="""## Task Analysis
-Intent: Create a contacts table with name, email, and phone fields
-Domain: emery
-Entities: contacts, name, email, phone
-Approach: analytical""",
+
+EXAMPLE_EXECUTE_SKILL = _example(
+    request="@skill:go-for-a-walk",
     result=PlanOrQuestionsOutput(
         plan=PlanOutput(
-            plan_id="plan_create_contacts",
-            goal="Create contacts table with name, email, and phone fields",
-            context="Empty workspace - creating new table from scratch",
-            analysis="Single table creation with 3 explicit field types. Straightforward schema design.",
+            plan_id="plan_execute_skill",
+            goal="Execute the 'Go for a Walk' skill",
+            context="Human task skill - assign and await completion.",
+            analysis="Simple skill execution. No research needed - just run the skill.",
             steps=[
                 PlanStepOutput(
-                    step_id="step_1_create_contacts_table",
-                    description=(
-                        'Create table "contacts" with fields: '
-                        "name (text), email (email), phone (phone). "
-                        "Verify: table exists with exactly 3 fields."
-                    ),
+                    step_id="step_1",
+                    description="Execute skill 'Go for a Walk'. Human task - await completion.",
                     phase_name="Execution",
                     phase_order=1,
                 )
             ],
             auto_approve_policy="auto",
-            matched_conditions=["single_resource", "explicit_values", "additive_only"],
+            matched_conditions=["skill_execution"],
+        ),
+        questions=None,
+    ),
+)
+
+EXAMPLE_SKILL_WITH_INPUTS = _example(
+    request="Run the weekly report skill and send to team@company.com",
+    result=PlanOrQuestionsOutput(
+        plan=PlanOutput(
+            plan_id="plan_run_report",
+            goal="Execute Weekly Report skill with recipient",
+            context="Skill with input parameter.",
+            analysis="Skill execution with input. Extract recipient from request.",
+            steps=[
+                PlanStepOutput(
+                    step_id="step_1",
+                    description="Execute 'Weekly Report' skill with recipient_email='team@company.com'.",
+                    phase_name="Execution",
+                    phase_order=1,
+                )
+            ],
+            auto_approve_policy="auto",
+            matched_conditions=["skill_execution", "explicit_values"],
+        ),
+        questions=None,
+    ),
+)
+
+EXAMPLE_LIST_SKILLS = _example(
+    request="What skills do I have?",
+    result=PlanOrQuestionsOutput(
+        plan=PlanOutput(
+            plan_id="plan_list_skills",
+            goal="List available skills",
+            context="Information request - format from workspace context.",
+            analysis="Skills are in workspace context. No tool calls needed.",
+            steps=[
+                PlanStepOutput(
+                    step_id="step_1",
+                    description="Format and present available skills from workspace context.",
+                    phase_name="Synthesis",
+                    phase_order=1,
+                )
+            ],
+            auto_approve_policy="auto",
+            matched_conditions=["read_only", "information_request"],
         ),
         questions=None,
     ),
@@ -92,94 +99,108 @@ Approach: analytical""",
 
 
 # =============================================================================
-# Example 2: Multi-step task (app with linked table)
+# Table/Schema Examples
 # =============================================================================
-EXAMPLE_CREATE_APP_WITH_TABLE = _create_example(
-    request="Create a task tracker with a tasks table and a simple app to view them",
-    workspace_context='{"_summary": "Empty workspace", "resources": []}',
-    planning_context="""## Task Analysis
-Intent: Create a task tracking system with database and UI
-Domain: emery
-Entities: tasks, task tracker, app
-Approach: systems-thinking""",
+
+EXAMPLE_CREATE_TABLE = _example(
+    request="Create a contacts table with name, email, and phone",
+    result=PlanOrQuestionsOutput(
+        plan=PlanOutput(
+            plan_id="plan_create_contacts",
+            goal="Create contacts table with name, email, phone fields",
+            context="New table creation.",
+            analysis="Single table with 3 explicit fields. Straightforward.",
+            steps=[
+                PlanStepOutput(
+                    step_id="step_1",
+                    description='Create table "contacts" with fields: name (text), email (email), phone (phone).',
+                    phase_name="Execution",
+                    phase_order=1,
+                )
+            ],
+            auto_approve_policy="auto",
+            matched_conditions=["single_resource", "explicit_values"],
+        ),
+        questions=None,
+    ),
+)
+
+EXAMPLE_ADD_FIELD = _example(
+    request="Add a phone field to the contacts table",
+    result=PlanOrQuestionsOutput(
+        plan=PlanOutput(
+            plan_id="plan_add_field",
+            goal="Add phone field to contacts table",
+            context="Adding field to existing table.",
+            analysis="Single field addition. Non-destructive.",
+            steps=[
+                PlanStepOutput(
+                    step_id="step_1",
+                    description='Add field "phone" (phone type) to table "contacts".',
+                    phase_name="Execution",
+                    phase_order=1,
+                )
+            ],
+            auto_approve_policy="auto",
+            matched_conditions=["single_resource", "additive_only"],
+        ),
+        questions=None,
+    ),
+)
+
+
+# =============================================================================
+# App/Dashboard Examples
+# =============================================================================
+
+EXAMPLE_CREATE_APP = _example(
+    request="Create a task tracker with a tasks table and app to view them",
     result=PlanOrQuestionsOutput(
         plan=PlanOutput(
             plan_id="plan_task_tracker",
-            goal="Create task tracker with tasks table and viewing app",
-            context="Empty workspace - need both data layer and UI",
-            analysis="Two-step task: first create data storage (table), then create UI (app). "
-            "App depends on table existing first.",
+            goal="Create task tracker with table and app",
+            context="Multi-step: table first, then app.",
+            analysis="Two-step: create data storage, then UI. App depends on table.",
             steps=[
                 PlanStepOutput(
-                    step_id="step_1_create_tasks_table",
-                    description=(
-                        'Create table "tasks" with fields: '
-                        "title (text), description (long-text), "
-                        "status (single-select: To Do, In Progress, Done), "
-                        "due_date (date). "
-                        "Verify: table exists with 4 fields."
-                    ),
+                    step_id="step_1",
+                    description='Create table "tasks" with: title, description, status, due_date.',
                     phase_name="Execution",
                     phase_order=1,
                 ),
                 PlanStepOutput(
-                    step_id="step_2_create_tasks_app",
-                    description=(
-                        'Create app "Task Tracker" with a single page "Tasks" '
-                        'that displays records from the "tasks" table in a table view. '
-                        "Include columns: title, status, due_date. "
-                        "Verify: app exists with one page showing task data."
-                    ),
-                    required_context=["step_1_create_tasks_table"],
+                    step_id="step_2",
+                    description='Create app "Task Tracker" with table view of tasks.',
+                    required_context=["step_1"],
                     phase_name="Execution",
                     phase_order=2,
                 ),
             ],
             auto_approve_policy="confirm",
-            matched_conditions=["explicit_values", "additive_only"],
+            matched_conditions=["multi_resource"],
         ),
         questions=None,
     ),
 )
 
-
-# =============================================================================
-# Example 3: Adding to existing resource
-# =============================================================================
-EXAMPLE_ADD_FIELD = _create_example(
-    request="Add a phone field to the contacts table",
-    workspace_context="""{
-        "_summary": "1 database, 1 table",
-        "resources": [
-            {"type": "database", "name": "Main", "id": "db_1", "tables": [
-                {"name": "contacts", "id": "tbl_1", "field_count": 2, "fields": ["name", "email"]}
-            ]}
-        ]
-    }""",
-    planning_context="""## Task Analysis
-Intent: Add a phone field to existing contacts table
-Domain: emery
-Entities: contacts, phone
-Approach: analytical""",
+EXAMPLE_BUILD_DASHBOARD = _example(
+    request="Build me a dashboard for sales metrics",
     result=PlanOrQuestionsOutput(
         plan=PlanOutput(
-            plan_id="plan_add_phone_field",
-            goal="Add phone field to contacts table",
-            context="contacts table exists with name and email fields - adding phone",
-            analysis="Single field addition to existing table. Non-destructive change.",
+            plan_id="plan_sales_dashboard",
+            goal="Create sales dashboard",
+            context="Dashboard app with charts.",
+            analysis="Delegate to app_builder for dashboard creation.",
             steps=[
                 PlanStepOutput(
-                    step_id="step_1_add_phone_field",
-                    description=(
-                        'Add field "phone" (phone type) to table "contacts". '
-                        "Verify: contacts table now has 3 fields: name, email, phone."
-                    ),
+                    step_id="step_1",
+                    description="Create 'Sales Dashboard' app with charts: Sales by Region, Sales Over Time, Top Products. Use app_builder.",
                     phase_name="Execution",
                     phase_order=1,
                 )
             ],
-            auto_approve_policy="auto",
-            matched_conditions=["single_resource", "explicit_values", "additive_only"],
+            auto_approve_policy="confirm",
+            matched_conditions=["app_creation"],
         ),
         questions=None,
     ),
@@ -187,31 +208,21 @@ Approach: analytical""",
 
 
 # =============================================================================
-# Example 4: Research/discovery task (uses web_search)
+# Research Examples
 # =============================================================================
-EXAMPLE_RESEARCH_TASK = _create_example(
+
+EXAMPLE_RESEARCH = _example(
     request="What are best practices for CRM database design?",
-    workspace_context='{"_summary": "Empty workspace", "resources": []}',
-    planning_context="""## Task Analysis
-Intent: Research CRM database design best practices
-Domain: research
-Entities: CRM, database
-Approach: analytical""",
     result=PlanOrQuestionsOutput(
         plan=PlanOutput(
-            plan_id="plan_crm_research",
-            goal="Research and summarize CRM database design best practices",
-            context="Research task - no workspace modifications needed",
-            analysis="Pure research task. Use web_search to gather information, then synthesize findings.",
+            plan_id="plan_research",
+            goal="Research CRM database design best practices",
+            context="Research task - no modifications.",
+            analysis="Pure research. Use web_search, then summarize.",
             steps=[
                 PlanStepOutput(
-                    step_id="step_1_research_crm",
-                    description=(
-                        "Search for CRM database design best practices. "
-                        "Look for: common entities (contacts, companies, deals, activities), "
-                        "recommended relationships, field types for each entity. "
-                        "Summarize findings with actionable recommendations."
-                    ),
+                    step_id="step_1",
+                    description="Search for CRM database design best practices. Summarize findings.",
                     tool_call="web_search",
                     phase_name="Discovery",
                     phase_order=1,
@@ -226,17 +237,11 @@ Approach: analytical""",
 
 
 # =============================================================================
-# Example 5: Task needing clarification
+# Clarification Examples
 # =============================================================================
-EXAMPLE_NEEDS_CLARIFICATION = _create_example(
+
+EXAMPLE_NEEDS_CLARIFICATION = _example(
     request="Set up email notifications",
-    workspace_context='{"_summary": "Empty workspace", "resources": []}',
-    planning_context="""## Task Analysis
-Intent: Set up email notifications
-Domain: automation
-Entities: email, notifications
-Approach: systems-thinking
-External services: email""",
     result=PlanOrQuestionsOutput(
         plan=None,
         questions=[
@@ -244,131 +249,19 @@ External services: email""",
                 question="What should trigger the email notifications?",
                 question_type=QuestionType.CHOICE,
                 options=[
-                    "When a new record is added to a table",
-                    "On a scheduled time (daily, weekly)",
+                    "When a new record is added",
+                    "On a schedule (daily, weekly)",
                     "When a field value changes",
-                    "Manual trigger from a button",
                 ],
-                reason="Need to know the trigger type to design the automation correctly",
+                reason="Need trigger type to design automation.",
             ),
             ClarifyingQuestionOutput(
-                question="Which email service would you like to use?",
+                question="Which email service?",
                 question_type=QuestionType.CHOICE,
                 options=["Gmail", "Outlook", "Custom SMTP"],
-                reason="Different services require different OAuth connections and have different capabilities",
+                reason="Different services need different setup.",
             ),
         ],
-    ),
-)
-
-
-# =============================================================================
-# Example 6: Research DURING planning (not as a plan step)
-# =============================================================================
-EXAMPLE_RESEARCH_THEN_PLAN = _create_example(
-    request="Create a project management system",
-    workspace_context='{"_summary": "Empty workspace", "resources": []}',
-    planning_context="""## Task Analysis
-Intent: Create project management system with tables and app
-Domain: emery
-Entities: projects, tasks, team members
-Approach: systems-thinking""",
-    # This example shows research DONE during planning, reflected in analysis field
-    result=PlanOrQuestionsOutput(
-        plan=PlanOutput(
-            plan_id="plan_pm_system",
-            goal="Create project management system based on research",
-            context="Empty workspace. Researched PM best practices: need projects, tasks, team assignments.",
-            analysis=(
-                "Researched via web_search: PM systems need projects (name, status, dates), "
-                "tasks (title, status, assignee, project link), and team members (name, role). "
-                "Found via search_capabilities: schema_builder for tables, app_builder for UI. "
-                "Will create minimal viable structure first."
-            ),
-            steps=[
-                # Note: NO research steps - research was done during planning
-                PlanStepOutput(
-                    step_id="step_1_projects_table",
-                    description=(
-                        'Create table "projects" with fields: name (text), '
-                        "status (single-select: Planning, Active, Complete), "
-                        "start_date (date), end_date (date). Verify: table exists."
-                    ),
-                    phase_name="Execution",
-                    phase_order=1,
-                ),
-                PlanStepOutput(
-                    step_id="step_2_tasks_table",
-                    description=(
-                        'Create table "tasks" with fields: title (text), '
-                        "description (long-text), status (single-select: To Do, In Progress, Done), "
-                        "due_date (date), project (link to projects). Verify: table exists with link field."
-                    ),
-                    required_context=["step_1_projects_table"],
-                    phase_name="Execution",
-                    phase_order=2,
-                ),
-                PlanStepOutput(
-                    step_id="step_3_pm_app",
-                    description=(
-                        'Create app "Project Manager" with page "Dashboard" showing '
-                        "projects table view and tasks table view. Verify: app accessible."
-                    ),
-                    required_context=["step_1_projects_table", "step_2_tasks_table"],
-                    phase_name="Execution",
-                    phase_order=3,
-                ),
-            ],
-            auto_approve_policy="confirm",
-            matched_conditions=["explicit_values", "additive_only"],
-        ),
-        questions=None,
-    ),
-)
-
-
-# =============================================================================
-# Example 7: Integration research DURING planning
-# =============================================================================
-EXAMPLE_INTEGRATION_RESEARCH = _create_example(
-    request="Set up automatic email notifications when tasks are completed",
-    workspace_context=(
-        '{"_summary": "1 table: tasks", '
-        '"resources": [{"type": "table", "name": "tasks", "fields": ["title", "status"]}]}'
-    ),
-    planning_context="""## Task Analysis
-Intent: Create automation for email notifications on task completion
-Domain: automation
-Entities: tasks, email, notifications
-External services: email""",
-    result=PlanOrQuestionsOutput(
-        plan=PlanOutput(
-            plan_id="plan_email_notifications",
-            goal="Set up email notifications when tasks marked complete",
-            context="tasks table exists with status field. Researched Gmail integration via search_external.",
-            analysis=(
-                'Called search_external("gmail") - found gmail_send_email requires: to, subject, body. '
-                'Called search_capabilities("automation trigger") - found skill_builder for creating triggers. '
-                'Plan: Create skill that triggers on tasks.status = "Done" and calls gmail_send_email.'
-            ),
-            steps=[
-                # Research was done - steps use exact tool names from research
-                PlanStepOutput(
-                    step_id="step_1_create_notification_skill",
-                    description=(
-                        'Create skill "Task Complete Notifier" with trigger: tasks table, '
-                        'when status changes to "Done". Action: call gmail_send_email with '
-                        'to={{assignee_email}}, subject="Task Complete: {{title}}", '
-                        'body="The task {{title}} has been marked complete."'
-                    ),
-                    phase_name="Execution",
-                    phase_order=1,
-                ),
-            ],
-            auto_approve_policy="confirm",
-            matched_conditions=["single_resource"],
-        ),
-        questions=None,
     ),
 )
 
@@ -377,11 +270,18 @@ External services: email""",
 # Collected demos for export
 # =============================================================================
 PLANNING_DEMOS: list[dspy.Example] = [
+    # Skill execution (highest priority for @skill: requests)
+    EXAMPLE_EXECUTE_SKILL,
+    EXAMPLE_SKILL_WITH_INPUTS,
+    EXAMPLE_LIST_SKILLS,
+    # Table/schema operations
     EXAMPLE_CREATE_TABLE,
-    EXAMPLE_CREATE_APP_WITH_TABLE,
     EXAMPLE_ADD_FIELD,
-    EXAMPLE_RESEARCH_TASK,
+    # App/dashboard
+    EXAMPLE_CREATE_APP,
+    EXAMPLE_BUILD_DASHBOARD,
+    # Research
+    EXAMPLE_RESEARCH,
+    # Clarification
     EXAMPLE_NEEDS_CLARIFICATION,
-    EXAMPLE_RESEARCH_THEN_PLAN,
-    EXAMPLE_INTEGRATION_RESEARCH,
 ]

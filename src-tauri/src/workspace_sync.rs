@@ -1,64 +1,61 @@
-//! Workspace Sync Commands (SFTP + rsync)
+//! Workspace Sync Commands (rsync over SSH)
 //!
 //! Provides Tauri commands for syncing agent workspaces between
-//! local folders and EFS via SFTP with byte-level delta sync.
+//! local folders and EFS via native rsync with SSH key authentication.
 //!
 //! Features:
-//! - SFTP transport (connects to AWS Transfer Family or local dev server)
-//! - rsync algorithm for byte-level deltas (only changed bytes transfer)
+//! - Native rsync for efficient delta sync (only changed bytes transfer)
+//! - SSH key authentication (Ed25519, cross-platform generation)
 //! - Filesystem watcher for event-driven sync
-//! - Workspace locking during agent tasks
+//! - Workspace locking during agent tasks (via HTTP API)
 
-use fast_rsync::{Signature, SignatureOptions};
+use futures::StreamExt;
 use notify::RecommendedWatcher;
 use notify_debouncer_mini::{new_debouncer, DebouncedEventKind};
+use reqwest_eventsource::{Event, EventSource};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
-use ssh2::{Session, Sftp};
+use ssh_key::{Algorithm, LineEnding, PrivateKey};
+use ssh_key::rand_core::OsRng;
 use std::collections::HashMap;
-use std::fs::{self, File};
-use std::io::{Read, Write};
-use std::net::TcpStream;
+use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_dialog::DialogExt;
-use tauri_plugin_http::reqwest;
 use tauri_plugin_store::StoreExt;
 use thiserror::Error;
-use tokio::sync::oneshot;
-use walkdir::WalkDir;
+use tokio::sync::{mpsc, oneshot};
 
 const STORE_PATH: &str = "workspace-sync.json";
 const API_KEY_STORE_KEY: &str = "api_key";
+const SSH_KEY_NAME: &str = "emery_sync_ed25519";
 
 // Lock file constants
 const LOCK_FILE_NAME: &str = ".emery-lock";
 const LOCK_TTL_SECS: i64 = 3600; // 1 hour - ignore stale locks
 
-// Files to skip during sync (OS metadata, editor temp files)
-// Note: .git and .gitignore are intentionally NOT ignored - users want these synced
-fn should_ignore_file(filename: &str) -> bool {
-    let ignored_exact = [".DS_Store", "Thumbs.db", "desktop.ini", ".AppleDouble", ".LSOverride"];
-    let ignored_prefixes = ["._"];  // macOS resource forks
-    let ignored_suffixes = [".swp", ".swo", "~"];  // vim swap files, backup files
-
-    if ignored_exact.contains(&filename) {
-        return true;
-    }
-    for prefix in ignored_prefixes {
-        if filename.starts_with(prefix) {
-            return true;
-        }
-    }
-    for suffix in ignored_suffixes {
-        if filename.ends_with(suffix) {
-            return true;
-        }
-    }
-    false
-}
+// Files/patterns to ignore in file watcher (system and editor files)
+const IGNORED_PATTERNS: &[&str] = &[
+    ".DS_Store",
+    "Thumbs.db",
+    ".git",
+    ".gitignore",
+    "*.swp",
+    "*.swo",
+    "*~",
+    ".emery-lock",
+    ".emery-sync-version",
+    "desktop.ini",
+    ".Spotlight-V100",
+    ".Trashes",
+    "__pycache__",
+    "*.pyc",
+    ".idea",
+    ".vscode",
+    "node_modules",
+];
 
 // ============================================================================
 // Error Types
@@ -70,8 +67,6 @@ pub enum SyncError {
     Io(#[from] std::io::Error),
     #[error("HTTP error: {0}")]
     Http(#[from] reqwest::Error),
-    #[error("SSH error: {0}")]
-    Ssh(#[from] ssh2::Error),
     #[error("Store error: {0}")]
     Store(String),
     #[error("Dialog cancelled")]
@@ -80,8 +75,10 @@ pub enum SyncError {
     NoApiKey,
     #[error("API error: {0}")]
     Api(String),
-    #[error("SFTP error: {0}")]
-    Sftp(String),
+    #[error("SSH key error: {0}")]
+    SshKey(String),
+    #[error("rsync error: {0}")]
+    Rsync(String),
     #[error("Workspace locked by task: {0}")]
     WorkspaceLocked(String),
     #[error("Not connected")]
@@ -102,12 +99,14 @@ impl From<SyncError> for String {
 pub struct SyncConfig {
     pub folder_path: String,
     pub last_sync: Option<i64>,
-    /// SFTP host (e.g., "localhost" for dev, "sftp.yourapp.com" for prod)
-    pub sftp_host: Option<String>,
-    /// SFTP port (default: 22, dev: 2222)
-    pub sftp_port: Option<u16>,
-    /// SFTP username (e.g., "agent" for dev, "agent-{id}" for prod)
-    pub sftp_user: Option<String>,
+    /// SSH host (e.g., "localhost" for dev, "sync.yourapp.com" for prod)
+    pub ssh_host: Option<String>,
+    /// SSH port (default: 22, dev: 2222)
+    pub ssh_port: Option<u16>,
+    /// SSH username (e.g., "agent")
+    pub ssh_user: Option<String>,
+    /// Remote workspace path
+    pub remote_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -125,7 +124,7 @@ pub struct SyncResult {
     pub files_synced: u32,
     pub bytes_transferred: u64,
     pub timestamp: i64,
-    pub direction: String, // "push" or "pull"
+    pub direction: String, // "push", "pull", "queued", or "none"
 }
 
 /// Workspace lock state (from .emery-lock file)
@@ -145,23 +144,14 @@ struct LockFileContents {
     agent_id: i64,
 }
 
-/// SFTP credentials for connecting
+/// SSH connection info for rsync
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SftpCredentials {
+pub struct SshConnectionInfo {
     pub host: String,
     pub port: u16,
     pub username: String,
-    pub password: String,
-    pub remote_path: String, // e.g., "/workspace" or "/{org_id}/agents/{agent_id}"
-}
-
-/// File info for sync comparison
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FileInfo {
-    pub path: String,
-    pub size: u64,
-    pub hash: String,
-    pub mtime: i64,
+    pub remote_path: String,
+    pub key_path: PathBuf,
 }
 
 /// Pending change queued during workspace lock
@@ -173,90 +163,48 @@ pub struct PendingChange {
 }
 
 // ============================================================================
-// SFTP Connection Manager
+// Connection State Manager
 // ============================================================================
 
-/// Manages SFTP connections per agent
-pub struct SftpConnectionManager {
-    connections: HashMap<i64, SftpConnection>,
+/// Manages connection state per agent (no actual connection needed for rsync)
+pub struct ConnectionManager {
+    connections: HashMap<i64, SshConnectionInfo>,
 }
 
-struct SftpConnection {
-    #[allow(dead_code)]
-    session: Session,
-    sftp: Sftp,
-    remote_path: String,
-}
-
-impl SftpConnectionManager {
+impl ConnectionManager {
     pub fn new() -> Self {
         Self {
             connections: HashMap::new(),
         }
     }
 
-    /// Connect to SFTP server for an agent
-    pub fn connect(&mut self, agent_id: i64, creds: &SftpCredentials) -> Result<(), SyncError> {
-        // Close existing connection if any
-        self.connections.remove(&agent_id);
-
-        // Establish TCP connection
-        let tcp = TcpStream::connect(format!("{}:{}", creds.host, creds.port))?;
-
-        // Create SSH session
-        let mut session = Session::new()?;
-        session.set_tcp_stream(tcp);
-        session.handshake()?;
-
-        // Authenticate with password
-        session.userauth_password(&creds.username, &creds.password)?;
-
-        if !session.authenticated() {
-            return Err(SyncError::Sftp("Authentication failed".to_string()));
-        }
-
-        // Open SFTP channel
-        let sftp = session.sftp()?;
-
-        self.connections.insert(
-            agent_id,
-            SftpConnection {
-                session,
-                sftp,
-                remote_path: creds.remote_path.clone(),
-            },
-        );
-
-        Ok(())
+    pub fn set(&mut self, agent_id: i64, info: SshConnectionInfo) {
+        self.connections.insert(agent_id, info);
     }
 
-    /// Get SFTP connection for an agent
-    fn get(&self, agent_id: i64) -> Option<&SftpConnection> {
+    pub fn get(&self, agent_id: i64) -> Option<&SshConnectionInfo> {
         self.connections.get(&agent_id)
     }
 
-    /// Disconnect from SFTP server
-    pub fn disconnect(&mut self, agent_id: i64) {
+    pub fn remove(&mut self, agent_id: i64) {
         self.connections.remove(&agent_id);
     }
 
-    /// Check if connected for an agent
     pub fn is_connected(&self, agent_id: i64) -> bool {
         self.connections.contains_key(&agent_id)
     }
 }
 
-// Global connection manager (thread-safe)
+// Global connection manager
 lazy_static::lazy_static! {
-    static ref SFTP_MANAGER: Arc<Mutex<SftpConnectionManager>> =
-        Arc::new(Mutex::new(SftpConnectionManager::new()));
+    static ref CONNECTION_MANAGER: Arc<Mutex<ConnectionManager>> =
+        Arc::new(Mutex::new(ConnectionManager::new()));
 }
 
 // ============================================================================
 // Filesystem Watcher Manager
 // ============================================================================
 
-/// Manages filesystem watchers per agent
 pub struct WatcherManager {
     watchers: HashMap<i64, WatcherHandle>,
 }
@@ -274,26 +222,82 @@ impl WatcherManager {
         }
     }
 
-    /// Check if watching for an agent
     pub fn is_watching(&self, agent_id: i64) -> bool {
         self.watchers.contains_key(&agent_id)
     }
 
-    /// Get watched path for an agent
     pub fn get_watched_path(&self, agent_id: i64) -> Option<PathBuf> {
         self.watchers.get(&agent_id).map(|h| h.path.clone())
     }
 
-    /// Stop watching for an agent
     pub fn stop(&mut self, agent_id: i64) {
         self.watchers.remove(&agent_id);
     }
 }
 
-// Global watcher manager (thread-safe)
 lazy_static::lazy_static! {
     static ref WATCHER_MANAGER: Arc<Mutex<WatcherManager>> =
         Arc::new(Mutex::new(WatcherManager::new()));
+}
+
+// ============================================================================
+// SSE Subscription Manager
+// ============================================================================
+
+/// Events emitted from SSE stream to frontend
+#[derive(Debug, Clone, Serialize)]
+pub struct AgentLockChangedEvent {
+    pub agent_id: i64,
+    pub locked: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct AgentWorkspaceUpdatedEvent {
+    pub agent_id: i64,
+    pub version: String,
+}
+
+/// SSE connection handle with shutdown channel
+struct SseHandle {
+    shutdown_tx: mpsc::Sender<()>,
+}
+
+/// Manages SSE subscriptions per agent
+pub struct SseManager {
+    subscriptions: HashMap<i64, SseHandle>,
+}
+
+impl SseManager {
+    pub fn new() -> Self {
+        Self {
+            subscriptions: HashMap::new(),
+        }
+    }
+
+    pub fn is_subscribed(&self, agent_id: i64) -> bool {
+        self.subscriptions.contains_key(&agent_id)
+    }
+
+    fn add(&mut self, agent_id: i64, handle: SseHandle) {
+        self.subscriptions.insert(agent_id, handle);
+    }
+
+    fn remove(&mut self, agent_id: i64) -> Option<SseHandle> {
+        self.subscriptions.remove(&agent_id)
+    }
+}
+
+lazy_static::lazy_static! {
+    static ref SSE_MANAGER: Arc<Mutex<SseManager>> =
+        Arc::new(Mutex::new(SseManager::new()));
+}
+
+/// SSE event data from the server
+#[derive(Debug, Deserialize)]
+struct SseEventData {
+    #[serde(rename = "type")]
+    event_type: String,
+    data: serde_json::Value,
 }
 
 // ============================================================================
@@ -315,85 +319,292 @@ fn get_pending_changes_key(agent_id: i64) -> String {
     format!("agent_{}_pending", agent_id)
 }
 
-/// Compute SHA256 hash of content
-fn compute_hash(content: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(content);
-    format!("{:x}", hasher.finalize())
-}
+/// Check if a path should be ignored based on IGNORED_PATTERNS
+fn should_ignore_path(path: &Path) -> bool {
+    let path_str = path.to_string_lossy();
+    let file_name = path.file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
 
-fn get_dir_mtime(path: &Path) -> Option<i64> {
-    let mut latest: Option<i64> = None;
-
-    if let Ok(entries) = fs::read_dir(path) {
-        for entry in entries.flatten() {
-            let entry_path = entry.path();
-
-            if let Ok(metadata) = entry.metadata() {
-                if let Ok(modified) = metadata.modified() {
-                    if let Ok(duration) = modified.duration_since(UNIX_EPOCH) {
-                        let mtime = duration.as_secs() as i64;
-                        latest = Some(latest.map_or(mtime, |l| l.max(mtime)));
-                    }
-                }
+    for pattern in IGNORED_PATTERNS {
+        // Handle glob-like patterns
+        if pattern.starts_with('*') {
+            // Suffix match (e.g., "*.swp")
+            let suffix = &pattern[1..];
+            if file_name.ends_with(suffix) || path_str.ends_with(suffix) {
+                return true;
             }
-
-            if entry_path.is_dir() {
-                if let Some(sub_mtime) = get_dir_mtime(&entry_path) {
-                    latest = Some(latest.map_or(sub_mtime, |l| l.max(sub_mtime)));
-                }
+        } else if pattern.ends_with('*') {
+            // Prefix match
+            let prefix = &pattern[..pattern.len() - 1];
+            if file_name.starts_with(prefix) {
+                return true;
+            }
+        } else {
+            // Exact match or contains
+            if file_name == *pattern || path_str.contains(pattern) {
+                return true;
             }
         }
     }
-
-    latest
+    false
 }
 
-/// Get all files in a directory with their info
-fn get_local_files(local_dir: &Path) -> Result<Vec<FileInfo>, SyncError> {
-    let mut files = Vec::new();
-
-    for entry in WalkDir::new(local_dir)
-        .into_iter()
-        .filter_map(|e| e.ok())
-        .filter(|e| e.file_type().is_file())
+/// Get the path to rsync binary (bundled on Windows, system on Unix)
+fn get_rsync_path() -> PathBuf {
+    #[cfg(target_os = "windows")]
     {
-        let path = entry.path();
-
-        // Skip ignored files (OS metadata, editor temp files)
-        if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
-            if should_ignore_file(filename) {
-                continue;
+        // Use bundled cwRsync on Windows
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(parent) = exe.parent() {
+                let bundled = parent.join("resources").join("cwrsync").join("rsync.exe");
+                if bundled.exists() {
+                    return bundled;
+                }
             }
         }
-
-        let relative = path
-            .strip_prefix(local_dir)
-            .map_err(|e| SyncError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?
-            .to_string_lossy()
-            .to_string();
-
-        let metadata = fs::metadata(path)?;
-        let mut content = Vec::new();
-        let mut file = File::open(path)?;
-        file.read_to_end(&mut content)?;
-
-        let mtime = metadata
-            .modified()
-            .ok()
-            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(0);
-
-        files.push(FileInfo {
-            path: relative,
-            size: metadata.len(),
-            hash: compute_hash(&content),
-            mtime,
-        });
+        // Fallback to PATH
+        PathBuf::from("rsync.exe")
     }
 
-    Ok(files)
+    #[cfg(not(target_os = "windows"))]
+    {
+        PathBuf::from("rsync")
+    }
+}
+
+/// Get the path to ssh binary (bundled on Windows, system on Unix)
+fn get_ssh_path() -> PathBuf {
+    #[cfg(target_os = "windows")]
+    {
+        // Use bundled ssh from cwRsync on Windows
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(parent) = exe.parent() {
+                let bundled = parent.join("resources").join("cwrsync").join("ssh.exe");
+                if bundled.exists() {
+                    return bundled;
+                }
+            }
+        }
+        PathBuf::from("ssh.exe")
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        PathBuf::from("ssh")
+    }
+}
+
+// ============================================================================
+// SSH Key Management
+// ============================================================================
+
+/// Get the SSH key directory
+fn get_ssh_dir() -> Result<PathBuf, SyncError> {
+    let home = dirs::home_dir().ok_or_else(|| SyncError::SshKey("No home directory".to_string()))?;
+    Ok(home.join(".ssh"))
+}
+
+/// Get the path to the private SSH key
+/// Generate Ed25519 SSH key pair if it doesn't exist (cross-platform, no external deps)
+fn ensure_ssh_key() -> Result<PathBuf, SyncError> {
+    let ssh_dir = get_ssh_dir()?;
+    fs::create_dir_all(&ssh_dir).map_err(SyncError::Io)?;
+
+    let key_path = ssh_dir.join(SSH_KEY_NAME);
+    let pub_path = ssh_dir.join(format!("{}.pub", SSH_KEY_NAME));
+
+    if !key_path.exists() {
+        log::info!("Generating new SSH key pair at {:?}", key_path);
+
+        // Generate Ed25519 key pair using pure Rust
+        let private_key = PrivateKey::random(&mut OsRng, Algorithm::Ed25519)
+            .map_err(|e| SyncError::SshKey(format!("Failed to generate key: {}", e)))?;
+
+        // Write private key in OpenSSH format
+        let private_openssh = private_key
+            .to_openssh(LineEnding::LF)
+            .map_err(|e| SyncError::SshKey(format!("Failed to encode private key: {}", e)))?;
+        fs::write(&key_path, private_openssh.as_bytes()).map_err(SyncError::Io)?;
+
+        // Write public key
+        let public_openssh = private_key
+            .public_key()
+            .to_openssh()
+            .map_err(|e| SyncError::SshKey(format!("Failed to encode public key: {}", e)))?;
+        fs::write(&pub_path, public_openssh).map_err(SyncError::Io)?;
+
+        // Set permissions to 600 (Unix only)
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&key_path, fs::Permissions::from_mode(0o600))
+                .map_err(SyncError::Io)?;
+        }
+
+        log::info!("SSH key pair generated successfully");
+    }
+
+    Ok(key_path)
+}
+
+/// Read the public SSH key
+fn read_public_key() -> Result<String, SyncError> {
+    let ssh_dir = get_ssh_dir()?;
+    let pub_path = ssh_dir.join(format!("{}.pub", SSH_KEY_NAME));
+    fs::read_to_string(pub_path).map_err(SyncError::Io)
+}
+
+/// Register SSH public key with the server
+async fn register_ssh_key(api_base: &str, api_key: &str, public_key: &str) -> Result<(), SyncError> {
+    let client = reqwest::Client::new();
+    let url = format!("{}/api/user/ssh-keys", api_base);
+
+    let response = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", api_key))
+        .json(&serde_json::json!({
+            "public_key": public_key,
+            "name": "Emery Desktop Sync"
+        }))
+        .send()
+        .await
+        .map_err(SyncError::Http)?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        // 409 Conflict means key already registered - that's OK
+        if status.as_u16() != 409 {
+            return Err(SyncError::Api(format!("Failed to register SSH key: {} - {}", status, body)));
+        }
+    }
+
+    Ok(())
+}
+
+// ============================================================================
+// rsync Operations
+// ============================================================================
+
+/// Parse rsync output to extract stats
+fn parse_rsync_output(output: &std::process::Output) -> Result<(u32, u64), SyncError> {
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    if !output.status.success() {
+        return Err(SyncError::Rsync(format!(
+            "rsync failed: {}",
+            if stderr.is_empty() { &stdout } else { &stderr }
+        )));
+    }
+
+    // Try to parse "sent X bytes" or "total size is X"
+    let mut files_synced = 0u32;
+    let mut bytes_transferred = 0u64;
+
+    for line in stdout.lines() {
+        if line.contains("files transferred:") || line.contains("files to consider:") {
+            if let Some(num) = line.split_whitespace().next() {
+                files_synced = num.parse().unwrap_or(0);
+            }
+        }
+        if line.contains("sent") && line.contains("bytes") {
+            // Parse "sent X bytes received Y bytes"
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if let Some(idx) = parts.iter().position(|&s| s == "sent") {
+                if let Some(num_str) = parts.get(idx + 1) {
+                    bytes_transferred = num_str.replace(",", "").parse().unwrap_or(0);
+                }
+            }
+        }
+    }
+
+    Ok((files_synced, bytes_transferred))
+}
+
+/// Push local changes to remote using rsync
+fn run_rsync_push(local_path: &Path, conn: &SshConnectionInfo) -> Result<(u32, u64), SyncError> {
+    let rsync = get_rsync_path();
+    let ssh = get_ssh_path();
+
+    // Build SSH command with key and port
+    let ssh_cmd = format!(
+        "{} -i {} -p {} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null",
+        ssh.display(),
+        conn.key_path.display(),
+        conn.port
+    );
+
+    // Build rsync command
+    let remote = format!(
+        "{}@{}:{}/",
+        conn.username, conn.host, conn.remote_path
+    );
+
+    log::debug!("Running rsync push: {} -> {}", local_path.display(), remote);
+
+    let output = Command::new(&rsync)
+        .args([
+            "-avz",                    // archive, verbose, compress
+            "--delete",                // remove deleted files
+            "--partial",               // keep partial transfers
+            "--stats",                 // show transfer stats
+            "-e", &ssh_cmd,            // SSH command with key
+            "--exclude", ".DS_Store",
+            "--exclude", "Thumbs.db",
+            "--exclude", "*.swp",
+            "--exclude", "*.swo",
+            "--exclude", "*~",
+            &format!("{}/", local_path.display()),
+            &remote,
+        ])
+        .output()
+        .map_err(SyncError::Io)?;
+
+    parse_rsync_output(&output)
+}
+
+/// Pull remote changes to local using rsync
+fn run_rsync_pull(local_path: &Path, conn: &SshConnectionInfo) -> Result<(u32, u64), SyncError> {
+    let rsync = get_rsync_path();
+    let ssh = get_ssh_path();
+
+    // Build SSH command with key and port
+    let ssh_cmd = format!(
+        "{} -i {} -p {} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null",
+        ssh.display(),
+        conn.key_path.display(),
+        conn.port
+    );
+
+    // Build rsync command
+    let remote = format!(
+        "{}@{}:{}/",
+        conn.username, conn.host, conn.remote_path
+    );
+
+    log::debug!("Running rsync pull: {} -> {}", remote, local_path.display());
+
+    let output = Command::new(&rsync)
+        .args([
+            "-avz",                    // archive, verbose, compress
+            "--delete",                // remove deleted files
+            "--partial",               // keep partial transfers
+            "--stats",                 // show transfer stats
+            "-e", &ssh_cmd,            // SSH command with key
+            "--exclude", ".DS_Store",
+            "--exclude", "Thumbs.db",
+            "--exclude", "*.swp",
+            "--exclude", "*.swo",
+            "--exclude", "*~",
+            &remote,
+            &format!("{}/", local_path.display()),
+        ])
+        .output()
+        .map_err(SyncError::Io)?;
+
+    parse_rsync_output(&output)
 }
 
 // ============================================================================
@@ -440,9 +651,6 @@ pub async fn set_sync_config(
     app: AppHandle,
     agent_id: i64,
     folder_path: String,
-    sftp_host: Option<String>,
-    sftp_port: Option<u16>,
-    sftp_user: Option<String>,
 ) -> Result<(), String> {
     let store = app
         .store(STORE_PATH)
@@ -452,9 +660,10 @@ pub async fn set_sync_config(
     let config = SyncConfig {
         folder_path,
         last_sync: None,
-        sftp_host,
-        sftp_port,
-        sftp_user,
+        ssh_host: None,
+        ssh_port: None,
+        ssh_user: None,
+        remote_path: None,
     };
 
     store.set(
@@ -497,10 +706,10 @@ pub async fn get_api_key(app: AppHandle) -> Result<Option<String>, String> {
 }
 
 // ============================================================================
-// Tauri Commands - SFTP Connection
+// Tauri Commands - SSH Connection
 // ============================================================================
 
-/// Connect to SFTP server for an agent workspace
+/// Set up SSH connection for an agent workspace (generates key, registers with server)
 #[tauri::command]
 pub async fn sftp_connect(
     _app: AppHandle,
@@ -510,103 +719,109 @@ pub async fn sftp_connect(
     api_base: String,
 ) -> Result<(), String> {
     // Get workspace root from env var (configurable for local vs production)
-    let sftp_root = std::env::var("SFTP_WORKSPACE_ROOT").unwrap_or_else(|_| "/config/workspace".to_string());
+    let ssh_root = std::env::var("SSH_WORKSPACE_ROOT")
+        .or_else(|_| std::env::var("SFTP_WORKSPACE_ROOT"))
+        .unwrap_or_else(|_| "/workspace".to_string());
 
-    // Get SFTP credentials from API
+    // Ensure SSH key exists
+    let key_path = ensure_ssh_key()?;
+
+    // Read and register public key with server (idempotent)
+    let public_key = read_public_key()?;
+    if let Err(e) = register_ssh_key(&api_base, &api_key, &public_key).await {
+        log::warn!("Failed to register SSH key (may already exist): {}", e);
+        // Continue anyway - key might already be registered
+    }
+
+    // Get SSH connection info from API or use local dev defaults
     let client = reqwest::Client::new();
-    let url = format!(
-        "{}/api/agents/{}/workspace/sftp-credentials",
-        api_base, agent_id
-    );
+    let url = format!("{}/api/agents/{}/workspace/ssh-info", api_base, agent_id);
 
-    log::debug!("Fetching SFTP credentials from: {}", url);
-
-    let response = client
+    let (host, port, username, remote_path) = match client
         .get(&url)
         .header("Authorization", format!("Bearer {}", api_key))
         .send()
         .await
-        .map_err(SyncError::Http)?;
+    {
+        Ok(response) if response.status().is_success() => {
+            #[derive(Deserialize)]
+            struct SshInfo {
+                host: String,
+                port: u16,
+                username: String,
+                remote_path: String,
+            }
+            #[derive(Deserialize)]
+            struct Response {
+                #[allow(dead_code)]
+                success: bool,
+                data: SshInfo,
+            }
 
-    if !response.status().is_success() {
-        log::info!("API returned {}, falling back to local dev credentials", response.status());
-
-        // Fall back to local dev credentials (linuxserver/openssh-server)
-        // Path: {SFTP_WORKSPACE_ROOT}/{org_id}/agents/{agent_id}
-        let remote_path = format!("{}/{}/agents/{}", sftp_root, org_id, agent_id);
-
-        let creds = SftpCredentials {
-            host: "localhost".to_string(),
-            port: 2222,
-            username: "agent".to_string(),
-            password: "test123".to_string(),
-            remote_path: remote_path.clone(),
-        };
-
-        let mut manager = SFTP_MANAGER.lock().map_err(|e| e.to_string())?;
-        manager.connect(agent_id, &creds)?;
-
-        // Create agent workspace directory if it doesn't exist
-        if let Some(conn) = manager.get(agent_id) {
-            let path = std::path::Path::new(&remote_path);
-            log::debug!("Ensuring workspace directory exists: {}", remote_path);
-            // Create parent dirs recursively
-            create_remote_dirs(&conn.sftp, path).ok();
+            match response.json::<Response>().await {
+                Ok(resp) => (resp.data.host, resp.data.port, resp.data.username, resp.data.remote_path),
+                Err(_) => {
+                    // Fallback to local dev
+                    let remote_path = format!("{}/{}/agents/{}", ssh_root, org_id, agent_id);
+                    ("localhost".to_string(), 2222, "agent".to_string(), remote_path)
+                }
+            }
         }
+        _ => {
+            // Fallback to local dev defaults
+            log::info!("Using local dev SSH settings");
+            let remote_path = format!("{}/{}/agents/{}", ssh_root, org_id, agent_id);
+            ("localhost".to_string(), 2222, "agent".to_string(), remote_path)
+        }
+    };
 
-        log::info!("Connected to local SFTP, workspace: {}", remote_path);
-        return Ok(());
-    }
+    let conn_info = SshConnectionInfo {
+        host,
+        port,
+        username,
+        remote_path: remote_path.clone(),
+        key_path,
+    };
 
-    // Parse response body manually
-    let body = response.text().await.map_err(SyncError::Http)?;
+    // Store connection info
+    let mut manager = CONNECTION_MANAGER.lock().map_err(|e| e.to_string())?;
+    manager.set(agent_id, conn_info);
 
-    #[derive(Deserialize)]
-    struct CredsResponse {
-        #[allow(dead_code)]
-        success: bool,
-        credentials: SftpCredentials,
-    }
-
-    let creds_resp: CredsResponse =
-        serde_json::from_str(&body).map_err(|e| format!("Failed to parse credentials: {}", e))?;
-
-    let mut manager = SFTP_MANAGER.lock().map_err(|e| e.to_string())?;
-    manager.connect(agent_id, &creds_resp.credentials)?;
-
-    log::info!("Connected to SFTP, workspace: {}", creds_resp.credentials.remote_path);
+    log::info!("SSH connection configured for agent {}, remote: {}", agent_id, remote_path);
 
     Ok(())
 }
 
-/// Disconnect from SFTP server
+/// Disconnect (clear connection info)
 #[tauri::command]
 pub async fn sftp_disconnect(agent_id: i64) -> Result<(), String> {
-    let mut manager = SFTP_MANAGER.lock().map_err(|e| e.to_string())?;
-    manager.disconnect(agent_id);
+    let mut manager = CONNECTION_MANAGER.lock().map_err(|e| e.to_string())?;
+    manager.remove(agent_id);
     Ok(())
 }
 
-/// Check SFTP connection status
+/// Check connection status
 #[tauri::command]
 pub async fn sftp_is_connected(agent_id: i64) -> Result<bool, String> {
-    let manager = SFTP_MANAGER.lock().map_err(|e| e.to_string())?;
+    let manager = CONNECTION_MANAGER.lock().map_err(|e| e.to_string())?;
     Ok(manager.is_connected(agent_id))
 }
 
 // ============================================================================
-// Tauri Commands - Workspace Lock (File-Based)
+// Tauri Commands - Workspace Lock (via HTTP API)
 // ============================================================================
 
-/// Check workspace lock status by reading .emery-lock file via SFTP
+/// Check workspace lock status via HTTP API
 #[tauri::command]
-pub async fn check_workspace_lock(agent_id: i64) -> Result<WorkspaceLockState, String> {
-    let manager = SFTP_MANAGER.lock().map_err(|e| e.to_string())?;
-
-    let conn = match manager.get(agent_id) {
-        Some(c) => c,
-        None => {
-            // Not connected - assume unlocked
+pub async fn check_workspace_lock(
+    agent_id: i64,
+    api_key: Option<String>,
+    api_base: Option<String>,
+) -> Result<WorkspaceLockState, String> {
+    // If no API credentials, assume unlocked
+    let (api_key, api_base) = match (api_key, api_base) {
+        (Some(k), Some(b)) => (k, b),
+        _ => {
             return Ok(WorkspaceLockState {
                 locked: false,
                 task_id: None,
@@ -616,15 +831,21 @@ pub async fn check_workspace_lock(agent_id: i64) -> Result<WorkspaceLockState, S
         }
     };
 
-    let lock_path = format!("{}/{}", conn.remote_path, LOCK_FILE_NAME);
-    let remote_path = std::path::Path::new(&lock_path);
+    let client = reqwest::Client::new();
+    let url = format!(
+        "{}/api/agents/{}/workspace/file?path=/{}",
+        api_base, agent_id, LOCK_FILE_NAME
+    );
 
-    // Try to read the lock file
-    match conn.sftp.open(remote_path) {
-        Ok(mut file) => {
-            let mut content = String::new();
-            if file.read_to_string(&mut content).is_err() {
-                // Can't read file - assume unlocked
+    match client
+        .get(&url)
+        .header("Authorization", format!("Bearer {}", api_key))
+        .send()
+        .await
+    {
+        Ok(response) => {
+            if response.status() == reqwest::StatusCode::NOT_FOUND {
+                // No lock file - unlocked
                 return Ok(WorkspaceLockState {
                     locked: false,
                     task_id: None,
@@ -633,57 +854,75 @@ pub async fn check_workspace_lock(agent_id: i64) -> Result<WorkspaceLockState, S
                 });
             }
 
-            // Parse lock file JSON
-            let lock_data: LockFileContents = match serde_json::from_str(&content) {
-                Ok(data) => data,
-                Err(_) => {
-                    // Invalid lock file - assume unlocked
-                    return Ok(WorkspaceLockState {
+            if !response.status().is_success() {
+                // API error - assume unlocked
+                return Ok(WorkspaceLockState {
+                    locked: false,
+                    task_id: None,
+                    started_at: None,
+                    agent_id: None,
+                });
+            }
+
+            // Parse lock file contents
+            #[derive(Deserialize)]
+            struct FileResponse {
+                #[allow(dead_code)]
+                success: bool,
+                data: Option<FileData>,
+            }
+            #[derive(Deserialize)]
+            struct FileData {
+                content: String,
+            }
+
+            match response.json::<FileResponse>().await {
+                Ok(resp) => {
+                    if let Some(data) = resp.data {
+                        if let Ok(lock_data) = serde_json::from_str::<LockFileContents>(&data.content) {
+                            // Check if lock is stale
+                            let now = get_current_timestamp();
+                            let age = now - lock_data.started_at;
+
+                            if age > LOCK_TTL_SECS {
+                                log::info!("Ignoring stale lock (age: {}s > {}s TTL)", age, LOCK_TTL_SECS);
+                                return Ok(WorkspaceLockState {
+                                    locked: false,
+                                    task_id: Some(lock_data.task_id),
+                                    started_at: Some(lock_data.started_at),
+                                    agent_id: Some(lock_data.agent_id),
+                                });
+                            }
+
+                            return Ok(WorkspaceLockState {
+                                locked: true,
+                                task_id: Some(lock_data.task_id),
+                                started_at: Some(lock_data.started_at),
+                                agent_id: Some(lock_data.agent_id),
+                            });
+                        }
+                    }
+                    Ok(WorkspaceLockState {
                         locked: false,
                         task_id: None,
                         started_at: None,
                         agent_id: None,
-                    });
+                    })
                 }
-            };
-
-            // Check if lock is stale
-            let now = get_current_timestamp();
-            let age = now - lock_data.started_at;
-
-            if age > LOCK_TTL_SECS {
-                // Lock is stale - ignore it
-                log::info!(
-                    "Ignoring stale lock for agent {} (age: {}s > {}s TTL)",
-                    agent_id,
-                    age,
-                    LOCK_TTL_SECS
-                );
-                return Ok(WorkspaceLockState {
+                Err(_) => Ok(WorkspaceLockState {
                     locked: false,
-                    task_id: Some(lock_data.task_id),
-                    started_at: Some(lock_data.started_at),
-                    agent_id: Some(lock_data.agent_id),
-                });
+                    task_id: None,
+                    started_at: None,
+                    agent_id: None,
+                }),
             }
-
-            // Valid lock
-            Ok(WorkspaceLockState {
-                locked: true,
-                task_id: Some(lock_data.task_id),
-                started_at: Some(lock_data.started_at),
-                agent_id: Some(lock_data.agent_id),
-            })
         }
-        Err(_) => {
-            // No lock file - workspace is unlocked
-            Ok(WorkspaceLockState {
-                locked: false,
-                task_id: None,
-                started_at: None,
-                agent_id: None,
-            })
-        }
+        Err(_) => Ok(WorkspaceLockState {
+            locked: false,
+            task_id: None,
+            started_at: None,
+            agent_id: None,
+        }),
     }
 }
 
@@ -696,10 +935,9 @@ pub async fn check_workspace_lock(agent_id: i64) -> Result<WorkspaceLockState, S
 pub async fn check_sync_status(
     app: AppHandle,
     agent_id: i64,
-    _api_key: String,
-    _api_base: String,
+    api_key: String,
+    api_base: String,
 ) -> Result<SyncStatus, String> {
-    // Get local config
     let store = app
         .store(STORE_PATH)
         .map_err(|e| SyncError::Store(e.to_string()))?;
@@ -713,16 +951,21 @@ pub async fn check_sync_status(
     let local_path = PathBuf::from(&config.folder_path);
 
     // Get local mtime
-    let local_modified = get_dir_mtime(&local_path);
+    let local_modified = local_path
+        .metadata()
+        .ok()
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .map(|d| d.as_secs() as i64);
 
     // Check connection status
     let connected = {
-        let manager = SFTP_MANAGER.lock().map_err(|e| e.to_string())?;
+        let manager = CONNECTION_MANAGER.lock().map_err(|e| e.to_string())?;
         manager.is_connected(agent_id)
     };
 
-    // Check workspace lock via SFTP (reads .emery-lock file)
-    let lock_state = check_workspace_lock(agent_id).await?;
+    // Check workspace lock via HTTP API
+    let lock_state = check_workspace_lock(agent_id, Some(api_key), Some(api_base)).await?;
 
     // Get pending changes count
     let pending_key = get_pending_changes_key(agent_id);
@@ -736,7 +979,7 @@ pub async fn check_sync_status(
         locked: lock_state.locked,
         locked_by_task: lock_state.task_id,
         local_modified,
-        remote_modified: None, // TODO: get from SFTP stat
+        remote_modified: None,
         pending_changes: pending_changes.len() as u32,
     })
 }
@@ -745,14 +988,14 @@ pub async fn check_sync_status(
 // Tauri Commands - rsync Sync
 // ============================================================================
 
-/// Push local changes to remote using rsync algorithm
+/// Push local changes to remote using rsync
 #[tauri::command]
 pub async fn push_workspace(
     app: AppHandle,
     agent_id: i64,
     local_path: String,
-    _api_key: String,
-    _api_base: String,
+    api_key: String,
+    api_base: String,
 ) -> Result<SyncResult, String> {
     log::info!("push_workspace: agent_id={}, local_path={}", agent_id, local_path);
 
@@ -763,121 +1006,25 @@ pub async fn push_workspace(
         return Err(format!("Local folder does not exist: {}", local_path));
     }
 
-    // Check workspace lock first (reads .emery-lock file via SFTP)
-    let lock_state = check_workspace_lock(agent_id).await?;
+    // Check workspace lock first
+    let lock_state = check_workspace_lock(agent_id, Some(api_key.clone()), Some(api_base.clone())).await?;
     if lock_state.locked {
         log::info!("push_workspace: Workspace locked by task {:?}, queuing changes", lock_state.task_id);
-        // Queue changes instead of syncing
         return queue_pending_changes(app, agent_id, local_path, "push").await;
     }
 
-    // Ensure connected
-    let manager = SFTP_MANAGER.lock().map_err(|e| {
-        log::error!("push_workspace: Failed to acquire SFTP manager lock: {}", e);
-        e.to_string()
-    })?;
-    let conn = manager
-        .get(agent_id)
-        .ok_or_else(|| {
-            log::error!("push_workspace: Not connected to SFTP for agent_id={}", agent_id);
-            SyncError::NotConnected.to_string()
-        })?;
+    // Get connection info
+    let conn = {
+        let manager = CONNECTION_MANAGER.lock().map_err(|e| e.to_string())?;
+        manager.get(agent_id).cloned()
+    };
 
-    log::debug!("push_workspace: Using remote_path: {}", conn.remote_path);
+    let conn = conn.ok_or_else(|| SyncError::NotConnected.to_string())?;
 
-    // Get local files
-    let local_files = get_local_files(&local_dir)?;
+    // Run rsync
+    let (files_synced, bytes_transferred) = run_rsync_push(&local_dir, &conn)?;
 
-    let mut files_synced = 0u32;
-    let mut bytes_transferred = 0u64;
-
-    // Sync each file using rsync algorithm
-    for file_info in &local_files {
-        let local_file_path = local_dir.join(&file_info.path);
-        let remote_file_path = format!("{}/{}", conn.remote_path, file_info.path);
-
-        // Read local file
-        let mut local_content = Vec::new();
-        let mut f = File::open(&local_file_path).map_err(|e| e.to_string())?;
-        f.read_to_end(&mut local_content).map_err(|e| e.to_string())?;
-
-        // Try to get remote file for delta comparison
-        let remote_path = std::path::Path::new(&remote_file_path);
-        let remote_content = match conn.sftp.open(remote_path) {
-            Ok(mut remote_file) => {
-                let mut content = Vec::new();
-                remote_file.read_to_end(&mut content).ok();
-                Some(content)
-            }
-            Err(_) => None,
-        };
-
-        // Calculate delta using rsync algorithm
-        let (data_to_send, _is_delta) = if let Some(ref remote) = remote_content {
-            // Use rsync algorithm for byte-level delta
-            let signature = Signature::calculate(
-                remote,
-                SignatureOptions {
-                    block_size: 2048,
-                    crypto_hash_size: 8,
-                },
-            );
-
-            // Index the signature for diff calculation
-            let indexed = signature.index();
-
-            let mut diff = Vec::new();
-            fast_rsync::diff(&indexed, &local_content, &mut diff)
-                .map_err(|e| format!("rsync diff error: {}", e))?;
-
-            // Only use delta if it's smaller
-            if diff.len() < local_content.len() {
-                (diff, true)
-            } else {
-                (local_content.clone(), false)
-            }
-        } else {
-            // No remote file, send full content
-            (local_content.clone(), false)
-        };
-
-        bytes_transferred += data_to_send.len() as u64;
-
-        // Ensure remote directory exists
-        if let Some(parent) = remote_path.parent() {
-            // Create parent directories recursively
-            log::debug!("push_workspace: Creating remote directory: {:?}", parent);
-            if let Err(e) = create_remote_dirs(&conn.sftp, parent) {
-                log::error!("push_workspace: Failed to create remote directory {:?}: {}", parent, e);
-                return Err(format!("Failed to create remote directory {:?}: {}", parent, e));
-            }
-        }
-
-        // Write to remote (always send full file for now since SFTP doesn't support apply)
-        // In production with delta, we'd send to a server-side apply endpoint
-        log::debug!("push_workspace: Writing file to {:?}", remote_path);
-
-        // Continue on file errors (permission denied, etc.) instead of aborting entire sync
-        let remote_file_result = conn.sftp.create(remote_path);
-        match remote_file_result {
-            Ok(mut remote_file) => {
-                match remote_file.write_all(&local_content) {
-                    Ok(_) => {
-                        files_synced += 1;
-                        log::debug!("push_workspace: Synced file {} ({} bytes)", file_info.path, local_content.len());
-                    }
-                    Err(e) => {
-                        log::warn!("push_workspace: Failed to write {:?}, skipping: {}", remote_path, e);
-                    }
-                }
-            }
-            Err(e) => {
-                log::warn!("push_workspace: Failed to create {:?}, skipping: {}", remote_path, e);
-            }
-        }
-    }
-
-    // Clear pending changes since we just synced
+    // Clear pending changes
     let store = app
         .store(STORE_PATH)
         .map_err(|e| SyncError::Store(e.to_string()))?;
@@ -892,17 +1039,16 @@ pub async fn push_workspace(
     let config = SyncConfig {
         folder_path: local_path,
         last_sync: Some(timestamp),
-        sftp_host: None,
-        sftp_port: None,
-        sftp_user: None,
+        ssh_host: Some(conn.host),
+        ssh_port: Some(conn.port),
+        ssh_user: Some(conn.username),
+        remote_path: Some(conn.remote_path),
     };
     store.set(
         key,
         serde_json::to_value(&config).map_err(|e| SyncError::Store(e.to_string()))?,
     );
     store.save().map_err(|e| SyncError::Store(e.to_string()))?;
-
-    drop(manager); // Release lock before returning
 
     Ok(SyncResult {
         files_synced,
@@ -912,7 +1058,7 @@ pub async fn push_workspace(
     })
 }
 
-/// Pull remote changes to local using rsync algorithm
+/// Pull remote changes to local using rsync
 #[tauri::command]
 pub async fn pull_workspace(
     app: AppHandle,
@@ -921,65 +1067,23 @@ pub async fn pull_workspace(
     _api_key: String,
     _api_base: String,
 ) -> Result<SyncResult, String> {
+    log::info!("pull_workspace: agent_id={}, local_path={}", agent_id, local_path);
+
     let local_dir = PathBuf::from(&local_path);
 
     // Create directory if it doesn't exist
     fs::create_dir_all(&local_dir).map_err(SyncError::Io)?;
 
-    // Get connection
-    let manager = SFTP_MANAGER.lock().map_err(|e| e.to_string())?;
-    let conn = manager
-        .get(agent_id)
-        .ok_or_else(|| SyncError::NotConnected.to_string())?;
+    // Get connection info
+    let conn = {
+        let manager = CONNECTION_MANAGER.lock().map_err(|e| e.to_string())?;
+        manager.get(agent_id).cloned()
+    };
 
-    // List remote files
-    let remote_files = list_remote_files(&conn.sftp, &conn.remote_path)?;
+    let conn = conn.ok_or_else(|| SyncError::NotConnected.to_string())?;
 
-    let mut files_synced = 0u32;
-    let mut bytes_transferred = 0u64;
-
-    for remote_info in &remote_files {
-        let local_file_path = local_dir.join(&remote_info.path);
-        let remote_file_path = format!("{}/{}", conn.remote_path, remote_info.path);
-
-        // Read remote file
-        let remote_path = std::path::Path::new(&remote_file_path);
-        let mut remote_file = conn
-            .sftp
-            .open(remote_path)
-            .map_err(|e| SyncError::Sftp(e.to_string()))?;
-
-        let mut remote_content = Vec::new();
-        remote_file
-            .read_to_end(&mut remote_content)
-            .map_err(|e| e.to_string())?;
-
-        // Check if local file exists and needs update
-        let needs_update = if local_file_path.exists() {
-            let mut local_content = Vec::new();
-            let mut f = File::open(&local_file_path).map_err(|e| e.to_string())?;
-            f.read_to_end(&mut local_content)
-                .map_err(|e| e.to_string())?;
-
-            compute_hash(&local_content) != compute_hash(&remote_content)
-        } else {
-            true
-        };
-
-        if needs_update {
-            // Ensure local directory exists
-            if let Some(parent) = local_file_path.parent() {
-                fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-            }
-
-            // Write to local
-            let mut f = File::create(&local_file_path).map_err(|e| e.to_string())?;
-            f.write_all(&remote_content).map_err(|e| e.to_string())?;
-
-            bytes_transferred += remote_content.len() as u64;
-            files_synced += 1;
-        }
-    }
+    // Run rsync
+    let (files_synced, bytes_transferred) = run_rsync_pull(&local_dir, &conn)?;
 
     // Update last sync time
     let timestamp = get_current_timestamp();
@@ -991,17 +1095,16 @@ pub async fn pull_workspace(
     let config = SyncConfig {
         folder_path: local_path,
         last_sync: Some(timestamp),
-        sftp_host: None,
-        sftp_port: None,
-        sftp_user: None,
+        ssh_host: Some(conn.host),
+        ssh_port: Some(conn.port),
+        ssh_user: Some(conn.username),
+        remote_path: Some(conn.remote_path),
     };
     store.set(
         key,
         serde_json::to_value(&config).map_err(|e| SyncError::Store(e.to_string()))?,
     );
     store.save().map_err(|e| SyncError::Store(e.to_string()))?;
-
-    drop(manager);
 
     Ok(SyncResult {
         files_synced,
@@ -1087,77 +1190,6 @@ pub async fn sync_pending_changes(
 }
 
 // ============================================================================
-// SFTP Helper Functions
-// ============================================================================
-
-/// Create remote directories recursively
-fn create_remote_dirs(sftp: &Sftp, path: &Path) -> Result<(), SyncError> {
-    let mut current = PathBuf::new();
-
-    for component in path.components() {
-        current.push(component);
-        let _ = sftp.mkdir(&current, 0o755); // Ignore errors (dir may exist)
-    }
-
-    Ok(())
-}
-
-/// List all files in remote directory recursively
-fn list_remote_files(sftp: &Sftp, remote_path: &str) -> Result<Vec<FileInfo>, SyncError> {
-    let mut files = Vec::new();
-    list_remote_files_recursive(sftp, remote_path, "", &mut files)?;
-    Ok(files)
-}
-
-fn list_remote_files_recursive(
-    sftp: &Sftp,
-    base_path: &str,
-    relative_path: &str,
-    files: &mut Vec<FileInfo>,
-) -> Result<(), SyncError> {
-    let current_path = if relative_path.is_empty() {
-        base_path.to_string()
-    } else {
-        format!("{}/{}", base_path, relative_path)
-    };
-
-    let entries = sftp
-        .readdir(std::path::Path::new(&current_path))
-        .map_err(|e| SyncError::Sftp(e.to_string()))?;
-
-    for (path, stat) in entries {
-        let file_name = path
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_default();
-
-        // Skip . and ..
-        if file_name == "." || file_name == ".." {
-            continue;
-        }
-
-        let rel_path = if relative_path.is_empty() {
-            file_name.clone()
-        } else {
-            format!("{}/{}", relative_path, file_name)
-        };
-
-        if stat.is_dir() {
-            list_remote_files_recursive(sftp, base_path, &rel_path, files)?;
-        } else if stat.is_file() {
-            files.push(FileInfo {
-                path: rel_path,
-                size: stat.size.unwrap_or(0),
-                hash: String::new(), // Hash computed on demand
-                mtime: stat.mtime.unwrap_or(0) as i64,
-            });
-        }
-    }
-
-    Ok(())
-}
-
-// ============================================================================
 // Tauri Commands - Filesystem Watcher
 // ============================================================================
 
@@ -1182,7 +1214,6 @@ pub async fn start_watching(
         return Err("Path does not exist".to_string());
     }
 
-    // Clone what we need for the closure
     let app_handle = app.clone();
     let watch_path = path.clone();
 
@@ -1192,22 +1223,25 @@ pub async fn start_watching(
         move |res: Result<Vec<notify_debouncer_mini::DebouncedEvent>, notify::Error>| {
             match res {
                 Ok(events) => {
-                    // Filter for actual file changes
+                    // Filter out ignored files (e.g., .DS_Store, .git, etc.)
                     let changed_paths: Vec<String> = events
                         .iter()
                         .filter(|e| matches!(e.kind, DebouncedEventKind::Any))
+                        .filter(|e| !should_ignore_path(&e.path))
                         .map(|e| e.path.to_string_lossy().to_string())
                         .collect();
 
                     if !changed_paths.is_empty() {
-                        // Emit event to frontend
+                        log::debug!(
+                            "File watcher: {} relevant changes for agent {}",
+                            changed_paths.len(),
+                            agent_id
+                        );
                         let event = FileChangeEvent {
                             agent_id,
                             paths: changed_paths,
                             timestamp: get_current_timestamp(),
                         };
-
-                        // Emit to frontend via Tauri event system
                         let _ = app_handle.emit("workspace-file-change", event);
                     }
                 }
@@ -1219,19 +1253,13 @@ pub async fn start_watching(
     )
     .map_err(|e| format!("Failed to create watcher: {}", e))?;
 
-    // Start watching
     debouncer
         .watcher()
         .watch(&watch_path, notify::RecursiveMode::Recursive)
         .map_err(|e| format!("Failed to start watching: {}", e))?;
 
-    // Store the watcher
     let mut manager = WATCHER_MANAGER.lock().map_err(|e| e.to_string())?;
-
-    // Remove existing watcher if any
     manager.stop(agent_id);
-
-    // Store new watcher
     manager.watchers.insert(
         agent_id,
         WatcherHandle {
@@ -1268,52 +1296,154 @@ pub async fn get_watched_path(agent_id: i64) -> Result<Option<String>, String> {
 }
 
 // ============================================================================
-// Deprecated HTTP Commands (kept for backwards compatibility)
+// Tauri Commands - SSE Subscription
 // ============================================================================
 
-/// DEPRECATED: Use push_workspace instead (now uses SFTP)
+/// Start SSE subscription for real-time agent updates
+/// Replaces polling for lock state and workspace version changes
 #[tauri::command]
-pub async fn push_workspace_delta(
+pub async fn start_agent_sse(
     app: AppHandle,
     agent_id: i64,
-    local_path: String,
     api_key: String,
     api_base: String,
-) -> Result<SyncResult, String> {
-    // Redirect to new SFTP-based push
-    push_workspace(app, agent_id, local_path, api_key, api_base).await
+) -> Result<(), String> {
+    // Check if already subscribed
+    {
+        let manager = SSE_MANAGER.lock().map_err(|e| e.to_string())?;
+        if manager.is_subscribed(agent_id) {
+            log::info!("[SSE] Already subscribed to agent {}", agent_id);
+            return Ok(());
+        }
+    }
+
+    log::info!("[SSE] Starting subscription for agent {}", agent_id);
+
+    // Create shutdown channel
+    let (shutdown_tx, mut shutdown_rx) = mpsc::channel::<()>(1);
+
+    // Store the handle
+    {
+        let mut manager = SSE_MANAGER.lock().map_err(|e| e.to_string())?;
+        manager.add(agent_id, SseHandle { shutdown_tx });
+    }
+
+    // Clone app handle and api_key for the spawned task
+    let app_handle = app.clone();
+    let api_key_clone = api_key.clone();
+
+    // Spawn the SSE connection task
+    tokio::spawn(async move {
+        let url = format!("{}/api/agents/{}/stream", api_base, agent_id);
+        log::info!("[SSE] Connecting to {} with api_key prefix: {}", url, &api_key_clone[..api_key_clone.len().min(10)]);
+
+        loop {
+            // Create new EventSource with auth header
+            let request = reqwest::Client::new()
+                .get(&url)
+                .header("Accept", "text/event-stream")
+                .header("Authorization", format!("Bearer {}", api_key_clone));
+
+            let mut es = EventSource::new(request).map_err(|e| {
+                log::error!("[SSE] Failed to create EventSource: {}", e);
+                e
+            }).unwrap();
+
+            loop {
+                tokio::select! {
+                    // Check for shutdown signal
+                    _ = shutdown_rx.recv() => {
+                        log::info!("[SSE] Received shutdown signal for agent {}", agent_id);
+                        es.close();
+                        return;
+                    }
+                    // Process SSE events
+                    event = es.next() => {
+                        match event {
+                            Some(Ok(Event::Open)) => {
+                                log::info!("[SSE] Connected to agent {} stream", agent_id);
+                            }
+                            Some(Ok(Event::Message(msg))) => {
+                                // Parse the SSE event data
+                                match serde_json::from_str::<SseEventData>(&msg.data) {
+                                    Ok(event_data) => {
+                                        match event_data.event_type.as_str() {
+                                            "lock_changed" => {
+                                                if let Some(locked) = event_data.data.get("locked").and_then(|v| v.as_bool()) {
+                                                    log::debug!("[SSE] Lock changed for agent {}: {}", agent_id, locked);
+                                                    let _ = app_handle.emit("agent-lock-changed", AgentLockChangedEvent {
+                                                        agent_id,
+                                                        locked,
+                                                    });
+                                                }
+                                            }
+                                            "workspace_updated" => {
+                                                if let Some(version) = event_data.data.get("version").and_then(|v| v.as_str()) {
+                                                    log::debug!("[SSE] Workspace updated for agent {}: {}", agent_id, version);
+                                                    let _ = app_handle.emit("agent-workspace-updated", AgentWorkspaceUpdatedEvent {
+                                                        agent_id,
+                                                        version: version.to_string(),
+                                                    });
+                                                }
+                                            }
+                                            "tasks_snapshot" | "tasks_updated" => {
+                                                // Tasks are handled by the web frontend, not Tauri
+                                                // We only care about lock and workspace events here
+                                            }
+                                            _ => {
+                                                log::debug!("[SSE] Unknown event type: {}", event_data.event_type);
+                                            }
+                                        }
+                                    }
+                                    Err(e) => {
+                                        log::warn!("[SSE] Failed to parse event data: {}", e);
+                                    }
+                                }
+                            }
+                            Some(Err(e)) => {
+                                log::error!("[SSE] Connection error for agent {}: {:?}", agent_id, e);
+                                // Break inner loop to reconnect
+                                break;
+                            }
+                            None => {
+                                log::info!("[SSE] Stream ended for agent {}, reconnecting...", agent_id);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Wait before reconnecting
+            log::info!("[SSE] Reconnecting to agent {} in 5 seconds...", agent_id);
+            tokio::time::sleep(Duration::from_secs(5)).await;
+        }
+    });
+
+    Ok(())
 }
 
-/// DEPRECATED: Use pull_workspace instead (now uses SFTP)
+/// Stop SSE subscription for an agent
 #[tauri::command]
-pub async fn pull_workspace_delta(
-    app: AppHandle,
-    agent_id: i64,
-    local_path: String,
-    api_key: String,
-    api_base: String,
-) -> Result<SyncResult, String> {
-    // Redirect to new SFTP-based pull
-    pull_workspace(app, agent_id, local_path, api_key, api_base).await
+pub async fn stop_agent_sse(agent_id: i64) -> Result<(), String> {
+    let handle = {
+        let mut manager = SSE_MANAGER.lock().map_err(|e| e.to_string())?;
+        manager.remove(agent_id)
+    };
+
+    if let Some(handle) = handle {
+        log::info!("[SSE] Stopping subscription for agent {}", agent_id);
+        // Send shutdown signal (ignore errors if receiver is dropped)
+        let _ = handle.shutdown_tx.send(()).await;
+    }
+
+    Ok(())
 }
 
-/// DEPRECATED: No longer needed with SFTP
+/// Check if SSE subscription is active for an agent
 #[tauri::command]
-pub async fn get_local_signatures(_local_path: String) -> Result<HashMap<String, String>, String> {
-    Ok(HashMap::new())
+pub async fn is_agent_sse_connected(agent_id: i64) -> Result<bool, String> {
+    let manager = SSE_MANAGER.lock().map_err(|e| e.to_string())?;
+    Ok(manager.is_subscribed(agent_id))
 }
 
-/// DEPRECATED: No longer needed with SFTP
-#[tauri::command]
-pub async fn get_cached_signatures(
-    _app: AppHandle,
-    _agent_id: i64,
-) -> Result<Option<HashMap<String, String>>, String> {
-    Ok(None)
-}
-
-/// DEPRECATED: No longer needed with SFTP
-#[tauri::command]
-pub async fn clear_agent_files(_local_path: String) -> Result<u32, String> {
-    Ok(0)
-}

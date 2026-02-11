@@ -99,6 +99,13 @@ class PlanGenerationRequest:
 
     token_accumulator: TokenAccumulator | None = None
 
+    # Retrieved context from KNN retrievers (formatted strings)
+    # Replaces custom FAISS search with DSPy KNNFewShot retrieval
+    retrieved_capabilities: str = ""
+    retrieved_patterns: str = ""
+    retrieved_knowledge: str = ""
+    retrieved_strategies: str = ""
+
     @property
     def configured_tools_json(self) -> str:
         """Format configured_tools as JSON string for DSPy signature input."""

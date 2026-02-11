@@ -40,10 +40,11 @@ CONTENT_TOOLS = {"document_crud", "file_crud"}
 ADMIN_TOOLS = {"team_crud"}
 
 # Discovery tools — always included in direct execution
+# Note: search_capabilities removed - KNNFewShot with TOOL_EXAMPLES provides
+# tool selection learning via few-shot demos instead of runtime search
 DISCOVERY_TOOL_NAMES = {
     "system_research",
     "workspace_overview",
-    "search_capabilities",
     "search_external",
     "web_search",
     "memory_crud",

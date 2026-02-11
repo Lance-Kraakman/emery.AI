@@ -24,7 +24,6 @@ if _version_not_supported:
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
     )
 
-
 class AgentWorkerStub(object):
     """Service for executing agent tasks on worker instances
     """

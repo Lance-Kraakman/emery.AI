@@ -1,8 +1,8 @@
 """
 Semantic Retrievers for capabilities, patterns, knowledge, strategies.
 
-Uses DSPy's Embeddings retriever (FAISS-backed for large corpora) with dspy.Embedder
-for automatic caching via dspy.configure_cache().
+Uses DSPy's Embeddings retriever (FAISS-backed for large corpora) with dspy.Embedder.
+Embeddings are tracked via contextvar so cached retrievers can use per-request trackers.
 """
 
 from __future__ import annotations
@@ -18,6 +18,8 @@ from emery_agents.entities.models.capability import Capability
 from emery_agents.knowledge.base import KnowledgeBase, KnowledgeItem
 from emery_agents.planning.pattern import PlanningPattern
 from emery_agents.planning.registry import PlanningRegistry
+from emery_agents.services.analysis.embedding_usage import get_current_tracker
+from emery_agents.services.analysis.embeddings import get_embeddings_batch
 from emery_agents.tools.capability_registry import CapabilityRegistry
 
 logger = logging.getLogger(__name__)
@@ -32,12 +34,21 @@ _org_retrievers: dict[str, dict[str, BaseRetriever[Any]]] = {}
 
 
 def _create_embedder() -> dspy.Embedder:
-    """Create DSPy Embedder with built-in caching."""
-    return dspy.Embedder(
-        model="gemini/gemini-embedding-001",
-        caching=True,
-        batch_size=100,  # Gemini max batch size
-    )
+    """Create DSPy Embedder that tracks usage via contextvar.
+
+    Uses get_embeddings_batch() which calls our Gemini embedding service
+    and tracks tokens to the current request's tracker (via contextvar).
+
+    The tracker is accessed at call time, not creation time, so cached
+    retrievers can track to different requests correctly.
+    """
+
+    def embed_fn(texts: list[str]) -> list[list[float]]:
+        tracker = get_current_tracker()  # Gets current request's tracker
+        embeddings = get_embeddings_batch(texts, tracker=tracker, batch_size=100)
+        return [list(emb) for emb in embeddings]
+
+    return dspy.Embedder(embed_fn)
 
 
 class BaseRetriever(Generic[T]):

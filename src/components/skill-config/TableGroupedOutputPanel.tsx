@@ -366,8 +366,8 @@ export function TableGroupedOutputPanel({
 
   return (
     <div className="space-y-3">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      {/* Header with inline actions */}
+      <div className="flex items-center gap-2">
         <div className="flex items-center gap-1.5">
           <Label className="text-xs font-medium">Outputs</Label>
           <div className="group relative">
@@ -377,7 +377,44 @@ export function TableGroupedOutputPanel({
             </div>
           </div>
         </div>
+
+        {!isReadOnly && (
+          <div className="flex items-center gap-1.5 flex-1">
+            {!showAddManual && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowAddManual(true)}
+                className="h-6 px-2 text-[10px] text-muted-foreground"
+              >
+                <Plus className="h-3 w-3 mr-1" />
+                Add output
+              </Button>
+            )}
+            {!tablesLoading && tables.length > 0 && (
+              <AddToTableButton
+                tables={tables}
+                databases={databases}
+                onAddFields={(tableId, fields) => handleAddOutputsToTable(tableId, fields)}
+              />
+            )}
+          </div>
+        )}
+
         <span className="text-[10px] text-muted-foreground">{outputs.length} total</span>
+
+        {!isReadOnly && outputs.length > 0 && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={handleClearAll}
+            className="h-6 px-2 text-[10px] text-muted-foreground hover:text-destructive"
+          >
+            Clear all
+          </Button>
+        )}
       </div>
 
       {/* Table-grouped output mappings */}
@@ -552,41 +589,6 @@ export function TableGroupedOutputPanel({
         </div>
       )}
 
-      {/* Action buttons */}
-      {!isReadOnly && (
-        <div className="flex items-center gap-2">
-          {!showAddManual && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowAddManual(true)}
-              className="h-6 px-2 text-[11px] text-muted-foreground"
-            >
-              <Plus className="h-3 w-3 mr-1" />
-              Add output
-            </Button>
-          )}
-          {!tablesLoading && tables.length > 0 && (
-            <AddToTableButton
-              tables={tables}
-              databases={databases}
-              onAddFields={(tableId, fields) => handleAddOutputsToTable(tableId, fields)}
-            />
-          )}
-          {outputs.length > 0 && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={handleClearAll}
-              className="h-6 px-2 text-[11px] text-muted-foreground hover:text-destructive"
-            >
-              Clear all
-            </Button>
-          )}
-        </div>
-      )}
     </div>
   );
 }
@@ -647,8 +649,9 @@ function AddToTableButton({
         setSelectedTableId(parseInt(v));
       }}
     >
-      <SelectTrigger className="h-6 w-[140px] text-[10px] text-muted-foreground">
-        <SelectValue placeholder="+ Add to table" />
+      <SelectTrigger className="h-6 w-[120px] text-[10px] text-muted-foreground">
+        <Table2 className="h-3 w-3 mr-1 shrink-0" />
+        <SelectValue placeholder="Add to table" />
       </SelectTrigger>
       <SelectContent>
         {Array.from(tablesByDatabase.entries()).map(([dbId, dbTables]) => {

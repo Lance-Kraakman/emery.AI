@@ -51,7 +51,7 @@ export default async function AgentPage({ params }: AgentPageProps) {
 
         {/* Split view streams separately - shows skeleton while tasks load */}
         <Suspense fallback={<SplitViewSkeleton />}>
-          <SplitViewWrapper agentId={agent.id} automations={agent.automations} />
+          <SplitViewWrapper agent={agent} />
         </Suspense>
       </AgentPageClient>
     </CanvasBase>

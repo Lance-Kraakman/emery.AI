@@ -82,14 +82,14 @@ class DSPyPlanGenerator:
     def _get_planner(self) -> PlannerModule:
         """Get or create planner module."""
         if self._planner is None:
-            self._planner = PlannerModule(discovery_tools=self.discovery_tools)
+            self._planner = PlannerModule(external_tools=self.discovery_tools)
         return self._planner
 
     def _get_template_planner(self) -> SkillTemplatePlannerModule:
         """Get or create skill template planner module."""
         if self._template_planner is None:
             self._template_planner = SkillTemplatePlannerModule(
-                discovery_tools=self.discovery_tools
+                external_tools=self.discovery_tools
             )
         return self._template_planner
 
@@ -152,6 +152,10 @@ class DSPyPlanGenerator:
                     memory_context=request.memory_context,
                     triage_analysis=request.triage_analysis,
                     configured_tools=request.configured_tools_json,
+                    retrieved_capabilities=request.retrieved_capabilities,
+                    retrieved_patterns=request.retrieved_patterns,
+                    retrieved_knowledge=request.retrieved_knowledge,
+                    retrieved_strategies=request.retrieved_strategies,
                 )
             record_from_lm(lm, request.token_accumulator.get_llm_tracker())
         except Exception as e:
@@ -326,9 +330,8 @@ class DSPyPlanGenerator:
     ) -> str:
         """Get capability planning guidance for the planner using semantic search.
 
-        Uses multi-factor matching: semantic search (top 3) filtered to enabled,
-        with the routing header always included. Falls back to all guidance if
-        no registry is available.
+        Searches org's enabled capabilities directly (50-500) rather than all 30K
+        capabilities. Falls back to full registry search if no org_id available.
 
         Matched capability guidance includes tool mappings and step description
         templates — these are the primary instructions for writing executor-ready steps.
@@ -343,18 +346,19 @@ class DSPyPlanGenerator:
         org_id = request.config.org_id if request.config else None
 
         try:
-            # Semantic search: top 3 most relevant capabilities
-            matched = request.capability_registry.search(
-                query=request.basic_instructions,
-                limit=3,
-            )
-
-            # Filter to enabled only
+            # Semantic search within org's enabled capabilities only (50-500, not 30K)
+            # Falls back to full registry search if no org_id
             if org_id:
-                enabled_ids = {
-                    cap.id for cap in request.capability_registry.get_enabled(org_id)
-                }
-                matched = [cap for cap in matched if cap.id in enabled_ids]
+                matched = request.capability_registry.search_enabled(
+                    query=request.basic_instructions,
+                    org_id=org_id,
+                    limit=3,
+                )
+            else:
+                matched = request.capability_registry.search(
+                    query=request.basic_instructions,
+                    limit=3,
+                )
 
             # Get guidance for matched capabilities
             guidance_parts = []

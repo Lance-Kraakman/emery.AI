@@ -14,7 +14,8 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Check } from "lucide-react";
 import { toast } from "sonner";
-import { getOrganizationRoles, type CustomRole } from "@/app/actions/roles";
+import { getOrganizationRoles } from "@/app/actions/roles";
+import type { CustomRole } from "@/app/actions/types";
 import {
   Command,
   CommandEmpty,

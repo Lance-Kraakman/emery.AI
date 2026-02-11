@@ -7,13 +7,17 @@ Configured via WORKSPACE_STORAGE_PATH environment variable.
 
 import json
 import logging
-import os
 import re
 import shutil
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, ClassVar, Optional
 
+from .workspace_paths import (
+    AGENT_WORKSPACE_DIRS,
+    USER_WORKSPACE_DIRS,
+    WORKSPACE_STORAGE_PATH,
+)
 from .workspace_storage import WorkspaceStorage, WorkspaceType
 
 logger = logging.getLogger(__name__)
@@ -23,56 +27,37 @@ class SharedFilesystemStorage(WorkspaceStorage):
     """
     Workspace storage using a shared filesystem (EFS, Azure Files, NFS, local).
 
-    Directory structure:
+    Directory structure (user files synced to root, system dirs created by engine):
         {base_path}/
         └── {org_id}/
             ├── agents/
             │   └── {agent_id}/
-            │       ├── .agent/
-            │       │   ├── config.json      # Agent configuration
-            │       │   ├── memory.jsonl     # Persistent memory (future)
-            │       │   ├── plans/           # Saved execution plans
-            │       │   └── memory/chroma/   # Vector store for RAG
-            │       ├── workspace/
-            │       │   ├── context/         # Synced tables/data
-            │       │   ├── scratch/         # Working files
-            │       │   └── outputs/         # Generated artifacts
-            │       └── history/
-            │           └── {date}/{task_id}/
-            │               ├── session.jsonl  # Execution log
-            │               └── result.json    # Task result
+            │       ├── [user files]         # Synced from local folder (rsync)
+            │       ├── .agent/              # Agent config + memory (persistent)
+            │       │   ├── config.json
+            │       │   ├── plans/
+            │       │   └── memory/chroma/
+            │       ├── history/             # Task execution logs
+            │       │   └── {date}/{task_id}/
+            │       │       ├── session.jsonl
+            │       │       └── result.json
+            │       └── scratch/             # Agent working space
+            │           ├── context/
+            │           └── outputs/
             └── users/
                 └── {user_id}/
                     ├── .user/
-                    │   └── config.json      # User session config
-                    ├── workspace/
-                    │   ├── scratch/         # Working files
-                    │   └── outputs/         # Generated artifacts
-                    └── history/
-                        └── {date}/{task_id}/
+                    ├── history/
+                    └── scratch/
+
+    Note: User files appear in workspace root (synced via rsync).
+    System directories (.agent, history, scratch) are created by the engine.
+    See workspace_paths.py for the source of truth on directory names.
     """
 
-    # Default directories for agent workspaces (full agent context)
-    AGENT_DIRS: ClassVar[list[str]] = [
-        ".agent",
-        ".agent/plans",
-        ".agent/memory",
-        ".agent/memory/chroma",
-        "workspace",
-        "workspace/context",
-        "workspace/scratch",
-        "workspace/outputs",
-        "history",
-    ]
-
-    # Default directories for user workspaces (simpler - just chat sessions)
-    USER_DIRS: ClassVar[list[str]] = [
-        ".user",
-        "workspace",
-        "workspace/scratch",
-        "workspace/outputs",
-        "history",
-    ]
+    # Directory structures imported from workspace_paths.py (source of truth)
+    AGENT_DIRS: ClassVar[list[str]] = AGENT_WORKSPACE_DIRS
+    USER_DIRS: ClassVar[list[str]] = USER_WORKSPACE_DIRS
 
     # Regex for validating workspace IDs (alphanumeric, underscore, hyphen)
     WORKSPACE_ID_PATTERN: ClassVar[re.Pattern[str]] = re.compile(r"^[a-zA-Z0-9_-]+$")
@@ -83,13 +68,9 @@ class SharedFilesystemStorage(WorkspaceStorage):
 
         Args:
             base_path: Root path for workspaces.
-                       Defaults to WORKSPACE_STORAGE_PATH env var
-                       or /mnt/storage/workspaces
+                       Defaults to WORKSPACE_STORAGE_PATH from workspace_paths.py
         """
-        self.base_path = Path(
-            base_path
-            or os.getenv("WORKSPACE_STORAGE_PATH", "/mnt/storage/workspaces")
-        )
+        self.base_path = Path(base_path) if base_path else WORKSPACE_STORAGE_PATH
         self.base_path.mkdir(parents=True, exist_ok=True)
         logger.info(f"SharedFilesystemStorage initialized at {self.base_path}")
 
@@ -113,34 +94,44 @@ class SharedFilesystemStorage(WorkspaceStorage):
     def get_workspace_path(
         self, org_id: int, workspace_type: WorkspaceType, workspace_id: str
     ) -> Path:
-        """Get workspace path, creating with default structure if needed."""
+        """Get workspace path, always ensuring structure exists.
+
+        Note: Always ensures structure because rsync may pre-create the root
+        directory before the engine runs. We need to create system directories
+        (.agent, history, scratch) on every access.
+        """
         path = self._workspace_path(org_id, workspace_type, workspace_id)
 
-        if not path.exists():
-            logger.info(f"Creating new workspace: {path}")
-            self._create_workspace(path, workspace_type, workspace_id)
+        # Always ensure structure exists (rsync may have created root only)
+        self._ensure_workspace_structure(path, workspace_type, workspace_id)
 
         return path
 
-    def _create_workspace(
+    def _ensure_workspace_structure(
         self, path: Path, workspace_type: WorkspaceType, workspace_id: str
     ) -> None:
-        """Create workspace with default directory structure."""
-        # Use appropriate directory structure based on workspace type
+        """Ensure workspace has required directory structure (idempotent).
+
+        Creates all required subdirectories and config if missing.
+        Safe to call multiple times - won't overwrite existing files.
+        """
+        # Create all required directories
         dirs = self.AGENT_DIRS if workspace_type == WorkspaceType.AGENTS else self.USER_DIRS
         for subdir in dirs:
             (path / subdir).mkdir(parents=True, exist_ok=True)
 
-        # Create initial config in the appropriate directory
+        # Create config only if it doesn't exist
         config_dir = ".agent" if workspace_type == WorkspaceType.AGENTS else ".user"
-        config = {
-            "workspace_id": workspace_id,
-            "workspace_type": workspace_type.value,
-            "created_at": datetime.now().isoformat(),
-            "version": 1,
-        }
         config_path = path / config_dir / "config.json"
-        config_path.write_text(json.dumps(config, indent=2))
+        if not config_path.exists():
+            config = {
+                "workspace_id": workspace_id,
+                "workspace_type": workspace_type.value,
+                "created_at": datetime.now().isoformat(),
+                "version": 1,
+            }
+            config_path.write_text(json.dumps(config, indent=2))
+            logger.info(f"Created workspace config: {config_path}")
 
     def create_agent_identifier(
         self,

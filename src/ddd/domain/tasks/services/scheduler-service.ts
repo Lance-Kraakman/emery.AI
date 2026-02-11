@@ -12,6 +12,7 @@ import type { AgentId } from '@/ddd/domain/shared/value-objects';
 import type { TriggerConfig, TriggerType, ScheduledTask, AutomationTaskRequest } from '@/ddd/domain/scheduling';
 import { CalendarTriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 import { IAgentRepository } from '../../agents/repositories/agent-repository';
+import { IOrganizationRepository } from '../../organizations/repositories/organization-repository';
 
 /**
  * Domain service for managing task scheduling
@@ -68,7 +69,8 @@ export interface ISchedulerService {
 
 export class SchedulerService implements ISchedulerService {
   constructor(
-    private agentRepository: IAgentRepository // Will be injected from container
+    private agentRepository: IAgentRepository,
+    private organizationRepository: IOrganizationRepository
   ) {}
 
   async scheduleAutomation(request: AutomationTaskRequest): Promise<void> {
@@ -98,9 +100,9 @@ export class SchedulerService implements ISchedulerService {
       inputMappings?: Array<{ triggerField: string; skillInputName: string }>;
     }[] = [];
 
-    // AIDEV-NOTE: Uses raw method to query across all orgs (bypasses RLS)
+    // AIDEV-NOTE: Uses org repository for cross-org queries (bypasses RLS)
     // This is intentional - scheduler needs visibility across all organizations
-    const agents = await this.agentRepository.findAllRaw();
+    const agents = await this.organizationRepository.findAllAgentsRaw();
 
     for (const agent of agents) {
       // Iterate through each agent's automations

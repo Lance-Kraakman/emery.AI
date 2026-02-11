@@ -42,9 +42,12 @@ sha2 = "0.10"
 walkdir = "2"
 base64 = "0.22"
 
-# SFTP + rsync sync (new)
-fast_rsync = "0.2"      # Pure Rust rsync algorithm
-ssh2 = "0.9"            # SFTP client
+# rsync sync (via shell command + SSH key auth)
+ssh-key = { version = "0.6", features = ["ed25519", "getrandom"] }  # Cross-platform SSH key generation
+dirs = "5.0"            # Cross-platform home/config directories
 notify = "6.1"          # Filesystem watcher for event-driven sync
 notify-debouncer-mini = "0.4"  # Debounce rapid file changes
-lazy_static = "1.4"     # Global static for connection manager
+reqwest = { version = "0.12", features = ["json"] }  # HTTP client for API calls
+reqwest-eventsource = "0.6"  # SSE client for real-time agent updates
+futures = "0.3"         # Async stream utilities for SSE
+lazy_static = "1.4"     # Global statics for connection/watcher managers

@@ -5,11 +5,13 @@ import { Calendar, Webhook, Database, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useModal } from '../modals/ModalContext';
 import type { AutomationConfigurationDTO } from '@/app/dtos/automation.dto';
+import type { AgentDTO } from '@/app/mappers/agent-mapper';
 
 // AIDEV-NOTE: Collapsible automations section in left panel
 // Shows list of automations, clicking opens TriggerConfigModal
 
 interface AutomationsSectionProps {
+  agent: AgentDTO;
   automations: AutomationConfigurationDTO[];
 }
 
@@ -19,15 +21,15 @@ const triggerTypeIcons = {
   DATABASE_EVENT: Database,
 };
 
-export function AutomationsSection({ automations }: AutomationsSectionProps) {
+export function AutomationsSection({ agent, automations }: AutomationsSectionProps) {
   const { openModal } = useModal();
 
   const handleAutomationClick = (automation: AutomationConfigurationDTO, index: number) => {
-    openModal('trigger-config', { automation, automationIndex: index });
+    openModal('trigger-config', { agent, automation, automationIndex: index });
   };
 
   const handleAddAutomation = () => {
-    openModal('trigger-config', {});
+    openModal('trigger-config', { agent });
   };
 
   return (

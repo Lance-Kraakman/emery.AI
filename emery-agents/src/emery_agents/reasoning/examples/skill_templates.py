@@ -1,8 +1,12 @@
 """
-Skill template examples for few-shot learning.
+Skill template examples for KNNFewShot demo selection.
 
-These examples demonstrate proper {{ variable }} usage, conditional logic
-with {% if %}, and template structure for skill creation.
+Each example shows: given a request, produce this skill template.
+KNN matches on request similarity to select relevant demos.
+
+IMPORTANT: Only `request` is marked as input for KNN matching.
+skill_inputs/skill_outputs are in examples as context for the model,
+but not used for similarity matching.
 """
 
 import dspy
@@ -15,48 +19,29 @@ from emery_agents.reasoning.signatures.planning import (
 )
 
 
-# Input field names for CreateSkillTemplate signature
-_INPUT_FIELDS = (
-    "request",
-    "workspace_context",
-    "capability_guidance",
-    "proven_strategies",
-    "conversation_history",
-    "skill_inputs",
-    "skill_outputs",
-    "configured_tools",
-)
-
-
-def _create_example(
+def _example(
     request: str,
     skill_inputs: list[SkillInputSpec],
     skill_outputs: list[SkillOutputSpec],
     result: SkillTemplatePlanOutput,
-    workspace_context: str = '{"_summary": "Empty workspace", "resources": []}',
-    capability_guidance: str = "",
-    proven_strategies: str = "",
-    conversation_history: str = "",
-    configured_tools: str = "",
 ) -> dspy.Example:
-    """Helper to create a properly-typed dspy.Example for skill templates."""
+    """Create a skill template example.
+
+    Only `request` is marked as input for KNN matching.
+    skill_inputs/skill_outputs are included as context.
+    """
     return dspy.Example(
         request=request,
-        workspace_context=workspace_context,
-        capability_guidance=capability_guidance,
-        proven_strategies=proven_strategies,
-        conversation_history=conversation_history,
         skill_inputs=skill_inputs,
         skill_outputs=skill_outputs,
-        configured_tools=configured_tools,
         result=result,
-    ).with_inputs(*_INPUT_FIELDS)
+    ).with_inputs("request")
 
 
 # =============================================================================
 # Example 1: Simple text generation skill
 # =============================================================================
-EXAMPLE_SUMMARY_SKILL = _create_example(
+EXAMPLE_SUMMARY_SKILL = _example(
     request="Write a professional summary for a person",
     skill_inputs=[
         SkillInputSpec(name="name", type="text", required=True),
@@ -69,17 +54,16 @@ EXAMPLE_SUMMARY_SKILL = _create_example(
     result=SkillTemplatePlanOutput(
         plan_id="skill_summary",
         goal="Generate professional summary for {{ name }}",
-        context="No workspace resources needed - pure text generation",
-        analysis="Simple text generation using input variables. Optional years_experience "
-        "should be conditionally included.",
+        context="Pure text generation - no external tools needed",
+        analysis="Text generation with optional conditional (years_experience).",
         steps=[
             SkillTemplateStepOutput(
-                step_id="step_1_generate_summary",
+                step_id="step_1",
                 description="Write professional summary for {{ name }} as {{ role }}",
                 prompt_template=(
                     "Write a professional summary for {{ name }} who works as a {{ role }}."
                     "{% if years_experience %} They have {{ years_experience }} years of experience.{% endif %}"
-                    " Keep it concise (2-3 sentences) and highlight their expertise."
+                    " Keep it concise (2-3 sentences)."
                 ),
                 phase_name="Execution",
                 phase_order=1,
@@ -92,8 +76,8 @@ EXAMPLE_SUMMARY_SKILL = _create_example(
 # =============================================================================
 # Example 2: Skill with conditional logic
 # =============================================================================
-EXAMPLE_GREETING_SKILL = _create_example(
-    request="Generate a greeting message. Use formal tone if business context, casual otherwise.",
+EXAMPLE_GREETING_SKILL = _example(
+    request="Generate a greeting message. Use formal tone for business, casual otherwise.",
     skill_inputs=[
         SkillInputSpec(name="recipient_name", type="text", required=True),
         SkillInputSpec(name="context", type="text", required=True),
@@ -105,17 +89,16 @@ EXAMPLE_GREETING_SKILL = _create_example(
     result=SkillTemplatePlanOutput(
         plan_id="skill_greeting",
         goal="Generate appropriate greeting for {{ recipient_name }}",
-        context="No workspace resources needed - conditional text generation",
-        analysis="Greeting style depends on context - formal for business, casual otherwise. "
-        "Sender name is optional.",
+        context="Conditional text generation based on context",
+        analysis="Greeting style depends on context value. Uses if/else.",
         steps=[
             SkillTemplateStepOutput(
-                step_id="step_1_generate_greeting",
+                step_id="step_1",
                 description="Generate greeting for {{ recipient_name }} based on {{ context }}",
                 prompt_template=(
-                    "Generate a greeting message for {{ recipient_name }}.\n"
+                    "Generate a greeting for {{ recipient_name }}.\n"
                     "{% if context == 'business' %}"
-                    "Use a formal, professional tone appropriate for business communication."
+                    "Use a formal, professional tone."
                     "{% else %}"
                     "Use a friendly, casual tone."
                     "{% endif %}"
@@ -132,7 +115,7 @@ EXAMPLE_GREETING_SKILL = _create_example(
 # =============================================================================
 # Example 3: Skill with external tool call
 # =============================================================================
-EXAMPLE_EMAIL_SKILL = _create_example(
+EXAMPLE_EMAIL_SKILL = _example(
     request="Send a follow-up email after a meeting",
     skill_inputs=[
         SkillInputSpec(name="recipient_email", type="text", required=True),
@@ -145,21 +128,20 @@ EXAMPLE_EMAIL_SKILL = _create_example(
     result=SkillTemplatePlanOutput(
         plan_id="skill_followup_email",
         goal="Send follow-up email about {{ meeting_topic }}",
-        context="Requires Gmail integration for sending",
-        analysis="Two-step process: compose personalized email, then send via Gmail. "
-        "Action items are conditionally included if provided.",
+        context="Requires Gmail integration",
+        analysis="Compose email with optional action items, then send via Gmail.",
         steps=[
             SkillTemplateStepOutput(
-                step_id="step_1_send_email",
+                step_id="step_1",
                 description="Compose and send follow-up email to {{ recipient_email }}",
                 tool_call="gmail_send_email",
                 connection_required="gmail",
                 prompt_template=(
-                    "Compose a professional follow-up email about the {{ meeting_topic }} meeting.\n"
+                    "Compose a follow-up email about {{ meeting_topic }}.\n"
                     "{% if action_items %}"
                     "Include these action items:\n{{ action_items }}"
                     "{% endif %}\n"
-                    "Keep it concise and actionable. Use the gmail_send_email tool to send to {{ recipient_email }}."
+                    "Send to {{ recipient_email }}."
                 ),
                 phase_name="Execution",
                 phase_order=1,
@@ -172,7 +154,7 @@ EXAMPLE_EMAIL_SKILL = _create_example(
 # =============================================================================
 # Example 4: Data lookup skill
 # =============================================================================
-EXAMPLE_LOOKUP_SKILL = _create_example(
+EXAMPLE_LOOKUP_SKILL = _example(
     request="Look up a contact's details from the database",
     skill_inputs=[
         SkillInputSpec(name="contact_name", type="text", required=True),
@@ -181,20 +163,19 @@ EXAMPLE_LOOKUP_SKILL = _create_example(
         SkillOutputSpec(name="email", type="text"),
         SkillOutputSpec(name="phone", type="text"),
     ],
-    workspace_context='{"_summary": "1 table: contacts", "resources": [{"type": "table", "name": "contacts", "fields": ["name", "email", "phone"]}]}',
     result=SkillTemplatePlanOutput(
         plan_id="skill_contact_lookup",
         goal="Find contact details for {{ contact_name }}",
-        context="contacts table exists with name, email, phone fields",
-        analysis="Simple lookup query on existing contacts table. Extract email and phone from result.",
+        context="Requires contacts table in workspace",
+        analysis="Simple lookup query on contacts table.",
         steps=[
             SkillTemplateStepOutput(
-                step_id="step_1_lookup_contact",
+                step_id="step_1",
                 description="Query contacts table for {{ contact_name }}",
                 tool_call="table_crud",
                 prompt_template=(
-                    "Look up the contact named {{ contact_name }} in the contacts table. "
-                    "Return their email and phone number."
+                    "Look up {{ contact_name }} in the contacts table. "
+                    "Return their email and phone."
                 ),
                 phase_name="Execution",
                 phase_order=1,

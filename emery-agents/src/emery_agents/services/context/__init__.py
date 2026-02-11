@@ -10,9 +10,12 @@ Context and configuration management for agent execution.
 """
 
 from .manager import (
+    clear_human_skill_awaiting,
     execution_scope,
     get_current_context,
+    get_human_skill_awaiting,
     set_current_context,
+    signal_human_skill_awaiting,
 )
 from .models import (
     ConversationMessage,
@@ -34,4 +37,7 @@ __all__ = [
     "set_current_context",
     "get_current_context",
     "execution_scope",
+    "signal_human_skill_awaiting",
+    "get_human_skill_awaiting",
+    "clear_human_skill_awaiting",
 ]

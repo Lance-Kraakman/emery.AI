@@ -87,3 +87,4 @@ certs/
 emery-agents/TaskStream/
 emery-agents/knowledge_base.json.gz
 *.json.gz
+.workspace-data

@@ -5,11 +5,13 @@ import { FolderOpen, File, ChevronRight, ChevronDown, Loader2 } from 'lucide-rea
 import { cn } from '@/lib/utils';
 
 // AIDEV-NOTE: Collapsible workspace section in left panel
-// Shows file tree, clicking file opens overlay with FileArtifactViewer
+// Shows file tree, clicking file triggers onFileSelect callback
 // Uses /api/agents/[id]/workspace/browse API
 
 interface WorkspaceSectionProps {
   agentId: number;
+  onFileSelect: (path: string) => void;
+  selectedFilePath?: string;
 }
 
 interface DirectoryEntry {
@@ -24,9 +26,10 @@ interface FileTreeNodeProps {
   path: string;
   agentId: number;
   onFileClick: (path: string) => void;
+  selectedFilePath?: string;
 }
 
-function FileTreeNode({ entry, path, agentId, onFileClick }: FileTreeNodeProps) {
+function FileTreeNode({ entry, path, agentId, onFileClick, selectedFilePath }: FileTreeNodeProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [children, setChildren] = useState<DirectoryEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -65,7 +68,12 @@ function FileTreeNode({ entry, path, agentId, onFileClick }: FileTreeNodeProps) 
     <div>
       <button
         onClick={handleClick}
-        className="w-full flex items-center gap-1 py-0.5 px-1 text-xs hover:bg-accent rounded transition-colors text-left"
+        className={cn(
+          'w-full flex items-center gap-1 py-0.5 px-1 text-xs rounded transition-colors text-left',
+          fullPath === selectedFilePath
+            ? 'bg-accent text-accent-foreground'
+            : 'hover:bg-accent'
+        )}
       >
         {entry.type === 'directory' ? (
           <>
@@ -96,6 +104,7 @@ function FileTreeNode({ entry, path, agentId, onFileClick }: FileTreeNodeProps) 
               path={fullPath}
               agentId={agentId}
               onFileClick={onFileClick}
+              selectedFilePath={selectedFilePath}
             />
           ))}
           {children.length === 0 && !isLoading && (
@@ -107,7 +116,7 @@ function FileTreeNode({ entry, path, agentId, onFileClick }: FileTreeNodeProps) 
   );
 }
 
-export function WorkspaceSection({ agentId }: WorkspaceSectionProps) {
+export function WorkspaceSection({ agentId, onFileSelect, selectedFilePath }: WorkspaceSectionProps) {
   const [entries, setEntries] = useState<DirectoryEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -133,13 +142,6 @@ export function WorkspaceSection({ agentId }: WorkspaceSectionProps) {
 
     loadRoot();
   }, [agentId]);
-
-  const handleFileClick = (path: string) => {
-    // TODO: Open file in overlay using FileArtifactViewer
-    console.log('Open file:', path);
-    // For now, open in new tab as a simple solution
-    window.open(`/api/agents/${agentId}/workspace/file?path=${encodeURIComponent(path)}`, '_blank');
-  };
 
   if (isLoading) {
     return (
@@ -182,7 +184,8 @@ export function WorkspaceSection({ agentId }: WorkspaceSectionProps) {
           entry={entry}
           path=""
           agentId={agentId}
-          onFileClick={handleFileClick}
+          onFileClick={onFileSelect}
+          selectedFilePath={selectedFilePath}
         />
       ))}
     </div>

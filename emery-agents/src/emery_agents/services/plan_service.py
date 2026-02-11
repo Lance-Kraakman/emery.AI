@@ -87,6 +87,10 @@ class PlanService:
         triage_analysis: dict | None = None,
         configured_tools: list | None = None,
         token_accumulator: Any | None = None,
+        retrieved_capabilities: str = "",
+        retrieved_patterns: str = "",
+        retrieved_knowledge: str = "",
+        retrieved_strategies: str = "",
     ) -> PlanGenerationResult:
         """Generate plan using DSPy PlannerModule. Returns plan or clarifying questions."""
         # Build request dataclass (includes all config for plan generation)
@@ -109,6 +113,10 @@ class PlanService:
             triage_analysis=triage_analysis,
             configured_tools=configured_tools,
             token_accumulator=token_accumulator,
+            retrieved_capabilities=retrieved_capabilities,
+            retrieved_patterns=retrieved_patterns,
+            retrieved_knowledge=retrieved_knowledge,
+            retrieved_strategies=retrieved_strategies,
         )
 
         # Delegate to generator (uses capability-based discovery)

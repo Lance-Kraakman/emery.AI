@@ -20,6 +20,7 @@ services:
       - integration-test-network
 
   app-integration:
+    profiles: ["app"]  # Only start with --profile app (for local dev, run pnpm dev instead)
     image: emery-integration-app:prod
     build:
       context: ../..
@@ -47,9 +48,11 @@ services:
       REDIS_URL: redis://redis-integration:6379
       # Workspace storage (shared with agents)
       WORKSPACE_STORAGE_PATH: /mnt/storage/workspaces
+      # Internal API secret for SSH key fetching
+      INTERNAL_API_SECRET: local-dev-secret
     volumes:
       # Shared workspace storage (same as agent services)
-      - workspace_data:/mnt/storage/workspaces
+      - ${WORKSPACE_HOST_PATH:-../../.workspace-data}:/mnt/storage/workspaces
     depends_on:
       postgres-integration:
         condition: service_healthy
@@ -131,8 +134,8 @@ services:
       EMERY_DEBUG_PROMPTS: "1"
       WORKSPACE_STORAGE_PATH: /mnt/storage/workspaces
     volumes:
-      # Shared workspace storage (same as SFTP server)
-      - workspace_data:/mnt/storage/workspaces
+      # Shared workspace storage (same as SSH sync server)
+      - ${WORKSPACE_HOST_PATH:-../../.workspace-data}:/mnt/storage/workspaces
     depends_on:
       postgres-integration:
         condition: service_healthy
@@ -172,8 +175,8 @@ services:
       REDIS_URL: redis://redis-integration:6379
       WORKSPACE_STORAGE_PATH: /mnt/storage/workspaces
     volumes:
-      # Shared workspace storage (same as SFTP server)
-      - workspace_data:/mnt/storage/workspaces
+      # Shared workspace storage (same as SSH sync server)
+      - ${WORKSPACE_HOST_PATH:-../../.workspace-data}:/mnt/storage/workspaces
     depends_on:
       postgres-integration:
         condition: service_healthy
@@ -190,10 +193,14 @@ services:
     networks:
       - integration-test-network
 
-  # SFTP server for workspace sync (Tauri desktop client connects here)
-  sftp-integration:
-    image: lscr.io/linuxserver/openssh-server:latest
-    container_name: emery-integration-sftp
+  # SSH + rsync server for workspace sync (Tauri desktop client connects here)
+  # Uses AuthorizedKeysCommand to fetch SSH keys from API - see docker/ssh-sync/README.md
+  # Note: For local dev, API_HOST is overridden in docker-compose.integration.dev.yml
+  ssh-sync-integration:
+    build:
+      context: ../../docker/ssh-sync
+      dockerfile: Dockerfile
+    container_name: emery-integration-ssh-sync
     ports:
       - "127.0.0.1:2222:2222"
     environment:
@@ -201,15 +208,18 @@ services:
       - PGID=1000
       - TZ=UTC
       - USER_NAME=agent
-      - USER_PASSWORD=test123
-      - PASSWORD_ACCESS=true
+      - PASSWORD_ACCESS=false
+      - SUDO_ACCESS=false
+      - DOCKER_MODS=linuxserver/mods:openssh-server-rsync
+      - INTERNAL_API_SECRET=local-dev-secret
+      - API_HOST=app-integration:3000
     volumes:
-      # Shared workspace storage - same volume agents use
-      - workspace_data:/config/workspace
+      - ${WORKSPACE_HOST_PATH:-../../.workspace-data}:/workspace
     networks:
       - integration-test-network
 
   scheduler-integration:
+    profiles: ["app"]  # Only start with --profile app (for local dev, run pnpm scheduler:start instead)
     image: emery-integration-scheduler:prod
     build:
       context: ../..
@@ -263,7 +273,10 @@ volumes:
   integration_postgres_data:  # Isolated volume for integration tests
   integration_minio_data:     # MinIO data for S3 storage testing
   integration_redis_data:     # Redis data for caching
-  workspace_data:             # Shared workspace for SFTP sync + agents
+  # Workspace storage is configurable via WORKSPACE_HOST_PATH env var:
+  #   - Local dev (Next.js on host): WORKSPACE_HOST_PATH=../../.workspace-data (default)
+  #   - Full Docker: WORKSPACE_HOST_PATH=workspace_data (uses named volume below)
+  workspace_data:             # Named volume for full Docker mode
 
 networks:
   integration-test-network:

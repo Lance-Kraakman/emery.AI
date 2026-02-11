@@ -36,10 +36,11 @@ export async function register() {
   // Polyfill runs at import time (above)
   // This export is required for Next.js instrumentation to work
 
-  // AIDEV-NOTE: Graceful shutdown handlers for ECS deployments
-  // When ECS sends SIGTERM, we have ~30 seconds to clean up
-  // Close database connections, flush caches, etc.
-  if (typeof process !== 'undefined') {
+  // Only run on Node.js server runtime, not edge/client
+  if (process.env.NEXT_RUNTIME === 'nodejs') {
+    // AIDEV-NOTE: Graceful shutdown handlers for ECS deployments
+    // When ECS sends SIGTERM, we have ~30 seconds to clean up
+    // Close database connections, flush caches, etc.
     const shutdown = async (signal: string) => {
       console.log(`[SHUTDOWN] Received ${signal}, starting graceful shutdown...`)
 

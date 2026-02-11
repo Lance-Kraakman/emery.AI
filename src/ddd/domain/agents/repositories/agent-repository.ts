@@ -69,15 +69,8 @@ export interface IAgentRepository {
   findAll(organizationId?: OrganizationId): Promise<Agent[]>;
 
   /**
-   * Find all agents bypassing RLS (system scheduler use only)
-   * WARNING: Completely bypasses row-level security.
-   * ONLY use for cross-org batch operations in trusted system processes.
-   * Requires rawDb to be configured in repository constructor.
-   */
-  findAllRaw(): Promise<Agent[]>;
-
-  /**
    * Find agent by API key
+   * NOTE: For cross-org auth, use organizationRepository.findAgentByApiKey()
    */
   findByApiKey(apiKey: ApiKey): Promise<Agent | null>;
 

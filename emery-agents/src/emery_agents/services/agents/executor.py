@@ -1084,6 +1084,14 @@ class AgentExecutor:
                 f"Added bash + filesystem tools with workspace: {context.workspace_path}, network={'enabled' if allow_net else 'disabled'}"
             )
 
+            # Debug: log what files exist in workspace
+            try:
+                files = [f for f in workspace.rglob("*") if f.is_file()]
+                file_list = [str(f.relative_to(workspace)) for f in files[:20]]
+                logger.info(f"[EXECUTOR] Workspace has {len(files)} files: {file_list}")
+            except Exception as e:
+                logger.warning(f"[EXECUTOR] Could not list workspace files: {e}")
+
         # Create DSPy executor module using AgentFactory
         agent_config = AgentConfig(
             tools=tools,
@@ -1150,6 +1158,14 @@ class AgentExecutor:
             logger.info(
                 f"Added bash + filesystem tools with workspace: {context.workspace_path}, network={'enabled' if allow_net else 'disabled'}"
             )
+
+            # Debug: log what files exist in workspace
+            try:
+                files = [f for f in workspace.rglob("*") if f.is_file()]
+                file_list = [str(f.relative_to(workspace)) for f in files[:20]]
+                logger.info(f"[EXECUTOR] Workspace has {len(files)} files: {file_list}")
+            except Exception as e:
+                logger.warning(f"[EXECUTOR] Could not list workspace files: {e}")
 
         # Load available skills as SkillTools for delegation
         if context.available_skills:
