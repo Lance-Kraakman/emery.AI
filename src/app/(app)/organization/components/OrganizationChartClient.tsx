@@ -35,7 +35,7 @@ import { useEmeryStore } from '@/contexts/EmeryStoreProvider';
 import { Loading } from '@/components/ui/loading';
 import { useOrganizationViewConfig } from '@/hooks/useOrganizationViewConfig';
 import { orgChartStore, orgChartSelectors } from '@/stores/organization-chart.store';
-import { storeActions, orgChartActions } from '@/stores/actions';
+import { orgChartActions } from '@/stores/actions';
 
 // Define custom node types
 const nodeTypes = {

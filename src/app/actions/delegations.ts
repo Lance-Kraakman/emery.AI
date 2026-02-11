@@ -3,17 +3,16 @@
 import { revalidatePath } from "next/cache";
 import { withAuthContext } from '@/lib/auth/with-context';
 import { requirePermission, requireAuth } from "./permissions";
-import { container, getAuditApplicationService } from "@/ddd/application/di/container";
-import type { CredentialDelegationApplicationService } from "@/ddd/application/services/delegations/credential-delegation-application-service";
-import type { ConnectionApplicationService } from "@/ddd/application/services/connections/connection-application-service";
-import { AgentId, UserId, OrganizationId } from '@/ddd/domain/shared/value-objects';
+import {
+  getAuditApplicationService,
+  getAgentRepository,
+  getConnectionApplicationService,
+  getDelegationApplicationService
+} from "@/ddd/application/di/container";
+import { AgentId, UserId } from '@/ddd/domain/shared/value-objects';
 import { AppName } from '@/ddd/domain/connections/value-objects';
-import { DelegationId } from '@/ddd/domain/shared/value-objects';
-import { getResourceAccessList, type AccessEntry } from "./resource-permissions";
-import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
-
-// Re-export AccessEntry for use in components
-export type { AccessEntry };
+import { getResourceAccessList } from "./resource-permissions";
+import type { AccessEntry } from "./resource-permissions";
 
 // AIDEV-NOTE: Server actions for OAuth credential delegation management
 // Used by AuthorizedConnectionsModal to manage which services agents can access
@@ -42,8 +41,8 @@ export async function getAgentDelegation(agentId: number): Promise<{ success: bo
     try {
       const session = await requirePermission("agents:view");
 
-      const delegationService = container.get('CredentialDelegationApplicationService') as CredentialDelegationApplicationService;
-      const connectionService = container.get('ConnectionApplicationService') as ConnectionApplicationService;
+      const delegationService = getDelegationApplicationService();
+      const connectionService = getConnectionApplicationService();
 
       if (!delegationService || !connectionService) {
         return {
@@ -53,7 +52,7 @@ export async function getAgentDelegation(agentId: number): Promise<{ success: bo
       }
 
       // Get agent to find owner
-      const agentRepository = container.get('IAgentRepository');
+      const agentRepository = getAgentRepository();
       const agent = await agentRepository?.findById(AgentId.fromNumber(agentId));
 
       if (!agent) {
@@ -128,7 +127,7 @@ export async function updateAgentDelegationServices(
     try {
       const session = await requirePermission("agents:manage");
 
-      const delegationService = container.get('CredentialDelegationApplicationService') as CredentialDelegationApplicationService;
+      const delegationService = getDelegationApplicationService();
 
       if (!delegationService) {
         return {
@@ -138,7 +137,7 @@ export async function updateAgentDelegationServices(
       }
 
       // Get the agent to verify ownership
-      const agentRepository = container.get('IAgentRepository');
+      const agentRepository = getAgentRepository();
       const agent = await agentRepository?.findById(AgentId.fromNumber(agentId));
 
       if (!agent) {
@@ -158,7 +157,7 @@ export async function updateAgentDelegationServices(
       }
 
       // Get current delegation
-      let currentResult = await delegationService.getDelegationForAgent(
+      const currentResult = await delegationService.getDelegationForAgent(
         AgentId.fromNumber(agentId)
       );
 
@@ -244,7 +243,7 @@ export async function revokeAgentDelegation(agentId: number): Promise<{ success:
     try {
       const session = await requirePermission("agents:manage");
 
-      const delegationService = container.get('CredentialDelegationApplicationService') as CredentialDelegationApplicationService;
+      const delegationService = getDelegationApplicationService();
 
       if (!delegationService) {
         return {
@@ -254,7 +253,7 @@ export async function revokeAgentDelegation(agentId: number): Promise<{ success:
       }
 
       // Get the agent to verify ownership
-      const agentRepository = container.get('IAgentRepository');
+      const agentRepository = getAgentRepository();
       const agent = await agentRepository?.findById(AgentId.fromNumber(agentId));
 
       if (!agent) {
@@ -357,7 +356,7 @@ export async function approveAgentDelegation(agentId: number): Promise<{ success
     try {
       const session = await requirePermission("agents:manage");
 
-      const delegationService = container.get('CredentialDelegationApplicationService') as CredentialDelegationApplicationService;
+      const delegationService = getDelegationApplicationService();
 
       if (!delegationService) {
         return {
@@ -367,7 +366,7 @@ export async function approveAgentDelegation(agentId: number): Promise<{ success
       }
 
       // Get the agent to verify ownership
-      const agentRepository = container.get('IAgentRepository');
+      const agentRepository = getAgentRepository();
       const agent = await agentRepository?.findById(AgentId.fromNumber(agentId));
 
       if (!agent) {
@@ -466,7 +465,7 @@ export async function approveAgentDelegation(agentId: number): Promise<{ success
  */
 export async function getAgentDelegationCount(agentId: number): Promise<number> {
   try {
-    const delegationService = container.get('CredentialDelegationApplicationService') as CredentialDelegationApplicationService;
+    const delegationService = getDelegationApplicationService();
 
     if (!delegationService) {
       return 0;
@@ -548,9 +547,9 @@ export async function getOwnerDelegationsSummary(): Promise<{
       const userId = session.user.id;
       const currentOrgId = session.user.currentOrganizationId;
 
-      const delegationService = container.get('CredentialDelegationApplicationService') as CredentialDelegationApplicationService;
-      const connectionService = container.get('ConnectionApplicationService') as ConnectionApplicationService;
-      const agentRepository = container.get('IAgentRepository') as IAgentRepository;
+      const delegationService = getDelegationApplicationService();
+      const connectionService = getConnectionApplicationService();
+      const agentRepository = getAgentRepository();
 
       if (!delegationService || !connectionService) {
         return {
@@ -669,7 +668,7 @@ export async function revokeServiceFromAgent(
     try {
       const session = await requirePermission("agents:manage");
 
-      const delegationService = container.get('CredentialDelegationApplicationService') as CredentialDelegationApplicationService;
+      const delegationService = getDelegationApplicationService();
 
       if (!delegationService) {
         return {
@@ -679,7 +678,7 @@ export async function revokeServiceFromAgent(
       }
 
       // Get the agent to verify ownership
-      const agentRepository = container.get('IAgentRepository') as IAgentRepository;
+      const agentRepository = getAgentRepository();
       const agent = await agentRepository?.findById(AgentId.fromNumber(agentId));
 
       if (!agent) {

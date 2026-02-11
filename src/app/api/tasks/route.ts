@@ -4,15 +4,20 @@ import { hasPermission, hasResourcePermission } from '@/lib/auth';
 import { getAgentTaskApplicationService } from '@/ddd/application/di/container';
 import { TokenUsageApplicationService } from '@/ddd/application/services/billing/token-usage-application-service';
 import { getTokenUsageRepository, getOrganizationRepository } from '@/ddd/application/di/getters';
+import { parsePaginationParams, paginateResults } from '@/lib/api/base';
 import type { CreateTaskDTO } from '@/app/dtos/task.dto';
 
 /**
  * Get tasks list using AgentTaskApplicationService
+ *
+ * Query params:
+ * - page: Page number (default: 1)
+ * - limit: Items per page (default: 20, max: 100)
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
     const authResult = await authenticateRequest(request);
-    
+
     if (!authResult.success || !authResult.user) {
       return NextResponse.json({ error: authResult.error || 'Unauthorized' }, { status: 401 });
     }
@@ -25,16 +30,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const organizationId = authResult.user.organizationId;
     const tasks = await agentTaskApplicationService.getTasksForOrganization(organizationId);
 
+    // AIDEV-NOTE: Apply pagination to results
+    const paginationParams = parsePaginationParams(request);
+    const paginatedResult = paginateResults(tasks, paginationParams);
+
     return NextResponse.json({
       success: true,
-      tasks,
+      tasks: paginatedResult.data,
+      pagination: paginatedResult.pagination,
     });
 
   } catch (error) {
     console.error('Error fetching tasks:', error);
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: false,
-      error: 'Internal server error' 
+      error: 'Internal server error'
     }, { status: 500 });
   }
 }
@@ -42,12 +52,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 export async function POST(request: NextRequest) {
   try {
     const authResult = await authenticateRequest(request);
-    
+
     if (!authResult.success || !authResult.user) {
       return NextResponse.json({ error: authResult.error || 'Unauthorized' }, { status: 401 });
     }
     const body = await request.json();
-    const { agentId, name, instructions } = body;
+    const { agentId, name, instructions, chatMessageId: bodyChatMessageId } = body;
 
     // Validate required fields
     if (!agentId || !name || !instructions) {
@@ -60,6 +70,11 @@ export async function POST(request: NextRequest) {
     if (!authResult.user.organizationId || !await hasResourcePermission(authResult.user.id, 'tasks:create', authResult.user.organizationId, 'agent', parseInt(agentId))) {
       return NextResponse.json({ error: 'Permission denied' }, { status: 403 });
     }
+
+    // Extract chatMessageId from header or body
+    // AIDEV-NOTE: X-Chat-Message-ID is set by Python when creating tasks from chat execution
+    // This links the task to the originating ChatMessage for ExecutionSteps retrieval
+    const chatMessageId = bodyChatMessageId || request.headers.get('X-Chat-Message-ID') || undefined;
 
     // Check token quota before creating task
     const organizationId = authResult.user.organizationId!;
@@ -94,7 +109,8 @@ export async function POST(request: NextRequest) {
       name,
       instructions: instructions || {},
       organizationId: authResult.user.organizationId!,
-      createdBy: authResult.user.id
+      createdBy: authResult.user.id,
+      chatMessageId, // Link to ChatMessage for ExecutionSteps retrieval
     };
 
     const result = await agentTaskApplicationService.createTask(dto);

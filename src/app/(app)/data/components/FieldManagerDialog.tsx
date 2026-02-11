@@ -5,9 +5,7 @@ import {
   useReactTable, 
   getCoreRowModel, 
   getSortedRowModel, 
-  createColumnHelper,
-  flexRender,
-  type ColumnDef
+  createColumnHelper
 } from '@tanstack/react-table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
@@ -15,7 +13,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Table as UITable, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Plus, Trash2, GripVertical } from "lucide-react"
 import { 

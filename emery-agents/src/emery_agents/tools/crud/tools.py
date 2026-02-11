@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import dspy
 import requests
@@ -19,7 +19,9 @@ from emery_agents.api.http_client import get_base_url
 logger = logging.getLogger(__name__)
 
 
-def create_tool_crud(api_key: str, org_id: str, extra_headers: dict[str, str] | None = None) -> dspy.Tool:
+def create_tool_crud(
+    api_key: str, org_id: str, extra_headers: dict[str, str] | None = None
+) -> dspy.Tool:
     """
     Factory: Create tool_crud tool with auth captured in closure.
 
@@ -36,7 +38,7 @@ def create_tool_crud(api_key: str, org_id: str, extra_headers: dict[str, str] | 
         tool_id: str | None = None,
         service: str | None = None,
         action: str | None = None,
-        params: Dict[str, Any] | None = None,
+        params: dict[str, Any] | None = None,
     ) -> str:
         """Tool discovery and execution.
 
@@ -121,15 +123,23 @@ def _list_tools() -> str:
         },
         "crud_tools": {
             "description": "Database CRUD operations (use specific CRUD tools instead)",
-            "actions": ["row_crud", "table_crud", "field_crud", "agent_crud", "skill_crud"],
+            "actions": [
+                "row_crud",
+                "table_crud",
+                "field_crud",
+                "agent_crud",
+                "skill_crud",
+            ],
         },
     }
 
-    return json.dumps({
-        "status": "success",
-        "message": "Available tools. Use tool_crud(method='execute', service='...', action='...', params={...}) to execute.",
-        "tools": tools,
-    })
+    return json.dumps(
+        {
+            "status": "success",
+            "message": "Available tools. Use tool_crud(method='execute', service='...', action='...', params={...}) to execute.",
+            "tools": tools,
+        }
+    )
 
 
 def _get_tool_info(tool_id: str) -> str:
@@ -137,27 +147,31 @@ def _get_tool_info(tool_id: str) -> str:
     # Parse tool_id format: "service_action" (e.g., "gmail_send_email")
     parts = tool_id.split("_", 1)
     if len(parts) < 2:
-        return json.dumps({
-            "status": "error",
-            "error": f"Invalid tool_id format: {tool_id}. Expected: service_action (e.g., 'gmail_send_email')",
-        })
+        return json.dumps(
+            {
+                "status": "error",
+                "error": f"Invalid tool_id format: {tool_id}. Expected: service_action (e.g., 'gmail_send_email')",
+            }
+        )
 
     service, action = parts[0], parts[1]
 
     # Return basic tool info
-    return json.dumps({
-        "status": "success",
-        "tool_id": tool_id,
-        "service": service,
-        "action": action,
-        "usage": f"tool_crud(method='execute', service='{service}', action='{action}', params={{...}})",
-    })
+    return json.dumps(
+        {
+            "status": "success",
+            "tool_id": tool_id,
+            "service": service,
+            "action": action,
+            "usage": f"tool_crud(method='execute', service='{service}', action='{action}', params={{...}})",
+        }
+    )
 
 
 def _execute_tool(
     service: str,
     action: str,
-    params: Dict[str, Any],
+    params: dict[str, Any],
     api_key: str,
     org_id: str,
     extra_headers: dict[str, str] | None = None,
@@ -186,40 +200,52 @@ def _execute_tool(
         response = requests.post(url, headers=headers, json=payload, timeout=60)
 
         if response.status_code == 401:
-            return json.dumps({
-                "status": "error",
-                "error": "Authentication failed. Check API key.",
-            })
+            return json.dumps(
+                {
+                    "status": "error",
+                    "error": "Authentication failed. Check API key.",
+                }
+            )
         elif response.status_code == 403:
-            return json.dumps({
-                "status": "error",
-                "error": f"Permission denied. You may not have access to {service}.",
-            })
+            return json.dumps(
+                {
+                    "status": "error",
+                    "error": f"Permission denied. You may not have access to {service}.",
+                }
+            )
         elif response.status_code >= 400:
-            return json.dumps({
-                "status": "error",
-                "error": f"Proxy error: {response.status_code}",
-                "details": response.text[:500],
-            })
+            return json.dumps(
+                {
+                    "status": "error",
+                    "error": f"Proxy error: {response.status_code}",
+                    "details": response.text[:500],
+                }
+            )
 
         result = response.json()
         logger.info(f"[TOOL-CRUD] {service}.{action} completed successfully")
 
-        return json.dumps({
-            "status": "success",
-            "service": service,
-            "action": action,
-            "result": result,
-        })
+        return json.dumps(
+            {
+                "status": "success",
+                "service": service,
+                "action": action,
+                "result": result,
+            }
+        )
 
     except requests.exceptions.Timeout:
-        return json.dumps({
-            "status": "error",
-            "error": "Tool execution timed out",
-        })
+        return json.dumps(
+            {
+                "status": "error",
+                "error": "Tool execution timed out",
+            }
+        )
     except Exception as e:
         logger.error(f"[TOOL-CRUD] Execution failed: {e}")
-        return json.dumps({
-            "status": "error",
-            "error": str(e),
-        })
+        return json.dumps(
+            {
+                "status": "error",
+                "error": str(e),
+            }
+        )

@@ -3,7 +3,7 @@
 
 import type { DbClient } from '@/ddd/infrastructure/db/client';
 import { pages } from '@/ddd/infrastructure/db/schema';
-import { eq, and, inArray } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import type { IPuckPageRepository } from '@/ddd/domain/puck/repositories/puck-page-repository';
 import { PuckPage } from '@/ddd/domain/puck/entities/puck-page';
 import { PageId } from '@/ddd/domain/puck/value-objects/page-id';

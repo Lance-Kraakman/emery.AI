@@ -7,11 +7,11 @@
 
 import { NextRequest } from 'next/server';
 import { auth, getUserIdFromRequest } from '@/lib/auth';
-import { validateUserApiKey, extractApiKeyFromHeader, UserApiKeyInfo } from './user-api-keys';
+import { validateUserApiKey, extractApiKeyFromHeader } from './user-api-keys';
 import { db } from '@/ddd/infrastructure/db/client';
 import { users } from '@/ddd/infrastructure/db/schema';
 import { eq } from 'drizzle-orm';
-import { getAgentRepository, getUserRepository } from '@/ddd/application/di/container';
+import { getOrganizationRepository, getUserRepository } from '@/ddd/application/di/container';
 import { ApiKey } from '@/ddd/domain/shared/value-objects';
 
 export interface AuthResult {
@@ -54,9 +54,10 @@ export async function authenticateWithApiKey(apiKeyString: string): Promise<Auth
 
   // Try agent API key (uses agent owner's identity)
   try {
-    const agentRepository = getAgentRepository();
+    const organizationRepository = getOrganizationRepository();
     const apiKey = ApiKey.fromString(apiKeyString);
-    const agent = await agentRepository.findByApiKey(apiKey);
+    // Use org repository for cross-org API key lookup (bypasses RLS)
+    const agent = await organizationRepository.findAgentByApiKey(apiKey);
 
     if (!agent) {
       return { success: false, error: 'Invalid API key' };
@@ -94,9 +95,16 @@ export async function authenticateWithApiKey(apiKeyString: string): Promise<Auth
  * 2. User API key (automation/testing authentication - format: user_*)
  * 3. Agent API key (tool execution using agent owner's identity)
  * 4. Development bypass (testing with x-test-user-id header)
+ *
+ * AIDEV-NOTE: X-Organization-ID header is used as fallback when auth succeeds
+ * but organizationId is missing (e.g., agent API keys with owner having no current org).
  */
 export async function authenticateRequest(request: NextRequest): Promise<AuthResult> {
   try {
+    // Extract X-Organization-ID header for fallback (sent by Python HTTP client)
+    const orgIdHeader = request.headers.get('x-organization-id');
+    const headerOrgId = orgIdHeader ? parseInt(orgIdHeader, 10) : null;
+
     // First, try NextAuth session authentication
     const session = await auth();
     if (session?.user?.id) {
@@ -118,7 +126,12 @@ export async function authenticateRequest(request: NextRequest): Promise<AuthRes
 
     if (apiKey) {
       const apiKeyAuth = await authenticateWithApiKey(apiKey);
-      if (apiKeyAuth.success) {
+      if (apiKeyAuth.success && apiKeyAuth.user) {
+        // Use X-Organization-ID as fallback if auth succeeded but no organizationId
+        if (!apiKeyAuth.user.organizationId && headerOrgId && !isNaN(headerOrgId)) {
+          console.log(`[AUTH] Using X-Organization-ID header fallback: ${headerOrgId}`);
+          apiKeyAuth.user.organizationId = headerOrgId;
+        }
         return apiKeyAuth;
       }
     }
@@ -132,7 +145,7 @@ export async function authenticateRequest(request: NextRequest): Promise<AuthRes
         .from(users)
         .where(eq(users.id, userId))
         .limit(1);
-      
+
       if (user) {
         return {
           success: true,
@@ -140,7 +153,7 @@ export async function authenticateRequest(request: NextRequest): Promise<AuthRes
             id: user.id,
             email: user.email || '',
             name: user.name,
-            organizationId: user.currentOrganizationId,
+            organizationId: user.currentOrganizationId || (headerOrgId && !isNaN(headerOrgId) ? headerOrgId : null),
             // organizationRole removed in RBAC system
           },
         };

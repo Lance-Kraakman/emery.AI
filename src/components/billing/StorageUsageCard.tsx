@@ -64,7 +64,7 @@ export function StorageUsageCard({ usage, tierName, onUpgrade }: StorageUsageCar
           <Alert variant="default" className="border-yellow-500 bg-yellow-50 dark:bg-yellow-950">
             <AlertTriangle className="h-4 w-4 text-yellow-600" />
             <AlertDescription className="text-yellow-800 dark:text-yellow-200">
-              You're approaching your storage limit. Consider upgrading to get more space.
+              You&apos;re approaching your storage limit. Consider upgrading to get more space.
             </AlertDescription>
           </Alert>
         )}

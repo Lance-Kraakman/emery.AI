@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Button as PuckButton, createUsePuck, FieldLabel, walkTree } from "@measured/puck";
 import { Button } from "@/components/ui/button";
-import { ComponentConfig, Slot } from "@measured/puck";
+import { ComponentConfig } from "@measured/puck";
 import { generateId } from "@/components/puck/lib/generate-id";
 import TemplateComponent, { TemplateProps } from "./Template";
 import { useLinkContext } from "../../contexts/PageContext";
@@ -771,7 +771,7 @@ export const TemplateInternal: ComponentConfig<TemplateProps> = {
                     className="w-full h-7 text-xs"
                   >
                     {updatingVariant && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
-                    Update "{currentDbTemplate.variants.find((v) => v.id === selectedVariantId)?.name}"
+                    Update &quot;{currentDbTemplate.variants.find((v) => v.id === selectedVariantId)?.name}&quot;
                   </Button>
                 )}
               </div>

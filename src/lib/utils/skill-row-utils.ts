@@ -26,17 +26,20 @@ export interface SkillTableMapping {
 export function getSkillTableMappings(inputs: InputDefinition[]): SkillTableMapping[] {
   return inputs
     .filter((input) => {
-      const mapping = input.inputMapping;
-      if (!mapping?.source?.tableId) return false;
+      const source = input.inputMapping?.source;
+      if (!source || source.type !== 'table_field') return false;
       // Only flag as requiring selection if it uses source_row
-      return mapping.source.rowSource?.type === 'source_row';
+      return source.rowSource?.type === 'source_row';
     })
-    .map((input) => ({
-      inputName: input.name,
-      tableId: input.inputMapping!.source.tableId,
-      fieldId: input.inputMapping!.source.fieldId,
-      requiresRowSelection: true,
-    }));
+    .map((input) => {
+      const source = input.inputMapping!.source as { type: 'table_field'; tableId: number; fieldId: number; rowSource: any };
+      return {
+        inputName: input.name,
+        tableId: source.tableId,
+        fieldId: source.fieldId,
+        requiresRowSelection: true,
+      };
+    });
 }
 
 /**

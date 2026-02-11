@@ -8,11 +8,10 @@ and app building operations.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 import dspy
 from pydantic import BaseModel, Field
-
 
 # ============== FIELD TYPES ==============
 
@@ -38,14 +37,16 @@ class SelectOption(BaseModel):
 
     value: str = Field(description="Internal value")
     label: str = Field(description="Display label")
-    color: Optional[str] = Field(default=None, description="Optional color for the option")
+    color: str | None = Field(default=None, description="Optional color for the option")
 
 
 class RelationConfig(BaseModel):
     """Configuration for relation fields."""
 
     target_table: str = Field(description="Name of the table to relate to")
-    target_field: str = Field(default="id", description="Field in target table to reference")
+    target_field: str = Field(
+        default="id", description="Field in target table to reference"
+    )
     relationship_type: Literal["one_to_one", "one_to_many", "many_to_many"] = Field(
         default="one_to_many", description="Type of relationship"
     )
@@ -56,28 +57,28 @@ class FieldDefinition(BaseModel):
 
     name: str = Field(description="Field name (snake_case)")
     field_type: FieldType = Field(description="Type of field")
-    display_name: Optional[str] = Field(
+    display_name: str | None = Field(
         default=None, description="Human-readable name for display"
     )
     required: bool = Field(default=False, description="Whether the field is required")
-    default_value: Optional[str] = Field(
+    default_value: str | None = Field(
         default=None, description="Default value for the field"
     )
-    description: Optional[str] = Field(
+    description: str | None = Field(
         default=None, description="Description of the field's purpose"
     )
 
     # Type-specific options
-    select_options: Optional[list[SelectOption]] = Field(
+    select_options: list[SelectOption] | None = Field(
         default=None, description="Options for SELECT type fields"
     )
-    relation_config: Optional[RelationConfig] = Field(
+    relation_config: RelationConfig | None = Field(
         default=None, description="Configuration for RELATION type fields"
     )
-    formula_expression: Optional[str] = Field(
+    formula_expression: str | None = Field(
         default=None, description="Expression for FORMULA type fields"
     )
-    lookup_field: Optional[str] = Field(
+    lookup_field: str | None = Field(
         default=None, description="Source field for LOOKUP type fields"
     )
 
@@ -87,7 +88,7 @@ class TableSchema(BaseModel):
 
     name: str = Field(description="Table name (snake_case)")
     display_name: str = Field(description="Human-readable name")
-    description: Optional[str] = Field(
+    description: str | None = Field(
         default=None, description="Description of the table's purpose"
     )
     fields: list[FieldDefinition] = Field(description="List of field definitions")
@@ -113,7 +114,9 @@ class BuildSchema(dspy.Signature):  # type: ignore[misc]
     Follow naming conventions: snake_case for names, Title Case for display names.
     """
 
-    requirements: str = dspy.InputField(desc="Description of what the table should store")
+    requirements: str = dspy.InputField(
+        desc="Description of what the table should store"
+    )
     existing_tables: list[ExistingTable] = dspy.InputField(
         desc="Existing tables in the workspace"
     )
@@ -133,8 +136,10 @@ class SkillInputField(BaseModel):
     name: str = Field(description="Input field name")
     field_type: str = Field(description="Type of input (text, number, date, etc.)")
     required: bool = Field(default=True, description="Whether input is required")
-    description: Optional[str] = Field(default=None, description="Description of the input")
-    default_value: Optional[str] = Field(default=None, description="Default value if any")
+    description: str | None = Field(
+        default=None, description="Description of the input"
+    )
+    default_value: str | None = Field(default=None, description="Default value if any")
 
 
 class SkillOutputField(BaseModel):
@@ -142,14 +147,18 @@ class SkillOutputField(BaseModel):
 
     name: str = Field(description="Output field name")
     field_type: str = Field(description="Type of output")
-    description: Optional[str] = Field(default=None, description="Description of the output")
+    description: str | None = Field(
+        default=None, description="Description of the output"
+    )
 
 
 class ToolParameter(BaseModel):
     """Parameter for a tool call within a skill."""
 
     name: str = Field(description="Parameter name")
-    value: str = Field(description="Parameter value (can reference inputs with {{input_name}})")
+    value: str = Field(
+        description="Parameter value (can reference inputs with {{input_name}})"
+    )
 
 
 class SkillStep(BaseModel):
@@ -159,7 +168,7 @@ class SkillStep(BaseModel):
     action: str = Field(description="What this step does")
     tool: str = Field(description="Tool to use (e.g., 'gmail:send_email')")
     parameters: list[ToolParameter] = Field(description="Parameters for the tool")
-    condition: Optional[str] = Field(
+    condition: str | None = Field(
         default=None, description="Optional condition for execution"
     )
 
@@ -212,7 +221,9 @@ class PageComponent(BaseModel):
     component_type: str = Field(
         description="Type: table_view, form, chart, text, button, etc."
     )
-    config: dict[str, Any] = Field(description="Component-specific configuration (values can be strings, numbers, lists, etc.)")
+    config: dict[str, Any] = Field(
+        description="Component-specific configuration (values can be strings, numbers, lists, etc.)"
+    )
     position: int = Field(description="Position/order on the page")
 
 
@@ -222,7 +233,7 @@ class AppPage(BaseModel):
     page_id: str = Field(description="Unique page identifier")
     name: str = Field(description="Page name")
     route: str = Field(description="URL route (e.g., '/dashboard')")
-    icon: Optional[str] = Field(default=None, description="Icon for the page")
+    icon: str | None = Field(default=None, description="Icon for the page")
     components: list[PageComponent] = Field(description="Components on this page")
 
 
@@ -231,12 +242,10 @@ class AppDefinition(BaseModel):
 
     name: str = Field(description="Application name")
     description: str = Field(description="What the app does")
-    icon: Optional[str] = Field(default=None, description="App icon")
+    icon: str | None = Field(default=None, description="App icon")
     pages: list[AppPage] = Field(description="Pages in the app")
     home_page: str = Field(description="page_id of the home page")
-    database_id: Optional[str] = Field(
-        default=None, description="Associated database ID"
-    )
+    database_id: str | None = Field(default=None, description="Associated database ID")
 
 
 class BuildApp(dspy.Signature):  # type: ignore[misc]

@@ -10,9 +10,9 @@ must be passed via RuntimeContext — see orchestrators/runtime.py.
 """
 
 import operator
-from typing import TypedDict, Annotated, List, Optional, Any, Dict
+from typing import Annotated, Any, TypedDict
 
-from ..entities.models.plan import Plan, PlanStep
+from ..entities.models.plan import Plan
 from ..entities.models.task_ledger import TaskLedger
 from ..services.context import WorkspaceContext
 
@@ -30,35 +30,35 @@ class PlanExecuteState(TypedDict, total=False):
 
     # === Input (set once at graph invocation) ===
     task: str
-    memory_context: Optional[str]  # Relevant memories (passed separately to planner)
+    memory_context: str | None  # Relevant memories (passed separately to planner)
 
     # Session config (auth, identity) — all primitives, safe to checkpoint
     api_key: str
     org_id: str
-    org_model: Optional[str]
-    organization_id: Optional[int]
+    org_model: str | None
+    organization_id: int | None
 
     # Workspace context — avoids duplicate WorkspaceAPI.get_all() calls
-    workspace_context: Optional[WorkspaceContext]
+    workspace_context: WorkspaceContext | None
 
     # Skill template generation (for GeneratePlan RPC)
-    skill_inputs: Optional[List[Dict[str, Any]]]  # Input DEFINITIONS (schema)
-    skill_outputs: Optional[List[Dict[str, Any]]]
+    skill_inputs: list[dict[str, Any]] | None  # Input DEFINITIONS (schema)
+    skill_outputs: list[dict[str, Any]] | None
     is_template_generation: bool
 
     # Runtime skill inputs (for skill invocation execution)
-    runtime_skill_inputs: Optional[Dict[str, str]]  # Input VALUES at execution time
+    runtime_skill_inputs: dict[str, str] | None  # Input VALUES at execution time
 
     # === Plan state (dataclasses — serializable) ===
-    plan: Optional[Plan]
-    stored_plan: Optional[Plan]  # Pre-approved plan for autonomous mode
-    step_outcomes: Dict[str, Dict[str, Any]]  # step_id → StepOutcome.to_dict()
+    plan: Plan | None
+    stored_plan: Plan | None  # Pre-approved plan for autonomous mode
+    step_outcomes: dict[str, dict[str, Any]]  # step_id → StepOutcome.to_dict()
 
     # Task ledger for evaluation
-    ledger: Optional[TaskLedger]
+    ledger: TaskLedger | None
 
     # === Reflection state (Reflexion pattern) ===
-    step_reflections: Dict[str, Dict[str, Any]]  # step_id → StepReflection.model_dump()
+    step_reflections: dict[str, dict[str, Any]]  # step_id → StepReflection.model_dump()
     reflection_summary: str  # Rolling summary of insights, max ~1500 chars
 
     # === Execution tracking (primitives) ===
@@ -66,37 +66,43 @@ class PlanExecuteState(TypedDict, total=False):
     max_replans: int
 
     # === Human-in-the-loop (primitives/dicts) ===
-    awaiting_input: Optional[str]  # "approval", "clarification", "recovery"
-    clarifying_questions: List[Dict[str, Any]]
+    awaiting_input: str | None  # "approval", "clarification", "recovery", "human_skill"
+    clarifying_questions: list[dict[str, Any]]
+    human_skill_info: dict[str, Any] | None  # Info for human skill interrupt
+    human_skill_completed: dict[str, Any] | None  # {step_id, outputs} - set after human completes
 
     # === Event accumulator (append-only for UI streaming) ===
-    events: Annotated[List[Any], operator.add]
+    events: Annotated[list[Any], operator.add]
 
     # === Configured tools (from skill UI) ===
-    configured_tools: Optional[List[Dict[str, Any]]]
+    configured_tools: list[dict[str, Any]] | None
 
     # === Triage (set by triage node) ===
-    execution_mode: Optional[str]  # "direct", "plan", "respond"
-    triage_reasoning: Optional[str]
-    triage_context: Optional[str]  # Key findings from triage research
-    triage_analysis: Optional[Dict[str, Any]]  # Combined analysis: intent, entities, approach, external_services
+    execution_mode: str | None  # "direct", "plan", "respond"
+    triage_reasoning: str | None
+    triage_context: str | None  # Key findings from triage research
+    triage_analysis: (
+        dict[str, Any] | None
+    )  # Combined analysis: intent, entities, approach, external_services
 
     # === Mention routing (set when @skill/@agent/@tool detected) ===
-    pre_selected_skill: Optional[str]
-    pre_selected_agent: Optional[str]
-    pre_selected_tool: Optional[str]
+    pre_selected_skill: str | None
+    pre_selected_agent: str | None
+    pre_selected_tool: str | None
 
     # === Auto-approval ===
-    auto_approved: Optional[bool]  # True if plan was auto-approved (low-risk, additive only)
+    auto_approved: (
+        bool | None
+    )  # True if plan was auto-approved (low-risk, additive only)
 
     # === Output ===
-    response: Optional[str]  # Final answer (signals "done" to routing)
-    error: Optional[str]
-    success: Optional[bool]
+    response: str | None  # Final answer (signals "done" to routing)
+    error: str | None
+    success: bool | None
 
 
 # Default initial state values — only serializable data.
-DEFAULT_STATE: Dict[str, Any] = {
+DEFAULT_STATE: dict[str, Any] = {
     # Input
     "task": "",
     "memory_context": None,
@@ -126,6 +132,8 @@ DEFAULT_STATE: Dict[str, Any] = {
     # Human-in-the-loop
     "awaiting_input": None,
     "clarifying_questions": [],
+    "human_skill_info": None,
+    "human_skill_completed": None,
     # Event accumulator
     "events": [],
     # Configured tools

@@ -16,3 +16,11 @@ export {
   CACHE_KEYS,
   CACHE_TAGS,
 } from './cache-keys';
+
+export {
+  type ITaskQueueService,
+  RedisTaskQueueService,
+  InMemoryTaskQueueService,
+  createTaskQueueService,
+  getTaskQueueService,
+} from './task-queue-service';

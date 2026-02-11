@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requirePermission, requireResourcePermission } from "./permissions";
 import { requireCurrentOrganization } from "./user-organizations";
 import { withAuthContext } from '@/lib/auth/with-context';
-import { createAgentSchema, updateAgentSchema, parseFormDataToAgent } from "@/lib/schemas";
+import { createAgentSchema, parseFormDataToAgent } from "@/lib/schemas";
 import { type Result, type CreateAgentData, type CreateAgentClientData } from "./types";
 import { getAgentApplicationService, getAgentRepository, getAuditApplicationService } from "@/ddd/application/di/container";
 import type { CreateAgentDTO, UpdateAgentDTO, AgentFiltersDTO, AgentDTO } from "@/app/dtos/agent.dto";

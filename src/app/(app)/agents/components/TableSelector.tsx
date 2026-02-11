@@ -1,9 +1,11 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Select, SelectContent, SelectItem, SelectGroup, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { getTables } from '@/app/actions/tables';
+import { getDatabases } from '@/app/actions/databases';
 import type { TableDTO } from '@/app/mappers/table-mapper';
+import type { DatabaseDTO } from '@/app/dtos/database.dto';
 import { Loader2, Database } from 'lucide-react';
 
 interface TableSelectorProps {
@@ -20,27 +22,41 @@ export function TableSelector({
   className = ""
 }: TableSelectorProps) {
   const [tables, setTables] = useState<TableDTO[]>([]);
+  const [databases, setDatabases] = useState<DatabaseDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const loadTables = async () => {
+    const loadData = async () => {
       try {
         setLoading(true);
         setError(null);
-        const tablesData = await getTables();
+        const [tablesData, databasesData] = await Promise.all([getTables(), getDatabases()]);
         setTables(tablesData || []);
+        setDatabases(databasesData || []);
       } catch (err) {
         console.error('Error loading tables:', err);
         setError('Failed to load tables');
         setTables([]);
+        setDatabases([]);
       } finally {
         setLoading(false);
       }
     };
 
-    loadTables();
+    loadData();
   }, []);
+
+  // Group tables by database
+  const tablesByDatabase = useMemo(() => {
+    const grouped = new Map<number, TableDTO[]>();
+    tables.forEach((table) => {
+      const list = grouped.get(table.databaseId) || [];
+      list.push(table);
+      grouped.set(table.databaseId, list);
+    });
+    return grouped;
+  }, [tables]);
 
   const handleValueChange = (selectedValue: string) => {
     if (selectedValue === 'none') {
@@ -87,14 +103,22 @@ export function TableSelector({
             No tables available
           </SelectItem>
         ) : (
-          tables.map((table) => (
-            <SelectItem key={table.id} value={table.id.toString()}>
-              <div className="flex items-center gap-2">
-                <Database className="w-4 h-4 text-muted-foreground" />
-                {table.name}
-              </div>
-            </SelectItem>
-          ))
+          Array.from(tablesByDatabase.entries()).map(([dbId, dbTables]) => {
+            const db = databases.find((d) => d.id === dbId);
+            return (
+              <SelectGroup key={dbId}>
+                <SelectLabel className="text-xs text-muted-foreground">{db?.name || 'Unknown'}</SelectLabel>
+                {dbTables.map((table) => (
+                  <SelectItem key={table.id} value={table.id.toString()}>
+                    <div className="flex items-center gap-2">
+                      <Database className="w-4 h-4 text-muted-foreground" />
+                      {table.name}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            );
+          })
         )}
       </SelectContent>
     </Select>

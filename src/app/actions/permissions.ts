@@ -3,13 +3,13 @@
 // AIDEV-NOTE: Minimal permission/auth functions - only what's actually used
 // Most files just import requireAuth and requirePermission
 
-import { auth, hasPermission as authHasPermission, requirePermission as authRequirePermission } from "@/lib/auth";
+import { auth, requirePermission as authRequirePermission } from "@/lib/auth";
+import { withAuthContext } from '@/lib/auth/with-context';
 import { Permission } from "@/ddd/domain/shared/value-objects/permission";
 import { revalidatePath } from "next/cache";
 // REMOVED: import { requireCurrentOrganization } from "./user-organizations"; - causes circular dependency
 import { getRBACRepository, getUserRoleApplicationService, getAuditApplicationService } from "@/ddd/application/di/container";
 import type { Result } from "./types";
-import { SYSTEM_ROLES, type SystemRoleType } from "@/ddd/domain/rbac/entities/role";
 import { OrganizationId, UserId } from "@/ddd/domain/shared/value-objects";
 import { headers } from "next/headers";
 import { extractApiKeyFromHeader } from "@/lib/auth/user-api-keys";
@@ -22,86 +22,88 @@ export interface AssignUserRolesCommand {
 }
 
 export async function assignUserRoles(command: AssignUserRolesCommand): Promise<Result> {
-  try {
-    console.log('assignUserRoles called with:', command);
-    const session = await requireAuth();
+  return withAuthContext(async () => {
+    try {
+      console.log('assignUserRoles called with:', command);
+      const session = await requireAuth();
 
-    const organizationId = command.organizationId || session.user.currentOrganizationId;
+      const organizationId = command.organizationId || session.user.currentOrganizationId;
 
-    if (!organizationId) {
-      console.log('assignUserRoles: No organization ID');
-      return {
-        success: false,
-        error: "No current organization selected"
-      };
-    }
-
-    if (!command.userId) {
-      console.log('assignUserRoles: No user ID');
-      return {
-        success: false,
-        error: "User ID is required"
-      };
-    }
-
-    console.log('assignUserRoles: Checking permission for org', organizationId);
-    // Check permission using string to avoid Permission VO serialization
-    await authRequirePermission(session.user.id, "users:manage", organizationId);
-
-    console.log('assignUserRoles: Permission check passed, calling updateMemberRoles');
-    const userRoleService = getUserRoleApplicationService();
-    const result = await userRoleService.updateMemberRoles({
-      userId: command.userId,
-      organizationId,
-      roleIds: command.roleIds,
-      updatedBy: session.user.id
-    });
-
-    console.log('assignUserRoles: updateMemberRoles result:', result);
-
-    if (!result.success) {
-      return {
-        success: false,
-        error: result.error || "Failed to assign user roles"
-      };
-    }
-
-    // Audit log the role assignment
-    const auditService = getAuditApplicationService();
-    auditService.logEvent(
-      OrganizationId.fromNumber(organizationId),
-      {
-        eventType: 'security',
-        eventCategory: 'permission_crud',
-        eventAction: 'update',
-        actorType: 'user',
-        actorId: session.user.id,
-        actorName: session.user.name || undefined,
-        resourceType: 'user_roles',
-        resourceId: command.userId,
-        resourceName: command.userId,
-        eventData: {
-          targetUserId: command.userId,
-          roleIds: command.roleIds,
-        },
-        success: true,
+      if (!organizationId) {
+        console.log('assignUserRoles: No organization ID');
+        return {
+          success: false,
+          error: "No current organization selected"
+        };
       }
-    );
 
-    revalidatePath('/dashboard');
-    revalidatePath('/organization/settings/users');
+      if (!command.userId) {
+        console.log('assignUserRoles: No user ID');
+        return {
+          success: false,
+          error: "User ID is required"
+        };
+      }
 
-    return {
-      success: true,
-      data: { message: "Roles assigned successfully" }
-    };
-  } catch (error) {
-    console.error("Error assigning user roles:", error);
-    return {
-      success: false,
-      error: "Failed to assign user roles",
-    };
-  }
+      console.log('assignUserRoles: Checking permission for org', organizationId);
+      // Check permission using string to avoid Permission VO serialization
+      await authRequirePermission(session.user.id, "users:manage", organizationId);
+
+      console.log('assignUserRoles: Permission check passed, calling updateMemberRoles');
+      const userRoleService = getUserRoleApplicationService();
+      const result = await userRoleService.updateMemberRoles({
+        userId: command.userId,
+        organizationId,
+        roleIds: command.roleIds,
+        updatedBy: session.user.id
+      });
+
+      console.log('assignUserRoles: updateMemberRoles result:', result);
+
+      if (!result.success) {
+        return {
+          success: false,
+          error: result.error || "Failed to assign user roles"
+        };
+      }
+
+      // Audit log the role assignment
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        OrganizationId.fromNumber(organizationId),
+        {
+          eventType: 'security',
+          eventCategory: 'permission_crud',
+          eventAction: 'update',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'user_roles',
+          resourceId: command.userId,
+          resourceName: command.userId,
+          eventData: {
+            targetUserId: command.userId,
+            roleIds: command.roleIds,
+          },
+          success: true,
+        }
+      );
+
+      revalidatePath('/dashboard');
+      revalidatePath('/organization/settings/users');
+
+      return {
+        success: true,
+        data: { message: "Roles assigned successfully" }
+      };
+    } catch (error) {
+      console.error("Error assigning user roles:", error);
+      return {
+        success: false,
+        error: "Failed to assign user roles",
+      };
+    }
+  });
 }
 
 // TODO: Replace with RBAC permission-based capability checking

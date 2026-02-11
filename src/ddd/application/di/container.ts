@@ -357,9 +357,6 @@ export function initializeDI(db: DbClient | ContextAwareDbClient): void {
   DIContainer.getInstance().initialize(db);
 }
 
-// Export container instance for direct access if needed
-export const container = DIContainer.getInstance();
-
 // Re-export getters - explicit exports to avoid circular dependency issues with export *
 export {
   // Core domain repositories
@@ -430,6 +427,9 @@ export {
   getConnectionRepository,
   getConnectionApplicationService,
   getOAuthProxyApplicationService,
+
+  // Delegation services
+  getDelegationApplicationService,
 
   // Puck services
   getAppRepository,

@@ -5,8 +5,10 @@ Categorizes tools as read-only or mutation-capable for two-phase execution.
 Planning mode uses only read-only tools, execution mode uses all tools.
 """
 
-from typing import List, Set, Optional, Any
+from __future__ import annotations
+
 import logging
+from typing import Any
 
 from emery_agents.types import ToolMode
 
@@ -15,18 +17,18 @@ logger = logging.getLogger(__name__)
 
 # Tool names that are read-only (safe for planning phase)
 # These tools only query/fetch data without making changes
-READ_ONLY_TOOLS: Set[str] = {
+READ_ONLY_TOOLS: set[str] = {
     # CRUD read operations (method parameter determines actual operation)
     # These tool names support read/list methods
     "database_crud",  # list, read methods are safe
-    "table_crud",     # list, read methods are safe
-    "field_crud",     # list, read methods are safe
-    "row_crud",       # get_rows, read methods are safe
+    "table_crud",  # list, read methods are safe
+    "field_crud",  # list, read methods are safe
+    "row_crud",  # get_rows, read methods are safe
     "document_crud",  # read method is safe
-    "skill_crud",     # list, read methods are safe
-    "file_crud",      # read, download methods are safe
-    "agent_crud",     # list, read methods are safe
-    "team_crud",      # list, read methods are safe
+    "skill_crud",  # list, read methods are safe
+    "file_crud",  # read, download methods are safe
+    "agent_crud",  # list, read methods are safe
+    "team_crud",  # list, read methods are safe
     # Organizational/query tools
     "emery_database",
     "table_schema",
@@ -45,7 +47,7 @@ READ_ONLY_TOOLS: Set[str] = {
 }
 
 # Methods within CRUD tools that are read-only
-READ_ONLY_METHODS: Set[str] = {
+READ_ONLY_METHODS: set[str] = {
     "list",
     "read",
     "get",
@@ -56,7 +58,7 @@ READ_ONLY_METHODS: Set[str] = {
 }
 
 # Methods within CRUD tools that perform mutations
-MUTATION_METHODS: Set[str] = {
+MUTATION_METHODS: set[str] = {
     "create",
     "create_row",
     "create_table",
@@ -82,18 +84,18 @@ MUTATION_METHODS: Set[str] = {
 }
 
 # Tools that always perform mutations (no read-only methods)
-MUTATION_ONLY_TOOLS: Set[str] = {
-    "tool_executor",      # Executes arbitrary tools
-    "pipedream",          # External integrations
-    "output",             # Writes output
-    "skill_tool",         # Executes skills
-    "document_generator", # Creates documents
-    "file_writer",        # Writes files
-    "simple_report_saver", # Saves reports
+MUTATION_ONLY_TOOLS: set[str] = {
+    "tool_executor",  # Executes arbitrary tools
+    "pipedream",  # External integrations
+    "output",  # Writes output
+    "skill_tool",  # Executes skills
+    "document_generator",  # Creates documents
+    "file_writer",  # Writes files
+    "simple_report_saver",  # Saves reports
 }
 
 
-def is_read_only_tool(tool_name: str, method: Optional[str] = None) -> bool:
+def is_read_only_tool(tool_name: str, method: str | None = None) -> bool:
     """
     Determine if a tool/method combination is read-only.
 
@@ -131,10 +133,10 @@ def is_read_only_tool(tool_name: str, method: Optional[str] = None) -> bool:
 
 
 def filter_tools_for_mode(
-    tools: List[Any],
+    tools: list[Any],
     mode: ToolMode,
-    get_tool_name: Optional[callable] = None,
-) -> List[Any]:
+    get_tool_name: callable | None = None,
+) -> list[Any]:
     """
     Filter tools based on execution mode.
 
@@ -162,7 +164,7 @@ def filter_tools_for_mode(
     def extract_name(tool: Any) -> str:
         if get_tool_name:
             return get_tool_name(tool)
-        if hasattr(tool, 'name'):
+        if hasattr(tool, "name"):
             return tool.name
         return str(tool)
 

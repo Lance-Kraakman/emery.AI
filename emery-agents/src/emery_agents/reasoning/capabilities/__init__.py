@@ -1,50 +1,39 @@
 """
 DSPy Capability Planning Guidance.
 
-This module provides planning guidance for each capability, replacing the old
-Jinja2 templates in prompts/capabilities/*/planning.j2.
-
-The guidance tells the planner WHEN to choose each capability and HOW to
-structure plan steps for it.
+This module provides the capability routing header for the planner.
+Individual capability guidance is accessed via PlanningRegistry and KNN retrievers.
 """
 
 from __future__ import annotations
 
-from . import (
-    agent_builder,
-    app_builder,
-    document_builder,
-    page_builder,
-    schema_builder,
-    skill_builder,
-    skill_executor,
-    table_builder,
-    view_builder,
-)
-
-
 # Quick-reference routing table prepended to all capability guidance.
 # Helps the planner match user intent to the correct target_agent.
 CAPABILITY_ROUTING_HEADER = """
+## YOUR CALLABLE TOOLS (use during planning research)
+
+You have EXACTLY 4 tools available. Call any tool multiple times as needed:
+
+1. `system_research` - Read existing tables, fields, pages from workspace
+2. `search_external` - Find Pipedream integrations by service name (gmail, slack, etc.)
+3. `web_search` - Research domain best practices, industry standards
+4. `finish` - Complete planning and output your plan
+
+>>> STOP: agent:schema_builder, agent:app_builder, table_crud, skill_tool are NOT callable.
+>>> They are EXECUTION targets, not planning tools. See routing table below.
+
 ## Research Protocol
 
-Use these tools as needed during planning. Call any tool multiple times to refine your understanding.
-
 - CHECK WORKSPACE: Read workspace_context for existing resources. Don't recreate what exists.
-- DISCOVER CAPABILITIES: search_capabilities(query="...") finds system agents, user skills,
-  AND external integrations (Gmail, Slack, etc.). Good starting point for any task.
 - GET TOOL DETAILS: search_external(service="<name>") returns exact tool names and input schemas.
-  Call after you know which service you need (e.g., from search_capabilities results).
 - LOOK UP DETAILS: system_research(resource_type='tables', query='<name>', include_details=True)
-  retrieves field schemas, page content, and resource details for existing workspace resources.
+  retrieves field schemas, page content, and resource details.
 - DOMAIN RESEARCH: web_search for external knowledge (industry practices, business requirements).
 
-Do NOT call search_external without knowing which service — use search_capabilities to discover services first.
+## Capability Routing — for plan step ROUTING only
 
-## Capability Routing — Quick Reference
-
->>> YOUR CALLABLE PLANNING TOOLS: system_research, search_external, search_capabilities, web_search, finish
->>> NOTHING ELSE IS CALLABLE. The "route_to" column below is for plan step ROUTING ONLY — NOT tool calls.
+The table below shows how to ROUTE plan steps to executors.
+These are NOT tools you can call. The executor will handle routing automatically.
 
 | User Intent | route_to (NOT a tool!) | Step Capability |
 |---|---|---|
@@ -57,7 +46,7 @@ Do NOT call search_external without knowing which service — use search_capabil
 | Execute existing skills/automations | skill_executor | agent:skill_executor |
 | Generate documents, reports, templates | document_builder | agent:document_builder |
 | Add/update/delete records in tables | table_builder | agent:table_builder |
-| Send/receive via external service (email, chat, API) | skill_builder | search_capabilities -> search_external for tool details |
+| Send/receive via external service (email, chat, API) | skill_builder | Use search_external for tool details |
 
 SKILL EXECUTION: When user asks to "run", "execute", or "trigger" an existing skill,
 route to skill_executor (NOT skill_builder). Check workspace_context for the skill ID.
@@ -66,76 +55,26 @@ MULTI-CAPABILITY TASKS: Use multiple route_to values across steps.
 Example: "Build a CRM" -> schema_builder (tables) -> app_builder (UI) -> view_builder (data views).
 Order: always create data (schema) before UI (app/page/view).
 
-EXTERNAL INTEGRATIONS: If task_analysis lists external services (Gmail, Slack, etc.),
-call search_capabilities first to verify which integrations are available, then
+EXTERNAL INTEGRATIONS: If the task involves external services (Gmail, Slack, etc.),
 call search_external(service="<name>") to get specific tool names and input schemas.
 Include the specific tool name in the plan step and set connection_required.
 
-AMBIGUOUS INTEGRATIONS: If search_capabilities returns multiple matching integrations
-for a task (e.g., both Gmail and Outlook for "send email"), always ask the user which
-service to use. If the user already specified (e.g., "send with Gmail"), proceed directly.
+## How to Write Plan Steps
+
+Plan steps should describe WHAT to do, not WHICH agent to call:
+
+GOOD: "Create table 'contacts' with fields: name (text), email (email), phone (phone)"
+BAD: "Use agent:schema_builder to create the contacts table"
+
+The executor will automatically route steps to the appropriate agent based on the action.
 """.strip()
-
-# Mapping from capability ID to planning guidance
-_GUIDANCE_MAP: dict[str, str] = {
-    "agent:schema_builder": schema_builder.PLANNING_GUIDANCE,
-    "agent:skill_builder": skill_builder.PLANNING_GUIDANCE,
-    "agent:skill_executor": skill_executor.PLANNING_GUIDANCE,
-    "agent:app_builder": app_builder.PLANNING_GUIDANCE,
-    "agent:document_builder": document_builder.PLANNING_GUIDANCE,
-    "agent:agent_builder": agent_builder.PLANNING_GUIDANCE,
-    "agent:page_builder": page_builder.PLANNING_GUIDANCE,
-    "agent:table_builder": table_builder.PLANNING_GUIDANCE,
-    "agent:view_builder": view_builder.PLANNING_GUIDANCE,
-}
-
-
-def get_all_planning_guidance() -> dict[str, str]:
-    """
-    Return all capability planning guidance.
-
-    Returns:
-        Dict mapping capability ID to planning guidance string.
-    """
-    return _GUIDANCE_MAP.copy()
 
 
 def get_planning_guidance(capability_id: str) -> str | None:
-    """
-    Get planning guidance for a specific capability.
-
-    Args:
-        capability_id: The capability ID (e.g., "agent:schema_builder")
-
-    Returns:
-        Planning guidance string, or None if not found.
-    """
-    return _GUIDANCE_MAP.get(capability_id)
+    """Return planning guidance for a capability. Returns None (use KNN retrievers)."""
+    return None
 
 
-def format_planning_guidance(
-    capability_ids: list[str] | None = None,
-) -> str:
-    """
-    Format planning guidance as a single string for the planner.
-
-    Args:
-        capability_ids: Optional list of capability IDs to include.
-                       If None, includes all capabilities.
-
-    Returns:
-        Formatted planning guidance string.
-    """
-    if capability_ids is None:
-        guidance_list = list(_GUIDANCE_MAP.values())
-    else:
-        guidance_list = [
-            _GUIDANCE_MAP[cap_id]
-            for cap_id in capability_ids
-            if cap_id in _GUIDANCE_MAP
-        ]
-
-    if not guidance_list:
-        return CAPABILITY_ROUTING_HEADER
-
-    return CAPABILITY_ROUTING_HEADER + "\n\n" + "\n\n".join(guidance_list)
+def format_planning_guidance(capability_ids: list[str] | None = None) -> str:
+    """Return the capability routing header."""
+    return CAPABILITY_ROUTING_HEADER

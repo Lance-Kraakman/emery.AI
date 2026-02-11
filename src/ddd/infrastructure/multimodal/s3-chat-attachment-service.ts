@@ -19,9 +19,6 @@ import { getChatAttachmentKey, CHAT_ATTACHMENTS_PREFIX } from '@/lib/s3/path-reg
 import { invalidateOrgStorageCache } from '@/ddd/infrastructure/storage/repositories/s3-file-storage-repository'
 import type {
   AttachmentMetadata,
-  ImageAttachmentMetadata,
-  AudioAttachmentMetadata,
-  DocumentAttachmentMetadata,
   AttachmentType
 } from '@/ddd/domain/multimodal/value-objects/attachment-metadata'
 

@@ -10,13 +10,10 @@ import type { WorkflowVariable } from '../WorkflowVariableInput';
 import type { InputDefinition } from '@/ddd/domain/skills/entities/skill';
 import type {
   ReadNodeData,
-  WriteNodeData,
   AgenticNodeData,
   ToolNodeData,
   OperationNodeData,
   LoopNodeData,
-  ConditionNodeData,
-  SkillRefNodeData,
 } from '../types';
 import { TASK_OUTPUT_SCHEMAS } from '@/lib/constants/task-output-schemas';
 

@@ -10,7 +10,7 @@ import json
 import logging
 from dataclasses import asdict, dataclass
 from enum import Enum
-from typing import Any, Callable
+from typing import Any
 
 from emery_agents.api.http_client import make_request
 
@@ -138,7 +138,11 @@ class SecurityReportTool:
             return report_result
 
         try:
-            report_data = json.loads(report_result) if isinstance(report_result, str) else report_result
+            report_data = (
+                json.loads(report_result)
+                if isinstance(report_result, str)
+                else report_result
+            )
         except json.JSONDecodeError:
             return f"ERROR: Failed to parse report response: {report_result}"
 
@@ -189,7 +193,11 @@ class SecurityReportTool:
             }
 
         try:
-            tiptap_data = json.loads(tiptap_result) if isinstance(tiptap_result, str) else tiptap_result
+            tiptap_data = (
+                json.loads(tiptap_result)
+                if isinstance(tiptap_result, str)
+                else tiptap_result
+            )
         except json.JSONDecodeError:
             return {
                 "success": False,
@@ -239,7 +247,11 @@ class SecurityReportTool:
                 }
 
             try:
-                save_data = json.loads(save_result) if isinstance(save_result, str) else save_result
+                save_data = (
+                    json.loads(save_result)
+                    if isinstance(save_result, str)
+                    else save_result
+                )
             except json.JSONDecodeError:
                 return {
                     "success": False,
@@ -340,7 +352,9 @@ class SecurityReportTool:
             try:
                 create_data = json.loads(create_result)
             except json.JSONDecodeError:
-                return json.dumps({"success": False, "error": "Could not parse create row response"})
+                return json.dumps(
+                    {"success": False, "error": "Could not parse create row response"}
+                )
 
             if not create_data.get("success", True):
                 return json.dumps(create_data)
@@ -348,7 +362,9 @@ class SecurityReportTool:
             row_data = create_data.get("data", {})
             row_id = row_data.get("data", {}).get("id") or row_data.get("id")
             if not row_id:
-                return json.dumps({"success": False, "error": "Could not get row ID from response"})
+                return json.dumps(
+                    {"success": False, "error": "Could not get row ID from response"}
+                )
 
         # Create document in the field
         doc_result = make_request(
@@ -368,7 +384,12 @@ class SecurityReportTool:
         try:
             doc_data = json.loads(doc_result)
         except json.JSONDecodeError:
-            return json.dumps({"success": False, "error": "Could not parse document creation response"})
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "Could not parse document creation response",
+                }
+            )
 
         if not doc_data.get("success", True):
             return json.dumps(doc_data)

@@ -1,0 +1,25 @@
+{
+  "extends": "next/core-web-vitals",
+  "rules": {
+    "no-restricted-imports": ["error", {
+      "patterns": [{
+        "group": ["@/ddd/infrastructure/db/client"],
+        "importNames": ["rawClient"],
+        "message": "rawClient should only be imported in DI modules. Use repository methods instead."
+      }]
+    }]
+  },
+  "overrides": [
+    {
+      "files": [
+        "src/ddd/application/di/**/*.ts",
+        "src/scripts/run-scheduler.ts",
+        "src/drizzle/seeds/**/*.ts",
+        "src/tests/**/*.ts"
+      ],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ]
+}

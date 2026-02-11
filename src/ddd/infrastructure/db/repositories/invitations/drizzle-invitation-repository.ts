@@ -1,8 +1,7 @@
 // AIDEV-NOTE: Drizzle implementation of invitation repository
 // Handles database operations for user invitations with token management and validation
 
-import type { DbClient } from '@/ddd/infrastructure/db/client';
-import { eq, and, lt, gte, desc, sql, inArray } from 'drizzle-orm';
+import { eq, and, lt, gte, desc, sql } from 'drizzle-orm';
 import type { InferSelectModel } from 'drizzle-orm';
 import { invitations, users, organizations, userOrganizations, roles } from '@/ddd/infrastructure/db/schema';
 
@@ -28,7 +27,6 @@ import { generateInvitationToken as generateToken } from '@/ddd/domain/invitatio
 import { OrganizationId } from '@/ddd/domain/shared/value-objects/organization-id';
 import { UserId } from '@/ddd/domain/shared/value-objects/user-id';
 import { EmailAddress } from '@/ddd/domain/shared/value-objects/email-address';
-import { SystemRoleType, SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
 import { InvitationId, InvitationToken } from '@/ddd/domain/shared/value-objects';
 
 export class DrizzleInvitationRepository
@@ -182,7 +180,7 @@ export class DrizzleInvitationRepository
 
 
   async findByQuery(query: InvitationQuery): Promise<Invitation[]> {
-    let whereConditions: any[] = [];
+    const whereConditions: any[] = [];
 
     if (query.organizationId) {
       whereConditions.push(eq(invitations.organizationId, query.organizationId.value));

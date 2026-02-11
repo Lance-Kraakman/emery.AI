@@ -7,7 +7,8 @@ Ported from tools/ask_question_tool.py as DSPy-compatible function.
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +127,9 @@ def create_ask_question_tool(
             collector.collected_questions.append(question_data)
 
             option_count = len(q.get("options", []) or [])
-            option_info = f" ({option_count} options)" if option_count else " (free text)"
+            option_info = (
+                f" ({option_count} options)" if option_count else " (free text)"
+            )
             logger.info(f"❓ Question recorded{option_info}: {question_text[:60]}...")
 
         logger.info(

@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
-import { type FilterOperator, type FieldType } from '@/lib/types/filters';
+import { type FilterOperator } from '@/lib/types/filters';
 import { FilterPopover } from '@/app/(app)/data/components/FilterPopover';
 import { FilterChip } from '@/app/(app)/data/components/FilterChip';
 

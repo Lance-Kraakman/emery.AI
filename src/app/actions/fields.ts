@@ -20,9 +20,10 @@ import { normalizeSelectMetadata } from "@/lib/utils/normalize-select-metadata";
 const logger = createDebugLogger('Fields');
 
 export async function createField(data: CreateFieldData, revalidateUrl?: string): Promise<Result> {
-  try {
-    const session = await requirePermission("database:create");
-    const currentOrg = await requireCurrentOrganization();
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("database:create");
+      const currentOrg = await requireCurrentOrganization();
     const { tableId, name, type, required = false, relatedTableId, metadata } = data;
 
     if (!tableId || !name || !type) {
@@ -144,13 +145,14 @@ export async function createField(data: CreateFieldData, revalidateUrl?: string)
       success: true,
       data: result.data ? FieldMapper.toDTO(result.data) : null,
     };
-  } catch (error) {
-    console.error("Error creating field:", error);
-    return {
-      success: false,
-      error: "Failed to create field",
-    };
-  }
+    } catch (error) {
+      console.error("Error creating field:", error);
+      return {
+        success: false,
+        error: "Failed to create field",
+      };
+    }
+  });
 }
 
 export async function createFieldAction(formData: FormData) {
@@ -186,14 +188,53 @@ export async function getFields(
   tableId: number,
   options?: { viaViewId?: number }
 ): Promise<FieldDTO[]> {
-  try {
-    if (!tableId) {
-      throw new Error("tableId is required");
+  // For public view access (unauthenticated), bypass withAuthContext
+  const session = await getSessionSafe();
+
+  if (!session && options?.viaViewId) {
+    // Unauthenticated: only allow via public view (no RLS context needed, uses rawDb internally)
+    try {
+      if (!tableId) {
+        throw new Error("tableId is required");
+      }
+
+      // Get schema via ViewApplicationService.getPublicViewSchema (uses rawDb, bypasses RLS)
+      const { ViewId } = await import("@/ddd/domain/views/value-objects/view-id");
+      const viewService = getViewApplicationService();
+      const schemaResult = await viewService.getPublicViewSchema(ViewId.fromNumber(options.viaViewId));
+
+      if (!schemaResult.success || !schemaResult.data) {
+        throw new Error("View not found or not public");
+      }
+
+      const dtoFields = schemaResult.data.map(FieldMapper.toDTO);
+
+      // Prepend id system field
+      const idField: FieldDTO = {
+        id: 0,
+        name: 'id',
+        type: 'number',
+        required: true,
+        metadata: {},
+        orderIndex: -1,
+        createdAt: null,
+      };
+
+      logger.summary('Loaded fields (public view)', { tableId, viewId: options.viaViewId, count: dtoFields.length + 1 });
+      return [idField, ...dtoFields];
+    } catch (error) {
+      logger.error("Error fetching fields (public)", error);
+      throw new Error("Failed to fetch fields");
     }
+  }
 
-    const session = await getSessionSafe();
+  // Authenticated path - use withAuthContext
+  return withAuthContext(async () => {
+    try {
+      if (!tableId) {
+        throw new Error("tableId is required");
+      }
 
-    if (session) {
       // Authenticated user: use normal RLS-wrapped path
       await requireResourcePermission("database:view", "table", tableId);
 
@@ -228,41 +269,11 @@ export async function getFields(
 
       logger.summary('Loaded fields', { tableId, count: dtoFields.length + 1 });
       return [idField, ...dtoFields];
-    } else {
-      // Unauthenticated: only allow via public view
-      if (!options?.viaViewId) {
-        throw new Error("Authentication required to access fields");
-      }
-
-      // Get schema via ViewApplicationService.getPublicViewSchema (uses rawDb, bypasses RLS)
-      const { ViewId } = await import("@/ddd/domain/views/value-objects/view-id");
-      const viewService = getViewApplicationService();
-      const schemaResult = await viewService.getPublicViewSchema(ViewId.fromNumber(options.viaViewId));
-
-      if (!schemaResult.success || !schemaResult.data) {
-        throw new Error("View not found or not public");
-      }
-
-      const dtoFields = schemaResult.data.map(FieldMapper.toDTO);
-
-      // Prepend id system field
-      const idField: FieldDTO = {
-        id: 0,
-        name: 'id',
-        type: 'number',
-        required: true,
-        metadata: {},
-        orderIndex: -1,
-        createdAt: null,
-      };
-
-      logger.summary('Loaded fields (public view)', { tableId, viewId: options.viaViewId, count: dtoFields.length + 1 });
-      return [idField, ...dtoFields];
+    } catch (error) {
+      logger.error("Error fetching fields", error);
+      throw new Error("Failed to fetch fields");
     }
-  } catch (error) {
-    logger.error("Error fetching fields", error);
-    throw new Error("Failed to fetch fields");
-  }
+  });
 }
 
 export async function updateField(data: {
@@ -276,21 +287,22 @@ export async function updateField(data: {
     metadata?: Record<string, any>
   }
 }, revalidateUrl?: string): Promise<Result> {
-  try {
-    logger.debug('[updateField] Called', { tableId: data.tableId, fieldName: data.fieldName, updates: data.updates });
+  return withAuthContext(async () => {
+    try {
+      logger.debug('[updateField] Called', { tableId: data.tableId, fieldName: data.fieldName, updates: data.updates });
 
-    const { tableId, fieldName, updates } = data;
+      const { tableId, fieldName, updates } = data;
 
-    if (!tableId || !fieldName) {
-      logger.error('[updateField] Validation failed: missing tableId or fieldName');
-      return {
-        success: false,
-        error: "tableId and fieldName are required",
-      };
-    }
+      if (!tableId || !fieldName) {
+        logger.error('[updateField] Validation failed: missing tableId or fieldName');
+        return {
+          success: false,
+          error: "tableId and fieldName are required",
+        };
+      }
 
-    // Fields inherit permissions from their parent table
-    const session = await requireResourcePermission("database:manage", "table", tableId);
+      // Fields inherit permissions from their parent table
+      const session = await requireResourcePermission("database:manage", "table", tableId);
     const currentOrg = await requireCurrentOrganization();
     logger.debug('[updateField] Permission check passed');
 
@@ -369,35 +381,37 @@ export async function updateField(data: {
       revalidatePath('/data'); // Default path for field operations
     }
 
-    logger.debug('[updateField] Completed successfully', { fieldName });
-    return {
-      success: true,
-      data: result.data ? FieldMapper.toDTO(result.data) : null,
-    };
-  } catch (error) {
-    logger.error("[updateField] Exception caught", error);
-    console.error("Error updating field:", error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to update field",
-    };
-  }
+      logger.debug('[updateField] Completed successfully', { fieldName });
+      return {
+        success: true,
+        data: result.data ? FieldMapper.toDTO(result.data) : null,
+      };
+    } catch (error) {
+      logger.error("[updateField] Exception caught", error);
+      console.error("Error updating field:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to update field",
+      };
+    }
+  });
 }
 
 export async function deleteField(tableId: number, fieldName: string, revalidateUrl?: string): Promise<Result> {
-  try {
-    logger.debug('[deleteField] Called', { tableId, fieldName });
+  return withAuthContext(async () => {
+    try {
+      logger.debug('[deleteField] Called', { tableId, fieldName });
 
-    if (!tableId || !fieldName) {
-      logger.error('[deleteField] Validation failed: missing tableId or fieldName');
-      return {
-        success: false,
-        error: "Table ID and field name are required",
-      };
-    }
+      if (!tableId || !fieldName) {
+        logger.error('[deleteField] Validation failed: missing tableId or fieldName');
+        return {
+          success: false,
+          error: "Table ID and field name are required",
+        };
+      }
 
-    // Fields inherit permissions from their parent table
-    const session = await requireResourcePermission("database:manage", "table", tableId);
+      // Fields inherit permissions from their parent table
+      const session = await requireResourcePermission("database:manage", "table", tableId);
     const currentOrg = await requireCurrentOrganization();
     logger.debug('[deleteField] Permission check passed');
 
@@ -444,35 +458,37 @@ export async function deleteField(tableId: number, fieldName: string, revalidate
       revalidatePath('/data'); // Default path for field operations
     }
 
-    logger.debug('[deleteField] Completed successfully', { fieldName });
-    return {
-      success: true,
-      data: { message: "Field deleted successfully" },
-    };
-  } catch (error) {
-    logger.error("[deleteField] Exception caught", error);
-    console.error("Error deleting field:", error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to delete field",
-    };
-  }
+      logger.debug('[deleteField] Completed successfully', { fieldName });
+      return {
+        success: true,
+        data: { message: "Field deleted successfully" },
+      };
+    } catch (error) {
+      logger.error("[deleteField] Exception caught", error);
+      console.error("Error deleting field:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to delete field",
+      };
+    }
+  });
 }
 
 // Server action wrapper for deleteField - updated to use correct parameters
 export async function deleteFieldAction(formData: FormData): Promise<Result> {
-  const fieldId = parseInt(formData.get('fieldId') as string);
+  return withAuthContext(async () => {
+    const fieldId = parseInt(formData.get('fieldId') as string);
 
-  if (!fieldId) {
-    return {
-      success: false,
-      error: "fieldId is required"
-    };
-  }
+    if (!fieldId) {
+      return {
+        success: false,
+        error: "fieldId is required"
+      };
+    }
 
-  try {
-    // We need to find the field by ID to get its name and table
-    const tableApplicationService = getTableApplicationService();
+    try {
+      // We need to find the field by ID to get its name and table
+      const tableApplicationService = getTableApplicationService();
 
     // Get all tables to find which table contains this field
     const { getTables } = require('./tables');
@@ -517,32 +533,34 @@ export async function deleteFieldAction(formData: FormData): Promise<Result> {
 
     return result;
 
-  } catch (error) {
-    logger.error('Error deleting field', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to delete field"
-    };
-  }
+    } catch (error) {
+      logger.error('Error deleting field', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to delete field"
+      };
+    }
+  });
 }
 
 export async function reorderFields(data: {
   tableId: number
   fieldOrders: Array<{ fieldName: string; orderIndex: number }>
 }, revalidateUrl?: string): Promise<Result> {
-  try {
-    const { tableId, fieldOrders } = data;
+  return withAuthContext(async () => {
+    try {
+      const { tableId, fieldOrders } = data;
 
-    if (!tableId || !fieldOrders || fieldOrders.length === 0) {
-      return {
-        success: false,
-        error: "tableId and fieldOrders are required",
-      };
-    }
+      if (!tableId || !fieldOrders || fieldOrders.length === 0) {
+        return {
+          success: false,
+          error: "tableId and fieldOrders are required",
+        };
+      }
 
-    // Fields inherit permissions from their parent table
-    const session = await requireResourcePermission("database:manage", "table", tableId);
-    const currentOrg = await requireCurrentOrganization();
+      // Fields inherit permissions from their parent table
+      const session = await requireResourcePermission("database:manage", "table", tableId);
+      const currentOrg = await requireCurrentOrganization();
 
     // Filter out system 'id' field - it's a synthetic field not stored in DB
     const filteredFieldOrders = fieldOrders.filter(fo => fo.fieldName !== 'id');
@@ -594,17 +612,18 @@ export async function reorderFields(data: {
       revalidatePath('/data'); // Default path for field operations
     }
 
-    return {
-      success: true,
-      data: { message: "Fields reordered successfully" },
-    };
-  } catch (error) {
-    console.error("Error reordering fields:", error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to reorder fields",
-    };
-  }
+      return {
+        success: true,
+        data: { message: "Fields reordered successfully" },
+      };
+    } catch (error) {
+      console.error("Error reordering fields:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to reorder fields",
+      };
+    }
+  });
 }
 
 /**
@@ -617,9 +636,10 @@ export async function resetAutonumberCounter(
   resetValue?: number,
   revalidateUrl?: string
 ): Promise<Result> {
-  try {
-    // Fields inherit permissions from their parent table
-    await requireResourcePermission("database:manage", "table", tableId);
+  return withAuthContext(async () => {
+    try {
+      // Fields inherit permissions from their parent table
+      await requireResourcePermission("database:manage", "table", tableId);
 
     // Get field and verify it's autonumber
     const fields = await getFields(tableId);
@@ -636,23 +656,24 @@ export async function resetAutonumberCounter(
     const currentMetadata = (field.metadata as AutonumberFieldConfig) || {};
     const newCurrentValue = resetValue ?? currentMetadata.startingNumber ?? 1;
 
-    // Update field metadata (set to resetValue - 1 so next number is resetValue)
-    return await updateField({
-      tableId,
-      fieldName,
-      updates: {
-        metadata: {
-          ...currentMetadata,
-          currentValue: newCurrentValue - 1
+      // Update field metadata (set to resetValue - 1 so next number is resetValue)
+      return await updateField({
+        tableId,
+        fieldName,
+        updates: {
+          metadata: {
+            ...currentMetadata,
+            currentValue: newCurrentValue - 1
+          }
         }
-      }
-    }, revalidateUrl);
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to reset counter",
-    };
-  }
+      }, revalidateUrl);
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to reset counter",
+      };
+    }
+  });
 }
 
 /**
@@ -660,22 +681,24 @@ export async function resetAutonumberCounter(
  * Used by EditorDataLayoutProvider to fetch fields for field selector in sidebar
  */
 export async function getFieldsForView(viewId: number): Promise<FieldDTO[]> {
-  try {
-    if (!viewId) {
+  return withAuthContext(async () => {
+    try {
+      if (!viewId) {
+        return [];
+      }
+
+      // Import getView to avoid circular dependency
+      const { getView } = await import('./views');
+      const view = await getView(viewId);
+
+      if (!view) {
+        return [];
+      }
+
+      return await getFields(view.tableId);
+    } catch (error) {
+      logger.error('Error getting fields for view', error);
       return [];
     }
-
-    // Import getView to avoid circular dependency
-    const { getView } = await import('./views');
-    const view = await getView(viewId);
-
-    if (!view) {
-      return [];
-    }
-
-    return await getFields(view.tableId);
-  } catch (error) {
-    logger.error('Error getting fields for view', error);
-    return [];
-  }
+  });
 }

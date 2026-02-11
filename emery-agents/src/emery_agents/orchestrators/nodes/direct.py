@@ -10,33 +10,41 @@ On failure: sets execution_mode = "plan" to escalate to full planning.
 
 import json
 import logging
-from typing import Any, Dict, List
+from typing import Any
 
 import dspy
 from dspy.adapters.types.image import Image as DspyImage
 
 from ...reasoning.config import get_dspy_lm
-from ...services.analysis.llm_usage import record_from_lm
 from ...reasoning.modules.executor import DirectExecutorModule, direct_execution_reward
 from ...reasoning.utils import extract_dspy_result
+from ...services.analysis.llm_usage import record_from_lm
+from ...services.context import format_conversation_history
 from ...services.execution.events import (
     AwaitingClarificationEvent,
+    AwaitingHumanSkillEvent,
+    ErrorEvent,
     ExecutionCompletedEvent,
     FinalSynthesisEvent,
-    ErrorEvent,
 )
-from ...tools.factories import create_all_tools
-from ...tools.profiles import select_tools_for_task
-from ...tools.output import QuestionCollector, create_ask_question_tool
+from ...tools.execution.skill import HumanSkillAwaitingException
+from ...entities.execution_context import ExecutionContext
+from ...services.context import execution_scope
 from ...services.memory import create_memory_crud
-from ..state import PlanExecuteState
+from ...types import ExecutionMode
+from ...tools.factories import create_all_tools
+from ...tools.output import QuestionCollector, create_ask_question_tool
+from ...tools.profiles import select_tools_for_task
+from ...types import ToolMode
 from ..runtime import RuntimeContext
-from ...services.context import format_conversation_history
+from ..state import PlanExecuteState
 
 logger = logging.getLogger(__name__)
 
 
-async def direct_execute_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[str, Any]:
+async def direct_execute_node(
+    state: PlanExecuteState, runtime: RuntimeContext
+) -> dict[str, Any]:
     """
     Direct execution node: execute task in a single ReAct loop.
 
@@ -54,14 +62,10 @@ async def direct_execute_node(state: PlanExecuteState, runtime: RuntimeContext) 
     memory_context = state.get("memory_context", "") or ""
     triage_context = state.get("triage_context", "") or ""
 
-    events: List[Any] = []
+    events: list[Any] = []
 
     # Create all tools with auth
-    tools = create_all_tools(
-        api_key=api_key,
-        org_id=org_id,
-        capability_registry=runtime.capability_registry,
-    )
+    tools = create_all_tools(api_key=api_key, org_id=org_id)
 
     # Include external tools from runtime (skill tools, Pipedream, etc.)
     if runtime.tools:
@@ -73,8 +77,8 @@ async def direct_execute_node(state: PlanExecuteState, runtime: RuntimeContext) 
                 tools.append(t)
 
     # Add memory CRUD if available
-    if runtime.memory_service:
-        tools.append(create_memory_crud(runtime.memory_service))
+    if runtime.engine:
+        tools.append(create_memory_crud(runtime.engine.memory))
 
     # Filter tools based on triage analysis (reduces tool surface for better selection)
     triage_analysis = state.get("triage_analysis")
@@ -103,7 +107,7 @@ async def direct_execute_node(state: PlanExecuteState, runtime: RuntimeContext) 
     )
 
     # Build execution context
-    execution_context: Dict[str, Any] = {
+    execution_context: dict[str, Any] = {
         "task": task,
         "org_id": org_id,
     }
@@ -122,9 +126,19 @@ async def direct_execute_node(state: PlanExecuteState, runtime: RuntimeContext) 
     if dspy_images:
         logger.info(f"Direct execution: passing {len(dspy_images)} image(s) to LLM")
 
+    # Create execution context with PLANNING mode to block mutations
+    # Direct execution is for read-only research, Q&A, information gathering
+    ctx = ExecutionContext(
+        mode=ExecutionMode.INTERACTIVE,
+        task=task,
+        available_tools=[t.name for t in all_tools if hasattr(t, "name")],
+        tool_mode=ToolMode.PLANNING,  # Block mutations in direct mode
+        organization_id=int(org_id) if org_id else None,
+    )
+
     try:
         lm = get_dspy_lm(org_model=org_model)
-        with dspy.context(lm=lm):
+        with execution_scope(ctx), dspy.context(lm=lm):
             result = executor(
                 step_description=task,
                 context=json.dumps(execution_context),
@@ -137,12 +151,16 @@ async def direct_execute_node(state: PlanExecuteState, runtime: RuntimeContext) 
         # Check for clarification questions
         if question_collector.has_questions():
             questions = question_collector.get_questions()
-            logger.info(f"Direct execution needs clarification: {len(questions)} question(s)")
+            logger.info(
+                f"Direct execution needs clarification: {len(questions)} question(s)"
+            )
 
-            events.append(AwaitingClarificationEvent.from_dict_list(
-                questions=questions,
-                reasoning="Need more details to complete this task",
-            ))
+            events.append(
+                AwaitingClarificationEvent.from_dict_list(
+                    questions=questions,
+                    reasoning="Need more details to complete this task",
+                )
+            )
             return {
                 "awaiting_input": "clarification",
                 "clarifying_questions": questions,
@@ -152,14 +170,18 @@ async def direct_execute_node(state: PlanExecuteState, runtime: RuntimeContext) 
         logger.info(f"Direct execution completed: {len(result_str)} chars")
 
         # Emit completion events
-        events.append(FinalSynthesisEvent(
-            plan_id="direct",
-            synthesis=result_str,
-        ))
-        events.append(ExecutionCompletedEvent(
-            plan_id="direct",
-            success=True,
-        ))
+        events.append(
+            FinalSynthesisEvent(
+                plan_id="direct",
+                synthesis=result_str,
+            )
+        )
+        events.append(
+            ExecutionCompletedEvent(
+                plan_id="direct",
+                success=True,
+            )
+        )
 
         return {
             "response": result_str,
@@ -167,13 +189,49 @@ async def direct_execute_node(state: PlanExecuteState, runtime: RuntimeContext) 
             "events": events,
         }
 
+    except HumanSkillAwaitingException as e:
+        # Human skill requires human input - set up interrupt
+        logger.info(
+            f"Human skill {e.skill_name} requires input - setting up interrupt"
+        )
+
+        events.append(
+            AwaitingHumanSkillEvent(
+                skill_id=e.skill_id,
+                skill_name=e.skill_name,
+                step_id="direct",  # No step in direct mode
+                instructions=e.instructions,
+                inputs=e.inputs,
+                output_schema=e.output_schema,
+                assigned_to=e.assigned_to,
+                external_links=e.external_links,
+                session_id=e.session_id,
+            )
+        )
+
+        return {
+            "awaiting_input": "human_skill",
+            "human_skill_info": {
+                "skill_id": e.skill_id,
+                "skill_name": e.skill_name,
+                "step_id": "direct",
+                "instructions": e.instructions,
+                "inputs": e.inputs,
+                "output_schema": e.output_schema,
+                "assigned_to": e.assigned_to,
+            },
+            "events": events,
+        }
+
     except Exception as e:
         logger.error(f"Direct execution failed, escalating to plan: {e}", exc_info=True)
 
-        events.append(ErrorEvent(
-            error=f"Direct execution failed: {e}",
-            recoverable=True,
-        ))
+        events.append(
+            ErrorEvent(
+                error=f"Direct execution failed: {e}",
+                recoverable=True,
+            )
+        )
 
         # Escalate to plan mode
         return {

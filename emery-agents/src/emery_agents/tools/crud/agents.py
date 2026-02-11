@@ -12,11 +12,14 @@ from typing import Any
 import dspy
 
 from emery_agents.api.http_client import make_request
-from ..mutation_guard import check_mutation_allowed
+
 from ..execution.dynamic_execution import execute_agent_by_id
+from ..mutation_guard import check_mutation_allowed
 
 
-def create_agent_crud(api_key: str, org_id: str, extra_headers: dict[str, str] | None = None) -> dspy.Tool:
+def create_agent_crud(
+    api_key: str, org_id: str, extra_headers: dict[str, str] | None = None
+) -> dspy.Tool:
     """
     Factory: Create agent_crud tool with auth captured in closure.
 

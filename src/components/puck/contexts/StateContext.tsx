@@ -29,7 +29,6 @@ import {
   type PageRuntimeState,
   type PageStateAction,
   type PageStateConfig,
-  initialPageRuntimeState,
   createInitialPageState,
 } from '@/components/puck/types/state';
 

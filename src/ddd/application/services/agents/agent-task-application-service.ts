@@ -18,7 +18,7 @@ import type { IOrganizationRepository } from '@/ddd/domain/organizations/reposit
 import { Task } from '@/ddd/domain/tasks/entities/task';
 import type { TriggerContext } from '@/ddd/domain/tasks/entities/task';
 import { isActiveAgent } from '@/ddd/domain/agents/entities/agent';
-import { AgentId, OrganizationId, TaskId, UserId, TaskStatus, TeamId } from '@/ddd/domain/shared/value-objects';
+import { AgentId, OrganizationId, TaskId, UserId, TaskStatus } from '@/ddd/domain/shared/value-objects';
 import type { CreateTaskDTO, ExecuteTaskDTO, TaskExecutionResultDTO, TaskDTO } from '@/app/dtos/task.dto';
 import { taskToDTO } from '@/app/mappers/task-mapper';
 import type { Result } from '@/ddd/domain/shared/result';
@@ -26,6 +26,7 @@ import { createDebugLogger } from '@/lib/utils/debug-logger';
 import { InstructionTemplateService } from '@/ddd/domain/tasks/services/instruction-template-service';
 import type { EnrichedSkill, SkillEnrichmentService } from '@/ddd/application/services/skills/skill-enrichment-service';
 import { getAuditApplicationService } from '@/ddd/application/di/container';
+import { getTaskQueueService, type ITaskQueueService } from '@/lib/cache/task-queue-service';
 
 const logger = createDebugLogger('AgentTaskService');
 
@@ -37,6 +38,7 @@ function mapTriggerType(type: string | undefined): string | undefined {
     'WEBHOOK': 'webhook',
     'DATABASE_EVENT': 'database_event',
     'CALENDAR': 'calendar',
+    'CHAT': 'chat',
   };
   return TRIGGER_TYPE_MAP[type] || type.toLowerCase();
 }
@@ -48,6 +50,7 @@ function buildTriggerContextFromType(triggerType: string): TriggerContext {
     'webhook': 'WEBHOOK',
     'database_event': 'DATABASE_EVENT',
     'calendar': 'CALENDAR',
+    'chat': 'CHAT',
   };
   const type = VALID_TRIGGER_TYPES[triggerType.toLowerCase()];
   if (!type) {
@@ -58,6 +61,19 @@ function buildTriggerContextFromType(triggerType: string): TriggerContext {
 }
 
 export class AgentTaskApplicationService {
+  /**
+   * Task queue service for Redis-backed per-org concurrency control
+   * Lazy-loaded to allow service initialization before Redis connects
+   */
+  private _taskQueueService: ITaskQueueService | null = null;
+
+  private get taskQueueService(): ITaskQueueService {
+    if (!this._taskQueueService) {
+      this._taskQueueService = getTaskQueueService();
+    }
+    return this._taskQueueService;
+  }
+
   constructor(
     private readonly agentRepository: IAgentRepository,
     private readonly taskRepository: ITaskRepository,
@@ -143,6 +159,7 @@ export class AgentTaskApplicationService {
         instructions,
         skillId: dto.skillId, // Optional skill to execute
         triggerContext,
+        chatMessageId: dto.chatMessageId, // Link to ChatMessage for ExecutionSteps
         createdBy,
         status: TaskStatus.pending()
       });
@@ -155,6 +172,7 @@ export class AgentTaskApplicationService {
         name: task.name,
         instructions: task.instructions,
         skillId: task.skillId, // Optional skill to execute
+        chatMessageId: task.chatMessageId, // Link to ChatMessage for ExecutionSteps
         status: task.status.value,
         createdBy: task.createdBy?.value || null,
         createdAt: task.createdAt,
@@ -182,9 +200,45 @@ export class AgentTaskApplicationService {
   }
 
   /**
-   * Execute an existing pending task
+   * Execute an existing pending task with per-organization concurrency control
+   * Uses Redis-backed queue to coordinate across multiple scheduler instances
    */
   async executeTask(dto: ExecuteTaskDTO): Promise<Result<TaskExecutionResultDTO>> {
+    const { taskId } = dto;
+
+    // Pre-load task to get organizationId for per-org slot allocation
+    const task = await this.taskRepository.findById(TaskId.fromString(taskId));
+    if (!task) {
+      return {
+        success: false,
+        error: `Task ${taskId} not found`
+      };
+    }
+
+    const orgId = task.organizationId.value.toString();
+
+    // Acquire per-org execution slot (blocks until available)
+    await this.taskQueueService.acquireExecutionSlot(orgId, taskId);
+
+    try {
+      return await this.executeTaskInternal(dto);
+    } finally {
+      // Release the slot for this org
+      await this.taskQueueService.releaseExecutionSlot(orgId, taskId);
+    }
+  }
+
+  /**
+   * Get current queue statistics for an organization
+   */
+  async getQueueStats(organizationId: string): Promise<{ active: number; maxConcurrent: number }> {
+    return await this.taskQueueService.getStats(organizationId);
+  }
+
+  /**
+   * Internal execution logic (called after acquiring execution slot)
+   */
+  private async executeTaskInternal(dto: ExecuteTaskDTO): Promise<Result<TaskExecutionResultDTO>> {
     try {
       const { taskId, timeoutSeconds } = dto;
 
@@ -333,6 +387,17 @@ export class AgentTaskApplicationService {
         if (executionResult.success) {
           task.complete(executionResult.outputData);
           logger.summary(`Task ${taskId.substring(0, 8)} completed successfully`);
+        } else if (executionResult.status === 'awaiting_human') {
+          // Human skill - pause task and store human skill data
+          task.awaitHuman();
+          if (executionResult.humanSkillData) {
+            task.addPendingHumanStep({
+              stepId: executionResult.humanSkillData.stepId || `skill-${executionResult.humanSkillData.skillId}`,
+              assignedTo: executionResult.humanSkillData.assignedTo,
+              inputs: executionResult.humanSkillData.inputs,
+            });
+          }
+          logger.summary(`Task ${taskId.substring(0, 8)} awaiting human input`);
         } else {
           task.fail(executionResult.error || 'Execution failed');
         }
@@ -375,7 +440,9 @@ export class AgentTaskApplicationService {
           result: task.result,
           completedAt: task.completedAt,
           error: task.error,
-          logs: task.logs
+          logs: task.logs,
+          currentStepId: task.currentStepId,
+          pendingHumanSteps: task.pendingHumanSteps
         });
       }
 
@@ -456,6 +523,59 @@ export class AgentTaskApplicationService {
   }
 
   /**
+   * Update task status with optional result or error
+   * Used by chat route to update task status after completion/failure
+   */
+  async updateTaskStatus(
+    taskId: string,
+    status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled' | 'timeout' | 'awaiting_human',
+    result?: any,
+    error?: string
+  ): Promise<void> {
+    logger.summary(`Updating task ${taskId.substring(0, 8)} to ${status}`);
+
+    const task = await this.taskRepository.findById(TaskId.fromString(taskId));
+    if (!task) {
+      throw new Error(`Task ${taskId} not found`);
+    }
+
+    // Apply domain transitions based on status
+    switch (status) {
+      case 'in_progress':
+        task.start();
+        break;
+      case 'completed':
+        task.complete(result);
+        break;
+      case 'failed':
+        task.fail(error || 'Task failed');
+        break;
+      case 'cancelled':
+        task.cancel(error);
+        break;
+      case 'timeout':
+        task.timeout();
+        break;
+      case 'awaiting_human':
+        // Status is set directly for awaiting_human
+        break;
+      default:
+        throw new Error(`Cannot update task to status: ${status}`);
+    }
+
+    // Persist updates
+    await this.taskRepository.update(task.id, {
+      status: task.status.value,
+      result: task.result,
+      error: task.error,
+      startedAt: task.startedAt,
+      completedAt: task.completedAt
+    });
+
+    logger.summary(`Updated task ${taskId.substring(0, 8)} to ${status}`);
+  }
+
+  /**
    * Get task by ID
    */
   async getTask(taskId: string): Promise<TaskDTO | null> {
@@ -518,5 +638,47 @@ export class AgentTaskApplicationService {
    */
   async getWorkerHealth(organizationId: number) {
     return await this.executionRepository.getWorkerHealth(organizationId.toString());
+  }
+
+  /**
+   * Get tasks awaiting human input for an organization
+   */
+  async getAwaitingHumanTasks(organizationId: number): Promise<TaskDTO[]> {
+    const tasks = await this.taskRepository.findByStatus(TaskStatus.awaitingHuman());
+    // Filter by organization (findByStatus doesn't filter by org)
+    const orgTasks = tasks.filter(task => task.organizationId.value === organizationId);
+    return orgTasks.map(taskToDTO);
+  }
+
+  /**
+   * Complete a human step on a task
+   * Updates the pendingHumanSteps with outputs and sets task status to pending for resume
+   */
+  async completeHumanStep(taskId: string, stepId: string, outputs: Record<string, any>): Promise<void> {
+    const task = await this.taskRepository.findById(TaskId.fromString(taskId));
+    if (!task) {
+      throw new Error(`Task ${taskId} not found`);
+    }
+
+    if (!task.isAwaitingHuman) {
+      throw new Error(`Task ${taskId} is not awaiting human input`);
+    }
+
+    // Complete the human step on the domain entity
+    task.completeHumanStep(stepId, outputs);
+
+    // Resume the task so scheduler can pick it up
+    task.resumeFromHuman();
+
+    // Set back to pending status so scheduler picks it up
+    // Note: resumeFromHuman sets to in_progress, but we want pending for scheduler
+    // Since Task entity doesn't have a direct method for this, we use the repository update
+    await this.taskRepository.update(task.id, {
+      status: 'pending', // Back to pending so scheduler picks it up
+      pendingHumanSteps: task.pendingHumanSteps,
+      currentStepId: task.currentStepId
+    });
+
+    logger.summary(`Human step ${stepId} completed on task ${taskId}, set to pending for resume`);
   }
 }

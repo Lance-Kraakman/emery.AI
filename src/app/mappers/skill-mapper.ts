@@ -1,25 +1,22 @@
 import type {
   Skill,
-  SkillParameterType,
   SkillExecutionType,
-  TaskModelConfig,
   SkillStep,
   ToolExecutionConfig,
   WriteConfig,
-  InputMappingConfig,
   InputDefinition,
   OutputDefinition,
   CanvasMetadata,
+  HumanSkillConfig,
   // Multi-table mapping types
   TableReference,
   FieldSource,
   RowIdSource,
 } from '@/ddd/domain/skills/entities/skill';
 import type { MessagePart } from '@/ddd/infrastructure/grpc/generated/agent_worker';
-import { s3SkillAttachmentService } from '@/ddd/infrastructure/multimodal/s3-skill-attachment-service';
 
 // Re-export unified types from domain
-export type { InputDefinition, OutputDefinition, TableReference, FieldSource, RowIdSource };
+export type { InputDefinition, OutputDefinition, TableReference, FieldSource, RowIdSource, HumanSkillConfig };
 
 /**
  * DTO for Tool Configuration
@@ -115,6 +112,7 @@ export interface SkillDTO {
   taskModelConfig?: TaskModelConfigDTO; // Config for 'operation' execution
   toolExecutionConfig?: ToolExecutionConfig; // Config for 'tool' execution
   writeConfig?: WriteConfig; // Config for 'write' execution
+  humanSkillConfig?: HumanSkillConfig; // Config for 'human' execution
   steps?: SkillStep[]; // Steps for 'agent' (step-based) execution
   canvasMetadata?: CanvasMetadata; // Canvas annotations (sticky notes)
   isSystem: boolean; // System skills cannot be deleted by users
@@ -154,6 +152,7 @@ export class SkillMapper {
       taskModelConfig: skill.taskModelConfig,
       toolExecutionConfig: skill.toolExecutionConfig,
       writeConfig: skill.writeConfig,
+      humanSkillConfig: skill.humanSkillConfig,
       steps: skill.steps,
       canvasMetadata: skill.canvasMetadata,
       isSystem: skill.isSystem,

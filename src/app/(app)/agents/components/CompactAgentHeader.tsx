@@ -4,7 +4,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Settings, Zap, Calendar, Link2, Plus, ChevronRight, ClipboardList, Edit2, Trash2, MoreHorizontal, Globe, Download, Key } from 'lucide-react';
 import type { AgentDTO } from '@/app/dtos/agent.dto';
 import type { SkillDTO } from '@/app/mappers/skill-mapper';
-import type { ConnectionDTO } from '@/app/mappers/connection-mapper';
 import { useModal } from './modals/ModalContext';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useRouter } from 'next/navigation';
@@ -15,11 +14,14 @@ import { TaskAssignmentModal } from './TaskAssignmentModal';
 import { ShareButton } from '@/components/permissions/ShareButton';
 import { ShareDialog } from '@/components/permissions/ShareDialog';
 import { PublishAgentWizard } from './PublishAgentWizard';
+import { WorkspaceSyncControls } from '@/components/workspace/WorkspaceSyncControls';
+import { isTauri } from '@/hooks/useDeviceFlow';
 
 interface CompactAgentHeaderProps {
   agent: AgentDTO;
   skills: SkillDTO[];
-  connections: ConnectionDTO[];
+  connectionCount: number;
+  resolvedModel?: string | null;
   className?: string;
 }
 
@@ -32,7 +34,8 @@ const STATUS_COLORS = {
 export function CompactAgentHeader({
   agent,
   skills,
-  connections,
+  connectionCount,
+  resolvedModel,
   className = ''
 }: CompactAgentHeaderProps) {
   const { openModal } = useModal();
@@ -47,25 +50,41 @@ export function CompactAgentHeader({
   const [overflowOpen, setOverflowOpen] = useState(false);
   const [isCompact, setIsCompact] = useState(false);
   const [isVeryCompact, setIsVeryCompact] = useState(false);
+  const [isTauriClient, setIsTauriClient] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Detect Tauri after hydration to prevent mismatch
+  useEffect(() => {
+    setIsTauriClient(isTauri());
+  }, []);
 
   const activeSchedules = agent.automations?.filter((s: { enabled: boolean }) => s.enabled).length || 0;
   const totalSchedules = agent.automations?.length || 0;
 
-  // Container-based responsive behavior
+  // Container-based responsive behavior with debouncing
   useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+
     const updateCompactMode = () => {
-      if (containerRef.current) {
-        const width = containerRef.current.offsetWidth;
-        // Switch to compact mode when container is less than 900px wide
-        // This accounts for chat panel reducing available space
-        setIsCompact(width < 900);
-        setIsVeryCompact(width < 640);
-      }
+      // Debounce to prevent rapid state updates during resize
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        if (containerRef.current) {
+          const width = containerRef.current.offsetWidth;
+          // Switch to compact mode when container is less than 900px wide
+          // This accounts for chat panel reducing available space
+          setIsCompact(width < 900);
+          setIsVeryCompact(width < 640);
+        }
+      }, 100);
     };
 
-    // Initial check
-    updateCompactMode();
+    // Initial check (no debounce)
+    if (containerRef.current) {
+      const width = containerRef.current.offsetWidth;
+      setIsCompact(width < 900);
+      setIsVeryCompact(width < 640);
+    }
 
     // Set up ResizeObserver to watch container width changes
     const resizeObserver = new ResizeObserver(updateCompactMode);
@@ -73,7 +92,10 @@ export function CompactAgentHeader({
       resizeObserver.observe(containerRef.current);
     }
 
-    return () => resizeObserver.disconnect();
+    return () => {
+      clearTimeout(timeoutId);
+      resizeObserver.disconnect();
+    };
   }, []);
 
   const handleAddSkill = async () => {
@@ -170,6 +192,9 @@ export function CompactAgentHeader({
           <div className="min-w-0">
             <h1 className="text-base sm:text-lg font-semibold truncate">{agent.name}</h1>
             <p className="text-xs text-muted-foreground truncate">{agent.role || 'Assistant'}</p>
+            {resolvedModel && (
+              <p className="text-[10px] text-muted-foreground/70 truncate">{resolvedModel}</p>
+            )}
           </div>
         </div>
 
@@ -182,13 +207,7 @@ export function CompactAgentHeader({
           {(agent.status || 'active').charAt(0).toUpperCase() + (agent.status || 'active').slice(1)}
         </span>
 
-        {/* Model Badge - Hidden on small screens */}
-        {agent.defaultModel && (
-          <span className="hidden md:inline-flex px-2 py-1 text-xs bg-muted rounded-full">
-            {agent.defaultModel}
-          </span>
-        )}
-      </div>
+              </div>
 
       {/* Right side - Settings and action badges */}
       <div className="flex items-center gap-1 min-w-0 overflow-hidden">
@@ -234,7 +253,7 @@ export function CompactAgentHeader({
                 className="flex items-center gap-2 w-full px-3 py-2 text-sm rounded-md hover:bg-accent transition-colors text-left"
               >
                 <Link2 className="h-4 w-4" />
-                Connections ({connections.length})
+                Connections ({connectionCount})
               </button>
               <button
                 onClick={() => { setOverflowOpen(false); handleDownloadWorkspace(); }}
@@ -400,27 +419,31 @@ export function CompactAgentHeader({
             <button
               onClick={() => openModal('authorized-connections', { agent })}
               className="flex group relative items-center gap-1 px-2 py-1.5 text-sm border rounded-md hover:bg-accent transition-colors"
-              title={`${connections.length} connections`}
+              title={`${connectionCount} connections`}
             >
               <Link2 className="h-4 w-4 shrink-0" />
               {!isCompact && <span>Connections</span>}
-              <span className={`${connections.length > 0 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}
+              <span className={`${connectionCount > 0 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}
                 text-xs font-medium px-1.5 rounded-full min-w-[1.25rem] text-center`}>
-                {connections.length}
+                {connectionCount}
               </span>
             </button>
           </>
         )}
 
-        {/* Download Workspace Button - Always visible */}
-        <button
-          onClick={handleDownloadWorkspace}
-          disabled={downloading}
-          className="p-2 border rounded-md hover:bg-accent transition-colors disabled:opacity-50"
-          title="Download agent workspace"
-        >
-          <Download className={`h-4 w-4 ${downloading ? 'animate-pulse' : ''}`} />
-        </button>
+        {/* Workspace Sync (Tauri) or Download (Web) */}
+        {isTauriClient ? (
+          <WorkspaceSyncControls agentId={agent.id} orgId={agent.organizationId!} />
+        ) : (
+          <button
+            onClick={handleDownloadWorkspace}
+            disabled={downloading}
+            className="p-2 border rounded-md hover:bg-accent transition-colors disabled:opacity-50"
+            title="Download agent workspace"
+          >
+            <Download className={`h-4 w-4 ${downloading ? 'animate-pulse' : ''}`} />
+          </button>
+        )}
 
         {/* Share Button - Always visible */}
         <ShareButton

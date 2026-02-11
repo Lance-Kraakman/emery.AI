@@ -7,8 +7,8 @@ used throughout the table library.
 
 # Schema defaults
 DEFAULT_EMBEDDING_SIZE = 768  # Default dimension for embedding vectors
-REQUIRED_ID_FIELD = 'id'  # Required ID field name for all tables
+REQUIRED_ID_FIELD = "id"  # Required ID field name for all tables
 
 # S3 Configuration
-DEFAULT_S3_BUCKET = 'enhancd-files'
-DEFAULT_AWS_REGION = 'us-east-1'
+DEFAULT_S3_BUCKET = "enhancd-files"
+DEFAULT_AWS_REGION = "us-east-1"

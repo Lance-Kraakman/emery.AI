@@ -2,7 +2,6 @@ import React, { useRef, useCallback, useState, useMemo, useEffect } from 'react'
 import { Loader2, ChevronDown, ChevronRight } from 'lucide-react';
 import type { ToolDTO } from '@/app/mappers/tool-mapper';
 import { ToolCard } from './ToolCard';
-import { cn } from '@/lib/utils';
 
 type App = {
   id: string;

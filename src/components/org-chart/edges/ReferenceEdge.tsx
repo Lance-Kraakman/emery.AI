@@ -119,7 +119,7 @@ export function ReferenceEdge({
   const edgeStyle: React.CSSProperties = {
     ...style,
     ...getEdgeStyle(edgeType),
-    strokeWidth: selected ? 3 : 2,
+    strokeWidth: selected ? 2 : 1.5,
     transition: 'stroke-width 0.2s ease',
   };
 
@@ -128,7 +128,7 @@ export function ReferenceEdge({
   return (
     <>
       <BaseEdge path={edgePath} markerEnd={markerEnd} style={edgeStyle} />
-      {label && (
+      {label && selected && (
         <EdgeLabelRenderer>
           <div
             style={{

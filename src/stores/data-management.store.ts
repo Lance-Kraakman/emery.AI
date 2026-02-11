@@ -11,7 +11,7 @@
 
 import { Store } from '@tanstack/react-store'
 import type { FieldDTO } from '@/app/mappers/field-mapper'
-import type { RowDTO, FieldValueDTO } from '@/app/mappers/row-mapper'
+import type { RowDTO } from '@/app/mappers/row-mapper'
 import type { FilterConfig } from '@/lib/types/filters'
 import { createDebugLogger } from '@/lib/utils/debug-logger'
 

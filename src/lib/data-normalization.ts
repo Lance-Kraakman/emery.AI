@@ -25,7 +25,7 @@ export class DataNormalizer {
 
     try {
       // Handle wrapped objects (DataSheetGrid pattern)
-      let unwrappedValue = this.unwrapValue(value, field.name)
+      const unwrappedValue = this.unwrapValue(value, field.name)
 
       // Type-specific normalization
       switch (field.type) {

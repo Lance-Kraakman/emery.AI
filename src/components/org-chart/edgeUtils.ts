@@ -98,7 +98,11 @@ export function normalizeEdgeConnection(
 /**
  * Create an edge object for skill connections.
  *
+ * For agent-owned skills, the edge source is the agent node with a skill-{id} handle.
+ * For org-level skills, the edge source is the skill node itself.
+ *
  * @param tableId - Optional table ID for table-level targeting (uses table-{id} handle)
+ * @param skillAgentId - The agent ID that owns this skill (null for org-level skills)
  */
 export function createSkillEdge(
   id: string,
@@ -107,13 +111,19 @@ export function createSkillEdge(
   targetId: number,
   edgeType: EdgeType,
   label: string,
-  tableId?: number
+  tableId?: number,
+  skillAgentId?: number | null
 ): OrgChartEdge {
+  // Determine source: agent node (with skill handle) or standalone skill node
+  const isAgentOwned = skillAgentId !== null && skillAgentId !== undefined;
+  const source = isAgentOwned ? makeNodeId('agent', skillAgentId) : makeNodeId('skill', skillId);
+  const sourceHandle = isAgentOwned ? `skill-${skillId}` : 'right-source';
+
   return {
     id,
-    source: makeNodeId('skill', skillId),
+    source,
     target: makeNodeId(targetType, targetId),
-    sourceHandle: 'right-source',
+    sourceHandle,
     targetHandle: tableId ? `table-${tableId}` : 'left-target',
     type: 'reference',
     data: { edgeType, label, tableId },
@@ -126,6 +136,8 @@ export function createSkillEdge(
 
 export interface SkillWithSteps {
   id: number;
+  /** Agent that owns this skill (null for org-level skills) */
+  agentId?: number | null;
   steps?: Array<{
     id: string;
     skillId?: number;
@@ -180,12 +192,14 @@ export function extractSkillEdges(
   };
 
   skills.forEach((skill) => {
+    const skillAgentId = skill.agentId;
+
     skill.steps?.forEach((step) => {
       // Skill references another skill
       if (step.skillId) {
         addEdge(
           `ref:${skill.id}-${step.skillId}`,
-          createSkillEdge(`skill-${skill.id}-ref-${step.skillId}`, skill.id, 'skill', step.skillId, 'skill_ref', 'references')
+          createSkillEdge(`skill-${skill.id}-ref-${step.skillId}`, skill.id, 'skill', step.skillId, 'skill_ref', 'references', undefined, skillAgentId)
         );
       }
 
@@ -203,7 +217,8 @@ export function extractSkillEdges(
               dbId,
               'skill_table',
               'reads',
-              tableId
+              tableId,
+              skillAgentId
             )
           );
         }
@@ -223,7 +238,8 @@ export function extractSkillEdges(
               dbId,
               'skill_table',
               'writes',
-              tableId
+              tableId,
+              skillAgentId
             )
           );
         }
@@ -246,7 +262,8 @@ export function extractSkillEdges(
               dbId,
               'skill_table',
               'reads',
-              tableId
+              tableId,
+              skillAgentId
             )
           );
         }
@@ -269,7 +286,8 @@ export function extractSkillEdges(
               dbId,
               'skill_table',
               'writes',
-              tableId
+              tableId,
+              skillAgentId
             )
           );
         }

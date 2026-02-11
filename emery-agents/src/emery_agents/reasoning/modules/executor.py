@@ -3,15 +3,41 @@ DSPy Executor Module.
 
 This module handles step execution using DSPy's ReAct strategy.
 It replaces smolagents ToolCallingAgent.
+
+Uses KNNFewShot with TOOL_EXAMPLES to teach tool selection:
+- TOOL_EXAMPLES teach which tool to use for each type of task
+- ReAct handles the actual execution with tools from runtime
 """
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import dspy
+from dspy import KNNFewShot
 from dspy.adapters.types.image import Image as DspyImage
 from dspy.primitives.prediction import Prediction
+
+from emery_agents.reasoning.examples.tools import TOOL_EXAMPLES
+from emery_agents.services.analysis.embeddings import create_dspy_embedder
+
+from ...services.context import clear_human_skill_awaiting, get_human_skill_awaiting
+
+logger = logging.getLogger(__name__)
+
+
+def _check_and_raise_human_skill() -> None:
+    """Check for pending human skill signal and raise if present.
+
+    DSPy ReAct catches tool exceptions internally, so skill tools signal
+    via context variable instead. This function checks after ReAct completes
+    and re-raises the stored exception.
+    """
+    exception = get_human_skill_awaiting()
+    if exception:
+        clear_human_skill_awaiting()  # Clear before raising
+        raise exception
 
 
 class ExecutorModule(dspy.Module):  # type: ignore[misc]
@@ -20,6 +46,11 @@ class ExecutorModule(dspy.Module):  # type: ignore[misc]
 
     This module uses the ReAct (Reasoning + Acting) pattern to execute
     steps, calling tools as needed and reasoning about results.
+
+    Uses KNNFewShot with TOOL_EXAMPLES to teach tool selection:
+    - At each forward() call, KNN finds similar examples from TOOL_EXAMPLES
+    - Examples teach: "create table" -> table_crud, "send email" -> gmail_send_email
+    - ReAct then executes with the actual tools from runtime
     """
 
     def __init__(
@@ -31,7 +62,8 @@ class ExecutorModule(dspy.Module):  # type: ignore[misc]
         Initialize the executor module.
 
         Args:
-            execution_tools: List of tools available for execution
+            execution_tools: List of dspy.Tool instances from runtime.tools
+                           (table_crud, field_crud, gmail_send_email, etc.)
             max_iters: Maximum iterations for ReAct loop
         """
         super().__init__()
@@ -39,11 +71,26 @@ class ExecutorModule(dspy.Module):  # type: ignore[misc]
         self.max_iters = max_iters
         self.last_trajectory: dict[str, Any] | None = None
 
-        # Create ReAct module with tools
-        self.react = dspy.ReAct(
+        # Create base ReAct module with execution tools
+        base_react = dspy.ReAct(
             "step_description, context -> result",
             tools=self.execution_tools,
             max_iters=max_iters,
+        )
+
+        # Wrap with KNNFewShot using TOOL_EXAMPLES
+        # TOOL_EXAMPLES teach tool selection: task description -> appropriate tool
+        # Examples are matched by 'request' field semantic similarity
+        embedder = create_dspy_embedder()
+        self.react = KNNFewShot(
+            k=5,
+            trainset=TOOL_EXAMPLES,
+            vectorizer=embedder,
+        ).compile(base_react)
+
+        logger.debug(
+            f"ExecutorModule initialized with {len(self.execution_tools)} tools, "
+            f"{len(TOOL_EXAMPLES)} demo examples"
         )
 
     def forward(self, step_description: str, context: str) -> str:
@@ -62,6 +109,11 @@ class ExecutorModule(dspy.Module):  # type: ignore[misc]
             context=context,
         )
         self.last_trajectory = getattr(result, "trajectory", None)
+
+        # Check for human skill signal from tool execution
+        # (DSPy catches tool exceptions, so tools signal via context instead)
+        _check_and_raise_human_skill()
+
         return result.result  # type: ignore[no-any-return]
 
 
@@ -128,19 +180,13 @@ class DirectExecution(dspy.Signature):  # type: ignore[misc]
     If the user has uploaded images, analyze them visually to answer the query.
     """
 
-    step_description: str = dspy.InputField(
-        desc="The user's task to execute."
-    )
-    context: str = dspy.InputField(
-        desc="Workspace state and conversation history."
-    )
+    step_description: str = dspy.InputField(desc="The user's task to execute.")
+    context: str = dspy.InputField(desc="Workspace state and conversation history.")
     images: list[DspyImage] = dspy.InputField(
         desc="User-uploaded images for visual analysis.",
         default=[],
     )
-    result: str = dspy.OutputField(
-        desc="What was accomplished and the outcome."
-    )
+    result: str = dspy.OutputField(desc="What was accomplished and the outcome.")
 
 
 class DirectExecutorModule(dspy.Module):  # type: ignore[misc]
@@ -153,6 +199,8 @@ class DirectExecutorModule(dspy.Module):  # type: ignore[misc]
     Uses DirectExecution signature which provides ReAct with completion
     instructions via its docstring (DSPy prepends signature.instructions
     before the agent loop prompt).
+
+    Uses KNNFewShot with TOOL_EXAMPLES to teach tool selection.
     """
 
     def __init__(
@@ -164,19 +212,40 @@ class DirectExecutorModule(dspy.Module):  # type: ignore[misc]
         self.execution_tools = execution_tools or []
         self.max_iters = max_iters
 
-        self.react = dspy.ReAct(
+        # Create base ReAct with DirectExecution signature
+        base_react = dspy.ReAct(
             DirectExecution,
             tools=self.execution_tools,
             max_iters=max_iters,
         )
 
-    def forward(self, step_description: str, context: str, images: list[DspyImage] | None = None) -> Prediction:
+        # Wrap with KNNFewShot using TOOL_EXAMPLES
+        embedder = create_dspy_embedder()
+        self.react = KNNFewShot(
+            k=5,
+            trainset=TOOL_EXAMPLES,
+            vectorizer=embedder,
+        ).compile(base_react)
+
+        logger.debug(
+            f"DirectExecutorModule initialized with {len(self.execution_tools)} tools"
+        )
+
+    def forward(
+        self, step_description: str, context: str, images: list[DspyImage] | None = None
+    ) -> Prediction:
         """Execute and return full Prediction (required for dspy.Refine)."""
-        return self.react(  # type: ignore[no-any-return]
+        result = self.react(
             step_description=step_description,
             context=context,
             images=images or [],
         )
+
+        # Check for human skill signal from tool execution
+        # (DSPy catches tool exceptions, so tools signal via context instead)
+        _check_and_raise_human_skill()
+
+        return result
 
 
 class SimpleExecutorModule(dspy.Module):  # type: ignore[misc]

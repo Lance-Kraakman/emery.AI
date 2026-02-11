@@ -4,7 +4,7 @@
 
 import { NextRequest } from "next/server";
 import { withAuthenticatedRoute, parseJsonBody, requireParam, parseIntParam, parseOptionalIntParam } from '@/lib/api/base';
-import { createRow, updateRowData, deleteRowData, getRowsDSG } from '@/app/actions/rows';
+import { createRow, updateRowData, deleteRowData, deleteRowsData, getRowsDSG } from '@/app/actions/rows';
 import { extractActorOverride } from '@/lib/api/agent-context';
 
 /**
@@ -88,7 +88,10 @@ export async function PUT(request: NextRequest): Promise<Response> {
 }
 
 /**
- * DELETE /api/rows - Delete a row
+ * DELETE /api/rows - Delete row(s)
+ * Supports:
+ *   - Single row: ?tableId=X&rowId=Y (query params)
+ *   - Batch: { tableId: X, rowIds: ["a", "b", "c"] } (request body)
  */
 export async function DELETE(request: NextRequest): Promise<Response> {
   const { searchParams } = new URL(request.url);
@@ -96,19 +99,44 @@ export async function DELETE(request: NextRequest): Promise<Response> {
   return withAuthenticatedRoute(request, async (user) => {
     const tableIdStr = searchParams.get("tableId");
     const rowId = searchParams.get("rowId");
+    const actorOverride = extractActorOverride(request, user);
 
+    // Check for batch delete via request body
+    const body = await parseJsonBody(request).catch(() => null);
+
+    if (body?.rowIds && Array.isArray(body.rowIds)) {
+      // Batch delete mode
+      const tableId = parseIntParam(body.tableId?.toString() || tableIdStr || '', 'tableId');
+
+      if (!tableId || body.rowIds.length === 0) {
+        return { success: false, error: 'tableId and rowIds are required', status: 400 };
+      }
+
+      const result = await deleteRowsData(tableId, body.rowIds, undefined, actorOverride);
+
+      if (!result.success) {
+        return { success: false, error: result.error || 'Failed to delete rows', status: 400 };
+      }
+
+      return {
+        success: true,
+        data: { deletedIds: body.rowIds, count: body.rowIds.length },
+        message: `${body.rowIds.length} row(s) deleted successfully`
+      };
+    }
+
+    // Single row delete mode (backward compatible)
     if (!tableIdStr || !rowId) {
       return { success: false, error: 'tableId and rowId are required', status: 400 };
     }
 
     const tableId = parseIntParam(tableIdStr, 'tableId');
-    const actorOverride = extractActorOverride(request, user);
     const result = await deleteRowData(tableId, rowId, undefined, actorOverride);
 
     if (!result.success) {
       return { success: false, error: result.error || 'Failed to delete row', status: 400 };
     }
 
-    return { success: true, data: { id: rowId }, message: 'Row deleted successfully' };
+    return { success: true, data: { deletedIds: [rowId], count: 1 }, message: 'Row deleted successfully' };
   });
 }

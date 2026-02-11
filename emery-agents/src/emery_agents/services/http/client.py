@@ -20,7 +20,7 @@ Usage:
 
 import logging
 import os
-from typing import Any, Dict, Optional
+from typing import Any
 
 import httpx
 
@@ -39,12 +39,14 @@ class AuthenticatedHttpClient:
         self,
         api_key: str,
         organization_id: int,
-        base_url: Optional[str] = None,
+        base_url: str | None = None,
         timeout: float = 30.0,
     ):
         self._api_key = api_key  # PRIVATE: Never expose this
         self._organization_id = organization_id
-        self._base_url = base_url or os.getenv("NEXTJS_BASE_URL", "http://localhost:3000")
+        self._base_url = base_url or os.getenv(
+            "NEXTJS_BASE_URL", "http://localhost:3000"
+        )
         self._timeout = timeout
 
     @property
@@ -57,7 +59,9 @@ class AuthenticatedHttpClient:
         """Get the base URL."""
         return self._base_url
 
-    def _build_headers(self, extra_headers: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+    def _build_headers(
+        self, extra_headers: dict[str, str] | None = None
+    ) -> dict[str, str]:
         """
         Build request headers with authentication.
 
@@ -82,8 +86,8 @@ class AuthenticatedHttpClient:
     async def get(
         self,
         path: str,
-        params: Optional[Dict[str, Any]] = None,
-        headers: Optional[Dict[str, str]] = None,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
         **kwargs,
     ) -> httpx.Response:
         """Make an authenticated GET request."""
@@ -100,9 +104,9 @@ class AuthenticatedHttpClient:
     async def post(
         self,
         path: str,
-        json: Optional[Dict[str, Any]] = None,
-        data: Optional[Any] = None,
-        headers: Optional[Dict[str, str]] = None,
+        json: dict[str, Any] | None = None,
+        data: Any | None = None,
+        headers: dict[str, str] | None = None,
         **kwargs,
     ) -> httpx.Response:
         """Make an authenticated POST request."""
@@ -120,9 +124,9 @@ class AuthenticatedHttpClient:
     async def put(
         self,
         path: str,
-        json: Optional[Dict[str, Any]] = None,
-        data: Optional[Any] = None,
-        headers: Optional[Dict[str, str]] = None,
+        json: dict[str, Any] | None = None,
+        data: Any | None = None,
+        headers: dict[str, str] | None = None,
         **kwargs,
     ) -> httpx.Response:
         """Make an authenticated PUT request."""
@@ -140,9 +144,9 @@ class AuthenticatedHttpClient:
     async def patch(
         self,
         path: str,
-        json: Optional[Dict[str, Any]] = None,
-        data: Optional[Any] = None,
-        headers: Optional[Dict[str, str]] = None,
+        json: dict[str, Any] | None = None,
+        data: Any | None = None,
+        headers: dict[str, str] | None = None,
         **kwargs,
     ) -> httpx.Response:
         """Make an authenticated PATCH request."""
@@ -160,8 +164,8 @@ class AuthenticatedHttpClient:
     async def delete(
         self,
         path: str,
-        params: Optional[Dict[str, Any]] = None,
-        headers: Optional[Dict[str, str]] = None,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
         **kwargs,
     ) -> httpx.Response:
         """Make an authenticated DELETE request."""

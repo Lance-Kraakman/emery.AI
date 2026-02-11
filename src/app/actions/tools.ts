@@ -11,6 +11,7 @@
  */
 
 import { requireAuth } from "./permissions";
+import { withAuthContext } from '@/lib/auth/with-context';
 import type { Result } from "./types";
 import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import { ToolMapper, type ToolDTO, type ToolSearchResultDTO } from '@/app/mappers/tool-mapper';
@@ -36,10 +37,11 @@ export async function searchAllTools(options: {
   limit?: number;
   offset?: number;
 }): Promise<Result<ToolSearchResultDTO>> {
-  try {
-    const session = await requireAuth();
+  return withAuthContext(async () => {
+    try {
+      const session = await requireAuth();
 
-    const { query, categories, toolCategories, appIds, connectedOnly, requiresConnection, showReferenceTools = true, limit = 20, offset = 0 } = options;
+      const { query, categories, toolCategories, appIds, connectedOnly, requiresConnection, showReferenceTools = true, limit = 20, offset = 0 } = options;
 
     // Get the tool search application service from DI container
     const toolSearchService = getToolSearchApplicationService();
@@ -99,13 +101,14 @@ export async function searchAllTools(options: {
       success: true,
       data: resultDTO
     };
-  } catch (error: unknown) {
-    console.error('[ToolActions] Error searching tools:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to search tools'
-    };
-  }
+    } catch (error: unknown) {
+      console.error('[ToolActions] Error searching tools:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to search tools'
+      };
+    }
+  });
 }
 
 /**

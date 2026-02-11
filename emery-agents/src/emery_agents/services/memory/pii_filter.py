@@ -9,7 +9,6 @@ Irreversible by design — we don't need to recover PII from agent memories.
 """
 
 import logging
-from typing import List
 
 from presidio_analyzer import AnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine
@@ -17,7 +16,7 @@ from presidio_anonymizer import AnonymizerEngine
 logger = logging.getLogger(__name__)
 
 # Default PII entities to detect and redact
-DEFAULT_PII_ENTITIES: List[str] = [
+DEFAULT_PII_ENTITIES: list[str] = [
     "PERSON",
     "EMAIL_ADDRESS",
     "PHONE_NUMBER",
@@ -31,7 +30,7 @@ DEFAULT_PII_ENTITIES: List[str] = [
 class PIIFilter:
     """Strips PII from text before storage. Used for agent memories (shared)."""
 
-    def __init__(self, entities: List[str] | None = None):
+    def __init__(self, entities: list[str] | None = None):
         """
         Initialize PII filter with Presidio engines.
 

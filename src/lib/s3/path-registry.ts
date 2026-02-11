@@ -12,16 +12,16 @@
  *   chat-attachments/{orgId}/{chatId}/{msgId}/{uuid}.{ext}
  *   skill-attachments/{orgId}/{skillId}/{uuid}.{ext}
  *   task-attachments/{orgId}/{agentId}/{uuid}.{ext}
- *   workspaces/{orgId}/
- *     agents/{agentId}.tar.gz
- *     users/{userId}.tar.gz
+ *
+ * Note: Workspaces use EFS (SharedFilesystemStorage), not S3.
  */
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export type StorageCategory = 'database' | 'chat' | 'skill' | 'workspace';
+// Note: 'workspace' removed - workspaces are on EFS, not S3
+export type StorageCategory = 'database' | 'chat' | 'skill';
 
 export interface OrgStoragePrefixes {
   /** org_{id}/ — tables, files, delta-lake data */
@@ -33,10 +33,10 @@ export interface OrgStoragePrefixes {
 }
 
 // ---------------------------------------------------------------------------
-// Prefix constants (shared with Python via convention — see workspace_sync.py)
+// Prefix constants
+// Note: Workspaces use EFS (SharedFilesystemStorage) - not S3
 // ---------------------------------------------------------------------------
 
-export const WORKSPACES_PREFIX = 'workspaces';
 export const CHAT_ATTACHMENTS_PREFIX = 'chat-attachments';
 export const SKILL_ATTACHMENTS_PREFIX = 'skill-attachments';
 export const TASK_ATTACHMENTS_PREFIX = 'task-attachments';
@@ -121,21 +121,6 @@ export function getTaskAttachmentKey(
   return `${TASK_ATTACHMENTS_PREFIX}/${organizationId}/${agentId}/${fileId}.${sanitizedExt}`;
 }
 
-/** workspaces/{orgId}/ — prefix for ListObjectsV2 scanning */
-export function getWorkspacePrefix(organizationId: number): string {
-  return `${WORKSPACES_PREFIX}/${organizationId}/`;
-}
-
-/** workspaces/{orgId}/agents/{agentId}.tar.gz */
-export function getAgentWorkspaceKey(organizationId: number, agentId: number): string {
-  return `${WORKSPACES_PREFIX}/${organizationId}/agents/${agentId}.tar.gz`;
-}
-
-/** workspaces/{orgId}/users/{userId}.tar.gz */
-export function getUserWorkspaceKey(organizationId: number, userId: string): string {
-  return `${WORKSPACES_PREFIX}/${organizationId}/users/${userId}.tar.gz`;
-}
-
 // ---------------------------------------------------------------------------
 // Key classifiers — used by the storage calculator
 // ---------------------------------------------------------------------------
@@ -148,12 +133,12 @@ export function getUserWorkspaceKey(organizationId: number, userId: string): str
  *   chat-attachments/{id}/...   → 'chat'
  *   skill-attachments/{id}/...  → 'skill'
  *   task-attachments/{id}/...   → 'database' (counted with database storage)
- *   workspaces/...              → 'workspace'
+ *
+ * Note: Workspaces are on EFS, not S3.
  */
 export function categorizeS3Key(key: string): StorageCategory {
   if (key.startsWith(`${CHAT_ATTACHMENTS_PREFIX}/`)) return 'chat';
   if (key.startsWith(`${SKILL_ATTACHMENTS_PREFIX}/`)) return 'skill';
-  if (key.startsWith('workspaces/')) return 'workspace';
   // task-attachments and org_{id}/ both count as database storage
   return 'database';
 }
@@ -161,13 +146,13 @@ export function categorizeS3Key(key: string): StorageCategory {
 /**
  * Extract the organization ID from an S3 key when the key encodes it directly.
  *
- * All key patterns now include the org ID:
+ * All key patterns include the org ID:
  *   org_{id}/...                       → database
  *   chat-attachments/{id}/...          → chat
  *   skill-attachments/{id}/...         → skill
  *   task-attachments/{id}/...          → database
- *   workspaces/{id}/agents/...         → workspace
- *   workspaces/{id}/users/...          → workspace
+ *
+ * Note: Workspaces are on EFS, not S3.
  */
 export function extractOrgIdFromKey(key: string): number | null {
   // chat-attachments/{orgId}/...
@@ -181,10 +166,6 @@ export function extractOrgIdFromKey(key: string): number | null {
   // task-attachments/{orgId}/...
   const taskMatch = key.match(new RegExp(`^${TASK_ATTACHMENTS_PREFIX}/(\\d+)/`));
   if (taskMatch) return parseInt(taskMatch[1], 10);
-
-  // workspaces/{orgId}/...
-  const wsMatch = key.match(new RegExp(`^${WORKSPACES_PREFIX}/(\\d+)/`));
-  if (wsMatch) return parseInt(wsMatch[1], 10);
 
   // org_{orgId}/...
   const orgMatch = key.match(/^org_(\d+)\//);

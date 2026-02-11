@@ -1,19 +1,18 @@
 'use client'
 
 import { generateId } from 'ai'
-import React, { useState, useEffect, useRef, useMemo } from 'react'
-import { useSession } from 'next-auth/react'
-import { ChatHandler, Message, type MessagePart } from '@llamaindex/chat-ui'
+import { useState, useEffect, useRef } from 'react'
+import { Message, type MessagePart } from '@llamaindex/chat-ui'
 import { useStore } from '@tanstack/react-store'
 import { uiStateStore, uiStateSelectors } from '@/stores/ui-state.store'
-import { createChatStreamRequest, type ChatContextOptions } from './types/chat-requests'
+import { type ChatContextOptions } from './types/chat-requests'
 import { loadChatWithFullHistory, getCurrentChatSession } from '@/app/actions/chat-history'
-import type { ChatMessageDTO, ChatContextDTO } from '@/app/mappers/chat-mapper'
+import type { ChatContextDTO } from '@/app/mappers/chat-mapper'
 import type { ToolDTO } from '@/app/mappers/tool-mapper'
 import { createDebugLogger } from '@/lib/utils/debug-logger'
 import type { AnyAttachmentMetadata } from '@/ddd/domain/multimodal/value-objects/attachment-metadata'
 import type { ExecutionStep } from '@/ddd/domain/chat/value-objects/execution-step'
-import type { ExtendedChatHandler, ChatMessage, CurrentStepProgress } from './types/extended-chat-handler'
+import type { ExtendedChatHandler, ChatMessage } from './types/extended-chat-handler'
 import { createTextMessage, createMultimodalMessage, getMessageContent } from '@/lib/chat/message-helpers'
 import { createExecutionStep, addStepDeduped } from '@/lib/chat/step-collection'
 import {
@@ -24,11 +23,45 @@ import {
   isPlanStatusUpdateEvent,
   isAwaitingInputEvent,
   isPermissionRequestEvent,
+  isAwaitingHumanSkillEvent,
   type PermissionRequestEvent
 } from '@/lib/chat/types/sse-events'
-import type { PendingPlanApproval, ActivePlanExecution, PlanExecutionStatus, AwaitingInputState } from './types/extended-chat-handler'
+import type { PendingPlanApproval, ActivePlanExecution, PlanExecutionStatus, AwaitingInputState, HumanTaskState } from './types/extended-chat-handler'
 
 const logger = createDebugLogger('ChatGRPC')
+
+/**
+ * Track blob URLs for cleanup to prevent memory leaks
+ * Blob URLs created with URL.createObjectURL() must be revoked when no longer needed
+ */
+const blobUrlRegistry = new Set<string>()
+
+/**
+ * Create a blob URL and register it for cleanup
+ */
+function createTrackedBlobUrl(blob: Blob | File): string {
+  const url = URL.createObjectURL(blob)
+  blobUrlRegistry.add(url)
+  return url
+}
+
+/**
+ * Revoke a specific blob URL and remove from registry
+ */
+function revokeTrackedBlobUrl(url: string): void {
+  if (blobUrlRegistry.has(url)) {
+    URL.revokeObjectURL(url)
+    blobUrlRegistry.delete(url)
+  }
+}
+
+/**
+ * Revoke all tracked blob URLs (call on unmount)
+ */
+function revokeAllBlobUrls(): void {
+  blobUrlRegistry.forEach(url => URL.revokeObjectURL(url))
+  blobUrlRegistry.clear()
+}
 
 /**
  * Helper to create an image MessagePart from attachment metadata
@@ -162,6 +195,9 @@ export function useChatGRPC(
   // Unified HITL awaiting input state (plan approval or questions)
   const [awaitingInput, setAwaitingInput] = useState<AwaitingInputState | null>(null)
 
+  // Human task state (when execution reaches a human skill)
+  const [humanTask, setHumanTask] = useState<HumanTaskState | null>(null)
+
   // Permission request state (when agent encounters RBAC errors)
   const [permissionRequest, setPermissionRequest] = useState<PermissionRequestEvent | null>(null)
 
@@ -190,6 +226,14 @@ export function useChatGRPC(
   // Initialize client-side
   useEffect(() => {
     setIsClient(true)
+  }, [])
+
+  // AIDEV-NOTE: Cleanup blob URLs on unmount to prevent memory leaks
+  // Blob URLs created with URL.createObjectURL() hold references to File objects in memory
+  useEffect(() => {
+    return () => {
+      revokeAllBlobUrls()
+    }
   }, [])
   
   // Load chat when chatId changes
@@ -320,7 +364,7 @@ export function useChatGRPC(
               data: {
                 filename: file.name,
                 mediaType: file.type,
-                url: URL.createObjectURL(file)  // Temporary blob URL for preview
+                url: createTrackedBlobUrl(file)  // Tracked blob URL for preview (auto-cleanup on unmount)
               }
             }))
           ],
@@ -449,7 +493,7 @@ export function useChatGRPC(
 
       // Use FormData if there are attachments, otherwise JSON
       let requestBody: FormData | string
-      let headers: Record<string, string> = {}
+      const headers: Record<string, string> = {}
 
       if (filesToAttach.length > 0) {
         // Use FormData for multipart/form-data with files
@@ -763,6 +807,47 @@ export function useChatGRPC(
                   permission: eventData.permission,
                   resource: eventData.resource
                 });
+
+              } else if (isAwaitingHumanSkillEvent(eventData)) {
+                // Human skill: Execution paused, needs human to complete task
+                logger.debug('Awaiting human skill', {
+                  skillId: eventData.skillId,
+                  skillName: eventData.skillName,
+                  assignedTo: eventData.assignedTo
+                });
+
+                // Set human task state for UI to render completion form
+                setHumanTask({
+                  skillId: eventData.skillId,
+                  skillName: eventData.skillName,
+                  stepId: eventData.stepId,
+                  instructions: eventData.instructions,
+                  inputs: eventData.inputs,
+                  outputSchema: eventData.outputSchema,
+                  assignedTo: eventData.assignedTo,
+                  externalLinks: eventData.externalLinks,
+                  sessionId: eventData.sessionId
+                });
+
+                // Display human task notification in chat message
+                const humanTaskMessage = `\n\n**Human Task Required: ${eventData.skillName}**\n\nPlease complete the task using the form below.`;
+                assistantMessage += humanTaskMessage;
+
+                if (!messageCreated) {
+                  setMessages((prev) => [...prev, createTextMessage(assistantMessage, 'assistant', assistantId)]);
+                  messageCreated = true;
+                } else {
+                  setMessages((prev) => prev.map((msg) =>
+                    msg.id === assistantId
+                      ? createTextMessage(assistantMessage, 'assistant', assistantId)
+                      : msg
+                  ));
+                }
+
+                logger.summary('Human task set', {
+                  skillId: eventData.skillId,
+                  skillName: eventData.skillName
+                });
               }
             } catch (e) {
               logger.debug('Failed to parse SSE event', e)
@@ -1002,6 +1087,55 @@ export function useChatGRPC(
     })
   }
 
+  // Human task completion function
+  const submitHumanTask = async (outputs: Record<string, string>) => {
+    if (!humanTask) {
+      logger.debug('No human task to submit')
+      return
+    }
+
+    logger.debug('Submitting human task', {
+      skillId: humanTask.skillId,
+      skillName: humanTask.skillName,
+      outputs
+    })
+
+    // Clear human task state
+    setHumanTask(null)
+
+    // Format outputs as a structured response
+    // AIDEV-NOTE: The response is sent as a user message that the agent
+    // will parse to continue execution with the human-provided outputs
+    const outputEntries = Object.entries(outputs)
+      .map(([name, value]) => `- **${name}**: ${value}`)
+      .join('\n')
+
+    const response = `Human task "${humanTask.skillName}" completed:\n\n${outputEntries}`
+
+    await append({
+      id: generateId(),
+      role: 'user',
+      parts: [{ type: 'text', text: response }]
+    })
+
+    logger.summary('Human task submitted', {
+      skillId: humanTask.skillId,
+      skillName: humanTask.skillName
+    })
+  }
+
+  // Human task cancellation
+  const cancelHumanTask = () => {
+    if (!humanTask) return
+
+    logger.debug('Cancelling human task', {
+      skillId: humanTask.skillId,
+      skillName: humanTask.skillName
+    })
+
+    setHumanTask(null)
+  }
+
   // Tool management functions
   const addTool = async (tool: ToolDTO) => {
     // No validation needed - domain objects are self-validating
@@ -1086,38 +1220,13 @@ export function useChatGRPC(
     // Unified HITL awaiting input
     awaitingInput,
     respondToInput,
+    // Human task completion (human skills)
+    humanTask,
+    submitHumanTask,
+    cancelHumanTask,
     // Permission request (RBAC errors)
     permissionRequest,
     clearPermissionRequest: () => setPermissionRequest(null),
   }
 }
 
-/**
- * Hook factory for page-specific chat contexts
- * Creates pre-configured chat hooks for different page types
- */
-export const useChatForPage = {
-  missionControl: () => useChatGRPC({ 
-    domainType: 'general' 
-  }),
-  
-  agents: (agentId?: number) => useChatGRPC({ 
-    domainType: 'agents',
-    domainId: agentId 
-  }),
-  
-  teams: (teamId?: number) => useChatGRPC({ 
-    domainType: 'teams',
-    domainId: teamId 
-  }),
-  
-  data: (tableId?: number) => useChatGRPC({ 
-    domainType: 'tables',
-    domainId: tableId
-  }),
-  
-  organization: () => useChatGRPC({ 
-    domainType: 'organizations'
-  }),
-  
-}

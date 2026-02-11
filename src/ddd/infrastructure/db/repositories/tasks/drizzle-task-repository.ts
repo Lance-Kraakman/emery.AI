@@ -13,17 +13,28 @@ import { Task } from '@/ddd/domain/tasks/entities/task';
 import { DrizzleBaseRepository } from '../base/drizzle-base-repository';
 import { TaskId } from '@/ddd/domain/tasks/value-objects/task-id';
 import { TaskStatus, TASK_STATUS } from '@/ddd/domain/tasks/value-objects/task-status';
-import { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
+import { AgentId } from '@/ddd/domain/shared/value-objects';
 
 type TaskRow = InferSelectModel<typeof tasks>;
 
 export class DrizzleTaskRepository
   extends DrizzleBaseRepository<Task, TaskId, CreateTaskData, UpdateTaskData, TaskRow>
   implements ITaskRepository {
-  
+
   protected readonly table = tasks;
   protected readonly idColumn = tasks.id;
   protected readonly organizationColumn = tasks.organizationId;
+
+  /**
+   * @param db - Context-aware database client (with RLS enforcement)
+   * @param rawDb - Optional raw database client for cross-org queries (bypasses RLS)
+   */
+  constructor(
+    db: DbClient,
+    private readonly rawDb?: DbClient
+  ) {
+    super(db);
+  }
 
   async create(data: CreateTaskData): Promise<Task> {
     const [record] = await this.db
@@ -36,6 +47,7 @@ export class DrizzleTaskRepository
         instructions: data.instructions,
         skillId: data.skillId,
         triggerContext: data.triggerContext,
+        chatMessageId: data.chatMessageId,
         status: data.status || 'pending',
         result: data.result,
         error: data.error,
@@ -279,6 +291,7 @@ export class DrizzleTaskRepository
       instructions: record.instructions,
       skillId: record.skillId,
       triggerContext: record.triggerContext,
+      chatMessageId: record.chatMessageId,
       status: record.status,
       result: record.result,
       error: record.error,
@@ -286,11 +299,61 @@ export class DrizzleTaskRepository
       startedAt: record.startedAt,
       completedAt: record.completedAt,
       createdBy: record.createdBy,
-      createdAt: record.createdAt || new Date()
+      createdAt: record.createdAt || new Date(),
+      currentStepId: record.currentStepId,
+      pendingHumanSteps: record.pendingHumanSteps
     });
   }
   
   protected toPersistence(task: Task): any {
     return task.toPersistence();
+  }
+
+  // ============================================================================
+  // Raw methods (bypass RLS - system scheduler use only)
+  // ============================================================================
+
+  /**
+   * Find pending tasks bypassing RLS (system scheduler use only)
+   * WARNING: Completely bypasses row-level security.
+   * ONLY use for cross-org batch operations in trusted system processes.
+   */
+  async findPendingTasksRaw(limit?: number): Promise<Task[]> {
+    if (!this.rawDb) {
+      throw new Error('Raw DB required for findPendingTasksRaw(). Pass rawDb to constructor when cross-org queries are needed.');
+    }
+    const queryBuilder = this.rawDb
+      .select()
+      .from(tasks)
+      .where(eq(tasks.status, TASK_STATUS.PENDING))
+      .orderBy(asc(tasks.createdAt));
+
+    const results = limit
+      ? await queryBuilder.limit(limit)
+      : await queryBuilder;
+    return results.map((r: TaskRow) => this.fromPersistence(r));
+  }
+
+  /**
+   * Find stuck in-progress tasks bypassing RLS (system scheduler use only)
+   * WARNING: Completely bypasses row-level security.
+   * ONLY use for cross-org batch operations in trusted system processes.
+   */
+  async findStuckInProgressRaw(olderThan: Date): Promise<Task[]> {
+    if (!this.rawDb) {
+      throw new Error('Raw DB required for findStuckInProgressRaw(). Pass rawDb to constructor when cross-org queries are needed.');
+    }
+    const results = await this.rawDb
+      .select()
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.status, TASK_STATUS.IN_PROGRESS),
+          lt(tasks.startedAt, olderThan)
+        )
+      )
+      .orderBy(asc(tasks.createdAt));
+
+    return results.map((r: TaskRow) => this.fromPersistence(r));
   }
 }

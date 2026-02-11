@@ -16,24 +16,25 @@ AIDEV-NOTE: DSPy Migration (Jan 2026)
 - Returns plain callables for DSPy ReAct (no wrapper needed)
 """
 
-import warnings
-from typing import Dict, List, Optional, Any, Callable, TYPE_CHECKING
 import logging
+from collections.abc import Callable
+from typing import Any
 
+from emery_agents.services.http import AuthenticatedHttpClient
+
+from .analysis import create_security_report_tool
 from .crud import (
-    create_database_crud,
-    create_skill_crud,
-    create_document_crud,
     create_agent_crud,
-    create_table_crud,
-    create_field_crud,
-    create_row_crud,
     create_app_crud,
+    create_database_crud,
+    create_document_crud,
+    create_field_crud,
     create_page_crud,
+    create_row_crud,
+    create_skill_crud,
+    create_table_crud,
     create_view_crud,
 )
-from .analysis import create_security_report_tool
-from emery_agents.services.http import AuthenticatedHttpClient
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +57,7 @@ class ToolProvider:
     """
 
     # Registry of DSPy tool factories
-    DSPY_FACTORIES: Dict[str, Callable[[str, str], Callable[..., str]]] = {
+    DSPY_FACTORIES: dict[str, Callable[[str, str], Callable[..., str]]] = {
         "database_crud": create_database_crud,
         "table_crud": create_table_crud,
         "field_crud": create_field_crud,
@@ -73,7 +74,7 @@ class ToolProvider:
         self,
         api_key: str,
         organization_id: int,
-        extra_headers: Dict[str, str] | None = None,
+        extra_headers: dict[str, str] | None = None,
     ):
         """
         Initialize tool provider with auth credentials.
@@ -88,9 +89,11 @@ class ToolProvider:
         self._organization_id = organization_id
         self._org_id_str = str(organization_id) if organization_id else ""
         self._extra_headers = extra_headers
-        self._cache: Dict[str, Any] = {}
+        self._cache: dict[str, Any] = {}
         self._http_client = AuthenticatedHttpClient(api_key, organization_id)
-        logger.info(f"[TOOL-PROVIDER] Initialized (api_key present: {bool(api_key)}, org_id: {organization_id})")
+        logger.info(
+            f"[TOOL-PROVIDER] Initialized (api_key present: {bool(api_key)}, org_id: {organization_id})"
+        )
 
     @property
     def http_client(self) -> AuthenticatedHttpClient:
@@ -125,7 +128,7 @@ class ToolProvider:
         return self._organization_id
 
     @property
-    def extra_headers(self) -> Dict[str, str] | None:
+    def extra_headers(self) -> dict[str, str] | None:
         """Get extra HTTP headers (agent context for audit trail)."""
         return self._extra_headers
 
@@ -147,7 +150,7 @@ class ToolProvider:
             logger.debug(f"🔧 Created and cached tool: {name}")
         return self._cache[name]
 
-    def get_all(self) -> Dict[str, Any]:
+    def get_all(self) -> dict[str, Any]:
         """Get all tools (creates any not yet cached)."""
         for name in list(self.DSPY_FACTORIES.keys()) + ["security_report"]:
             self.get(name)
@@ -157,7 +160,7 @@ class ToolProvider:
     # Category Helpers
     # -------------------------
 
-    def get_schema_builder_tools(self) -> List[Any]:
+    def get_schema_builder_tools(self) -> list[Any]:
         """Get tools for schema builder agent."""
         return [
             self.get("database_crud"),
@@ -165,27 +168,27 @@ class ToolProvider:
             self.get("field_crud"),
         ]
 
-    def get_table_builder_tools(self) -> List[Any]:
+    def get_table_builder_tools(self) -> list[Any]:
         """Get tools for table builder agent."""
         return [self.get("table_crud"), self.get("field_crud")]
 
-    def get_skill_builder_tools(self) -> List[Any]:
+    def get_skill_builder_tools(self) -> list[Any]:
         """Get tools for skill builder agent."""
         return [self.get("skill_crud")]
 
-    def get_document_builder_tools(self) -> List[Any]:
+    def get_document_builder_tools(self) -> list[Any]:
         """Get tools for document builder agent."""
         return [self.get("document_crud")]
 
-    def get_app_builder_tools(self) -> List[Any]:
+    def get_app_builder_tools(self) -> list[Any]:
         """Get tools for app builder agent."""
         return [self.get("app_crud"), self.get("page_crud"), self.get("view_crud")]
 
-    def get_agent_builder_tools(self) -> List[Any]:
+    def get_agent_builder_tools(self) -> list[Any]:
         """Get tools for agent builder agent."""
         return [self.get("agent_crud"), self.get("skill_crud")]
 
-    def get_view_builder_tools(self) -> List[Any]:
+    def get_view_builder_tools(self) -> list[Any]:
         """Get tools for view builder agent."""
         return [
             self.get("database_crud"),
@@ -194,11 +197,11 @@ class ToolProvider:
             self.get("view_crud"),
         ]
 
-    def get_system_designer_tools(self) -> List[Any]:
+    def get_system_designer_tools(self) -> list[Any]:
         """Get tools for system designer agent (security analysis)."""
         return [self.get("security_report")]
 
-    def get_security_tools(self) -> List[Any]:
+    def get_security_tools(self) -> list[Any]:
         """Get security-related tools."""
         return [self.get("security_report")]
 
@@ -214,10 +217,14 @@ class ToolProvider:
         """
         # Check DSPy factories first
         if name in self.DSPY_FACTORIES:
-            return self.DSPY_FACTORIES[name](self._api_key, self._org_id_str, extra_headers=self._extra_headers)
+            return self.DSPY_FACTORIES[name](
+                self._api_key, self._org_id_str, extra_headers=self._extra_headers
+            )
 
         # Security report tool
         if name == "security_report":
             return create_security_report_tool(self._api_key, self._organization_id)
 
-        raise ValueError(f"Unknown tool: {name}. Supported: {list(self.DSPY_FACTORIES.keys()) + ['security_report']}")
+        raise ValueError(
+            f"Unknown tool: {name}. Supported: {list(self.DSPY_FACTORIES.keys()) + ['security_report']}"
+        )

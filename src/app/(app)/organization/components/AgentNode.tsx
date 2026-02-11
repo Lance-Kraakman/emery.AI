@@ -5,8 +5,7 @@
 import React from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Bot, User, Activity, CheckCircle, Clock, XCircle } from 'lucide-react';
+import { Bot, Activity, CheckCircle, Clock, XCircle } from 'lucide-react';
 import type { Agent } from '@/ddd/domain/agents/entities/agent';
 import type { TaskDTO } from '@/app/mappers/task-mapper';
 

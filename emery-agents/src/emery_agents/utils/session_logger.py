@@ -21,12 +21,16 @@ import json
 import logging
 import os
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
 # Check if debug logging is enabled via environment variable
-DEBUG_PROMPTS_ENABLED = os.environ.get("EMERY_DEBUG_PROMPTS", "").lower() in ("1", "true", "yes")
+DEBUG_PROMPTS_ENABLED = os.environ.get("EMERY_DEBUG_PROMPTS", "").lower() in (
+    "1",
+    "true",
+    "yes",
+)
 
 
 class SessionLogger:
@@ -36,7 +40,7 @@ class SessionLogger:
     """
 
     _instance: Optional["SessionLogger"] = None
-    _session_id: Optional[str] = None
+    _session_id: str | None = None
 
     def __init__(self, session_id: str):
         """
@@ -54,7 +58,9 @@ class SessionLogger:
             self._ensure_dir()
             logger.info(f"📝 Session logger initialized: {self.log_path}")
         else:
-            logger.debug("📝 Session logger disabled (set EMERY_DEBUG_PROMPTS=1 to enable)")
+            logger.debug(
+                "📝 Session logger disabled (set EMERY_DEBUG_PROMPTS=1 to enable)"
+            )
 
     def _ensure_dir(self) -> None:
         """Ensure log directory exists."""
@@ -65,7 +71,7 @@ class SessionLogger:
         agent_name: str,
         prompt: str,
         phase: str = "",
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """
         Log a prompt sent to an agent.
@@ -83,7 +89,7 @@ class SessionLogger:
             "phase": phase,
             "content_length": len(prompt),
             "content_preview": prompt[:500] + "..." if len(prompt) > 500 else prompt,
-            "metadata": metadata or {}
+            "metadata": metadata or {},
         }
         self._append(entry)
 
@@ -92,7 +98,7 @@ class SessionLogger:
         agent_name: str,
         prompt: str,
         phase: str = "",
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """
         Log a prompt with full content (for debugging).
@@ -109,7 +115,7 @@ class SessionLogger:
             "agent": agent_name,
             "phase": phase,
             "content": prompt,
-            "metadata": metadata or {}
+            "metadata": metadata or {},
         }
         self._append(entry)
 
@@ -117,7 +123,7 @@ class SessionLogger:
         self,
         agent_name: str,
         response: str,
-        tool_calls: Optional[List[Dict[str, Any]]] = None
+        tool_calls: list[dict[str, Any]] | None = None,
     ) -> None:
         """
         Log a response from an agent.
@@ -132,16 +138,15 @@ class SessionLogger:
             "type": "response",
             "agent": agent_name,
             "content_length": len(response),
-            "content_preview": response[:500] + "..." if len(response) > 500 else response,
-            "tool_calls": tool_calls or []
+            "content_preview": response[:500] + "..."
+            if len(response) > 500
+            else response,
+            "tool_calls": tool_calls or [],
         }
         self._append(entry)
 
     def log_state_transition(
-        self,
-        from_state: str,
-        to_state: str,
-        trigger: str = ""
+        self, from_state: str, to_state: str, trigger: str = ""
     ) -> None:
         """
         Log a state machine transition.
@@ -156,15 +161,12 @@ class SessionLogger:
             "type": "state_transition",
             "from": from_state,
             "to": to_state,
-            "trigger": trigger
+            "trigger": trigger,
         }
         self._append(entry)
 
     def log_tool_call(
-        self,
-        tool_name: str,
-        arguments: Dict[str, Any],
-        agent_name: str = ""
+        self, tool_name: str, arguments: dict[str, Any], agent_name: str = ""
     ) -> None:
         """
         Log a tool call.
@@ -179,16 +181,12 @@ class SessionLogger:
             "type": "tool_call",
             "tool": tool_name,
             "agent": agent_name,
-            "arguments": arguments
+            "arguments": arguments,
         }
         self._append(entry)
 
     def log_tool_result(
-        self,
-        tool_name: str,
-        result: Any,
-        success: bool = True,
-        agent_name: str = ""
+        self, tool_name: str, result: Any, success: bool = True, agent_name: str = ""
     ) -> None:
         """
         Log a tool result.
@@ -207,15 +205,13 @@ class SessionLogger:
             "agent": agent_name,
             "success": success,
             "result_length": len(result_str),
-            "result_preview": result_str[:500] + "..." if len(result_str) > 500 else result_str
+            "result_preview": result_str[:500] + "..."
+            if len(result_str) > 500
+            else result_str,
         }
         self._append(entry)
 
-    def log_event(
-        self,
-        event_type: str,
-        data: Optional[Dict[str, Any]] = None
-    ) -> None:
+    def log_event(self, event_type: str, data: dict[str, Any] | None = None) -> None:
         """
         Log a generic event.
 
@@ -227,7 +223,7 @@ class SessionLogger:
             "timestamp": datetime.now().isoformat(),
             "type": "event",
             "event_type": event_type,
-            "data": data or {}
+            "data": data or {},
         }
         self._append(entry)
 
@@ -236,9 +232,9 @@ class SessionLogger:
         action: str,
         plan_id: str,
         goal: str,
-        steps: Optional[List[Dict[str, Any]]] = None,
-        context: Optional[str] = None,
-        analysis: Optional[str] = None
+        steps: list[dict[str, Any]] | None = None,
+        context: str | None = None,
+        analysis: str | None = None,
     ) -> None:
         """
         Log plan creation, update, or status change.
@@ -263,14 +259,18 @@ class SessionLogger:
                     "step_id": s.get("step_id", ""),
                     "description": s.get("description", "")[:200],
                     "status": s.get("status", "pending"),
-                    "target_agent": s.get("target_agent")
+                    "target_agent": s.get("target_agent"),
                 }
                 for s in (steps or [])
             ],
             "has_context": bool(context),
-            "context_preview": context[:300] + "..." if context and len(context) > 300 else context,
+            "context_preview": context[:300] + "..."
+            if context and len(context) > 300
+            else context,
             "has_analysis": bool(analysis),
-            "analysis_preview": analysis[:300] + "..." if analysis and len(analysis) > 300 else analysis
+            "analysis_preview": analysis[:300] + "..."
+            if analysis and len(analysis) > 300
+            else analysis,
         }
         self._append(entry)
 
@@ -280,8 +280,8 @@ class SessionLogger:
         step_id: str,
         action: str,
         description: str,
-        result: Optional[str] = None,
-        error: Optional[str] = None
+        result: str | None = None,
+        error: str | None = None,
     ) -> None:
         """
         Log step execution events.
@@ -301,8 +301,10 @@ class SessionLogger:
             "step_id": step_id,
             "action": action,
             "description": description[:200],
-            "result_preview": result[:300] + "..." if result and len(result) > 300 else result,
-            "error": error
+            "result_preview": result[:300] + "..."
+            if result and len(result) > 300
+            else result,
+            "error": error,
         }
         self._append(entry)
 
@@ -311,7 +313,7 @@ class SessionLogger:
         content_type: str,
         name: str,
         content: str,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """
         Log full content to a separate file for inspection.
@@ -355,17 +357,19 @@ class SessionLogger:
             return
 
         # Also log reference in main log
-        self._append({
-            "timestamp": datetime.now().isoformat(),
-            "type": "full_content",
-            "content_type": content_type,
-            "name": name,
-            "file": filepath,
-            "length": len(content),
-            "metadata": metadata or {}
-        })
+        self._append(
+            {
+                "timestamp": datetime.now().isoformat(),
+                "type": "full_content",
+                "content_type": content_type,
+                "name": name,
+                "file": filepath,
+                "length": len(content),
+                "metadata": metadata or {},
+            }
+        )
 
-    def _append(self, entry: Dict[str, Any]) -> None:
+    def _append(self, entry: dict[str, Any]) -> None:
         """Append entry to log file (only if enabled)."""
         if not self.enabled:
             return
@@ -398,7 +402,7 @@ class SessionLogger:
         return cls._instance
 
 
-def get_session_logger(session_id: Optional[str] = None) -> Optional[SessionLogger]:
+def get_session_logger(session_id: str | None = None) -> SessionLogger | None:
     """
     Get session logger instance.
 

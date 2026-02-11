@@ -5,34 +5,32 @@ Facade for plan management using DSPy.
 """
 
 import logging
-from typing import List, Optional, Any
+from typing import Any
 
+from emery_agents.ace import StrategyAccumulationService
+from emery_agents.entities.models.context_mapping import ResolvedContext
 from emery_agents.entities.models.plan import (
     Plan,
-    PlanStep,
-    StepPlan,
     PlanStatus,
+    PlanStep,
     RecoveryResult,
-    create_plan,
     SkillInputDefinition,
     SkillOutputDefinition,
+    StepPlan,
 )
 from emery_agents.entities.models.task_ledger import TaskLedger
-from emery_agents.entities.models.context_mapping import ResolvedContext
-
-from .protocols import ModelProviderProtocol, GRPCClient, Tool
 from emery_agents.tools.capability_registry import CapabilityRegistry
-from emery_agents.ace import StrategyAccumulationService
-from emery_agents.services.analysis.token_accumulator import TokenAccumulator
+
+from .context import SessionConfig, WorkspaceContext
 from .planning import (
     DSPyPlanGenerator,
-    PlanRepository,
     FailureAnalyzer,
     PlanGenerationRequest,
     PlanGenerationResult,
+    PlanRepository,
     ToolResultSummary,
 )
-from .context import SessionConfig, WorkspaceContext
+from .protocols import GRPCClient, ModelProviderProtocol, Tool
 
 logger = logging.getLogger(__name__)
 
@@ -48,9 +46,9 @@ class PlanService:
 
     def __init__(
         self,
-        grpc_client: Optional[GRPCClient] = None,
-        model_provider: Optional[ModelProviderProtocol] = None,
-        discovery_tools: Optional[List[Tool]] = None,
+        grpc_client: GRPCClient | None = None,
+        model_provider: ModelProviderProtocol | None = None,
+        discovery_tools: list[Tool] | None = None,
     ):
         self.grpc_client = grpc_client
         self.model_provider = model_provider
@@ -59,7 +57,9 @@ class PlanService:
         self._generator: DSPyPlanGenerator = DSPyPlanGenerator(
             discovery_tools=discovery_tools,
         )
-        logger.info("📋 PlanService initialized with DSPy generator (smolagents disabled)")
+        logger.info(
+            "📋 PlanService initialized with DSPy generator (smolagents disabled)"
+        )
 
         # Initialize other delegates
         self._repository = PlanRepository(grpc_client=grpc_client)
@@ -68,25 +68,29 @@ class PlanService:
     async def generate_plan(
         self,
         basic_instructions: str,
-        context_tables: Optional[ResolvedContext] = None,
-        available_tools: Optional[List[str]] = None,
-        goal: Optional[str] = None,
-        tools: Optional[List[Tool]] = None,
-        managed_agents: Optional[List[Any]] = None,
-        skill_inputs: Optional[List[SkillInputDefinition]] = None,
-        previous_plan_json: Optional[str] = None,
-        user_feedback: Optional[str] = None,
-        skill_outputs: Optional[List[SkillOutputDefinition]] = None,
+        context_tables: ResolvedContext | None = None,
+        available_tools: list[str] | None = None,
+        goal: str | None = None,
+        tools: list[Tool] | None = None,
+        managed_agents: list[Any] | None = None,
+        skill_inputs: list[SkillInputDefinition] | None = None,
+        previous_plan_json: str | None = None,
+        user_feedback: str | None = None,
+        skill_outputs: list[SkillOutputDefinition] | None = None,
         is_template_generation: bool = False,
-        conversation_history: Optional[List[Any]] = None,
-        strategy_service: Optional[StrategyAccumulationService] = None,
-        capability_registry: Optional[Any] = None,
-        config: Optional[SessionConfig] = None,
-        workspace: Optional[WorkspaceContext] = None,
+        conversation_history: list[Any] | None = None,
+        strategy_service: StrategyAccumulationService | None = None,
+        capability_registry: Any | None = None,
+        config: SessionConfig | None = None,
+        workspace: WorkspaceContext | None = None,
         memory_context: str = "",
-        triage_analysis: Optional[dict] = None,
-        configured_tools: Optional[list] = None,
-        token_accumulator: Optional[Any] = None,
+        triage_analysis: dict | None = None,
+        configured_tools: list | None = None,
+        token_accumulator: Any | None = None,
+        retrieved_capabilities: str = "",
+        retrieved_patterns: str = "",
+        retrieved_knowledge: str = "",
+        retrieved_strategies: str = "",
     ) -> PlanGenerationResult:
         """Generate plan using DSPy PlannerModule. Returns plan or clarifying questions."""
         # Build request dataclass (includes all config for plan generation)
@@ -109,6 +113,10 @@ class PlanService:
             triage_analysis=triage_analysis,
             configured_tools=configured_tools,
             token_accumulator=token_accumulator,
+            retrieved_capabilities=retrieved_capabilities,
+            retrieved_patterns=retrieved_patterns,
+            retrieved_knowledge=retrieved_knowledge,
+            retrieved_strategies=retrieved_strategies,
         )
 
         # Delegate to generator (uses capability-based discovery)
@@ -132,7 +140,7 @@ class PlanService:
         """Save plan to skill step via gRPC."""
         await self._repository.save_step_plan(skill_id, step_id, plan)
 
-    async def load_agent_plan(self, agent_id: int) -> Optional[Plan]:
+    async def load_agent_plan(self, agent_id: int) -> Plan | None:
         """Load plan from agent entity."""
         return await self._repository.load_agent_plan(agent_id)
 
@@ -140,7 +148,7 @@ class PlanService:
         self,
         skill_id: int,
         step_id: str,
-    ) -> Optional[StepPlan]:
+    ) -> StepPlan | None:
         """Load plan from skill step."""
         return await self._repository.load_step_plan(skill_id, step_id)
 
@@ -173,8 +181,8 @@ class PlanService:
         plan: Plan,
         step_id: str,
         status: str,
-        result: Optional[str] = None,
-        error: Optional[str] = None,
+        result: str | None = None,
+        error: str | None = None,
     ) -> Plan:
         """Update a step's status within a plan."""
         for step in plan.steps:
@@ -200,10 +208,11 @@ class PlanService:
         error_message: str,
         plan: Plan,
         ledger: TaskLedger,
-        org_model: Optional[str] = None,
-        api_key: Optional[str] = None,
-        organization_id: Optional[int] = None,
-        capability_registry: Optional[CapabilityRegistry] = None,
+        org_model: str | None = None,
+        api_key: str | None = None,
+        organization_id: int | None = None,
+        capability_registry: CapabilityRegistry | None = None,
+        tracker: Any | None = None,
     ) -> RecoveryResult:
         """Analyze a failed step and determine recovery strategy."""
         return self._analyzer.analyze(
@@ -216,6 +225,7 @@ class PlanService:
             api_key=api_key,
             organization_id=organization_id,
             capability_registry=capability_registry,
+            tracker=tracker,
         )
 
     @property
@@ -229,9 +239,9 @@ class PlanServiceFactory:
 
     def __init__(
         self,
-        grpc_client: Optional[GRPCClient] = None,
-        model_provider: Optional[ModelProviderProtocol] = None,
-        discovery_tools: Optional[List[Tool]] = None,
+        grpc_client: GRPCClient | None = None,
+        model_provider: ModelProviderProtocol | None = None,
+        discovery_tools: list[Tool] | None = None,
     ) -> None:
         self.grpc_client = grpc_client
         self.model_provider = model_provider

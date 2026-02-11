@@ -8,9 +8,9 @@ AIDEV-NOTE: Uses raw httpx with explicit content-type header because
 the InferenceClient doesn't set content-type when passing raw bytes,
 causing "Content type None not supported" errors with the router endpoint.
 """
+
 import logging
 import os
-from typing import Optional
 
 import httpx
 
@@ -28,14 +28,15 @@ DEFAULT_AUDIO_CONTENT_TYPE = "audio/mpeg"
 
 class TranscriptionError(Exception):
     """Raised when audio transcription fails."""
+
     pass
 
 
 async def transcribe_audio(
     audio_bytes: bytes,
-    model_id: Optional[str] = None,
-    language: Optional[str] = None,
-    content_type: Optional[str] = None
+    model_id: str | None = None,
+    language: str | None = None,
+    content_type: str | None = None,
 ) -> str:
     """
     Transcribe audio using HuggingFace Inference API.
@@ -53,7 +54,7 @@ async def transcribe_audio(
         TranscriptionError: If transcription fails
     """
     model_id = model_id or DEFAULT_WHISPER_MODEL
-    hf_token = os.getenv('HF_TOKEN')
+    hf_token = os.getenv("HF_TOKEN")
 
     if not hf_token:
         raise TranscriptionError("HF_TOKEN environment variable not set")
@@ -65,13 +66,15 @@ async def transcribe_audio(
 
     # Use provided content-type or default to audio/mpeg
     audio_content_type = content_type or DEFAULT_AUDIO_CONTENT_TYPE
-    logger.info(f"🎙️ Transcribing audio ({len(audio_bytes)} bytes, {audio_content_type}) with model: {model_id}")
+    logger.info(
+        f"🎙️ Transcribing audio ({len(audio_bytes)} bytes, {audio_content_type}) with model: {model_id}"
+    )
 
     try:
         # AIDEV-NOTE: Use raw httpx with explicit content-type header
         # The InferenceClient doesn't set content-type for raw bytes, causing 400 errors
         # Check for custom endpoint (e.g., dedicated inference endpoint)
-        custom_endpoint = os.getenv('WHISPER_ENDPOINT')
+        custom_endpoint = os.getenv("WHISPER_ENDPOINT")
         if custom_endpoint:
             endpoint = custom_endpoint
         else:
@@ -88,19 +91,23 @@ async def transcribe_audio(
                 endpoint,
                 headers=headers,
                 content=audio_bytes,
-                timeout=120.0  # Transcription can take time for longer audio
+                timeout=120.0,  # Transcription can take time for longer audio
             )
 
             if response.status_code != 200:
                 error_text = response.text
-                logger.error(f"❌ Transcription API error {response.status_code}: {error_text}")
-                raise TranscriptionError(f"API error {response.status_code}: {error_text}")
+                logger.error(
+                    f"❌ Transcription API error {response.status_code}: {error_text}"
+                )
+                raise TranscriptionError(
+                    f"API error {response.status_code}: {error_text}"
+                )
 
             result = response.json()
 
             # Extract text from result
-            if isinstance(result, dict) and 'text' in result:
-                text = result['text']
+            if isinstance(result, dict) and "text" in result:
+                text = result["text"]
             elif isinstance(result, str):
                 text = result
             else:
@@ -120,9 +127,9 @@ async def transcribe_audio(
 
 async def transcribe_audio_from_url(
     url: str,
-    model_id: Optional[str] = None,
-    language: Optional[str] = None,
-    content_type: Optional[str] = None
+    model_id: str | None = None,
+    language: str | None = None,
+    content_type: str | None = None,
 ) -> str:
     """
     Download and transcribe audio from URL.
@@ -150,7 +157,9 @@ async def transcribe_audio_from_url(
 
             # Try to get content-type from response headers if not provided
             if not content_type:
-                content_type = response.headers.get('content-type', '').split(';')[0].strip()
+                content_type = (
+                    response.headers.get("content-type", "").split(";")[0].strip()
+                )
                 if content_type:
                     logger.info(f"📋 Got content-type from response: {content_type}")
 

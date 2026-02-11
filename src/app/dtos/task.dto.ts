@@ -19,6 +19,7 @@ export interface CreateTaskDTO {
   name: string;
   instructions: TaskInstructions;
   skillId?: number;           // Optional - execute this skill instead of raw instructions
+  chatMessageId?: string;     // Optional - link to ChatMessage for ExecutionSteps
   createdBy?: string;
   organizationId: number;
   // Trigger context for audit trail

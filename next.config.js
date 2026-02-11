@@ -1,9 +1,19 @@
+// Bundle analyzer - run with ANALYZE=true to generate size report
+const withBundleAnalyzer = require('@next/bundle-analyzer')({
+  enabled: process.env.ANALYZE === 'true',
+});
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // AIDEV-NOTE: Disable standalone mode to speed up builds - use regular node_modules copy
   // output: 'standalone',
   // AIDEV-NOTE: Removed env config to allow runtime environment variable loading
   // App router is now stable in Next.js 15
+
+  // Run lint separately (pnpm lint) - build should not fail on lint warnings
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
 
   // AIDEV-NOTE: Consistent build ID for multi-container deployments (prevents version skew)
   generateBuildId: async () => {
@@ -19,8 +29,7 @@ const nextConfig = {
     '@duckdb/node-bindings-linux-x64',
     'unpdf',
     '@z-skip/protoc',
-    'canvas',
-    'pdfjs-dist'
+    'canvas'
   ],
 
   // Increase Server Actions body size limit from 1MB to 5MB
@@ -83,7 +92,7 @@ const nextConfig = {
           { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
           { key: 'X-Powered-By', value: '' },
           { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
-          { key: 'Content-Security-Policy', value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https: wss:; frame-ancestors 'self'" },
+          { key: 'Content-Security-Policy', value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https: wss:; worker-src 'self' blob:; frame-ancestors 'self'" },
         ],
       },
       // Default security headers for all other routes (excludes preview/frame for iframe embedding)
@@ -98,13 +107,14 @@ const nextConfig = {
           { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
           { key: 'X-Powered-By', value: '' },  // Force remove (Next.js 15 ignores poweredByHeader)
           { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
-          { key: 'Content-Security-Policy', value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https: wss:; frame-ancestors 'none'" },
+          { key: 'Content-Security-Policy', value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https: wss:; worker-src 'self' blob:; frame-ancestors 'none'" },
         ],
       },
     ]
   },
   // Remove X-Powered-By header
   poweredByHeader: false,
+
 }
 
-module.exports = nextConfig
+module.exports = withBundleAnalyzer(nextConfig)

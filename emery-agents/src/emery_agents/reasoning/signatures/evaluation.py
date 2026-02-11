@@ -6,7 +6,7 @@ These signatures handle goal evaluation after execution and error recovery.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 import dspy
 from pydantic import BaseModel, Field
@@ -17,33 +17,34 @@ class GoalEvaluation(BaseModel):
 
     achieved: bool = Field(
         description="True ONLY if ALL required deliverables from the goal are confirmed "
-                    "by tool_evidence. Partial completion = false."
+        "by tool_evidence. Partial completion = false."
     )
     confidence: float = Field(
-        ge=0.0, le=1.0,
+        ge=0.0,
+        le=1.0,
         description="How confident the evaluation is. "
-                    "1.0 = all tool calls confirmed SUCCESS. "
-                    "0.8-0.9 = completed but minor quality concerns. "
-                    "0.5-0.7 = partial completion (some steps succeeded, others pending/failed). "
-                    "Below 0.5 = significant failures or missing evidence.",
+        "1.0 = all tool calls confirmed SUCCESS. "
+        "0.8-0.9 = completed but minor quality concerns. "
+        "0.5-0.7 = partial completion (some steps succeeded, others pending/failed). "
+        "Below 0.5 = significant failures or missing evidence.",
     )
     completed_items: list[str] = Field(
         description="Specific deliverables confirmed done by tool_evidence "
-                    "(e.g., 'Created contacts table with 5 fields', 'Published CRM app')"
+        "(e.g., 'Created contacts table with 5 fields', 'Published CRM app')"
     )
     remaining_items: list[str] = Field(
         description="Specific deliverables NOT yet completed. "
-                    "Reference the original goal to identify what's missing."
+        "Reference the original goal to identify what's missing."
     )
     blockers: list[str] = Field(
         default_factory=list,
         description="Concrete issues preventing completion — only from [FAILED] steps "
-                    "or FAILED tool calls. Not speculative concerns.",
+        "or FAILED tool calls. Not speculative concerns.",
     )
     next_steps: list[str] = Field(
         default_factory=list,
         description="Actionable steps to resolve remaining_items or blockers. "
-                    "Empty if achieved=true and confidence >= 0.9.",
+        "Empty if achieved=true and confidence >= 0.9.",
     )
 
 
@@ -87,12 +88,12 @@ class EvaluateGoal(dspy.Signature):  # type: ignore[misc]
     )
     step_results: list[str] = dspy.InputField(
         desc="Execution results prefixed with [COMPLETED], [FAILED], or [PENDING]. "
-             "Map each result back to its planned step to assess coverage."
+        "Map each result back to its planned step to assess coverage."
     )
     tool_evidence: str = dspy.InputField(
         desc="RAW tool/API call outcomes per step (SUCCESS/FAILED with response data). "
-             "This is GROUND TRUTH — use it to verify what actually happened, "
-             "overriding any ambiguous step summaries."
+        "This is GROUND TRUTH — use it to verify what actually happened, "
+        "overriding any ambiguous step summaries."
     )
 
     evaluation: GoalEvaluation = dspy.OutputField()
@@ -102,16 +103,15 @@ class DirectExecutionJudgement(BaseModel):
     """LLM judge assessment of a DIRECT execution result."""
 
     score: float = Field(
-        ge=0.0, le=1.0,
+        ge=0.0,
+        le=1.0,
         description="Quality score. "
-                    "1.0 = task fully addressed, tools succeeded, result is actionable. "
-                    "0.7-0.9 = task mostly addressed, minor gaps. "
-                    "0.4-0.6 = partially addressed, significant gaps or errors. "
-                    "Below 0.4 = failed, wrong, or irrelevant result.",
+        "1.0 = task fully addressed, tools succeeded, result is actionable. "
+        "0.7-0.9 = task mostly addressed, minor gaps. "
+        "0.4-0.6 = partially addressed, significant gaps or errors. "
+        "Below 0.4 = failed, wrong, or irrelevant result.",
     )
-    reasoning: str = Field(
-        description="Brief explanation of the score (1-2 sentences)"
-    )
+    reasoning: str = Field(description="Brief explanation of the score (1-2 sentences)")
 
 
 class JudgeDirectExecution(dspy.Signature):  # type: ignore[misc]
@@ -141,7 +141,7 @@ class JudgeDirectExecution(dspy.Signature):  # type: ignore[misc]
     result: str = dspy.InputField(desc="The execution result to judge")
     tool_evidence: str = dspy.InputField(
         desc="Tool call outcomes: tool_name -> SUCCESS/FAILED with response preview. "
-             "Empty string if no tools were called."
+        "Empty string if no tools were called."
     )
 
     judgement: DirectExecutionJudgement = dspy.OutputField()
@@ -200,11 +200,11 @@ class AnalyzeRecovery(dspy.Signature):  # type: ignore[misc]
     )
     error_message: str = dspy.InputField(
         desc="The error message or exception. Parse for error codes, missing fields, "
-             "or resource names to inform the recovery strategy."
+        "or resource names to inform the recovery strategy."
     )
     context: str = dspy.InputField(
         desc="Execution state: completed steps, their results, and the remaining plan. "
-             "Use to determine if a prerequisite was missed or if replanning is needed."
+        "Use to determine if a prerequisite was missed or if replanning is needed."
     )
 
     recovery: RecoveryAction = dspy.OutputField()
@@ -246,12 +246,8 @@ class InterruptClassificationResult(BaseModel):
     requires_replan: bool = Field(
         description="Whether this interrupt requires replanning"
     )
-    is_cancel: bool = Field(
-        description="Whether this is a cancellation request"
-    )
-    reasoning: str = Field(
-        description="Brief explanation of the classification"
-    )
+    is_cancel: bool = Field(description="Whether this is a cancellation request")
+    reasoning: str = Field(description="Brief explanation of the classification")
     suggested_action: str = Field(
         default="", description="Suggested next action (especially for SCOPE_CHANGE)"
     )
@@ -278,6 +274,7 @@ class ClassifyInterrupt(dspy.Signature):  # type: ignore[misc]
 
 # ACE (Agentic Context Engineering) Signatures
 
+
 class PlanningInsightModel(BaseModel):
     """A single planning insight extracted from phase output."""
 
@@ -291,7 +288,9 @@ class PlanningInsightModel(BaseModel):
 class PlanningInsightsResult(BaseModel):
     """Result of extracting planning insights."""
 
-    insights: list[PlanningInsightModel] = Field(description="List of planning insights")
+    insights: list[PlanningInsightModel] = Field(
+        description="List of planning insights"
+    )
 
 
 class ExtractPlanningInsights(dspy.Signature):  # type: ignore[misc]
@@ -319,13 +318,17 @@ class ExecutionInsightModel(BaseModel):
     )
     summary: str = Field(description="1-2 sentence actionable summary")
     key_facts: list[str] = Field(description="Bullet points of essential facts")
-    source_step_ids: list[str] = Field(description="Step IDs that contributed to this insight")
+    source_step_ids: list[str] = Field(
+        description="Step IDs that contributed to this insight"
+    )
 
 
 class ExecutionInsightsResult(BaseModel):
     """Result of extracting execution insights."""
 
-    insights: list[ExecutionInsightModel] = Field(description="List of execution insights")
+    insights: list[ExecutionInsightModel] = Field(
+        description="List of execution insights"
+    )
 
 
 class ExtractExecutionInsights(dspy.Signature):  # type: ignore[misc]
@@ -402,16 +405,16 @@ class SynthesizeAnswer(dspy.Signature):  # type: ignore[misc]
     )
     step_results: str = dspy.InputField(
         desc="Formatted results from each completed step. "
-             "Extract resource names, IDs, URLs, and key details from these."
+        "Extract resource names, IDs, URLs, and key details from these."
     )
     curated_context: str = dspy.InputField(
         desc="Additional execution insights (ACE context): decisions made, "
-             "entities discovered, constraints encountered. Use to enrich the answer."
+        "entities discovered, constraints encountered. Use to enrich the answer."
     )
 
     answer: str = dspy.OutputField(
         desc="User-facing summary of what was accomplished. Lead with the outcome, "
-             "organize by deliverable, include actionable details. No step IDs or tool names."
+        "organize by deliverable, include actionable details. No step IDs or tool names."
     )
 
 
@@ -422,9 +425,10 @@ class StepReflection(BaseModel):
     """Reflection on a completed step's execution quality."""
 
     quality_score: float = Field(
-        ge=0.0, le=1.0,
+        ge=0.0,
+        le=1.0,
         description="Overall quality: 1.0=optimal, 0.7-0.9=good with minor issues, "
-                    "0.5-0.7=suboptimal but functional, below 0.5=poor",
+        "0.5-0.7=suboptimal but functional, below 0.5=poor",
     )
     was_suboptimal: bool = Field(
         description="True if the step succeeded but could have been done better"
@@ -435,12 +439,12 @@ class StepReflection(BaseModel):
     )
     refined_instructions: str = Field(
         description="Improved instructions that would produce better results. "
-                    "Empty string if execution was optimal.",
+        "Empty string if execution was optimal.",
     )
     pattern_learned: str = Field(
         description="Reusable insight for subsequent steps. "
-                    "Example: 'Always check if table exists before creating fields'. "
-                    "Empty string if no pattern learned.",
+        "Example: 'Always check if table exists before creating fields'. "
+        "Empty string if no pattern learned.",
     )
 
 
@@ -473,7 +477,7 @@ class ReflectOnExecution(dspy.Signature):  # type: ignore[misc]
     )
     previous_reflections: str = dspy.InputField(
         desc="Rolling summary of reflections from previous steps (max 1500 chars). "
-             "Check for recurring patterns.",
+        "Check for recurring patterns.",
     )
 
     reflection: StepReflection = dspy.OutputField()

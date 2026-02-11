@@ -11,17 +11,18 @@ Presentation concerns (str conversion) handled by to_dict().
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass
 class WorkspaceField:
     """Field within a table."""
+
     name: str
     type: str
-    related_table_id: Optional[int] = None
+    related_table_id: int | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "type": self.type,
@@ -32,12 +33,13 @@ class WorkspaceField:
 @dataclass
 class WorkspacePage:
     """Page within an app."""
+
     id: int = 0
     name: str = ""
     slug: str = ""
-    app_id: Optional[int] = None
+    app_id: int | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "id": str(self.id),
@@ -48,13 +50,14 @@ class WorkspacePage:
 @dataclass
 class WorkspaceApp:
     """App with its pages."""
+
     id: int = 0
     name: str = ""
     slug: str = ""
     description: str = ""
-    pages: List[WorkspacePage] = field(default_factory=list)
+    pages: list[WorkspacePage] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "id": str(self.id),
@@ -66,13 +69,14 @@ class WorkspaceApp:
 @dataclass
 class WorkspaceAgent:
     """Agent entity."""
+
     id: int = 0
     name: str = ""
     description: str = ""
-    persona: Optional[str] = None
-    database_id: Optional[int] = None
+    persona: str | None = None
+    database_id: int | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "id": str(self.id),
@@ -83,16 +87,17 @@ class WorkspaceAgent:
 @dataclass
 class WorkspaceSkill:
     """Skill entity."""
+
     id: int = 0
     name: str = ""
     description: str = ""
-    agent_id: Optional[int] = None
-    agent_name: Optional[str] = None
-    inputs: List[Dict[str, Any]] = field(default_factory=list)
-    raw: Optional[Dict[str, Any]] = None
+    agent_id: int | None = None
+    agent_name: str | None = None
+    inputs: list[dict[str, Any]] = field(default_factory=list)
+    raw: dict[str, Any] | None = None
     is_system: bool = False
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "id": str(self.id),
@@ -104,18 +109,21 @@ class WorkspaceSkill:
 @dataclass
 class WorkspaceTable:
     """Table within a database."""
+
     id: int = 0
     name: str = ""
-    database_id: Optional[int] = None
-    database_name: Optional[str] = None
+    database_id: int | None = None
+    database_name: str | None = None
     field_count: int = 0
-    fields: List[WorkspaceField] = field(default_factory=list)
+    fields: list[WorkspaceField] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "id": str(self.id),
-            "database_id": str(self.database_id) if self.database_id is not None else None,
+            "database_id": str(self.database_id)
+            if self.database_id is not None
+            else None,
             "database_name": self.database_name,
             "field_count": self.field_count,
             "fields": [f"{f.name} ({f.type})" for f in self.fields],
@@ -125,12 +133,13 @@ class WorkspaceTable:
 @dataclass
 class WorkspaceDatabase:
     """Database with its tables."""
+
     id: int = 0
     name: str = ""
     table_count: int = 0
-    tables: List[WorkspaceTable] = field(default_factory=list)
+    tables: list[WorkspaceTable] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "id": str(self.id),
@@ -141,12 +150,13 @@ class WorkspaceDatabase:
 @dataclass
 class WorkspaceView:
     """Data view entity."""
+
     id: int = 0
     name: str = ""
-    table_id: Optional[int] = None
+    table_id: int | None = None
     view_type: str = "grid"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "id": str(self.id),
@@ -158,8 +168,20 @@ class WorkspaceView:
 @dataclass
 class WorkspaceData:
     """Complete workspace data from unified endpoint."""
-    apps: List[WorkspaceApp] = field(default_factory=list)
-    agents: List[WorkspaceAgent] = field(default_factory=list)
-    skills: List[WorkspaceSkill] = field(default_factory=list)
-    databases: List[WorkspaceDatabase] = field(default_factory=list)
-    views: List[WorkspaceView] = field(default_factory=list)
+
+    apps: list[WorkspaceApp] = field(default_factory=list)
+    agents: list[WorkspaceAgent] = field(default_factory=list)
+    skills: list[WorkspaceSkill] = field(default_factory=list)
+    databases: list[WorkspaceDatabase] = field(default_factory=list)
+    views: list[WorkspaceView] = field(default_factory=list)
+    fetch_error: str | None = None  # Stores error message if fetch failed
+
+    def is_empty(self) -> bool:
+        """Check if workspace has no resources (possibly due to fetch failure)."""
+        return (
+            not self.apps
+            and not self.agents
+            and not self.skills
+            and not self.databases
+            and not self.views
+        )

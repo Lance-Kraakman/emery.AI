@@ -10,6 +10,7 @@
  */
 
 import type { ContextAwareDbClient } from '@/ddd/infrastructure/db/simple-context-proxy';
+import { db as rawDb } from '@/ddd/infrastructure/db/client';
 import type { IOrganizationRepository } from '@/ddd/domain/organizations/repositories/organization-repository';
 import type { IUserRepository } from '@/ddd/domain/users/repositories/user-repository';
 import type { ITeamRepository } from '@/ddd/domain/teams/repositories/team-repository';
@@ -39,18 +40,25 @@ export interface CoreServices {
 
 export interface CoreDependencies {
   db: ContextAwareDbClient;
+  rawDb?: typeof import('@/ddd/infrastructure/db/client').db; // Optional raw DB for cross-org queries
   agentRepository?: any; // Will be provided by agent module
 }
 
 export function registerCoreServices(deps: CoreDependencies): CoreServices {
-  const { db } = deps;
+  const { db, rawDb: passedRawDb } = deps;
 
   // Register repositories
-  const organizationRepository = new DrizzleOrganizationRepository(db);
+  // Organization repository gets rawDb for cross-org queries (system scheduler)
+  const organizationRepository = new DrizzleOrganizationRepository(db, passedRawDb || rawDb);
   const userRepository = new DrizzleUserRepository(db);
   const teamRepository = new DrizzleTeamRepository(db);
   const invitationRepository = new DrizzleInvitationRepository(db);
-  const rbacRepository = new DrizzleRBACRepository(db);
+
+  // AIDEV-NOTE: RBAC uses rawDb instead of contextAwareDb because:
+  // 1. Permission checks happen before/during RLS context establishment
+  // 2. RBAC tables need cross-organizational access (checking user's org membership)
+  // 3. These are trusted operations that validate access, not user data
+  const rbacRepository = new DrizzleRBACRepository(rawDb);
 
   // Register application services
   const userRoleApplicationService = new UserRoleApplicationService(

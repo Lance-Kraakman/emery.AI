@@ -18,33 +18,35 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import dspy
 
 from emery_agents.ace import StrategyAccumulationService
+from emery_agents.entities.models.plan import Plan, PlanStep, create_plan, create_step
 from emery_agents.reasoning.capabilities import (
     CAPABILITY_ROUTING_HEADER,
     format_planning_guidance,
     get_planning_guidance,
 )
 from emery_agents.reasoning.config import get_dspy_lm
-from emery_agents.services.analysis.llm_usage import record_from_lm
-from emery_agents.reasoning.modules.planner import PlannerModule, SkillTemplatePlannerModule
+from emery_agents.reasoning.modules.planner import (
+    PlannerModule,
+    SkillTemplatePlannerModule,
+)
 from emery_agents.reasoning.signatures.planning import (
     ClarifyingQuestionOutput,
-    PlanOutput,
     PlanOrQuestionsOutput,
+    PlanOutput,
     SkillTemplatePlanOutput,
 )
-from emery_agents.entities.models.plan import Plan, PlanStep, create_plan, create_step
+from emery_agents.services.analysis.llm_usage import record_from_lm
 from emery_agents.services.context import WorkspaceContext, format_conversation_history
 from emery_agents.services.protocols import Tool
 
 if TYPE_CHECKING:
-    from emery_agents.services.context import ConversationMessage
+    pass
 
-from emery_agents.services.analysis.token_accumulator import TokenAccumulator
 from .models import PlanGenerationRequest, PlanGenerationResult
 
 logger = logging.getLogger(__name__)
@@ -68,31 +70,33 @@ class DSPyPlanGenerator:
 
     def __init__(
         self,
-        discovery_tools: Optional[list["Tool"]] = None,
+        discovery_tools: list[Tool] | None = None,
     ) -> None:
         self.discovery_tools = discovery_tools or []
         self._last_strategy_guidance: str = ""
 
         # Initialize planner modules (will be configured with model on each call)
-        self._planner: Optional[PlannerModule] = None
-        self._template_planner: Optional[SkillTemplatePlannerModule] = None
+        self._planner: PlannerModule | None = None
+        self._template_planner: SkillTemplatePlannerModule | None = None
 
     def _get_planner(self) -> PlannerModule:
         """Get or create planner module."""
         if self._planner is None:
-            self._planner = PlannerModule(discovery_tools=self.discovery_tools)
+            self._planner = PlannerModule(external_tools=self.discovery_tools)
         return self._planner
 
     def _get_template_planner(self) -> SkillTemplatePlannerModule:
         """Get or create skill template planner module."""
         if self._template_planner is None:
-            self._template_planner = SkillTemplatePlannerModule(discovery_tools=self.discovery_tools)
+            self._template_planner = SkillTemplatePlannerModule(
+                external_tools=self.discovery_tools
+            )
         return self._template_planner
 
     async def generate(
         self,
         request: PlanGenerationRequest,
-        strategy_service: Optional[StrategyAccumulationService] = None,
+        strategy_service: StrategyAccumulationService | None = None,
     ) -> PlanGenerationResult:
         """Generate plan using DSPy PlannerModule. Returns plan or clarifying questions."""
         # ACE: Get strategy guidance from past successful executions
@@ -105,7 +109,9 @@ class DSPyPlanGenerator:
             )
             if strategies:
                 strategy_guidance = strategy_service.format_for_planner(strategies)
-                logger.info(f"📊 Found {len(strategies)} relevant strategies for planning")
+                logger.info(
+                    f"📊 Found {len(strategies)} relevant strategies for planning"
+                )
 
         self._last_strategy_guidance = strategy_guidance
 
@@ -146,6 +152,10 @@ class DSPyPlanGenerator:
                     memory_context=request.memory_context,
                     triage_analysis=request.triage_analysis,
                     configured_tools=request.configured_tools_json,
+                    retrieved_capabilities=request.retrieved_capabilities,
+                    retrieved_patterns=request.retrieved_patterns,
+                    retrieved_knowledge=request.retrieved_knowledge,
+                    retrieved_strategies=request.retrieved_strategies,
                 )
             record_from_lm(lm, request.token_accumulator.get_llm_tracker())
         except Exception as e:
@@ -154,7 +164,9 @@ class DSPyPlanGenerator:
 
         # Handle clarifying questions
         if result.questions:
-            logger.info(f"❓ DSPy planner returned {len(result.questions)} clarifying question(s)")
+            logger.info(
+                f"❓ DSPy planner returned {len(result.questions)} clarifying question(s)"
+            )
             return PlanGenerationResult(
                 plan=None,
                 strategy_guidance=strategy_guidance,
@@ -195,8 +207,7 @@ class DSPyPlanGenerator:
             for i in request.skill_inputs
         ]
         skill_outputs = [
-            {"name": o.name, "type": o.type}
-            for o in (request.skill_outputs or [])
+            {"name": o.name, "type": o.type} for o in (request.skill_outputs or [])
         ]
 
         try:
@@ -221,7 +232,7 @@ class DSPyPlanGenerator:
 
     def _format_workspace_context(
         self,
-        workspace: Optional[WorkspaceContext],
+        workspace: WorkspaceContext | None,
     ) -> str:
         """Format workspace context as slim summary for DSPy signature.
 
@@ -233,53 +244,85 @@ class DSPyPlanGenerator:
         cannot call system_research. Names alone are enough for most planning decisions.
         """
         if not workspace:
-            return json.dumps({"_summary": "Empty workspace — no existing resources", "resources": []})
+            return json.dumps(
+                {"_summary": "Empty workspace — no existing resources", "resources": []}
+            )
 
         resources: list[dict[str, Any]] = []
 
         def _table_entry(t: Any) -> dict[str, Any]:
-            entry: dict[str, Any] = {"name": t.name, "id": str(t.id), "field_count": t.field_count}
+            entry: dict[str, Any] = {
+                "name": t.name,
+                "id": str(t.id),
+                "field_count": t.field_count,
+            }
             if t.fields:
                 entry["fields"] = [f.name for f in t.fields]
             return entry
 
         for db in workspace.existing_databases:
             tables = []
-            for t in (workspace.existing_tables or []):
+            for t in workspace.existing_tables or []:
                 if t.database_id == db.id:
                     tables.append(_table_entry(t))
-            resources.append({"type": "database", "name": db.name, "id": str(db.id), "tables": tables})
+            resources.append(
+                {
+                    "type": "database",
+                    "name": db.name,
+                    "id": str(db.id),
+                    "tables": tables,
+                }
+            )
 
         # Include tables not in any database (edge case)
         db_ids = {db.id for db in workspace.existing_databases}
-        for t in (workspace.existing_tables or []):
+        for t in workspace.existing_tables or []:
             if t.database_id not in db_ids:
                 resources.append({"type": "table", **_table_entry(t)})
 
         for app in workspace.existing_apps:
             page_names = [p.name for p in app.pages]
-            resources.append({"type": "app", "name": app.name, "id": str(app.id), "pages": page_names})
+            resources.append(
+                {
+                    "type": "app",
+                    "name": app.name,
+                    "id": str(app.id),
+                    "pages": page_names,
+                }
+            )
 
         for agent in workspace.existing_agents:
             resources.append({"type": "agent", "name": agent.name, "id": str(agent.id)})
 
         for skill in workspace.existing_skills:
-            resources.append({
-                "type": "skill", "name": skill.name, "id": str(skill.id),
-                "agent_id": str(skill.agent_id) if skill.agent_id else None,
-            })
+            resources.append(
+                {
+                    "type": "skill",
+                    "name": skill.name,
+                    "id": str(skill.id),
+                    "agent_id": str(skill.agent_id) if skill.agent_id else None,
+                }
+            )
 
         for view in workspace.existing_views:
-            resources.append({
-                "type": "view", "name": view.name, "id": str(view.id),
-                "view_type": view.view_type,
-            })
+            resources.append(
+                {
+                    "type": "view",
+                    "name": view.name,
+                    "id": str(view.id),
+                    "view_type": view.view_type,
+                }
+            )
 
         summary = workspace.resource_summary()
-        return json.dumps({
-            "_summary": f"{summary}. Use system_research for field details.",
-            "resources": resources,
-        }, indent=2, default=str)
+        return json.dumps(
+            {
+                "_summary": f"{summary}. Use system_research for field details.",
+                "resources": resources,
+            },
+            indent=2,
+            default=str,
+        )
 
     def _get_capability_guidance(
         self,
@@ -287,33 +330,35 @@ class DSPyPlanGenerator:
     ) -> str:
         """Get capability planning guidance for the planner using semantic search.
 
-        Uses multi-factor matching: semantic search (top 3) filtered to enabled,
-        with the routing header always included. Falls back to all guidance if
-        no registry is available.
+        Searches org's enabled capabilities directly (50-500) rather than all 30K
+        capabilities. Falls back to full registry search if no org_id available.
 
         Matched capability guidance includes tool mappings and step description
         templates — these are the primary instructions for writing executor-ready steps.
         """
         # Fallback: no registry means return all guidance (includes routing header)
         if not request.capability_registry:
-            logger.warning("capability_registry missing in request — returning all guidance (this shouldn't happen)")
+            logger.warning(
+                "capability_registry missing in request — returning all guidance (this shouldn't happen)"
+            )
             return format_planning_guidance()
 
         org_id = request.config.org_id if request.config else None
 
         try:
-            # Semantic search: top 3 most relevant capabilities
-            matched = request.capability_registry.search(
-                query=request.basic_instructions,
-                limit=3,
-            )
-
-            # Filter to enabled only
+            # Semantic search within org's enabled capabilities only (50-500, not 30K)
+            # Falls back to full registry search if no org_id
             if org_id:
-                enabled_ids = {
-                    cap.id for cap in request.capability_registry.get_enabled(org_id)
-                }
-                matched = [cap for cap in matched if cap.id in enabled_ids]
+                matched = request.capability_registry.search_enabled(
+                    query=request.basic_instructions,
+                    org_id=org_id,
+                    limit=3,
+                )
+            else:
+                matched = request.capability_registry.search(
+                    query=request.basic_instructions,
+                    limit=3,
+                )
 
             # Get guidance for matched capabilities
             guidance_parts = []
@@ -377,6 +422,8 @@ class DSPyPlanGenerator:
             steps=steps,
             context=dspy_plan.context,
             analysis=dspy_plan.analysis,
+            auto_approve_policy=dspy_plan.auto_approve_policy,
+            matched_conditions=dspy_plan.matched_conditions,
         )
 
     def _convert_template_plan(

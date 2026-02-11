@@ -9,6 +9,14 @@ Context and configuration management for agent execution.
 - ContextSyncService: Bidirectional sync between local workspace and dynamic tables
 """
 
+from .manager import (
+    clear_human_skill_awaiting,
+    execution_scope,
+    get_current_context,
+    get_human_skill_awaiting,
+    set_current_context,
+    signal_human_skill_awaiting,
+)
 from .models import (
     ConversationMessage,
     SessionConfig,
@@ -17,12 +25,6 @@ from .models import (
 )
 from .resolver import ContextResolver
 from .sync import ContextSyncService, ContextSyncServiceFactory
-from .manager import (
-    set_current_context,
-    get_current_context,
-    execution_scope,
-)
-
 
 __all__ = [
     "ConversationMessage",
@@ -35,4 +37,7 @@ __all__ = [
     "set_current_context",
     "get_current_context",
     "execution_scope",
+    "signal_human_skill_awaiting",
+    "get_human_skill_awaiting",
+    "clear_human_skill_awaiting",
 ]

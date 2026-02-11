@@ -11,7 +11,7 @@
  */
 
 import { NextRequest } from 'next/server';
-import { withAuthenticatedRoute, parseIntParam, parseJsonBody } from '@/lib/api/base';
+import { withAuthenticatedRoute, parseJsonBody } from '@/lib/api/base';
 import { getFileApplicationService, getTableApplicationService, getRowApplicationService } from '@/ddd/application/di/container';
 import { TableId, FieldId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import { RowId, Row } from '@/ddd/domain/tables/value-objects/row';

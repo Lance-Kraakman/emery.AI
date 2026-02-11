@@ -2,22 +2,22 @@
 
 // AIDEV-NOTE: Client wrapper for NewAgentDetailsView to handle routing
 // Provides refresh on update
+// NOTE: This component is no longer used - replaced by streaming architecture in page.tsx
 
 import { useRouter } from 'next/navigation';
 import { NewAgentDetailsView } from './NewAgentDetailsView';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import type { TaskDTO } from '@/app/mappers/task-mapper';
 import type { SkillDTO } from '@/app/mappers/skill-mapper';
-import type { ConnectionDTO } from '@/app/mappers/connection-mapper';
 
 interface AgentDetailsWrapperProps {
   agent: AgentDTO;
   tasks: TaskDTO[];
   skills: SkillDTO[];
-  connections: ConnectionDTO[];
+  connectionCount: number;
 }
 
-export function AgentDetailsWrapper({ agent, tasks, skills, connections }: AgentDetailsWrapperProps) {
+export function AgentDetailsWrapper({ agent, tasks, skills, connectionCount }: AgentDetailsWrapperProps) {
   const router = useRouter();
 
   const handleUpdate = () => {
@@ -29,7 +29,7 @@ export function AgentDetailsWrapper({ agent, tasks, skills, connections }: Agent
       agent={agent}
       tasks={tasks}
       skills={skills}
-      connections={connections}
+      connectionCount={connectionCount}
       onUpdate={handleUpdate}
     />
   );

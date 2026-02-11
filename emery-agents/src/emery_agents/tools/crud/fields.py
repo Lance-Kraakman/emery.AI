@@ -12,27 +12,36 @@ from typing import Any
 import dspy
 
 from emery_agents.api.http_client import make_request
+
 from ..mutation_guard import check_mutation_allowed
 
 # Valid field types for validation
 VALID_FIELD_TYPES = {
     # Simple types (no config needed)
-    "text", "number", "boolean", "date", "email", "phone", "json",
+    "text",
+    "number",
+    "boolean",
+    "date",
+    "email",
+    "phone",
+    "json",
     # Config types (may need additional params)
-    "relation",       # Required: related_table_id
-    "file",           # Optional: allowedTypes, maxSize in field_config
-    "document",       # No config needed
-    "embedding",      # Required: embeddingSize (384|768|1536|3072) in field_config
+    "relation",  # Required: related_table_id
+    "file",  # Optional: allowedTypes, maxSize in field_config
+    "document",  # No config needed
+    "embedding",  # Required: embeddingSize (384|768|1536|3072) in field_config
     "single-select",  # Required: options array in field_config
-    "multi-select",   # Required: options array in field_config
+    "multi-select",  # Required: options array in field_config
     # Auto-generated (read-only - users rarely create these)
-    "autonumber",     # Optional: startingNumber, prefix, suffix, digits in field_config
-    "created-at",     # No config needed
-    "last-updated",   # Optional: watchFields in field_config
+    "autonumber",  # Optional: startingNumber, prefix, suffix, digits in field_config
+    "created-at",  # No config needed
+    "last-updated",  # Optional: watchFields in field_config
 }
 
 
-def create_field_crud(api_key: str, org_id: str, extra_headers: dict[str, str] | None = None) -> dspy.Tool:
+def create_field_crud(
+    api_key: str, org_id: str, extra_headers: dict[str, str] | None = None
+) -> dspy.Tool:
     """
     Factory: Create field_crud tool with auth captured in closure.
 
@@ -53,16 +62,16 @@ def create_field_crud(api_key: str, org_id: str, extra_headers: dict[str, str] |
         related_table_id: str | None = None,
         field_config: dict[str, Any] | None = None,
     ) -> str:
-        """Column/field management: create_field, list_fields, delete_field.
+        """Column/field management: create_field, list_fields, update_field, delete_field.
 
         Supports field types: text, number, boolean, date, email, phone, json,
         relation, file, document, embedding, single-select, multi-select,
         autonumber, created-at, last-updated.
 
         Args:
-            method: Operation - create_field, list_fields, delete_field
+            method: Operation - create_field, list_fields, update_field, delete_field
             table_id: Table ID (required for all operations)
-            field_name: Column name for create_field/delete_field
+            field_name: Column name for create_field/update_field/delete_field
             field_type: Field type (see supported types above)
             field_required: Whether field is required (default: false)
             related_table_id: Target table ID for relation fields
@@ -117,14 +126,16 @@ def create_field_crud(api_key: str, org_id: str, extra_headers: dict[str, str] |
                         'Valid sizes: 384, 768, 1536, 3072. Example: field_config={"embeddingSize": 1536}'
                     )
                 if field_config.get("embeddingSize") not in (384, 768, 1536, 3072):
-                    return f"ERROR: Invalid embeddingSize. Valid sizes: 384, 768, 1536, 3072"
+                    return "ERROR: Invalid embeddingSize. Valid sizes: 384, 768, 1536, 3072"
 
             # Build request payload
             create_data: dict[str, Any] = {
                 "tableId": int(table_id),
                 "name": field_name,
                 "type": field_type,
-                "required": bool(field_required) if field_required is not None else False,
+                "required": bool(field_required)
+                if field_required is not None
+                else False,
             }
 
             if related_table_id:
@@ -154,6 +165,43 @@ def create_field_crud(api_key: str, org_id: str, extra_headers: dict[str, str] |
                 extra_headers=extra_headers,
             )
 
+        elif method == "update_field":
+            if not table_id:
+                return "ERROR: table_id is required for update_field operation"
+            if not field_name:
+                return "ERROR: field_name is required for update_field"
+
+            # Build update payload - only include fields that are provided
+            update_data: dict[str, Any] = {
+                "tableId": int(table_id),
+                "fieldName": field_name,
+            }
+
+            # Include optional update fields
+            if field_type:
+                if field_type not in VALID_FIELD_TYPES:
+                    return (
+                        f"ERROR: Invalid field_type '{field_type}'. "
+                        f"Valid types: text, number, boolean, date, email, phone, json, "
+                        f"relation, file, document, embedding, single-select, multi-select"
+                    )
+                update_data["type"] = field_type
+
+            if field_required is not None:
+                update_data["required"] = bool(field_required)
+
+            if field_config:
+                update_data["metadata"] = field_config
+
+            return make_request(
+                endpoint="fields",
+                method="PATCH",
+                data=update_data,
+                auth_token=api_key,
+                org_id=org_id,
+                extra_headers=extra_headers,
+            )
+
         elif method == "delete_field":
             if not table_id:
                 return "ERROR: table_id is required for delete_field operation"
@@ -171,16 +219,16 @@ def create_field_crud(api_key: str, org_id: str, extra_headers: dict[str, str] |
             )
 
         else:
-            return f"ERROR: Unknown method: {method}. Supported: create_field, list_fields, delete_field"
+            return f"ERROR: Unknown method: {method}. Supported: create_field, list_fields, update_field, delete_field"
 
     return dspy.Tool(
         func=field_crud,
         name="field_crud",
-        desc="Column/field management: create_field, list_fields, delete_field. Supports types: text, number, boolean, date, email, phone, json, relation, file, document, embedding, single-select, multi-select.",
+        desc="Column/field management: create_field, list_fields, update_field, delete_field. Supports types: text, number, boolean, date, email, phone, json, relation, file, document, embedding, single-select, multi-select.",
         arg_desc={
-            "method": "Operation: create_field, list_fields, delete_field",
+            "method": "Operation: create_field, list_fields, update_field, delete_field",
             "table_id": "Table ID (required for all operations)",
-            "field_name": "Column name (required for create_field, delete_field)",
+            "field_name": "Column name (required for create_field, update_field, delete_field)",
             "field_type": "Field type: text, number, boolean, date, email, phone, json, relation, file, document, embedding, single-select, multi-select",
             "field_required": "Whether field is required (default: false)",
             "related_table_id": "Target table ID for relation fields",

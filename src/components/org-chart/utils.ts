@@ -26,8 +26,7 @@ export * from './edgeUtils';
 export * from './nodeFactory';
 
 // Import from modules for internal use
-import { makeNodeId } from './nodeId';
-import { calculateGridPosition, calculateAgentContentHeight, getNodeDimensions, LAYOUT_PADDING, LAYOUT_GAP, COLUMNS } from './layout';
+import { calculateGridPosition, getNodeDimensions, LAYOUT_PADDING, LAYOUT_GAP, COLUMNS } from './layout';
 import { extractSkillEdges } from './edgeUtils';
 import { createAgentNode, createSkillNode, createDatabaseNode, type Agent, type Skill, type Database } from './nodeFactory';
 
@@ -80,23 +79,17 @@ export function buildOrgChartFromData(
   const totalOrgRows = skillRows + dbRows;
   const agentStartY = LAYOUT_PADDING + totalOrgRows * (orgChartNodeSizes.nodeHeight + LAYOUT_GAP) + (totalOrgRows > 0 ? LAYOUT_GAP * 2 : 0);
 
-  // Create agent container nodes with their children
+  // Create agent nodes (compact cards with inline skill/database lists)
   agents.forEach((agent, agentIndex) => {
-    const isExpanded = canvasMetadata?.agentExpandedStates?.[agent.id] ?? true;
-    const agentSkills = skills.filter((s) => s.agentId === agent.id);
-    const agentDatabases = databases.filter((d) => d.agentId === agent.id);
-    const defaultHeight = isExpanded
-      ? calculateAgentContentHeight(agentSkills.length, agentDatabases.length)
-      : 60;
-
     const defaultPos = calculateGridPosition(
       agentIndex,
       agentStartY,
       orgChartNodeSizes.containerMinWidth,
-      defaultHeight,
-      2 // agents in 2-column grid
+      orgChartNodeSizes.containerMinHeight,
+      3 // agents in 3-column grid for better horizontal layout
     );
 
+    // Agent node now contains skills/databases as inline lists (no separate child nodes)
     nodes.push(createAgentNode(
       agent,
       agentPositions[agent.id] ?? defaultPos,
@@ -104,28 +97,6 @@ export function buildOrgChartFromData(
       skills,
       databases
     ));
-
-    // Add children if expanded
-    if (isExpanded) {
-      const agentNodeId = makeNodeId('agent', agent.id);
-
-      // Add agent's skills
-      agentSkills.forEach((skill, index) => {
-        const node = createSkillNode(skill, undefined, canvasMetadata, index);
-        node.parentId = agentNodeId;
-        node.extent = 'parent';
-        nodes.push(node);
-      });
-
-      // Add agent's databases
-      agentDatabases.forEach((db, index) => {
-        const combinedIndex = agentSkills.length + index;
-        const node = createDatabaseNode(db, undefined, canvasMetadata, combinedIndex);
-        node.parentId = agentNodeId;
-        node.extent = 'parent';
-        nodes.push(node);
-      });
-    }
   });
 
   // Add saved sticky notes
@@ -193,7 +164,7 @@ export function extractMetadataFromNodes(
     if (node.type === 'agent') {
       const data = node.data as AgentContainerNodeData;
       agentPositions[data.agentId] = { x: node.position.x, y: node.position.y };
-      agentExpandedStates[data.agentId] = data.isExpanded ?? true;
+      // No longer tracking expanded states - agents always show content inline
       agentDimensions[data.agentId] = getNodeDimensions(node);
     } else if (node.type === 'skill') {
       const data = node.data as SkillNodeData;

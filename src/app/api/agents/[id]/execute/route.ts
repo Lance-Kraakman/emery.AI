@@ -10,7 +10,6 @@ import { eq } from 'drizzle-orm';
 import { getAgentTaskApplicationService } from '@/ddd/application/di/container';
 import type { TaskInstructions } from '@/ddd/domain/tasks/entities/task';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
-import { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import crypto from 'crypto';
 import { validateOutboundUrl } from '@/lib/security/url-validator';
 

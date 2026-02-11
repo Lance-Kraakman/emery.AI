@@ -1,0 +1,1 @@
+ALTER TABLE "agents" ADD COLUMN "allow_network" boolean DEFAULT true NOT NULL;

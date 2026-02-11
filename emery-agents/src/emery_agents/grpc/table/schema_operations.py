@@ -6,18 +6,17 @@ column detection, type mapping, and backfilling operations.
 """
 
 import logging
-from typing import List, Dict, Optional
-import pyarrow as pa
-import polars as pl
-from deltalake import write_deltalake, DeltaTable
 
-from .schema import get_delta_schema_as_pyarrow, build_schema_from_table_fields
-from .transform import normalize_arrow_table_to_large_string, create_empty_arrow_table
+import pyarrow as pa
+from deltalake import DeltaTable, write_deltalake
+
+from .schema import get_delta_schema_as_pyarrow
+from .transform import create_empty_arrow_table, normalize_arrow_table_to_large_string
 
 logger = logging.getLogger(__name__)
 
 
-def detect_new_columns(current_schema: pa.Schema, new_schema: pa.Schema) -> List[str]:
+def detect_new_columns(current_schema: pa.Schema, new_schema: pa.Schema) -> list[str]:
     """
     Detect which columns in new_schema don't exist in current_schema.
 
@@ -32,14 +31,14 @@ def detect_new_columns(current_schema: pa.Schema, new_schema: pa.Schema) -> List
     new_columns = [field.name for field in new_schema]
     columns_to_add = [col for col in new_columns if col not in current_columns]
 
-    logger.info(f"[detect_new_columns] Current: {current_columns}, New: {new_columns}, To add: {columns_to_add}")
+    logger.info(
+        f"[detect_new_columns] Current: {current_columns}, New: {new_columns}, To add: {columns_to_add}"
+    )
     return columns_to_add
 
 
 def evolve_table_schema(
-    s3_uri: str,
-    new_fields_schema: pa.Schema,
-    storage_options: Dict[str, str]
+    s3_uri: str, new_fields_schema: pa.Schema, storage_options: dict[str, str]
 ) -> None:
     """
     Evolve Delta Lake table schema by adding new columns with metadata.
@@ -53,7 +52,9 @@ def evolve_table_schema(
         new_fields_schema: PyArrow schema containing new fields with metadata
         storage_options: S3 storage configuration (credentials, region, etc.)
     """
-    logger.info(f"[evolve_table_schema] Adding {len(new_fields_schema)} columns: {list(new_fields_schema.names)}")
+    logger.info(
+        f"[evolve_table_schema] Adding {len(new_fields_schema)} columns: {list(new_fields_schema.names)}"
+    )
 
     # Create empty PyArrow table using metadata-preserving utility
     # This preserves field metadata (e.g., field_type for autonumber sorting)
@@ -68,17 +69,15 @@ def evolve_table_schema(
         arrow_table,
         mode="append",
         schema_mode="merge",
-        storage_options=storage_options
+        storage_options=storage_options,
     )
 
-    logger.info(f"[evolve_table_schema] ✅ Schema evolution triggered")
+    logger.info("[evolve_table_schema] ✅ Schema evolution triggered")
 
 
 def verify_schema_update(
-    s3_uri: str,
-    expected_columns: List[str],
-    storage_options: Dict[str, str]
-) -> Optional[str]:
+    s3_uri: str, expected_columns: list[str], storage_options: dict[str, str]
+) -> str | None:
     """
     Verify that schema evolution succeeded and all expected columns were added.
 
@@ -102,15 +101,17 @@ def verify_schema_update(
         logger.error(f"[verify_schema_update] ❌ {error_msg}")
         return error_msg
 
-    logger.info(f"[verify_schema_update] ✅ All {len(expected_columns)} columns added successfully")
+    logger.info(
+        f"[verify_schema_update] ✅ All {len(expected_columns)} columns added successfully"
+    )
     return None
 
 
 def backfill_boolean_columns(
     s3_uri: str,
     new_schema: pa.Schema,
-    columns_to_add: List[str],
-    storage_options: Dict[str, str]
+    columns_to_add: list[str],
+    storage_options: dict[str, str],
 ) -> None:
     """
     Backfill boolean columns with false (not null).
@@ -126,7 +127,8 @@ def backfill_boolean_columns(
     """
     # Find boolean columns among the newly added columns
     boolean_cols = [
-        field.name for field in new_schema
+        field.name
+        for field in new_schema
         if field.name in columns_to_add and field.type == pa.bool_()
     ]
 
@@ -134,12 +136,18 @@ def backfill_boolean_columns(
         logger.info("[backfill_boolean_columns] No boolean columns to backfill")
         return
 
-    logger.info(f"[backfill_boolean_columns] Backfilling {len(boolean_cols)} columns: {boolean_cols}")
+    logger.info(
+        f"[backfill_boolean_columns] Backfilling {len(boolean_cols)} columns: {boolean_cols}"
+    )
 
     try:
         table = DeltaTable(s3_uri, storage_options=storage_options)
         for col_name in boolean_cols:
             table.update(predicate=f"`{col_name}` IS NULL", updates={col_name: "false"})
-        logger.info(f"[backfill_boolean_columns] ✅ Backfilled {len(boolean_cols)} boolean columns")
+        logger.info(
+            f"[backfill_boolean_columns] ✅ Backfilled {len(boolean_cols)} boolean columns"
+        )
     except Exception as e:
-        logger.warning(f"[backfill_boolean_columns] Backfill failed (non-critical): {e}")
+        logger.warning(
+            f"[backfill_boolean_columns] Backfill failed (non-critical): {e}"
+        )

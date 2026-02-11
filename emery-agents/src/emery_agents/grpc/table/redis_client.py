@@ -7,17 +7,16 @@ Returns None if Redis is unavailable (graceful degradation).
 
 import logging
 import os
-from typing import Optional
 
 import redis
 
 logger = logging.getLogger(__name__)
 
-_redis_client: Optional[redis.Redis] = None
+_redis_client: redis.Redis | None = None
 _initialized = False
 
 
-def get_redis_client() -> Optional[redis.Redis]:
+def get_redis_client() -> redis.Redis | None:
     """Get singleton Redis client. Returns None if Redis unavailable."""
     global _redis_client, _initialized
 

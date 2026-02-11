@@ -13,15 +13,14 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach, beforeAll } from 'vitest';
-import { getAgentTaskApplicationService, getAgentApplicationService, getTeamApplicationService, initializeDI } from '@/ddd/application/di/container';
-import { AgentId, OrganizationId, UserId, TeamId } from '@/ddd/domain/shared/value-objects';
+import { getAgentTaskApplicationService, getAgentApplicationService } from '@/ddd/application/di/container';
+import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import type { CreateTaskDTO } from '@/app/dtos/task.dto';
-import type { CreateAgentDTO } from '@/app/dtos/agent.dto';
 import { testClient } from '../shared/integration-helpers';
 import { createTestOrganization, createTestAgent, createTestTeam, createTestUser, initializeTestDI } from '../shared/test-setup';
 import type { TestContext } from '../shared/test-setup';
 import { agents, teams, tasks, teamMemberships, users } from '@/ddd/infrastructure/db/schema';
-import { eq, or } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { contextManager } from '@/ddd/infrastructure/db/context-manager';
 
 // Test timeout for permission tests

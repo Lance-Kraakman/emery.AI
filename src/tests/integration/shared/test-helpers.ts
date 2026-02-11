@@ -1,9 +1,8 @@
 import { Client } from 'pg';
 import { initializeDI } from '@/ddd/application/di/container';
-import { db, rawClient } from '@/ddd/infrastructure/db/client';
-import { organizations, users, userOrganizations, agents, tasks } from '@/ddd/infrastructure/db/schema';
+import { db } from '@/ddd/infrastructure/db/client';
+import { agents, tasks } from '@/ddd/infrastructure/db/schema';
 import { eq } from 'drizzle-orm';
-import type { TestCase } from '../../shared/types';
 
 // AIDEV-NOTE: Clean test helpers using Drizzle ORM and environment variables
 // Provides minimal, maintainable integration test utilities

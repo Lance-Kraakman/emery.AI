@@ -11,7 +11,6 @@
 import type { ReferenceTool } from '@/ddd/domain/tools/entities/reference-tool'
 import type { ReferenceCategory } from '@/ddd/domain/chat/value-objects/reference-types'
 import type { ToolDTO } from './tool-mapper'
-import type { ToolDefinitionData } from '@/ddd/infrastructure/db/schema'
 
 /**
  * Reference Tool DTO for frontend consumption
@@ -133,7 +132,7 @@ export function mapReferenceToolToDTO(referenceTool: ReferenceTool): ToolDTO {
   }
 
   // Convert skill inputs to parameters format for insert text generation
-  let parameters: Record<string, { type: string; description?: string; required: boolean }> = {}
+  const parameters: Record<string, { type: string; description?: string; required: boolean }> = {}
   if (referenceTool.toolConfig.isSkillTool()) {
     const skillConfig = referenceTool.toolConfig.getSkillConfig()!
     const skillInputs = skillConfig.inputs || []

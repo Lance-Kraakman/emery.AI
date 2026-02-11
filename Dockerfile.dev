@@ -22,7 +22,9 @@ RUN npm i -g pnpm
 COPY package.json pnpm-lock.yaml ./
 
 # Install dependencies inside container (Linux binaries)
-RUN pnpm install --frozen-lockfile
+# Uses BuildKit cache mount for pnpm store - run with DOCKER_BUILDKIT=1
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile
 
 # Copy source code
 COPY . .

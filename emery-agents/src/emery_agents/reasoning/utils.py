@@ -37,7 +37,11 @@ class ToolCallOutcome:
     output: str
 
     def to_dict(self) -> dict[str, Any]:
-        return {"tool_name": self.tool_name, "success": self.success, "output": self.output}
+        return {
+            "tool_name": self.tool_name,
+            "success": self.success,
+            "output": self.output,
+        }
 
 
 @dataclass
@@ -79,7 +83,9 @@ class StepOutcome:
         return "\n".join(lines)
 
 
-def build_step_outcome(result_text: str, trajectory: dict[str, Any] | None) -> StepOutcome:
+def build_step_outcome(
+    result_text: str, trajectory: dict[str, Any] | None
+) -> StepOutcome:
     """Build StepOutcome from DSPy ReAct result text and trajectory.
 
     Parses trajectory keys (tool_name_N, observation_N) to extract
@@ -99,11 +105,13 @@ def build_step_outcome(result_text: str, trajectory: dict[str, Any] | None) -> S
             )
 
             truncated = observation[:500] if len(observation) > 500 else observation
-            tool_calls.append(ToolCallOutcome(
-                tool_name=tool_name,
-                success=success,
-                output=truncated,
-            ))
+            tool_calls.append(
+                ToolCallOutcome(
+                    tool_name=tool_name,
+                    success=success,
+                    output=truncated,
+                )
+            )
             idx += 1
 
     # Determine step success:

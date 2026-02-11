@@ -9,21 +9,22 @@ from __future__ import annotations
 import ast
 import math
 import operator
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any
 
-from emery_agents.services.sandbox import BwrapExecutor
+from emery_agents.services.sandbox import GVisorExecutor
 
 
-def create_file_reader_tool(workspace_path: Optional[Path] = None) -> Callable[[str], str]:
-    """Factory: Create file reader that uses bwrap sandbox when workspace_path is provided.
+def create_file_reader_tool(workspace_path: Path | None = None) -> Callable[[str], str]:
+    """Factory: Create file reader that uses gVisor sandbox when workspace_path is provided.
 
     Args:
-        workspace_path: If provided, file reads go through bwrap sandbox.
+        workspace_path: If provided, file reads go through gVisor sandbox.
                        The sandbox ensures isolation to the workspace directory.
     """
     # Create shell if workspace_path provided
-    shell = BwrapExecutor().get_shell(workspace_path) if workspace_path else None
+    shell = GVisorExecutor().get_shell(workspace_path) if workspace_path else None
 
     def file_reader(file_path: str) -> str:
         """Read and return the content of a text file.
@@ -35,12 +36,12 @@ def create_file_reader_tool(workspace_path: Optional[Path] = None) -> Callable[[
             The text content of the file, or an error message if reading fails.
         """
         if shell:
-            # Read via bwrap sandbox - isolated to workspace
+            # Read via gVisor sandbox - isolated to workspace
             return shell.read_file(file_path)
         else:
             # Fallback for non-sandboxed context (shouldn't happen in production)
             try:
-                with open(file_path, "r", encoding="utf-8") as f:
+                with open(file_path, encoding="utf-8") as f:
                     return f.read()
             except FileNotFoundError:
                 return f"Error: File '{file_path}' not found."
@@ -112,7 +113,9 @@ def create_calculator_tool() -> Callable[[str], str]:
                 operand = _eval_node(node.operand)
                 op = safe_ops.get(type(node.op))
                 if op is None:
-                    raise ValueError(f"Unsupported unary operator: {type(node.op).__name__}")
+                    raise ValueError(
+                        f"Unsupported unary operator: {type(node.op).__name__}"
+                    )
                 return op(operand)
             elif isinstance(node, ast.Call):
                 if not isinstance(node.func, ast.Name):

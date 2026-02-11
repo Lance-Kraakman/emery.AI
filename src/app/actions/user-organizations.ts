@@ -9,8 +9,7 @@ import { getUserRoleApplicationService, getUserRepository, getOrganizationReposi
 import { withAuthContext } from '@/lib/auth/with-context';
 import type { Result } from "./types";
 import { UserId, OrganizationId } from "@/ddd/domain/shared/value-objects";
-import { SystemRoleType, SYSTEM_ROLES, SYSTEM_ROLE_IDS } from "@/ddd/domain/rbac/entities/role";
-import { contextManager } from '@/ddd/infrastructure/db/context-manager';
+import { SystemRoleType, SYSTEM_ROLE_IDS } from "@/ddd/domain/rbac/entities/role";
 import { OrganizationMapper, type OrganizationDTO } from "@/app/mappers/organization-mapper";
 
 // Helper to map Role entities to simplified format for OrganizationDTO.userRoles
@@ -35,7 +34,8 @@ import type {
 export async function switchCurrentOrganization(organizationId: number): Promise<Result> {
   return withAuthContext(async () => {
     try {
-      const session = await requirePermission("users:manage");
+      // Only require auth, not admin permission - any member can switch to their orgs
+      const session = await requireAuth();
     
     if (!organizationId) {
       return {
@@ -212,59 +212,53 @@ export async function getUserOrganizations() {
 }
 
 export async function getCurrentOrganization(): Promise<OrganizationDTO | null> {
-  try {
-    // FIXED: Cannot use requirePermission here as it causes circular dependency with requireCurrentOrganization
-    const session = await requireAuth();
-  
-  if (!session.user.currentOrganizationId) {
-    return null;
-  }
+  return withAuthContext(async () => {
+    try {
+      // FIXED: Cannot use requirePermission here as it causes circular dependency with requireCurrentOrganization
+      const session = await requireAuth();
 
-  const organizationRepository = getOrganizationRepository();
-  const userRoleApplicationService = getUserRoleApplicationService();
-  
-  const organization = await organizationRepository.findById(OrganizationId.fromNumber(session.user.currentOrganizationId));
-  
-  if (!organization) {
-    return null;
-  }
+      if (!session.user.currentOrganizationId) {
+        return null;
+      }
 
-  // Get the user's roles in this organization
-  const userRoles = await userRoleApplicationService.getUserOrganizationRoles(
-    UserId.fromString(session.user.id), 
-    OrganizationId.fromNumber(session.user.currentOrganizationId)
-  );
-  
-  // AIDEV-NOTE: Role lookup for organization context
-  
-  if (!userRoles || userRoles.length === 0) {
-    console.error(`⚠️ No roles found for user ${session.user.id} in current organization ${session.user.currentOrganizationId}. This indicates a data integrity issue.`);
-  }
+      const organizationRepository = getOrganizationRepository();
+      const userRoleApplicationService = getUserRoleApplicationService();
 
-  // Convert to DTO to avoid serialization issues with Value Objects
-  return OrganizationMapper.toDTO({
-    ...organization,
-    userRoles: Array.isArray(userRoles) ? userRoles.map(mapRoleToSimpleFormat) : [],
-    hasRoleError: !userRoles || userRoles.length === 0 // Flag to indicate role loading error
+      const organization = await organizationRepository.findById(OrganizationId.fromNumber(session.user.currentOrganizationId));
+
+      if (!organization) {
+        return null;
+      }
+
+      // Get the user's roles in this organization
+      const userRoles = await userRoleApplicationService.getUserOrganizationRoles(
+        UserId.fromString(session.user.id),
+        OrganizationId.fromNumber(session.user.currentOrganizationId)
+      );
+
+      // AIDEV-NOTE: Role lookup for organization context
+
+      if (!userRoles || userRoles.length === 0) {
+        console.error(`⚠️ No roles found for user ${session.user.id} in current organization ${session.user.currentOrganizationId}. This indicates a data integrity issue.`);
+      }
+
+      // Convert to DTO to avoid serialization issues with Value Objects
+      return OrganizationMapper.toDTO({
+        ...organization,
+        userRoles: Array.isArray(userRoles) ? userRoles.map(mapRoleToSimpleFormat) : [],
+        hasRoleError: !userRoles || userRoles.length === 0 // Flag to indicate role loading error
+      });
+    } catch (error) {
+      console.error("Error fetching current organization:", error);
+      return null;
+    }
   });
-  } catch (error) {
-    console.error("Error fetching current organization:", error);
-    return null;
-  }
 }
 
 // AIDEV-NOTE: Helper function to check if user has access to current organization context
+// IMPORTANT: This function is called from within server actions that are already wrapped with
+// withAuthContext(), so the RLS context is already set. We just need to fetch the org.
 export async function requireCurrentOrganization() {
-  const session = await requireAuth();
-  
-  // Set RLS context for subsequent database operations
-  if (session.user.id && session.user.currentOrganizationId) {
-    contextManager.setContext(
-      OrganizationId.fromNumber(session.user.currentOrganizationId),
-      UserId.fromString(session.user.id)
-    );
-  }
-  
   const org = await getCurrentOrganization();
   if (!org) {
     throw new Error("No current organization selected");

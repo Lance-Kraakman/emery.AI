@@ -4,7 +4,7 @@
  * Orchestrates token usage tracking, billing, and quota enforcement.
  * Handles recording AI model usage and calculating costs.
  */
-import type { ITokenUsageRepository, UsageStatistics } from '@/ddd/domain/billing/repositories/token-usage-repository';
+import type { ITokenUsageRepository } from '@/ddd/domain/billing/repositories/token-usage-repository';
 import type { CreateTokenUsageData, EntityType, TokenUsageMetadata } from '@/ddd/domain/billing/entities/token-usage';
 import { TokenUsageUtils } from '@/ddd/domain/billing/entities/token-usage';
 import { OrganizationId, UserId, AgentId } from '@/ddd/domain/shared/value-objects';

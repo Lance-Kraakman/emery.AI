@@ -64,6 +64,15 @@ export function AvatarPicker({ value, onChange, className }: AvatarPickerProps) 
     return generateAvatarDataUri(selectedStyle, 'preview-' + selectedStyle, selectedColor);
   }, [selectedStyle, selectedColor]);
 
+  // Pre-compute sample avatars for all styles (avoids hooks in callbacks)
+  const sampleAvatars = useMemo(() => {
+    const samples: Record<string, string> = {};
+    Object.keys(AVATAR_STYLES).forEach((styleName) => {
+      samples[styleName] = generateAvatarDataUri(styleName, 'sample-' + styleName, 'blue');
+    });
+    return samples;
+  }, []);
+
   const previewColors = getAvatarColor(selectedColor);
 
   return (
@@ -91,11 +100,7 @@ export function AvatarPicker({ value, onChange, className }: AvatarPickerProps) 
         <div className="grid grid-cols-4 gap-2">
           {Object.keys(AVATAR_STYLES).map((styleName) => {
             const isSelected = styleName === selectedStyle;
-            // Generate a sample avatar for this style using a consistent seed
-            const sampleDataUri = useMemo(() =>
-              generateAvatarDataUri(styleName, 'sample-' + styleName, 'blue'),
-              [styleName]
-            );
+            const sampleDataUri = sampleAvatars[styleName];
 
             return (
               <button

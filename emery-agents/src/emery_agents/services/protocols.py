@@ -6,7 +6,7 @@ the required methods/attributes satisfies the protocol, without explicit inherit
 This allows type-safe dependency injection while keeping classes decoupled.
 """
 
-from typing import Protocol, Optional, Any, Dict, List, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 
 @runtime_checkable
@@ -19,19 +19,19 @@ class ModelProviderProtocol(Protocol):
 
     def resolve_model_selection(
         self,
-        skill_model: Optional[str] = None,
-        agent_model: Optional[str] = None,
-        org_model: Optional[str] = None,
+        skill_model: str | None = None,
+        agent_model: str | None = None,
+        org_model: str | None = None,
         has_images: bool = False,
     ) -> str:
         """Resolve model ID using hierarchy: skill > agent > org > default."""
         ...
 
-    def get_dspy_lm(self, model_id: Optional[str] = None) -> Any:
+    def get_dspy_lm(self, model_id: str | None = None) -> Any:
         """Get a DSPy LM instance for the given model."""
         ...
 
-    def configure_dspy(self, model_id: Optional[str] = None) -> None:
+    def configure_dspy(self, model_id: str | None = None) -> None:
         """Configure DSPy global settings with the specified model."""
         ...
 
@@ -44,21 +44,21 @@ class GRPCClient(Protocol):
     Implementors: ChatProcessingClient (or similar)
     """
 
-    async def update_agent_plan(self, agent_id: int, plan: Dict[str, Any]) -> None:
+    async def update_agent_plan(self, agent_id: int, plan: dict[str, Any]) -> None:
         """Save plan to agent entity."""
         ...
 
-    async def get_agent(self, agent_id: int) -> Optional[Any]:
+    async def get_agent(self, agent_id: int) -> Any | None:
         """Get agent by ID."""
         ...
 
     async def update_step_plan(
-        self, skill_id: int, step_id: str, plan: Dict[str, Any]
+        self, skill_id: int, step_id: str, plan: dict[str, Any]
     ) -> None:
         """Save plan to skill step."""
         ...
 
-    async def get_skill_step(self, skill_id: int, step_id: str) -> Optional[Any]:
+    async def get_skill_step(self, skill_id: int, step_id: str) -> Any | None:
         """Get skill step by IDs."""
         ...
 

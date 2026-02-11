@@ -5,13 +5,19 @@ All outbound HTTP data access lives here, parallel to grpc/ for inbound.
 Provides both sync (make_request) and async (httpx.AsyncClient) API patterns.
 """
 
-from .http_client import make_request, get_http_client, get_base_url, unwrap_entity, HTTPClient
-from .database_api import DatabaseAPI, Database
-from .table_api import TableAPI, Table
-from .row_api import RowAPI
-from .app_api import AppAPI, App
 from .agent_api import AgentAPI, AgentAPIService, fetch_agent_by_id_sync
+from .app_api import App, AppAPI
+from .database_api import Database, DatabaseAPI
+from .http_client import (
+    HTTPClient,
+    get_base_url,
+    get_http_client,
+    make_request,
+    unwrap_entity,
+)
+from .row_api import RowAPI
 from .skill_api import SkillAPI, SkillAPIService
+from .table_api import Table, TableAPI
 from .workspace_api import WorkspaceAPI
 
 __all__ = [

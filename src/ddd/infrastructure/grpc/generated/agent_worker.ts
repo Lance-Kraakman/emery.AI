@@ -31,6 +31,8 @@ export enum TaskStatus {
   TASK_FAILED = 3,
   TASK_CANCELLED = 4,
   TASK_TIMEOUT = 5,
+  /** TASK_AWAITING_HUMAN - Paused, waiting for human to complete a step */
+  TASK_AWAITING_HUMAN = 6,
   UNRECOGNIZED = -1,
 }
 
@@ -54,6 +56,9 @@ export function taskStatusFromJSON(object: any): TaskStatus {
     case 5:
     case "TASK_TIMEOUT":
       return TaskStatus.TASK_TIMEOUT;
+    case 6:
+    case "TASK_AWAITING_HUMAN":
+      return TaskStatus.TASK_AWAITING_HUMAN;
     case -1:
     case "UNRECOGNIZED":
     default:
@@ -75,6 +80,8 @@ export function taskStatusToJSON(object: TaskStatus): string {
       return "TASK_CANCELLED";
     case TaskStatus.TASK_TIMEOUT:
       return "TASK_TIMEOUT";
+    case TaskStatus.TASK_AWAITING_HUMAN:
+      return "TASK_AWAITING_HUMAN";
     case TaskStatus.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";
@@ -350,6 +357,8 @@ export interface AgentConfig {
   tools: ToolConfig[];
   servers: ServerConfig[];
   defaultModel: string;
+  /** Network access for bash commands (git, curl, wget) - default true for agents */
+  allowNetwork: boolean;
 }
 
 /**
@@ -942,6 +951,11 @@ export interface ProcessMessageRequest {
   taskId: string;
   /** User display name for audit trail */
   userName: string;
+  /**
+   * Link tasks to chat messages for ExecutionSteps retrieval
+   * AIDEV-NOTE: When Python creates tasks, it should include this as chatMessageId
+   */
+  assistantMessageId: string;
 }
 
 /** Streaming response from AI processing */
@@ -965,6 +979,10 @@ export interface ProcessMessageResponse {
   /** HITL: Agent needs user approval/input */
   awaitingInput?:
     | AwaitingInput
+    | undefined;
+  /** Human skill step needs completion */
+  awaitingHumanSkill?:
+    | AwaitingHumanSkill
     | undefined;
   /** Response timestamp */
   timestamp: number;
@@ -1003,6 +1021,32 @@ export interface InputOption {
   label: string;
   /** Optional description */
   description: string;
+}
+
+/**
+ * Human skill step awaiting completion
+ * AIDEV-NOTE: Emitted when execution hits a human skill step. Stream closes after this,
+ * frontend shows completion UI, user submits outputs, new message resumes execution.
+ */
+export interface AwaitingHumanSkill {
+  /** Skill being executed */
+  skillId: number;
+  /** Skill display name */
+  skillName: string;
+  /** Step ID in workflow (for multi-step skills) */
+  stepId: string;
+  /** What human needs to do (rich text/markdown) */
+  instructions: string;
+  /** Context from execution (input values) */
+  inputs: SkillInputValue[];
+  /** What human needs to provide */
+  outputSchema: OutputDefinition[];
+  /** User ID assigned to complete */
+  assignedTo: string;
+  /** URLs if human needs to work externally */
+  externalLinks: string[];
+  /** For resuming after completion */
+  sessionId: string;
 }
 
 /**
@@ -2474,7 +2518,16 @@ export const TokenUsage: MessageFns<TokenUsage> = {
 };
 
 function createBaseAgentConfig(): AgentConfig {
-  return { name: "", role: "", description: "", persona: "", tools: [], servers: [], defaultModel: "" };
+  return {
+    name: "",
+    role: "",
+    description: "",
+    persona: "",
+    tools: [],
+    servers: [],
+    defaultModel: "",
+    allowNetwork: false,
+  };
 }
 
 export const AgentConfig: MessageFns<AgentConfig> = {
@@ -2499,6 +2552,9 @@ export const AgentConfig: MessageFns<AgentConfig> = {
     }
     if (message.defaultModel !== "") {
       writer.uint32(66).string(message.defaultModel);
+    }
+    if (message.allowNetwork !== false) {
+      writer.uint32(72).bool(message.allowNetwork);
     }
     return writer;
   },
@@ -2566,6 +2622,14 @@ export const AgentConfig: MessageFns<AgentConfig> = {
           message.defaultModel = reader.string();
           continue;
         }
+        case 9: {
+          if (tag !== 72) {
+            break;
+          }
+
+          message.allowNetwork = reader.bool();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2586,6 +2650,7 @@ export const AgentConfig: MessageFns<AgentConfig> = {
         ? object.servers.map((e: any) => ServerConfig.fromJSON(e))
         : [],
       defaultModel: isSet(object.defaultModel) ? globalThis.String(object.defaultModel) : "",
+      allowNetwork: isSet(object.allowNetwork) ? globalThis.Boolean(object.allowNetwork) : false,
     };
   },
 
@@ -2612,6 +2677,9 @@ export const AgentConfig: MessageFns<AgentConfig> = {
     if (message.defaultModel !== "") {
       obj.defaultModel = message.defaultModel;
     }
+    if (message.allowNetwork !== false) {
+      obj.allowNetwork = message.allowNetwork;
+    }
     return obj;
   },
 
@@ -2627,6 +2695,7 @@ export const AgentConfig: MessageFns<AgentConfig> = {
     message.tools = object.tools?.map((e) => ToolConfig.fromPartial(e)) || [];
     message.servers = object.servers?.map((e) => ServerConfig.fromPartial(e)) || [];
     message.defaultModel = object.defaultModel ?? "";
+    message.allowNetwork = object.allowNetwork ?? false;
     return message;
   },
 };
@@ -7407,6 +7476,7 @@ function createBaseProcessMessageRequest(): ProcessMessageRequest {
     userApiKey: "",
     taskId: "",
     userName: "",
+    assistantMessageId: "",
   };
 }
 
@@ -7444,6 +7514,9 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
     }
     if (message.userName !== "") {
       writer.uint32(170).string(message.userName);
+    }
+    if (message.assistantMessageId !== "") {
+      writer.uint32(178).string(message.assistantMessageId);
     }
     return writer;
   },
@@ -7543,6 +7616,14 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
           message.userName = reader.string();
           continue;
         }
+        case 22: {
+          if (tag !== 178) {
+            break;
+          }
+
+          message.assistantMessageId = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -7569,6 +7650,7 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
       userApiKey: isSet(object.userApiKey) ? globalThis.String(object.userApiKey) : "",
       taskId: isSet(object.taskId) ? globalThis.String(object.taskId) : "",
       userName: isSet(object.userName) ? globalThis.String(object.userName) : "",
+      assistantMessageId: isSet(object.assistantMessageId) ? globalThis.String(object.assistantMessageId) : "",
     };
   },
 
@@ -7607,6 +7689,9 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
     if (message.userName !== "") {
       obj.userName = message.userName;
     }
+    if (message.assistantMessageId !== "") {
+      obj.assistantMessageId = message.assistantMessageId;
+    }
     return obj;
   },
 
@@ -7628,6 +7713,7 @@ export const ProcessMessageRequest: MessageFns<ProcessMessageRequest> = {
     message.userApiKey = object.userApiKey ?? "";
     message.taskId = object.taskId ?? "";
     message.userName = object.userName ?? "";
+    message.assistantMessageId = object.assistantMessageId ?? "";
     return message;
   },
 };
@@ -7639,6 +7725,7 @@ function createBaseProcessMessageResponse(): ProcessMessageResponse {
     error: undefined,
     stepProgress: undefined,
     awaitingInput: undefined,
+    awaitingHumanSkill: undefined,
     timestamp: 0,
     taskId: "",
     taskProgress: undefined,
@@ -7661,6 +7748,9 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
     }
     if (message.awaitingInput !== undefined) {
       AwaitingInput.encode(message.awaitingInput, writer.uint32(58).fork()).join();
+    }
+    if (message.awaitingHumanSkill !== undefined) {
+      AwaitingHumanSkill.encode(message.awaitingHumanSkill, writer.uint32(66).fork()).join();
     }
     if (message.timestamp !== 0) {
       writer.uint32(48).int64(message.timestamp);
@@ -7721,6 +7811,14 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
           message.awaitingInput = AwaitingInput.decode(reader, reader.uint32());
           continue;
         }
+        case 8: {
+          if (tag !== 66) {
+            break;
+          }
+
+          message.awaitingHumanSkill = AwaitingHumanSkill.decode(reader, reader.uint32());
+          continue;
+        }
         case 6: {
           if (tag !== 48) {
             break;
@@ -7761,6 +7859,9 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
       error: isSet(object.error) ? ProcessingError.fromJSON(object.error) : undefined,
       stepProgress: isSet(object.stepProgress) ? StepProgress.fromJSON(object.stepProgress) : undefined,
       awaitingInput: isSet(object.awaitingInput) ? AwaitingInput.fromJSON(object.awaitingInput) : undefined,
+      awaitingHumanSkill: isSet(object.awaitingHumanSkill)
+        ? AwaitingHumanSkill.fromJSON(object.awaitingHumanSkill)
+        : undefined,
       timestamp: isSet(object.timestamp) ? globalThis.Number(object.timestamp) : 0,
       taskId: isSet(object.taskId) ? globalThis.String(object.taskId) : "",
       taskProgress: isSet(object.taskProgress) ? ChatTaskProgress.fromJSON(object.taskProgress) : undefined,
@@ -7783,6 +7884,9 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
     }
     if (message.awaitingInput !== undefined) {
       obj.awaitingInput = AwaitingInput.toJSON(message.awaitingInput);
+    }
+    if (message.awaitingHumanSkill !== undefined) {
+      obj.awaitingHumanSkill = AwaitingHumanSkill.toJSON(message.awaitingHumanSkill);
     }
     if (message.timestamp !== 0) {
       obj.timestamp = Math.round(message.timestamp);
@@ -7815,6 +7919,9 @@ export const ProcessMessageResponse: MessageFns<ProcessMessageResponse> = {
       : undefined;
     message.awaitingInput = (object.awaitingInput !== undefined && object.awaitingInput !== null)
       ? AwaitingInput.fromPartial(object.awaitingInput)
+      : undefined;
+    message.awaitingHumanSkill = (object.awaitingHumanSkill !== undefined && object.awaitingHumanSkill !== null)
+      ? AwaitingHumanSkill.fromPartial(object.awaitingHumanSkill)
       : undefined;
     message.timestamp = object.timestamp ?? 0;
     message.taskId = object.taskId ?? "";
@@ -8053,6 +8160,210 @@ export const InputOption: MessageFns<InputOption> = {
     message.id = object.id ?? "";
     message.label = object.label ?? "";
     message.description = object.description ?? "";
+    return message;
+  },
+};
+
+function createBaseAwaitingHumanSkill(): AwaitingHumanSkill {
+  return {
+    skillId: 0,
+    skillName: "",
+    stepId: "",
+    instructions: "",
+    inputs: [],
+    outputSchema: [],
+    assignedTo: "",
+    externalLinks: [],
+    sessionId: "",
+  };
+}
+
+export const AwaitingHumanSkill: MessageFns<AwaitingHumanSkill> = {
+  encode(message: AwaitingHumanSkill, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.skillId !== 0) {
+      writer.uint32(8).int32(message.skillId);
+    }
+    if (message.skillName !== "") {
+      writer.uint32(18).string(message.skillName);
+    }
+    if (message.stepId !== "") {
+      writer.uint32(26).string(message.stepId);
+    }
+    if (message.instructions !== "") {
+      writer.uint32(34).string(message.instructions);
+    }
+    for (const v of message.inputs) {
+      SkillInputValue.encode(v!, writer.uint32(42).fork()).join();
+    }
+    for (const v of message.outputSchema) {
+      OutputDefinition.encode(v!, writer.uint32(50).fork()).join();
+    }
+    if (message.assignedTo !== "") {
+      writer.uint32(58).string(message.assignedTo);
+    }
+    for (const v of message.externalLinks) {
+      writer.uint32(66).string(v!);
+    }
+    if (message.sessionId !== "") {
+      writer.uint32(74).string(message.sessionId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AwaitingHumanSkill {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseAwaitingHumanSkill();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.skillId = reader.int32();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.skillName = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.stepId = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.instructions = reader.string();
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.inputs.push(SkillInputValue.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.outputSchema.push(OutputDefinition.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 7: {
+          if (tag !== 58) {
+            break;
+          }
+
+          message.assignedTo = reader.string();
+          continue;
+        }
+        case 8: {
+          if (tag !== 66) {
+            break;
+          }
+
+          message.externalLinks.push(reader.string());
+          continue;
+        }
+        case 9: {
+          if (tag !== 74) {
+            break;
+          }
+
+          message.sessionId = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): AwaitingHumanSkill {
+    return {
+      skillId: isSet(object.skillId) ? globalThis.Number(object.skillId) : 0,
+      skillName: isSet(object.skillName) ? globalThis.String(object.skillName) : "",
+      stepId: isSet(object.stepId) ? globalThis.String(object.stepId) : "",
+      instructions: isSet(object.instructions) ? globalThis.String(object.instructions) : "",
+      inputs: globalThis.Array.isArray(object?.inputs)
+        ? object.inputs.map((e: any) => SkillInputValue.fromJSON(e))
+        : [],
+      outputSchema: globalThis.Array.isArray(object?.outputSchema)
+        ? object.outputSchema.map((e: any) => OutputDefinition.fromJSON(e))
+        : [],
+      assignedTo: isSet(object.assignedTo) ? globalThis.String(object.assignedTo) : "",
+      externalLinks: globalThis.Array.isArray(object?.externalLinks)
+        ? object.externalLinks.map((e: any) => globalThis.String(e))
+        : [],
+      sessionId: isSet(object.sessionId) ? globalThis.String(object.sessionId) : "",
+    };
+  },
+
+  toJSON(message: AwaitingHumanSkill): unknown {
+    const obj: any = {};
+    if (message.skillId !== 0) {
+      obj.skillId = Math.round(message.skillId);
+    }
+    if (message.skillName !== "") {
+      obj.skillName = message.skillName;
+    }
+    if (message.stepId !== "") {
+      obj.stepId = message.stepId;
+    }
+    if (message.instructions !== "") {
+      obj.instructions = message.instructions;
+    }
+    if (message.inputs?.length) {
+      obj.inputs = message.inputs.map((e) => SkillInputValue.toJSON(e));
+    }
+    if (message.outputSchema?.length) {
+      obj.outputSchema = message.outputSchema.map((e) => OutputDefinition.toJSON(e));
+    }
+    if (message.assignedTo !== "") {
+      obj.assignedTo = message.assignedTo;
+    }
+    if (message.externalLinks?.length) {
+      obj.externalLinks = message.externalLinks;
+    }
+    if (message.sessionId !== "") {
+      obj.sessionId = message.sessionId;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<AwaitingHumanSkill>, I>>(base?: I): AwaitingHumanSkill {
+    return AwaitingHumanSkill.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AwaitingHumanSkill>, I>>(object: I): AwaitingHumanSkill {
+    const message = createBaseAwaitingHumanSkill();
+    message.skillId = object.skillId ?? 0;
+    message.skillName = object.skillName ?? "";
+    message.stepId = object.stepId ?? "";
+    message.instructions = object.instructions ?? "";
+    message.inputs = object.inputs?.map((e) => SkillInputValue.fromPartial(e)) || [];
+    message.outputSchema = object.outputSchema?.map((e) => OutputDefinition.fromPartial(e)) || [];
+    message.assignedTo = object.assignedTo ?? "";
+    message.externalLinks = object.externalLinks?.map((e) => e) || [];
+    message.sessionId = object.sessionId ?? "";
     return message;
   },
 };

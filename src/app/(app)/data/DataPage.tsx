@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { CanvasBase } from '../../../components/canvas/CanvasBase'
-import { Database, Plus, Table } from 'lucide-react'
+import { Database, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 /**

@@ -12,14 +12,14 @@ Planning context:
 """
 
 from dataclasses import dataclass, field
-from typing import List, Optional
 from enum import Enum
 
 
 class PlanningInsightType(Enum):
     """Types of insights extracted during planning."""
-    ENTITY = "entity"         # Found entity (table, app, field)
-    DECISION = "decision"     # Planning decision made
+
+    ENTITY = "entity"  # Found entity (table, app, field)
+    DECISION = "decision"  # Planning decision made
     CONSTRAINT = "constraint"  # Discovered limitation
     DEPENDENCY = "dependency"  # Dependency between phases
 
@@ -32,9 +32,10 @@ class PhaseGoal:
     Each phase has a specific goal derived from the overall instructions.
     Goals provide focus and accountability for each phase.
     """
-    phase_name: str           # "Schema Implementation", "CRM App", etc.
-    goal: str                 # What this phase should achieve
-    generated_by: str         # Which phase generated this (e.g., "Planning")
+
+    phase_name: str  # "Schema Implementation", "CRM App", etc.
+    goal: str  # What this phase should achieve
+    generated_by: str  # Which phase generated this (e.g., "Planning")
 
 
 @dataclass(frozen=True)
@@ -45,11 +46,12 @@ class PlanningInsight:
     Insights are distilled from raw context to preserve important
     information while managing token budget.
     """
+
     insight_id: str
     insight_type: PlanningInsightType
     summary: str
     key_facts: tuple[str, ...]
-    source_phase: str         # Which phase produced this insight
+    source_phase: str  # Which phase produced this insight
     relevance_score: float = 1.0
 
 
@@ -63,16 +65,14 @@ class PlanningContext:
     1. Its specific goal (from phase_goals)
     2. Curated insights from completed phases (not raw context)
     """
+
     overall_goal: str
-    phase_goals: List[PhaseGoal] = field(default_factory=list)
-    insights: List[PlanningInsight] = field(default_factory=list)
-    completed_phases: List[str] = field(default_factory=list)
+    phase_goals: list[PhaseGoal] = field(default_factory=list)
+    insights: list[PlanningInsight] = field(default_factory=list)
+    completed_phases: list[str] = field(default_factory=list)
 
     def add_phase_goal(
-        self,
-        phase_name: str,
-        goal: str,
-        generated_by: str = "Planning"
+        self, phase_name: str, goal: str, generated_by: str = "Planning"
     ) -> None:
         """
         Register a phase goal.
@@ -82,7 +82,7 @@ class PlanningContext:
         """
         self.phase_goals.append(PhaseGoal(phase_name, goal, generated_by))
 
-    def get_phase_goal(self, phase_name: str) -> Optional[str]:
+    def get_phase_goal(self, phase_name: str) -> str | None:
         """Get the goal for a specific phase."""
         for pg in self.phase_goals:
             if pg.phase_name == phase_name:
@@ -140,8 +140,10 @@ class PlanningContext:
         # Group entities by source phase
         for phase in self.completed_phases:
             phase_entities = [
-                i for i in self.insights
-                if i.source_phase == phase and i.insight_type == PlanningInsightType.ENTITY
+                i
+                for i in self.insights
+                if i.source_phase == phase
+                and i.insight_type == PlanningInsightType.ENTITY
             ]
             if phase_entities:
                 parts.append(f"\n### {phase} - Discovered")
@@ -161,9 +163,15 @@ class PlanningContext:
         parts = []
 
         # Group by insight type
-        decisions = [i for i in self.insights if i.insight_type == PlanningInsightType.DECISION]
-        constraints = [i for i in self.insights if i.insight_type == PlanningInsightType.CONSTRAINT]
-        dependencies = [i for i in self.insights if i.insight_type == PlanningInsightType.DEPENDENCY]
+        decisions = [
+            i for i in self.insights if i.insight_type == PlanningInsightType.DECISION
+        ]
+        constraints = [
+            i for i in self.insights if i.insight_type == PlanningInsightType.CONSTRAINT
+        ]
+        dependencies = [
+            i for i in self.insights if i.insight_type == PlanningInsightType.DEPENDENCY
+        ]
 
         if decisions:
             parts.append("## Decisions Made")

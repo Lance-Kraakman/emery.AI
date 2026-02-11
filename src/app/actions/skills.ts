@@ -1,9 +1,9 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { withAuthContext } from '@/lib/auth/with-context';
 import { getSkillApplicationService, getAgentApplicationService, getStorageQuotaApplicationService, getAuditApplicationService } from '@/ddd/application/di/container';
-import { getOrganizationRepository, getUserRepository } from '@/ddd/application/di/getters';
-import { UserId } from '@/ddd/domain/shared/value-objects/user-id';
+import { getOrganizationRepository } from '@/ddd/application/di/getters';
 import { ensureFreshUserApiKey } from '@/lib/auth/user-api-keys';
 import { OrganizationId } from '@/ddd/domain/shared/value-objects';
 import { SkillMapper } from '@/app/mappers/skill-mapper';
@@ -17,7 +17,7 @@ import type { SkillDTO } from '@/app/mappers/skill-mapper';
 import { s3SkillAttachmentService } from '@/ddd/infrastructure/multimodal/s3-skill-attachment-service';
 import type { AttachmentMetadata, AttachmentType } from '@/ddd/domain/multimodal/value-objects/attachment-metadata';
 import type { MessagePart, AwaitingInput } from '@/ddd/infrastructure/grpc/generated/agent_worker';
-import type { SkillExecutionType, ToolExecutionConfig, WriteConfig, ReadConfig, SkillStep, CanvasMetadata, StoredPlan } from '@/ddd/domain/skills/entities/skill';
+import type { SkillExecutionType, ToolExecutionConfig, WriteConfig, ReadConfig, SkillStep, CanvasMetadata, StoredPlan, HumanSkillConfig } from '@/ddd/domain/skills/entities/skill';
 import { getChatProcessingClient, type ClarificationAnswer } from '@/ddd/infrastructure/grpc/chat-processing-client';
 
 /**
@@ -58,14 +58,15 @@ export async function createSkill(command: {
   steps?: SkillStep[];
   canvasMetadata?: CanvasMetadata;
 }): Promise<Result<SkillDTO>> {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return { success: false, error: 'Unauthorized' };
-    }
+  return withAuthContext(async () => {
+    try {
+      const session = await getServerSession(authOptions);
+      if (!session?.user?.id) {
+        return { success: false, error: 'Unauthorized' };
+      }
 
-    // Check permission to manage the agent
-    await requireResourcePermission("agents:manage", "agent", command.agentId);
+      // Check permission to manage the agent
+      await requireResourcePermission("agents:manage", "agent", command.agentId);
 
     // Validation - only name is required
     if (!command.name?.trim()) {
@@ -159,13 +160,14 @@ export async function createSkill(command: {
       success: true,
       data: SkillMapper.toDTO(skillResult.data)
     };
-  } catch (error) {
-    console.error('[createSkill] error:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to create skill'
-    };
-  }
+    } catch (error) {
+      console.error('[createSkill] error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to create skill'
+      };
+    }
+  });
 }
 
 /**
@@ -188,14 +190,15 @@ export async function createOrganizationSkill(command: {
   writeConfig?: WriteConfig;
   steps?: SkillStep[];
 }): Promise<Result<SkillDTO>> {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return { success: false, error: 'Unauthorized' };
-    }
+  return withAuthContext(async () => {
+    try {
+      const session = await getServerSession(authOptions);
+      if (!session?.user?.id) {
+        return { success: false, error: 'Unauthorized' };
+      }
 
-    // Check permission to create organization skills
-    await requirePermission("skills:create");
+      // Check permission to create organization skills
+      await requirePermission("skills:create");
 
     // Validation - only name is required
     if (!command.name?.trim()) {
@@ -290,13 +293,14 @@ export async function createOrganizationSkill(command: {
       success: true,
       data: SkillMapper.toDTO(skillResult.data)
     };
-  } catch (error) {
-    console.error('[createOrganizationSkill] error:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to create organization skill'
-    };
-  }
+    } catch (error) {
+      console.error('[createOrganizationSkill] error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to create organization skill'
+      };
+    }
+  });
 }
 
 /**
@@ -319,18 +323,20 @@ export async function updateSkill(
     toolExecutionConfig?: ToolExecutionConfig | null;
     writeConfig?: WriteConfig | null;
     readConfig?: ReadConfig | null; // Config for 'read' execution
+    humanSkillConfig?: HumanSkillConfig | null; // Config for 'human' execution
     steps?: SkillStep[] | null; // Steps for 'agent' (step-based) execution
     canvasMetadata?: CanvasMetadata | null; // Canvas annotations (sticky notes)
     content?: MessagePart[]; // Skill-level attachments
   }
 ): Promise<Result<SkillDTO>> {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return { success: false, error: 'Unauthorized' };
-    }
+  return withAuthContext(async () => {
+    try {
+      const session = await getServerSession(authOptions);
+      if (!session?.user?.id) {
+        return { success: false, error: 'Unauthorized' };
+      }
 
-    const service = getSkillApplicationService();
+      const service = getSkillApplicationService();
 
     // Fetch skill to determine if agent-scoped or org-level
     const skillResult = await service.getSkill(skillId);
@@ -421,26 +427,28 @@ export async function updateSkill(
       success: true,
       data: SkillMapper.toDTO(updatedSkillResult.data)
     };
-  } catch (error) {
-    console.error('[updateSkill] error:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to update skill'
-    };
-  }
+    } catch (error) {
+      console.error('[updateSkill] error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update skill'
+      };
+    }
+  });
 }
 
 /**
  * Delete a skill
  */
 export async function deleteSkill(skillId: number): Promise<Result<void>> {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return { success: false, error: 'Unauthorized' };
-    }
+  return withAuthContext(async () => {
+    try {
+      const session = await getServerSession(authOptions);
+      if (!session?.user?.id) {
+        return { success: false, error: 'Unauthorized' };
+      }
 
-    const service = getSkillApplicationService();
+      const service = getSkillApplicationService();
 
     // Get skill info before deleting for permission check and revalidation
     const skillResult = await service.getSkill(skillId);
@@ -494,13 +502,14 @@ export async function deleteSkill(skillId: number): Promise<Result<void>> {
     }
 
     return result;
-  } catch (error) {
-    console.error('[deleteSkill] error:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to delete skill'
-    };
-  }
+    } catch (error) {
+      console.error('[deleteSkill] error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to delete skill'
+      };
+    }
+  });
 }
 
 /**
@@ -508,13 +517,14 @@ export async function deleteSkill(skillId: number): Promise<Result<void>> {
  * Appends " (Copy)" to the skill name
  */
 export async function duplicateSkill(skillId: number): Promise<Result<SkillDTO>> {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return { success: false, error: 'Unauthorized' };
-    }
+  return withAuthContext(async () => {
+    try {
+      const session = await getServerSession(authOptions);
+      if (!session?.user?.id) {
+        return { success: false, error: 'Unauthorized' };
+      }
 
-    const service = getSkillApplicationService();
+      const service = getSkillApplicationService();
 
     // Get the original skill
     const skillResult = await service.getSkill(skillId);
@@ -593,107 +603,114 @@ export async function duplicateSkill(skillId: number): Promise<Result<SkillDTO>>
       success: true,
       data: SkillMapper.toDTO(newSkillResult.data)
     };
-  } catch (error) {
-    console.error('[duplicateSkill] error:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to duplicate skill'
-    };
-  }
+    } catch (error) {
+      console.error('[duplicateSkill] error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to duplicate skill'
+      };
+    }
+  });
 }
 
 /**
  * Get a skill by ID
  */
 export async function getSkill(skillId: number): Promise<Result<SkillDTO | null>> {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return { success: false, error: 'Unauthorized' };
+  return withAuthContext(async () => {
+    try {
+      const session = await getServerSession(authOptions);
+      if (!session?.user?.id) {
+        return { success: false, error: 'Unauthorized' };
+      }
+
+      const service = getSkillApplicationService();
+      const result = await service.getSkill(skillId);
+
+      if (!result.success) {
+        return { success: false, error: result.error };
+      }
+
+      if (!result.data) {
+        return { success: true, data: null };
+      }
+
+      return {
+        success: true,
+        data: SkillMapper.toDTO(result.data)
+      };
+    } catch (error) {
+      console.error('[getSkill] error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get skill'
+      };
     }
-
-    const service = getSkillApplicationService();
-    const result = await service.getSkill(skillId);
-
-    if (!result.success) {
-      return { success: false, error: result.error };
-    }
-
-    if (!result.data) {
-      return { success: true, data: null };
-    }
-
-    return {
-      success: true,
-      data: SkillMapper.toDTO(result.data)
-    };
-  } catch (error) {
-    console.error('[getSkill] error:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to get skill'
-    };
-  }
+  });
 }
 
 /**
  * Get all skills for an agent
  */
 export async function getSkillsByAgent(agentId: number): Promise<Result<SkillDTO[]>> {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return { success: false, error: 'Unauthorized' };
+  return withAuthContext(async () => {
+    try {
+      const session = await getServerSession(authOptions);
+      if (!session?.user?.id) {
+        return { success: false, error: 'Unauthorized' };
+      }
+
+      const service = getSkillApplicationService();
+      const result = await service.getSkillsByAgent(agentId);
+
+      if (!result.success) {
+        return { success: false, error: result.error };
+      }
+
+      return {
+        success: true,
+        data: SkillMapper.toDTOList(result.data!)
+      };
+    } catch (error) {
+      console.error('[getSkillsByAgent] error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get skills'
+      };
     }
-
-    const service = getSkillApplicationService();
-    const result = await service.getSkillsByAgent(agentId);
-
-    if (!result.success) {
-      return { success: false, error: result.error };
-    }
-
-    return {
-      success: true,
-      data: SkillMapper.toDTOList(result.data!)
-    };
-  } catch (error) {
-    console.error('[getSkillsByAgent] error:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to get skills'
-    };
-  }
+  });
 }
 
 /**
  * Get all organization skills for an organization
  */
 export async function getOrganizationSkills(organizationId: number): Promise<Result<SkillDTO[]>> {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return { success: false, error: 'Unauthorized' };
+  return withAuthContext(async () => {
+    try {
+      const session = await getServerSession(authOptions);
+      if (!session?.user?.id) {
+        return { success: false, error: 'Unauthorized' };
+      }
+
+      const service = getSkillApplicationService();
+      const result = await service.getOrganizationSkills(organizationId);
+
+      if (!result.success) {
+        return { success: false, error: result.error };
+      }
+
+      return {
+        success: true,
+        data: SkillMapper.toDTOList(result.data!)
+      };
+    } catch (error) {
+      console.error('[getOrganizationSkills] error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get organization skills'
+      };
     }
-
-    const service = getSkillApplicationService();
-    const result = await service.getOrganizationSkills(organizationId);
-
-    if (!result.success) {
-      return { success: false, error: result.error };
-    }
-
-    return {
-      success: true,
-      data: SkillMapper.toDTOList(result.data!)
-    };
-  } catch (error) {
-    console.error('[getOrganizationSkills] error:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to get organization skills'
-    };
-  }
+  });
 }
 
 /**
@@ -702,67 +719,71 @@ export async function getOrganizationSkills(organizationId: number): Promise<Res
  * Requires skills:view permission (enforced by RLS)
  */
 export async function getSkillTemplate(skillId: number): Promise<Result<SkillDTO>> {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return { success: false, error: 'Unauthorized' };
+  return withAuthContext(async () => {
+    try {
+      const session = await getServerSession(authOptions);
+      if (!session?.user?.id) {
+        return { success: false, error: 'Unauthorized' };
+      }
+
+      const service = getSkillApplicationService();
+      const result = await service.getSkill(skillId);
+
+      if (!result.success || !result.data) {
+        return { success: false, error: 'Skill not found' };
+      }
+
+      const skill = result.data;
+
+      // Verify it's an organization skill (only org skills can be templates)
+      if (skill.agentId !== null) {
+        return { success: false, error: 'Only organization skills can be used as templates' };
+      }
+
+      return {
+        success: true,
+        data: SkillMapper.toDTO(skill)
+      };
+    } catch (error) {
+      console.error('[getSkillTemplate] error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get skill template'
+      };
     }
-
-    const service = getSkillApplicationService();
-    const result = await service.getSkill(skillId);
-
-    if (!result.success || !result.data) {
-      return { success: false, error: 'Skill not found' };
-    }
-
-    const skill = result.data;
-
-    // Verify it's an organization skill (only org skills can be templates)
-    if (skill.agentId !== null) {
-      return { success: false, error: 'Only organization skills can be used as templates' };
-    }
-
-    return {
-      success: true,
-      data: SkillMapper.toDTO(skill)
-    };
-  } catch (error) {
-    console.error('[getSkillTemplate] error:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to get skill template'
-    };
-  }
+  });
 }
 
 /**
  * Get all skills for an organization (both global and agent-scoped)
  */
 export async function getSkillsByOrganization(organizationId: number): Promise<Result<SkillDTO[]>> {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return { success: false, error: 'Unauthorized' };
+  return withAuthContext(async () => {
+    try {
+      const session = await getServerSession(authOptions);
+      if (!session?.user?.id) {
+        return { success: false, error: 'Unauthorized' };
+      }
+
+      const service = getSkillApplicationService();
+      const result = await service.getSkillsByOrganization(organizationId);
+
+      if (!result.success) {
+        return { success: false, error: result.error };
+      }
+
+      return {
+        success: true,
+        data: SkillMapper.toDTOList(result.data!)
+      };
+    } catch (error) {
+      console.error('[getSkillsByOrganization] error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get organization skills'
+      };
     }
-
-    const service = getSkillApplicationService();
-    const result = await service.getSkillsByOrganization(organizationId);
-
-    if (!result.success) {
-      return { success: false, error: result.error };
-    }
-
-    return {
-      success: true,
-      data: SkillMapper.toDTOList(result.data!)
-    };
-  } catch (error) {
-    console.error('[getSkillsByOrganization] error:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to get organization skills'
-    };
-  }
+  });
 }
 
 /**
@@ -770,28 +791,30 @@ export async function getSkillsByOrganization(organizationId: number): Promise<R
  * Used for quick creation from sidebar + button
  */
 export async function createDefaultOrganizationSkill(): Promise<Result<SkillDTO>> {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id || !session?.user?.currentOrganizationId) {
-      return { success: false, error: 'Unauthorized' };
-    }
+  return withAuthContext(async () => {
+    try {
+      const session = await getServerSession(authOptions);
+      if (!session?.user?.id || !session?.user?.currentOrganizationId) {
+        return { success: false, error: 'Unauthorized' };
+      }
 
-    return createOrganizationSkill({
-      organizationId: session.user.currentOrganizationId,
-      name: "Untitled Skill",
-      description: "",
-      inputs: [],
-      outputs: [],
-      instructions: "Add instructions here...",
-      tools: []
-    });
-  } catch (error) {
-    console.error('[createDefaultOrganizationSkill] error:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to create default skill'
-    };
-  }
+      return createOrganizationSkill({
+        organizationId: session.user.currentOrganizationId,
+        name: "Untitled Skill",
+        description: "",
+        inputs: [],
+        outputs: [],
+        instructions: "Add instructions here...",
+        tools: []
+      });
+    } catch (error) {
+      console.error('[createDefaultOrganizationSkill] error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to create default skill'
+      };
+    }
+  });
 }
 
 /**
@@ -799,28 +822,30 @@ export async function createDefaultOrganizationSkill(): Promise<Result<SkillDTO>
  * Used for quick creation from agent header "Add Skill" button
  */
 export async function createDefaultAgentSkill(agentId: number): Promise<Result<SkillDTO>> {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return { success: false, error: 'Unauthorized' };
-    }
+  return withAuthContext(async () => {
+    try {
+      const session = await getServerSession(authOptions);
+      if (!session?.user?.id) {
+        return { success: false, error: 'Unauthorized' };
+      }
 
-    return createSkill({
-      agentId,
-      name: "Untitled Skill",
-      description: "",
-      inputs: [],
-      outputs: [],
-      instructions: "Add instructions here...",
-      tools: []
-    });
-  } catch (error) {
-    console.error('[createDefaultAgentSkill] error:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to create default agent skill'
-    };
-  }
+      return createSkill({
+        agentId,
+        name: "Untitled Skill",
+        description: "",
+        inputs: [],
+        outputs: [],
+        instructions: "Add instructions here...",
+        tools: []
+      });
+    } catch (error) {
+      console.error('[createDefaultAgentSkill] error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to create default agent skill'
+      };
+    }
+  });
 }
 
 /**
@@ -830,13 +855,14 @@ export async function uploadSkillAttachment(
   skillId: number,
   formData: FormData
 ): Promise<Result<AttachmentMetadata>> {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return { success: false, error: 'Unauthorized' };
-    }
+  return withAuthContext(async () => {
+    try {
+      const session = await getServerSession(authOptions);
+      if (!session?.user?.id) {
+        return { success: false, error: 'Unauthorized' };
+      }
 
-    const file = formData.get('file') as File;
+      const file = formData.get('file') as File;
     if (!file) {
       return { success: false, error: 'No file provided' };
     }
@@ -891,13 +917,14 @@ export async function uploadSkillAttachment(
       success: true,
       data: uploadResult.metadata
     };
-  } catch (error) {
-    console.error('[uploadSkillAttachment] error:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to upload skill attachment'
-    };
-  }
+    } catch (error) {
+      console.error('[uploadSkillAttachment] error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to upload skill attachment'
+      };
+    }
+  });
 }
 
 /**
@@ -907,31 +934,33 @@ export async function deleteSkillAttachment(
   skillId: number,
   s3Key: string
 ): Promise<Result<void>> {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return { success: false, error: 'Unauthorized' };
+  return withAuthContext(async () => {
+    try {
+      const session = await getServerSession(authOptions);
+      if (!session?.user?.id) {
+        return { success: false, error: 'Unauthorized' };
+      }
+
+      // Verify skill access
+      const service = getSkillApplicationService();
+      const skillResult = await service.getSkill(skillId);
+
+      if (!skillResult.success || !skillResult.data) {
+        return { success: false, error: 'Skill not found' };
+      }
+
+      // Delete from S3
+      await s3SkillAttachmentService.deleteAttachment(s3Key);
+
+      return { success: true, data: undefined };
+    } catch (error) {
+      console.error('[deleteSkillAttachment] error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to delete skill attachment'
+      };
     }
-
-    // Verify skill access
-    const service = getSkillApplicationService();
-    const skillResult = await service.getSkill(skillId);
-
-    if (!skillResult.success || !skillResult.data) {
-      return { success: false, error: 'Skill not found' };
-    }
-
-    // Delete from S3
-    await s3SkillAttachmentService.deleteAttachment(s3Key);
-
-    return { success: true, data: undefined };
-  } catch (error) {
-    console.error('[deleteSkillAttachment] error:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to delete skill attachment'
-    };
-  }
+  });
 }
 
 /**
@@ -941,31 +970,33 @@ export async function generateSkillAttachmentUrl(
   skillId: number,
   s3Key: string
 ): Promise<Result<string>> {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return { success: false, error: 'Unauthorized' };
+  return withAuthContext(async () => {
+    try {
+      const session = await getServerSession(authOptions);
+      if (!session?.user?.id) {
+        return { success: false, error: 'Unauthorized' };
+      }
+
+      // Verify skill access
+      const service = getSkillApplicationService();
+      const skillResult = await service.getSkill(skillId);
+
+      if (!skillResult.success || !skillResult.data) {
+        return { success: false, error: 'Skill not found' };
+      }
+
+      // Generate URL
+      const url = await s3SkillAttachmentService.generateAttachmentUrl(s3Key);
+
+      return { success: true, data: url };
+    } catch (error) {
+      console.error('[generateSkillAttachmentUrl] error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to generate attachment URL'
+      };
     }
-
-    // Verify skill access
-    const service = getSkillApplicationService();
-    const skillResult = await service.getSkill(skillId);
-
-    if (!skillResult.success || !skillResult.data) {
-      return { success: false, error: 'Skill not found' };
-    }
-
-    // Generate URL
-    const url = await s3SkillAttachmentService.generateAttachmentUrl(s3Key);
-
-    return { success: true, data: url };
-  } catch (error) {
-    console.error('[generateSkillAttachmentUrl] error:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to generate attachment URL'
-    };
-  }
+  });
 }
 
 /**
@@ -985,13 +1016,14 @@ export async function savePlanToSkill(params: {
   agentId?: number;
   skillName?: string;
 }): Promise<Result<SkillDTO>> {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return { success: false, error: 'Unauthorized' };
-    }
+  return withAuthContext(async () => {
+    try {
+      const session = await getServerSession(authOptions);
+      if (!session?.user?.id) {
+        return { success: false, error: 'Unauthorized' };
+      }
 
-    const { skillId, planJson, agentId, skillName } = params;
+      const { skillId, planJson, agentId, skillName } = params;
 
     // Parse the plan JSON
     let plan: any;
@@ -1206,13 +1238,14 @@ export async function savePlanToSkill(params: {
         data: SkillMapper.toDTO(newSkillResult.data)
       };
     }
-  } catch (error) {
-    console.error('[savePlanToSkill] error:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to save plan to skill'
-    };
-  }
+    } catch (error) {
+      console.error('[savePlanToSkill] error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to save plan to skill'
+      };
+    }
+  });
 }
 
 /**
@@ -1223,13 +1256,14 @@ export async function transferSkillToAgent(
   skillId: number,
   agentId: number
 ): Promise<Result<SkillDTO>> {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return { success: false, error: 'Unauthorized' };
-    }
+  return withAuthContext(async () => {
+    try {
+      const session = await getServerSession(authOptions);
+      if (!session?.user?.id) {
+        return { success: false, error: 'Unauthorized' };
+      }
 
-    const service = getSkillApplicationService();
+      const service = getSkillApplicationService();
 
     // Fetch skill to verify it's org-level
     const skillResult = await service.getSkill(skillId);
@@ -1294,13 +1328,101 @@ export async function transferSkillToAgent(
       success: true,
       data: SkillMapper.toDTO(updatedSkillResult.data)
     };
-  } catch (error) {
-    console.error('[transferSkillToAgent] error:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to transfer skill to agent'
-    };
-  }
+    } catch (error) {
+      console.error('[transferSkillToAgent] error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to transfer skill to agent'
+      };
+    }
+  });
+}
+
+/**
+ * Remove a skill from an agent, making it org-level
+ * This changes the skill's scope from agent-scoped to org-level
+ */
+export async function unassignSkillFromAgent(
+  skillId: number
+): Promise<Result<SkillDTO>> {
+  return withAuthContext(async () => {
+    try {
+      const session = await getServerSession(authOptions);
+      if (!session?.user?.id) {
+        return { success: false, error: 'Unauthorized' };
+      }
+
+      const service = getSkillApplicationService();
+
+      // Fetch skill to verify it's agent-scoped
+      const skillResult = await service.getSkill(skillId);
+      if (!skillResult.success || !skillResult.data) {
+        return { success: false, error: 'Skill not found' };
+      }
+
+      const skill = skillResult.data;
+      const previousAgentId = skill.agentId?.value ?? null;
+
+      // Verify skill is agent-scoped (has an agent)
+      if (!skill.agentId) {
+        return { success: false, error: 'Skill is already org-level' };
+      }
+
+      // Check permission to manage the agent-scoped skill
+      await requireResourcePermission("agents:manage", "agent", skill.agentId.value);
+
+      // Update the skill's agentId to null (org-level)
+      const updateResult = await service.updateSkillAgent(skillId, null);
+
+      if (!updateResult.success) {
+        return { success: false, error: updateResult.error || 'Failed to unassign skill' };
+      }
+
+      // Fetch updated skill
+      const updatedSkillResult = await service.getSkill(skillId);
+      if (!updatedSkillResult.success || !updatedSkillResult.data) {
+        return { success: false, error: 'Failed to fetch updated skill' };
+      }
+
+      // AUDIT: Log skill unassignment
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        skill.organizationId,
+        {
+          eventType: 'agent',
+          eventCategory: 'skill_crud',
+          eventAction: 'update',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || undefined,
+          resourceType: 'skill',
+          resourceId: String(skillId),
+          resourceName: skill.name,
+          eventData: { action: 'unassign_from_agent', previousAgentId },
+          success: true,
+        }
+      );
+
+      // Revalidate paths
+      revalidatePath('/skills'); // Org skills page
+      if (previousAgentId) {
+        revalidatePath(`/agents/${previousAgentId}/skills`); // Agent skills page
+      }
+      revalidatePath('/organization'); // Org chart
+      revalidatePath('/');
+
+      return {
+        success: true,
+        data: SkillMapper.toDTO(updatedSkillResult.data)
+      };
+    } catch (error) {
+      console.error('[unassignSkillFromAgent] error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to unassign skill from agent'
+      };
+    }
+  });
 }
 
 /**
@@ -1337,14 +1459,15 @@ export async function generateSkillPlan(
   sessionId?: string,
   answers?: ClarificationAnswer[]
 ): Promise<GeneratePlanResult> {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id || !session?.user?.currentOrganizationId) {
-      return { success: false, error: 'Unauthorized' };
-    }
+  return withAuthContext(async () => {
+    try {
+      const session = await getServerSession(authOptions);
+      if (!session?.user?.id || !session?.user?.currentOrganizationId) {
+        return { success: false, error: 'Unauthorized' };
+      }
 
-    // Get skill to verify access and get model override
-    const service = getSkillApplicationService();
+      // Get skill to verify access and get model override
+      const service = getSkillApplicationService();
     const skillResult = await service.getSkill(skillId);
     if (!skillResult.success || !skillResult.data) {
       return { success: false, error: 'Skill not found' };
@@ -1468,11 +1591,12 @@ export async function generateSkillPlan(
     console.log(`[generateSkillPlan] Generated plan ${result.plan.planId} with ${plan.steps?.length || 0} steps in ${result.plan.planningTimeMs}ms`);
 
     return { success: true, data: plan };
-  } catch (error) {
-    console.error('[generateSkillPlan] error:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to generate plan'
-    };
-  }
+    } catch (error) {
+      console.error('[generateSkillPlan] error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to generate plan'
+      };
+    }
+  });
 }

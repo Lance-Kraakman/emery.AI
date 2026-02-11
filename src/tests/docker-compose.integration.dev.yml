@@ -2,9 +2,9 @@
 # Use with: docker-compose -f docker-compose.integration.yml -f docker-compose.integration.dev.yml up
 #
 # This enables fast iteration with pnpm dev instead of production build:
-# - Skips build step (60-120s faster)
+# - Skips build step (5+ min faster)
 # - Live code reloading via volume mounts
-# - Same infrastructure (postgres, minio, agent)
+# - Same infrastructure (postgres, minio, agents)
 
 services:
   app-integration:
@@ -14,12 +14,41 @@ services:
       dockerfile: Dockerfile.dev
     command: ["dev"]
     environment:
-      # Override production NODE_ENV from integration.yml
       NODE_ENV: development
     volumes:
-      # Mount source code for live reloading
       - ../..:/app
-      # CRITICAL: Keep container's node_modules (Linux binaries, not macOS)
       - /app/node_modules
-      # Keep container's .next directory to avoid permission/cache issues
       - /app/.next
+      - workspace_data:/mnt/storage/workspaces
+
+  # Scheduler: use dev Dockerfile (skips next build)
+  scheduler-integration:
+    image: emery-integration-scheduler:dev
+    build:
+      context: ../..
+      dockerfile: Dockerfile.dev
+    command: ["scheduler"]
+    environment:
+      NODE_ENV: development
+    volumes:
+      - ../..:/app
+      - /app/node_modules
+      - /app/.next
+
+  # SSH server: enable password auth for local dev + point to local app
+  ssh-sync-integration:
+    environment:
+      - PASSWORD_ACCESS=true
+      - USER_PASSWORD=test123
+      - API_HOST=host.docker.internal:3002
+
+  # Python agents: mount source for code changes without rebuild
+  agent-chat-integration:
+    volumes:
+      - ../../emery-agents/src:/usr/src/app/src
+      - workspace_data:/mnt/storage/workspaces
+
+  agent-table-integration:
+    volumes:
+      - ../../emery-agents/src:/usr/src/app/src
+      - workspace_data:/mnt/storage/workspaces

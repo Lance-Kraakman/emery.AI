@@ -64,6 +64,15 @@ interface ChatItemProps {
 function ChatItem({ session, isActive, onClick, onArchive, onSettings }: ChatItemProps) {
   const [isDeleting, setIsDeleting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [formattedDate, setFormattedDate] = useState('')
+
+  // Format date after hydration to avoid server/client mismatch
+  useEffect(() => {
+    const dateStr = session.lastMessageAt || session.createdAt
+    if (dateStr) {
+      setFormattedDate(formatDate(new Date(dateStr)))
+    }
+  }, [session.lastMessageAt, session.createdAt])
 
   const handleDeleteClick = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -121,13 +130,12 @@ function ChatItem({ session, isActive, onClick, onArchive, onSettings }: ChatIte
               <MessageSquare className="h-3 w-3" />
               {session.messageCount}
             </div>
-            <div className="flex items-center gap-1">
-              <Calendar className="h-3 w-3" />
-              {session.lastMessageAt
-                ? formatDate(new Date(session.lastMessageAt))
-                : formatDate(new Date(session.createdAt))
-              }
-            </div>
+            {formattedDate && (
+              <div className="flex items-center gap-1">
+                <Calendar className="h-3 w-3" />
+                {formattedDate}
+              </div>
+            )}
             {session.model && (
               <div className="truncate max-w-[80px] bg-muted/50 px-1.5 py-0.5 rounded text-[10px]">
                 {session.model.split('/').pop()?.substring(0, 12)}
@@ -165,7 +173,7 @@ function ChatItem({ session, isActive, onClick, onArchive, onSettings }: ChatIte
           <AlertDialogHeader>
             <AlertDialogTitle>Delete chat?</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete "{session.title}"? This action cannot be undone.
+              Are you sure you want to delete &quot;{session.title}&quot;? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -276,7 +284,7 @@ function ChatSettingsDialog({
           <div className="space-y-2">
             <label className="text-sm font-medium">AI Model</label>
             <p className="text-xs text-muted-foreground mb-2">
-              Select a model for this chat. Leave as "Inherit" to use the organization default.
+              Select a model for this chat. Leave as &quot;Inherit&quot; to use the organization default.
             </p>
             <ModelSelector
               value={model}
@@ -474,7 +482,7 @@ export function ChatHistoryDropdown({
               <div className="p-6 text-center">
                 {searchQuery ? (
                   <p className="text-sm text-muted-foreground">
-                    No chats match "{searchQuery}"
+                    No chats match &quot;{searchQuery}&quot;
                   </p>
                 ) : (
                   <div className="space-y-3">

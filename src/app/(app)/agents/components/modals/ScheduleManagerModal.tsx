@@ -19,11 +19,7 @@ import {
 } from 'lucide-react';
 import type { AgentDTO } from '@/app/mappers/agent-mapper';
 import type { AutomationConfigurationDTO } from '@/app/dtos/automation.dto';
-import type { TriggerConfig } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 import {
-  isCalendarTrigger,
-  isDatabaseEventTrigger,
-  isWebhookTrigger,
   getTriggerTypeLabel
 } from '../trigger-utils';
 import { updateAgentFromClient } from '@/app/actions/agents';

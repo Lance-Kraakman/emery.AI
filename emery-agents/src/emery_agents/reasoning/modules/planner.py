@@ -1,8 +1,14 @@
 """
 DSPy Planner Module.
 
-This module handles plan generation using DSPy's ChainOfThought strategy.
-It replaces the Jinja2-based planning templates.
+This module handles plan generation using DSPy's ChainOfThought or ReAct.
+
+Two planner modes:
+- Standard: ChainOfThought with all context retrieved upfront via KNN retrievers
+- Complex: ReAct with external tools (workspace_overview, search_external, web_search)
+
+TOOL_EXAMPLES are NOT used here - they belong in the Executor which actually calls
+execution tools. The Planner only needs PLANNING_DEMOS to learn plan structure.
 """
 
 from __future__ import annotations
@@ -11,16 +17,19 @@ import logging
 from typing import Any
 
 import dspy
+from dspy import LabeledFewShot
 
 logger = logging.getLogger(__name__)
 
+from emery_agents.reasoning.examples.planning import PLANNING_DEMOS
+from emery_agents.reasoning.examples.skill_templates import SKILL_TEMPLATE_DEMOS
 from emery_agents.reasoning.signatures.planning import (
     AnalyzeTask,
-    ClarifyingQuestionOutput,
     CreatePlan,
     CreateSkillTemplate,
     PlanOrQuestionsOutput,
-    QuestionType,
+    PlanReflection,
+    ReflectOnPlan,
     SkillInputSpec,
     SkillOutputSpec,
     SkillTemplatePlanOutput,
@@ -57,19 +66,40 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         "common",
     ]
 
-    def __init__(self, discovery_tools: list[Any] | None = None) -> None:
+    def __init__(self, external_tools: list[Any] | None = None) -> None:
         """
-        Initialize the planner module.
+        Initialize the planner module with standard and complex planners.
 
         Args:
-            discovery_tools: dspy.Tool instances for dynamic discovery during planning
-                           (e.g., system_research, search_capabilities, search_external).
-                           ReAct with no tools behaves like ChainOfThought.
+            external_tools: dspy.Tool instances for EXTERNAL data only:
+                           workspace_overview, system_research, search_external, web_search.
+                           These are NOT execution tools (table_crud, etc.) - those go to Executor.
+                           Internal search tools (search_capabilities, search_planning_patterns)
+                           are replaced by KNN retrievers called before planning.
         """
         super().__init__()
         self.analyzer = dspy.ChainOfThought(AnalyzeTask)
-        self.discovery_tools = discovery_tools or []
-        self.planner = dspy.ReAct(CreatePlan, tools=self.discovery_tools, max_iters=5)
+        self.external_tools = external_tools or []
+
+        # Standard planner: ChainOfThought (no tools)
+        # Used when all context is retrieved upfront via KNN retrievers
+        # LabeledFewShot injects demos without bootstrap overhead (unlike KNNFewShot)
+        base_standard = dspy.ChainOfThought(CreatePlan)
+        self.standard_planner = LabeledFewShot(k=5).compile(
+            base_standard, trainset=PLANNING_DEMOS
+        )
+
+        # Complex planner: ReAct with external tools only
+        # Used when planning needs external data (workspace API, pipedream, web)
+        base_complex = dspy.ReAct(
+            CreatePlan, tools=self.external_tools, max_iters=4
+        )
+        self.complex_planner = LabeledFewShot(k=5).compile(
+            base_complex, trainset=PLANNING_DEMOS
+        )
+
+        # Reflexion module for extended thinking - critiques and improves plans
+        self.reflector = dspy.ChainOfThought(ReflectOnPlan)
 
     def forward(
         self,
@@ -81,19 +111,34 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         memory_context: str = "",
         triage_analysis: dict[str, Any] | None = None,
         configured_tools: str = "",
+        retrieved_capabilities: str = "",
+        retrieved_patterns: str = "",
+        retrieved_knowledge: str = "",
+        retrieved_strategies: str = "",
+        use_complex_planner: bool = False,
     ) -> PlanOrQuestionsOutput:
         """
         Generate a plan or clarifying questions for a user request.
+
+        Routes between standard (ChainOfThought) and complex (ReAct) planners:
+        - Standard: All context retrieved upfront via KNN retrievers, no tools needed
+        - Complex: Needs external data during planning (workspace API, pipedream, web)
 
         Args:
             request: The user's goal or task description
             workspace_context: JSON string of existing workspace resources
             capability_guidance: Routing table + matched capability instructions
-            proven_strategies: ACE patterns for similar goals
+            proven_strategies: ACE patterns for similar goals (legacy, prefer retrieved_strategies)
             conversation_history: Formatted previous messages for context continuity
             memory_context: Relevant memories from previous interactions
             triage_analysis: Pre-computed analysis from triage node (intent, entities,
                            approach, external_services). If provided, skips AnalyzeTask call.
+            configured_tools: JSON of configured tool names
+            retrieved_capabilities: Formatted capabilities from CapabilityRetriever
+            retrieved_patterns: Formatted patterns from PatternRetriever
+            retrieved_knowledge: Formatted knowledge from KnowledgeRetriever
+            retrieved_strategies: Formatted strategies from StrategyRetriever
+            use_complex_planner: Force ReAct planner for external tool access
 
         Returns:
             PlanOrQuestionsOutput with either a plan or clarifying questions
@@ -117,16 +162,38 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
                 "external_services": analysis.external_services or [],
             }
 
-        # Build combined planning_context from analysis + auxiliary fields
+        # Build combined planning_context from analysis + retrieved context
         planning_context = self._build_planning_context(
             analysis_data=analysis_data,
             proven_strategies=proven_strategies,
             memory_context=memory_context,
             has_delegation=has_delegation,
+            retrieved_capabilities=retrieved_capabilities,
+            retrieved_patterns=retrieved_patterns,
+            retrieved_knowledge=retrieved_knowledge,
+            retrieved_strategies=retrieved_strategies,
+        )
+
+        # Route to appropriate planner
+        # Use complex planner if:
+        # 1. Explicitly requested via use_complex_planner
+        # 2. External services detected in triage (needs search_external for tool details)
+        # 3. We have external tools configured
+        external_services = analysis_data.get("external_services", [])
+        needs_external_data = (
+            use_complex_planner
+            or bool(external_services)
+            or bool(self.external_tools)
+        )
+
+        planner = self.complex_planner if needs_external_data else self.standard_planner
+        logger.debug(
+            f"Using {'complex' if needs_external_data else 'standard'} planner "
+            f"(external_services={external_services})"
         )
 
         # Call planner with consolidated fields
-        result = self.planner(
+        result = planner(
             request=request,
             workspace_context=workspace_context,
             capability_guidance=capability_guidance,
@@ -136,6 +203,52 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         )
 
         plan_result = result.result
+
+        # Reflexion loop (max 2 iterations) - like extended thinking
+        # Critiques the plan and triggers re-planning if improvements needed
+        for iteration in range(2):
+            if plan_result.plan is None:
+                # Questions returned, user needs to answer - skip reflexion
+                break
+
+            reflection = self.reflector(
+                request=request,
+                draft_plan=plan_result.plan.model_dump_json(),
+                research_done="(research performed during ReAct planning)",
+                workspace_context=workspace_context,
+            )
+
+            if not reflection.reflection.should_iterate:
+                # Plan is ready for user
+                logger.debug(
+                    f"Plan ready after iteration {iteration}: "
+                    f"quality={reflection.reflection.quality_score}"
+                )
+                break
+
+            # Plan needs improvement - re-run planner with reflection context
+            logger.info(
+                f"Reflexion iteration {iteration + 1}: {reflection.reflection.critique}"
+            )
+
+            # Add reflection to planning context for next iteration
+            reflection_context = (
+                f"\n\n## Reflection (Iteration {iteration + 1})\n"
+                f"Critique: {reflection.reflection.critique}\n"
+                f"Missing info: {', '.join(reflection.reflection.missing_info)}\n"
+                f"Suggested improvements: {reflection.reflection.suggested_improvements}"
+            )
+
+            result = planner(
+                request=request,
+                workspace_context=workspace_context,
+                capability_guidance=capability_guidance,
+                planning_context=planning_context + reflection_context,
+                conversation_history=conversation_history,
+                configured_tools=configured_tools,
+            )
+            plan_result = result.result
+
         self._ensure_valid_output(plan_result)
 
         return plan_result  # type: ignore[no-any-return]
@@ -146,11 +259,23 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         proven_strategies: str,
         memory_context: str,
         has_delegation: bool,
+        retrieved_capabilities: str = "",
+        retrieved_patterns: str = "",
+        retrieved_knowledge: str = "",
+        retrieved_strategies: str = "",
     ) -> str:
-        """Build merged planning_context from task analysis and auxiliary fields.
+        """Build merged planning_context from task analysis and retrieved context.
 
-        Combines task analysis, proven strategies, memory context, and delegation
-        hints into a single labeled string. Empty sections are omitted to reduce noise.
+        Combines:
+        - Task analysis (from triage)
+        - Retrieved capabilities (from CapabilityRetriever)
+        - Retrieved patterns (from PatternRetriever)
+        - Retrieved knowledge (from KnowledgeRetriever)
+        - Retrieved strategies (from StrategyRetriever, preferred over proven_strategies)
+        - Memory context
+        - Delegation hint
+
+        Empty sections are omitted to reduce noise.
         """
         sections: list[str] = []
 
@@ -173,8 +298,23 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
             f"{external_hint}"
         )
 
-        # Proven strategies (only if non-empty)
-        if proven_strategies and proven_strategies.strip():
+        # Retrieved capabilities (from KNN retriever)
+        if retrieved_capabilities and retrieved_capabilities.strip():
+            sections.append(retrieved_capabilities)
+
+        # Retrieved patterns (from KNN retriever)
+        if retrieved_patterns and retrieved_patterns.strip():
+            sections.append(retrieved_patterns)
+
+        # Retrieved knowledge (from KNN retriever)
+        if retrieved_knowledge and retrieved_knowledge.strip():
+            sections.append(retrieved_knowledge)
+
+        # Retrieved strategies (from KNN retriever, preferred over proven_strategies)
+        if retrieved_strategies and retrieved_strategies.strip():
+            sections.append(retrieved_strategies)
+        elif proven_strategies and proven_strategies.strip():
+            # Fallback to legacy proven_strategies if no retrieved_strategies
             sections.append(f"## Proven Strategies\n{proven_strategies}")
 
         # Memory context (only if non-empty)
@@ -183,7 +323,9 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
 
         # Delegation hint
         if has_delegation:
-            sections.append("## Delegation\nUser delegated decisions — propose sensible defaults, do not ask questions.")
+            sections.append(
+                "## Delegation\nUser delegated decisions — propose sensible defaults, do not ask questions."
+            )
 
         return "\n\n".join(sections)
 
@@ -220,18 +362,26 @@ class SkillTemplatePlannerModule(PlannerModule):
 
     Extends PlannerModule to inherit shared logic:
     - _has_delegation_phrase()
-    - Discovery tools handling
+    - External tools handling
     """
 
-    def __init__(self, discovery_tools: list[Any] | None = None) -> None:
+    def __init__(self, external_tools: list[Any] | None = None) -> None:
         """Initialize the skill template planner module.
 
         Args:
-            discovery_tools: List of tools available during planning phase
+            external_tools: External tools for workspace/integration discovery
         """
-        super().__init__(discovery_tools=discovery_tools)
-        # ReAct with discovery tools so the template planner can call system_research
-        self.template_planner = dspy.ReAct(CreateSkillTemplate, tools=self.discovery_tools, max_iters=5)
+        super().__init__(external_tools=external_tools)
+
+        # Create base template planner with ReAct for tool use
+        base_template_planner = dspy.ReAct(
+            CreateSkillTemplate, tools=self.external_tools, max_iters=5
+        )
+
+        # LabeledFewShot injects demos without bootstrap overhead (unlike KNNFewShot)
+        self.template_planner = LabeledFewShot(k=3).compile(
+            base_template_planner, trainset=SKILL_TEMPLATE_DEMOS
+        )
 
     def forward(  # type: ignore[override]
         self,
@@ -318,7 +468,9 @@ VARIABLE SYNTAX:
         """
         for step in plan.steps:
             if not step.prompt_template:
-                raise ValueError(f"Step {step.step_id} missing required prompt_template")
+                raise ValueError(
+                    f"Step {step.step_id} missing required prompt_template"
+                )
 
             # Warn if no {{ }} but inputs provided
             if skill_inputs and "{{" not in step.prompt_template:

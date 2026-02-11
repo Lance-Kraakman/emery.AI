@@ -7,8 +7,8 @@
  * It supports filtering by event type, resource, actor, and time range.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { authenticateRequest } from '@/lib/auth/test-auth';
+import { NextRequest } from 'next/server';
+import { withAuthenticatedRoute } from '@/lib/api/base';
 import { getAuditApplicationService } from '@/ddd/application/di/getters';
 import { OrganizationId } from '@/ddd/domain/shared/value-objects';
 import type { AuditQueryFilters, AuditEventType, AuditActorType } from '@/ddd/domain/audit/types';
@@ -30,14 +30,8 @@ import type { AuditQueryFilters, AuditEventType, AuditActorType } from '@/ddd/do
  * - limit: Maximum number of events to return (default: 50, max: 200)
  * - offset: Number of events to skip for pagination
  */
-export async function GET(request: NextRequest): Promise<NextResponse> {
-  try {
-    const authResult = await authenticateRequest(request);
-
-    if (!authResult.success || !authResult.user) {
-      return NextResponse.json({ error: authResult.error || 'Unauthorized' }, { status: 401 });
-    }
-
+export async function GET(request: NextRequest): Promise<Response> {
+  return withAuthenticatedRoute(request, async (user) => {
     const { searchParams } = new URL(request.url);
 
     // Build filters from query parameters
@@ -101,28 +95,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     // Query audit events
     const auditService = getAuditApplicationService();
-    const organizationId = OrganizationId.fromNumber(authResult.user.organizationId!);
+    const organizationId = OrganizationId.fromNumber(user.organizationId!);
     const events = await auditService.queryEvents(organizationId, filters);
 
-    return NextResponse.json({
+    return {
       success: true,
-      data: events,
-      filters: {
-        applied: Object.fromEntries(
-          Object.entries(filters).filter(([_, v]) => v !== undefined)
-        ),
-        limit: filters.limit,
-        offset: filters.offset || 0,
+      data: {
+        events,
+        filters: {
+          applied: Object.fromEntries(
+            Object.entries(filters).filter(([_, v]) => v !== undefined)
+          ),
+          limit: filters.limit,
+          offset: filters.offset || 0,
+        },
       },
-    });
-  } catch (error) {
-    console.error('Error fetching audit events:', error);
-    return NextResponse.json(
-      {
-        success: false,
-        error: 'Internal server error',
-      },
-      { status: 500 }
-    );
-  }
+    };
+  });
 }

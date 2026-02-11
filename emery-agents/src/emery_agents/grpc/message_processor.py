@@ -6,20 +6,20 @@ Handles extraction of content from messages and building task prompts.
 """
 
 import logging
-from typing import Any, List, Optional
+from typing import Any
 
 from PIL import Image
 
-from .mappers.message_types import ChatMessage, MessageContentList
-from .mappers.proto_mapper import file_attachments_from_proto
-from .generated import agent_worker_pb2
 from ..entities.message import FileAttachment
 from ..services.data.image_processor import ImageProcessor
+from .generated import agent_worker_pb2
+from .mappers.message_types import ChatMessage, MessageContentList
+from .mappers.proto_mapper import file_attachments_from_proto
 
 logger = logging.getLogger(__name__)
 
 
-def extract_user_api_key_from_tools(tools: List[Any]) -> Optional[str]:
+def extract_user_api_key_from_tools(tools: list[Any]) -> str | None:
     """
     Extract user API key from enriched tool configs.
 
@@ -35,8 +35,8 @@ def extract_user_api_key_from_tools(tools: List[Any]) -> Optional[str]:
     """
     for tool in tools:
         if tool.config:
-            api_key = tool.config.get('api_key')
-            if api_key and api_key.startswith('user_'):
+            api_key = tool.config.get("api_key")
+            if api_key and api_key.startswith("user_"):
                 logger.debug(f"Extracted user API key from tool {tool.name}")
                 return api_key
     logger.warning("No user API key found in tool configs")
@@ -44,8 +44,8 @@ def extract_user_api_key_from_tools(tools: List[Any]) -> Optional[str]:
 
 
 def extract_file_attachments(
-    message_parts: List['agent_worker_pb2.MessagePart']
-) -> List[FileAttachment]:
+    message_parts: list["agent_worker_pb2.MessagePart"],
+) -> list[FileAttachment]:
     """
     Extract file attachments (audio, PDFs, etc.) from message parts.
 
@@ -61,7 +61,7 @@ def extract_file_attachments(
     return file_attachments_from_proto(message_parts)
 
 
-def extract_images_from_message(message: ChatMessage) -> List[Image.Image]:
+def extract_images_from_message(message: ChatMessage) -> list[Image.Image]:
     """Extract PIL Image objects from ChatMessage content using shared utility."""
     return ImageProcessor.extract_images_from_message(message)
 
@@ -85,7 +85,7 @@ def extract_text_from_message(message: ChatMessage) -> str:
     content: MessageContentList = message.content
 
     # Extract all text from content parts
-    text_parts: List[str] = []
+    text_parts: list[str] = []
     for part in content:
         if part.get("type") == "text":
             text_parts.append(part["text"])
@@ -94,8 +94,7 @@ def extract_text_from_message(message: ChatMessage) -> str:
 
 
 def build_task_with_conversation_context(
-    conversation_messages: List[ChatMessage],
-    system_prompt: str
+    conversation_messages: list[ChatMessage], system_prompt: str
 ) -> str:
     """
     Build task prompt with full conversation history.

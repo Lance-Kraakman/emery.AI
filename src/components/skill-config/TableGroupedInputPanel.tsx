@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Table2, ArrowLeft, Plus, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { Table2, ArrowLeft, Plus, X, ChevronDown, ChevronUp, Zap } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -11,9 +11,12 @@ import { ManualInputItem } from './ManualInputItem';
 import { fieldTypeToInputType } from './field-type-maps';
 import { serializeRowIdSource, deserializeRowIdSource } from './mapping-serializers';
 import { useTableFields } from './hooks/useTableFields';
+import { TriggerVariablePanel } from './TriggerVariablePanel';
 import { getTables } from '@/app/actions/tables';
+import { getDatabases } from '@/app/actions/databases';
 import type { InputDefinition } from '@/app/mappers/skill-mapper';
 import type { TableDTO } from '@/app/mappers/table-mapper';
+import type { DatabaseDTO } from '@/app/dtos/database.dto';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
 import type { FieldType } from '@/ddd/domain/tables/value-objects/table-field';
 
@@ -29,28 +32,33 @@ export function TableGroupedInputPanel({
   isReadOnly = false,
 }: TableGroupedInputPanelProps) {
   const [tables, setTables] = useState<TableDTO[]>([]);
+  const [databases, setDatabases] = useState<DatabaseDTO[]>([]);
   const [tablesLoading, setTablesLoading] = useState(true);
   const [showAddManual, setShowAddManual] = useState(false);
   const [newInputName, setNewInputName] = useState('');
   const [expandedTables, setExpandedTables] = useState<Set<number>>(new Set());
+  const [showTriggerPanel, setShowTriggerPanel] = useState(false);
 
-  // Load tables for selectors
+  // Load tables and databases for selectors
   useEffect(() => {
-    getTables()
-      .then(setTables)
+    Promise.all([getTables(), getDatabases()])
+      .then(([tablesData, databasesData]) => {
+        setTables(tablesData);
+        setDatabases(databasesData);
+      })
       .finally(() => setTablesLoading(false));
   }, []);
 
-  // Group inputs by source table
+  // Group inputs by source table (only table_field mappings, not trigger_variable)
   const { byTable, manual } = useMemo(() => {
     const byTable = new Map<number, InputDefinition[]>();
     const manual: InputDefinition[] = [];
     inputs.forEach((input) => {
-      const tableId = input.inputMapping?.source?.tableId;
-      if (tableId) {
-        const list = byTable.get(tableId) || [];
+      const source = input.inputMapping?.source;
+      if (source && source.type === 'table_field') {
+        const list = byTable.get(source.tableId) || [];
         list.push(input);
-        byTable.set(tableId, list);
+        byTable.set(source.tableId, list);
       } else {
         manual.push(input);
       }
@@ -87,6 +95,7 @@ export function TableGroupedInputPanel({
         type: inputType || 'text',
         inputMapping: {
           source: {
+            type: 'table_field',
             tableId,
             fieldId: field.id,
             rowSource: { type: 'source_row' },
@@ -102,8 +111,9 @@ export function TableGroupedInputPanel({
   };
 
   const handleUpdateInput = (inputName: string, updated: InputDefinition) => {
-    if (updated.inputMapping?.source?.tableId) {
-      fetchFieldsForTable(updated.inputMapping.source.tableId);
+    const source = updated.inputMapping?.source;
+    if (source && source.type === 'table_field') {
+      fetchFieldsForTable(source.tableId);
     }
     onInputsChange(inputs.map((i) => (i.name === inputName ? updated : i)));
   };
@@ -130,15 +140,66 @@ export function TableGroupedInputPanel({
   };
 
   const handleRemoveTableGroup = (tableId: number) => {
-    onInputsChange(inputs.filter((i) => i.inputMapping?.source?.tableId !== tableId));
+    onInputsChange(inputs.filter((i) => {
+      const source = i.inputMapping?.source;
+      return !(source && source.type === 'table_field' && source.tableId === tableId);
+    }));
+  };
+
+  const handleClearAll = () => {
+    onInputsChange([]);
   };
 
   return (
     <div className="space-y-3">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      {/* Header with inline actions */}
+      <div className="flex items-center gap-2">
         <Label className="text-xs font-medium">Inputs</Label>
+
+        {!isReadOnly && (
+          <div className="flex items-center gap-1.5 flex-1">
+            {!showAddManual && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowAddManual(true)}
+                className="h-6 px-2 text-[10px] text-muted-foreground"
+              >
+                <Plus className="h-3 w-3 mr-1" />
+                Add input
+              </Button>
+            )}
+            {!tablesLoading && tables.length > 0 && (
+              <AddFromTableButton
+                tables={tables}
+                databases={databases}
+                onSelectTable={(tableId) => fetchFieldsForTable(tableId)}
+                onAddFields={(tableId, fields) => handleAddInputsFromTable(tableId, fields)}
+              />
+            )}
+            <AddFromAutomationButton
+              onSelectType={(type) => {
+                setShowTriggerPanel(true);
+              }}
+              isActive={showTriggerPanel}
+            />
+          </div>
+        )}
+
         <span className="text-[10px] text-muted-foreground">{inputs.length} total</span>
+
+        {!isReadOnly && inputs.length > 0 && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={handleClearAll}
+            className="h-6 px-2 text-[10px] text-muted-foreground hover:text-destructive"
+          >
+            Clear all
+          </Button>
+        )}
       </div>
 
       {/* Table-grouped inputs */}
@@ -274,29 +335,15 @@ export function TableGroupedInputPanel({
         </div>
       )}
 
-      {/* Action buttons */}
-      {!isReadOnly && (
-        <div className="flex items-center gap-2">
-          {!showAddManual && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowAddManual(true)}
-              className="h-6 px-2 text-[11px] text-muted-foreground"
-            >
-              <Plus className="h-3 w-3 mr-1" />
-              Add input
-            </Button>
-          )}
-          {!tablesLoading && tables.length > 0 && (
-            <AddFromTableButton
-              tables={tables}
-              onSelectTable={(tableId) => fetchFieldsForTable(tableId)}
-              onAddFields={(tableId, fields) => handleAddInputsFromTable(tableId, fields)}
-            />
-          )}
-        </div>
+      {/* Trigger Variable Panel */}
+      {showTriggerPanel && !isReadOnly && (
+        <TriggerVariablePanel
+          onAddInputs={(newInputs) => {
+            onInputsChange([...inputs, ...newInputs]);
+            setShowTriggerPanel(false);
+          }}
+          existingInputNames={new Set(inputs.map(i => i.name))}
+        />
       )}
     </div>
   );
@@ -321,27 +368,29 @@ function InputMappingRow({
   isReadOnly?: boolean;
 }) {
   const mapping = input.inputMapping;
-  const selectedFieldId = mapping?.source?.fieldId;
-  const rowSource = mapping?.source?.rowSource;
+  const source = mapping?.source;
+  const isTableField = source && source.type === 'table_field';
+  const selectedFieldId = isTableField ? source.fieldId : undefined;
+  const rowSource = isTableField ? source.rowSource : undefined;
 
   const handleFieldChange = (fieldId: number) => {
-    if (!mapping) return;
+    if (!mapping || !isTableField) return;
     onUpdate({
       ...input,
       inputMapping: {
-        source: { ...mapping.source, fieldId },
+        source: { ...source, fieldId },
       },
     });
   };
 
   const handleRowSourceChange = (value: string) => {
-    if (!mapping) return;
+    if (!mapping || !isTableField) return;
     const newRowSource = deserializeRowIdSource(value);
     if (newRowSource) {
       onUpdate({
         ...input,
         inputMapping: {
-          source: { ...mapping.source, rowSource: newRowSource },
+          source: { ...source, rowSource: newRowSource },
         },
       });
     }
@@ -425,14 +474,27 @@ function InputMappingRow({
 /** Button to add inputs from a new table (table picker → field picker) */
 function AddFromTableButton({
   tables,
+  databases,
   onSelectTable,
   onAddFields,
 }: {
   tables: TableDTO[];
+  databases: DatabaseDTO[];
   onSelectTable: (tableId: number) => void;
   onAddFields: (tableId: number, fields: FieldDTO[]) => void;
 }) {
   const [selectedTableId, setSelectedTableId] = useState<number | null>(null);
+
+  // Group tables by database
+  const tablesByDatabase = useMemo(() => {
+    const grouped = new Map<number, TableDTO[]>();
+    tables.forEach((table) => {
+      const list = grouped.get(table.databaseId) || [];
+      list.push(table);
+      grouped.set(table.databaseId, list);
+    });
+    return grouped;
+  }, [tables]);
 
   if (selectedTableId) {
     return (
@@ -469,16 +531,47 @@ function AddFromTableButton({
         setSelectedTableId(id);
       }}
     >
-      <SelectTrigger className="h-6 w-[140px] text-[10px] text-muted-foreground">
-        <SelectValue placeholder="+ Add from table" />
+      <SelectTrigger className="h-6 w-[130px] text-[10px] text-muted-foreground">
+        <Table2 className="h-3 w-3 mr-1 shrink-0" />
+        <SelectValue placeholder="Add from table" />
       </SelectTrigger>
       <SelectContent>
-        {tables.map((table) => (
-          <SelectItem key={table.id} value={table.id.toString()}>
-            {table.name}
-          </SelectItem>
-        ))}
+        {Array.from(tablesByDatabase.entries()).map(([dbId, dbTables]) => {
+          const db = databases.find((d) => d.id === dbId);
+          return (
+            <SelectGroup key={dbId}>
+              <SelectLabel className="text-[10px] text-muted-foreground">{db?.name || 'Unknown'}</SelectLabel>
+              {dbTables.map((table) => (
+                <SelectItem key={table.id} value={table.id.toString()}>
+                  {table.name}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          );
+        })}
       </SelectContent>
     </Select>
+  );
+}
+
+/** Button to add inputs from automation trigger variables */
+function AddFromAutomationButton({
+  onSelectType,
+  isActive,
+}: {
+  onSelectType: (type: string) => void;
+  isActive: boolean;
+}) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      onClick={() => onSelectType('toggle')}
+      className={`h-6 px-2 text-[10px] ${isActive ? 'text-primary bg-primary/10' : 'text-muted-foreground'}`}
+    >
+      <Zap className="h-3 w-3 mr-1" />
+      Add from automation
+    </Button>
   );
 }

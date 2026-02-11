@@ -7,7 +7,7 @@
  * These users operate with elevated permissions across organizations.
  */
 
-import { db, rawClient } from '@/ddd/infrastructure/db/client';
+import { db } from '@/ddd/infrastructure/db/client';
 import { users } from '@/ddd/infrastructure/db/schema';
 import { SYSTEM_USER_ID_VALUE } from '@/ddd/infrastructure/db/system-context';
 

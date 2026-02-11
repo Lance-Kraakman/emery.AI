@@ -12,10 +12,15 @@ import json
 import logging
 import os
 import threading
-from typing import Any, Callable, TYPE_CHECKING
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
 
 from emery_agents.entities.skill_config import SkillConfig
-from emery_agents.services.data.output_mapping import MappingContext, OutputMappingService
+from emery_agents.services.data.output_mapping import (
+    MappingContext,
+    OutputMappingService,
+)
 from emery_agents.types import SkillExecutionResult
 from emery_agents.utils import run_async_in_thread
 
@@ -23,6 +28,30 @@ if TYPE_CHECKING:
     from emery_agents.entities.task import SkillOutputValue
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class HumanSkillAwaitingException(Exception):
+    """
+    Raised when a human skill requires human action.
+
+    This exception interrupts agent execution and signals that the graph
+    should pause for human input. The execution node catches this and
+    sets up a LangGraph interrupt.
+    """
+
+    skill_id: int
+    skill_name: str
+    step_id: str
+    instructions: str
+    inputs: dict[str, Any]
+    output_schema: list[dict[str, str]]
+    assigned_to: str
+    external_links: list[str] = field(default_factory=list)
+    session_id: str = ""
+
+    def __post_init__(self) -> None:
+        super().__init__(f"Human skill awaiting input: {self.skill_name}")
 
 
 class SkillTool:
@@ -60,15 +89,15 @@ class SkillTool:
 
         # Tool metadata for the LLM
         self.name = f"skill_{skill_config.name.replace('-', '_').replace(' ', '_')}"
-        self.description = skill_config.description or f"Execute the {skill_config.name} skill"
+        self.description = (
+            skill_config.description or f"Execute the {skill_config.name} skill"
+        )
         self.output_type = "string"
 
         # Convert skill inputs to tool input schema
         self.inputs = self._build_inputs_schema()
 
-        logger.info(
-            f"Created SkillTool: {self.name} with {len(self.inputs)} inputs"
-        )
+        logger.info(f"Created SkillTool: {self.name} with {len(self.inputs)} inputs")
 
     def __call__(self, **kwargs: Any) -> str:
         """Make the tool callable for DSPy ReAct."""
@@ -145,7 +174,10 @@ class SkillTool:
             else:
                 description = f"{required_prefix}{skill_input.name}"
 
-            inputs_schema[skill_input.name] = {"type": input_type, "description": description}
+            inputs_schema[skill_input.name] = {
+                "type": input_type,
+                "description": description,
+            }
 
         if not inputs_schema:
             inputs_schema["task"] = {
@@ -198,32 +230,75 @@ class SkillTool:
             parent_ctx = AgentExecutor.get_current_context()
             progress_callback = parent_ctx.progress_callback if parent_ctx else None
 
-            if self._has_output_mappings():
-                executor_result = self.skill_executor(
-                    self.skill_config,
-                    enriched_kwargs,
-                    capture_outputs=True,
-                    progress_callback=progress_callback,
-                )
+            # Always use capture_outputs=True to get SkillExecutionResult with status
+            # This allows detection of human skills (status="awaiting_human")
+            executor_result = self.skill_executor(
+                self.skill_config,
+                enriched_kwargs,
+                capture_outputs=True,
+                progress_callback=progress_callback,
+            )
 
-                if isinstance(executor_result, SkillExecutionResult):
-                    result = executor_result.result
-                    captured_outputs = executor_result.captured_outputs
-                    if captured_outputs:
-                        run_async_in_thread(
-                            self._apply_agent_output_mappings(captured_outputs)
-                        )
-                        result = self._build_result_with_outputs(result, captured_outputs)
-                else:
-                    result = executor_result
+            # Check for human skill awaiting input
+            if isinstance(executor_result, SkillExecutionResult):
+                if executor_result.status == "awaiting_human":
+                    # Human skill detected - raise exception to pause execution
+                    logger.info(
+                        f"Human skill {self.name} awaiting input - raising exception"
+                    )
+                    human_config = self.skill_config.human_skill_config
+                    instructions = (
+                        human_config.instructions
+                        if human_config
+                        else self.skill_config.instructions
+                    )
+                    assigned_to = ""
+                    if human_config:
+                        if (
+                            human_config.assignee_type == "specific_user"
+                            and human_config.assignee_id
+                        ):
+                            assigned_to = human_config.assignee_id
+                        elif (
+                            human_config.assignee_type == "role"
+                            and human_config.assignee_role
+                        ):
+                            assigned_to = f"role:{human_config.assignee_role}"
+
+                    raise HumanSkillAwaitingException(
+                        skill_id=self.skill_config.id,
+                        skill_name=self.skill_config.name,
+                        step_id="",  # Will be set by execution node
+                        instructions=instructions,
+                        inputs=enriched_kwargs,
+                        output_schema=[
+                            {"name": out.name, "type": out.type}
+                            for out in self.skill_config.outputs
+                        ],
+                        assigned_to=assigned_to,
+                    )
+
+                # Normal completed skill - process result
+                result = executor_result.result
+                captured_outputs = executor_result.captured_outputs
+
+                # Apply output mappings if available
+                if captured_outputs and self._has_output_mappings():
+                    run_async_in_thread(
+                        self._apply_agent_output_mappings(captured_outputs)
+                    )
+                    result = self._build_result_with_outputs(result, captured_outputs)
             else:
-                result = self.skill_executor(
-                    self.skill_config, enriched_kwargs, progress_callback=progress_callback
-                )
+                result = executor_result
 
             logger.info(f"Skill {self.name} completed successfully")
             cache[call_key] = result
             return result
+
+        except HumanSkillAwaitingException:
+            # Re-raise human skill exception to propagate to execution node
+            call_stack.discard(skill_name)
+            raise
 
         except Exception as e:
             error_msg = f"Skill execution failed: {str(e)}"
@@ -259,7 +334,9 @@ class SkillTool:
             result_parts.append("\n".join(extracted_lines))
 
         if not_found_lines:
-            result_parts.append(f"\n**Not found in input ({len(not_found_lines)} fields):**")
+            result_parts.append(
+                f"\n**Not found in input ({len(not_found_lines)} fields):**"
+            )
             result_parts.append("\n".join(not_found_lines))
 
         if extracted_lines:
@@ -267,7 +344,9 @@ class SkillTool:
 
         return "\n".join(result_parts)
 
-    async def _apply_agent_output_mappings(self, captured_values: dict[str, Any]) -> None:
+    async def _apply_agent_output_mappings(
+        self, captured_values: dict[str, Any]
+    ) -> None:
         """Apply output mappings for agent mode skills using captured OutputTool values."""
         if not self.api_key or not self.organization_id:
             logger.debug("No API auth available, skipping agent output mappings")
@@ -277,7 +356,9 @@ class SkillTool:
             logger.debug("No captured values for agent output mappings")
             return
 
-        ctx = MappingContext(api_key=self.api_key, organization_id=str(self.organization_id))
+        ctx = MappingContext(
+            api_key=self.api_key, organization_id=str(self.organization_id)
+        )
 
         outputs_with_mappings = [
             output
@@ -353,7 +434,9 @@ class SkillTool:
 
         return resolved
 
-    def _resolve_row_id(self, row_source: dict[str, Any], context: dict[str, Any]) -> str | None:
+    def _resolve_row_id(
+        self, row_source: dict[str, Any], context: dict[str, Any]
+    ) -> str | None:
         """Resolve row ID from row source configuration."""
         from emery_agents.services.agents.executor import AgentExecutor
 
@@ -369,7 +452,9 @@ class SkillTool:
             ):
                 return str(parent_ctx.source_row_id)
 
-            logger.warning("use_source_row specified but no row ID available in context")
+            logger.warning(
+                "use_source_row specified but no row ID available in context"
+            )
             return None
         elif row_source.get("static_id"):
             return row_source["static_id"]
@@ -385,13 +470,13 @@ class SkillTool:
 
         return None
 
-    async def _read_table_field(
-        self, table_id: int, field_id: int, row_id: str
-    ) -> Any:
+    async def _read_table_field(self, table_id: int, field_id: int, row_id: str) -> Any:
         """Read a single field value from a table row."""
         import httpx
 
-        ctx = MappingContext(api_key=self.api_key, organization_id=str(self.organization_id))
+        ctx = MappingContext(
+            api_key=self.api_key, organization_id=str(self.organization_id)
+        )
 
         url = f"{ctx.api_base_url}/rows"
         params = {"tableId": str(table_id), "rowId": row_id}
@@ -401,7 +486,9 @@ class SkillTool:
                 response = await client.get(url, headers=ctx.headers, params=params)
 
                 if response.status_code >= 400:
-                    logger.warning(f"Failed to fetch row {row_id}: {response.status_code}")
+                    logger.warning(
+                        f"Failed to fetch row {row_id}: {response.status_code}"
+                    )
                     return None
 
                 data = response.json()

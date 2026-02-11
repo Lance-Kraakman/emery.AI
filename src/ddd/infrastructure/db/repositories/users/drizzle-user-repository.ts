@@ -1,7 +1,7 @@
 // AIDEV-NOTE: Drizzle implementation of IUserRepository - handles user authentication and management
 // User business operations with organization relationships and role management
 
-import { eq, and, ne, or, gte, sql } from 'drizzle-orm';
+import { eq, and, ne, or, gte } from 'drizzle-orm';
 import type { InferSelectModel } from 'drizzle-orm';
 
 import { users, userOrganizations, organizations } from '@/ddd/infrastructure/db/schema';
@@ -17,7 +17,6 @@ import type {
 import type { Organization } from '@/ddd/domain/organizations/entities/organization';
 import { UserId, EmailAddress, ApiKey, OrganizationId, OrganizationName } from '@/ddd/domain/shared/value-objects';
 import { SystemRoleType, SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
-import type { DbClient } from '@/ddd/infrastructure/db/client';
 import { SYSTEM_USER_ID_VALUE } from '@/ddd/infrastructure/db/system-context';
 
 type UserRow = InferSelectModel<typeof users>;

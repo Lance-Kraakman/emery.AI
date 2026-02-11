@@ -4,78 +4,99 @@ import json
 import logging
 import os
 import time
-import asyncio
+from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import AsyncIterator, Optional, List, Dict, Any, Tuple, cast
+from typing import Any, cast
 
 import grpc
 
-from .generated import agent_worker_pb2, agent_worker_pb2_grpc
-from .mappers.message_mapper import build_conversation_messages, has_images, extract_text_from_parts
-from .mappers import format_clarifying_questions
-from ..infrastructure.workspace_sync import WorkspaceSync
-from ..services.models.provider import ModelProvider
-from emery_agents.tools.loader import UnifiedToolLoader
-from ..services.context.session_manager import SessionManager
-from ..services.agents.factory import AgentFactory
-from ..services.skills.executor import SkillExecutorService
-from ..services.plan_service import PlanService
-from ..services.execution.events import PlanCreatedEvent, AwaitingClarificationEvent
-from ..orchestrators.nodes.planning import generate_plan_node
-from ..orchestrators.state import PlanExecuteState
-from ..orchestrators.runtime import RuntimeContext
-from emery_agents.tools.provider import ToolProvider
-from ..entities.models.plan import Plan, SkillInputDefinition, SkillOutputDefinition
-from .message_processor import extract_file_attachments
-from .mappers.proto_mapper import tool_configs_from_proto, history_messages_from_proto, token_usage_to_proto
-from .agent_streaming import AgentStreamingHandler
-from .response_types import StreamResponseDict
-from .coordinator_streaming import CoordinatorStreamingHandler
-from .response_converter import convert_response_to_proto
-from .agents.agent_models import get_builder_descriptors
-from emery_agents.tools.capability_registry import CapabilityRegistry
-from emery_agents.services.analysis.token_accumulator import TokenAccumulator
 from emery_agents.entities.models.capability import CapabilityType
-from emery_agents.services.analysis.embedding_cache import load_embedding_cache, save_embedding_cache
-from emery_agents.tools.capability_bootstrap import populate_system_agents, populate_integration_services
+from emery_agents.knowledge.cache import (
+    get_efs_cache_path,
+    load_knowledge_cache,
+    load_knowledge_local,
+    save_knowledge_local,
+)
+from emery_agents.planning.patterns import ALL_PATTERNS
+from emery_agents.planning.registry import PlanningRegistry
+from emery_agents.services.analysis.token_accumulator import TokenAccumulator
+from emery_agents.tools.capability_bootstrap import (
+    populate_integration_services,
+    populate_system_agents,
+)
+from emery_agents.tools.capability_registry import CapabilityRegistry
+from emery_agents.tools.knowledge import get_knowledge_base, set_knowledge_base
+from emery_agents.tools.loader import UnifiedToolLoader
+from emery_agents.tools.provider import ToolProvider
+
+from ..entities.models.plan import Plan, SkillInputDefinition, SkillOutputDefinition
+from ..infrastructure.storage import WorkspaceType, create_workspace_storage
+from ..orchestrators.nodes.planning import generate_plan_node
+from ..orchestrators.runtime import RuntimeContext
+from ..orchestrators.state import PlanExecuteState
+from ..services.agents.executor import AgentExecutor
+from ..services.agents.factory import AgentFactory
+from ..services.context.session_manager import SessionManager
+from ..services.execution.events import AwaitingClarificationEvent, PlanCreatedEvent
+from ..services.models.provider import ModelProvider
+from ..services.plan_service import PlanService
+from ..services.skills.executor import SkillExecutorService
 from ..services.tasks import TaskExecutor
 from ..services.tasks.task_executor import TaskData
-from ..services.agents.executor import AgentExecutor
+from .agent_streaming import AgentStreamingHandler
+from .agents.agent_models import get_builder_descriptors
+from .coordinator_streaming import CoordinatorStreamingHandler
+from .generated import agent_worker_pb2, agent_worker_pb2_grpc
+from .mappers import format_clarifying_questions
+from .mappers.message_mapper import (
+    build_conversation_messages,
+    extract_text_from_parts,
+    has_images,
+)
+from .mappers.proto_mapper import (
+    history_messages_from_proto,
+    token_usage_to_proto,
+    tool_configs_from_proto,
+)
+from .message_processor import extract_file_attachments
+from .response_converter import convert_response_to_proto
+from .response_types import StreamResponseDict
 
 logger = logging.getLogger(__name__)
 
 
-class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingServiceServicer):
+class ChatProcessingServiceImplementation(
+    agent_worker_pb2_grpc.ChatProcessingServiceServicer
+):
     """gRPC service for AI chat. DB/auth handled by Next.js."""
 
     def __init__(self, organization_id: str = ""):
         hf_token = os.getenv("HF_TOKEN")
         if not hf_token:
-            raise EnvironmentError("HF_TOKEN environment variable required")
+            raise OSError("HF_TOKEN environment variable required")
 
         self.organization_id = organization_id
-        self.active_streams: Dict[str, bool] = {}
+        self.active_streams: dict[str, bool] = {}
 
-        # Initialize workspace sync for persistent filesystem
-        s3_bucket = os.getenv("S3_BUCKET_NAME")
-        if s3_bucket:
-            self.workspace_sync = WorkspaceSync(bucket=s3_bucket)
-            logger.info(f"✅ WorkspaceSync initialized with bucket: {s3_bucket}")
-        else:
-            self.workspace_sync = None
-            logger.warning("⚠️ S3_BUCKET_NAME not set, workspace sync disabled for chat")
+        # Initialize workspace storage (EFS/NFS/local filesystem)
+        # Workspaces are stored directly on shared filesystem - no S3 needed
+        self.workspace_storage = create_workspace_storage()
+        logger.info("✅ WorkspaceStorage initialized for chat")
+
+        # Initialize knowledge base for discovery
+        self._initialize_knowledge_base()
 
         self.session_manager = SessionManager(
-            idle_timeout=1800,
-            max_lifetime=14400,
-            workspace_sync=self.workspace_sync
+            idle_timeout=1800, max_lifetime=14400
         )
         self.session_manager.start_cleanup_task()
 
         try:
             self.tool_loader: UnifiedToolLoader = UnifiedToolLoader()
         except ImportError:
-            raise RuntimeError("UnifiedToolLoader failed to initialize due to missing dependencies.")
+            raise RuntimeError(
+                "UnifiedToolLoader failed to initialize due to missing dependencies."
+            )
 
         self.model_provider: ModelProvider = ModelProvider()
         self.agent_factory: AgentFactory = AgentFactory(self.model_provider)
@@ -83,6 +104,11 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         populate_system_agents(self.capability_registry)
         populate_integration_services(self.capability_registry)
         self._precompute_embeddings()
+
+        # Initialize planning registry with all patterns
+        self.planning_registry = PlanningRegistry()
+        for pattern in ALL_PATTERNS:
+            self.planning_registry.register(pattern)
 
         self.skill_executor_service = SkillExecutorService(
             tool_loader=self.tool_loader, agent_factory=self.agent_factory
@@ -102,6 +128,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             plan_service=self.plan_service,
             coordinator_handler=self._coordinator_handler,
             capability_registry=self.capability_registry,
+            planning_registry=self.planning_registry,
         )
 
         # Shared TaskExecutor for task-based chat executions
@@ -113,11 +140,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
         logger.info("✅ ChatProcessingService initialized successfully")
 
-
     def _resolve_agent_id(
-        self,
-        request: agent_worker_pb2.ProcessMessageRequest
-    ) -> Optional[int]:
+        self, request: agent_worker_pb2.ProcessMessageRequest
+    ) -> int | None:
         """
         Resolve agentId - now returns None since skills are loaded dynamically.
 
@@ -138,6 +163,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         task_id: str | None,
         user_name: str | None = None,
         agent_name: str | None = None,
+        assistant_message_id: str | None = None,
     ) -> dict[str, str] | None:
         """
         Build HTTP headers for audit trail in chat-initiated executions.
@@ -145,6 +171,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         When a user executes a skill from chat, CRUD tool calls should
         carry context so the TypeScript API can attribute the action
         correctly in the audit log.
+
+        AIDEV-NOTE: assistant_message_id is the ChatMessage ID for linking
+        tasks created during execution back to the originating chat message.
         """
         if not agent_id:
             # Org-level (no agent) - user is the actor; no extra headers needed
@@ -161,62 +190,140 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             headers["X-Agent-Name"] = agent_name
         if task_id:
             headers["X-Task-ID"] = task_id
+        if assistant_message_id:
+            headers["X-Chat-Message-ID"] = assistant_message_id
         return headers
+
+    async def _resolve_execution_credentials(
+        self,
+        request: agent_worker_pb2.ProcessMessageRequest,
+        agent_id: int | None,
+        task_id: str | None,
+        org_id: int | str,
+    ) -> str | None:
+        """
+        Resolve API key for execution based on context.
+
+        Priority:
+        1. Task-tracked execution → use task's resolved credentials
+        2. Agent-owned skill → use agent's stored credentials
+        3. Org-level → use user's API key from request
+
+        Returns:
+            API key string or None if no credentials available
+        """
+        org_id_int = int(org_id) if isinstance(org_id, str) else org_id
+
+        if task_id:
+            task_data = TaskData(
+                task_id=task_id,
+                organization_id=org_id_int,
+                agent_id=agent_id,
+            )
+            credentials = await self._task_executor._resolve_credentials(task_data)
+            logger.info(
+                f"🔑 Using {credentials.source} credentials for task {task_id[:8]}..."
+            )
+            return credentials.api_key
+
+        if agent_id:
+            credentials = await self._task_executor._load_agent_credentials(
+                agent_id, org_id_int
+            )
+            logger.info(f"🔑 Using agent credentials (agent_id={agent_id})")
+            return credentials.api_key
+
+        # Org-level - use user's credentials from request
+        effective_api_key = request.user_api_key or None
+        if effective_api_key:
+            logger.info("🔑 User API key provided for managed agents")
+        else:
+            logger.warning(
+                "⚠️ No user API key provided - managed agents may fail auth"
+            )
+        return effective_api_key
+
+    def _initialize_knowledge_base(self) -> None:
+        """Eagerly load knowledge base at startup.
+
+        Load order (fastest to slowest):
+        1. EFS cache (shared filesystem, persistent across restarts)
+        2. S3 cache (remote, slower but always available)
+        3. Local path (for development/testing)
+
+        If loaded from S3, we save to EFS to pre-populate for next instances.
+        """
+        s3_bucket = os.getenv("S3_BUCKET_NAME")
+        efs_path = get_efs_cache_path()
+
+        try:
+            kb = None
+
+            # 1. Try EFS first (fastest - shared filesystem)
+            if os.path.exists(efs_path):
+                kb = load_knowledge_local(efs_path)
+                if kb:
+                    set_knowledge_base(kb)
+                    logger.info(f"✅ KnowledgeBase from EFS ({kb.count()} items)")
+                    return
+
+            # 2. Fall back to S3
+            if s3_bucket:
+                kb = load_knowledge_cache(s3_bucket)
+                if kb:
+                    set_knowledge_base(kb)
+                    logger.info(f"✅ KnowledgeBase from S3 ({kb.count()} items)")
+                    # Pre-populate EFS for next instances
+                    os.makedirs(os.path.dirname(efs_path), exist_ok=True)
+                    save_knowledge_local(efs_path, kb)
+                    return
+
+            # 3. Local fallback (development/testing)
+            local_path = os.environ.get(
+                "KNOWLEDGE_BASE_PATH", "./knowledge_base.json.gz"
+            )
+            if os.path.exists(local_path):
+                kb = load_knowledge_local(local_path)
+                if kb:
+                    set_knowledge_base(kb)
+                    logger.info(f"✅ KnowledgeBase from local ({kb.count()} items)")
+                    return
+
+            logger.info("ℹ️ No knowledge base cache found, will be empty")
+
+        except Exception as e:
+            logger.warning(f"⚠️ Knowledge base init failed: {e}")
 
     def _precompute_embeddings(self) -> None:
         """Pre-compute capability embeddings at startup.
 
-        Integration embeddings (3K+ static services): loaded from S3 cache.
-        On cache miss: computed via multi-text embed_content, then uploaded to S3.
-        Agent embeddings (11): always computed fresh (1 API call).
+        Embeddings are cached to disk (content-addressed by text hash).
+        First startup computes and caches; subsequent startups load from disk.
         """
         start = time.monotonic()
-        s3_bucket = os.getenv("S3_BUCKET_NAME")
-        integration_caps = self.capability_registry.by_type(CapabilityType.TOOL)
 
-        # Integration embeddings: try S3 cache first
-        loaded_from_cache = False
-        if s3_bucket and integration_caps:
-            try:
-                cached = load_embedding_cache(s3_bucket, integration_caps)
-                if cached:
-                    count = self.capability_registry.load_embeddings(cached)
-                    logger.info(f"Loaded {count} integration embeddings from S3 cache")
-                    loaded_from_cache = True
-            except Exception as e:
-                logger.warning(f"Failed to load embedding cache: {e}")
+        # Integration embeddings (3K+ services) - disk cache handles persistence
+        integration_count = self.capability_registry.precompute_embeddings(
+            "integration:"
+        )
+        logger.info(f"Loaded/computed {integration_count} integration embeddings")
 
-        # Cache miss: compute via batch API, then upload to S3
-        if not loaded_from_cache and integration_caps:
-            logger.info(f"Computing {len(integration_caps)} integration embeddings (first startup)...")
-            count = self.capability_registry.precompute_embeddings("integration:")
-            logger.info(f"Computed {count} integration embeddings via API")
-            if s3_bucket and count > 0:
-                try:
-                    embeddings = self.capability_registry.export_embeddings("integration:")
-                    save_embedding_cache(s3_bucket, integration_caps, embeddings)
-                    logger.info("Uploaded integration embeddings to S3 cache")
-                except Exception as e:
-                    logger.warning(f"Failed to save embedding cache: {e}")
-
-        # Agent embeddings: always compute (11 agents, 1 API call)
+        # Agent embeddings (11 agents)
         agent_count = self.capability_registry.precompute_embeddings("agent:")
-        if agent_count:
-            logger.info(f"Computed {agent_count} agent embeddings")
+        logger.info(f"Computed {agent_count} agent embeddings")
 
         elapsed = time.monotonic() - start
         logger.info(f"Embedding pre-computation complete in {elapsed:.1f}s")
 
     def _get_workspace_id(
-        self,
-        request: agent_worker_pb2.ProcessMessageRequest
-    ) -> Tuple[str, str, int]:
+        self, request: agent_worker_pb2.ProcessMessageRequest
+    ) -> tuple[WorkspaceType, str, int]:
         """
         Determine workspace type and ID from skill's agent ownership.
 
         Returns:
             Tuple of (workspace_type, workspace_id, organization_id)
-            - workspace_type: "agents" or "users"
+            - workspace_type: WorkspaceType.AGENTS or WorkspaceType.USERS
             - workspace_id: agent_id or user_id
             - organization_id: org that owns this workspace
         """
@@ -224,11 +331,11 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         agent_id = self._resolve_agent_id(request)
 
         if agent_id:
-            workspace_type = "agents"
+            workspace_type = WorkspaceType.AGENTS
             workspace_id = str(agent_id)
         else:
             # Org-level - use user's personal workspace
-            workspace_type = "users"
+            workspace_type = WorkspaceType.USERS
             workspace_id = request.user_id
 
         organization_id = int(request.organization_id)
@@ -237,7 +344,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
     async def ProcessMessage(
         self,
         request: agent_worker_pb2.ProcessMessageRequest,
-        context: grpc.aio.ServicerContext
+        context: grpc.aio.ServicerContext,
     ) -> AsyncIterator[agent_worker_pb2.ProcessMessageResponse]:
         """
         Process a chat message and stream AI response.
@@ -249,26 +356,42 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
         All session/persistence logic is handled by Next.js caller.
         """
-        
+
         start_time = time.time()
-        message_parts = request.message_parts
         user_id = request.user_id
         org_id = request.organization_id
-        message_id = request.message_id if request.message_id else f"msg_{int(time.time() * 1000)}"
+        message_id = (
+            request.message_id
+            if request.message_id
+            else f"msg_{int(time.time() * 1000)}"
+        )
         session_id = request.session_id if request.session_id else f"{org_id}_{user_id}"
 
         # Task-based execution tracking (when task_id is provided)
-            # AIDEV-NOTE: When task_id is set, this is a task-tracked execution (skill/agent invocation)
+        # AIDEV-NOTE: When task_id is set, this is a task-tracked execution (skill/agent invocation)
         task_id = request.task_id if request.task_id else None
         if task_id:
             logger.info(f"📋 Task-tracked execution: task_id={task_id[:8]}...")
+
+        # ChatMessage link for ExecutionSteps retrieval
+        # AIDEV-NOTE: assistant_message_id links this execution to a ChatMessage in TypeScript
+        # Tasks created from this execution should include this as chatMessageId
+        assistant_message_id = (
+            request.assistant_message_id if request.assistant_message_id else None
+        )
+        if assistant_message_id:
+            logger.info(
+                f"💬 Chat-linked execution: assistant_message_id={assistant_message_id[:8]}..."
+            )
 
         # Create a new token accumulator for this request
         accumulator = TokenAccumulator()
 
         # Register message stream for cancellation tracking
         self.active_streams[message_id] = False  # False = not cancelled
-        logger.info(f"🚀 Processing message {message_id} for user {user_id} in org {org_id} (session: {session_id})")
+        logger.info(
+            f"🚀 Processing message {message_id} for user {user_id} in org {org_id} (session: {session_id})"
+        )
 
         # Extract text preview for logging
         message_parts_list = list(request.message_parts)
@@ -276,7 +399,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         has_image_content = has_images(message_parts_list)
         logger.info(f"📝 Message preview: {text_preview[:100]}...")
         if has_image_content:
-            logger.info(f"🖼️ Message contains images")
+            logger.info("🖼️ Message contains images")
 
         file_attachments = extract_file_attachments(message_parts_list)
         if file_attachments:
@@ -288,34 +411,40 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             tools_count = len(agent_config.tools) if agent_config.tools else 0
             logger.info(f"🔧 AgentConfig provided: {tools_count} tools")
         else:
-            logger.info(f"⚠️ No AgentConfig provided, using empty tools")
+            logger.info("⚠️ No AgentConfig provided, using empty tools")
 
-        # Download workspace from S3 if workspace sync is enabled
-        workspace_path: Optional[Path] = None
-        workspace_type: Optional[str] = None
-        workspace_id: Optional[str] = None
-        workspace_org_id: Optional[int] = None
+        # Get workspace path from shared filesystem (EFS/NFS/local)
+        workspace_path: Path | None = None
+        workspace_type: WorkspaceType | None = None
+        workspace_id: str | None = None
+        workspace_org_id: int | None = None
 
-        if self.workspace_sync:
-            try:
-                workspace_type, workspace_id, workspace_org_id = self._get_workspace_id(request)
-                workspace_path = self.workspace_sync.download(workspace_org_id, workspace_type, workspace_id)
-                logger.info(f"📁 Workspace downloaded: {workspace_path} (type={workspace_type}, id={workspace_id})")
-            except Exception as e:
-                logger.error(f"Failed to download workspace: {e}")
-                # Continue without workspace - chat can still work
+        try:
+            workspace_type, workspace_id, workspace_org_id = self._get_workspace_id(
+                request
+            )
+            workspace_path = self.workspace_storage.get_workspace_path(
+                workspace_org_id, workspace_type, workspace_id
+            )
+            logger.info(
+                f"📁 Workspace ready: {workspace_path} (type={workspace_type.value}, id={workspace_id})"
+            )
+        except Exception as e:
+            logger.error(f"Failed to access workspace: {e}")
+            # Continue without workspace - chat can still work
 
         try:
             conversation_messages = await build_conversation_messages(
-                list(request.conversation_history),
-                message_parts_list
+                list(request.conversation_history), message_parts_list
             )
 
-            logger.info(f"💬 Built conversation with {len(conversation_messages)} messages (HF format)")
+            logger.info(
+                f"💬 Built conversation with {len(conversation_messages)} messages (HF format)"
+            )
 
             sequence = 0
             total_content = ""
-            current_plan_data: Dict[str, Any] | None = None
+            current_plan_data: dict[str, Any] | None = None
 
             tools_to_use = []
 
@@ -327,7 +456,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 logger.info(f"📨 AgentConfig tools received: {len(tools_to_use)} tools")
                 if tools_to_use:
                     for i, tool in enumerate(tools_to_use):
-                        logger.info(f"  Tool {i}: name={tool.name}, config_keys={list(tool.config.keys()) if tool.config else 'none'}")
+                        logger.info(
+                            f"  Tool {i}: name={tool.name}, config_keys={list(tool.config.keys()) if tool.config else 'none'}"
+                        )
             else:
                 logger.info("  No AgentConfig received from frontend")
 
@@ -336,43 +467,32 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             if org_model:
                 logger.info(f"🔧 Using organization model override: {org_model}")
             else:
-                logger.info("🔧 No organization model specified, will use system default")
+                logger.info(
+                    "🔧 No organization model specified, will use system default"
+                )
 
             # Resolve credentials based on skill's agent ownership
-            # agentId is resolved from skill.agent_id (set during enrichment in Next.js)
-            # - Org-level skill (no agent_id) → User's credentials
-            # - Agent skill (agent_id set) → Agent's stored credentials
             agent_id = self._resolve_agent_id(request)
-
-            if task_id:
-                task_data = TaskData(
-                    task_id=task_id,
-                    organization_id=int(org_id),
-                    agent_id=agent_id,
-                )
-                credentials = await self._task_executor._resolve_credentials(task_data)
-                effective_api_key = credentials.api_key
-                logger.info(f"🔑 Using {credentials.source} credentials for task {task_id[:8]}...")
-            elif agent_id:
-                # No task tracking but skill is agent-owned - use agent credentials
-                credentials = await self._task_executor._load_agent_credentials(agent_id, int(org_id))
-                effective_api_key = credentials.api_key
-                logger.info(f"🔑 Using agent credentials (agent_id={agent_id})")
-            else:
-                # Org-level - use user's credentials from request
-                effective_api_key = request.user_api_key or None
-                if effective_api_key:
-                    logger.info(f"🔑 User API key provided for managed agents")
-                else:
-                    logger.warning("⚠️ No user API key provided - managed agents may fail auth")
+            effective_api_key = await self._resolve_execution_credentials(
+                request, agent_id, task_id, org_id
+            )
 
             # Build audit headers for chat-initiated tool calls
             user_name = request.user_name if request.user_name else None
-            agent_name = agent_config.name if agent_config and agent_config.name else None
-            chat_audit_headers = self._build_chat_audit_headers(
-                user_id, agent_id, task_id,
-                user_name=user_name, agent_name=agent_name
+            agent_name = (
+                agent_config.name if agent_config and agent_config.name else None
             )
+            chat_audit_headers = self._build_chat_audit_headers(
+                user_id,
+                agent_id,
+                task_id,
+                user_name=user_name,
+                agent_name=agent_name,
+                assistant_message_id=assistant_message_id,
+            )
+
+            # Cancellation callback - checked every heartbeat interval (~15s)
+            is_cancelled = lambda: self.active_streams.get(message_id, False)
 
             async for response_dict in self._agent_handler.stream_response(
                 conversation_messages,
@@ -384,34 +504,41 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 session_id=session_id,
                 user_id=user_id,
                 org_id=org_id,
-                conversation_history=history_messages_from_proto(list(request.conversation_history)),
+                conversation_history=history_messages_from_proto(
+                    list(request.conversation_history)
+                ),
                 agent_config=agent_config,  # Pass agent_config for skill execution
                 user_api_key=effective_api_key,  # Resolved credentials (user or agent)
                 file_attachments=file_attachments,  # File attachments for skill context injection
                 workspace_path=workspace_path,  # Workspace filesystem path
-                workspace_id=workspace_id,  # Workspace ID for S3 (user_id or agent_id)
-                workspace_type=workspace_type,  # "agents" or "users" — determines memory PII filtering
-                workspace_org_id=workspace_org_id,  # Organization ID for org-scoped S3 keys
-                 extra_headers=chat_audit_headers,  # Audit trail headers for CRUD tool calls
+                workspace_id=workspace_id,  # Workspace ID (user_id or agent_id)
+                workspace_type=workspace_type.value if workspace_type else None,  # "agents" or "users"
+                workspace_org_id=workspace_org_id,  # Organization ID
+                extra_headers=chat_audit_headers,  # Audit trail headers for CRUD tool calls
+                is_cancelled=is_cancelled,  # Cancellation check for heartbeat loop
             ):
                 # Check for cancellation
                 if self.active_streams.get(message_id, False):
-                    logger.info(f"⚠️ Message {message_id} was cancelled, stopping stream")
+                    logger.info(
+                        f"⚠️ Message {message_id} was cancelled, stopping stream"
+                    )
                     # Send cancellation error
                     cancel_response = agent_worker_pb2.ProcessMessageResponse(
                         error=agent_worker_pb2.ProcessingError(
-                            error_code='CANCELLED',
-                            error_message='Message processing was cancelled by user',
-                            error_details={}
+                            error_code="CANCELLED",
+                            error_message="Message processing was cancelled by user",
+                            error_details={},
                         ),
-                        timestamp=int(time.time() * 1000)
+                        timestamp=int(time.time() * 1000),
                     )
                     yield cancel_response
                     break
 
                 if isinstance(response_dict, dict):
-                    proto_response, content, plan_data, should_break, seq_inc = convert_response_to_proto(
-                        cast(StreamResponseDict, response_dict), sequence
+                    proto_response, content, plan_data, should_break, seq_inc = (
+                        convert_response_to_proto(
+                            cast(StreamResponseDict, response_dict), sequence
+                        )
                     )
 
                     if proto_response:
@@ -427,31 +554,38 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     if should_break:
                         break
 
-            # Upload workspace after message processing (crash-safe persistence)
-            if self.workspace_sync and workspace_path and workspace_id and workspace_org_id and workspace_type:
-                try:
-                    self.workspace_sync.upload(workspace_org_id, workspace_type, workspace_id)
-                    logger.info(f"📤 Workspace uploaded: {workspace_id}")
-                except Exception as e:
-                    logger.error(f"Failed to upload workspace: {e}")
+            # With EFS-based storage, workspace changes are already persisted
+            # No upload needed - filesystem changes are immediately available
+            if workspace_path:
+                logger.info(f"✅ Workspace changes persisted: {workspace_id}")
 
             processing_time = int((time.time() - start_time) * 1000)
             # Extract accumulated LLM + embedding usage for this request
             llm_usage = accumulator.extract_llm_usage()
             embedding_usage = accumulator.extract_embedding_usage()
-            handler_token_usage = TokenAccumulator.merge_usage(llm_usage, embedding_usage)
+            handler_token_usage = TokenAccumulator.merge_usage(
+                llm_usage, embedding_usage
+            )
             token_usage_proto = token_usage_to_proto(handler_token_usage)
-            model_used = getattr(handler_token_usage, 'model_name', '') if handler_token_usage else ''
+            model_used = (
+                getattr(handler_token_usage, "model_name", "")
+                if handler_token_usage
+                else ""
+            )
 
             completion_metadata = {
-                'content_length': str(len(total_content)),
-                'agent_id': str(agent_id) if agent_id else 'none',
-                'agent_name': agent_config.name if agent_config and agent_config.name else '',
+                "content_length": str(len(total_content)),
+                "agent_id": str(agent_id) if agent_id else "none",
+                "agent_name": agent_config.name
+                if agent_config and agent_config.name
+                else "",
             }
 
             if current_plan_data:
-                completion_metadata['plan'] = json.dumps(current_plan_data)
-                logger.info(f"📋 Including plan {current_plan_data.get('id')} in completion metadata")
+                completion_metadata["plan"] = json.dumps(current_plan_data)
+                logger.info(
+                    f"📋 Including plan {current_plan_data.get('id')} in completion metadata"
+                )
 
             complete_response = agent_worker_pb2.ProcessMessageResponse(
                 complete=agent_worker_pb2.ProcessingComplete(
@@ -459,9 +593,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                     total_tokens=sequence,
                     processing_time_ms=processing_time,
                     token_usage=token_usage_proto,
-                    metadata=completion_metadata
+                    metadata=completion_metadata,
                 ),
-                timestamp=int(time.time() * 1000)
+                timestamp=int(time.time() * 1000),
             )
             # Add task_id to completion response for logging/tracking
             if task_id:
@@ -472,26 +606,30 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
 
         except Exception as e:
             logger.exception(f"❌ Message processing failed: {e}")
-            
+
             # Extract partial usage up to failure
             llm_usage = accumulator.extract_llm_usage()
             embedding_usage = accumulator.extract_embedding_usage()
-            handler_token_usage = TokenAccumulator.merge_usage(llm_usage, embedding_usage)
+            handler_token_usage = TokenAccumulator.merge_usage(
+                llm_usage, embedding_usage
+            )
             token_usage_proto = token_usage_to_proto(handler_token_usage)
-            
+
             # Send error response
             error_response = agent_worker_pb2.ProcessMessageResponse(
                 error=agent_worker_pb2.ProcessingError(
-                    error_code='PROCESSING_FAILED',
+                    error_code="PROCESSING_FAILED",
                     error_message=str(e),
                     error_details={
-                        'user_id': user_id,
-                        'organization_id': str(org_id),
-                        'processing_time_ms': str(int((time.time() - start_time) * 1000))
+                        "user_id": user_id,
+                        "organization_id": str(org_id),
+                        "processing_time_ms": str(
+                            int((time.time() - start_time) * 1000)
+                        ),
                     },
-                    token_usage=token_usage_proto
+                    token_usage=token_usage_proto,
                 ),
-                timestamp=int(time.time() * 1000)
+                timestamp=int(time.time() * 1000),
             )
             # Add task_id to error response for logging/tracking
             if task_id:
@@ -507,7 +645,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
     async def CancelMessage(
         self,
         request: agent_worker_pb2.CancelMessageRequest,
-        context: grpc.aio.ServicerContext
+        context: grpc.aio.ServicerContext,
     ) -> agent_worker_pb2.CancelMessageResponse:
         """Cancel an in-progress message."""
         message_id = request.message_id
@@ -515,62 +653,63 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
         if message_id in self.active_streams:
             self.active_streams[message_id] = True
             return agent_worker_pb2.CancelMessageResponse(
-                success=True,
-                message=f"Message {message_id} cancellation requested"
+                success=True, message=f"Message {message_id} cancellation requested"
             )
         return agent_worker_pb2.CancelMessageResponse(
             success=False,
-            message=f"Message {message_id} not found or already completed"
+            message=f"Message {message_id} not found or already completed",
         )
 
     async def GeneratePlan(
         self,
         request: agent_worker_pb2.GeneratePlanRequest,
-        context: grpc.aio.ServicerContext
+        context: grpc.aio.ServicerContext,
     ) -> AsyncIterator[agent_worker_pb2.GeneratePlanResponse]:
         """Generate autonomous plan for skill editor."""
         import uuid
+
         start_time = time.time()
 
         session_id = request.session_id if request.session_id else str(uuid.uuid4())
 
-        def _make_progress(message: str, phase: str) -> agent_worker_pb2.GeneratePlanResponse:
+        def _make_progress(
+            message: str, phase: str
+        ) -> agent_worker_pb2.GeneratePlanResponse:
             """Create a progress response."""
             return agent_worker_pb2.GeneratePlanResponse(
-                progress=agent_worker_pb2.PlanProgress(
-                    message=message,
-                    phase=phase
-                ),
-                timestamp=int(time.time() * 1000)
+                progress=agent_worker_pb2.PlanProgress(message=message, phase=phase),
+                timestamp=int(time.time() * 1000),
             )
 
-        def _make_error(error_code: str, error_message: str) -> agent_worker_pb2.GeneratePlanResponse:
+        def _make_error(
+            error_code: str, error_message: str
+        ) -> agent_worker_pb2.GeneratePlanResponse:
             """Create an error response."""
             return agent_worker_pb2.GeneratePlanResponse(
                 error=agent_worker_pb2.ProcessingError(
-                    error_code=error_code,
-                    error_message=error_message,
-                    can_retry=True
+                    error_code=error_code, error_message=error_message, can_retry=True
                 ),
-                timestamp=int(time.time() * 1000)
+                timestamp=int(time.time() * 1000),
             )
 
         try:
             tool_provider = ToolProvider(
                 api_key=request.user_api_key or "",
-                organization_id=request.organization_id
+                organization_id=request.organization_id,
             )
 
             # Get agent descriptors for plan generation (replaces ManagedAgentsFactory.create_all_agents)
             managed_agents = get_builder_descriptors()
             capability_registry = self.capability_registry
 
-            skill_inputs: List[SkillInputDefinition] = [
-                SkillInputDefinition(name=i.name, type=i.type or "text", required=i.required)
+            skill_inputs: list[SkillInputDefinition] = [
+                SkillInputDefinition(
+                    name=i.name, type=i.type or "text", required=i.required
+                )
                 for i in request.skill_inputs
             ]
 
-            skill_outputs: List[SkillOutputDefinition] = [
+            skill_outputs: list[SkillOutputDefinition] = [
                 SkillOutputDefinition(name=o.name, type=o.type or "text")
                 for o in request.skill_outputs
             ]
@@ -580,30 +719,43 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             task_instructions = request.instructions
 
             # Extract configured tools appendix from instructions
-            configured_tools: List[Dict[str, Any]] = []
+            configured_tools: list[dict[str, Any]] = []
             if "---CONFIGURED_TOOLS---" in task_instructions:
                 parts = task_instructions.split("---CONFIGURED_TOOLS---", 1)
                 task_instructions = parts[0].strip()
                 try:
                     configured_tools = json.loads(parts[1].strip())
-                    logger.info(f"📋 GeneratePlan: Extracted {len(configured_tools)} configured tools")
+                    logger.info(
+                        f"📋 GeneratePlan: Extracted {len(configured_tools)} configured tools"
+                    )
                 except json.JSONDecodeError:
-                    logger.warning("📋 GeneratePlan: Failed to parse configured tools JSON")
+                    logger.warning(
+                        "📋 GeneratePlan: Failed to parse configured tools JSON"
+                    )
 
             if request.session_id and request.answers:
-                logger.info(f"📋 GeneratePlan: Resuming session {session_id} with {len(request.answers)} answers")
+                logger.info(
+                    f"📋 GeneratePlan: Resuming session {session_id} with {len(request.answers)} answers"
+                )
                 yield _make_progress("Resuming with your answers...", "resuming")
 
                 plan_session = await self.session_manager.get_plan_session(session_id)
                 if not plan_session:
-                    yield _make_error("SESSION_NOT_FOUND", "Planning session expired. Please start over.")
+                    yield _make_error(
+                        "SESSION_NOT_FOUND",
+                        "Planning session expired. Please start over.",
+                    )
                     return
 
                 answers_dict = {a.question_id: a.answer for a in request.answers}
                 if answers_dict:
-                    answers_text = "\n".join([f"- {q}: {a}" for q, a in answers_dict.items()])
+                    answers_text = "\n".join(
+                        [f"- {q}: {a}" for q, a in answers_dict.items()]
+                    )
                     task_instructions = f"{plan_session.get('instructions', request.instructions)}\n\nUser clarifications:\n{answers_text}"
-                    logger.info(f"📋 GeneratePlan: Enhanced instructions with {len(answers_dict)} clarifications")
+                    logger.info(
+                        f"📋 GeneratePlan: Enhanced instructions with {len(answers_dict)} clarifications"
+                    )
 
                 await self.session_manager.remove_plan_session(session_id)
 
@@ -613,7 +765,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             if user_feedback:
                 task_instructions = f"{task_instructions}\n\nUser feedback on previous plan:\n{user_feedback}"
             if previous_plan_json or user_feedback:
-                logger.info("📋 GeneratePlan: Enhanced instructions with regeneration context")
+                logger.info(
+                    "📋 GeneratePlan: Enhanced instructions with regeneration context"
+                )
 
             yield _make_progress("Analyzing instructions...", "analyzing")
 
@@ -627,6 +781,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 org_id=str(tool_provider.organization_id),
                 org_model=request.model or None,
                 capability_registry=capability_registry,
+                planning_registry=self.planning_registry,
+                knowledge_base=get_knowledge_base(),
+                token_accumulator=TokenAccumulator(),
             )
 
             # Call generate_plan_node directly (no graph needed for plan-only)
@@ -639,35 +796,47 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                 "skill_inputs": [
                     {"name": i.name, "type": i.type, "required": i.required}
                     for i in skill_inputs
-                ] if skill_inputs else None,
+                ]
+                if skill_inputs
+                else None,
                 "skill_outputs": [
-                    {"name": o.name, "type": o.type}
-                    for o in skill_outputs
-                ] if skill_outputs else None,
+                    {"name": o.name, "type": o.type} for o in skill_outputs
+                ]
+                if skill_outputs
+                else None,
                 "is_template_generation": bool(skill_inputs),
                 "configured_tools": configured_tools if configured_tools else None,
             }
 
-            result = await generate_plan_node(cast(PlanExecuteState, plan_state), runtime)
+            result = await generate_plan_node(
+                cast(PlanExecuteState, plan_state), runtime
+            )
 
             # Check for clarification
             result_events = result.get("events", [])
             for event in result_events:
                 if isinstance(event, AwaitingClarificationEvent):
-                    logger.info(f"GeneratePlan: Needs clarification - {len(event.questions)} questions")
+                    logger.info(
+                        f"GeneratePlan: Needs clarification - {len(event.questions)} questions"
+                    )
 
-                    await self.session_manager.store_plan_session(session_id, {
-                        "instructions": request.instructions,
-                        "skill_inputs": skill_inputs,
-                        "skill_outputs": skill_outputs,
-                        "org_model": request.model,
-                        "api_key": tool_provider.api_key,
-                        "organization_id": tool_provider.organization_id,
-                        "previous_plan_json": previous_plan_json,
-                        "user_feedback": user_feedback,
-                    })
+                    await self.session_manager.store_plan_session(
+                        session_id,
+                        {
+                            "instructions": request.instructions,
+                            "skill_inputs": skill_inputs,
+                            "skill_outputs": skill_outputs,
+                            "org_model": request.model,
+                            "api_key": tool_provider.api_key,
+                            "organization_id": tool_provider.organization_id,
+                            "previous_plan_json": previous_plan_json,
+                            "user_feedback": user_feedback,
+                        },
+                    )
 
-                    questions_json = json.dumps(format_clarifying_questions(event.questions))
+                    questions_json = json.dumps(
+                        format_clarifying_questions(event.questions)
+                    )
 
                     yield agent_worker_pb2.GeneratePlanResponse(
                         awaiting_input=agent_worker_pb2.AwaitingInput(
@@ -675,22 +844,26 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
                             title="Clarification Needed",
                             content=questions_json,
                             options=[],
-                            session_id=session_id
+                            session_id=session_id,
                         ),
-                        timestamp=int(time.time() * 1000)
+                        timestamp=int(time.time() * 1000),
                     )
                     return
 
                 elif isinstance(event, PlanCreatedEvent):
                     plan = event.plan
                     planning_time_ms = int((time.time() - start_time) * 1000)
-                    logger.info(f"GeneratePlan: Created plan {plan.id} with {len(plan.steps)} steps in {planning_time_ms}ms")
+                    logger.info(
+                        f"GeneratePlan: Created plan {plan.id} with {len(plan.steps)} steps in {planning_time_ms}ms"
+                    )
 
                     if not plan.steps:
-                        logger.error("GeneratePlan: Plan has no steps - generation failed")
+                        logger.error(
+                            "GeneratePlan: Plan has no steps - generation failed"
+                        )
                         yield _make_error(
                             "PLAN_GENERATION_FAILED",
-                            "Plan generation failed - no steps were created. Check that the model can access database context."
+                            "Plan generation failed - no steps were created. Check that the model can access database context.",
                         )
                         return
 
@@ -700,7 +873,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             if result.get("error"):
                 yield _make_error("PLAN_GENERATION_FAILED", result["error"])
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error(f"📋 GeneratePlan: Timed out after {request.timeout_seconds}s")
             yield _make_error("TIMEOUT", "Plan generation timed out")
 
@@ -708,7 +881,9 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             logger.error(f"📋 GeneratePlan: Failed with error: {e}", exc_info=True)
             yield _make_error("INTERNAL_ERROR", str(e))
 
-    def _make_plan_complete_response(self, plan: Plan, planning_time_ms: int) -> agent_worker_pb2.GeneratePlanResponse:
+    def _make_plan_complete_response(
+        self, plan: Plan, planning_time_ms: int
+    ) -> agent_worker_pb2.GeneratePlanResponse:
         """Convert Plan to StoredPlan JSON format for TypeScript frontend."""
         stored_plan = {
             "id": plan.id,
@@ -736,8 +911,7 @@ class ChatProcessingServiceImplementation(agent_worker_pb2_grpc.ChatProcessingSe
             plan_complete=agent_worker_pb2.PlanComplete(
                 plan_json=json.dumps(stored_plan),
                 plan_id=plan.id,
-                planning_time_ms=planning_time_ms
+                planning_time_ms=planning_time_ms,
             ),
-            timestamp=int(time.time() * 1000)
+            timestamp=int(time.time() * 1000),
         )
-

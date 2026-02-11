@@ -6,19 +6,17 @@ import {
   getCoreRowModel, 
   getSortedRowModel, 
   createColumnHelper,
-  flexRender,
-  type ColumnDef
+  flexRender
 } from '@tanstack/react-table';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { UserPlus, Crown, Shield, User, Loader2, Eye, Users as TeamIcon } from "lucide-react";
+import { UserPlus, Loader2 } from "lucide-react";
 import { getOrganizationMembers, getPendingInvitations, inviteUser } from "@/app/actions/invitations";
 import { assignUserRoles } from "@/app/actions/permissions";
-import { getOrganizationRolesForSelection, type CustomRole } from "@/app/actions/roles";
+import { getOrganizationRolesForSelection } from "@/app/actions/roles";
 import { EntityMultiSelect } from "./EntityMultiSelect";
 import { RoleDisplay } from "@/components/ui/RoleDisplay";
 

@@ -7,16 +7,16 @@ Extracted from ChatProcessingService for maintainability.
 """
 
 import json
-from typing import Any, Dict
 
 from ..entities.models.plan import Plan
 from .response_types import (
     AwaitingInputResponseDict,
-    ErrorResponseDict,
 )
+
 
 def is_approval_response(task: str) -> bool:
     return task.lower().strip() == "approve"
+
 
 def create_awaiting_input_for_plan(plan: Plan) -> AwaitingInputResponseDict:
     """
@@ -57,21 +57,23 @@ def create_awaiting_input_for_plan(plan: Plan) -> AwaitingInputResponseDict:
             "options": [
                 {"id": "approve", "label": "Approve", "description": "Execute the plan"}
             ],
-            "plan_json": json.dumps({
-                "id": plan.id,
-                "goal": plan.goal,
-                "context": plan.context,
-                "analysis": plan.analysis,
-                "steps": [
-                    {
-                        "step_id": s.step_id,
-                        "description": s.description,
-                        "tool_call": s.tool_call,
-                        "prompt_template": s.prompt_template,
-                        "required_context": s.required_context or [],
-                    }
-                    for s in plan.steps
-                ]
-            })
-        }
+            "plan_json": json.dumps(
+                {
+                    "id": plan.id,
+                    "goal": plan.goal,
+                    "context": plan.context,
+                    "analysis": plan.analysis,
+                    "steps": [
+                        {
+                            "step_id": s.step_id,
+                            "description": s.description,
+                            "tool_call": s.tool_call,
+                            "prompt_template": s.prompt_template,
+                            "required_context": s.required_context or [],
+                        }
+                        for s in plan.steps
+                    ],
+                }
+            ),
+        },
     }

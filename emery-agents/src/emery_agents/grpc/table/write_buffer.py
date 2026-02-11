@@ -20,13 +20,13 @@ import json
 import logging
 import time
 from datetime import datetime
-from typing import Dict, List, Optional, Any
+from typing import Any
 
 import polars as pl
 import pyarrow as pa
 
 from .redis_client import get_redis_client
-from .schema import extract_protobuf_value, arrow_to_polars_type
+from .schema import arrow_to_polars_type, extract_protobuf_value
 
 logger = logging.getLogger(__name__)
 
@@ -59,13 +59,15 @@ class WriteBuffer:
             for row_data in rows_data:
                 count += 1
                 row_id = row_data.id
-                data_dict: Dict[str, Any] = {"id": row_id}
+                data_dict: dict[str, Any] = {"id": row_id}
                 for key, value in row_data.data.items():
                     data_dict[key] = extract_protobuf_value(value)
 
                 entry = json.dumps(
                     {"op": "insert", "data": data_dict, "ts": _now_ms()},
-                    default=lambda o: o.isoformat() if isinstance(o, datetime) else str(o),
+                    default=lambda o: (
+                        o.isoformat() if isinstance(o, datetime) else str(o)
+                    ),
                 )
                 total_bytes += len(entry)
                 pipe.hset(ops_key, row_id, entry)
@@ -93,13 +95,15 @@ class WriteBuffer:
             for row_data in rows_data:
                 count += 1
                 row_id = row_data.id
-                data_dict: Dict[str, Any] = {"id": row_id}
+                data_dict: dict[str, Any] = {"id": row_id}
                 for key, value in row_data.data.items():
                     data_dict[key] = extract_protobuf_value(value)
 
                 entry = json.dumps(
                     {"op": "update", "data": data_dict, "ts": _now_ms()},
-                    default=lambda o: o.isoformat() if isinstance(o, datetime) else str(o),
+                    default=lambda o: (
+                        o.isoformat() if isinstance(o, datetime) else str(o)
+                    ),
                 )
                 total_bytes += len(entry)
                 pipe.hset(ops_key, row_id, entry)
@@ -114,7 +118,7 @@ class WriteBuffer:
             logger.warning(f"[WriteBuffer] Failed to buffer updates: {e}")
             return False
 
-    def buffer_deletes(self, s3_uri: str, row_ids: List[str]) -> bool:
+    def buffer_deletes(self, s3_uri: str, row_ids: list[str]) -> bool:
         """Buffer delete operations. Returns False if Redis unavailable."""
         if not self._redis:
             return False
@@ -124,7 +128,9 @@ class WriteBuffer:
             total_bytes = 0
 
             for row_id in row_ids:
-                entry = json.dumps({"op": "delete", "data": {"id": row_id}, "ts": _now_ms()})
+                entry = json.dumps(
+                    {"op": "delete", "data": {"id": row_id}, "ts": _now_ms()}
+                )
                 total_bytes += len(entry)
                 pipe.hset(ops_key, row_id, entry)
 
@@ -138,12 +144,12 @@ class WriteBuffer:
             logger.warning(f"[WriteBuffer] Failed to buffer deletes: {e}")
             return False
 
-    def get_buffered_ops(self, s3_uri: str) -> Dict[str, Dict[str, Any]]:
+    def get_buffered_ops(self, s3_uri: str) -> dict[str, dict[str, Any]]:
         """Get all buffered ops for a table. Returns empty dict if Redis unavailable."""
         if not self._redis:
             return {}
         try:
-            raw: Dict[str, str] = self._redis.hgetall(BUFFER_OPS_KEY.format(s3_uri))  # type: ignore[assignment]
+            raw: dict[str, str] = self._redis.hgetall(BUFFER_OPS_KEY.format(s3_uri))  # type: ignore[assignment]
             return {row_id: json.loads(entry) for row_id, entry in raw.items()}
         except Exception as e:
             logger.warning(f"[WriteBuffer] Failed to get buffered ops: {e}")
@@ -154,12 +160,12 @@ class WriteBuffer:
         if not self._redis:
             return 0
         try:
-            size: Optional[str] = self._redis.get(BUFFER_SIZE_KEY.format(s3_uri))  # type: ignore[assignment]
+            size: str | None = self._redis.get(BUFFER_SIZE_KEY.format(s3_uri))  # type: ignore[assignment]
             return int(size) if size else 0
         except Exception:
             return 0
 
-    def rotate_for_flush(self, s3_uri: str) -> Dict[str, Dict[str, Any]]:
+    def rotate_for_flush(self, s3_uri: str) -> dict[str, dict[str, Any]]:
         """Atomically move :ops -> :flushing, return flushing ops.
 
         After RENAME, new writes go to a fresh :ops key.
@@ -175,7 +181,7 @@ class WriteBuffer:
             # Reset size tracker
             self._redis.delete(BUFFER_SIZE_KEY.format(s3_uri))
 
-            raw: Dict[str, str] = self._redis.hgetall(flushing_key)  # type: ignore[assignment]
+            raw: dict[str, str] = self._redis.hgetall(flushing_key)  # type: ignore[assignment]
             return {row_id: json.loads(entry) for row_id, entry in raw.items()}
         except Exception as e:
             # Key might not exist (empty buffer) — that's fine
@@ -184,12 +190,14 @@ class WriteBuffer:
             logger.warning(f"[WriteBuffer] Failed to rotate for flush: {e}")
             return {}
 
-    def get_flushing_ops(self, s3_uri: str) -> Dict[str, Dict[str, Any]]:
+    def get_flushing_ops(self, s3_uri: str) -> dict[str, dict[str, Any]]:
         """Get ops from a :flushing key (for crash recovery retries)."""
         if not self._redis:
             return {}
         try:
-            raw: Dict[str, str] = self._redis.hgetall(BUFFER_FLUSHING_KEY.format(s3_uri))  # type: ignore[assignment]
+            raw: dict[str, str] = self._redis.hgetall(
+                BUFFER_FLUSHING_KEY.format(s3_uri)
+            )  # type: ignore[assignment]
             return {row_id: json.loads(entry) for row_id, entry in raw.items()}
         except Exception:
             return {}
@@ -216,7 +224,7 @@ class WriteBuffer:
         except Exception:
             return set()
 
-    def get_incomplete_flushes(self) -> List[str]:
+    def get_incomplete_flushes(self) -> list[str]:
         """Find :flushing keys from prior crashes."""
         if not self._redis:
             return []
@@ -225,7 +233,9 @@ class WriteBuffer:
             cursor = 0
             flushing_uris = []
             while True:
-                cursor, keys = self._redis.scan(cursor, match="buffer:*:flushing", count=100)  # type: ignore[misc]
+                cursor, keys = self._redis.scan(
+                    cursor, match="buffer:*:flushing", count=100
+                )  # type: ignore[misc]
                 for key in keys:
                     # Extract s3_uri from key pattern "buffer:{s3_uri}:flushing"
                     s3_uri = key.removeprefix("buffer:").removesuffix(":flushing")
@@ -240,7 +250,7 @@ class WriteBuffer:
 
 def merge_buffer_into_dataframe(
     df: pl.DataFrame,
-    buffered_ops: Dict[str, Dict[str, Any]],
+    buffered_ops: dict[str, dict[str, Any]],
     schema: pa.Schema,
 ) -> pl.DataFrame:
     """Merge buffered operations into a Delta Lake DataFrame.
@@ -259,8 +269,8 @@ def merge_buffer_into_dataframe(
     if not buffered_ops:
         return df
 
-    delete_ids: List[str] = []
-    upsert_rows: List[Dict[str, Any]] = []
+    delete_ids: list[str] = []
+    upsert_rows: list[dict[str, Any]] = []
 
     for row_id, entry in buffered_ops.items():
         op = entry["op"]
@@ -279,8 +289,11 @@ def merge_buffer_into_dataframe(
     if upsert_rows:
         polars_schema = {f.name: arrow_to_polars_type(f.type) for f in schema}
         delta_field_names = {f.name for f in schema}
-        datetime_cols = {name for name, dtype in polars_schema.items()
-                         if isinstance(dtype, (pl.Datetime, pl.Date))}
+        datetime_cols = {
+            name
+            for name, dtype in polars_schema.items()
+            if isinstance(dtype, (pl.Datetime, pl.Date))
+        }
 
         # Pre-process: parse ISO date strings back to datetime objects
         cleaned = []

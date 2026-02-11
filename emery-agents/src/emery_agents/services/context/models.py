@@ -16,15 +16,14 @@ creating duplicates. CapabilityRegistry handles runtime capability routing.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from emery_agents.entities.workspace import (
-    WorkspaceDatabase,
-    WorkspaceTable,
-    WorkspacePage,
-    WorkspaceApp,
     WorkspaceAgent,
+    WorkspaceApp,
+    WorkspaceDatabase,
     WorkspaceSkill,
+    WorkspaceTable,
     WorkspaceView,
 )
 
@@ -41,7 +40,7 @@ class ConversationMessage:
 
 
 def format_conversation_history(
-    history: Optional[List["ConversationMessage"]],
+    history: list["ConversationMessage"] | None,
     max_messages: int = 10,
     max_content_length: int = 500,
 ) -> str:
@@ -71,9 +70,10 @@ class SessionConfig:
     - Model preferences
     - API credentials
     """
+
     org_id: str
-    org_model: Optional[str] = None
-    api_key: Optional[str] = None
+    org_model: str | None = None
+    api_key: str | None = None
 
 
 @dataclass
@@ -92,12 +92,13 @@ class WorkspaceContext:
     This gives the planner awareness of existing resources to avoid duplicates.
     CapabilityRegistry handles runtime capability routing separately.
     """
-    existing_databases: List[WorkspaceDatabase] = field(default_factory=list)
-    existing_tables: List[WorkspaceTable] = field(default_factory=list)
-    existing_apps: List[WorkspaceApp] = field(default_factory=list)
-    existing_agents: List[WorkspaceAgent] = field(default_factory=list)
-    existing_skills: List[WorkspaceSkill] = field(default_factory=list)
-    existing_views: List[WorkspaceView] = field(default_factory=list)
+
+    existing_databases: list[WorkspaceDatabase] = field(default_factory=list)
+    existing_tables: list[WorkspaceTable] = field(default_factory=list)
+    existing_apps: list[WorkspaceApp] = field(default_factory=list)
+    existing_agents: list[WorkspaceAgent] = field(default_factory=list)
+    existing_skills: list[WorkspaceSkill] = field(default_factory=list)
+    existing_views: list[WorkspaceView] = field(default_factory=list)
 
     @property
     def has_databases(self) -> bool:
@@ -123,7 +124,7 @@ class WorkspaceContext:
     def has_views(self) -> bool:
         return len(self.existing_views) > 0
 
-    def to_template_context(self) -> Dict[str, Any]:
+    def to_template_context(self) -> dict[str, Any]:
         """
         Build dict for template rendering.
 
@@ -147,7 +148,7 @@ class WorkspaceContext:
 
     def resource_summary(self) -> str:
         """Human-readable summary of resource counts."""
-        parts: List[str] = []
+        parts: list[str] = []
         if self.existing_databases:
             parts.append(f"{len(self.existing_databases)} database(s)")
         if self.existing_tables:
@@ -162,42 +163,42 @@ class WorkspaceContext:
             parts.append(f"{len(self.existing_views)} view(s)")
         return ", ".join(parts) if parts else "empty workspace"
 
-    def get_database_by_name(self, name: str) -> Optional[WorkspaceDatabase]:
+    def get_database_by_name(self, name: str) -> WorkspaceDatabase | None:
         """Look up database by name."""
         for db in self.existing_databases:
             if db.name == name:
                 return db
         return None
 
-    def get_table_by_name(self, name: str) -> Optional[WorkspaceTable]:
+    def get_table_by_name(self, name: str) -> WorkspaceTable | None:
         """Look up table by name."""
         for table in self.existing_tables:
             if table.name == name:
                 return table
         return None
 
-    def get_app_by_name(self, name: str) -> Optional[WorkspaceApp]:
+    def get_app_by_name(self, name: str) -> WorkspaceApp | None:
         """Look up app by name."""
         for app in self.existing_apps:
             if app.name == name:
                 return app
         return None
 
-    def get_agent_by_name(self, name: str) -> Optional[WorkspaceAgent]:
+    def get_agent_by_name(self, name: str) -> WorkspaceAgent | None:
         """Look up agent by name."""
         for agent in self.existing_agents:
             if agent.name == name:
                 return agent
         return None
 
-    def get_skill_by_name(self, name: str) -> Optional[WorkspaceSkill]:
+    def get_skill_by_name(self, name: str) -> WorkspaceSkill | None:
         """Look up skill by name."""
         for skill in self.existing_skills:
             if skill.name == name:
                 return skill
         return None
 
-    def get_view_by_name(self, name: str) -> Optional[WorkspaceView]:
+    def get_view_by_name(self, name: str) -> WorkspaceView | None:
         """Look up view by name."""
         for view in self.existing_views:
             if view.name == name:

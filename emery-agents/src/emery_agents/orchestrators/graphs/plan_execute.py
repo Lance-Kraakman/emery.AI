@@ -20,21 +20,21 @@ which creates a focused plan biased toward the specified resource.
 """
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
-from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import END, StateGraph
 
-from ..state import PlanExecuteState, DEFAULT_STATE
-from ..runtime import RuntimeContext
-from ..nodes.planning import generate_plan_node
-from ..nodes.execution import execute_step_node
-from ..nodes.replan import replan_node
-from ..nodes.human import await_approval_node
-from ..nodes.triage import triage_node
-from ..nodes.direct import direct_execute_node
 from ...entities.models.task_ledger import create_ledger_from_plan
-from ...services.execution.events import PlanCreatedEvent, PlanApprovedEvent
+from ...services.execution.events import PlanApprovedEvent
+from ..nodes.direct import direct_execute_node
+from ..nodes.execution import execute_step_node
+from ..nodes.human import await_approval_node
+from ..nodes.planning import generate_plan_node
+from ..nodes.replan import replan_node
+from ..nodes.triage import triage_node
+from ..runtime import RuntimeContext
+from ..state import PlanExecuteState
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +92,7 @@ def route_after_approval(state: PlanExecuteState) -> str:
 
 def route_after_triage(state: PlanExecuteState) -> str:
     """Route based on triage decision."""
-    mode = state.get("execution_mode", "plan")
+    mode = state.get("execution_mode", "direct")
 
     # "respond" sets response directly in triage node
     if mode == "respond" or state.get("response"):
@@ -135,7 +135,7 @@ def route_after_replan(state: PlanExecuteState) -> str:
     return "execute_step"
 
 
-async def handle_autonomous_entry(state: PlanExecuteState) -> Dict[str, Any]:
+async def handle_autonomous_entry(state: PlanExecuteState) -> dict[str, Any]:
     """
     Set up autonomous mode with stored plan.
 
@@ -154,9 +154,14 @@ async def handle_autonomous_entry(state: PlanExecuteState) -> Dict[str, Any]:
     ledger = create_ledger_from_plan(
         task_id=stored_plan.id,
         goal=stored_plan.goal,
-        plan_steps=[{"step_id": s.step_id, "description": s.description} for s in stored_plan.steps],
+        plan_steps=[
+            {"step_id": s.step_id, "description": s.description}
+            for s in stored_plan.steps
+        ],
     )
-    ledger.record_plan_created({"plan_id": stored_plan.id, "step_count": len(stored_plan.steps)})
+    ledger.record_plan_created(
+        {"plan_id": stored_plan.id, "step_count": len(stored_plan.steps)}
+    )
     ledger.record_plan_approved()
 
     # Start execution
@@ -182,7 +187,7 @@ async def handle_autonomous_entry(state: PlanExecuteState) -> Dict[str, Any]:
 
 def create_session_graph(
     runtime: RuntimeContext,
-    checkpointer: Optional[Any] = None,
+    checkpointer: Any | None = None,
 ) -> Any:
     """
     Create a session-scoped plan-and-execute LangGraph.
@@ -202,20 +207,21 @@ def create_session_graph(
     Returns:
         Compiled LangGraph that can be invoked with ainvoke() or astream().
     """
+
     # Create closure-wrapped node functions that bind runtime
-    async def _triage(state: PlanExecuteState) -> Dict[str, Any]:
+    async def _triage(state: PlanExecuteState) -> dict[str, Any]:
         return await triage_node(state, runtime)
 
-    async def _direct_execute(state: PlanExecuteState) -> Dict[str, Any]:
+    async def _direct_execute(state: PlanExecuteState) -> dict[str, Any]:
         return await direct_execute_node(state, runtime)
 
-    async def _generate_plan(state: PlanExecuteState) -> Dict[str, Any]:
+    async def _generate_plan(state: PlanExecuteState) -> dict[str, Any]:
         return await generate_plan_node(state, runtime)
 
-    async def _execute_step(state: PlanExecuteState) -> Dict[str, Any]:
+    async def _execute_step(state: PlanExecuteState) -> dict[str, Any]:
         return await execute_step_node(state, runtime)
 
-    async def _replan(state: PlanExecuteState) -> Dict[str, Any]:
+    async def _replan(state: PlanExecuteState) -> dict[str, Any]:
         return await replan_node(state, runtime)
 
     graph = StateGraph(PlanExecuteState)
@@ -230,52 +236,75 @@ def create_session_graph(
     graph.add_node("replan", _replan)
 
     # === Entry point: triage, autonomous, or @mention (skip triage → plan) ===
-    graph.set_conditional_entry_point(route_entry, {
-        "autonomous": "setup_autonomous",
-        "mention": "generate_plan",
-        "interactive": "triage",
-    })
+    graph.set_conditional_entry_point(
+        route_entry,
+        {
+            "autonomous": "setup_autonomous",
+            "mention": "generate_plan",
+            "interactive": "triage",
+        },
+    )
 
     # === Triage routing ===
-    graph.add_conditional_edges("triage", route_after_triage, {
-        "direct_execute": "direct_execute",
-        "generate_plan": "generate_plan",
-        "end": END,
-    })
+    graph.add_conditional_edges(
+        "triage",
+        route_after_triage,
+        {
+            "direct_execute": "direct_execute",
+            "generate_plan": "generate_plan",
+            "end": END,
+        },
+    )
 
     # === Direct execution routing (with escalation + clarification) ===
-    graph.add_conditional_edges("direct_execute", route_after_direct, {
-        "generate_plan": "generate_plan",
-        "await_approval": "await_approval",
-        "end": END,
-    })
+    graph.add_conditional_edges(
+        "direct_execute",
+        route_after_direct,
+        {
+            "generate_plan": "generate_plan",
+            "await_approval": "await_approval",
+            "end": END,
+        },
+    )
 
     # === Autonomous → execute ===
     graph.add_edge("setup_autonomous", "execute_step")
 
     # === Plan → approve or auto-execute ===
-    graph.add_conditional_edges("generate_plan", route_after_plan, {
-        "await_approval": "await_approval",
-        "execute_step": "execute_step",
-        "end": END,
-    })
+    graph.add_conditional_edges(
+        "generate_plan",
+        route_after_plan,
+        {
+            "await_approval": "await_approval",
+            "execute_step": "execute_step",
+            "end": END,
+        },
+    )
 
     # === Approve → execute or re-plan ===
-    graph.add_conditional_edges("await_approval", route_after_approval, {
-        "execute_step": "execute_step",
-        "generate_plan": "generate_plan",
-        "end": END,
-    })
+    graph.add_conditional_edges(
+        "await_approval",
+        route_after_approval,
+        {
+            "execute_step": "execute_step",
+            "generate_plan": "generate_plan",
+            "end": END,
+        },
+    )
 
     # === Execute → replan (always) ===
     graph.add_edge("execute_step", "replan")
 
     # === Replan → execute, ask user, or end ===
-    graph.add_conditional_edges("replan", route_after_replan, {
-        "execute_step": "execute_step",
-        "await_approval": "await_approval",
-        "end": END,
-    })
+    graph.add_conditional_edges(
+        "replan",
+        route_after_replan,
+        {
+            "execute_step": "execute_step",
+            "await_approval": "await_approval",
+            "end": END,
+        },
+    )
 
     # === Compile ===
     if checkpointer is None:
@@ -290,7 +319,7 @@ def create_session_graph(
 
 def create_session_plan_only_graph(
     runtime: RuntimeContext,
-    checkpointer: Optional[Any] = None,
+    checkpointer: Any | None = None,
 ) -> Any:
     """
     Create a session-scoped plan-only LangGraph (no execution).
@@ -305,7 +334,8 @@ def create_session_plan_only_graph(
     Returns:
         Compiled LangGraph that terminates after plan generation.
     """
-    async def _generate_plan(state: PlanExecuteState) -> Dict[str, Any]:
+
+    async def _generate_plan(state: PlanExecuteState) -> dict[str, Any]:
         return await generate_plan_node(state, runtime)
 
     graph = StateGraph(PlanExecuteState)
@@ -319,17 +349,25 @@ def create_session_plan_only_graph(
 
     # After plan generation: if clarification needed, go to await_approval then re-plan.
     # Otherwise terminate (plan created or error).
-    graph.add_conditional_edges("generate_plan", route_after_plan, {
-        "await_approval": "await_approval",
-        "execute_step": END,  # Auto-approved plans just end in plan-only mode
-        "end": END,
-    })
+    graph.add_conditional_edges(
+        "generate_plan",
+        route_after_plan,
+        {
+            "await_approval": "await_approval",
+            "execute_step": END,  # Auto-approved plans just end in plan-only mode
+            "end": END,
+        },
+    )
 
     # After clarification: re-generate plan or terminate
-    graph.add_conditional_edges("await_approval", route_after_approval_plan_only, {
-        "generate_plan": "generate_plan",
-        "end": END,
-    })
+    graph.add_conditional_edges(
+        "await_approval",
+        route_after_approval_plan_only,
+        {
+            "generate_plan": "generate_plan",
+            "end": END,
+        },
+    )
 
     if checkpointer is None:
         checkpointer = MemorySaver()

@@ -398,6 +398,168 @@ export async function getTaskStats(agentId?: number): Promise<Result> {
  * Upload attachment for a task
  * Uploads file to S3 and returns the URL for inclusion in task instructions
  */
+/**
+ * Get all tasks awaiting human input for the current organization
+ * Used in the "All Tasks" tab of /tasks page
+ */
+export async function getAwaitingHumanTasks(): Promise<Result> {
+  return withAuthContext(async () => {
+    try {
+      await requirePermission("tasks:manage");
+      const currentOrg = await requireCurrentOrganization();
+
+      const taskApplicationService = getAgentTaskApplicationService();
+      const tasks = await taskApplicationService.getAwaitingHumanTasks(currentOrg.id);
+
+      return {
+        success: true,
+        data: tasks,
+      };
+    } catch (error) {
+      console.error("Error fetching awaiting human tasks:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to fetch awaiting human tasks",
+      };
+    }
+  });
+}
+
+/**
+ * Get tasks awaiting input from the current user
+ * Used in the "My Tasks" tab of /tasks page
+ */
+export async function getMyAwaitingTasks(): Promise<Result> {
+  return withAuthContext(async () => {
+    try {
+      const session = await getServerSession(authOptions);
+      if (!session?.user?.id) {
+        return { success: false, error: 'Unauthorized' };
+      }
+
+      const currentOrg = await requireCurrentOrganization();
+      const taskApplicationService = getAgentTaskApplicationService();
+
+      // Get all awaiting human tasks and filter by current user assignment
+      const allAwaitingTasks = await taskApplicationService.getAwaitingHumanTasks(currentOrg.id);
+
+      // Filter tasks where current user is assigned
+      const myTasks = allAwaitingTasks.filter(task => {
+        if (!task.pendingHumanSteps || task.pendingHumanSteps.length === 0) {
+          return false;
+        }
+        // Check if any pending step is assigned to current user
+        return task.pendingHumanSteps.some(step =>
+          !step.completedAt && step.assignedTo === session.user.id
+        );
+      });
+
+      return {
+        success: true,
+        data: myTasks,
+      };
+    } catch (error) {
+      console.error("Error fetching my awaiting tasks:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to fetch my awaiting tasks",
+      };
+    }
+  });
+}
+
+/**
+ * Complete a human step on a task
+ * This updates the pendingHumanSteps with outputs and sets task status back to pending
+ * so the scheduler can pick it up and resume execution
+ */
+export async function completeHumanStep(
+  taskId: string,
+  stepId: string,
+  outputs: Record<string, any>
+): Promise<Result> {
+  return withAuthContext(async () => {
+    try {
+      const session = await getServerSession(authOptions);
+      if (!session?.user?.id) {
+        return { success: false, error: 'Unauthorized' };
+      }
+
+      const taskApplicationService = getAgentTaskApplicationService();
+
+      // Get the task
+      const task = await taskApplicationService.getTask(taskId);
+      if (!task) {
+        return { success: false, error: 'Task not found' };
+      }
+
+      // Verify task is awaiting human input
+      if (task.status !== 'awaiting_human') {
+        return { success: false, error: 'Task is not awaiting human input' };
+      }
+
+      // Find the pending step
+      const pendingStep = task.pendingHumanSteps?.find(
+        (step: { stepId: string; completedAt?: string }) => step.stepId === stepId && !step.completedAt
+      );
+      if (!pendingStep) {
+        return { success: false, error: 'Pending step not found or already completed' };
+      }
+
+      // Verify current user is assigned to this step
+      if (pendingStep.assignedTo !== session.user.id) {
+        // Also check for role-based assignment (e.g., "role:admin")
+        // For now, we only support direct user assignment
+        return { success: false, error: 'You are not assigned to this step' };
+      }
+
+      // Complete the human step via application service
+      await taskApplicationService.completeHumanStep(taskId, stepId, outputs);
+
+      // Audit log the human step completion
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        OrganizationId.fromNumber(task.organizationId),
+        {
+          eventType: 'agent',
+          eventCategory: 'task_lifecycle',
+          eventAction: 'human_step_completed',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || session.user.email || undefined,
+          resourceType: 'task',
+          resourceId: taskId,
+          resourceName: task.name,
+          parentResourceType: task.agentId ? 'agent' : undefined,
+          parentResourceId: task.agentId ? String(task.agentId) : undefined,
+          eventData: {
+            stepId,
+            hasOutputs: Object.keys(outputs).length > 0,
+          },
+          success: true,
+        }
+      );
+
+      // Get updated task
+      const updatedTask = await taskApplicationService.getTask(taskId);
+
+      revalidatePath('/tasks');
+      revalidatePath('/dashboard');
+
+      return {
+        success: true,
+        data: updatedTask,
+      };
+    } catch (error) {
+      console.error("Error completing human step:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to complete human step",
+      };
+    }
+  });
+}
+
 export async function uploadTaskAttachment(
   agentId: number,
   formData: FormData

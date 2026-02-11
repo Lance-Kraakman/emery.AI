@@ -16,22 +16,22 @@ from .execution_context import (
     create_insight,
 )
 from .execution_evolution import (
-    ExecutionEvolutionTracker,
-    ExecutionDelta,
-    ExecutionSnapshot,
     ExecutionChangeType,
-)
-from .strategy_accumulation import (
-    StrategyRegistry,
-    StrategyRecord,
-    ExecutionPattern,
-    StrategyOutcome,
+    ExecutionDelta,
+    ExecutionEvolutionTracker,
+    ExecutionSnapshot,
 )
 from .planning_context import (
+    PhaseGoal,
     PlanningContext,
     PlanningInsight,
     PlanningInsightType,
-    PhaseGoal,
+)
+from .strategy_accumulation import (
+    ExecutionPattern,
+    StrategyOutcome,
+    StrategyRecord,
+    StrategyRegistry,
 )
 
 __all__ = [

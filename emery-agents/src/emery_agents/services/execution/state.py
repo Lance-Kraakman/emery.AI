@@ -13,10 +13,10 @@ AIDEV-NOTE: This replaces:
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ...entities.models.plan import Plan, PlanStep
-from ..protocols import Tool, ManagedAgent
+from ..protocols import ManagedAgent, Tool
 
 
 class Phase(str, Enum):
@@ -30,6 +30,7 @@ class Phase(str, Enum):
     - COMPLETE: Task finished successfully
     - FAILED: Task failed with error
     """
+
     IDLE = "idle"
     WORKING = "working"
     AWAITING_INPUT = "awaiting_input"
@@ -39,43 +40,48 @@ class Phase(str, Enum):
 
 class InputType(str, Enum):
     """Type of user input being awaited."""
-    APPROVAL = "approval"           # Plan approval
+
+    APPROVAL = "approval"  # Plan approval
     CLARIFICATION = "clarification"  # Clarifying question
-    QUESTIONS = "questions"         # Managed agent HITL questions
-    RECOVERY = "recovery"           # Recovery from failure
+    QUESTIONS = "questions"  # Managed agent HITL questions
+    RECOVERY = "recovery"  # Recovery from failure
 
 
 class WorkMode(str, Enum):
     """What kind of work the agent is doing when in WORKING phase."""
-    PLANNING = "planning"    # Read-only tools, generating plan
+
+    PLANNING = "planning"  # Read-only tools, generating plan
     EXECUTING = "executing"  # Full tools, running steps
 
 
 @dataclass
 class ClarifyingQuestion:
     """A question to ask the user."""
+
     question: str
-    options: Optional[List[str]] = None
-    context: Optional[str] = None
+    options: list[str] | None = None
+    context: str | None = None
     required: bool = True
 
 
 @dataclass
 class PendingInput:
     """Details about what input is being awaited."""
+
     input_type: InputType
-    questions: List[ClarifyingQuestion] = field(default_factory=list)
+    questions: list[ClarifyingQuestion] = field(default_factory=list)
     reasoning: str = ""
-    failed_step_id: Optional[str] = None  # For recovery
+    failed_step_id: str | None = None  # For recovery
 
 
 @dataclass
 class StepResult:
     """Result from executing a step."""
+
     step_id: str
     success: bool
-    output: Optional[str] = None
-    error: Optional[str] = None
+    output: str | None = None
+    error: str | None = None
     skipped: bool = False
 
 
@@ -90,26 +96,27 @@ class ExecutionState:
     - Handle resumption after user input
     - Provide context for prompts
     """
+
     phase: Phase = Phase.IDLE
 
     # Task context
     original_task: str = ""
-    conversation_id: Optional[str] = None
+    conversation_id: str | None = None
 
     # Plan state
-    plan: Optional[Plan] = None
+    plan: Plan | None = None
     current_step_index: int = 0
-    step_results: Dict[str, StepResult] = field(default_factory=dict)
+    step_results: dict[str, StepResult] = field(default_factory=dict)
 
     # Input state
-    pending_input: Optional[PendingInput] = None
+    pending_input: PendingInput | None = None
 
     # Error state
-    error: Optional[str] = None
+    error: str | None = None
 
     # Tools/agents available (resolved at start)
-    tools: List[Tool] = field(default_factory=list)
-    managed_agents: List[ManagedAgent] = field(default_factory=list)
+    tools: list[Tool] = field(default_factory=list)
+    managed_agents: list[ManagedAgent] = field(default_factory=list)
 
     def reset(self) -> None:
         """Reset state for new task."""
@@ -121,7 +128,9 @@ class ExecutionState:
         self.pending_input = None
         self.error = None
 
-    def start_task(self, task: str, tools: List[Tool], managed_agents: List[ManagedAgent]) -> None:
+    def start_task(
+        self, task: str, tools: list[Tool], managed_agents: list[ManagedAgent]
+    ) -> None:
         """Initialize state for new task."""
         self.phase = Phase.WORKING
         self.original_task = task
@@ -147,7 +156,9 @@ class ExecutionState:
             reasoning="Plan requires approval before execution",
         )
 
-    def await_clarification(self, questions: List[ClarifyingQuestion], reasoning: str = "") -> None:
+    def await_clarification(
+        self, questions: list[ClarifyingQuestion], reasoning: str = ""
+    ) -> None:
         """Transition to awaiting clarification."""
         self.phase = Phase.AWAITING_INPUT
         self.pending_input = PendingInput(
@@ -156,7 +167,9 @@ class ExecutionState:
             reasoning=reasoning,
         )
 
-    def await_questions(self, questions: List[ClarifyingQuestion], reasoning: str = "") -> None:
+    def await_questions(
+        self, questions: list[ClarifyingQuestion], reasoning: str = ""
+    ) -> None:
         """Transition to awaiting managed agent HITL questions."""
         self.phase = Phase.AWAITING_INPUT
         self.pending_input = PendingInput(
@@ -165,7 +178,12 @@ class ExecutionState:
             reasoning=reasoning,
         )
 
-    def await_recovery(self, failed_step_id: str, questions: List[ClarifyingQuestion], reasoning: str = "") -> None:
+    def await_recovery(
+        self,
+        failed_step_id: str,
+        questions: list[ClarifyingQuestion],
+        reasoning: str = "",
+    ) -> None:
         """Transition to awaiting recovery input."""
         self.phase = Phase.AWAITING_INPUT
         self.pending_input = PendingInput(
@@ -180,7 +198,14 @@ class ExecutionState:
         self.phase = Phase.WORKING
         self.pending_input = None
 
-    def complete_step(self, step_id: str, success: bool, output: Optional[str] = None, error: Optional[str] = None, skipped: bool = False) -> None:
+    def complete_step(
+        self,
+        step_id: str,
+        success: bool,
+        output: str | None = None,
+        error: str | None = None,
+        skipped: bool = False,
+    ) -> None:
         """Record step completion."""
         self.step_results[step_id] = StepResult(
             step_id=step_id,
@@ -219,20 +244,20 @@ class ExecutionState:
         return self.phase in (Phase.COMPLETE, Phase.FAILED)
 
     @property
-    def current_step(self) -> Optional[PlanStep]:
+    def current_step(self) -> PlanStep | None:
         """Get current step being executed."""
         if self.plan and 0 <= self.current_step_index < len(self.plan.steps):
             return self.plan.steps[self.current_step_index]
         return None
 
     @property
-    def pending_steps(self) -> List[PlanStep]:
+    def pending_steps(self) -> list[PlanStep]:
         """Get remaining steps to execute."""
         if self.plan:
-            return self.plan.steps[self.current_step_index:]
+            return self.plan.steps[self.current_step_index :]
         return []
 
-    def to_prompt_context(self) -> Dict[str, Any]:
+    def to_prompt_context(self) -> dict[str, Any]:
         """Build context dict for prompt templates."""
         return {
             "phase": self.phase.value,
@@ -246,5 +271,3 @@ class ExecutionState:
             "tools": [getattr(t, "name", str(t)) for t in self.tools],
             "agents": [getattr(a, "name", str(a)) for a in self.managed_agents],
         }
-
-

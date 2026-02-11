@@ -8,7 +8,7 @@ Provides consistent token tracking and cost calculation.
 """
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from ...reasoning.modules.step_tracker import TrackedStep
 from ..models.provider import TokenUsage
@@ -21,7 +21,7 @@ class TokenUsageExtractor:
     """Utility class for extracting and converting token usage data."""
 
     @staticmethod
-    def extract_from_result(result: Any) -> Optional[TokenUsage]:
+    def extract_from_result(result: Any) -> TokenUsage | None:
         """
         Extract token usage from agent execution result.
 
@@ -53,7 +53,7 @@ class TokenUsageExtractor:
     @staticmethod
     def extract_from_tracked_steps(
         steps: list[TrackedStep], default_model_name: str = ""
-    ) -> Optional[TokenUsage]:
+    ) -> TokenUsage | None:
         """
         Extract accumulated token usage from DSPy TrackedStep list.
 
@@ -115,7 +115,7 @@ class TokenUsageExtractor:
     @staticmethod
     def extract_from_agent_memory(
         agent: Any, default_model_name: str = ""
-    ) -> Optional[TokenUsage]:
+    ) -> TokenUsage | None:
         """
         Extract accumulated token usage from agent's memory.
 
@@ -150,4 +150,3 @@ class TokenUsageExtractor:
         except Exception as e:
             logger.error(f"Failed to extract token usage from agent memory: {e}")
             return None
-

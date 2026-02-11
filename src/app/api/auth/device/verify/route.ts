@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { consumeDeviceSession, isValidDeviceCode } from '@/lib/auth/device-flow';
+import { ensureFreshUserApiKey } from '@/lib/auth/user-api-keys';
+import { db } from '@/ddd/infrastructure/db/client';
+import { sessions } from '@/ddd/infrastructure/db/schema';
+import { eq } from 'drizzle-orm';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * Polled by the Tauri webview to check if the browser auth completed.
- * 200 + Set-Cookie = session ready, 202 = still pending, 400 = bad code.
+ * 200 + Set-Cookie + apiKey = session ready, 202 = still pending, 400 = bad code.
+ *
+ * For Tauri desktop apps, also returns an API key for Rust commands to use.
  */
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get('code');
@@ -27,10 +33,32 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Look up user ID from session token
+    const [session] = await db
+      .select({ userId: sessions.userId })
+      .from(sessions)
+      .where(eq(sessions.sessionToken, sessionToken))
+      .limit(1);
+
+    // Generate API key for Tauri to use with Rust commands
+    let apiKey: string | undefined;
+    if (session?.userId) {
+      try {
+        apiKey = await ensureFreshUserApiKey(session.userId);
+      } catch (err) {
+        console.error('[Device Flow] Failed to generate API key:', err);
+        // Continue without API key - user can still use the session
+      }
+    }
+
     const isSecure = process.env.NEXTAUTH_URL?.startsWith('https://') ?? true;
 
     const response = NextResponse.json(
-      { status: 'complete', message: 'Authentication successful' },
+      {
+        status: 'complete',
+        message: 'Authentication successful',
+        apiKey, // Included for Tauri to store and use with Rust commands
+      },
       { status: 200 }
     );
 

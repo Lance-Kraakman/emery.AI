@@ -14,7 +14,6 @@ from .transcription import (
     transcribe_audio_from_url,
 )
 
-
 __all__ = [
     # Client
     "AuthenticatedHttpClient",

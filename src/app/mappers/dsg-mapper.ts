@@ -12,7 +12,6 @@
  */
 
 import type { FieldDTO } from './field-mapper'
-import type { RowDTO } from './row-mapper'
 import type { FieldValue } from '@/ddd/domain/tables/value-objects/field-values'
 
 /**

@@ -3,6 +3,7 @@
 // AIDEV-NOTE: Simplified reference listing with proper pagination
 // Replaces over-engineered search system with direct path insertion
 
+import { withAuthContext } from '@/lib/auth/with-context';
 import { requirePermission } from "./permissions";
 import { getTableApplicationService, getRowApplicationService } from "@/ddd/application/di/container";
 import { TableId } from "@/ddd/domain/shared/value-objects";
@@ -46,15 +47,16 @@ export async function listReferences(
   emeryData: any,
   options: ListReferencesOptions = {}
 ): Promise<ReferenceListResult> {
-  try {
-    await requirePermission("table:manage");
-    
-    const {
-      query = '',
-      categories = ['doc', 'file', 'tool', 'agent', 'table'],
-      limit = 20,
-      offset = 0
-    } = options;
+  return withAuthContext(async () => {
+    try {
+      await requirePermission("table:manage");
+
+      const {
+        query = '',
+        categories = ['doc', 'file', 'tool', 'agent', 'table'],
+        limit = 20,
+        offset = 0
+      } = options;
 
     const allReferences: SimpleReference[] = [];
 
@@ -95,15 +97,16 @@ export async function listReferences(
       nextOffset
     };
 
-  } catch (error) {
-    console.error("Error listing references:", error);
-    return {
-      references: [],
-      totalCount: 0,
-      hasMore: false,
-      nextOffset: 0
-    };
-  }
+    } catch (error) {
+      console.error("Error listing references:", error);
+      return {
+        references: [],
+        totalCount: 0,
+        hasMore: false,
+        nextOffset: 0
+      };
+    }
+  });
 }
 
 /**

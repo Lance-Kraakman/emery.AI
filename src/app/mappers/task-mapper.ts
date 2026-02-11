@@ -5,7 +5,7 @@
  * Handles conversion from Value Objects to serializable primitives.
  */
 
-import type { Task as TaskEntity, TaskInstructions, TriggerContext } from '@/ddd/domain/tasks/entities/task';
+import type { Task as TaskEntity, TaskInstructions, TriggerContext, PendingHumanStep } from '@/ddd/domain/tasks/entities/task';
 
 // DTO representing a task as returned by server actions to the frontend
 export interface TaskDTO {
@@ -16,6 +16,7 @@ export interface TaskDTO {
   instructions: TaskInstructions;
   skillId: number | null;             // Optional skill to execute
   triggerContext: TriggerContext | null; // What triggered this task (schedule, manual, etc.)
+  chatMessageId: string | null;       // Link to ChatMessage for ExecutionSteps
   status: string;                     // Converted from TaskStatus value object
   result: any;
   error: string | null;
@@ -24,6 +25,9 @@ export interface TaskDTO {
   completedAt: Date | null;
   createdBy: string | null;           // Converted from UserId value object
   createdAt: Date;
+  // Human skill tracking
+  currentStepId: string | null;       // Current step ID in workflow
+  pendingHumanSteps: PendingHumanStep[]; // Pending human steps with inputs/outputs
 }
 
 /**
@@ -38,6 +42,7 @@ export function taskToDTO(task: TaskEntity): TaskDTO {
     instructions: task.instructions,
     skillId: task.skillId,
     triggerContext: task.triggerContext,
+    chatMessageId: task.chatMessageId,
     status: task.status.value,
     result: task.result,
     error: task.error,
@@ -45,7 +50,9 @@ export function taskToDTO(task: TaskEntity): TaskDTO {
     startedAt: task.startedAt,
     completedAt: task.completedAt,
     createdBy: task.createdBy?.value || null,
-    createdAt: task.createdAt
+    createdAt: task.createdAt,
+    currentStepId: task.currentStepId,
+    pendingHumanSteps: task.pendingHumanSteps
   };
 }
 

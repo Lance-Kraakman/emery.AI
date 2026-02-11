@@ -18,7 +18,6 @@
 import type { ComponentConfig } from "@measured/puck";
 import MetricBlock, { type MetricBlockProps } from "./MetricBlock";
 import { getView, executeViewAggregations } from "@/app/actions/views";
-import { getTables } from "@/app/actions/tables";
 import { typographySizeField, backgroundColorField, textColorField, fontFamilyField, fontWeightField, borderRadiusField, borderWidthField, paddingField } from "../../fields/standard-fields";
 import { createViewManagementField } from "../../custom-fields";
 

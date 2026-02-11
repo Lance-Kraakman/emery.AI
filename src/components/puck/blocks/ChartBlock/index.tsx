@@ -16,7 +16,6 @@
 import type { ComponentConfig } from "@measured/puck";
 import ChartBlock, { type ChartBlockProps } from "./ChartBlock";
 import { getView, executeChartView } from "@/app/actions/views";
-import { getTables } from "@/app/actions/tables";
 import { createViewManagementField } from "../../custom-fields";
 
 export const ChartBlockConfig: ComponentConfig<ChartBlockProps> = {

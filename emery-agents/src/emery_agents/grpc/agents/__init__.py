@@ -7,7 +7,13 @@ Execution happens via DSPy ExecutorModule, not smolagents agent.run().
 AIDEV-NOTE: ManagedAgentsFactory has been deleted. Use ChatAgent and AgentDescriptor instead.
 """
 
-from .agent_models import ChatAgent, AgentMemory, MemoryStep, AgentDescriptor, get_builder_descriptors
+from .agent_models import (
+    AgentDescriptor,
+    AgentMemory,
+    ChatAgent,
+    MemoryStep,
+    get_builder_descriptors,
+)
 
 __all__ = [
     "ChatAgent",

@@ -8,14 +8,26 @@ so concurrent requests never mix their embedding usage.
 The get_embedding() function in embeddings.py calls record() on cache misses.
 The executor extracts accumulated usage via get_totals() and merges it
 into the task's token usage before reporting via gRPC.
+
+For cached retrievers (which persist across requests), use set_current_tracker()
+context manager so embed functions can access the current request's tracker
+via get_current_tracker().
 """
 
+from __future__ import annotations
+
+import contextvars
 import logging
 import threading
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import TYPE_CHECKING, Generator
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from typing import Self
 
 
 @dataclass
@@ -64,3 +76,39 @@ class EmbeddingUsageTracker:
     def call_count(self) -> int:
         with self._lock:
             return len(self._records)
+
+
+# Contextvar for current request's embedding tracker.
+# Used by cached retrievers to access the per-request tracker.
+_current_tracker: contextvars.ContextVar[EmbeddingUsageTracker | None] = (
+    contextvars.ContextVar("_current_tracker", default=None)
+)
+
+
+@contextmanager
+def set_current_tracker(
+    tracker: EmbeddingUsageTracker | None,
+) -> Generator[None, None, None]:
+    """Set the current embedding tracker for this async context.
+
+    Use this context manager around code that calls cached retrievers,
+    so embed functions can access the current request's tracker via
+    get_current_tracker().
+
+    Example:
+        with set_current_tracker(token_accumulator.get_embedding_tracker()):
+            results = retriever(query)  # Query embedding tracked to this request
+    """
+    token = _current_tracker.set(tracker)
+    try:
+        yield
+    finally:
+        _current_tracker.reset(token)
+
+
+def get_current_tracker() -> EmbeddingUsageTracker | None:
+    """Get the current embedding tracker from contextvar.
+
+    Returns None if no tracker is set (e.g., during startup corpus embedding).
+    """
+    return _current_tracker.get()

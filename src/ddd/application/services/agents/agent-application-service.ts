@@ -13,14 +13,12 @@ import type { CredentialDelegationApplicationService } from '@/ddd/application/s
 import type { ConnectionApplicationService } from '@/ddd/application/services/connections/connection-application-service';
 import {
   Agent,
-  type CreateAgentData,
-  type UpdateAgentData
+  type CreateAgentData
 } from '@/ddd/domain/agents/entities/agent';
 import type { Result } from '@/ddd/domain/shared/result';
 import { createAgentDefaults } from '@/ddd/domain/agents/entities/agent';
-import { AgentId, OrganizationId, UserId, TeamId, AgentStatus, ApiKey, AGENT_STATUS } from '@/ddd/domain/shared/value-objects';
-import { AppName } from '@/ddd/domain/connections/value-objects';
-import { TriggerConfig, TriggerConfigFromJSON } from '@/ddd/domain/scheduling/value-objects/trigger-config';
+import { AgentId, OrganizationId, UserId, TeamId, AgentStatus, ApiKey } from '@/ddd/domain/shared/value-objects';
+import { TriggerConfigFromJSON } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 import type { CreateAgentDTO, UpdateAgentDTO, AgentFiltersDTO, AgentDTO } from '@/app/dtos/agent.dto';
 import type { AutomationConfiguration } from '@/ddd/domain/agents/entities/agent';
 import { AgentMapper } from '@/app/mappers/agent-mapper';
@@ -74,7 +72,8 @@ export class AgentApplicationService {
         organizationId,
         // Convert AutomationConfigurationDTO[] to AutomationConfiguration[]
         automations: dto.automations ? this.automationsFromDTOs(dto.automations) : [],
-        status: dto.status ? AgentStatus.fromString(dto.status) : undefined
+        status: dto.status ? AgentStatus.fromString(dto.status) : undefined,
+        allowNetwork: dto.allowNetwork // Default true is applied in createAgentDefaults
       };
 
       // Apply defaults and add generated fields
@@ -164,6 +163,7 @@ export class AgentApplicationService {
       if (dto.status !== undefined) updateData.status = dto.status;
       if (dto.avatarConfig !== undefined) updateData.avatarConfig = dto.avatarConfig;
       if (dto.defaultModel !== undefined) updateData.defaultModel = dto.defaultModel;
+      if (dto.allowNetwork !== undefined) updateData.allowNetwork = dto.allowNetwork;
 
       // LOGGING: Update data prepared
       logger.debug('Update data prepared for repository', {

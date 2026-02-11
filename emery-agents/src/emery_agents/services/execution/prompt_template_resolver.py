@@ -11,9 +11,9 @@ Variable Syntax in Templates:
 """
 
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Any
 
-from jinja2 import Environment, BaseLoader, UndefinedError, meta
+from jinja2 import BaseLoader, Environment, UndefinedError, meta
 
 logger = logging.getLogger(__name__)
 
@@ -34,14 +34,14 @@ class PromptTemplateResolver:
             lstrip_blocks=True,
         )
         # Add custom filters if needed
-        self.env.filters['tojson'] = lambda x: __import__('json').dumps(x, indent=2)
+        self.env.filters["tojson"] = lambda x: __import__("json").dumps(x, indent=2)
 
     def resolve(
         self,
         template: str,
-        skill_inputs: Optional[Dict[str, Any]] = None,
-        discovered_context: Optional[Dict[str, Any]] = None,
-        previous_results: Optional[Dict[str, Any]] = None,
+        skill_inputs: dict[str, Any] | None = None,
+        discovered_context: dict[str, Any] | None = None,
+        previous_results: dict[str, Any] | None = None,
     ) -> str:
         """
         Render prompt template with runtime context.
@@ -85,7 +85,7 @@ class PromptTemplateResolver:
             logger.error(f"❌ Template rendering failed: {e}")
             return template  # Return original template as fallback
 
-    def get_required_variables(self, template: str) -> List[str]:
+    def get_required_variables(self, template: str) -> list[str]:
         """
         Extract variable names from a Jinja2 template.
 
@@ -110,8 +110,8 @@ class PromptTemplateResolver:
     def validate_template(
         self,
         template: str,
-        available_variables: List[str],
-    ) -> tuple[bool, List[str]]:
+        available_variables: list[str],
+    ) -> tuple[bool, list[str]]:
         """
         Validate that all required variables are available.
 
@@ -125,14 +125,14 @@ class PromptTemplateResolver:
         required = set(self.get_required_variables(template))
         available = set(available_variables)
         # 'steps' is always available for previous results
-        available.add('steps')
+        available.add("steps")
 
         missing = required - available
         return (len(missing) == 0, list(missing))
 
 
 # Module-level singleton for convenience
-_resolver: Optional[PromptTemplateResolver] = None
+_resolver: PromptTemplateResolver | None = None
 
 
 def get_resolver() -> PromptTemplateResolver:
@@ -145,9 +145,9 @@ def get_resolver() -> PromptTemplateResolver:
 
 def resolve_prompt_template(
     template: str,
-    skill_inputs: Optional[Dict[str, Any]] = None,
-    discovered_context: Optional[Dict[str, Any]] = None,
-    previous_results: Optional[Dict[str, Any]] = None,
+    skill_inputs: dict[str, Any] | None = None,
+    discovered_context: dict[str, Any] | None = None,
+    previous_results: dict[str, Any] | None = None,
 ) -> str:
     """
     Convenience function to resolve a prompt template.

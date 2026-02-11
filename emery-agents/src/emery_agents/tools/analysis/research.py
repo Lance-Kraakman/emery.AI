@@ -102,14 +102,18 @@ Examples:
         filters = filters or {}
         include_details = include_details or False
 
-        logger.info(f"[SYSTEM_RESEARCH] Querying {resource_type} with query={query}, filters={filters}")
+        logger.info(
+            f"[SYSTEM_RESEARCH] Querying {resource_type} with query={query}, filters={filters}"
+        )
 
         handlers = {
             "organization": lambda: self._research_organization(include_details),
             "agents": lambda: self._research_agents(query, filters, include_details),
             "skills": lambda: self._research_skills(query, filters, include_details),
             "tasks": lambda: self._research_tasks(query, filters, include_details),
-            "databases": lambda: self._research_databases(query, filters, include_details),
+            "databases": lambda: self._research_databases(
+                query, filters, include_details
+            ),
             "tables": lambda: self._research_tables(query, filters, include_details),
             "apps": lambda: self._research_apps(query, filters, include_details),
             "pages": lambda: self._research_pages(query, filters, include_details),

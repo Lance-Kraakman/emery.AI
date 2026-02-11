@@ -1,11 +1,12 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
 /* Import required LlamaIndex Chat UI styles for editor functionality */
+/* Note: @import must come before @tailwind directives */
 @import '@llamaindex/chat-ui/styles/markdown.css';
 @import '@llamaindex/chat-ui/styles/pdf.css';
 @import '@llamaindex/chat-ui/styles/editor.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 @layer base {
   *,

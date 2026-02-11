@@ -4,53 +4,53 @@ DSPy Signatures for the Emery agent system.
 Signatures define typed I/O contracts that replace Jinja2 templates.
 """
 
+from emery_agents.reasoning.signatures.agents import (
+    AppDefinition,
+    BuildApp,
+    BuildSchema,
+    BuildSkill,
+    FieldDefinition,
+    FieldType,
+    SkillDefinition,
+    TableSchema,
+)
+from emery_agents.reasoning.signatures.evaluation import (
+    AnalyzeRecovery,
+    ClassifyInterrupt,
+    EvaluateGoal,
+    ExecutionInsightModel,
+    ExecutionInsightsResult,
+    ExtractExecutionInsights,
+    # ACE signatures
+    ExtractPlanningInsights,
+    GoalEvaluation,
+    InterruptClassificationResult,
+    PlanningInsightModel,
+    PlanningInsightsResult,
+    RankStrategies,
+    RecoveryAction,
+    StrategyRankingModel,
+    StrategyRankingsResult,
+)
+from emery_agents.reasoning.signatures.extraction import (
+    SKILL_TYPE_MAP,
+    create_extraction_signature,
+)
 from emery_agents.reasoning.signatures.planning import (
-    CreatePlan,
-    AnalyzeTask,
-    PlanStepOutput,
-    PlanOutput,
-    ClarifyingQuestionOutput,
-    PlanOrQuestionsOutput,
-    ClassifyTask,
-    TaskClassificationResult,
     AnalyzeGaps,
+    AnalyzeTask,
+    ClarifyingQuestionOutput,
+    ClassifyTask,
+    CreatePlan,
     GapAnalysisResultModel,
     GapItemOutput,
     GeneratePlanDiff,
     PlanDiffResult,
+    PlanOrQuestionsOutput,
+    PlanOutput,
+    PlanStepOutput,
     StepModificationOutput,
-)
-from emery_agents.reasoning.signatures.agents import (
-    BuildSchema,
-    BuildSkill,
-    BuildApp,
-    TableSchema,
-    FieldDefinition,
-    FieldType,
-    SkillDefinition,
-    AppDefinition,
-)
-from emery_agents.reasoning.signatures.evaluation import (
-    EvaluateGoal,
-    AnalyzeRecovery,
-    GoalEvaluation,
-    RecoveryAction,
-    ClassifyInterrupt,
-    InterruptClassificationResult,
-    # ACE signatures
-    ExtractPlanningInsights,
-    PlanningInsightsResult,
-    PlanningInsightModel,
-    ExtractExecutionInsights,
-    ExecutionInsightsResult,
-    ExecutionInsightModel,
-    RankStrategies,
-    StrategyRankingsResult,
-    StrategyRankingModel,
-)
-from emery_agents.reasoning.signatures.extraction import (
-    create_extraction_signature,
-    SKILL_TYPE_MAP,
+    TaskClassificationResult,
 )
 
 __all__ = [

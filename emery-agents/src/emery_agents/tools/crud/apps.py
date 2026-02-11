@@ -12,6 +12,7 @@ from typing import Any
 import dspy
 
 from emery_agents.api.http_client import make_request
+
 from ..mutation_guard import check_mutation_allowed
 from .puck_validation import validate_puck_template
 
@@ -47,7 +48,9 @@ def _ensure_block_ids(template_data: dict[str, Any]) -> dict[str, Any]:
     return template_data
 
 
-def create_app_crud(api_key: str, org_id: str, extra_headers: dict[str, str] | None = None) -> dspy.Tool:
+def create_app_crud(
+    api_key: str, org_id: str, extra_headers: dict[str, str] | None = None
+) -> dspy.Tool:
     """
     Factory: Create app_crud tool with auth captured in closure.
 
@@ -154,7 +157,9 @@ def create_app_crud(api_key: str, org_id: str, extra_headers: dict[str, str] | N
     )
 
 
-def create_page_crud(api_key: str, org_id: str, extra_headers: dict[str, str] | None = None) -> dspy.Tool:
+def create_page_crud(
+    api_key: str, org_id: str, extra_headers: dict[str, str] | None = None
+) -> dspy.Tool:
     """
     Factory: Create page_crud tool with auth captured in closure.
 
@@ -226,7 +231,9 @@ def create_page_crud(api_key: str, org_id: str, extra_headers: dict[str, str] | 
                 # Validate templateData against Puck blocks schema
                 validation_errors = validate_puck_template(data["templateData"])
                 if validation_errors:
-                    return f"ERROR: Puck validation failed: {'; '.join(validation_errors)}"
+                    return (
+                        f"ERROR: Puck validation failed: {'; '.join(validation_errors)}"
+                    )
             return make_request(
                 endpoint=f"apps/{app_id}/pages",
                 method="POST",
@@ -330,7 +337,7 @@ def create_page_crud(api_key: str, org_id: str, extra_headers: dict[str, str] | 
             "Puck page management. For create/update_content, templateData must have: "
             "content (array of blocks), root (object), zones (object for nested blocks). "
             "Each block needs: type (string), props (object). Block IDs are auto-generated. "
-            "Example: {\"content\": [{\"type\": \"Hero\", \"props\": {\"title\": \"My Page\", \"description\": \"\", \"buttons\": []}}], \"root\": {}, \"zones\": {}}"
+            'Example: {"content": [{"type": "Hero", "props": {"title": "My Page", "description": "", "buttons": []}}], "root": {}, "zones": {}}'
         ),
         arg_desc={
             "method": "Operation: list, read, create, update, delete, update_content, publish, unpublish",

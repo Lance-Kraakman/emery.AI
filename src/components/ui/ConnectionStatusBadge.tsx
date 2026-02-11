@@ -6,7 +6,6 @@ import { Button } from './button';
 import {
   CheckCircle,
   XCircle,
-  AlertTriangle,
   ExternalLink,
   Loader2
 } from 'lucide-react';

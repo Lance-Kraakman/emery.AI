@@ -13,7 +13,6 @@ import signal
 import subprocess
 import sys
 import time
-from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -22,7 +21,8 @@ logger = logging.getLogger(__name__)
 DEFAULT_SOCKET_PATH = "/tmp/sandbox-proxy.sock"
 
 # How long to wait for proxy to start (seconds)
-STARTUP_TIMEOUT = 5.0
+# Cold starts in containers can take 5-10s due to Python imports/asyncio init
+STARTUP_TIMEOUT = 15.0
 
 # How often to check if proxy is alive
 HEALTH_CHECK_INTERVAL = 0.1
@@ -37,14 +37,14 @@ class ProxyManager:
     Usage:
         manager = ProxyManager.get_instance()
         socket_path = manager.ensure_running()
-        # ... use socket_path in bwrap bind mount ...
+        # ... use socket_path in gVisor bind mount ...
     """
 
     _instance: Optional["ProxyManager"] = None
 
     def __init__(self, socket_path: str = DEFAULT_SOCKET_PATH):
         self.socket_path = socket_path
-        self._process: Optional[subprocess.Popen[bytes]] = None
+        self._process: subprocess.Popen[bytes] | None = None
 
     @classmethod
     def get_instance(cls) -> "ProxyManager":
@@ -96,7 +96,9 @@ class ProxyManager:
         while time.monotonic() - start_time < STARTUP_TIMEOUT:
             if self._process.poll() is not None:
                 # Process died during startup
-                stderr = self._process.stderr.read().decode() if self._process.stderr else ""
+                stderr = (
+                    self._process.stderr.read().decode() if self._process.stderr else ""
+                )
                 raise RuntimeError(
                     f"SandboxProxy died during startup (exit {self._process.returncode}): {stderr[:500]}"
                 )
@@ -109,9 +111,7 @@ class ProxyManager:
 
         # Timeout — kill and raise
         self._kill_process()
-        raise RuntimeError(
-            f"SandboxProxy failed to start within {STARTUP_TIMEOUT}s"
-        )
+        raise RuntimeError(f"SandboxProxy failed to start within {STARTUP_TIMEOUT}s")
 
     def _kill_process(self) -> None:
         """Kill the proxy subprocess."""

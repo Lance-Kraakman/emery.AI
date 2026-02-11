@@ -6,15 +6,15 @@ Provides read/write access and tracks modifications for sync.
 """
 
 import json
-from pathlib import Path
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any
+from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
+from typing import Any
 
+import numpy as np
+import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
-import pandas as pd
-import numpy as np
 
 
 @dataclass
@@ -26,6 +26,7 @@ class WorkspaceConfig:
     - context/: Synced context tables (parquet files)
     - results/: Offloaded large results
     """
+
     base_dir: Path
     session_id: str
     organization_id: int
@@ -54,6 +55,7 @@ class WorkspaceConfig:
     def cleanup(self) -> None:
         """Remove workspace directory (for session cleanup)."""
         import shutil
+
         if self.base_dir.exists():
             shutil.rmtree(self.base_dir)
 
@@ -61,11 +63,12 @@ class WorkspaceConfig:
 @dataclass
 class TableMetadata:
     """Metadata for a cached table."""
+
     table_id: int
     table_name: str
     synced_at: datetime
     row_count: int
-    field_names: List[str]
+    field_names: list[str]
     has_embeddings: bool = False
 
 
@@ -81,7 +84,7 @@ class ContextCache:
         self.workspace = workspace
         self.workspace.ensure_dirs()
         self._modified_tables: set = set()
-        self._table_metadata: Dict[str, TableMetadata] = {}
+        self._table_metadata: dict[str, TableMetadata] = {}
 
     def table_path(self, table_name: str) -> Path:
         """Get path to parquet file for a table."""
@@ -95,10 +98,7 @@ class ContextCache:
         return self.workspace.context_dir / f"{safe_name}.meta.json"
 
     def write_table(
-        self,
-        table_name: str,
-        data: pd.DataFrame,
-        metadata: Optional[TableMetadata] = None
+        self, table_name: str, data: pd.DataFrame, metadata: TableMetadata | None = None
     ) -> None:
         """
         Write table data to local parquet file.
@@ -123,15 +123,18 @@ class ContextCache:
         if metadata:
             self._table_metadata[table_name] = metadata
             meta_path = self.metadata_path(table_name)
-            with open(meta_path, 'w') as f:
-                json.dump({
-                    "table_id": metadata.table_id,
-                    "table_name": metadata.table_name,
-                    "synced_at": metadata.synced_at.isoformat(),
-                    "row_count": metadata.row_count,
-                    "field_names": metadata.field_names,
-                    "has_embeddings": metadata.has_embeddings,
-                }, f)
+            with open(meta_path, "w") as f:
+                json.dump(
+                    {
+                        "table_id": metadata.table_id,
+                        "table_name": metadata.table_name,
+                        "synced_at": metadata.synced_at.isoformat(),
+                        "row_count": metadata.row_count,
+                        "field_names": metadata.field_names,
+                        "has_embeddings": metadata.has_embeddings,
+                    },
+                    f,
+                )
 
     def read_table(self, table_name: str) -> pd.DataFrame:
         """
@@ -148,7 +151,7 @@ class ContextCache:
             return pd.DataFrame()
         return pq.read_table(path).to_pandas()
 
-    def read_metadata(self, table_name: str) -> Optional[TableMetadata]:
+    def read_metadata(self, table_name: str) -> TableMetadata | None:
         """Read metadata for a table."""
         if table_name in self._table_metadata:
             return self._table_metadata[table_name]
@@ -157,7 +160,7 @@ class ContextCache:
         if not meta_path.exists():
             return None
 
-        with open(meta_path, 'r') as f:
+        with open(meta_path) as f:
             data = json.load(f)
             return TableMetadata(
                 table_id=data["table_id"],
@@ -168,7 +171,7 @@ class ContextCache:
                 has_embeddings=data.get("has_embeddings", False),
             )
 
-    def append_rows(self, table_name: str, rows: List[dict]) -> None:
+    def append_rows(self, table_name: str, rows: list[dict]) -> None:
         """
         Append rows to a table.
 
@@ -184,10 +187,7 @@ class ContextCache:
         self._modified_tables.add(table_name)
 
     def update_rows(
-        self,
-        table_name: str,
-        updates: List[dict],
-        key_column: str = "id"
+        self, table_name: str, updates: list[dict], key_column: str = "id"
     ) -> None:
         """
         Update rows by key column.
@@ -216,10 +216,7 @@ class ContextCache:
         self._modified_tables.add(table_name)
 
     def delete_rows(
-        self,
-        table_name: str,
-        key_values: List[Any],
-        key_column: str = "id"
+        self, table_name: str, key_values: list[Any], key_column: str = "id"
     ) -> int:
         """
         Delete rows by key column.
@@ -306,7 +303,7 @@ class ContextCache:
         """Check if a table has been modified since last sync."""
         return table_name in self._modified_tables
 
-    def get_modified_tables(self) -> List[str]:
+    def get_modified_tables(self) -> list[str]:
         """Get list of all modified tables."""
         return list(self._modified_tables)
 
@@ -318,7 +315,7 @@ class ContextCache:
         """Clear all modified flags."""
         self._modified_tables.clear()
 
-    def list_tables(self) -> List[str]:
+    def list_tables(self) -> list[str]:
         """List all cached tables."""
         tables = []
         for path in self.workspace.context_dir.glob("*.parquet"):
@@ -327,7 +324,7 @@ class ContextCache:
             tables.append(table_name)
         return tables
 
-    def get_table_stats(self, table_name: str) -> Optional[dict]:
+    def get_table_stats(self, table_name: str) -> dict | None:
         """Get statistics for a cached table."""
         if not self.table_exists(table_name):
             return None

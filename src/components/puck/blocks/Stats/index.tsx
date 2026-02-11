@@ -1,4 +1,4 @@
-/* eslint-disable @next/next/no-img-element */
+ 
 import React from "react";
 import { ComponentConfig } from "@measured/puck";
 import styles from "./styles.module.css";

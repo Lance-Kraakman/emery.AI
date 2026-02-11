@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Loader2, Settings } from "lucide-react";
-import { getAvailablePermissions, getRoleDetails, updateCustomRole, type CustomRole } from "@/app/actions/roles";
+import { getAvailablePermissions, getRoleDetails, updateCustomRole } from "@/app/actions/roles";
+import type { CustomRole } from "@/app/actions/types";
 import { PermissionSelector, type PermissionAssignment } from "./PermissionSelector";
 
 interface EditRoleDialogProps {

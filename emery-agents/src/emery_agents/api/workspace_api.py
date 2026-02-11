@@ -4,20 +4,20 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-from .http_client import make_request
 from ..entities.workspace import (
+    WorkspaceAgent,
+    WorkspaceApp,
+    WorkspaceData,
+    WorkspaceDatabase,
     WorkspaceField,
     WorkspacePage,
-    WorkspaceApp,
-    WorkspaceAgent,
     WorkspaceSkill,
     WorkspaceTable,
-    WorkspaceDatabase,
     WorkspaceView,
-    WorkspaceData,
 )
+from .http_client import make_request
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +58,7 @@ class WorkspaceAPI:
 
         if result.startswith("ERROR"):
             logger.warning(f"Workspace API failed: {result}")
-            return WorkspaceData()
+            return WorkspaceData(fetch_error=result)
 
         try:
             response = json.loads(result)
@@ -76,7 +76,7 @@ class WorkspaceAPI:
             logger.warning(f"Workspace parse failed: {e}")
             return WorkspaceData()
 
-    def _parse_apps(self, apps_data: List[Dict[str, Any]]) -> List[WorkspaceApp]:
+    def _parse_apps(self, apps_data: list[dict[str, Any]]) -> list[WorkspaceApp]:
         """Parse apps with their pages."""
         apps = []
         for app in apps_data:
@@ -90,16 +90,18 @@ class WorkspaceAPI:
                 )
                 for p in app.get("pages", [])
             ]
-            apps.append(WorkspaceApp(
-                id=app_id,
-                name=app.get("name", ""),
-                slug=app.get("slug", ""),
-                description=app.get("description", ""),
-                pages=pages,
-            ))
+            apps.append(
+                WorkspaceApp(
+                    id=app_id,
+                    name=app.get("name", ""),
+                    slug=app.get("slug", ""),
+                    description=app.get("description", ""),
+                    pages=pages,
+                )
+            )
         return apps
 
-    def _parse_agents(self, agents_data: List[Dict[str, Any]]) -> List[WorkspaceAgent]:
+    def _parse_agents(self, agents_data: list[dict[str, Any]]) -> list[WorkspaceAgent]:
         """Parse agents."""
         return [
             WorkspaceAgent(
@@ -110,7 +112,7 @@ class WorkspaceAPI:
             for a in agents_data
         ]
 
-    def _parse_skills(self, skills_data: List[Dict[str, Any]]) -> List[WorkspaceSkill]:
+    def _parse_skills(self, skills_data: list[dict[str, Any]]) -> list[WorkspaceSkill]:
         """Parse skills."""
         return [
             WorkspaceSkill(
@@ -123,7 +125,9 @@ class WorkspaceAPI:
             for s in skills_data
         ]
 
-    def _parse_databases(self, databases_data: List[Dict[str, Any]]) -> List[WorkspaceDatabase]:
+    def _parse_databases(
+        self, databases_data: list[dict[str, Any]]
+    ) -> list[WorkspaceDatabase]:
         """Parse databases with their tables and fields."""
         databases = []
         for db in databases_data:
@@ -143,15 +147,17 @@ class WorkspaceAPI:
                 )
                 for t in db.get("tables", [])
             ]
-            databases.append(WorkspaceDatabase(
-                id=db.get("id", 0),
-                name=db.get("name", ""),
-                table_count=len(tables),
-                tables=tables,
-            ))
+            databases.append(
+                WorkspaceDatabase(
+                    id=db.get("id", 0),
+                    name=db.get("name", ""),
+                    table_count=len(tables),
+                    tables=tables,
+                )
+            )
         return databases
 
-    def _parse_views(self, views_data: List[Dict[str, Any]]) -> List[WorkspaceView]:
+    def _parse_views(self, views_data: list[dict[str, Any]]) -> list[WorkspaceView]:
         """Parse views."""
         return [
             WorkspaceView(

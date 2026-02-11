@@ -17,9 +17,8 @@ Security patterns detected (logged for monitoring):
 - "system:"
 """
 
-import re
 import logging
-from typing import Optional
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -42,9 +41,7 @@ SUSPICIOUS_PATTERNS = [
 
 
 def sanitize_user_content(
-    content: Optional[str],
-    max_length: int,
-    field_name: str = "content"
+    content: str | None, max_length: int, field_name: str = "content"
 ) -> str:
     """
     Sanitize user-provided content with defensive processing.
@@ -61,13 +58,13 @@ def sanitize_user_content(
         return ""
 
     # 1. Remove control characters (except newlines/tabs)
-    sanitized = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', content)
+    sanitized = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", content)
 
     # 2. Normalize horizontal whitespace (collapse multiple spaces/tabs)
-    sanitized = re.sub(r'[ \t]+', ' ', sanitized)
+    sanitized = re.sub(r"[ \t]+", " ", sanitized)
 
     # 3. Normalize vertical whitespace (max 2 consecutive newlines)
-    sanitized = re.sub(r'\n{3,}', '\n\n', sanitized)
+    sanitized = re.sub(r"\n{3,}", "\n\n", sanitized)
 
     # 4. Strip leading/trailing whitespace
     sanitized = sanitized.strip()
@@ -81,7 +78,7 @@ def sanitize_user_content(
         suffix = "..."
         truncate_to = max_length - len(suffix)
         truncated = sanitized[:truncate_to]
-        last_space = truncated.rfind(' ')
+        last_space = truncated.rfind(" ")
         if last_space > truncate_to * 0.8:  # Only use space if it's not too far back
             sanitized = truncated[:last_space] + suffix
         else:
@@ -99,7 +96,7 @@ def sanitize_user_content(
     return sanitized
 
 
-def sanitize_persona(persona: Optional[str]) -> str:
+def sanitize_persona(persona: str | None) -> str:
     """
     Sanitize user-defined agent persona.
 
@@ -112,7 +109,7 @@ def sanitize_persona(persona: Optional[str]) -> str:
     return sanitize_user_content(persona, MAX_PERSONA_LENGTH, "persona")
 
 
-def sanitize_description(description: Optional[str]) -> str:
+def sanitize_description(description: str | None) -> str:
     """
     Sanitize user-defined agent or skill description.
 

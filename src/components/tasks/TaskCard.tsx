@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Clock, Calendar, Zap, Webhook, MousePointer } from 'lucide-react';
+import { Clock, Calendar, Zap, Webhook, MousePointer, User } from 'lucide-react';
 import { TaskLogsPanel } from './TaskLogsPanel';
 import { TaskResultDisplay } from './TaskResultDisplay';
 
@@ -11,7 +11,7 @@ interface TaskCardProps {
     name: string;
     status: string;
     triggerContext?: {
-      type: 'DATABASE_EVENT' | 'CALENDAR' | 'WEBHOOK' | 'MANUAL';
+      type: 'DATABASE_EVENT' | 'CALENDAR' | 'WEBHOOK' | 'MANUAL' | 'CHAT';
       scheduleName?: string;
       tableChange?: any;
     } | null;
@@ -36,10 +36,21 @@ export function TaskCard({ task, className, hasMounted = true, variant = 'full' 
         return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
       case 'in_progress':
         return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+      case 'awaiting_human':
+        return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
       case 'failed':
         return 'bg-red-500/20 text-red-400 border-red-500/30';
       default:
         return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'awaiting_human':
+        return 'Needs Action';
+      default:
+        return status.replace('_', ' ');
     }
   };
 
@@ -102,9 +113,10 @@ export function TaskCard({ task, className, hasMounted = true, variant = 'full' 
             </div>
           </div>
           <span
-            className={`px-2 py-1 text-xs font-medium rounded-full border ${getStatusColor(task.status)}`}
+            className={`px-2 py-1 text-xs font-medium rounded-full border flex items-center gap-1 ${getStatusColor(task.status)}`}
           >
-            {task.status.replace('_', ' ')}
+            {task.status === 'awaiting_human' && <User className="h-3 w-3" />}
+            {getStatusLabel(task.status)}
           </span>
         </div>
 
@@ -125,6 +137,16 @@ export function TaskCard({ task, className, hasMounted = true, variant = 'full' 
               <span className="text-muted-foreground">
                 on {task.triggerContext.tableChange.tableName || 'table'}
               </span>
+            </div>
+          </div>
+        )}
+
+        {/* Awaiting Human Banner for compact */}
+        {task.status === 'awaiting_human' && (
+          <div className="mt-2 p-2 bg-purple-500/10 border border-purple-500/20 rounded text-xs">
+            <div className="flex items-center gap-1.5 text-purple-400">
+              <User className="h-3 w-3" />
+              <span className="font-medium">Needs your action</span>
             </div>
           </div>
         )}
@@ -157,9 +179,10 @@ export function TaskCard({ task, className, hasMounted = true, variant = 'full' 
       <div className="flex justify-between items-start mb-3">
         <h4 className="font-semibold text-foreground">{task.name}</h4>
         <span
-          className={`px-2 py-1 text-xs font-medium rounded-full border ${getStatusColor(task.status)}`}
+          className={`px-2 py-1 text-xs font-medium rounded-full border flex items-center gap-1 ${getStatusColor(task.status)}`}
         >
-          {task.status}
+          {task.status === 'awaiting_human' && <User className="h-3 w-3" />}
+          {getStatusLabel(task.status)}
         </span>
       </div>
 
@@ -219,6 +242,19 @@ export function TaskCard({ task, className, hasMounted = true, variant = 'full' 
           </div>
         )}
       </div>
+
+      {/* Awaiting Human Banner */}
+      {task.status === 'awaiting_human' && (
+        <div className="mt-3 p-3 bg-purple-500/10 border border-purple-500/20 rounded">
+          <div className="flex items-center gap-2 text-purple-400">
+            <User className="h-4 w-4" />
+            <span className="font-medium">Human Action Required</span>
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            This task is waiting for a human to complete a step before it can continue.
+          </p>
+        </div>
+      )}
 
       {/* Error Display */}
       {task.error && (

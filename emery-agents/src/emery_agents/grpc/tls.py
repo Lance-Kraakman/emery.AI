@@ -16,16 +16,15 @@ Behavior:
 - Partial config (some set, some not): always raises
 """
 
-import os
 import logging
-from typing import Optional
+import os
 
 import grpc
 
 logger = logging.getLogger(__name__)
 
 
-def get_server_credentials() -> Optional[grpc.ServerCredentials]:
+def get_server_credentials() -> grpc.ServerCredentials | None:
     """
     Load mTLS server credentials from environment variables.
 

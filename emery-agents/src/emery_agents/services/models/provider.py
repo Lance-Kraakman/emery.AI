@@ -3,23 +3,31 @@ Model Provider with DSPy and Model Registry Support.
 
 AIDEV-NOTE: Centralized model provider for DSPy-based execution.
 Integrates with model registry for pricing, capabilities, and access control.
-Supports model selection hierarchy: skill > agent > organization > default.
+Supports model selection hierarchy: skill > agent > organization > context > default.
+
+Model resolution checks (in order):
+1. Explicit skill_model parameter
+2. Explicit agent_model parameter
+3. Explicit org_model parameter
+4. ExecutionContext.org_model (from context variable - set at request entry)
+5. Vision model (if has_images=True)
+6. System default
 """
 
 from __future__ import annotations
 
-import os
 import logging
-from typing import Optional
+import os
 from dataclasses import dataclass
 
 import dspy
 
+from ..context import get_current_context
 from .registry import (
-    get_model_metadata,
+    ModelTier,
     get_default_model_for_tier,
     get_default_vision_model,
-    ModelTier,
+    get_model_metadata,
 )
 
 logger = logging.getLogger(__name__)
@@ -28,6 +36,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class TokenUsage:
     """Token usage information with cost tracking."""
+
     input_tokens: int = 0
     output_tokens: int = 0
     total_tokens: int = 0
@@ -52,9 +61,9 @@ class ModelProvider:
 
     def resolve_model_selection(
         self,
-        skill_model: Optional[str] = None,
-        agent_model: Optional[str] = None,
-        org_model: Optional[str] = None,
+        skill_model: str | None = None,
+        agent_model: str | None = None,
+        org_model: str | None = None,
         has_images: bool = False,
     ) -> str:
         """
@@ -63,9 +72,10 @@ class ModelProvider:
         Priority:
         1. skill_model (if provided)
         2. agent_model (if provided)
-        3. org_model (if provided)
-        4. vision_model (if has_images=True and no explicit model)
-        5. default model
+        3. org_model (if provided explicitly)
+        4. org_model from ExecutionContext (set at request entry point)
+        5. vision_model (if has_images=True and no explicit model)
+        6. default model
 
         Args:
             skill_model: Model override from skill configuration
@@ -76,7 +86,7 @@ class ModelProvider:
         Returns:
             Model ID to use for execution
         """
-        logger.info(f"[MODEL-PROVIDER] resolve_model_selection called with:")
+        logger.info("[MODEL-PROVIDER] resolve_model_selection called with:")
         logger.info(f"[MODEL-PROVIDER] - skill_model: {repr(skill_model)}")
         logger.info(f"[MODEL-PROVIDER] - agent_model: {repr(agent_model)}")
         logger.info(f"[MODEL-PROVIDER] - org_model: {repr(org_model)}")
@@ -94,6 +104,16 @@ class ModelProvider:
             logger.info(f"Using organization default model: {org_model}")
             return org_model
 
+        # Check execution context for org_model (set at request entry point)
+        # This enables sub-executions (skills, agents) to inherit the org's model
+        # without explicitly passing it through the entire call chain
+        exec_context = get_current_context()
+        if exec_context and exec_context.org_model:
+            logger.info(
+                f"Using org model from execution context: {exec_context.org_model}"
+            )
+            return exec_context.org_model
+
         # Smart selection: vision model if images present, otherwise default
         if has_images:
             vision_model = get_default_vision_model()
@@ -107,9 +127,9 @@ class ModelProvider:
 
     def _get_hf_token(self) -> str:
         """Get HuggingFace token from environment."""
-        token = os.getenv('HF_TOKEN')
+        token = os.getenv("HF_TOKEN")
         if not token:
-            raise EnvironmentError(
+            raise OSError(
                 "HF_TOKEN environment variable is required for HuggingFace API access. "
                 "Get your token from https://huggingface.co/settings/tokens"
             )
@@ -145,7 +165,7 @@ class ModelProvider:
             gemini_model_id = actual_model_id.replace("google/", "")
             gemini_api_key = os.environ.get("GEMINI_API_KEY")
             if not gemini_api_key:
-                raise EnvironmentError("GEMINI_API_KEY required for Gemini models")
+                raise OSError("GEMINI_API_KEY required for Gemini models")
             logger.info(f"Creating DSPy LM for Gemini (native): {gemini_model_id}")
             return dspy.LM(
                 f"gemini/{gemini_model_id}",
@@ -181,6 +201,7 @@ class ModelProvider:
                 result = module(...)
         """
         import warnings
+
         warnings.warn(
             "configure_dspy() uses global dspy.settings.configure() which fails under "
             "concurrent async tasks. Use get_dspy_lm() + dspy.context() instead.",

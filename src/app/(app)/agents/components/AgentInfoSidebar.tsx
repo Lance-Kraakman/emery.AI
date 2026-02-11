@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import { User, Edit3, Settings } from 'lucide-react';
 import type { AgentDTO } from '@/app/dtos/agent.dto';
 import type { SkillDTO } from '@/app/mappers/skill-mapper';

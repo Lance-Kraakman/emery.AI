@@ -4,13 +4,13 @@
 // Integrates with chat domain services for proper reference resolution
 
 import { requireAuth } from "./permissions";
+import { withAuthContext } from '@/lib/auth/with-context';
 import { OrganizationId } from "@/ddd/domain/shared/value-objects";
 import { getToolSearchApplicationService } from "@/ddd/application/di/container";
 import { ReferenceMapper, type ReferenceDTO, type ReferencePanelStateDTO } from "@/app/mappers/reference-mapper";
 import { ToolMapper, type ToolSearchResultDTO } from "@/app/mappers/tool-mapper";
-import { ReferenceToolMapper, type ReferenceToolDTO } from "@/app/mappers/reference-tool-mapper";
+import { ReferenceToolMapper } from "@/app/mappers/reference-tool-mapper";
 import { ReferenceCategory } from "@/ddd/domain/chat/value-objects/reference-types";
-import type { ReferenceTool } from "@/ddd/domain/tools/entities/reference-tool";
 import type { Result } from "./types";
 import { toolResolverService } from "@/ddd/domain/tools/services/tool-resolver-service";
 
@@ -24,11 +24,12 @@ export async function searchAllTools(options: {
   limit?: number;
   offset?: number;
 }): Promise<Result<ToolSearchResultDTO>> {
-  try {
-    const session = await requireAuth();
-    const toolSearchService = getToolSearchApplicationService();
+  return withAuthContext(async () => {
+    try {
+      const session = await requireAuth();
+      const toolSearchService = getToolSearchApplicationService();
 
-    const { query, categories, limit = 20, offset = 0 } = options;
+      const { query, categories, limit = 20, offset = 0 } = options;
 
     console.log(`[ReferenceActions] Searching all tools for query: "${query}", categories:`, categories);
 
@@ -61,18 +62,19 @@ export async function searchAllTools(options: {
         totalCount: searchResult.totalCount
       }
     };
-  } catch (error) {
-    console.error('[ReferenceActions] Error searching all tools:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to search tools',
-      data: {
-        tools: [],
-        hasMore: false,
-        totalCount: 0
-      }
-    };
-  }
+    } catch (error) {
+      console.error('[ReferenceActions] Error searching all tools:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to search tools',
+        data: {
+          tools: [],
+          hasMore: false,
+          totalCount: 0
+        }
+      };
+    }
+  });
 }
 
 
@@ -82,11 +84,12 @@ export async function searchAllTools(options: {
  * Used by ReferencesPanel.tsx, EmeryChat.tsx, CustomChatInput.tsx
  */
 export async function resolveReferences(referenceTexts: string[]): Promise<Result<ReferencePanelStateDTO>> {
-  try {
-    const session = await requireAuth();
-    const toolSearchService = getToolSearchApplicationService();
+  return withAuthContext(async () => {
+    try {
+      const session = await requireAuth();
+      const toolSearchService = getToolSearchApplicationService();
 
-    console.log(`[ReferenceActions] Resolving ${referenceTexts.length} references:`, referenceTexts);
+      console.log(`[ReferenceActions] Resolving ${referenceTexts.length} references:`, referenceTexts);
 
     const resolvedReferences: ReferenceDTO[] = [];
 
@@ -172,12 +175,13 @@ export async function resolveReferences(referenceTexts: string[]): Promise<Resul
         isCollapsed: false
       }
     };
-  } catch (error: unknown) {
-    console.error('[ReferenceActions] Error resolving references:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to resolve references'
-    };
-  }
+    } catch (error: unknown) {
+      console.error('[ReferenceActions] Error resolving references:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to resolve references'
+      };
+    }
+  });
 }
 

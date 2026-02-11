@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Trash2, Globe, Lock, Copy, Sparkles, GitBranch } from 'lucide-react';
+import { Trash2, Globe, Lock, Copy, Sparkles, GitBranch, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -99,10 +99,10 @@ export function EditOrganizationSkillView({ skill, isSystem = false }: EditOrgan
           disabled={isSystem}
         />
 
-        {/* Mode Toggle - Agentic vs Workflow */}
+        {/* Mode Toggle - Agentic vs Workflow vs Human */}
         <div className="flex items-center gap-0.5 p-0.5 bg-muted rounded-lg h-8 shrink-0">
           <Button
-            variant={formData.executionType !== 'agent' ? 'default' : 'ghost'}
+            variant={!formData.executionType || formData.executionType === 'agentic' ? 'default' : 'ghost'}
             size="sm"
             onClick={() => setFormData({ ...formData, executionType: 'agentic' })}
             className="h-7 px-2.5 gap-1.5"
@@ -120,6 +120,16 @@ export function EditOrganizationSkillView({ skill, isSystem = false }: EditOrgan
           >
             <GitBranch className="h-3.5 w-3.5" />
             Workflow
+          </Button>
+          <Button
+            variant={formData.executionType === 'human' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => setFormData({ ...formData, executionType: 'human' })}
+            className="h-7 px-2.5 gap-1.5"
+            disabled={isSystem}
+          >
+            <User className="h-3.5 w-3.5" />
+            Human
           </Button>
         </div>
 

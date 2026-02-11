@@ -9,7 +9,7 @@
  */
 
 import { chats } from '@/ddd/infrastructure/db/schema';
-import { eq, and, desc, asc, ilike, isNull, isNotNull, sql } from 'drizzle-orm';
+import { eq, and, desc, sql } from 'drizzle-orm';
 import type { InferSelectModel } from 'drizzle-orm';
 import type { IChatRepository } from '@/ddd/domain/chat/repositories/chat-repository';
 import { Chat, type CreateChatData, type UpdateChatData } from '@/ddd/domain/chat/entities/chat';

@@ -19,13 +19,12 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-import dspy
+from emery_agents.tools.execution.skill_invoker import create_skill_invoker_tools
 
-from ..reasoning.modules import ExecutorModule
-from emery_agents.tools.execution import create_skill_invoker_tools
 from ..entities.workspace import WorkspaceAgent, WorkspaceSkill
-from ..utils.persona_sanitizer import sanitize_persona, sanitize_description
+from ..reasoning.modules import ExecutorModule
 from ..services.skills.validator import create_validator_from_skills
+from ..utils.persona_sanitizer import sanitize_description
 
 logger = logging.getLogger(__name__)
 
@@ -64,12 +63,16 @@ def create_agent_executor(
     # SECURITY: Sanitize user-provided content
     agent_description = sanitize_description(agent_data.description)
 
-    logger.info(f"[AGENT-EXECUTOR] Creating ExecutorModule for agent: {agent_name} (id={agent_id})")
+    logger.info(
+        f"[AGENT-EXECUTOR] Creating ExecutorModule for agent: {agent_name} (id={agent_id})"
+    )
 
     # SECURITY: Create skill permission validator to enforce skill whitelist
     agent_id_int = int(agent_id) if agent_id else None
     skill_validator = create_validator_from_skills(skills, agent_id=agent_id_int)
-    logger.info(f"[AGENT-EXECUTOR] Created skill validator with {len(skill_validator.allowed_skill_ids)} allowed skills")
+    logger.info(
+        f"[AGENT-EXECUTOR] Created skill validator with {len(skill_validator.allowed_skill_ids)} allowed skills"
+    )
 
     # 1. Create SkillInvokerTools for each skill (with permission validation)
     skill_tools = create_skill_invoker_tools(

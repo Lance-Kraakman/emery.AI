@@ -8,7 +8,7 @@ DSPy Migration: Uses DSPy-compatible callable tools instead of smolagents.
 """
 
 import logging
-from typing import Callable, List
+from collections.abc import Callable
 
 from ddgs import DDGS
 
@@ -46,7 +46,7 @@ def duckduckgo_search(query: str, max_results: int = 5) -> str:
         return f"Search failed: {e}"
 
 
-def get_research_tools() -> List[Callable[..., str]]:
+def get_research_tools() -> list[Callable[..., str]]:
     """
     Get research tools for planning phase.
 

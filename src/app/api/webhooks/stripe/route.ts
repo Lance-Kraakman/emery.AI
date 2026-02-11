@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { stripe } from '@/ddd/infrastructure/external/stripe/client';
 import { db } from '@/ddd/infrastructure/db/client';
-import { organizations, invoices } from '@/ddd/infrastructure/db/schema';
+import { organizations } from '@/ddd/infrastructure/db/schema';
 import { eq } from 'drizzle-orm';
 import { getTierFromStripePriceId, getTierConfig, PRICE_PER_CREDIT_USD } from '@/ddd/infrastructure/external/stripe/config';
 import { getInvoiceApplicationService } from '@/ddd/application/di/getters';

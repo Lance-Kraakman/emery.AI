@@ -56,7 +56,6 @@ import { NodePalette } from './NodePalette';
 import { NodeConfigPanel } from './NodeConfigPanel';
 import { QuickAddPopover } from './QuickAddPopover';
 import { CommandPalette } from './CommandPalette';
-import { getDefaultNodeData } from './utils/flow-converters';
 
 // Node components
 import { SkillRefNode } from './nodes/SkillRefNode';

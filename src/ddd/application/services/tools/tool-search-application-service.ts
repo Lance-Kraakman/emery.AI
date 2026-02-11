@@ -13,7 +13,6 @@ import { createDebugLogger } from '@/lib/utils/debug-logger';
 import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 
 const logger = createDebugLogger('ToolSearch');
-import { Reference } from '@/ddd/domain/chat/value-objects/reference';
 import { ReferenceCategory } from '@/ddd/domain/chat/value-objects/reference-types';
 import { ReferenceTool } from '@/ddd/domain/tools/entities/reference-tool';
 import { Tool } from '@/ddd/domain/tools/entities/tool';
@@ -27,7 +26,7 @@ import type { RowQueryOptions } from '@/ddd/infrastructure/db/types/table-persis
 import { RowMapper, type DocumentFieldValue, type FileFieldValue } from '@/app/mappers/row-mapper';
 import { isDocumentArray, isFileArray } from '@/ddd/domain/tables/value-objects/field-values';
 import type { IToolRegistryService } from '@/ddd/domain/tools/services/tool-registry';
-import { toolResolverService, type SearchCategoryType, type SearchHandlerType, SEARCH_CATEGORIES } from '@/ddd/domain/tools/services/tool-resolver-service';
+import { toolResolverService, type SearchCategoryType } from '@/ddd/domain/tools/services/tool-resolver-service';
 
 export interface SearchReferencesOptions {
   query: string;

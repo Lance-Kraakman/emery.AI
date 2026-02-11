@@ -51,7 +51,6 @@ import {
   updateContextMapping,
   detachContextTable,
 } from '@/app/actions/context-mappings';
-import { getFields } from '@/app/actions/fields';
 import { FieldPickerPopover } from '@/components/skill-config/FieldPickerPopover';
 import { ManualInputItem } from '@/components/skill-config/ManualInputItem';
 import { ManualOutputItem } from '@/components/skill-config/ManualOutputItem';
@@ -163,7 +162,7 @@ function TableInputGroup({
             )}
             <ArrowLeft className="h-3 w-3 text-muted-foreground ml-auto" />
             <span className="text-muted-foreground truncate max-w-[80px]">
-              {input.inputMapping?.source?.fieldId ? `field #${input.inputMapping.source.fieldId}` : 'mapped'}
+              {input.inputMapping?.source?.type === 'table_field' && input.inputMapping.source.fieldId ? `field #${input.inputMapping.source.fieldId}` : 'mapped'}
             </span>
             <button
               type="button"
@@ -363,8 +362,10 @@ export function SkillConfigPanel({
 
     // 2. From input mappings (skill reads from)
     localInputs.forEach((input) => {
-      const tid = input.inputMapping?.source?.tableId;
-      if (tid) tableIds.add(tid);
+      const source = input.inputMapping?.source;
+      if (source && source.type === 'table_field') {
+        tableIds.add(source.tableId);
+      }
     });
 
     // 3. From output mappings (skill writes to)
@@ -395,10 +396,10 @@ export function SkillConfigPanel({
     const manual: InputDefinition[] = [];
 
     localInputs.forEach((input) => {
-      const tableId = input.inputMapping?.source?.tableId;
-      if (tableId) {
-        const existing = byTable.get(tableId) || [];
-        byTable.set(tableId, [...existing, input]);
+      const source = input.inputMapping?.source;
+      if (source && source.type === 'table_field') {
+        const existing = byTable.get(source.tableId) || [];
+        byTable.set(source.tableId, [...existing, input]);
       } else {
         manual.push(input);
       }
@@ -490,6 +491,7 @@ export function SkillConfigPanel({
           required: false,
           inputMapping: {
             source: {
+              type: 'table_field' as const,
               tableId,
               fieldId: field.id,
               rowSource: { type: 'source_row' as const },

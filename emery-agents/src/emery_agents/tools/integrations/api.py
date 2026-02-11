@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timedelta
-from typing import Any, Callable
+from typing import Any
 
 from emery_agents.entities.tool_config import ToolConfig
 
@@ -24,18 +24,40 @@ class MeasurementAPITool:
     """
 
     name = "measurement_api"
-    description = "API for creating, updating, and analyzing organizational measurements and KPIs"
+    description = (
+        "API for creating, updating, and analyzing organizational measurements and KPIs"
+    )
     inputs = {
         "action": {
             "type": "string",
             "description": "Action to perform: create_measurement, update_measurement, get_measurements, calculate_kpi, create_kpi_definition, analyze_trends, suggest_measurements_for_industry",
         },
-        "organization_id": {"type": "integer", "description": "Organization ID", "nullable": True},
-        "measurement_data": {"type": "object", "description": "Measurement data object", "nullable": True},
-        "kpi_data": {"type": "object", "description": "KPI definition data", "nullable": True},
+        "organization_id": {
+            "type": "integer",
+            "description": "Organization ID",
+            "nullable": True,
+        },
+        "measurement_data": {
+            "type": "object",
+            "description": "Measurement data object",
+            "nullable": True,
+        },
+        "kpi_data": {
+            "type": "object",
+            "description": "KPI definition data",
+            "nullable": True,
+        },
         "filters": {"type": "object", "description": "Query filters", "nullable": True},
-        "industry_type": {"type": "string", "description": "Industry type for suggestions", "nullable": True},
-        "processes": {"type": "array", "description": "List of processes for measurement suggestions", "nullable": True},
+        "industry_type": {
+            "type": "string",
+            "description": "Industry type for suggestions",
+            "nullable": True,
+        },
+        "processes": {
+            "type": "array",
+            "description": "List of processes for measurement suggestions",
+            "nullable": True,
+        },
     }
     output_type = "object"
 
@@ -59,7 +81,10 @@ class MeasurementAPITool:
                 "value": 85.5,
                 "unit": "percentage",
                 "timestamp": (datetime.now() - timedelta(hours=2)).isoformat(),
-                "metadata": {"department": "Operations", "source": "project_management_tool"},
+                "metadata": {
+                    "department": "Operations",
+                    "source": "project_management_tool",
+                },
             },
             {
                 "id": "measure_002",
@@ -79,7 +104,11 @@ class MeasurementAPITool:
                 "value": 125000.00,
                 "unit": "currency",
                 "timestamp": (datetime.now() - timedelta(days=1)).isoformat(),
-                "metadata": {"currency": "USD", "period": "2024-01", "source": "accounting_system"},
+                "metadata": {
+                    "currency": "USD",
+                    "period": "2024-01",
+                    "source": "accounting_system",
+                },
             },
         ]
 
@@ -102,7 +131,10 @@ class MeasurementAPITool:
         """Execute measurement API operations."""
         if action == "suggest_measurements_for_industry":
             if not industry_type:
-                return {"success": False, "error": "industry_type is required for suggest_measurements_for_industry"}
+                return {
+                    "success": False,
+                    "error": "industry_type is required for suggest_measurements_for_industry",
+                }
 
             industry_measurements = {
                 "saas": [
@@ -120,7 +152,10 @@ class MeasurementAPITool:
                         "frequency": "monthly",
                         "assignedAgents": ["finance_agent"],
                         "validationRules": ["value > 0", "currency = 'USD'"],
-                        "alertThresholds": {"warning": "10% decrease", "critical": "25% decrease"},
+                        "alertThresholds": {
+                            "warning": "10% decrease",
+                            "critical": "25% decrease",
+                        },
                     },
                     {
                         "id": "churn_rate_measurement",
@@ -191,7 +226,10 @@ class MeasurementAPITool:
 
         elif action == "create_measurement":
             if not organization_id or not measurement_data:
-                return {"success": False, "error": "organization_id and measurement_data are required"}
+                return {
+                    "success": False,
+                    "error": "organization_id and measurement_data are required",
+                }
 
             measurement_id = f"measure_{uuid.uuid4().hex[:8]}"
             measurement = {
@@ -220,11 +258,21 @@ class MeasurementAPITool:
 
             if filters:
                 if "category" in filters:
-                    measurements = [m for m in measurements if m.get("category") == filters["category"]]
+                    measurements = [
+                        m
+                        for m in measurements
+                        if m.get("category") == filters["category"]
+                    ]
                 if "date_from" in filters:
-                    measurements = [m for m in measurements if m["timestamp"] >= filters["date_from"]]
+                    measurements = [
+                        m
+                        for m in measurements
+                        if m["timestamp"] >= filters["date_from"]
+                    ]
                 if "date_to" in filters:
-                    measurements = [m for m in measurements if m["timestamp"] <= filters["date_to"]]
+                    measurements = [
+                        m for m in measurements if m["timestamp"] <= filters["date_to"]
+                    ]
 
             measurements.sort(key=lambda m: m["timestamp"], reverse=True)
 
@@ -257,11 +305,31 @@ class KPIAPITool:
             "type": "string",
             "description": "Action to perform: design_kpi_framework, create_kpi_definition, calculate_kpi, calculate_thresholds, map_kpi_dependencies, get_kpis, analyze_kpi_trends",
         },
-        "organization_id": {"type": "integer", "description": "Organization ID", "nullable": True},
-        "industry": {"type": "string", "description": "Industry type", "nullable": True},
-        "company_size": {"type": "string", "description": "Company size", "nullable": True},
-        "business_model": {"type": "string", "description": "Business model", "nullable": True},
-        "kpi_data": {"type": "object", "description": "KPI definition data", "nullable": True},
+        "organization_id": {
+            "type": "integer",
+            "description": "Organization ID",
+            "nullable": True,
+        },
+        "industry": {
+            "type": "string",
+            "description": "Industry type",
+            "nullable": True,
+        },
+        "company_size": {
+            "type": "string",
+            "description": "Company size",
+            "nullable": True,
+        },
+        "business_model": {
+            "type": "string",
+            "description": "Business model",
+            "nullable": True,
+        },
+        "kpi_data": {
+            "type": "object",
+            "description": "KPI definition data",
+            "nullable": True,
+        },
         "filters": {"type": "object", "description": "Query filters", "nullable": True},
     }
     output_type = "object"
@@ -287,7 +355,10 @@ class KPIAPITool:
         """Execute KPI API operations."""
         if action == "design_kpi_framework":
             if not industry:
-                return {"success": False, "error": "industry is required for design_kpi_framework"}
+                return {
+                    "success": False,
+                    "error": "industry is required for design_kpi_framework",
+                }
 
             if industry == "saas" or business_model == "saas":
                 kpis = [
@@ -296,7 +367,12 @@ class KPIAPITool:
                         "name": "Monthly Recurring Revenue Growth",
                         "category": "financial",
                         "description": "Month-over-month MRR growth rate",
-                        "thresholds": {"excellent": 20, "good": 15, "warning": 10, "critical": 5},
+                        "thresholds": {
+                            "excellent": 20,
+                            "good": 15,
+                            "warning": 10,
+                            "critical": 5,
+                        },
                         "calculationFrequency": "monthly",
                         "dependentMeasurements": ["mrr_measurement"],
                         "priority": "high",
@@ -306,7 +382,12 @@ class KPIAPITool:
                         "name": "Customer Churn Rate",
                         "category": "customer",
                         "description": "Monthly customer churn percentage",
-                        "thresholds": {"excellent": 2, "good": 3, "warning": 5, "critical": 10},
+                        "thresholds": {
+                            "excellent": 2,
+                            "good": 3,
+                            "warning": 5,
+                            "critical": 10,
+                        },
                         "calculationFrequency": "monthly",
                         "dependentMeasurements": ["churn_rate_measurement"],
                         "priority": "high",
@@ -319,7 +400,12 @@ class KPIAPITool:
                         "name": "Website Conversion Rate",
                         "category": "marketing",
                         "description": "Percentage of visitors who complete purchases",
-                        "thresholds": {"excellent": 5, "good": 3, "warning": 2, "critical": 1},
+                        "thresholds": {
+                            "excellent": 5,
+                            "good": 3,
+                            "warning": 2,
+                            "critical": 1,
+                        },
                         "calculationFrequency": "daily",
                         "dependentMeasurements": ["conversion_rate_measurement"],
                         "priority": "high",
@@ -332,7 +418,12 @@ class KPIAPITool:
                         "name": "Operational Efficiency",
                         "category": "operational",
                         "description": "Overall operational efficiency score",
-                        "thresholds": {"excellent": 90, "good": 80, "warning": 70, "critical": 60},
+                        "thresholds": {
+                            "excellent": 90,
+                            "good": 80,
+                            "warning": 70,
+                            "critical": 60,
+                        },
                         "calculationFrequency": "weekly",
                         "dependentMeasurements": ["efficiency_measurement"],
                         "priority": "medium",
@@ -390,7 +481,12 @@ class KPIAPITool:
                     "MRR growth is accelerating, indicating healthy business expansion",
                     "Customer churn is decreasing, showing improved retention strategies",
                 ],
-                "analysis_summary": {"total_kpis_analyzed": len(trends), "improving": 1, "declining": 0, "stable": 1},
+                "analysis_summary": {
+                    "total_kpis_analyzed": len(trends),
+                    "improving": 1,
+                    "declining": 0,
+                    "stable": 1,
+                },
             }
 
         else:
@@ -408,16 +504,34 @@ class AnalysisAPITool:
     """
 
     name = "analysis_api"
-    description = "API for analyzing organizations, generating insights, and providing benchmarks"
+    description = (
+        "API for analyzing organizations, generating insights, and providing benchmarks"
+    )
     inputs = {
         "action": {
             "type": "string",
             "description": "Action to perform: analyze_website, analyze_industry_benchmarks, recommend_improvement_areas, estimate_processes, optimize_reporting_schedule",
         },
-        "website_url": {"type": "string", "description": "Website URL to analyze", "nullable": True},
-        "industry_data": {"type": "object", "description": "Industry information", "nullable": True},
-        "analysis_context": {"type": "object", "description": "Analysis context and requirements", "nullable": True},
-        "process_data": {"type": "object", "description": "Process data for analysis", "nullable": True},
+        "website_url": {
+            "type": "string",
+            "description": "Website URL to analyze",
+            "nullable": True,
+        },
+        "industry_data": {
+            "type": "object",
+            "description": "Industry information",
+            "nullable": True,
+        },
+        "analysis_context": {
+            "type": "object",
+            "description": "Analysis context and requirements",
+            "nullable": True,
+        },
+        "process_data": {
+            "type": "object",
+            "description": "Process data for analysis",
+            "nullable": True,
+        },
     }
     output_type = "object"
 
@@ -439,14 +553,21 @@ class AnalysisAPITool:
         """Execute analysis API operations."""
         if action == "analyze_website":
             if not website_url:
-                return {"success": False, "error": "website_url is required for analyze_website"}
+                return {
+                    "success": False,
+                    "error": "website_url is required for analyze_website",
+                }
 
             if "stripe.com" in website_url:
                 analysis = {
                     "business_model": "payment_processing_platform",
                     "industry": "fintech",
                     "company_size_estimate": "large",
-                    "primary_services": ["payment_processing", "financial_infrastructure", "developer_apis"],
+                    "primary_services": [
+                        "payment_processing",
+                        "financial_infrastructure",
+                        "developer_apis",
+                    ],
                     "target_audience": ["businesses", "developers", "enterprises"],
                     "organizational_complexity": "high",
                     "inferred_processes": [
@@ -472,7 +593,9 @@ class AnalysisAPITool:
                     "target_audience": ["general"],
                     "organizational_complexity": "medium",
                     "inferred_processes": ["customer_service", "operations"],
-                    "suggested_measurements": [{"name": "Customer Satisfaction", "priority": "medium"}],
+                    "suggested_measurements": [
+                        {"name": "Customer Satisfaction", "priority": "medium"}
+                    ],
                     "confidence_score": 0.6,
                 }
 
@@ -485,7 +608,10 @@ class AnalysisAPITool:
 
         elif action == "estimate_processes":
             if not industry_data:
-                return {"success": False, "error": "industry_data is required for estimate_processes"}
+                return {
+                    "success": False,
+                    "error": "industry_data is required for estimate_processes",
+                }
 
             industry = industry_data.get("industry", "general")
             company_size = industry_data.get("company_size", "medium")
@@ -530,8 +656,15 @@ class AnalysisAPITool:
                             "Processing time",
                             "Fraud detection accuracy",
                         ],
-                        "automation_opportunities": ["Automated fraud detection", "Real-time authorization"],
-                        "related_measurements": ["transaction_success_rate", "processing_time", "fraud_accuracy"],
+                        "automation_opportunities": [
+                            "Automated fraud detection",
+                            "Real-time authorization",
+                        ],
+                        "related_measurements": [
+                            "transaction_success_rate",
+                            "processing_time",
+                            "fraud_accuracy",
+                        ],
                     }
                 ]
             else:
@@ -588,8 +721,16 @@ class ProcessAPITool:
             "type": "string",
             "description": "Action to perform: create_process, update_process, get_processes, analyze_bottlenecks, track_performance, create_improvement",
         },
-        "organization_id": {"type": "integer", "description": "Organization ID", "nullable": True},
-        "process_data": {"type": "object", "description": "Process data object", "nullable": True},
+        "organization_id": {
+            "type": "integer",
+            "description": "Organization ID",
+            "nullable": True,
+        },
+        "process_data": {
+            "type": "object",
+            "description": "Process data object",
+            "nullable": True,
+        },
         "filters": {"type": "object", "description": "Query filters", "nullable": True},
     }
     output_type = "object"
@@ -611,7 +752,10 @@ class ProcessAPITool:
         """Execute process API operations."""
         if action == "create_process":
             if not organization_id or not process_data:
-                return {"success": False, "error": "organization_id and process_data are required"}
+                return {
+                    "success": False,
+                    "error": "organization_id and process_data are required",
+                }
 
             process_id = f"process_{uuid.uuid4().hex[:8]}"
             process = {

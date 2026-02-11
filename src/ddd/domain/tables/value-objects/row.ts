@@ -11,7 +11,6 @@
 import crypto from 'crypto';
 import type { FieldValue as TypedFieldValue } from './field-values';
 import type { TableField } from './table-field';
-import { TableId } from '../../shared/value-objects';
 
 export class RowId {
   constructor(private readonly _value: string) {

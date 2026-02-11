@@ -11,7 +11,7 @@ AIDEV-NOTE: Migration complete. All agents are now DSPy modules.
 - InterruptibleModule wraps any module for HITL support
 """
 
-from .research_emery_agent import create_research_emery_agent
+from ._hitl_mixin import HITLState, handle_hitl_resume, is_approval_response
 from .agent_executor_agent import (
     create_agent_executor,
     create_agent_executor_from_api,
@@ -22,7 +22,7 @@ from .interrupt_aware_agent import (
     create_interruptible_executor,
     wrap_interruptible,
 )
-from ._hitl_mixin import HITLState, handle_hitl_resume, is_approval_response
+from .research_emery_agent import create_research_emery_agent
 
 __all__ = [
     # Research

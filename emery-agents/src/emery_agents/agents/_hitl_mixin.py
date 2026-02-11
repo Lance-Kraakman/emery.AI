@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from ..reasoning.modules import InterruptRequested, TrackedStep, StepType
+from ..reasoning.modules import InterruptRequested, StepType, TrackedStep
 from ..services.context import get_current_context
 from ..tools.tool_modes import ToolMode
 
@@ -33,7 +33,9 @@ class HITLState:
         self.interrupt_switch = False
         self.resume_state = None
 
-    def store_interrupt(self, agent_name: str, state: dict[str, Any] | None = None) -> None:
+    def store_interrupt(
+        self, agent_name: str, state: dict[str, Any] | None = None
+    ) -> None:
         """Store interrupted agent info."""
         self.interrupted_agent_name = agent_name
         self.interrupt_switch = True

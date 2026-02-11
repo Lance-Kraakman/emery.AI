@@ -14,8 +14,7 @@ import type {
   SkillTemplateData,
   AgentTemplateData,
   DatabaseTemplateData,
-  OrgSectionTemplateData,
-  TemplateMetadata
+  OrgSectionTemplateData
 } from '@/ddd/domain/templates/types';
 import { TemplateApplicationService } from '@/ddd/application/services/templates/template-application-service';
 import { DrizzleTemplateRepository } from '@/ddd/infrastructure/db/repositories/templates/drizzle-template-repository';
@@ -25,7 +24,7 @@ import { db } from '@/ddd/infrastructure/db/client';
 import { createSkill, createOrganizationSkill, getSkill, getSkillsByAgent } from './skills';
 import { getAgent, createAgentFromClient } from './agents';
 import { getDatabase, getAgentDatabases, createDatabase } from './databases';
-import { getTablesForDatabase, createTable, type TableWithFieldsDTO } from './tables';
+import { getTablesForDatabase, createTable } from './tables';
 import { createField } from './fields';
 import { isBrainTemplate, isOrgSectionTemplateData } from '@/ddd/domain/templates/types';
 import type { TableTemplateData, FieldTemplateData, TemplateContent } from '@/ddd/domain/templates/types';

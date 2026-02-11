@@ -7,6 +7,7 @@ import {
   AppWindow,
   Bot,
   ChevronRight,
+  ClipboardList,
   Database,
   Table2,
   Users,
@@ -474,7 +475,7 @@ export function AppSidebar({
         </div>
       </SidebarHeader>
 
-      {/* Organization - fixed at top, not scrollable */}
+      {/* Organization & Tasks - fixed at top, not scrollable */}
       <div className="flex-shrink-0 border-b border-sidebar-border">
         <SidebarGroup>
           <SidebarMenu>
@@ -486,6 +487,17 @@ export function AppSidebar({
                 <Link href="/organization">
                   <Users className="h-4 w-4" />
                   <span>Organization</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={pathname === "/tasks" || pathname?.startsWith("/tasks")}
+              >
+                <Link href="/tasks">
+                  <ClipboardList className="h-4 w-4" />
+                  <span>Tasks</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

@@ -7,7 +7,7 @@
  * Allows editing metadata and choosing between download or save to library.
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   Dialog,
   DialogContent,

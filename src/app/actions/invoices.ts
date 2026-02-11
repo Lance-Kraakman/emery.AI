@@ -12,7 +12,6 @@ import { requireResourcePermission } from './permissions';
 import { withAuthContext } from '@/lib/auth/with-context';
 import { getInvoiceApplicationService } from '@/ddd/application/di/getters';
 import type { InvoiceDTO, InvoiceSummaryDTO } from '@/ddd/application/services/billing/invoice-application-service';
-import type { Result } from '@/ddd/domain/shared/result';
 
 export interface GetInvoicesResult {
   success: boolean;

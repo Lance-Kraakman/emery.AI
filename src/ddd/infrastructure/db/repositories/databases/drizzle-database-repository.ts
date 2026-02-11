@@ -7,7 +7,6 @@ import { DrizzleBaseRepository } from '../base/drizzle-base-repository';
 import type { DatabaseId, OrganizationId } from '@/ddd/domain/shared/value-objects';
 import { databases } from '@/ddd/infrastructure/db/schema';
 import { eq, and, ne } from 'drizzle-orm';
-import type { DbClient } from '@/ddd/infrastructure/db/client';
 
 export class DrizzleDatabaseRepository 
   extends DrizzleBaseRepository<Database, DatabaseId, CreateDatabaseData, UpdateDatabaseData, any>
@@ -136,6 +135,23 @@ export class DrizzleDatabaseRepository
       .where(eq(databases.organizationId, organizationId.value));
 
     return result.length;
+  }
+
+  async updateAgent(id: DatabaseId, agentId: number | null): Promise<Database> {
+    const [record] = await this.db
+      .update(databases)
+      .set({
+        agentId: agentId,
+        updatedAt: new Date()
+      })
+      .where(eq(databases.id, id.value))
+      .returning();
+
+    if (!record) {
+      throw new Error(`Database with id ${id.value} not found`);
+    }
+
+    return this.fromPersistence(record);
   }
 
   protected fromPersistence(record: any): Database {

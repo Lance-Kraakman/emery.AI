@@ -70,6 +70,7 @@ export interface IAgentRepository {
 
   /**
    * Find agent by API key
+   * NOTE: For cross-org auth, use organizationRepository.findAgentByApiKey()
    */
   findByApiKey(apiKey: ApiKey): Promise<Agent | null>;
 

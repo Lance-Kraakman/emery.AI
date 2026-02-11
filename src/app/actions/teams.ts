@@ -9,10 +9,10 @@ import { requireCurrentOrganization } from "./user-organizations";
 import { withAuthContext } from '@/lib/auth/with-context';
 import { getTeamApplicationService, getAuditApplicationService } from "@/ddd/application/di/container";
 import { AgentId } from "@/ddd/domain/shared/value-objects";
-import { createTeamSchema, updateTeamSchema, parseFormDataToTeam } from "@/lib/schemas";
-import type { Result, CreateTeamData, CreateTeamClientData, TeamMembershipData } from "./types";
+import { createTeamSchema, parseFormDataToTeam } from "@/lib/schemas";
+import type { Result, CreateTeamData, CreateTeamClientData } from "./types";
 import type { CreateTeamDTO, UpdateTeamDTO, TeamFiltersDTO } from "@/app/dtos/team.dto";
-import { TeamId, OrganizationId, UserId } from "@/ddd/domain/shared/value-objects";
+import { TeamId, OrganizationId } from "@/ddd/domain/shared/value-objects";
 import { TeamMapper, type TeamDTO } from "@/app/mappers/team-mapper";
 
 // Import the DI setup to ensure container is initialized

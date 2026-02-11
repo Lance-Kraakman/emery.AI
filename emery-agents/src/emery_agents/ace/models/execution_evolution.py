@@ -10,18 +10,19 @@ Part of the ACE (Agentic Context Engineering) pattern:
 - Maintains snapshots for recovery
 """
 
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Optional, Dict, Any
 from enum import Enum
-import uuid
+from typing import Any
 
 
 class ExecutionChangeType(Enum):
     """Types of changes in execution context between steps."""
-    ADDITION = "addition"        # New information added
+
+    ADDITION = "addition"  # New information added
     MODIFICATION = "modification"  # Existing info changed
-    REMOVAL = "removal"          # Information removed/lost
+    REMOVAL = "removal"  # Information removed/lost
 
 
 @dataclass(frozen=True)
@@ -32,12 +33,13 @@ class ExecutionDelta:
     Used to track what information is being added, modified, or lost
     during execution.
     """
+
     delta_id: str
     change_type: ExecutionChangeType
-    key: str                     # What changed (e.g., "step_123_result")
-    before_value: Optional[str]  # Value before (None for additions)
-    after_value: Optional[str]   # Value after (None for removals)
-    step_id: str                 # Step that caused this change
+    key: str  # What changed (e.g., "step_123_result")
+    before_value: str | None  # Value before (None for additions)
+    after_value: str | None  # Value after (None for removals)
+    step_id: str  # Step that caused this change
     timestamp: datetime = field(default_factory=datetime.utcnow)
 
     @property
@@ -68,7 +70,7 @@ class ExecutionDelta:
         after_len = len(self.after_value) if self.after_value else 0
         return after_len - before_len
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize to dictionary."""
         return {
             "delta_id": self.delta_id,
@@ -94,13 +96,14 @@ class ExecutionSnapshot:
     is mutable. Callers should not modify the dict after creation.
     For true immutability, make a deep copy before modifying.
     """
-    snapshot_id: str
-    step_id: str                 # Step after which snapshot was taken
-    timestamp: datetime
-    context_state: Dict[str, Any]  # Full context dump (treat as immutable)
-    summary: str                 # Token-efficient summary
 
-    def to_dict(self) -> Dict[str, Any]:
+    snapshot_id: str
+    step_id: str  # Step after which snapshot was taken
+    timestamp: datetime
+    context_state: dict[str, Any]  # Full context dump (treat as immutable)
+    summary: str  # Token-efficient summary
+
+    def to_dict(self) -> dict[str, Any]:
         """Serialize to dictionary."""
         return {
             "snapshot_id": self.snapshot_id,
@@ -123,10 +126,11 @@ class ExecutionEvolutionTracker:
     - Snapshots: Full context dumps for recovery (last 5)
     - Degradation warnings: When information loss is detected
     """
+
     task_id: str
-    deltas: List[ExecutionDelta] = field(default_factory=list)
-    snapshots: List[ExecutionSnapshot] = field(default_factory=list)
-    degradation_warnings: List[str] = field(default_factory=list)
+    deltas: list[ExecutionDelta] = field(default_factory=list)
+    snapshots: list[ExecutionSnapshot] = field(default_factory=list)
+    degradation_warnings: list[str] = field(default_factory=list)
 
     # Metrics
     total_additions: int = 0
@@ -141,8 +145,8 @@ class ExecutionEvolutionTracker:
         self,
         step_id: str,
         key: str,
-        before_value: Optional[Any],
-        after_value: Optional[Any],
+        before_value: Any | None,
+        after_value: Any | None,
     ) -> ExecutionDelta:
         """
         Record a context change and detect degradation.
@@ -192,7 +196,7 @@ class ExecutionEvolutionTracker:
     def take_snapshot(
         self,
         step_id: str,
-        context_state: Dict[str, Any],
+        context_state: dict[str, Any],
         summary: str,
     ) -> ExecutionSnapshot:
         """
@@ -218,7 +222,7 @@ class ExecutionEvolutionTracker:
 
         # Keep only last N snapshots
         if len(self.snapshots) > self.max_snapshots:
-            self.snapshots = self.snapshots[-self.max_snapshots:]
+            self.snapshots = self.snapshots[-self.max_snapshots :]
 
         return snapshot
 
@@ -256,11 +260,11 @@ class ExecutionEvolutionTracker:
 
         return "\n".join(lines)
 
-    def get_recent_deltas(self, limit: int = 10) -> List[ExecutionDelta]:
+    def get_recent_deltas(self, limit: int = 10) -> list[ExecutionDelta]:
         """Get most recent deltas."""
         return self.deltas[-limit:] if self.deltas else []
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize to dictionary."""
         return {
             "task_id": self.task_id,

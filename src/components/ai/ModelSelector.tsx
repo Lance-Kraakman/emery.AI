@@ -8,7 +8,7 @@
  */
 
 import * as React from "react"
-import { Check, ChevronDown, Sparkles, Zap, Target, Settings2, Eye } from "lucide-react"
+import { Sparkles, Zap, Target, Settings2, Eye } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   Select,
@@ -24,10 +24,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import {
-  getAllModels,
   getModelsForTier,
-  getModelsWithCapability,
-  canAccessModel,
   type ModelMetadata
 } from "@/lib/ai/model-registry"
 

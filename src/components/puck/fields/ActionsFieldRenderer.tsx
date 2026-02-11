@@ -36,7 +36,7 @@ import { VariableAutocompleteInput } from './VariableAutocompleteInput';
 import { VariablesPanel, type Variable } from '@/components/shared/VariablesPanel';
 import { useDataLayoutContext } from '../contexts/DataLayoutContext';
 import { useStateContext } from '../contexts/StateContext';
-import type { StateVariableType, StateVariable } from '../types/state';
+import type { StateVariableType } from '../types/state';
 import { isArrayFieldType } from '@/ddd/domain/tables/value-objects/table-field';
 
 type ActionType = 'assignTask' | 'navigateToPage' | 'openUrl' | 'setState';

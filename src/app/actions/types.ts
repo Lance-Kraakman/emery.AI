@@ -1,9 +1,6 @@
 // AIDEV-NOTE: Application Layer DTOs - Commands and types for Server Actions
 // Re-exports domain types and defines application-specific command interfaces
 import { FieldType } from '@/ddd/domain/tables/value-objects/table-field';
-import type { Result } from '@/ddd/domain/shared/result';
-import type { Row } from '@/ddd/domain/tables/value-objects/row';
-import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 
 // Export the unified Result interface for use in Server Actions
 export type { Result } from '@/ddd/domain/shared/result';
@@ -97,7 +94,6 @@ export interface CreateAgentFormData {
 
 // AIDEV-NOTE: Import DTO types from agent mapper (following ToolMapper pattern)
 // These DTOs use plain serializable types that can pass through Next.js Server Actions
-import type { ToolConfigDTO } from '@/app/mappers/agent-mapper';
 
 // AIDEV-NOTE: Re-export CreateAgentDTO from consolidated DTOs
 // CreateAgentClientData is now an alias for CreateAgentDTO
@@ -134,7 +130,6 @@ export interface CreateTaskData {
 // CreateRoleData moved to domain entities: @/lib/domain/entities/role
 
 // Role management types
-import type { Role } from "@/ddd/domain/rbac/entities/role";
 
 // Interface for role selection in EntityMultiSelect component
 export interface RoleSelectionOption {

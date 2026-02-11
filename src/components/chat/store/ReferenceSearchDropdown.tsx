@@ -181,7 +181,7 @@ export function ReferenceSearchDropdown({
                 <div className="text-center py-8 text-muted-foreground">
                   <Search className="h-8 w-8 mx-auto mb-2 opacity-50" />
                   <div className="text-sm font-medium">No matches found</div>
-                  <div className="text-xs">No results for "{query}"</div>
+                  <div className="text-xs">No results for &quot;{query}&quot;</div>
                 </div>
               ) : (
                 <div className="text-center py-8 text-muted-foreground">

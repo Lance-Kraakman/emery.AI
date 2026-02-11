@@ -90,7 +90,7 @@ interface DynamicDataSheetGridProps {
   onRefresh: () => void;
   onUpdateRow: (rowId: string, fieldId: number, value: DomainFieldValue) => Promise<any>;
   onAddRows: (rows: Record<string, any>[]) => Promise<void>;
-  onDeleteRow: (rowId: string) => void;
+  onDeleteRows: (rowIds: string[]) => void;
   onScroll?: (e: React.UIEvent<HTMLDivElement>) => void;  // For infinite scroll
   isLoading?: boolean;
   error?: string | null;
@@ -450,7 +450,7 @@ export function DynamicDataSheetGrid({
   onRefresh,
   onUpdateRow,
   onAddRows,
-  onDeleteRow,
+  onDeleteRows,
   onScroll,
   isLoading = false,
   error = null,
@@ -659,10 +659,14 @@ export function DynamicDataSheetGrid({
           // Rows deleted - indices refer to OLD data
           const deletedRows = oldData.slice(operation.fromRowIndex, operation.toRowIndex)
 
+          // Dispatch local state updates for each row
           deletedRows.forEach(row => {
             dispatch({ type: 'ROW_DELETED', payload: row.id })
-            onDeleteRow(row.id)
           })
+
+          // Single batch call for all deleted rows
+          const deletedIds = deletedRows.map(row => row.id)
+          onDeleteRows(deletedIds)
           break
         }
 
@@ -716,14 +720,14 @@ export function DynamicDataSheetGrid({
       }
     })
 
-  }, [state.data, fields, onAddRows, onUpdateRow, onDeleteRow, dispatch])
+  }, [state.data, fields, onAddRows, onUpdateRow, onDeleteRows, dispatch])
 
   const handleDeleteRow = useCallback((rowId: string) => {
     if (!state.isSyncing) {
       dispatch({ type: 'START_SYNC' })
-      onDeleteRow(rowId)
+      onDeleteRows([rowId])
     }
-  }, [onDeleteRow, state.isSyncing])
+  }, [onDeleteRows, state.isSyncing, dispatch])
 
   // Show error state (but keep table visible during loading/search)
   if (error) {
@@ -761,7 +765,7 @@ export function DynamicDataSheetGrid({
     onRefresh,
     onUpdateRow,
     onAddRows,
-    onDeleteRow,
+    onDeleteRow: handleDeleteRow,  // Single row delete wraps to batch
     onScroll,
     returnTo,
     onBack

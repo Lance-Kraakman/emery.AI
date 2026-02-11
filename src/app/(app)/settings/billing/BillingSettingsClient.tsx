@@ -28,6 +28,7 @@ import {
 import { TrendingUp, Sparkles, X, Mail, ArrowUpRight, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'sonner';
 import { createCheckoutSession, createPaymentMethodPortalSession, setSpendingLimit } from '@/app/actions/billing';
+import type { StorageUsageBreakdown } from '@/ddd/application/services/billing/storage-quota-application-service';
 import type { TierName } from '@/ddd/infrastructure/external/stripe/config';
 import type { StorageUsage } from '@/components/billing/StorageUsageCard';
 import type { CreditUsage } from '@/components/billing/CreditUsageCard';
@@ -37,7 +38,7 @@ import type { BreakdownItem } from '@/components/billing/CreditBreakdownTabs';
 
 export interface BillingSettingsClientProps {
   billingStatus: any; // From getBillingStatus action
-  storageUsage: StorageUsage | null;
+  storageUsage: StorageUsageBreakdown | StorageUsage | null;
   invoices: Invoice[];
   organizationId: number;
   modelBreakdown: BreakdownItem[];

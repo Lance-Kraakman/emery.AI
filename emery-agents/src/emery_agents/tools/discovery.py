@@ -1,14 +1,19 @@
 """
 Discovery tools for the executor.
 
-These tools enable the executor to discover what resources exist,
-what capabilities are available, and what integrations are accessible.
+These tools enable the executor to discover what resources exist
+and what external integrations are accessible.
 
-Wraps existing infrastructure as dspy.Tool instances:
-- SystemResearchTool → system_research
-- WorkspaceAPI → workspace_overview
-- CapabilityRegistry → search_capabilities
-- External integrations → search_external
+INTERNAL SEARCH REMOVED:
+- search_capabilities → replaced by CapabilityRetriever (KNN)
+- search_planning_patterns → replaced by PatternRetriever (KNN)
+- search_knowledge → replaced by KnowledgeRetriever (KNN)
+
+EXTERNAL DATA TOOLS (kept):
+- system_research → API call for workspace details
+- workspace_overview → API call for workspace summary
+- search_external → Pipedream tool details
+- web_search → DuckDuckGo research
 """
 
 from __future__ import annotations
@@ -17,13 +22,12 @@ import json
 import logging
 
 import dspy
-
 from ddgs import DDGS
 
-from .analysis.research import SystemResearchTool
 from emery_agents.api import WorkspaceAPI
+
+from .analysis.research import SystemResearchTool
 from .integrations.pipedream import get_pipedream_tool_info, list_pipedream_tools_by_app
-from .capability_registry import CapabilityRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -110,8 +114,7 @@ def create_workspace_overview_tool(api_key: str, org_id: str) -> dspy.Tool:
                                 "name": t.name,
                                 "field_count": t.field_count,
                                 "fields": [
-                                    {"name": f.name, "type": f.type}
-                                    for f in t.fields
+                                    {"name": f.name, "type": f.type} for f in t.fields
                                 ],
                             }
                             for t in d.tables
@@ -144,46 +147,6 @@ def create_workspace_overview_tool(api_key: str, org_id: str) -> dspy.Tool:
             "For capabilities (what the platform can do), use search_capabilities instead."
         ),
         arg_desc={},
-    )
-
-
-def create_capability_search_tool(registry: "CapabilityRegistry") -> dspy.Tool:
-    """Create search_capabilities tool wrapping CapabilityRegistry.search()."""
-
-    def search_capabilities(query: str, limit: int = 5) -> str:
-        """Semantic search for platform capabilities."""
-        results = registry.search(query=query, limit=limit)
-        return json.dumps(
-            [
-                {
-                    "id": c.id,
-                    "name": c.name,
-                    "type": c.type.value,
-                    "description": c.description,
-                    "actions": c.actions,
-                    "entities": c.entities,
-                }
-                for c in results
-            ],
-            default=str,
-        )
-
-    return dspy.Tool(
-        func=search_capabilities,
-        name="search_capabilities",
-        desc=(
-            "Search for capabilities — platform features (schema_builder, app_builder, etc.), "
-            "external integrations (Gmail, Slack, GitHub, etc.), and user-created skills.\n"
-            "WHAT IT RETURNS: Ranked list of capabilities with id, name, type (agent/tool/skill), "
-            "description, actions, and entities. The id maps to target_agent in plan steps.\n"
-            "For integration details, call search_external(service='<name>') to get specific "
-            "tool names and input schemas."
-        ),
-        arg_desc={
-            "query": "Natural language description of what you need to do "
-                     "(e.g., 'create database tables', 'send email', 'build a dashboard app')",
-            "limit": "Max results to return (default: 5)",
-        },
     )
 
 
@@ -272,30 +235,32 @@ def create_web_search_tool() -> dspy.Tool:
 def create_discovery_tools(
     api_key: str,
     org_id: str,
-    capability_registry: "CapabilityRegistry | None" = None,
 ) -> list[dspy.Tool]:
     """
-    Create all discovery tools with auth captured.
+    Create external discovery tools with auth captured.
+
+    Internal search tools (search_capabilities, search_planning_patterns, search_knowledge)
+    have been removed - replaced by KNN retrievers called from the planning node.
+
+    These tools are for EXTERNAL data only:
+    - system_research: API call for detailed workspace/resource info
+    - workspace_overview: API call for complete workspace summary
+    - search_external: Pipedream tool details for integrations
+    - web_search: DuckDuckGo for external research
 
     Args:
         api_key: Bearer token for authentication
         org_id: Organization ID for RLS context
-        capability_registry: Optional registry for capability search
 
     Returns:
-        List of dspy.Tool instances for discovery operations
+        List of dspy.Tool instances for external discovery operations
     """
     tools: list[dspy.Tool] = [
         create_system_research_dspy_tool(api_key, org_id),
         create_workspace_overview_tool(api_key, org_id),
         create_external_search_tool(),
+        create_web_search_tool(),
     ]
 
-    if capability_registry:
-        tools.append(create_capability_search_tool(capability_registry))
-
-    # Add web search (DuckDuckGo — read-only research tool)
-    tools.append(create_web_search_tool())
-
-    logger.info(f"Created {len(tools)} discovery tools")
+    logger.info(f"Created {len(tools)} discovery tools (external only)")
     return tools

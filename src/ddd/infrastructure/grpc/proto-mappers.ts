@@ -24,7 +24,7 @@ import {
   ContextMappingProto,
   ResolvedContextProto,
 } from './generated/agent_worker';
-import { Task, TaskStatus } from '@/ddd/domain/tasks/entities/task';
+import { TaskStatus } from '@/ddd/domain/tasks/entities/task';
 
 // AgentData interface for gRPC transport (uses primitives, not domain value objects)
 // AIDEV-NOTE: Skills are now in separate table, not embedded in Agent
@@ -71,6 +71,7 @@ export function mapAgentToProto(agent: Agent): AgentConfigProto {
     description: agent.description || '',
     persona: agent.persona || '',
     defaultModel: agent.defaultModel || '', // Agent-specific model override for task execution
+    allowNetwork: agent.allowNetwork, // Network access for bash commands (git, curl, wget)
     tools: [], // Tools are now defined per-task (in skills and schedule configurations)
     servers: [], // Servers removed from agent-level configuration
     // skills removed - now loaded dynamically via API
@@ -294,20 +295,22 @@ export function mapProtoStatusToTaskStatus(protoStatus: number | string): TaskSt
       'TASK_COMPLETED': 'completed',
       'TASK_FAILED': 'failed',
       'TASK_CANCELLED': 'cancelled',
-      'TASK_TIMEOUT': 'failed' // Map timeout to failed since we don't have timeout status
+      'TASK_TIMEOUT': 'failed', // Map timeout to failed since we don't have timeout status
+      'TASK_AWAITING_HUMAN': 'awaiting_human'
     };
     const statusString = stringStatusMap[protoStatus] || 'failed';
     return TaskStatus.fromString(statusString);
   }
-  
-  // Proto enum values: TASK_PENDING=0, TASK_IN_PROGRESS=1, TASK_COMPLETED=2, TASK_FAILED=3, TASK_CANCELLED=4, TASK_TIMEOUT=5
+
+  // Proto enum values: TASK_PENDING=0, TASK_IN_PROGRESS=1, TASK_COMPLETED=2, TASK_FAILED=3, TASK_CANCELLED=4, TASK_TIMEOUT=5, TASK_AWAITING_HUMAN=6
   const statusMap: Record<number, string> = {
     0: 'pending',
-    1: 'in_progress', 
+    1: 'in_progress',
     2: 'completed',
     3: 'failed',
     4: 'cancelled',
-    5: 'failed' // Map timeout to failed since we don't have timeout status
+    5: 'failed', // Map timeout to failed since we don't have timeout status
+    6: 'awaiting_human'
   };
   
   const statusString = statusMap[protoStatus] || 'failed';

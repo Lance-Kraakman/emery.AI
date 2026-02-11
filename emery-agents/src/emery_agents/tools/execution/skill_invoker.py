@@ -7,7 +7,8 @@ Ported from tools/skill_invoker_tool.py as DSPy-compatible function.
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from emery_agents.entities.workspace import WorkspaceSkill
 from emery_agents.services.skills.validator import SkillPermissionValidator
@@ -94,7 +95,11 @@ def create_skill_invoker_tool(
                 inp_name = inp_def["name"]
                 inp_type = inp_def.get("type", "text")
                 questions.append(
-                    {"name": inp_name, "type": inp_type, "question": f"What is the {inp_name}?"}
+                    {
+                        "name": inp_name,
+                        "type": inp_type,
+                        "question": f"What is the {inp_name}?",
+                    }
                 )
 
             return {
@@ -108,7 +113,10 @@ def create_skill_invoker_tool(
         # If missing inputs and gather_missing=False, return error
         if missing_inputs:
             missing_names = [inp["name"] for inp in missing_inputs]
-            return {"success": False, "error": f"Missing required inputs: {', '.join(missing_names)}"}
+            return {
+                "success": False,
+                "error": f"Missing required inputs: {', '.join(missing_names)}",
+            }
 
         # Execute the skill
         logger.info(
@@ -122,7 +130,11 @@ def create_skill_invoker_tool(
                 _validator.validate_execution(_skill_id, _skill_name)
             except PermissionError as e:
                 logger.warning(f"[SECURITY] Skill execution blocked: {e}")
-                return {"success": False, "error": str(e), "blocked_by": "skill_permission_validator"}
+                return {
+                    "success": False,
+                    "error": str(e),
+                    "blocked_by": "skill_permission_validator",
+                }
 
         if _executor is None:
             return {"success": False, "error": "Skill executor not configured"}

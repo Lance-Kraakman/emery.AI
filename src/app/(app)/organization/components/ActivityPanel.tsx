@@ -1,23 +1,16 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Activity,
   Clock,
   CheckCircle,
   XCircle,
   Filter,
-  Calendar,
-  User,
-  Bot,
   ChevronLeft
 } from 'lucide-react';
 import { TaskDTO as Task } from '@/app/mappers/task-mapper';
-import { format, formatDistanceToNow } from 'date-fns';
 import { TaskCard } from '@/components/tasks/TaskCard';
 
 interface ActivityPanelProps {

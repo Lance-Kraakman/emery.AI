@@ -24,7 +24,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { cn } from '@/lib/utils';
-import { StickyNote, Search, Maximize, LayoutGrid, FileDown, FileUp, Layers, ShieldCheck } from 'lucide-react';
+import { StickyNote, Search, LayoutGrid, FileDown, FileUp, Layers, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import {
@@ -42,7 +42,7 @@ import { useOrgChart, useOrgChartExport } from '@/components/org-chart/hooks';
 import {
   getNextGridSlotPosition,
   normalizeEdgeConnection,
-  arrangeOrgChartTopDown,
+  arrangeOrgChartLTR,
 } from '@/components/org-chart/utils';
 import { DeleteConfirmationDialog, buildDeleteImpactItems, AgentAssignmentDialog, ExportTemplateDialog, type AssignmentConfig } from '@/components/org-chart/dialogs';
 import { ImportTemplateDialog } from '@/components/templates/ImportTemplateDialog';
@@ -59,7 +59,8 @@ import { SearchDialog } from './SearchDialog';
 import { StickyNoteProvider } from '@/components/shared/StickyNoteContext';
 import { OrgChartDragProvider } from '@/components/org-chart/context';
 import { attachContextTable } from '@/app/actions/context-mappings';
-import { transferSkillToAgent, duplicateSkill } from '@/app/actions/skills';
+import { transferSkillToAgent, duplicateSkill, unassignSkillFromAgent } from '@/app/actions/skills';
+import { assignDatabaseToAgent } from '@/app/actions/databases';
 import { toast } from 'sonner';
 import type { OrgChartCanvasMetadata, OrgChartNodeType, AgentContainerNodeData, OrgChartEdge, OrgChartEdgeData } from '@/components/org-chart/types';
 
@@ -146,7 +147,7 @@ export function OrgChartCanvas({
   const [visibleEdgeLayers, setVisibleEdgeLayers] = useState<Set<string>>(
     () => new Set(ALL_EDGE_LAYERS)
   );
-  const [selectedOnlyEdges, setSelectedOnlyEdges] = useState(false);
+  const [selectedOnlyEdges, setSelectedOnlyEdges] = useState(true);
 
   // Assignment dialog state for database/skill drops
   const [assignmentDialog, setAssignmentDialog] = useState<{
@@ -835,9 +836,9 @@ export function OrgChartCanvas({
     [setSelectedNodeId, onSelect]
   );
 
-  // Auto-arrange: top-down tiered org chart layout
+  // Auto-arrange: left-to-right org chart layout (skills → agents → databases)
   const handleAutoArrange = useCallback(() => {
-    setNodes((currentNodes) => arrangeOrgChartTopDown(currentNodes, allEdges));
+    setNodes((currentNodes) => arrangeOrgChartLTR(currentNodes, allEdges));
   }, [allEdges, setNodes]);
 
   // Handle node double-click (open editor)
@@ -866,8 +867,40 @@ export function OrgChartCanvas({
     addStickyNote(center);
   }, [addStickyNote]);
 
+  // Handle skill eject - move to org level
+  const handleEjectSkill = useCallback(async (skillId: number) => {
+    try {
+      const result = await unassignSkillFromAgent(skillId);
+      if (result.success) {
+        toast.success('Skill moved to org level');
+        router.refresh(); // Refresh to get updated data
+      } else {
+        toast.error(result.error || 'Failed to move skill');
+      }
+    } catch (error) {
+      console.error('Error ejecting skill:', error);
+      toast.error('Failed to move skill');
+    }
+  }, [router]);
+
+  // Handle database eject - move to org level
+  const handleEjectDatabase = useCallback(async (databaseId: number) => {
+    try {
+      const result = await assignDatabaseToAgent(databaseId, null);
+      if (result.success) {
+        toast.success('Database moved to org level');
+        router.refresh(); // Refresh to get updated data
+      } else {
+        toast.error(result.error || 'Failed to move database');
+      }
+    } catch (error) {
+      console.error('Error ejecting database:', error);
+      toast.error('Failed to move database');
+    }
+  }, [router]);
+
   return (
-    <OrgChartDragProvider>
+    <OrgChartDragProvider onEjectSkill={handleEjectSkill} onEjectDatabase={handleEjectDatabase}>
     <div
       ref={reactFlowWrapper}
       className="h-full w-full"

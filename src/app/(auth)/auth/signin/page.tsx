@@ -1,6 +1,5 @@
 import React from "react"
 import { auth } from "@/lib/auth"
-import { redirect } from "next/navigation"
 import Link from "next/link"
 import { SignInButton } from "@/components/auth/SignInButton"
 import { EmailSignInForm } from "@/components/auth/EmailSignInForm"
@@ -46,7 +45,7 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
             <span className="bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">Enhanced.AI</span>
           </h1>
           <p className="mt-2 text-muted-foreground">
-            Enabling Agentic Organization's
+            Enabling Agentic Organization&apos;s
           </p>
         </div>
 

@@ -6,27 +6,30 @@ The graph always routes to the replan node after execution (success or failure).
 """
 
 import logging
-from typing import Any, Dict, List
+from typing import Any
 
 from ...ace import StepResult
-from ...entities.models.plan import Plan, PlanStep, PlanStepStatus
 from ...reasoning.utils import StepOutcome
-from ...services.plan_service import PlanService
-from ...services.execution.plan_step_executor import PlanStepExecutor
-from ...services.execution.step_executor import StepExecutor
 from ...services.execution.events import (
-    StepStartedEvent,
+    AwaitingHumanSkillEvent,
     StepCompletedEvent,
     StepFailedEvent,
+    StepStartedEvent,
 )
+from ...services.execution.plan_step_executor import PlanStepExecutor
+from ...services.execution.step_executor import StepExecutor
 from ...services.memory import create_memory_crud
-from ..state import PlanExecuteState
+from ...services.plan_service import PlanService
+from ...tools.execution.skill import HumanSkillAwaitingException
 from ..runtime import RuntimeContext
+from ..state import PlanExecuteState
 
 logger = logging.getLogger(__name__)
 
 
-async def execute_step_node(state: PlanExecuteState, runtime: RuntimeContext) -> Dict[str, Any]:
+async def execute_step_node(
+    state: PlanExecuteState, runtime: RuntimeContext
+) -> dict[str, Any]:
     """
     Execute the current plan step.
 
@@ -38,15 +41,69 @@ async def execute_step_node(state: PlanExecuteState, runtime: RuntimeContext) ->
     ledger = state.get("ledger")
     runtime_skill_inputs = state.get("runtime_skill_inputs")
 
-    logger.info(f"📝 execute_step_node - runtime_skill_inputs from state: {runtime_skill_inputs}")
+    logger.info(
+        f"📝 execute_step_node - runtime_skill_inputs from state: {runtime_skill_inputs}"
+    )
 
     # Read non-serializable objects from runtime
     tools = runtime.tools
     managed_agents = runtime.managed_agents
 
-    events: List[Any] = []
+    events: list[Any] = []
 
     assert plan is not None, "Cannot execute without a plan"
+
+    # Check if we're resuming after a human skill completion
+    human_skill_completed = state.get("human_skill_completed")
+    if human_skill_completed:
+        completed_step_id = human_skill_completed.get("step_id")
+        skill_name = human_skill_completed.get("skill_name", "unknown")
+        human_outputs = human_skill_completed.get("outputs", {})
+
+        logger.info(
+            f"Human skill '{skill_name}' completed for step {completed_step_id} - "
+            f"marking step as done"
+        )
+
+        # Format outputs for result
+        outputs_str = ", ".join(
+            f"{k}: {str(v)[:100]}" for k, v in human_outputs.items()
+        )
+        result_summary = f"Human skill '{skill_name}' completed with: {outputs_str}"
+
+        # Update step outcome
+        step_outcomes[completed_step_id] = {
+            "summary": result_summary,
+            "success": True,
+            "tool_calls": [],
+            "human_skill_outputs": human_outputs,
+        }
+
+        # Mark step as completed
+        plan_service = PlanService()
+        plan = await plan_service.update_step_status(
+            plan, completed_step_id, "completed", result=result_summary
+        )
+
+        if ledger:
+            ledger.complete_step(completed_step_id, result_summary)
+
+        events.append(
+            StepCompletedEvent(
+                plan_id=plan.id,
+                step_id=completed_step_id,
+                result=result_summary,
+            )
+        )
+
+        # Clear the flag and return to replan
+        return {
+            "plan": plan,
+            "step_outcomes": step_outcomes,
+            "ledger": ledger,
+            "human_skill_completed": None,
+            "events": events,
+        }
 
     # Get pending steps
     pending_steps = plan.get_pending_steps()
@@ -62,11 +119,13 @@ async def execute_step_node(state: PlanExecuteState, runtime: RuntimeContext) ->
     if ledger:
         ledger.start_step(step.step_id)
 
-    events.append(StepStartedEvent(
-        plan_id=plan.id,
-        step_id=step.step_id,
-        step_description=step.description,
-    ))
+    events.append(
+        StepStartedEvent(
+            plan_id=plan.id,
+            step_id=step.step_id,
+            step_description=step.description,
+        )
+    )
 
     # Mark step as in progress
     plan_service = PlanService()
@@ -74,8 +133,8 @@ async def execute_step_node(state: PlanExecuteState, runtime: RuntimeContext) ->
 
     # Build extra tools (e.g., memory CRUD)
     extra_tools = []
-    if runtime.memory_service:
-        extra_tools.append(create_memory_crud(runtime.memory_service))
+    if runtime.engine:
+        extra_tools.append(create_memory_crud(runtime.engine.memory))
 
     # Create fresh PlanStepExecutor per step from RuntimeContext
     plan_step_executor = PlanStepExecutor(
@@ -87,7 +146,9 @@ async def execute_step_node(state: PlanExecuteState, runtime: RuntimeContext) ->
         capability_registry=runtime.capability_registry,
         extra_tools=extra_tools or None,
         extra_headers=runtime.extra_headers,  # Audit trail headers for CRUD tool calls
-        llm_tracker=runtime.token_accumulator.get_llm_tracker() if runtime.token_accumulator else None,
+        llm_tracker=runtime.token_accumulator.get_llm_tracker()
+        if runtime.token_accumulator
+        else None,
     )
 
     # Hydrate with previous step results so context flows between steps
@@ -121,13 +182,17 @@ async def execute_step_node(state: PlanExecuteState, runtime: RuntimeContext) ->
             if ledger:
                 ledger.complete_step(step.step_id, outcome.summary)
 
-            events.append(StepCompletedEvent(
-                plan_id=plan.id,
-                step_id=step.step_id,
-                result=outcome.summary,
-            ))
+            events.append(
+                StepCompletedEvent(
+                    plan_id=plan.id,
+                    step_id=step.step_id,
+                    result=outcome.summary,
+                )
+            )
 
-            logger.info(f"Step {step.step_id} completed (tool_calls={len(outcome.tool_calls)})")
+            logger.info(
+                f"Step {step.step_id} completed (tool_calls={len(outcome.tool_calls)})"
+            )
 
             return {
                 "plan": plan,
@@ -145,11 +210,13 @@ async def execute_step_node(state: PlanExecuteState, runtime: RuntimeContext) ->
             if ledger:
                 ledger.fail_step(step.step_id, error_msg)
 
-            events.append(StepFailedEvent(
-                plan_id=plan.id,
-                step_id=step.step_id,
-                error=error_msg,
-            ))
+            events.append(
+                StepFailedEvent(
+                    plan_id=plan.id,
+                    step_id=step.step_id,
+                    error=error_msg,
+                )
+            )
 
             logger.warning(f"Step {step.step_id} failed: tool calls unsuccessful")
 
@@ -160,6 +227,45 @@ async def execute_step_node(state: PlanExecuteState, runtime: RuntimeContext) ->
                 "error": error_msg,
                 "events": events,
             }
+
+    except HumanSkillAwaitingException as e:
+        # Human skill requires human input - set up interrupt
+        logger.info(
+            f"Human skill {e.skill_name} requires input - setting up interrupt"
+        )
+
+        # Emit the awaiting human skill event
+        events.append(
+            AwaitingHumanSkillEvent(
+                skill_id=e.skill_id,
+                skill_name=e.skill_name,
+                step_id=step.step_id,  # Associate with current plan step
+                instructions=e.instructions,
+                inputs=e.inputs,
+                output_schema=e.output_schema,
+                assigned_to=e.assigned_to,
+                external_links=e.external_links,
+                session_id=e.session_id,
+            )
+        )
+
+        # Set state for human skill interrupt
+        return {
+            "plan": plan,
+            "step_outcomes": step_outcomes,
+            "ledger": ledger,
+            "awaiting_input": "human_skill",
+            "human_skill_info": {
+                "skill_id": e.skill_id,
+                "skill_name": e.skill_name,
+                "step_id": step.step_id,
+                "instructions": e.instructions,
+                "inputs": e.inputs,
+                "output_schema": e.output_schema,
+                "assigned_to": e.assigned_to,
+            },
+            "events": events,
+        }
 
     except Exception as e:
         error_msg = str(e)
@@ -174,11 +280,13 @@ async def execute_step_node(state: PlanExecuteState, runtime: RuntimeContext) ->
         if ledger:
             ledger.fail_step(step.step_id, error_msg)
 
-        events.append(StepFailedEvent(
-            plan_id=plan.id,
-            step_id=step.step_id,
-            error=error_msg,
-        ))
+        events.append(
+            StepFailedEvent(
+                plan_id=plan.id,
+                step_id=step.step_id,
+                error=error_msg,
+            )
+        )
 
         return {
             "plan": plan,

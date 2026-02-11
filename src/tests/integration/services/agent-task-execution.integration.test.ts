@@ -16,11 +16,10 @@
 import { describe, test, expect, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import { getAgentTaskApplicationService, getAgentApplicationService } from '@/ddd/application/di/container';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
-import { AgentId } from '@/ddd/domain/shared/value-objects';
 
 // Set default timeout to 3 minutes for agent execution tests (accounts for AI model delays)
 const TEST_TIMEOUT = 180000;
-import type { CreateTaskDTO, TaskExecutionResultDTO } from '@/app/dtos/task.dto';
+import type { CreateTaskDTO } from '@/app/dtos/task.dto';
 import type { CreateAgentDTO } from '@/app/dtos/agent.dto';
 import { testClient } from '../shared/integration-helpers';
 import type { TestCase } from '../../shared/types';

@@ -6,7 +6,6 @@ import type { FieldBadgeItem } from './FieldBadgeList';
 import type { RelationArrayFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
 import { Popover, PopoverContent, PopoverAnchor } from '@/components/ui/popover';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Search, Loader2 } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';

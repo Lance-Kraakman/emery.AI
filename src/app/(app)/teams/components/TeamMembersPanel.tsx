@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import type { TeamDTO } from '@/app/mappers/team-mapper';
-import { getTeamMembers, addTeamMember, removeTeamMember } from '@/app/actions/teams';
+import { getTeamMembers, removeTeamMember } from '@/app/actions/teams';
 
 interface TeamMembersPanelProps {
   team: TeamDTO;

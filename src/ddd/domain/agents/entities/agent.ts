@@ -104,6 +104,7 @@ export interface Agent {
   previousApiKeyExpiresAt?: Date | null;
   webhookToken?: string | null;               // For webhook authentication (Pipedream, etc.)
   defaultModel?: string | null;               // AI model override for this agent
+  allowNetwork: boolean;                      // Whether bash commands have network access (git, curl, etc.)
   avatarConfig?: AvatarConfig | null;         // Avatar configuration with icon + color (versioned JSON)
   // Plan file - generated detailed execution plan for orchestration
   plan?: AgentPlan | null;
@@ -131,6 +132,7 @@ export interface AgentPersistenceRecord {
   previousApiKeyExpiresAt?: Date | null;
   webhookToken?: string | null;
   defaultModel?: string | null;
+  allowNetwork: boolean;
   avatarConfig?: AvatarConfig | null;
   plan?: AgentPlan | null;
   planGeneratedAt?: Date | null;
@@ -169,6 +171,7 @@ export class AgentFactory {
       previousApiKeyExpiresAt: record.previousApiKeyExpiresAt || null,
       webhookToken: record.webhookToken || null,
       defaultModel: record.defaultModel || null,
+      allowNetwork: record.allowNetwork ?? true, // Default true for new agents
       avatarConfig: record.avatarConfig || null,
       plan: record.plan || null,
       planGeneratedAt: record.planGeneratedAt || null,
@@ -206,6 +209,7 @@ export class AgentFactory {
       previousApiKeyExpiresAt: agent.previousApiKeyExpiresAt || null,
       webhookToken: agent.webhookToken || null,
       defaultModel: agent.defaultModel || null,
+      allowNetwork: agent.allowNetwork,
       avatarConfig: agent.avatarConfig || null,
       plan: agent.plan || null,
       planGeneratedAt: agent.planGeneratedAt || null,
@@ -227,6 +231,7 @@ export interface CreateAgentData {
   organizationId?: OrganizationId;            // Set by application layer from session
   ownerId?: UserId;                           // Set by application layer from session - used for OAuth resolution
   avatarConfig?: AvatarConfig | null;         // Avatar configuration with icon + color (versioned JSON)
+  allowNetwork?: boolean;                     // defaults to true - enables git, curl, wget in sandbox
 }
 
 export interface UpdateAgentData {
@@ -244,6 +249,7 @@ export interface UpdateAgentData {
   previousApiKeyExpiresAt?: Date | null;
   avatarConfig?: AvatarConfig | null;  // Avatar configuration with icon + color (versioned JSON)
   defaultModel?: string | null;  // AI model override for this agent
+  allowNetwork?: boolean;  // Network access for bash commands (git, curl, wget)
   // Note: organizationId typically not changed after creation
 }
 
@@ -281,6 +287,7 @@ export const createAgentDefaults = (data: CreateAgentData): Omit<CreateAgentData
   persona: string;
   automations: AutomationConfiguration[];
   status: AgentStatus;
+  allowNetwork: boolean;
   organizationId?: OrganizationId;
   ownerId?: UserId;
 } => {
@@ -295,6 +302,7 @@ export const createAgentDefaults = (data: CreateAgentData): Omit<CreateAgentData
     persona,
     automations: data.automations || [],
     status: data.status || AgentStatus.active(),
+    allowNetwork: data.allowNetwork ?? true, // Default true - enables git, curl, wget
     organizationId: data.organizationId, // Should be provided by application layer
     ownerId: data.ownerId, // Should be provided by application layer - used for OAuth resolution
     databaseId: data.databaseId,

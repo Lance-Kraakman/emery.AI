@@ -13,7 +13,6 @@ from the agent's configuration, and blocks any skill not in that list.
 """
 
 import logging
-from typing import Set, Optional
 from dataclasses import dataclass, field
 
 from ...entities.workspace import WorkspaceSkill
@@ -30,8 +29,9 @@ class SkillPermissions:
         allowed_skill_ids: Set of skill IDs this agent is allowed to execute
         agent_id: The agent ID for logging/audit purposes
     """
-    allowed_skill_ids: Set[int] = field(default_factory=set)
-    agent_id: Optional[int] = None
+
+    allowed_skill_ids: set[int] = field(default_factory=set)
+    agent_id: int | None = None
 
 
 class SkillPermissionValidator:
@@ -64,12 +64,12 @@ class SkillPermissionValidator:
         )
 
     @property
-    def allowed_skill_ids(self) -> Set[int]:
+    def allowed_skill_ids(self) -> set[int]:
         """Get the set of allowed skill IDs."""
         return self._permissions.allowed_skill_ids
 
     @property
-    def agent_id(self) -> Optional[int]:
+    def agent_id(self) -> int | None:
         """Get the agent ID."""
         return self._permissions.agent_id
 
@@ -115,8 +115,7 @@ class SkillPermissionValidator:
 
 
 def create_validator_from_skills(
-    skills: list[WorkspaceSkill],
-    agent_id: Optional[int] = None
+    skills: list[WorkspaceSkill], agent_id: int | None = None
 ) -> SkillPermissionValidator:
     """
     Create a validator from a list of WorkspaceSkill.
@@ -128,7 +127,7 @@ def create_validator_from_skills(
     Returns:
         SkillPermissionValidator configured with skill IDs
     """
-    skill_ids: Set[int] = set()
+    skill_ids: set[int] = set()
     for skill in skills:
         try:
             skill_ids.add(int(skill.id))

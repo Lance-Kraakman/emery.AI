@@ -11,7 +11,6 @@ import { useFieldValue, useIsInDataContext } from '@/components/puck/hooks/useFi
 import { useRowData } from '@/components/puck/contexts/RowDataContext';
 import { useActionContext } from '@/components/puck/contexts/ActionContext';
 import { executeActions } from '@/components/puck/actions/execute-action';
-import type { Action } from '@/components/puck/types/actions';
 import { cn } from '@/lib/utils';
 import { FileText, Download, ExternalLink, Edit3 } from 'lucide-react';
 import styles from './styles.module.css';

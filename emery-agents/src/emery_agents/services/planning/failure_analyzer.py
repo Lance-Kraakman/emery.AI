@@ -6,16 +6,19 @@ ChainOfThought with AnalyzeRecovery signature.
 """
 
 import logging
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from emery_agents.services.analysis.llm_usage import LlmUsageTracker
 
 import dspy
 
-from ..protocols import ModelProviderProtocol
 from emery_agents.entities.models.plan import PlanStep, RecoveryResult
 from emery_agents.entities.models.task_ledger import TaskLedger
 from emery_agents.reasoning.signatures.evaluation import AnalyzeRecovery, RecoveryAction
-
 from emery_agents.tools.capability_registry import CapabilityRegistry
+
+from ..protocols import ModelProviderProtocol
 from .models import FailureAnalysisRequest
 
 logger = logging.getLogger(__name__)
@@ -53,7 +56,7 @@ class FailureAnalyzer:
 
     def __init__(
         self,
-        lm: Optional[dspy.LM] = None,
+        lm: dspy.LM | None = None,
         model_provider: Optional["ModelProviderProtocol"] = None,
     ):
         """
@@ -72,12 +75,13 @@ class FailureAnalyzer:
         failed_step: PlanStep,
         error_message: str,
         plan_goal: str,
-        plan_context: Optional[str],
+        plan_context: str | None,
         ledger: TaskLedger,
-        org_model: Optional[str] = None,
-        api_key: Optional[str] = None,
-        organization_id: Optional[int] = None,
-        capability_registry: Optional[CapabilityRegistry] = None,
+        org_model: str | None = None,
+        api_key: str | None = None,
+        organization_id: int | None = None,
+        capability_registry: CapabilityRegistry | None = None,
+        tracker: Optional["LlmUsageTracker"] = None,
     ) -> RecoveryResult:
         """
         Analyze a failed step and determine how to fix it.
@@ -103,7 +107,7 @@ class FailureAnalyzer:
         context = f"""
 Plan Goal: {plan_goal}
 
-Plan Context: {plan_context or 'None'}
+Plan Context: {plan_context or "None"}
 
 Execution State:
 {ledger.to_json_summary()}
@@ -125,7 +129,8 @@ Execution State:
                         error_message=error_message,
                         context=context,
                     )
-                record_from_lm(lm)
+                if tracker:
+                    record_from_lm(lm, tracker)
             else:
                 result = self._module(
                     failed_step=failed_step.description,
@@ -162,11 +167,12 @@ Execution State:
         """
         # Create minimal step for analysis
         from emery_agents.entities.models.plan import create_step
+
         failed_step = create_step(
             description=request.step_description,
         )
         # Override step_id if needed
-        object.__setattr__(failed_step, 'step_id', request.step_id)
+        object.__setattr__(failed_step, "step_id", request.step_id)
 
         # Create minimal ledger from summary
         ledger = TaskLedger(task_id=request.step_id, goal=request.plan_goal)

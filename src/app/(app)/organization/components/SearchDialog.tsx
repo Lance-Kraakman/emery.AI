@@ -8,7 +8,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { Search, Bot, Sparkles, Database, X } from 'lucide-react';
+import { Search, Bot, Sparkles, Database } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   Dialog,

@@ -12,9 +12,13 @@ Uses semantic search (Gemini embeddings) for accurate capability matching.
 """
 
 import logging
-from typing import Optional
-from emery_agents.services.analysis import get_embedding, get_embeddings_batch, cosine_similarity
+
 from emery_agents.entities.models.capability import Capability, CapabilityType
+from emery_agents.services.analysis import (
+    cosine_similarity,
+    get_embedding,
+    get_embeddings_batch,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +56,9 @@ class CapabilityRegistry:
     def __init__(self) -> None:
         self._capabilities: dict[str, Capability] = {}
         self._enabled: dict[str, set[str]] = {}  # org_id -> set of capability_ids
-        self._embeddings: dict[str, tuple[float, ...]] = {}  # cap_id -> embedding vector
+        self._embeddings: dict[
+            str, tuple[float, ...]
+        ] = {}  # cap_id -> embedding vector
 
     def register(self, capability: Capability) -> None:
         """Register a capability in the registry."""
@@ -68,7 +74,7 @@ class CapabilityRegistry:
             return True
         return False
 
-    def get(self, capability_id: str) -> Optional[Capability]:
+    def get(self, capability_id: str) -> Capability | None:
         """Get a specific capability by ID."""
         return self._capabilities.get(capability_id)
 
@@ -269,7 +275,8 @@ class CapabilityRegistry:
             Number of embeddings computed
         """
         caps = [
-            c for c in self._capabilities.values()
+            c
+            for c in self._capabilities.values()
             if c.id.startswith(prefix) and c.id not in self._embeddings
         ]
 
@@ -289,8 +296,8 @@ class CapabilityRegistry:
         self,
         query: str,
         *,
-        capability_type: Optional[CapabilityType] = None,
-        domain: Optional[str] = None,
+        capability_type: CapabilityType | None = None,
+        domain: str | None = None,
         limit: int = 10,
     ) -> list[Capability]:
         """
@@ -340,7 +347,8 @@ class CapabilityRegistry:
             Number of capabilities removed
         """
         to_remove = [
-            cap_id for cap_id, cap in self._capabilities.items()
+            cap_id
+            for cap_id, cap in self._capabilities.items()
             if cap.type == capability_type
         ]
         for cap_id in to_remove:
@@ -360,8 +368,7 @@ class CapabilityRegistry:
             Number of capabilities removed
         """
         to_remove = [
-            cap_id for cap_id in self._capabilities
-            if cap_id.startswith(prefix)
+            cap_id for cap_id in self._capabilities if cap_id.startswith(prefix)
         ]
         for cap_id in to_remove:
             del self._capabilities[cap_id]

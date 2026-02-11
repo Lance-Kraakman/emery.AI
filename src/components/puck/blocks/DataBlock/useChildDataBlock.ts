@@ -18,12 +18,12 @@
  * - Returns rows, loading state, and error info
  */
 
-import { useState, useEffect, useMemo, useReducer, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useReducer, useRef } from 'react';
 import { useParentRowData } from '@/components/puck/contexts/RowDataContext';
 import { useStateContext } from '@/components/puck/contexts/StateContext';
 import { executeView } from '@/app/actions/views';
 import type { RowFilterConfig, FilterCondition } from '../../fields/MultiFilterField';
-import type { RowSortConfig, SortCondition } from '../../fields/MultiSortField';
+import type { RowSortConfig } from '../../fields/MultiSortField';
 import type { FieldType } from '@/ddd/domain/tables/value-objects/table-field';
 import type {
   RelationArrayFieldValue,

@@ -256,7 +256,7 @@ export function UnifiedConnectionsGrid({
             </span>
             {searchTerm && (
               <Badge variant="outline" className="text-xs">
-                Search: "{searchTerm}"
+                Search: &quot;{searchTerm}&quot;
               </Badge>
             )}
             {filter !== 'all' && (

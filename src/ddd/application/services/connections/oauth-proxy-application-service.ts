@@ -11,9 +11,8 @@ import { oauthAuditLogger } from '@/lib/audit/oauth-audit-logger';
 
 const logger = createDebugLogger('OAuthProxy');
 import { getExternalUserIdForAgent } from '@/ddd/infrastructure/external/pipedream/client';
-import { ApiKey, UserId, AgentId } from '@/ddd/domain/shared/value-objects';
+import { ApiKey, UserId } from '@/ddd/domain/shared/value-objects';
 import { AppName } from '@/ddd/domain/connections/value-objects';
-import type { Agent } from '@/ddd/domain/agents/entities/agent';
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
 import type { CredentialDelegationApplicationService } from '@/ddd/application/services/delegations/credential-delegation-application-service';
 import { UnauthorizedCredentialUsageError } from '@/ddd/domain/delegations/errors';

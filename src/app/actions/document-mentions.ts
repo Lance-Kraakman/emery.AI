@@ -6,7 +6,7 @@
 import { requirePermission } from "./permissions";
 import { getTableApplicationService, getRowApplicationService } from "@/ddd/application/di/container";
 import { TableId } from "@/ddd/domain/shared/value-objects";
-import { RowMapper, type RowDTO, type DocumentFieldValue } from "@/app/mappers/row-mapper";
+import { RowMapper, type DocumentFieldValue } from "@/app/mappers/row-mapper";
 
 export interface DocumentMention {
   id: string

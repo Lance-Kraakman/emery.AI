@@ -30,6 +30,7 @@ export interface CreateAgentDTO {
   automations?: AutomationConfigurationDTO[]; // Automations (trigger + skill reference)
   status?: 'active' | 'inactive' | 'archived';
   defaultModel?: string | null; // AI model override for this agent
+  allowNetwork?: boolean; // Network access for bash commands (git, curl, wget) - default true
   avatarConfig?: AvatarConfig | null; // Avatar configuration with icon + color (versioned JSON)
 }
 
@@ -47,6 +48,7 @@ export interface UpdateAgentDTO {
   automations?: AutomationConfigurationDTO[]; // Automations (trigger + skill reference)
   status?: 'active' | 'inactive' | 'archived';
   defaultModel?: string | null; // AI model override for this agent
+  allowNetwork?: boolean; // Network access for bash commands (git, curl, wget)
   avatarConfig?: AvatarConfig | null; // Avatar configuration with icon + color (versioned JSON)
 }
 

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Trash2, Bot, Sparkles, GitBranch } from 'lucide-react';
+import { ArrowLeft, Trash2, Bot, Sparkles, GitBranch, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -129,7 +129,7 @@ export function EditSkillView({ agent, skill }: EditSkillViewProps) {
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
-                variant={formData.executionType !== 'agent' ? 'default' : 'ghost'}
+                variant={!formData.executionType || formData.executionType === 'agentic' ? 'default' : 'ghost'}
                 size="sm"
                 onClick={() => setFormData({ ...formData, executionType: 'agentic' })}
                 className={`h-7 gap-1.5 ${isNarrow ? 'px-1.5' : 'px-2.5'}`}
@@ -153,6 +153,20 @@ export function EditSkillView({ agent, skill }: EditSkillViewProps) {
               </Button>
             </TooltipTrigger>
             {isNarrow && <TooltipContent side="bottom">Workflow</TooltipContent>}
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={formData.executionType === 'human' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setFormData({ ...formData, executionType: 'human' })}
+                className={`h-7 gap-1.5 ${isNarrow ? 'px-1.5' : 'px-2.5'}`}
+              >
+                <User className="h-3.5 w-3.5" />
+                {!isNarrow && <span>Human</span>}
+              </Button>
+            </TooltipTrigger>
+            {isNarrow && <TooltipContent side="bottom">Human</TooltipContent>}
           </Tooltip>
         </div>
 

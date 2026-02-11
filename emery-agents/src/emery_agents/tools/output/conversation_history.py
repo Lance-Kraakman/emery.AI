@@ -7,7 +7,8 @@ conversation history list and returns formatted last 10 messages.
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from ...orchestrators.runtime import format_conversation_history
 
@@ -31,6 +32,9 @@ def create_conversation_history_tool(
         Returns "role: content" lines. Use to understand follow-up questions
         or what the user said previously in this session.
         """
-        return format_conversation_history(conversation_history) or "No conversation history."
+        return (
+            format_conversation_history(conversation_history)
+            or "No conversation history."
+        )
 
     return get_conversation_history

@@ -6,7 +6,7 @@
 // Main chat components
 export { EmeryChat } from './EmeryChat'
 export { ChatCanvas } from './ChatCanvas'
-export { useChatGRPC, useChatForPage } from './useChatGRPC'
+export { useChatGRPC } from './useChatGRPC'
 
 // Chat Mention System (+ button and @ mentions)
 export { ChatPlusButton } from './ChatPlusButton'

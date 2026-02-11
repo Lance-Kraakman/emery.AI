@@ -20,6 +20,7 @@ services:
       - integration-test-network
 
   app-integration:
+    profiles: ["app"]  # Only start with --profile app (for local dev, run pnpm dev instead)
     image: emery-integration-app:prod
     build:
       context: ../..
@@ -32,8 +33,8 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:integration_test_password@postgres-integration:5432/emery_integration_test
       NODE_ENV: production
-      GRPC_INSECURE: "true"                                                                                                                                                            
-      ENCRYPTION_PASSTHROUGH: "true" 
+      GRPC_INSECURE: "true"
+      ENCRYPTION_PASSTHROUGH: "true"
       # Override WORKER_ADDRESS for internal container network
       WORKER_ADDRESS: agent-chat-integration:50051
       GRPC_TOOLS_ADDRESS: agent-table-integration:50052    # Table operations (internal network)
@@ -45,6 +46,13 @@ services:
       AWS_SECRET_ACCESS_KEY: minioadmin
       # Redis for caching (ioredis)
       REDIS_URL: redis://redis-integration:6379
+      # Workspace storage (shared with agents)
+      WORKSPACE_STORAGE_PATH: /mnt/storage/workspaces
+      # Internal API secret for SSH key fetching
+      INTERNAL_API_SECRET: local-dev-secret
+    volumes:
+      # Shared workspace storage (same as agent services)
+      - ${WORKSPACE_HOST_PATH:-../../.workspace-data}:/mnt/storage/workspaces
     depends_on:
       postgres-integration:
         condition: service_healthy
@@ -106,6 +114,7 @@ services:
       context: ../../emery-agents
       dockerfile: Dockerfile
     container_name: emery-integration-chat-agent
+    user: "1000:1000"  # Match SFTP server UID for workspace write permissions
     ports:
       - "127.0.0.1:50053:50051"  # Chat processing service
     env_file:
@@ -123,6 +132,10 @@ services:
       S3_BUCKET_NAME: enhancd-files
       NEXTJS_BASE_URL: http://app-integration:3000
       EMERY_DEBUG_PROMPTS: "1"
+      WORKSPACE_STORAGE_PATH: /mnt/storage/workspaces
+    volumes:
+      # Shared workspace storage (same as SSH sync server)
+      - ${WORKSPACE_HOST_PATH:-../../.workspace-data}:/mnt/storage/workspaces
     depends_on:
       postgres-integration:
         condition: service_healthy
@@ -142,6 +155,7 @@ services:
       context: ../../emery-agents
       dockerfile: Dockerfile
     container_name: emery-integration-table-agent
+    user: "1000:1000"  # Match SFTP server UID for workspace write permissions
     ports:
       - "127.0.0.1:50054:50052"  # Table operations service
     env_file:
@@ -159,6 +173,10 @@ services:
       AWS_ALLOW_HTTP: "true"
       AWS_S3_ALLOW_UNSAFE_RENAME: "true"
       REDIS_URL: redis://redis-integration:6379
+      WORKSPACE_STORAGE_PATH: /mnt/storage/workspaces
+    volumes:
+      # Shared workspace storage (same as SSH sync server)
+      - ${WORKSPACE_HOST_PATH:-../../.workspace-data}:/mnt/storage/workspaces
     depends_on:
       postgres-integration:
         condition: service_healthy
@@ -175,7 +193,33 @@ services:
     networks:
       - integration-test-network
 
+  # SSH + rsync server for workspace sync (Tauri desktop client connects here)
+  # Uses AuthorizedKeysCommand to fetch SSH keys from API - see docker/ssh-sync/README.md
+  # Note: For local dev, API_HOST is overridden in docker-compose.integration.dev.yml
+  ssh-sync-integration:
+    build:
+      context: ../../docker/ssh-sync
+      dockerfile: Dockerfile
+    container_name: emery-integration-ssh-sync
+    ports:
+      - "127.0.0.1:2222:2222"
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=UTC
+      - USER_NAME=agent
+      - PASSWORD_ACCESS=false
+      - SUDO_ACCESS=false
+      - DOCKER_MODS=linuxserver/mods:openssh-server-rsync
+      - INTERNAL_API_SECRET=local-dev-secret
+      - API_HOST=app-integration:3000
+    volumes:
+      - ${WORKSPACE_HOST_PATH:-../../.workspace-data}:/workspace
+    networks:
+      - integration-test-network
+
   scheduler-integration:
+    profiles: ["app"]  # Only start with --profile app (for local dev, run pnpm scheduler:start instead)
     image: emery-integration-scheduler:prod
     build:
       context: ../..
@@ -229,6 +273,10 @@ volumes:
   integration_postgres_data:  # Isolated volume for integration tests
   integration_minio_data:     # MinIO data for S3 storage testing
   integration_redis_data:     # Redis data for caching
+  # Workspace storage is configurable via WORKSPACE_HOST_PATH env var:
+  #   - Local dev (Next.js on host): WORKSPACE_HOST_PATH=../../.workspace-data (default)
+  #   - Full Docker: WORKSPACE_HOST_PATH=workspace_data (uses named volume below)
+  workspace_data:             # Named volume for full Docker mode
 
 networks:
   integration-test-network:

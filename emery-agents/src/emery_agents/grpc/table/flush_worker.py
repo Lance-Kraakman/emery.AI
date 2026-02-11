@@ -11,21 +11,21 @@ Flush triggers (whichever comes first):
 """
 
 import logging
-import os
 import threading
 import time
+from collections.abc import Callable
 from datetime import datetime
-from typing import Callable, Dict, List, Any
+from typing import Any
 
-import pyarrow as pa
 import polars as pl
+import pyarrow as pa
 from deltalake import DeltaTable
 
-from .write_buffer import WriteBuffer
-from .operations import write_with_schema_evolution, write_with_merge_operation
-from .delta_cache import invalidate_delta_cache, get_delta_table_cached
-from .schema import get_delta_schema_as_pyarrow, arrow_to_polars_type
+from .delta_cache import get_delta_table_cached, invalidate_delta_cache
+from .operations import write_with_merge_operation, write_with_schema_evolution
+from .schema import arrow_to_polars_type, get_delta_schema_as_pyarrow
 from .transform import convert_dataframe_to_arrow
+from .write_buffer import WriteBuffer
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ class FlushWorker:
     def __init__(
         self,
         write_buffer: WriteBuffer,
-        storage_options_fn: Callable[[], Dict[str, str]],
+        storage_options_fn: Callable[[], dict[str, str]],
         flush_interval: int = 60,
         flush_size_mb: float = 5.0,
         poll_interval: int = 5,
@@ -48,15 +48,19 @@ class FlushWorker:
         self._poll_interval = poll_interval
         self._running = False
         self._thread: threading.Thread | None = None
-        self._last_flush: Dict[str, float] = {}
+        self._last_flush: dict[str, float] = {}
 
     def start(self) -> None:
         if not self._buffer.enabled:
-            logger.info("[FlushWorker] Write buffer disabled (no Redis), skipping start")
+            logger.info(
+                "[FlushWorker] Write buffer disabled (no Redis), skipping start"
+            )
             return
 
         self._running = True
-        self._thread = threading.Thread(target=self._run_loop, daemon=True, name="flush-worker")
+        self._thread = threading.Thread(
+            target=self._run_loop, daemon=True, name="flush-worker"
+        )
         self._thread.start()
         logger.info(
             f"[FlushWorker] Started (poll={self._poll_interval}s, "
@@ -114,25 +118,33 @@ class FlushWorker:
             if not ops:
                 continue
 
-            reason = "time" if time_elapsed >= self._flush_interval else f"size ({buffer_size / 1024:.1f}KB)"
-            logger.info(f"[FlushWorker] Flushing {s3_uri} ({len(ops)} ops, trigger={reason})")
+            reason = (
+                "time"
+                if time_elapsed >= self._flush_interval
+                else f"size ({buffer_size / 1024:.1f}KB)"
+            )
+            logger.info(
+                f"[FlushWorker] Flushing {s3_uri} ({len(ops)} ops, trigger={reason})"
+            )
 
             try:
                 self._flush_ops(s3_uri, ops)
                 self._buffer.complete_flush(s3_uri)
                 self._last_flush[s3_uri] = time.time()
             except Exception as e:
-                logger.error(f"[FlushWorker] Failed to flush {s3_uri}: {e}", exc_info=True)
+                logger.error(
+                    f"[FlushWorker] Failed to flush {s3_uri}: {e}", exc_info=True
+                )
                 # :flushing key preserved for retry on next cycle
 
-    def _flush_ops(self, s3_uri: str, ops: Dict[str, Dict[str, Any]]) -> None:
+    def _flush_ops(self, s3_uri: str, ops: dict[str, dict[str, Any]]) -> None:
         """Flush buffered operations to Delta Lake."""
         storage_options = self._get_storage_options()
 
         # Partition operations
-        inserts: List[Dict[str, Any]] = []
-        updates: List[Dict[str, Any]] = []
-        delete_ids: List[str] = []
+        inserts: list[dict[str, Any]] = []
+        updates: list[dict[str, Any]] = []
+        delete_ids: list[str] = []
 
         for row_id, entry in ops.items():
             op = entry["op"]
@@ -171,19 +183,22 @@ class FlushWorker:
         invalidate_delta_cache(s3_uri)
 
 
-def _rows_to_arrow(rows: List[Dict[str, Any]], delta_table: DeltaTable) -> pa.Table:
+def _rows_to_arrow(rows: list[dict[str, Any]], delta_table: DeltaTable) -> pa.Table:
     """Convert buffered row dicts to a PyArrow table aligned to Delta Lake schema."""
     schema = get_delta_schema_as_pyarrow(delta_table)
 
     # Build Polars schema from Delta Lake schema
-    polars_schema: Dict[str, Any] = {}
+    polars_schema: dict[str, Any] = {}
     for field in schema:
         polars_schema[field.name] = arrow_to_polars_type(field.type)
 
     # Only include columns that exist in the Delta schema
     delta_field_names = {f.name for f in schema}
-    datetime_cols = {name for name, dtype in polars_schema.items()
-                     if isinstance(dtype, (pl.Datetime, pl.Date))}
+    datetime_cols = {
+        name
+        for name, dtype in polars_schema.items()
+        if isinstance(dtype, (pl.Datetime, pl.Date))
+    }
 
     cleaned_rows = []
     for row in rows:

@@ -55,7 +55,34 @@ services:
       timeout: 5s
       retries: 5
 
+  # SSH + rsync server for workspace sync (local development)
+  # Uses SSH keys registered via API (fetched by AuthorizedKeysCommand)
+  # See docker/ssh-sync/README.md for details
+  ssh-sync:
+    build: ./docker/ssh-sync
+    container_name: emery-ssh-sync
+    ports:
+      - "2222:2222"
+    volumes:
+      - workspace-data:/workspace
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=UTC
+      - USER_NAME=agent
+      - PASSWORD_ACCESS=false
+      - SUDO_ACCESS=false
+      - DOCKER_MODS=linuxserver/mods:openssh-server-rsync
+      - INTERNAL_API_SECRET=local-dev-secret
+      - API_HOST=host.docker.internal:3000
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
 volumes:
   redis-data:
   minio-data:
   postgres-data:
+  # Shared workspace storage for agent/frontend
+  # Mount with: volumes: - workspace-data:/mnt/storage/workspaces
+  # Set env: WORKSPACE_STORAGE_PATH=/mnt/storage/workspaces
+  workspace-data:

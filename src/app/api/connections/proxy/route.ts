@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { ApiKey, UserId } from '@/ddd/domain/shared/value-objects';
+import { ApiKey } from '@/ddd/domain/shared/value-objects';
 import { getOAuthProxyApplicationService, getUserRepository, getAgentRepository } from '@/ddd/application/di/container';
 
 /**

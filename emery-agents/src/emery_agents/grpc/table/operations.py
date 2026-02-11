@@ -6,47 +6,41 @@ Focuses on preparing data for different table operations.
 """
 
 import logging
-from typing import List, Dict, Any, Optional, Tuple
-import pyarrow as pa
-import polars as pl
-from deltalake import write_deltalake, DeltaTable
+from functools import partial
+from typing import Any
 
+import polars as pl
+import pyarrow as pa
+from deltalake import DeltaTable, write_deltalake
+
+from ..generated import table_service_pb2
+from .filter_operations import extract_jsonb_target_ids, json_array_contains_id
+from .query_operations import (
+    apply_pagination,
+    apply_type_aware_sorting,
+    build_query_metadata,
+    load_filtered_data,
+)
 from .schema import (
-    create_enhanced_schema,
-    evolve_schema,
     create_dataframe_with_schema,
+    evolve_schema,
     get_delta_schema_as_pyarrow,
-    get_field_type_from_metadata
 )
 from .transform import (
     convert_dataframe_to_arrow,
-    normalize_arrow_table_to_large_string,
     create_empty_arrow_table,
+    normalize_arrow_table_to_large_string,
 )
-from .validate import (
-    validate_row_data,
-    validate_sort_columns,
-    detect_data_anomalies
-)
-from ..generated import table_service_pb2
-from .transform import build_pyarrow_predicate
-from .query_operations import (
-    load_filtered_data,
-    apply_type_aware_sorting,
-    apply_pagination,
-    build_query_metadata
-)
-from functools import partial
-from .filter_operations import extract_jsonb_target_ids, json_array_contains_id
-from .write_buffer import merge_buffer_into_dataframe, WriteBuffer
+from .validate import detect_data_anomalies, validate_sort_columns
+from .write_buffer import WriteBuffer, merge_buffer_into_dataframe
 
 logger = logging.getLogger(__name__)
 
 
 def prepare_create_table(
-    fields: List[table_service_pb2.TableField],
+    fields: list[table_service_pb2.TableField],
     s3_uri: str,
-    storage_options: Dict[str, str]
+    storage_options: dict[str, str],
 ) -> None:
     """Create new Delta table with specified schema.
 
@@ -55,10 +49,13 @@ def prepare_create_table(
         s3_uri: S3 URI where to create the table
         storage_options: S3 storage options
     """
-    logger.info(f"[prepare_create_table] Creating table with {len(fields)} fields at {s3_uri}")
+    logger.info(
+        f"[prepare_create_table] Creating table with {len(fields)} fields at {s3_uri}"
+    )
 
     # Build PyArrow schema from protobuf fields (includes field metadata)
     from .schema import build_schema_from_table_fields
+
     schema = build_schema_from_table_fields(fields)
 
     # Create empty PyArrow table with metadata-preserving utility
@@ -68,14 +65,16 @@ def prepare_create_table(
     # Write with schema evolution
     write_with_schema_evolution(s3_uri, empty_table, "overwrite", storage_options)  # type: ignore
 
-    logger.info(f"[prepare_create_table] Successfully created table with schema: {[f.name for f in fields]}")
+    logger.info(
+        f"[prepare_create_table] Successfully created table with schema: {[f.name for f in fields]}"
+    )
 
 
 def prepare_rows_common(
-    rows_data: List[table_service_pb2.RowData],
+    rows_data: list[table_service_pb2.RowData],
     delta_table: DeltaTable,
-    operation_name: str
-) -> Tuple[pl.DataFrame, pa.Table]:
+    operation_name: str,
+) -> tuple[pl.DataFrame, pa.Table]:
     """Prepare row data for create or update operations.
 
     Args:
@@ -89,7 +88,7 @@ def prepare_rows_common(
     logger.info(f"[{operation_name}] Preparing {len(rows_data)} rows")
 
     # Get schema for data processing
-    schema = get_delta_schema_as_pyarrow(delta_table)
+    get_delta_schema_as_pyarrow(delta_table)
 
     # Create DataFrame with schema-aware conversion
     df = create_dataframe_with_schema(rows_data, delta_table)
@@ -103,15 +102,17 @@ def prepare_rows_common(
     # Convert to Arrow with string normalization
     arrow_table = convert_dataframe_to_arrow(df, normalize_strings=True)
 
-    logger.info(f"[{operation_name}] Prepared DataFrame: {df.shape}, Arrow: {arrow_table.shape}")
+    logger.info(
+        f"[{operation_name}] Prepared DataFrame: {df.shape}, Arrow: {arrow_table.shape}"
+    )
     return df, arrow_table
 
 
 def prepare_create_rows(
-    rows_data: List[table_service_pb2.RowData],
+    rows_data: list[table_service_pb2.RowData],
     delta_table: DeltaTable,
-    mode: str = "append"
-) -> Tuple[pl.DataFrame, pa.Table]:
+    mode: str = "append",
+) -> tuple[pl.DataFrame, pa.Table]:
     """Prepare data for CreateRows operation.
 
     Args:
@@ -126,9 +127,8 @@ def prepare_create_rows(
 
 
 def prepare_update_rows(
-    rows_data: List[table_service_pb2.RowData],
-    delta_table: DeltaTable
-) -> Tuple[pl.DataFrame, pa.Table]:
+    rows_data: list[table_service_pb2.RowData], delta_table: DeltaTable
+) -> tuple[pl.DataFrame, pa.Table]:
     """Prepare data for UpdateRows operation.
 
     Args:
@@ -143,15 +143,15 @@ def prepare_update_rows(
 
 def prepare_query_rows(
     delta_table: DeltaTable,
-    filters: List[table_service_pb2.RowFilter],
-    order_by: List[str],
-    order_direction: str = 'ASC',
-    limit: Optional[int] = None,
+    filters: list[table_service_pb2.RowFilter],
+    order_by: list[str],
+    order_direction: str = "ASC",
+    limit: int | None = None,
     offset: int = 0,
-    aggregation: Optional[table_service_pb2.AggregationConfig] = None,
-    s3_uri: Optional[str] = None,
-    write_buffer: Optional[WriteBuffer] = None,
-) -> Tuple[pl.DataFrame, Dict[str, Any]]:
+    aggregation: table_service_pb2.AggregationConfig | None = None,
+    s3_uri: str | None = None,
+    write_buffer: WriteBuffer | None = None,
+) -> tuple[pl.DataFrame, dict[str, Any]]:
     """Prepare data for QueryRows operation.
 
     Args:
@@ -166,7 +166,9 @@ def prepare_query_rows(
     Returns:
         Tuple of (filtered_df, metadata_dict)
     """
-    logger.info(f"[prepare_query_rows] Preparing query with {len(filters)} filters, order_by={order_by}")
+    logger.info(
+        f"[prepare_query_rows] Preparing query with {len(filters)} filters, order_by={order_by}"
+    )
 
     # Get schema for validation
     schema = get_delta_schema_as_pyarrow(delta_table)
@@ -222,9 +224,9 @@ def prepare_query_rows(
 
 def apply_field_additions(
     delta_table: DeltaTable,
-    new_fields: List[table_service_pb2.TableField],
+    new_fields: list[table_service_pb2.TableField],
     s3_uri: str,
-    storage_options: Dict[str, str]
+    storage_options: dict[str, str],
 ) -> pa.Schema:
     """Apply field additions to existing table schema and Delta Lake.
 
@@ -258,14 +260,16 @@ def apply_field_additions(
         # Write with schema evolution to add new columns to Delta Lake
         write_with_schema_evolution(s3_uri, new_arrow_table, "append", storage_options)
 
-    logger.info(f"[apply_field_additions] Schema evolved from {len(current_schema)} to {len(new_schema)} fields")
+    logger.info(
+        f"[apply_field_additions] Schema evolved from {len(current_schema)} to {len(new_schema)} fields"
+    )
     return new_schema
 
 
 def apply_field_updates(
     delta_table: DeltaTable,
-    field_updates: List[Tuple[str, table_service_pb2.TableField]]
-) -> Tuple[pa.Schema, List[str]]:
+    field_updates: list[tuple[str, table_service_pb2.TableField]],
+) -> tuple[pa.Schema, list[str]]:
     """Apply field updates to existing table schema.
 
     Args:
@@ -279,11 +283,11 @@ def apply_field_updates(
 
     # Get current schema
     current_schema = get_delta_schema_as_pyarrow(delta_table)
-    
+
     # For now, just return current schema (field updates are complex)
     # This would need full schema migration logic
     migration_messages = []
-    for field_name, new_field in field_updates:
+    for field_name, _new_field in field_updates:
         migration_messages.append(f"Field '{field_name}' update requested")
 
     logger.info(f"[apply_field_updates] Field updates prepared: {migration_messages}")
@@ -291,9 +295,7 @@ def apply_field_updates(
 
 
 def apply_filters_in_memory(
-    df: pl.DataFrame,
-    filters: List[table_service_pb2.RowFilter],
-    schema: pa.Schema
+    df: pl.DataFrame, filters: list[table_service_pb2.RowFilter], schema: pa.Schema
 ) -> pl.DataFrame:
     """Apply filters to DataFrame in-memory.
 
@@ -308,7 +310,9 @@ def apply_filters_in_memory(
     if not filters:
         return df
 
-    logger.debug(f"[apply_filters_in_memory] Applying {len(filters)} filters to {len(df)} rows")
+    logger.debug(
+        f"[apply_filters_in_memory] Applying {len(filters)} filters to {len(df)} rows"
+    )
 
     for filter_obj in filters:
         field_name = filter_obj.field
@@ -317,17 +321,19 @@ def apply_filters_in_memory(
 
         # Skip if field not in DataFrame
         if field_name not in df.columns:
-            logger.warning(f"[apply_filters_in_memory] Field '{field_name}' not in DataFrame, skipping")
+            logger.warning(
+                f"[apply_filters_in_memory] Field '{field_name}' not in DataFrame, skipping"
+            )
             continue
 
         # Extract actual value from RowDataValue
-        if filter_value.HasField('text_value'):
+        if filter_value.HasField("text_value"):
             raw_value = filter_value.text_value
-        elif filter_value.HasField('number_value'):
+        elif filter_value.HasField("number_value"):
             raw_value = filter_value.number_value
-        elif filter_value.HasField('boolean_value'):
+        elif filter_value.HasField("boolean_value"):
             raw_value = filter_value.boolean_value
-        elif filter_value.HasField('date_value'):
+        elif filter_value.HasField("date_value"):
             raw_value = filter_value.date_value
         else:
             raw_value = None
@@ -353,12 +359,20 @@ def apply_filters_in_memory(
             elif operator == table_service_pb2.FILTER_OP_LIKE:
                 df = df.filter(pl.col(field_name).str.contains(str(raw_value)))
             elif operator == table_service_pb2.FILTER_OP_ILIKE:
-                df = df.filter(pl.col(field_name).str.to_lowercase().str.contains(str(raw_value).lower()))
+                df = df.filter(
+                    pl.col(field_name)
+                    .str.to_lowercase()
+                    .str.contains(str(raw_value).lower())
+                )
             else:
-                logger.warning(f"[apply_filters_in_memory] Unsupported operator {operator} for field '{field_name}'")
+                logger.warning(
+                    f"[apply_filters_in_memory] Unsupported operator {operator} for field '{field_name}'"
+                )
 
         except Exception as e:
-            logger.error(f"[apply_filters_in_memory] Error applying filter on field '{field_name}': {e}")
+            logger.error(
+                f"[apply_filters_in_memory] Error applying filter on field '{field_name}': {e}"
+            )
             continue
 
     logger.debug(f"[apply_filters_in_memory] Filtered result: {len(df)} rows")
@@ -366,70 +380,80 @@ def apply_filters_in_memory(
 
 
 def apply_like_ilike_filters(
-    df: pl.DataFrame,
-    filters: List[table_service_pb2.RowFilter]
+    df: pl.DataFrame, filters: list[table_service_pb2.RowFilter]
 ) -> pl.DataFrame:
     """Apply LIKE/ILIKE filters to DataFrame in-memory.
-    
+
     These filters cannot be pushed down to Delta Lake and must be applied
     after loading data into memory.
-    
+
     Args:
         df: Polars DataFrame to filter
         filters: List of RowFilter objects
-        
+
     Returns:
         Filtered Polars DataFrame
     """
     if not filters:
         return df
-    
+
     # Extract LIKE/ILIKE filters
-    ilike_filters = [f for f in filters if f.operator == table_service_pb2.FILTER_OP_ILIKE]
-    
+    ilike_filters = [
+        f for f in filters if f.operator == table_service_pb2.FILTER_OP_ILIKE
+    ]
+
     # Check if we have a text search pattern (multiple ILIKE filters with same search term)
     is_text_search = False
     if len(ilike_filters) > 1:
         search_terms = set()
         for f in ilike_filters:
-            value = f.value.text_value if f.value.HasField('text_value') else ''
-            search_terms.add(value.replace('%', ''))
-        
+            value = f.value.text_value if f.value.HasField("text_value") else ""
+            search_terms.add(value.replace("%", ""))
+
         if len(search_terms) == 1:
             is_text_search = True
             search_term = search_terms.pop()
-            
+
             # Build OR condition: field1.contains(term) OR field2.contains(term) OR ...
             or_condition = None
             for f in ilike_filters:
-                field_condition = pl.col(f.field).str.contains(f'(?i){search_term}')
+                field_condition = pl.col(f.field).str.contains(f"(?i){search_term}")
                 if or_condition is None:
                     or_condition = field_condition
                 else:
                     or_condition = or_condition | field_condition
-            
+
             # Apply OR filter for text search
             if or_condition is not None:
                 df = df.filter(or_condition)
-    
+
     # If not a text search, apply LIKE/ILIKE filters with AND logic
     if not is_text_search:
         for filter_obj in filters:
             if filter_obj.operator == table_service_pb2.FILTER_OP_ILIKE:
-                value = filter_obj.value.text_value if filter_obj.value.HasField('text_value') else ''
-                search_term = value.replace('%', '')
-                df = df.filter(pl.col(filter_obj.field).str.contains(f'(?i){search_term}'))
-            
+                value = (
+                    filter_obj.value.text_value
+                    if filter_obj.value.HasField("text_value")
+                    else ""
+                )
+                search_term = value.replace("%", "")
+                df = df.filter(
+                    pl.col(filter_obj.field).str.contains(f"(?i){search_term}")
+                )
+
             elif filter_obj.operator == table_service_pb2.FILTER_OP_LIKE:
-                value = filter_obj.value.text_value if filter_obj.value.HasField('text_value') else ''
-                search_term = value.replace('%', '')
+                value = (
+                    filter_obj.value.text_value
+                    if filter_obj.value.HasField("text_value")
+                    else ""
+                )
+                search_term = value.replace("%", "")
                 df = df.filter(pl.col(filter_obj.field).str.contains(search_term))
     return df
 
 
 def apply_jsonb_contains_filters(
-    df: pl.DataFrame,
-    filters: List[table_service_pb2.RowFilter]
+    df: pl.DataFrame, filters: list[table_service_pb2.RowFilter]
 ) -> pl.DataFrame:
     """Apply JSONB contains filters for complex field types (relation/file/document).
 
@@ -457,16 +481,22 @@ def apply_jsonb_contains_filters(
 
         field_name = filter_obj.field
         if field_name not in df.columns:
-            logger.warning(f"[apply_jsonb_contains_filters] Field '{field_name}' not in DataFrame")
+            logger.warning(
+                f"[apply_jsonb_contains_filters] Field '{field_name}' not in DataFrame"
+            )
             continue
 
         # Extract target IDs using type-safe function
         target_ids = extract_jsonb_target_ids(filter_obj.value)
         if not target_ids:
-            logger.warning(f"[apply_jsonb_contains_filters] No target IDs for field '{field_name}'")
+            logger.warning(
+                f"[apply_jsonb_contains_filters] No target IDs for field '{field_name}'"
+            )
             continue
 
-        logger.info(f"[apply_jsonb_contains_filters] Filtering '{field_name}' for IDs: {target_ids}")
+        logger.info(
+            f"[apply_jsonb_contains_filters] Filtering '{field_name}' for IDs: {target_ids}"
+        )
 
         # Apply filter using map_elements with partial to avoid closure issues
         # NOTE: Using functools.partial ensures target_ids is bound correctly
@@ -476,26 +506,29 @@ def apply_jsonb_contains_filters(
             pl.col(field_name).map_elements(checker, return_dtype=pl.Boolean)
         )
 
-        logger.info(f"[apply_jsonb_contains_filters] After filter: {len(df)} rows remaining")
+        logger.info(
+            f"[apply_jsonb_contains_filters] After filter: {len(df)} rows remaining"
+        )
 
     return df
 
 
 def apply_aggregations(
-    df: pl.DataFrame,
-    aggregation: table_service_pb2.AggregationConfig
+    df: pl.DataFrame, aggregation: table_service_pb2.AggregationConfig
 ) -> pl.DataFrame:
     """Apply aggregation operations to DataFrame.
-    
+
     Args:
         df: Polars DataFrame to aggregate
         aggregation: AggregationConfig from protobuf
-        
+
     Returns:
         Aggregated Polars DataFrame
     """
-    logger.info(f"[apply_aggregations] Applying {len(aggregation.aggregations)} aggregation functions")
-    
+    logger.info(
+        f"[apply_aggregations] Applying {len(aggregation.aggregations)} aggregation functions"
+    )
+
     # Build Polars aggregation expressions
     # Null Handling in Aggregations:
     # - fill_null(0): Treats null values as zeros for numeric aggregations
@@ -506,7 +539,7 @@ def apply_aggregations(
     agg_exprs = []
     for agg_func in aggregation.aggregations:
         field_id = agg_func.field_id  # Numeric field ID as string, e.g., "10", "11"
-        
+
         # Map protobuf aggregation type to Polars expression
         # Use field_id as alias to ensure column names match what TypeScript expects
         if agg_func.type == table_service_pb2.AGG_TYPE_SUM:
@@ -526,28 +559,29 @@ def apply_aggregations(
         elif agg_func.type == table_service_pb2.AGG_TYPE_COUNT_NOT_EMPTY:
             agg_exprs.append(pl.col(field_id).is_not_null().sum().alias(field_id))
         else:
-            logger.warning(f"[apply_aggregations] Unknown aggregation type: {agg_func.type}")
+            logger.warning(
+                f"[apply_aggregations] Unknown aggregation type: {agg_func.type}"
+            )
             continue
-    
+
     # Apply aggregation
     if len(aggregation.group_by_fields) > 0:
         # GROUP BY aggregation (for dashboard views with multiple groups)
-        logger.info(f"[apply_aggregations] Applying GROUP BY aggregation on fields: {list(aggregation.group_by_fields)}")
+        logger.info(
+            f"[apply_aggregations] Applying GROUP BY aggregation on fields: {list(aggregation.group_by_fields)}"
+        )
         df = df.group_by(list(aggregation.group_by_fields)).agg(agg_exprs)
     else:
         # Global aggregation (single row result for metric views)
-        logger.info(f"[apply_aggregations] Applying global aggregation (no GROUP BY)")
+        logger.info("[apply_aggregations] Applying global aggregation (no GROUP BY)")
         df = df.select(agg_exprs)
-    
+
     logger.info(f"[apply_aggregations] Aggregation complete, result shape: {df.shape}")
     return df
 
 
 def write_with_schema_evolution(
-    s3_uri: str,
-    data: pa.Table,
-    mode: str,
-    storage_options: Dict[str, str]
+    s3_uri: str, data: pa.Table, mode: str, storage_options: dict[str, str]
 ) -> None:
     """Write data to Delta Lake with schema evolution support.
 
@@ -564,20 +598,18 @@ def write_with_schema_evolution(
 
     # Write with schema evolution
     write_deltalake(
-        s3_uri, 
-        normalized_data, 
+        s3_uri,
+        normalized_data,
         mode=mode,  # type: ignore
-        schema_mode="merge", 
-        storage_options=storage_options
+        schema_mode="merge",
+        storage_options=storage_options,
     )
 
     logger.info("[write_with_schema_evolution] END")
 
 
 def write_with_merge_operation(
-    s3_uri: str,
-    update_data: pa.Table,
-    storage_options: Dict[str, str]
+    s3_uri: str, update_data: pa.Table, storage_options: dict[str, str]
 ) -> None:
     """Write data using Delta Lake native merge operation to update specific rows.
 
@@ -589,11 +621,15 @@ def write_with_merge_operation(
         update_data: Arrow table with rows to update (must include 'id' column)
         storage_options: S3 storage options
     """
-    logger.info(f"[write_with_merge_operation] Merging {len(update_data)} rows to {s3_uri}")
+    logger.info(
+        f"[write_with_merge_operation] Merging {len(update_data)} rows to {s3_uri}"
+    )
 
     # Verify 'id' column exists
-    if 'id' not in update_data.schema.names:
-        logger.error("[write_with_merge_operation] No 'id' column in update data, cannot merge")
+    if "id" not in update_data.schema.names:
+        logger.error(
+            "[write_with_merge_operation] No 'id' column in update data, cannot merge"
+        )
         raise ValueError("Update data must contain 'id' column for merge operation")
 
     # Normalize strings before merge to ensure compatibility
@@ -609,17 +645,19 @@ def write_with_merge_operation(
             source=normalized_update,
             predicate="target.id = source.id",
             source_alias="source",
-            target_alias="target"
+            target_alias="target",
         )
         .when_matched_update_all()  # Update all columns where id matches
         .when_not_matched_insert_all()  # Insert rows with new ids
         .execute()
     )
 
-    logger.info(f"[write_with_merge_operation] Successfully merged {len(update_data)} rows")
+    logger.info(
+        f"[write_with_merge_operation] Successfully merged {len(update_data)} rows"
+    )
 
 
-def prepare_table_stats(s3_uri: str, storage_options: Dict[str, str]) -> Dict[str, Any]:
+def prepare_table_stats(s3_uri: str, storage_options: dict[str, str]) -> dict[str, Any]:
     """Prepare table statistics.
 
     Args:
@@ -632,7 +670,7 @@ def prepare_table_stats(s3_uri: str, storage_options: Dict[str, str]) -> Dict[st
     try:
         # Load DeltaTable from S3 URI
         delta_table = DeltaTable(s3_uri, storage_options=storage_options)
-        
+
         # Read table data
         arrow_table = delta_table.to_pyarrow_table()
         df = pl.from_arrow(arrow_table)
@@ -643,30 +681,27 @@ def prepare_table_stats(s3_uri: str, storage_options: Dict[str, str]) -> Dict[st
 
         # Calculate statistics
         stats = {
-            'row_count': len(df),
-            'column_count': len(df.columns),
-            'size_bytes': arrow_table.nbytes,
-            'columns': []
+            "row_count": len(df),
+            "column_count": len(df.columns),
+            "size_bytes": arrow_table.nbytes,
+            "columns": [],
         }
 
         # Column-level statistics
         for col_name in df.columns:
             col_stats = {
-                'name': col_name,
-                'dtype': str(df[col_name].dtype),
-                'null_count': df[col_name].null_count(),
-                'unique_count': df[col_name].n_unique()
+                "name": col_name,
+                "dtype": str(df[col_name].dtype),
+                "null_count": df[col_name].null_count(),
+                "unique_count": df[col_name].n_unique(),
             }
-            stats['columns'].append(col_stats)
+            stats["columns"].append(col_stats)
 
-        logger.info(f"[prepare_table_stats] Table stats: {stats['row_count']} rows, {stats['column_count']} columns")
+        logger.info(
+            f"[prepare_table_stats] Table stats: {stats['row_count']} rows, {stats['column_count']} columns"
+        )
         return stats
 
     except Exception as e:
         logger.error(f"[prepare_table_stats] Error calculating stats: {e}")
-        return {
-            'row_count': 0,
-            'column_count': 0,
-            'size_bytes': 0,
-            'error': str(e)
-        }
+        return {"row_count": 0, "column_count": 0, "size_bytes": 0, "error": str(e)}

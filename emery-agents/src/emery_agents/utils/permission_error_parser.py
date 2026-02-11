@@ -15,10 +15,10 @@ Usage:
         user_message = format_permission_error_for_user(perm_error)
 """
 
-import re
 import logging
-from typing import Any, Dict, Optional
+import re
 from dataclasses import dataclass
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -34,14 +34,15 @@ class ParsedPermissionError:
         action: Action being attempted (e.g., "view")
         raw_message: Original error message
     """
+
     permission: str
-    resource: Optional[str]
-    resource_id: Optional[int]
+    resource: str | None
+    resource_id: int | None
     action: str
     raw_message: str
 
 
-def parse_permission_error(error_response: Any) -> Optional[ParsedPermissionError]:
+def parse_permission_error(error_response: Any) -> ParsedPermissionError | None:
     """
     Parse API error response for permission information.
 
@@ -80,7 +81,7 @@ def parse_permission_error(error_response: Any) -> Optional[ParsedPermissionErro
     return None
 
 
-def _parse_from_string(error_str: str) -> Optional[ParsedPermissionError]:
+def _parse_from_string(error_str: str) -> ParsedPermissionError | None:
     """Parse permission info from error string using pattern matching."""
 
     # Pattern: "Permission denied: resource:action"
@@ -96,7 +97,9 @@ def _parse_from_string(error_str: str) -> Optional[ParsedPermissionError]:
         )
 
     # Pattern: "You need 'permission' permission" or "requires 'permission'"
-    match = re.search(r"(?:need|requires?)['\s]+([a-z_]+:[a-z_]+)", error_str, re.IGNORECASE)
+    match = re.search(
+        r"(?:need|requires?)['\s]+([a-z_]+:[a-z_]+)", error_str, re.IGNORECASE
+    )
     if match:
         permission = match.group(1)
         parts = permission.split(":")
@@ -121,7 +124,7 @@ def _parse_from_string(error_str: str) -> Optional[ParsedPermissionError]:
     return None
 
 
-def _safe_int(value: Any) -> Optional[int]:
+def _safe_int(value: Any) -> int | None:
     """Safely convert value to int, returning None on failure."""
     if value is None:
         return None
@@ -155,8 +158,7 @@ def format_permission_error_for_user(perm_error: ParsedPermissionError) -> str:
 
 
 def format_permission_error_for_agent(
-    perm_error: ParsedPermissionError,
-    is_interactive: bool = False
+    perm_error: ParsedPermissionError, is_interactive: bool = False
 ) -> str:
     """
     Format permission error with guidance for agent/autonomous mode.
@@ -173,10 +175,7 @@ def format_permission_error_for_agent(
     base_message = format_permission_error_for_user(perm_error)
 
     if is_interactive:
-        return (
-            f"{base_message}\n\n"
-            f"You can request access to this resource."
-        )
+        return f"{base_message}\n\nYou can request access to this resource."
     else:
         return (
             f"{base_message}\n\n"

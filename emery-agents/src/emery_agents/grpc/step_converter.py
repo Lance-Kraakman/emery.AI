@@ -9,10 +9,11 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict
+from typing import Any
 
-from ..reasoning.modules.step_tracker import TrackedStep, StepType as DSPyStepType
-from .response_types import StepType, StepMetadata, StepProgressDict
+from ..reasoning.modules.step_tracker import StepType as DSPyStepType
+from ..reasoning.modules.step_tracker import TrackedStep
+from .response_types import StepMetadata, StepProgressDict, StepType
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +86,9 @@ def extract_planning_step(step: Any, index: int) -> StepProgressDict:
         type="step_progress",
         step_type="PLANNING",
         step_name="Planning",
-        content=getattr(step, 'plan', str(step)) if hasattr(step, "plan") else str(step),
+        content=getattr(step, "plan", str(step))
+        if hasattr(step, "plan")
+        else str(step),
         metadata=StepMetadata(),
         step_index=index,
     )
@@ -103,43 +106,47 @@ def extract_action_step(step: Any, index: int) -> StepProgressDict:
     step_type: StepType = "ACTION"
     step_name = "Action"
     content = ""
-    metadata_dict: Dict[str, str] = {}
+    metadata_dict: dict[str, str] = {}
 
     # Try to extract tool information
-    if hasattr(step, 'tool_calls') and step.tool_calls:
+    if hasattr(step, "tool_calls") and step.tool_calls:
         tool_call = step.tool_calls[0]
-        tool_name = getattr(tool_call, 'name', getattr(tool_call, 'tool_name', 'unknown'))
-        tool_args = str(getattr(tool_call, 'arguments', {}))
+        tool_name = getattr(
+            tool_call, "name", getattr(tool_call, "tool_name", "unknown")
+        )
+        tool_args = str(getattr(tool_call, "arguments", {}))
         step_name = f"Tool: {tool_name}"
         metadata_dict["tool"] = tool_name
         metadata_dict["arguments"] = tool_args[:MAX_METADATA_LENGTH]
 
     # Try to extract observations
-    if hasattr(step, 'observations') and step.observations:
+    if hasattr(step, "observations") and step.observations:
         obs = str(step.observations)
         MAX_LENGTH = 500
         content = obs[:MAX_LENGTH] + "..." if len(obs) > MAX_LENGTH else obs
         metadata_dict["observations"] = content
 
     # Try to extract content
-    if hasattr(step, 'content') and step.content:
+    if hasattr(step, "content") and step.content:
         content = step.content[:MAX_METADATA_LENGTH]
 
     # Add skill metadata for managed agents and skill-related tools
     if metadata_dict.get("tool"):
         tool_name = metadata_dict["tool"]
         is_managed_agent = (
-            tool_name.endswith("_builder") or
-            tool_name.endswith("_agent") or
-            tool_name == "tool_executor" or
-            tool_name == "system_designer" or
-            tool_name.startswith("skill-")
+            tool_name.endswith("_builder")
+            or tool_name.endswith("_agent")
+            or tool_name == "tool_executor"
+            or tool_name == "system_designer"
+            or tool_name.startswith("skill-")
         )
 
         if is_managed_agent:
             metadata_dict["skill_name"] = tool_name
             metadata_dict["skill_status"] = "completed" if content else "executing"
-            skill_message = build_skill_message(tool_name, metadata_dict.get("arguments", "{}"), content)
+            skill_message = build_skill_message(
+                tool_name, metadata_dict.get("arguments", "{}"), content
+            )
             if skill_message:
                 metadata_dict["skill_message"] = skill_message
 
@@ -149,7 +156,7 @@ def extract_action_step(step: Any, index: int) -> StepProgressDict:
         step_name=step_name,
         content=content,
         metadata=metadata_dict,
-        step_index=index
+        step_index=index,
     )
 
 
@@ -174,17 +181,30 @@ def build_skill_message(tool_name: str, tool_args: str, observations: str) -> st
         task = args.get("task", "")
         tool = args.get("tool", "")
         if task:
-            messages.append(f"Running: {task[:MAX_MESSAGE_PREVIEW_LENGTH]}{'...' if len(task) > MAX_MESSAGE_PREVIEW_LENGTH else ''}")
+            messages.append(
+                f"Running: {task[:MAX_MESSAGE_PREVIEW_LENGTH]}{'...' if len(task) > MAX_MESSAGE_PREVIEW_LENGTH else ''}"
+            )
         if tool:
             messages.append(f"Using tool: {tool}")
 
-    elif tool_name.endswith("_builder") or tool_name.endswith("_agent") or tool_name == "system_designer":
+    elif (
+        tool_name.endswith("_builder")
+        or tool_name.endswith("_agent")
+        or tool_name == "system_designer"
+    ):
         # Generic handler for all managed agents (*_builder, *_agent, system_designer)
         task = args.get("task", args.get("request", ""))
         if task:
             # Format agent name for display: schema_builder -> Schema
-            display_name = tool_name.replace("_builder", "").replace("_agent", "").replace("_", " ").title()
-            messages.append(f"{display_name}: {task[:MAX_MESSAGE_PREVIEW_LENGTH]}{'...' if len(task) > MAX_MESSAGE_PREVIEW_LENGTH else ''}")
+            display_name = (
+                tool_name.replace("_builder", "")
+                .replace("_agent", "")
+                .replace("_", " ")
+                .title()
+            )
+            messages.append(
+                f"{display_name}: {task[:MAX_MESSAGE_PREVIEW_LENGTH]}{'...' if len(task) > MAX_MESSAGE_PREVIEW_LENGTH else ''}"
+            )
 
     elif tool_name.startswith("skill-"):
         # Generic skill call
@@ -197,13 +217,15 @@ def build_skill_message(tool_name: str, tool_args: str, observations: str) -> st
         obs_lower = observations.lower()
         if "success" in obs_lower or "created" in obs_lower:
             # Extract key success info
-            lines = observations.split('\n')
+            lines = observations.split("\n")
             for line in lines[:3]:  # First 3 lines
                 if line.strip():
                     messages.append(f"Done: {line.strip()[:80]}")
                     break
         elif "error" in obs_lower or "failed" in obs_lower:
-            messages.append(f"Failed: {observations[:MAX_MESSAGE_PREVIEW_LENGTH]}{'...' if len(observations) > MAX_MESSAGE_PREVIEW_LENGTH else ''}")
+            messages.append(
+                f"Failed: {observations[:MAX_MESSAGE_PREVIEW_LENGTH]}{'...' if len(observations) > MAX_MESSAGE_PREVIEW_LENGTH else ''}"
+            )
 
     return "\n".join(messages) if messages else ""
 
@@ -220,5 +242,5 @@ def extract_final_step(index: int) -> StepProgressDict:
         step_name="Final Answer",
         content="Generating final response...",
         metadata=StepMetadata(),
-        step_index=index
+        step_index=index,
     )

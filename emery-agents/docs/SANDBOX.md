@@ -1,0 +1,194 @@
+# Agent Sandbox Environment
+
+This document describes the sandboxed execution environment for agent bash commands.
+
+## Overview
+
+Agents execute bash commands in an isolated sandbox using [gVisor (runsc)](https://gvisor.dev/). gVisor provides stronger isolation than namespace-based sandboxes by implementing a user-space kernel called Sentry that intercepts ALL syscalls. The real Linux kernel is never directly exposed to agent code.
+
+## Security Model
+
+gVisor intercepts every system call via its Sentry kernel:
+- **Sentry**: User-space kernel that handles all syscalls
+- **Gofer**: Separate process that mediates all filesystem access
+- **Synthetic /proc, /sys**: No host information leakage
+- **Platform**: ptrace (works on Fargate, no KVM required)
+
+For detailed security documentation, see `src/emery_agents/services/sandbox/SECURITY.md`.
+
+## Filesystem Access
+
+### Read-Only System Paths
+The following paths are mounted read-only from the host:
+- `/usr` - System binaries and libraries
+- `/bin` - Essential binaries (bash, ls, cat, etc.)
+- `/lib`, `/lib64` - Shared libraries
+- `/etc/alternatives` - Debian symlinks
+
+### Writable Paths
+- `/workspace` - Agent's workspace directory (persistent storage)
+- `/tmp` - Ephemeral tmpfs (isolated per execution)
+- `/var`, `/run`, `/etc` - Ephemeral tmpfs directories
+
+### Invisible Paths
+All other host paths are invisible to the sandboxed process. The agent cannot:
+- Access other agent workspaces
+- Read host environment variables
+- Access host secrets or credentials
+- Read real /proc or /sys (gVisor provides synthetic versions)
+
+## Network Access
+
+### Default Behavior
+- **Agents**: Network access is **enabled by default** (`allowNetwork: true`)
+- **Skills**: Network access is **disabled by default** (`allowNetwork: false`)
+
+### How Network Works
+
+When network is enabled:
+1. The sandbox has zero network interfaces (always isolated)
+2. A filtering proxy runs on the host, listening on a Unix socket
+3. The socket is bind-mounted into the sandbox
+4. `socat` bridges the Unix socket to sandbox-local TCP
+5. `http_proxy` / `https_proxy` environment variables route traffic through the proxy
+
+### Proxy Filtering
+The proxy blocks connections to:
+- Private IP ranges (RFC1918: 10.x.x.x, 172.16-31.x.x, 192.168.x.x)
+- Localhost (127.x.x.x)
+- AWS metadata service (169.254.169.254)
+- ECS task credential endpoint (169.254.170.2)
+- Link-local addresses (169.254.x.x)
+- IPv6 local addresses
+
+### Git Usage
+
+**HTTPS works** (when network is enabled):
+```bash
+# Clone public repos
+git clone https://github.com/user/repo.git
+
+# Clone private repos with token
+git clone https://oauth2:$TOKEN@github.com/user/private-repo.git
+```
+
+**SSH does NOT work**:
+- No SSH keys are mounted in the sandbox
+- SSH connections bypass the HTTP proxy and hit the network firewall
+- Use HTTPS with tokens instead
+
+### Tools That Work
+When network is enabled, these tools work via the HTTP proxy:
+- `curl` / `wget` (HTTP/HTTPS requests)
+- `git` (HTTPS URLs only)
+- `pip` / `npm` / `cargo` (package managers)
+- Python `requests`, `httpx`, `urllib` libraries
+
+### Tools That Don't Work
+These bypass the HTTP proxy and will fail:
+- SSH connections
+- Raw TCP sockets
+- Non-HTTP protocols
+
+## User Identity
+
+Inside the sandbox:
+- The process appears to run as `root` (UID 0)
+- This is due to user namespace mapping in the OCI spec
+- On the host, it's still an unprivileged user
+- The "root" identity cannot escape the sandbox
+
+## Available Commands
+
+The sandbox has `PATH=/usr/local/bin:/usr/bin:/bin` providing access to:
+
+### Always Available
+- `bash`, `sh` - Shells
+- `python3`, `pip` - Python 3.11 interpreter and package manager
+- `git` - Version control
+- `curl`, `wget` - HTTP clients (via proxy when network enabled)
+- `jq` - JSON processor
+- `grep`, `sed`, `awk` - Text processing
+- `ls`, `cat`, `head`, `tail`, `find` - File utilities
+- `tree` - Directory visualization
+- `socat` - Socket relay (used for network proxy)
+
+### Not Available (add to Dockerfile if needed)
+- `gcc`, `make`, `cmake` - C/C++ compilation
+- `node`, `npm` - Node.js runtime
+- `go` - Go compiler
+- `rustc`, `cargo` - Rust toolchain
+
+To add compilation tools, update the Dockerfile:
+```dockerfile
+RUN apt-get update && apt-get install -y build-essential
+```
+
+## Configuration
+
+### Agent Level
+Set on the agent entity in the database:
+```typescript
+// Default: true - agents can access network
+allowNetwork: boolean
+```
+
+### Skill Level
+Set on individual skills:
+```typescript
+// Default: false - skills need explicit network access
+allowNetwork: boolean
+```
+
+The skill setting overrides the agent setting when executing a skill.
+
+## Troubleshooting
+
+### "Network unreachable" errors
+- Check if `allowNetwork` is enabled for the agent/skill
+- The command may be trying to use SSH instead of HTTPS
+
+### "Permission denied" errors
+- Ensure the file/directory is in `/workspace`
+- System paths are read-only
+
+### Git clone fails
+- Use HTTPS URLs, not SSH (git@github.com:...)
+- For private repos, include the token in the URL
+
+## Security Testing
+
+The container includes security testing tools to validate sandbox isolation:
+
+```bash
+# Run security pentest (executes inside gVisor sandbox)
+run-sandbox-pentest
+
+# Quick mode (faster, less thorough)
+run-sandbox-pentest --quick
+```
+
+This runs:
+- **amicontained** - Container security introspection
+- **deepce** - Container escape enumeration
+- **botb** - Breakout testing
+
+See `src/emery_agents/services/sandbox/SECURITY.md` for detailed security documentation.
+
+## ECS Requirements
+
+For gVisor to work on ECS/Fargate, the task definition needs:
+
+```json
+{
+  "containerDefinitions": [{
+    "linuxParameters": {
+      "capabilities": {
+        "add": ["SYS_PTRACE"]
+      }
+    }
+  }]
+}
+```
+
+This capability is required for gVisor's ptrace platform.

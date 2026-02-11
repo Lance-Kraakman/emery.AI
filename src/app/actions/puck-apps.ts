@@ -6,10 +6,11 @@
 import { z } from "zod"
 import { revalidatePath } from "next/cache"
 import { auth } from "@/lib/auth"
+import { withAuthContext } from '@/lib/auth/with-context';
 import { requirePermission, requireResourcePermission } from "./permissions"
 import { requireCurrentOrganization } from "./user-organizations"
 import { getAppApplicationService } from "@/ddd/application/di/container"
-import { ActionError, type Result, type ErrorCode } from "@/lib/puck/errors"
+import { ActionError, type Result } from "@/lib/puck/errors"
 
 import { OrganizationId, UserId } from "@/ddd/domain/shared/value-objects"
 import { AppId } from "@/ddd/domain/puck/value-objects/app-id"
@@ -39,161 +40,169 @@ const updateAppSchema = z.object({
  * Get all apps for the current organization
  */
 export async function getApps(): Promise<Result<AppDTO[]>> {
-  try {
-    // Check session first
-    const session = await auth();
-    if (!session?.user) {
-      console.log('[getApps] No session found');
+  return withAuthContext(async () => {
+    try {
+      // Check session first
+      const session = await auth();
+      if (!session?.user) {
+        console.log('[getApps] No session found');
+        return {
+          success: false,
+          error: ActionError.permission('view apps'),
+          errorCode: 'PERMISSION'
+        };
+      }
+
+      // Then check permission
+      await requirePermission("apps:view");
+      const currentOrg = await requireCurrentOrganization();
+
+      const appService = getAppApplicationService();
+      const apps = await appService.getAppsByOrganization(OrganizationId.fromNumber(currentOrg.id));
+
+      return {
+        success: true,
+        data: AppMapper.toDTOs(apps)
+      };
+    } catch (error) {
+      console.error('[getApps] Error:', error);
       return {
         success: false,
-        error: ActionError.permission('view apps'),
-        errorCode: 'PERMISSION'
+        error: ActionError.database('fetch apps'),
+        errorCode: 'DATABASE'
       };
     }
-
-    // Then check permission
-    await requirePermission("apps:view");
-    const currentOrg = await requireCurrentOrganization();
-
-    const appService = getAppApplicationService();
-    const apps = await appService.getAppsByOrganization(OrganizationId.fromNumber(currentOrg.id));
-
-    return {
-      success: true,
-      data: AppMapper.toDTOs(apps)
-    };
-  } catch (error) {
-    console.error('[getApps] Error:', error);
-    return {
-      success: false,
-      error: ActionError.database('fetch apps'),
-      errorCode: 'DATABASE'
-    };
-  }
+  });
 }
 
 /**
  * Get a single app by ID
  */
 export async function getApp(id: number): Promise<Result<AppDTO>> {
-  try {
-    if (!id) {
+  return withAuthContext(async () => {
+    try {
+      if (!id) {
+        return {
+          success: false,
+          error: ActionError.validation(['ID required']),
+          errorCode: 'VALIDATION'
+        };
+      }
+
+      await requireResourcePermission("apps:view", "app", id);
+
+      const appService = getAppApplicationService();
+      const app = await appService.getApp(AppId.fromNumber(id));
+
+      if (!app) {
+        return {
+          success: false,
+          error: ActionError.notFound('App', id),
+          errorCode: 'NOT_FOUND'
+        };
+      }
+
+      return {
+        success: true,
+        data: AppMapper.toDTO(app)
+      };
+    } catch (error) {
+      console.error('[getApp] Error:', error);
       return {
         success: false,
-        error: ActionError.validation(['ID required']),
-        errorCode: 'VALIDATION'
+        error: ActionError.database('fetch app'),
+        errorCode: 'DATABASE'
       };
     }
-
-    await requireResourcePermission("apps:view", "app", id);
-
-    const appService = getAppApplicationService();
-    const app = await appService.getApp(AppId.fromNumber(id));
-
-    if (!app) {
-      return {
-        success: false,
-        error: ActionError.notFound('App', id),
-        errorCode: 'NOT_FOUND'
-      };
-    }
-
-    return {
-      success: true,
-      data: AppMapper.toDTO(app)
-    };
-  } catch (error) {
-    console.error('[getApp] Error:', error);
-    return {
-      success: false,
-      error: ActionError.database('fetch app'),
-      errorCode: 'DATABASE'
-    };
-  }
+  });
 }
 
 /**
  * Get an app by slug
  */
 export async function getAppBySlug(slug: string): Promise<Result<AppDTO>> {
-  try {
-    await requirePermission("apps:view");
-    const currentOrg = await requireCurrentOrganization();
+  return withAuthContext(async () => {
+    try {
+      await requirePermission("apps:view");
+      const currentOrg = await requireCurrentOrganization();
 
-    if (!slug) {
+      if (!slug) {
+        return {
+          success: false,
+          error: ActionError.validation(['Slug required']),
+          errorCode: 'VALIDATION'
+        };
+      }
+
+      const appService = getAppApplicationService();
+      const app = await appService.getAppBySlug(OrganizationId.fromNumber(currentOrg.id), slug);
+
+      if (!app) {
+        return {
+          success: false,
+          error: ActionError.notFound('App', slug),
+          errorCode: 'NOT_FOUND'
+        };
+      }
+
+      return {
+        success: true,
+        data: AppMapper.toDTO(app)
+      };
+    } catch (error) {
+      console.error('[getAppBySlug] Error:', error);
       return {
         success: false,
-        error: ActionError.validation(['Slug required']),
-        errorCode: 'VALIDATION'
+        error: ActionError.database('fetch app by slug'),
+        errorCode: 'DATABASE'
       };
     }
-
-    const appService = getAppApplicationService();
-    const app = await appService.getAppBySlug(OrganizationId.fromNumber(currentOrg.id), slug);
-
-    if (!app) {
-      return {
-        success: false,
-        error: ActionError.notFound('App', slug),
-        errorCode: 'NOT_FOUND'
-      };
-    }
-
-    return {
-      success: true,
-      data: AppMapper.toDTO(app)
-    };
-  } catch (error) {
-    console.error('[getAppBySlug] Error:', error);
-    return {
-      success: false,
-      error: ActionError.database('fetch app by slug'),
-      errorCode: 'DATABASE'
-    };
-  }
+  });
 }
 
 /**
  * Get an app with its page count
  */
 export async function getAppWithPages(id: number): Promise<Result<{ app: AppDTO; pageCount: number }>> {
-  try {
-    if (!id) {
-      return {
-        success: false,
-        error: ActionError.validation(['ID required']),
-        errorCode: 'VALIDATION'
-      };
-    }
-
-    await requireResourcePermission("apps:view", "app", id);
-
-    const appService = getAppApplicationService();
-    const result = await appService.getAppWithPages(AppId.fromNumber(id));
-
-    if (!result) {
-      return {
-        success: false,
-        error: ActionError.notFound('App', id),
-        errorCode: 'NOT_FOUND'
-      };
-    }
-
-    return {
-      success: true,
-      data: {
-        app: AppMapper.toDTO(result.app),
-        pageCount: result.pageCount
+  return withAuthContext(async () => {
+    try {
+      if (!id) {
+        return {
+          success: false,
+          error: ActionError.validation(['ID required']),
+          errorCode: 'VALIDATION'
+        };
       }
-    };
-  } catch (error) {
-    console.error('[getAppWithPages] Error:', error);
-    return {
-      success: false,
-      error: ActionError.database('fetch app with pages'),
-      errorCode: 'DATABASE'
-    };
-  }
+
+      await requireResourcePermission("apps:view", "app", id);
+
+      const appService = getAppApplicationService();
+      const result = await appService.getAppWithPages(AppId.fromNumber(id));
+
+      if (!result) {
+        return {
+          success: false,
+          error: ActionError.notFound('App', id),
+          errorCode: 'NOT_FOUND'
+        };
+      }
+
+      return {
+        success: true,
+        data: {
+          app: AppMapper.toDTO(result.app),
+          pageCount: result.pageCount
+        }
+      };
+    } catch (error) {
+      console.error('[getAppWithPages] Error:', error);
+      return {
+        success: false,
+        error: ActionError.database('fetch app with pages'),
+        errorCode: 'DATABASE'
+      };
+    }
+  });
 }
 
 /**
@@ -201,253 +210,263 @@ export async function getAppWithPages(id: number): Promise<Result<{ app: AppDTO;
  * If no data is provided, creates a default "Untitled App" with auto-generated slug
  */
 export async function createApp(data?: z.infer<typeof createAppSchema>, revalidateUrl?: string): Promise<Result<AppDTO>> {
-  try {
-    const session = await requirePermission("apps:create");
-    const currentOrg = await requireCurrentOrganization();
+  return withAuthContext(async () => {
+    try {
+      const session = await requirePermission("apps:create");
+      const currentOrg = await requireCurrentOrganization();
 
-    const validatedData = createAppSchema.parse(data || {});
-    const appService = getAppApplicationService();
+      const validatedData = createAppSchema.parse(data || {});
+      const appService = getAppApplicationService();
 
-    // Generate defaults if not provided
-    const name = validatedData.name || "Untitled App";
-    let slug = validatedData.slug;
+      // Generate defaults if not provided
+      const name = validatedData.name || "Untitled App";
+      let slug = validatedData.slug;
 
-    if (!slug) {
-      const slugResult = await appService.generateSlugFromName(
-        OrganizationId.fromNumber(currentOrg.id),
-        name
-      );
-      if (!slugResult.success) {
+      if (!slug) {
+        const slugResult = await appService.generateSlugFromName(
+          OrganizationId.fromNumber(currentOrg.id),
+          name
+        );
+        if (!slugResult.success) {
+          return {
+            success: false,
+            error: ActionError.database('generate slug'),
+            errorCode: 'DATABASE'
+          };
+        }
+        slug = slugResult.data!;
+      }
+
+      const result = await appService.createApp({
+        name,
+        slug,
+        description: validatedData.description,
+        organizationId: OrganizationId.fromNumber(currentOrg.id),
+        ownerId: UserId.fromString(session.user.id)
+      });
+
+      if (!result.success) {
         return {
           success: false,
-          error: ActionError.database('generate slug'),
+          error: result.error || ActionError.database('create app'),
           errorCode: 'DATABASE'
         };
       }
-      slug = slugResult.data!;
-    }
 
-    const result = await appService.createApp({
-      name,
-      slug,
-      description: validatedData.description,
-      organizationId: OrganizationId.fromNumber(currentOrg.id),
-      ownerId: UserId.fromString(session.user.id)
-    });
+      // Revalidate the appropriate path
+      if (revalidateUrl) {
+        revalidatePath(revalidateUrl)
+      } else {
+        revalidatePath('/apps') // Default path for Puck apps
+      }
 
-    if (!result.success) {
+      return {
+        success: true,
+        data: result.data ? AppMapper.toDTO(result.data) : undefined
+      };
+    } catch (error) {
+      console.error('[createApp] Error:', error);
+
+      if (error instanceof z.ZodError) {
+        return {
+          success: false,
+          error: ActionError.validation(error.errors.map(e => e.message)),
+          errorCode: 'VALIDATION'
+        };
+      }
+
       return {
         success: false,
-        error: result.error || ActionError.database('create app'),
+        error: ActionError.database('create app'),
         errorCode: 'DATABASE'
       };
     }
-
-    // Revalidate the appropriate path
-    if (revalidateUrl) {
-      revalidatePath(revalidateUrl)
-    } else {
-      revalidatePath('/apps') // Default path for Puck apps
-    }
-
-    return {
-      success: true,
-      data: result.data ? AppMapper.toDTO(result.data) : undefined
-    };
-  } catch (error) {
-    console.error('[createApp] Error:', error);
-
-    if (error instanceof z.ZodError) {
-      return {
-        success: false,
-        error: ActionError.validation(error.errors.map(e => e.message)),
-        errorCode: 'VALIDATION'
-      };
-    }
-
-    return {
-      success: false,
-      error: ActionError.database('create app'),
-      errorCode: 'DATABASE'
-    };
-  }
+  });
 }
 
 /**
  * Update an existing Puck app
  */
 export async function updateApp(data: z.infer<typeof updateAppSchema>, revalidateUrl?: string): Promise<Result<AppDTO>> {
-  try {
-    const validatedData = updateAppSchema.parse(data);
+  return withAuthContext(async () => {
+    try {
+      const validatedData = updateAppSchema.parse(data);
 
-    if (!validatedData.id) {
+      if (!validatedData.id) {
+        return {
+          success: false,
+          error: ActionError.validation(['ID required']),
+          errorCode: 'VALIDATION'
+        };
+      }
+
+      await requireResourcePermission("apps:manage", "app", validatedData.id);
+
+      const appService = getAppApplicationService();
+
+      const result = await appService.updateApp({
+        id: AppId.fromNumber(validatedData.id),
+        name: validatedData.name,
+        slug: validatedData.slug,
+        description: validatedData.description
+      });
+
+      if (!result.success) {
+        return {
+          success: false,
+          error: result.error || ActionError.database('update app'),
+          errorCode: 'DATABASE'
+        };
+      }
+
+      // Revalidate the appropriate path
+      if (revalidateUrl) {
+        revalidatePath(revalidateUrl)
+      } else {
+        revalidatePath('/apps') // Default path for Puck apps
+      }
+
       return {
-        success: false,
-        error: ActionError.validation(['ID required']),
-        errorCode: 'VALIDATION'
+        success: true,
+        data: result.data ? AppMapper.toDTO(result.data) : undefined
       };
-    }
+    } catch (error) {
+      console.error('[updateApp] Error:', error);
 
-    await requireResourcePermission("apps:manage", "app", validatedData.id);
+      if (error instanceof z.ZodError) {
+        return {
+          success: false,
+          error: ActionError.validation(error.errors.map(e => e.message)),
+          errorCode: 'VALIDATION'
+        };
+      }
 
-    const appService = getAppApplicationService();
-
-    const result = await appService.updateApp({
-      id: AppId.fromNumber(validatedData.id),
-      name: validatedData.name,
-      slug: validatedData.slug,
-      description: validatedData.description
-    });
-
-    if (!result.success) {
       return {
         success: false,
-        error: result.error || ActionError.database('update app'),
+        error: ActionError.database('update app'),
         errorCode: 'DATABASE'
       };
     }
-
-    // Revalidate the appropriate path
-    if (revalidateUrl) {
-      revalidatePath(revalidateUrl)
-    } else {
-      revalidatePath('/apps') // Default path for Puck apps
-    }
-
-    return {
-      success: true,
-      data: result.data ? AppMapper.toDTO(result.data) : undefined
-    };
-  } catch (error) {
-    console.error('[updateApp] Error:', error);
-
-    if (error instanceof z.ZodError) {
-      return {
-        success: false,
-        error: ActionError.validation(error.errors.map(e => e.message)),
-        errorCode: 'VALIDATION'
-      };
-    }
-
-    return {
-      success: false,
-      error: ActionError.database('update app'),
-      errorCode: 'DATABASE'
-    };
-  }
+  });
 }
 
 /**
  * Delete a Puck app (cascades to all pages)
  */
 export async function deleteApp(id: number, revalidateUrl?: string): Promise<Result<{ message: string }>> {
-  try {
-    if (!id) {
+  return withAuthContext(async () => {
+    try {
+      if (!id) {
+        return {
+          success: false,
+          error: ActionError.validation(['ID required']),
+          errorCode: 'VALIDATION'
+        };
+      }
+
+      await requireResourcePermission("apps:manage", "app", id);
+
+      const appService = getAppApplicationService();
+      const result = await appService.deleteApp(AppId.fromNumber(id));
+
+      if (!result.success) {
+        return {
+          success: false,
+          error: result.error || ActionError.database('delete app'),
+          errorCode: 'DATABASE'
+        };
+      }
+
+      // Revalidate the appropriate path
+      if (revalidateUrl) {
+        revalidatePath(revalidateUrl)
+      } else {
+        revalidatePath('/apps') // Default path for Puck apps
+      }
+
       return {
-        success: false,
-        error: ActionError.validation(['ID required']),
-        errorCode: 'VALIDATION'
+        success: true,
+        data: { message: "App deleted successfully" }
       };
-    }
-
-    await requireResourcePermission("apps:manage", "app", id);
-
-    const appService = getAppApplicationService();
-    const result = await appService.deleteApp(AppId.fromNumber(id));
-
-    if (!result.success) {
+    } catch (error) {
+      console.error('[deleteApp] Error:', error);
       return {
         success: false,
-        error: result.error || ActionError.database('delete app'),
+        error: ActionError.database('delete app'),
         errorCode: 'DATABASE'
       };
     }
-
-    // Revalidate the appropriate path
-    if (revalidateUrl) {
-      revalidatePath(revalidateUrl)
-    } else {
-      revalidatePath('/apps') // Default path for Puck apps
-    }
-
-    return {
-      success: true,
-      data: { message: "App deleted successfully" }
-    };
-  } catch (error) {
-    console.error('[deleteApp] Error:', error);
-    return {
-      success: false,
-      error: ActionError.database('delete app'),
-      errorCode: 'DATABASE'
-    };
-  }
+  });
 }
 
 /**
  * Generate a unique slug from an app name
  */
 export async function generateAppSlug(name: string): Promise<Result<{ slug: string }>> {
-  try {
-    await requirePermission("apps:view");
-    const currentOrg = await requireCurrentOrganization();
+  return withAuthContext(async () => {
+    try {
+      await requirePermission("apps:view");
+      const currentOrg = await requireCurrentOrganization();
 
-    if (!name) {
+      if (!name) {
+        return {
+          success: false,
+          error: ActionError.validation(['Name required']),
+          errorCode: 'VALIDATION'
+        };
+      }
+
+      const appService = getAppApplicationService();
+      const result = await appService.generateSlugFromName(OrganizationId.fromNumber(currentOrg.id), name);
+
+      if (!result.success || !result.data) {
+        return {
+          success: false,
+          error: result.error || ActionError.database('generate slug'),
+          errorCode: 'DATABASE'
+        };
+      }
+
       return {
-        success: false,
-        error: ActionError.validation(['Name required']),
-        errorCode: 'VALIDATION'
+        success: true,
+        data: { slug: result.data }
       };
-    }
-
-    const appService = getAppApplicationService();
-    const result = await appService.generateSlugFromName(OrganizationId.fromNumber(currentOrg.id), name);
-
-    if (!result.success || !result.data) {
+    } catch (error) {
+      console.error('[generateAppSlug] Error:', error);
       return {
         success: false,
-        error: result.error || ActionError.database('generate slug'),
+        error: ActionError.database('generate slug'),
         errorCode: 'DATABASE'
       };
     }
-
-    return {
-      success: true,
-      data: { slug: result.data }
-    };
-  } catch (error) {
-    console.error('[generateAppSlug] Error:', error);
-    return {
-      success: false,
-      error: ActionError.database('generate slug'),
-      errorCode: 'DATABASE'
-    };
-  }
+  });
 }
 
 /**
  * Get app count for the current organization
  */
 export async function getAppCount(): Promise<Result<number>> {
-  try {
-    await requirePermission("apps:view");
-    const currentOrg = await requireCurrentOrganization();
+  return withAuthContext(async () => {
+    try {
+      await requirePermission("apps:view");
+      const currentOrg = await requireCurrentOrganization();
 
-    const appService = getAppApplicationService();
-    const count = await appService.countApps(OrganizationId.fromNumber(currentOrg.id));
+      const appService = getAppApplicationService();
+      const count = await appService.countApps(OrganizationId.fromNumber(currentOrg.id));
 
-    return {
-      success: true,
-      data: count
-    };
-  } catch (error) {
-    console.error('[getAppCount] Error:', error);
-    return {
-      success: false,
-      error: ActionError.database('fetch app count'),
-      errorCode: 'DATABASE'
-    };
-  }
+      return {
+        success: true,
+        data: count
+      };
+    } catch (error) {
+      console.error('[getAppCount] Error:', error);
+      return {
+        success: false,
+        error: ActionError.database('fetch app count'),
+        errorCode: 'DATABASE'
+      };
+    }
+  });
 }
 
 /**
@@ -455,20 +474,21 @@ export async function getAppCount(): Promise<Result<number>> {
  * Appends " (Copy)" to the app name and generates a new slug
  */
 export async function duplicateApp(id: number, revalidateUrl?: string): Promise<Result<AppDTO>> {
-  try {
-    if (!id) {
-      return {
-        success: false,
-        error: ActionError.validation(['ID required']),
-        errorCode: 'VALIDATION'
-      };
-    }
+  return withAuthContext(async () => {
+    try {
+      if (!id) {
+        return {
+          success: false,
+          error: ActionError.validation(['ID required']),
+          errorCode: 'VALIDATION'
+        };
+      }
 
-    // Need to view the original app to duplicate it
-    await requireResourcePermission("apps:view", "app", id);
-    // Need create permission for the new app
-    const session = await requirePermission("apps:create");
-    const currentOrg = await requireCurrentOrganization();
+      // Need to view the original app to duplicate it
+      await requireResourcePermission("apps:view", "app", id);
+      // Need create permission for the new app
+      const session = await requirePermission("apps:create");
+      const currentOrg = await requireCurrentOrganization();
 
     const appService = getAppApplicationService();
 
@@ -545,14 +565,15 @@ export async function duplicateApp(id: number, revalidateUrl?: string): Promise<
       success: true,
       data: AppMapper.toDTO(result.data)
     };
-  } catch (error) {
-    console.error('[duplicateApp] Error:', error);
-    return {
-      success: false,
-      error: ActionError.database('duplicate app'),
-      errorCode: 'DATABASE'
-    };
-  }
+    } catch (error) {
+      console.error('[duplicateApp] Error:', error);
+      return {
+        success: false,
+        error: ActionError.database('duplicate app'),
+        errorCode: 'DATABASE'
+      };
+    }
+  });
 }
 
 /**
@@ -562,53 +583,95 @@ export async function updateAppTheme(
   appId: number,
   themeConfig: ThemeConfigProps | undefined
 ): Promise<Result<AppDTO>> {
-  try {
-    if (!appId) {
+  return withAuthContext(async () => {
+    try {
+      if (!appId) {
+        return {
+          success: false,
+          error: ActionError.validation(['ID required']),
+          errorCode: 'VALIDATION'
+        };
+      }
+
+      await requireResourcePermission("apps:manage", "app", appId);
+
+      const appService = getAppApplicationService();
+
+      // Get the app
+      const app = await appService.getApp(AppId.fromNumber(appId));
+      if (!app) {
+        return {
+          success: false,
+          error: ActionError.notFound('App', appId),
+          errorCode: 'NOT_FOUND'
+        };
+      }
+
+      // Update theme
+      app.updateTheme(themeConfig);
+
+      // Save the app using repository
+      const { getAppRepository } = await import("@/ddd/application/di/container");
+      const appRepository = getAppRepository();
+      const updatedApp = await appRepository.update(app);
+
+      // Revalidate app routes
+      revalidatePath(`/apps/${appId}`);
+      revalidatePath(`/p/${app.slug.value}`);
+
+      return {
+        success: true,
+        data: AppMapper.toDTO(updatedApp)
+      };
+    } catch (error) {
+      console.error('[updateAppTheme] Error:', error);
       return {
         success: false,
-        error: ActionError.validation(['ID required']),
-        errorCode: 'VALIDATION'
+        error: ActionError.database('update app theme'),
+        errorCode: 'DATABASE'
       };
     }
+  });
+}
 
-    await requireResourcePermission("apps:manage", "app", appId);
+// Types for sidebar data
+export interface SidebarApp {
+  id: number
+  name: string
+  slug: string
+  pages: { id: number; name: string; slug: string; appId: number }[]
+}
 
-    const appService = getAppApplicationService();
+/**
+ * Get apps with pages for sidebar display
+ * Used by layout.tsx to fetch sidebar data with proper RLS context
+ */
+export async function getSidebarApps(): Promise<SidebarApp[]> {
+  return withAuthContext(async () => {
+    try {
+      const session = await auth();
+      if (!session?.user?.currentOrganizationId) return [];
 
-    // Get the app
-    const app = await appService.getApp(AppId.fromNumber(appId));
-    if (!app) {
-      return {
-        success: false,
-        error: ActionError.notFound('App', appId),
-        errorCode: 'NOT_FOUND'
-      };
+      const orgId = OrganizationId.fromNumber(session.user.currentOrganizationId);
+      const appService = getAppApplicationService();
+      const appsWithPages = await appService.getAppsWithPagesForOrganization(orgId);
+
+      return appsWithPages.map(app => ({
+        id: app.id,
+        name: app.name,
+        slug: app.slug,
+        pages: app.pages.map(page => ({
+          id: page.id,
+          name: page.name,
+          slug: page.slug,
+          appId: app.id
+        }))
+      }));
+    } catch (error) {
+      console.error('[getSidebarApps] Error:', error);
+      return [];
     }
-
-    // Update theme
-    app.updateTheme(themeConfig);
-
-    // Save the app using repository
-    const { getAppRepository } = await import("@/ddd/application/di/container");
-    const appRepository = getAppRepository();
-    const updatedApp = await appRepository.update(app);
-
-    // Revalidate app routes
-    revalidatePath(`/apps/${appId}`);
-    revalidatePath(`/p/${app.slug.value}`);
-
-    return {
-      success: true,
-      data: AppMapper.toDTO(updatedApp)
-    };
-  } catch (error) {
-    console.error('[updateAppTheme] Error:', error);
-    return {
-      success: false,
-      error: ActionError.database('update app theme'),
-      errorCode: 'DATABASE'
-    };
-  }
+  });
 }
 
 /**
@@ -619,55 +682,57 @@ export async function setAppHomePage(
   pageId: number | null,
   revalidateUrl?: string
 ): Promise<Result<AppDTO>> {
-  try {
-    if (!appId) {
+  return withAuthContext(async () => {
+    try {
+      if (!appId) {
+        return {
+          success: false,
+          error: ActionError.validation(['App ID required']),
+          errorCode: 'VALIDATION'
+        };
+      }
+
+      await requireResourcePermission("apps:manage", "app", appId);
+
+      const appService = getAppApplicationService();
+
+      // Get the app
+      const app = await appService.getApp(AppId.fromNumber(appId));
+      if (!app) {
+        return {
+          success: false,
+          error: ActionError.notFound('App', appId),
+          errorCode: 'NOT_FOUND'
+        };
+      }
+
+      // Set the home page
+      const { PageId } = await import("@/ddd/domain/puck/value-objects/page-id");
+      app.setHomePage(pageId ? PageId.fromNumber(pageId) : undefined);
+
+      // Save the app using repository
+      const { getAppRepository } = await import("@/ddd/application/di/container");
+      const appRepository = getAppRepository();
+      const updatedApp = await appRepository.update(app);
+
+      // Revalidate app routes
+      if (revalidateUrl) {
+        revalidatePath(revalidateUrl);
+      }
+      revalidatePath(`/apps/${appId}`);
+      revalidatePath(`/public/${app.organizationId.value}/${app.slug.value}`);
+
+      return {
+        success: true,
+        data: AppMapper.toDTO(updatedApp)
+      };
+    } catch (error) {
+      console.error('[setAppHomePage] Error:', error);
       return {
         success: false,
-        error: ActionError.validation(['App ID required']),
-        errorCode: 'VALIDATION'
+        error: ActionError.database('set app home page'),
+        errorCode: 'DATABASE'
       };
     }
-
-    await requireResourcePermission("apps:manage", "app", appId);
-
-    const appService = getAppApplicationService();
-
-    // Get the app
-    const app = await appService.getApp(AppId.fromNumber(appId));
-    if (!app) {
-      return {
-        success: false,
-        error: ActionError.notFound('App', appId),
-        errorCode: 'NOT_FOUND'
-      };
-    }
-
-    // Set the home page
-    const { PageId } = await import("@/ddd/domain/puck/value-objects/page-id");
-    app.setHomePage(pageId ? PageId.fromNumber(pageId) : undefined);
-
-    // Save the app using repository
-    const { getAppRepository } = await import("@/ddd/application/di/container");
-    const appRepository = getAppRepository();
-    const updatedApp = await appRepository.update(app);
-
-    // Revalidate app routes
-    if (revalidateUrl) {
-      revalidatePath(revalidateUrl);
-    }
-    revalidatePath(`/apps/${appId}`);
-    revalidatePath(`/public/${app.organizationId.value}/${app.slug.value}`);
-
-    return {
-      success: true,
-      data: AppMapper.toDTO(updatedApp)
-    };
-  } catch (error) {
-    console.error('[setAppHomePage] Error:', error);
-    return {
-      success: false,
-      error: ActionError.database('set app home page'),
-      errorCode: 'DATABASE'
-    };
-  }
+  });
 }

@@ -180,16 +180,26 @@ export interface AgentExecutionRequest {
 export interface AgentExecutionResult {
   success: boolean;
   executionId: string;
-  status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled' | 'timeout';
+  status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled' | 'timeout' | 'awaiting_human';
   outputData?: any;
   error?: string;
   startedAt?: Date;
   completedAt?: Date;
+  /** Data for human skill when status is 'awaiting_human' */
+  humanSkillData?: {
+    skillId: number;
+    skillName: string;
+    stepId: string;
+    instructions: string;
+    inputs: Record<string, any>;
+    outputSchema: Array<{ name: string; type: string }>;
+    assignedTo: string;
+  };
 }
 
 export interface ExecutionStatus {
   executionId: string;
-  status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled' | 'timeout';
+  status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled' | 'timeout' | 'awaiting_human';
   progress?: number; // 0-100
   currentStep?: string;
   result?: any;

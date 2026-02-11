@@ -32,7 +32,13 @@ logger = logging.getLogger(__name__)
 # This file is at: emery-agents/src/emery_agents/tools/crud/puck_validation.py
 # Schema is at: src/components/puck/blocks-schema.generated.json
 # So we go up 5 levels to repo root, then down to src/components/puck
-SCHEMA_PATH = Path(__file__).parents[5] / "src" / "components" / "puck" / "blocks-schema.generated.json"
+SCHEMA_PATH = (
+    Path(__file__).parents[5]
+    / "src"
+    / "components"
+    / "puck"
+    / "blocks-schema.generated.json"
+)
 
 
 @lru_cache(maxsize=1)
@@ -82,7 +88,7 @@ def validate_puck_template(template_data: dict[str, Any]) -> list[str]:
     # Validate content blocks (top-level blocks)
     content = template_data.get("content", [])
     if isinstance(content, list):
-        for idx, block in enumerate(content):
+        for _idx, block in enumerate(content):
             if isinstance(block, dict):
                 block_errors = _validate_block(block, schema, parent_zone=None)
                 errors.extend(block_errors)
@@ -92,9 +98,11 @@ def validate_puck_template(template_data: dict[str, Any]) -> list[str]:
     if isinstance(zones, dict):
         for zone_name, zone_blocks in zones.items():
             if isinstance(zone_blocks, list):
-                for idx, block in enumerate(zone_blocks):
+                for _idx, block in enumerate(zone_blocks):
                     if isinstance(block, dict):
-                        block_errors = _validate_block(block, schema, parent_zone=zone_name)
+                        block_errors = _validate_block(
+                            block, schema, parent_zone=zone_name
+                        )
                         errors.extend(block_errors)
 
     return errors

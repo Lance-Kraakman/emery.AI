@@ -1,6 +1,6 @@
 'use client'
 
-import { Database, ChevronRight, ArrowDown } from 'lucide-react'
+import { Database, ArrowDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ContextMappingDTO } from '@/app/actions/context-mappings'
 

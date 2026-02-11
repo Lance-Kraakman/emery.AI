@@ -2,11 +2,12 @@
  * Storage Recalculation Application Service
  *
  * Orchestrates periodic storage recalculation to prevent drift between
- * incremental counters and actual S3 storage usage.
+ * incremental counters and actual storage usage.
  *
  * Depends on:
- * - IFileStorageRepository: Scan actual S3 storage
+ * - IFileStorageRepository: Scan actual S3 storage (database, chat, skill)
  * - IOrganizationRepository: Get/update organization storage counters
+ * - WorkspaceStorageScanner: Scan EFS workspace storage
  */
 
 import type { IFileStorageRepository } from '@/ddd/domain/tables/repositories/file-storage-repository';
@@ -15,7 +16,9 @@ import { OrganizationId } from '@/ddd/domain/shared/value-objects';
 import type { Result } from '@/ddd/domain/shared/result';
 import { ResultHelpers } from '@/ddd/domain/shared/result';
 import { invalidateOrgStorageCache } from '@/ddd/infrastructure/storage/repositories/s3-file-storage-repository';
+import { withSystemContext } from '@/ddd/infrastructure/db/system-context';
 import { createDebugLogger } from '@/lib/utils/debug-logger';
+import { WorkspaceStorageScanner } from '@/ddd/infrastructure/storage/workspace-storage-scanner';
 
 const logger = createDebugLogger('StorageRecalculation');
 
@@ -68,10 +71,16 @@ export interface BatchRecalculationResult {
 }
 
 export class StorageRecalculationApplicationService {
+  private readonly workspaceScanner: WorkspaceStorageScanner;
+
   constructor(
     private readonly fileStorageRepository: IFileStorageRepository,
-    private readonly organizationRepository: IOrganizationRepository
-  ) {}
+    private readonly organizationRepository: IOrganizationRepository,
+    workspaceScanner?: WorkspaceStorageScanner
+  ) {
+    // Use provided scanner or create default instance
+    this.workspaceScanner = workspaceScanner || new WorkspaceStorageScanner();
+  }
 
   /**
    * Recalculate storage for a single organization
@@ -103,13 +112,28 @@ export class StorageRecalculationApplicationService {
 
       // Invalidate cache to ensure we get fresh S3 data
       invalidateOrgStorageCache(organizationId);
+      this.workspaceScanner.invalidateCache(organizationId);
 
-      // Scan actual S3 storage
-      const actualBreakdown = await this.fileStorageRepository.getOrganizationStorageBreakdown(
+      // Scan actual S3 storage (database, chat, skill)
+      const s3Breakdown = await this.fileStorageRepository.getOrganizationStorageBreakdown(
         organizationId
       );
 
-      logger.debug(`Actual storage: ${actualBreakdown.totalBytes} bytes (${actualBreakdown.fileCount} files)`);
+      // Scan workspace storage from EFS
+      const workspaceResult = await this.workspaceScanner.scanOrganization(organizationId);
+
+      // Combine S3 + EFS results
+      const actualBreakdown = {
+        ...s3Breakdown,
+        workspaceStorageBytes: workspaceResult.totalBytes,
+        totalBytes: s3Breakdown.totalBytes + workspaceResult.totalBytes,
+      };
+
+      logger.debug(
+        `Actual storage: ${actualBreakdown.totalBytes} bytes ` +
+          `(S3: ${s3Breakdown.totalBytes}, workspace: ${workspaceResult.totalBytes}, ` +
+          `${actualBreakdown.fileCount} S3 files, ${workspaceResult.agentCount} agents)`
+      );
 
       // Calculate difference
       const difference = actualBreakdown.totalBytes - trackedTotal;
@@ -206,15 +230,19 @@ export class StorageRecalculationApplicationService {
     };
 
     try {
-      // Get all organizations using proper repository method
-      const allOrganizations = await this.organizationRepository.findAll();
+      // Get all organizations using raw method (bypasses RLS for cross-org batch operation)
+      // AIDEV-NOTE: This is intentional - scheduler needs visibility across all orgs
+      const allOrganizations = await this.organizationRepository.findAllRaw();
       batchResult.totalOrganizations = allOrganizations.length;
 
       logger.debug(`Found ${allOrganizations.length} organizations to process`);
 
       // Process each organization
       for (const org of allOrganizations) {
-        const result = await this.recalculateOrganizationStorage(org.id.value);
+        // AIDEV-NOTE: Wrap in withSystemContext so findById/update work with RLS
+        const result = await withSystemContext(org.id.value, () =>
+          this.recalculateOrganizationStorage(org.id.value)
+        );
 
         if (result.success && result.data) {
           batchResult.successCount++;
@@ -280,13 +308,27 @@ export class StorageRecalculationApplicationService {
     const discrepancies: StorageDiscrepancy[] = [];
 
     try {
-      const allOrganizations = await this.organizationRepository.findAll();
+      // AIDEV-NOTE: Uses raw method to query across all orgs (bypasses RLS)
+      // This is intentional - detecting discrepancies needs visibility across all organizations
+      const allOrganizations = await this.organizationRepository.findAllRaw();
 
       for (const org of allOrganizations) {
         const trackedTotal = org.storageUsedBytes || 0;
-        const actualBreakdown = await this.fileStorageRepository.getOrganizationStorageBreakdown(
+
+        // Get S3 storage
+        const s3Breakdown = await this.fileStorageRepository.getOrganizationStorageBreakdown(
           org.id.value
         );
+
+        // Get workspace storage from EFS
+        const workspaceResult = await this.workspaceScanner.scanOrganization(org.id.value);
+
+        // Combine
+        const actualBreakdown = {
+          ...s3Breakdown,
+          workspaceStorageBytes: workspaceResult.totalBytes,
+          totalBytes: s3Breakdown.totalBytes + workspaceResult.totalBytes,
+        };
 
         const difference = actualBreakdown.totalBytes - trackedTotal;
 

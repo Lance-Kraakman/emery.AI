@@ -5,11 +5,11 @@ import {
   getDatabaseApplicationService
 } from '@/ddd/application/di/container';
 import { testClient } from '../shared/integration-helpers';
-import { OrganizationId, UserId, DatabaseId, TableId } from '@/ddd/domain/shared/value-objects';
+import { DatabaseId, TableId } from '@/ddd/domain/shared/value-objects';
 import type { TableApplicationService } from '@/ddd/application/services/tables/table-application-service';
 import type { RowApplicationService } from '@/ddd/application/services/tables/row-application-service';
 import { DynamicTable } from '@/ddd/domain/tables/entities/dynamic-table';
-import { TableField, type FieldType } from '@/ddd/domain/tables/value-objects/table-field';
+import { type FieldType } from '@/ddd/domain/tables/value-objects/table-field';
 import type { TestCase } from '../../shared/types';
 import { createTestOrganization, type TestContext, initializeTestDI } from '../shared/test-setup';
 import { Row, RowId } from '@/ddd/domain/tables/value-objects/row';
@@ -485,7 +485,7 @@ describe('TableApplicationService Integration Tests', () => {
 
   describe('deleteRow', () => {
     let deleteTestTable: DynamicTable;
-    let createdRowIds: string[] = [];
+    const createdRowIds: string[] = [];
 
     beforeEach(async () => {
       // Create test table for deletion tests

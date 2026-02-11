@@ -7,7 +7,7 @@ Questions are collected from all sub-agents before presenting to user.
 
 from dataclasses import dataclass, field
 from itertools import groupby
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass
@@ -18,14 +18,15 @@ class AgentQuestion:
     Collected during cascading planning when a sub-agent needs
     clarification before finalizing its detailed plan.
     """
+
     question_id: str
     agent_name: str  # "schema_builder", "skill_builder", etc.
     step_id: str  # Parent step this question relates to
     question: str
-    options: Optional[List[str]] = None  # For multiple choice questions
-    context: Optional[str] = None  # Why the agent needs this info
+    options: list[str] | None = None  # For multiple choice questions
+    context: str | None = None  # Why the agent needs this info
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "questionId": self.question_id,
@@ -37,7 +38,7 @@ class AgentQuestion:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "AgentQuestion":
+    def from_dict(cls, data: dict[str, Any]) -> "AgentQuestion":
         """Create from dictionary."""
         return cls(
             question_id=data.get("questionId", data.get("question_id", "")),
@@ -56,26 +57,27 @@ class BatchedQuestions:
 
     Presented to user in a single UI, grouped by agent.
     """
-    questions: List[AgentQuestion] = field(default_factory=list)
+
+    questions: list[AgentQuestion] = field(default_factory=list)
     planning_round: int = 1  # For iterative planning
 
-    def group_by_agent(self) -> Dict[str, List[AgentQuestion]]:
+    def group_by_agent(self) -> dict[str, list[AgentQuestion]]:
         """Group questions by agent for UI display."""
         sorted_qs = sorted(self.questions, key=lambda q: q.agent_name)
-        result: Dict[str, List[AgentQuestion]] = {}
+        result: dict[str, list[AgentQuestion]] = {}
         for agent_name, group in groupby(sorted_qs, key=lambda q: q.agent_name):
             result[agent_name] = list(group)
         return result
 
-    def group_by_step(self) -> Dict[str, List[AgentQuestion]]:
+    def group_by_step(self) -> dict[str, list[AgentQuestion]]:
         """Group questions by parent step."""
         sorted_qs = sorted(self.questions, key=lambda q: q.step_id)
-        result: Dict[str, List[AgentQuestion]] = {}
+        result: dict[str, list[AgentQuestion]] = {}
         for step_id, group in groupby(sorted_qs, key=lambda q: q.step_id):
             result[step_id] = list(group)
         return result
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "questions": [q.to_dict() for q in self.questions],
@@ -83,7 +85,7 @@ class BatchedQuestions:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "BatchedQuestions":
+    def from_dict(cls, data: dict[str, Any]) -> "BatchedQuestions":
         """Create from dictionary."""
         questions_data = data.get("questions", [])
         planning_round = data.get("planningRound", data.get("planning_round", 1))
@@ -112,19 +114,20 @@ class QuestionAnswers:
 
     Maps question_id to the user's answer.
     """
-    answers: Dict[str, str] = field(default_factory=dict)  # question_id → answer
 
-    def to_dict(self) -> Dict[str, Any]:
+    answers: dict[str, str] = field(default_factory=dict)  # question_id → answer
+
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {"answers": self.answers}
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "QuestionAnswers":
+    def from_dict(cls, data: dict[str, Any]) -> "QuestionAnswers":
         """Create from dictionary."""
         answers_data = data.get("answers", {})
         return cls(answers=answers_data if isinstance(answers_data, dict) else {})
 
-    def get_answer(self, question_id: str) -> Optional[str]:
+    def get_answer(self, question_id: str) -> str | None:
         """Get answer for a specific question."""
         return self.answers.get(question_id)
 
@@ -132,7 +135,7 @@ class QuestionAnswers:
         self,
         agent_name: str,
         questions: BatchedQuestions,
-    ) -> Dict[str, str]:
+    ) -> dict[str, str]:
         """Get answers for a specific agent's questions."""
         agent_questions = questions.group_by_agent().get(agent_name, [])
         return {

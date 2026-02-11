@@ -89,6 +89,19 @@ export function useDeviceFlow() {
           if (pollRef.current) clearInterval(pollRef.current)
           pollRef.current = null
           localStorage.removeItem(STORAGE_KEY)
+
+          // Extract and store API key for Tauri Rust commands
+          try {
+            const data = await res.json()
+            if (data.apiKey && isTauri()) {
+              const { invoke } = await import('@tauri-apps/api/core')
+              await invoke('store_api_key', { apiKey: data.apiKey })
+            }
+          } catch (err) {
+            console.error('[Device Flow] Failed to store API key:', err)
+            // Continue anyway - sync features may not work but auth will
+          }
+
           setState((prev) => ({ ...prev, status: 'success' }))
 
           setTimeout(() => {

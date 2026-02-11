@@ -9,7 +9,7 @@
 
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -47,6 +47,14 @@ export function ImageArtifactViewer({
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [imageError, setImageError] = useState(false)
   const theme = useOptionalTheme()
+  const [formattedDate, setFormattedDate] = useState('')
+
+  // Format date after hydration to avoid server/client mismatch
+  useEffect(() => {
+    if (attachment?.uploadedAt) {
+      setFormattedDate(new Date(attachment.uploadedAt).toLocaleDateString())
+    }
+  }, [attachment?.uploadedAt])
 
   // Zoom controls
   const handleZoomIn = () => setZoom(prev => Math.min(prev + 25, 300))
@@ -385,9 +393,11 @@ export function ImageArtifactViewer({
           )}
           <span>{attachment.mimeType}</span>
         </div>
-        <div>
-          Uploaded {new Date(attachment.uploadedAt).toLocaleDateString()}
-        </div>
+        {formattedDate && (
+          <div>
+            Uploaded {formattedDate}
+          </div>
+        )}
       </div>
     </div>
   )

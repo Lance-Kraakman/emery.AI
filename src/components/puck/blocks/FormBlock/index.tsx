@@ -13,7 +13,6 @@
 import type { ComponentConfig } from "@measured/puck";
 import FormBlock, { type FormBlockProps } from "./FormBlock";
 import { getFormViewConfiguration } from "@/app/actions/views";
-import { getTables } from "@/app/actions/tables";
 import { createViewManagementField } from "../../custom-fields";
 import { FormConfigFieldRenderer } from "../../fields/FormConfigFieldRenderer";
 

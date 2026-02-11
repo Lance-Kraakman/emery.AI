@@ -39,7 +39,7 @@ export { TaskStatus };
  * ```
  */
 export interface TriggerContext {
-  type: 'DATABASE_EVENT' | 'CALENDAR' | 'WEBHOOK' | 'MANUAL';
+  type: 'DATABASE_EVENT' | 'CALENDAR' | 'WEBHOOK' | 'MANUAL' | 'CHAT';
   scheduleName?: string; // Name of the schedule that triggered this task
   tableChange?: TableChangeEvent; // For DATABASE_EVENT triggers
   calendarData?: {  // For CALENDAR triggers
@@ -92,6 +92,17 @@ export interface TaskInstructions {
   metadata?: Record<string, any>;
 }
 
+/**
+ * Pending human step data for workflow execution
+ */
+export interface PendingHumanStep {
+  stepId: string;
+  assignedTo: string;
+  inputs: Record<string, any>;
+  completedAt?: string;
+  outputs?: Record<string, any>;
+}
+
 export interface TaskConfig {
   id?: TaskId; // Will be generated if not provided
   agentId?: AgentId | null; // null = org-level task, set = agent executes this
@@ -100,6 +111,7 @@ export interface TaskConfig {
   instructions: TaskInstructions;
   skillId?: number; // Optional - execute this skill instead of raw instructions
   triggerContext?: TriggerContext; // Optional - what triggered this task
+  chatMessageId?: string; // Optional - link to ChatMessage for ExecutionSteps
   status?: TaskStatus;
   result?: any;
   error?: string;
@@ -108,6 +120,8 @@ export interface TaskConfig {
   completedAt?: Date;
   createdBy?: UserId;
   createdAt?: Date;
+  currentStepId?: string;
+  pendingHumanSteps?: PendingHumanStep[];
 }
 
 export interface CreateTaskData {
@@ -116,6 +130,7 @@ export interface CreateTaskData {
   instructions: TaskInstructions; // Task configuration
   skillId?: number; // Optional - execute this skill instead of raw instructions
   triggerContext?: TriggerContext; // What triggered this task
+  chatMessageId?: string; // Optional - link to ChatMessage for ExecutionSteps
   createdBy?: UserId;
 }
 
@@ -128,6 +143,7 @@ export class Task {
     public readonly instructions: TaskInstructions,
     public readonly skillId: number | null, // Optional skill to execute
     public readonly triggerContext: TriggerContext | null,
+    public readonly chatMessageId: string | null, // Link to ChatMessage for ExecutionSteps
     private _status: TaskStatus,
     private _result: any | null,
     private _error: string | null,
@@ -135,7 +151,9 @@ export class Task {
     private _startedAt: Date | null,
     private _completedAt: Date | null,
     public readonly createdBy: UserId | null,
-    public readonly createdAt: Date
+    public readonly createdAt: Date,
+    private _currentStepId: string | null,
+    private _pendingHumanSteps: PendingHumanStep[]
   ) {}
 
   static create(config: TaskConfig): Task {
@@ -158,6 +176,7 @@ export class Task {
       config.instructions,
       config.skillId || null,
       config.triggerContext || null,
+      config.chatMessageId || null,
       config.status || TaskStatus.pending(),
       config.result || null,
       config.error || null,
@@ -165,7 +184,9 @@ export class Task {
       config.startedAt || null,
       config.completedAt || null,
       config.createdBy || null,
-      config.createdAt || now
+      config.createdAt || now,
+      config.currentStepId || null,
+      config.pendingHumanSteps || []
     );
   }
 
@@ -177,6 +198,7 @@ export class Task {
     instructions: any; // JSONB from database
     skillId?: number | null; // Optional skill reference
     triggerContext?: any; // JSONB from database
+    chatMessageId?: string | null; // Link to ChatMessage
     status: string;
     result?: any;
     error?: string | null;
@@ -185,6 +207,8 @@ export class Task {
     completedAt?: Date | null;
     createdBy?: string | null;
     createdAt: Date;
+    currentStepId?: string | null;
+    pendingHumanSteps?: any; // JSONB from database
   }): Task {
     return new Task(
       TaskId.fromString(data.id),
@@ -194,6 +218,7 @@ export class Task {
       data.instructions as TaskInstructions,
       data.skillId || null,
       data.triggerContext as TriggerContext | null || null,
+      data.chatMessageId || null,
       TaskStatus.fromString(data.status),
       data.result || null,
       data.error || null,
@@ -201,7 +226,9 @@ export class Task {
       data.startedAt || null,
       data.completedAt || null,
       data.createdBy ? UserId.fromString(data.createdBy) : null,
-      data.createdAt
+      data.createdAt,
+      data.currentStepId || null,
+      Array.isArray(data.pendingHumanSteps) ? data.pendingHumanSteps : []
     );
   }
 
@@ -213,6 +240,7 @@ export class Task {
     instructions: any;
     skillId: number | null;
     triggerContext: TriggerContext | null;
+    chatMessageId: string | null;
     status: string;
     result: any;
     error: string | null;
@@ -221,6 +249,8 @@ export class Task {
     completedAt: Date | null;
     createdBy: string | null;
     createdAt: Date;
+    currentStepId: string | null;
+    pendingHumanSteps: PendingHumanStep[];
   } {
     return {
       id: this.id.value,
@@ -230,6 +260,7 @@ export class Task {
       instructions: this.instructions,
       skillId: this.skillId,
       triggerContext: this.triggerContext,
+      chatMessageId: this.chatMessageId,
       status: this._status.value,
       result: this._result,
       error: this._error,
@@ -237,7 +268,9 @@ export class Task {
       startedAt: this._startedAt,
       completedAt: this._completedAt,
       createdBy: this.createdBy?.value || null,
-      createdAt: this.createdAt
+      createdAt: this.createdAt,
+      currentStepId: this._currentStepId,
+      pendingHumanSteps: this._pendingHumanSteps
     };
   }
 
@@ -248,6 +281,8 @@ export class Task {
   get logs(): string[] { return this._logs; }
   get startedAt(): Date | null { return this._startedAt; }
   get completedAt(): Date | null { return this._completedAt; }
+  get currentStepId(): string | null { return this._currentStepId; }
+  get pendingHumanSteps(): PendingHumanStep[] { return this._pendingHumanSteps; }
 
   /**
    * Start task execution
@@ -336,10 +371,18 @@ export class Task {
   }
 
   /**
-   * Check if task is in a terminal state
+   * Check if task is in a terminal state (not awaiting_human - that's a paused state)
    */
   get isTerminal(): boolean {
     return [TASK_STATUS.COMPLETED, TASK_STATUS.FAILED, TASK_STATUS.CANCELLED].includes(this._status.value as any);
+  }
+
+  /**
+   * Check if task is in an active state (running or awaiting human)
+   */
+  get isActive(): boolean {
+    return this._status.value === TASK_STATUS.IN_PROGRESS ||
+           this._status.value === TASK_STATUS.AWAITING_HUMAN;
   }
 
   /**
@@ -354,6 +397,59 @@ export class Task {
    */
   get isPending(): boolean {
     return this._status.value === TASK_STATUS.PENDING;
+  }
+
+  /**
+   * Check if task is awaiting human input
+   */
+  get isAwaitingHuman(): boolean {
+    return this._status.value === TASK_STATUS.AWAITING_HUMAN;
+  }
+
+  /**
+   * Pause task for human input
+   */
+  awaitHuman(): void {
+    if (!this._status.canTransitionTo(TaskStatus.awaitingHuman())) {
+      throw new Error(`Cannot await human for task ${this.id}: current status is ${this._status.value}`);
+    }
+
+    this._status = TaskStatus.awaitingHuman();
+  }
+
+  /**
+   * Resume task from human input
+   */
+  resumeFromHuman(): void {
+    if (this._status.value !== TASK_STATUS.AWAITING_HUMAN) {
+      throw new Error(`Cannot resume task ${this.id}: task is not awaiting human input`);
+    }
+
+    this._status = TaskStatus.inProgress();
+  }
+
+  /**
+   * Add a pending human step to the task
+   */
+  addPendingHumanStep(step: Omit<PendingHumanStep, 'completedAt' | 'outputs'>): void {
+    this._pendingHumanSteps.push({
+      ...step,
+      completedAt: undefined,
+      outputs: undefined,
+    });
+    this._currentStepId = step.stepId;
+  }
+
+  /**
+   * Complete a pending human step with outputs
+   */
+  completeHumanStep(stepId: string, outputs: Record<string, any>): void {
+    const step = this._pendingHumanSteps.find(s => s.stepId === stepId);
+    if (!step) {
+      throw new Error(`Human step ${stepId} not found on task ${this.id}`);
+    }
+    step.completedAt = new Date().toISOString();
+    step.outputs = outputs;
   }
 
   /**

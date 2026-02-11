@@ -8,8 +8,7 @@ import { getAgents } from '@/app/actions/agents'
 import { getSkillsByOrganization } from '@/app/actions/skills'
 import { getDatabases } from '@/app/actions/databases'
 import { getTables } from '@/app/actions/tables'
-import { getAppApplicationService } from '@/ddd/application/di/container'
-import { OrganizationId } from '@/ddd/domain/shared/value-objects'
+import { getSidebarApps } from '@/app/actions/puck-apps'
 
 // AIDEV-NOTE: Server-side sidebar data fetching moved to layout
 // Uses optimized 2-query approach for apps+pages instead of N+1
@@ -64,12 +63,12 @@ export default async function AppLayout({
   if (session?.user?.currentOrganizationId) {
     try {
       const startTime = Date.now()
-      const orgId = OrganizationId.fromNumber(session.user.currentOrganizationId)
 
       // Fetch all sidebar data in parallel (no N+1 - apps+pages use optimized 2-query approach)
       // Teams fetch skipped - feature coming soon
+      // All calls use server actions which set RLS context via withAuthContext()
       const [appsWithPages, agentsResult, skillsResult, databasesResult, tablesResult] = await Promise.all([
-        getAppApplicationService().getAppsWithPagesForOrganization(orgId),
+        getSidebarApps(),
         getAgents(),
         getSkillsByOrganization(session.user.currentOrganizationId),
         getDatabases(),
@@ -88,17 +87,7 @@ export default async function AppLayout({
       }, {} as Record<number, typeof tablesResult>)
 
       sidebarData = {
-        apps: appsWithPages.map(app => ({
-          id: app.id,
-          name: app.name,
-          slug: app.slug,
-          pages: app.pages.map(page => ({
-            id: page.id,
-            name: page.name,
-            slug: page.slug,
-            appId: app.id
-          }))
-        })),
+        apps: appsWithPages, // Already in correct format from getSidebarApps()
         agents: (agentsResult || []).map(agent => ({
           id: agent.id,
           name: agent.name

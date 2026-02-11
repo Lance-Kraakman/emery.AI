@@ -25,13 +25,14 @@ import { auth } from '@/lib/auth';
 
 // Import Value Objects for proper type safety
 import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
+import { contextManager } from '@/ddd/infrastructure/db/context-manager';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 
 // Import existing chat services (DIContainer now auto-initializes)
-import { getChatApplicationService, getDynamicTableRepository, getAgentRepository, getToolConfigurationApplicationService, getUserRepository, getOrganizationRepository, getStorageQuotaApplicationService, getAuditApplicationService } from '@/ddd/application/di/container';
+import { getChatApplicationService, getToolConfigurationApplicationService, getOrganizationRepository, getStorageQuotaApplicationService, getAuditApplicationService } from '@/ddd/application/di/container';
 import { TokenUsageApplicationService } from '@/ddd/application/services/billing/token-usage-application-service';
 import { getTokenUsageRepository } from '@/ddd/application/di/getters';
-import type { CreateChatDTO, SendMessageDTO, UpdateMessageDTO, ExecutionStep, ExecutionStepMetadata } from '@/app/dtos/chat.dto';
+import type { CreateChatDTO, SendMessageDTO, UpdateMessageDTO, ExecutionStep } from '@/app/dtos/chat.dto';
 import type { EnrichToolsWithUserApiKeyCommand } from '@/ddd/application/services/tools/tool-configuration-application-service';
 
 // Import user API key utilities
@@ -104,11 +105,11 @@ export async function POST(req: NextRequest) {
     const userId = session?.user?.id;
     const currentOrganizationId = session?.user?.currentOrganizationId;
 
-    if (!session?.user) {
+    if (!session?.user || !userId) {
       console.error('[CHAT-GRPC-API] Authentication failed - no valid session or user ID');
       return new Response(
         JSON.stringify({ error: 'Authentication required. Please log in and try again.' }),
-        { 
+        {
           status: 401,
           headers: { 'Content-Type': 'application/json' }
         }
@@ -124,7 +125,7 @@ export async function POST(req: NextRequest) {
     let domainId: number | undefined;
     let requestModel: string | undefined;  // Model override from frontend
     let tools: any[] = [];
-    let uploadedFiles: File[] = [];
+    const uploadedFiles: File[] = [];
 
     if (contentType.includes('multipart/form-data')) {
       // Handle FormData with file uploads
@@ -209,6 +210,13 @@ export async function POST(req: NextRequest) {
         }
       );
     }
+
+    // AIDEV-NOTE: Set RLS context for all subsequent database operations
+    // Uses asyncLocalStorage.enterWith() to set context for entire async chain
+    contextManager.setContext(
+      OrganizationId.fromNumber(organizationId),
+      UserId.fromString(userId)
+    );
 
     // 2.5 Check token quota before processing
     console.log('[CHAT-GRPC-API] Checking token quota for organization:', organizationId);
@@ -491,6 +499,11 @@ export async function POST(req: NextRequest) {
         userApiKey = await ensureFreshUserApiKey(userId);
       } catch (error) {
         console.error('[CHAT-GRPC-API] Error generating user API key:', error);
+        // Don't silently continue - fail early with clear error
+        return new Response(
+          JSON.stringify({ error: 'Failed to generate API credentials for chat session' }),
+          { status: 500, headers: { 'Content-Type': 'application/json' } }
+        );
       }
     }
 
@@ -752,7 +765,17 @@ export async function POST(req: NextRequest) {
 
         const grpcClient = getChatProcessingClient(organizationId.toString());
 
-        // AIDEV-NOTE: Task tracking removed - Python creates tasks when executing skills dynamically
+        // AIDEV-NOTE: Task creation removed from per-message flow
+        // Tasks are now created per agent invocation/skill execution, not per chat message
+        // This prevents database bloat and aligns with the domain model where:
+        // - 1 task = 1 agent invocation (which may run multiple skills)
+        // - 1 task = 1 direct skill execution
+        // Task creation happens in Python when skills are executed
+
+        // Pass assistantMessageId to Python so tasks can link to ChatMessage for ExecutionSteps
+        if (assistantMessageId) {
+          processingOptions.assistantMessageId = assistantMessageId;
+        }
 
         // Process message with gRPC service (now accepts MessagePart[])
         grpcClient.processMessage(

@@ -16,7 +16,9 @@ RUN git config --global url."https://github.com/".insteadOf "git@github.com:"
 RUN npm i -g pnpm
 
 # AIDEV-NOTE: Install dependencies with frozen lockfile for cache efficiency
-RUN pnpm install --frozen-lockfile
+# Uses BuildKit cache mount for pnpm store - run with DOCKER_BUILDKIT=1
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile
 
 # Copy source code after dependencies are installed
 COPY . .
@@ -56,7 +58,7 @@ ENV MALLOC_ARENA_MAX=2
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/src/public ./public
+COPY --from=builder /app/public ./public
 
 # AIDEV-NOTE: Copy source files needed for tsx execution
 COPY --from=builder /app/src/scripts ./src/scripts

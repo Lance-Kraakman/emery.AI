@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { getConnectionApplicationService } from '@/ddd/application/di/container';
-import { UserId, OrganizationId } from '@/ddd/domain/shared/value-objects';
+import { UserId } from '@/ddd/domain/shared/value-objects';
 import { AppName, ConnectionId } from '@/ddd/domain/connections/value-objects';
 import { testClient } from '../shared/integration-helpers';
 import type { TestCase } from '../../shared/types';

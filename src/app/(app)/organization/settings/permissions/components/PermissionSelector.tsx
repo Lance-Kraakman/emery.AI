@@ -6,7 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, Eye, Edit, Plus, Play, Users, Shield, ChevronDown } from "lucide-react";
+import { Search, Eye, Edit, Plus, Play, Users, Shield } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ResourceSelector } from "./ResourceSelector";
 
@@ -407,7 +407,7 @@ export function PermissionSelector({
       {Object.keys(filteredResourceGroups).length === 0 && searchTerm && (
         <div className="text-center py-8 text-muted-foreground">
           <Search className="w-8 h-8 mx-auto mb-2 opacity-50" />
-          <p>No permissions found matching "{searchTerm}"</p>
+          <p>No permissions found matching &quot;{searchTerm}&quot;</p>
           <Button 
             variant="outline" 
             size="sm" 

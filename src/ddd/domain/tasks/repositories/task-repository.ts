@@ -7,7 +7,7 @@
 import type { Task } from '../entities/task';
 import type { TaskId } from '../value-objects/task-id';
 import type { TaskStatus } from '../value-objects/task-status';
-import type { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
+import type { AgentId, OrganizationId } from '@/ddd/domain/shared/value-objects';
 
 // Data transfer objects for repository operations
 export interface CreateTaskData {
@@ -18,6 +18,7 @@ export interface CreateTaskData {
   skillId?: number | null; // Optional skill to execute
   instructions: any; // JSONB from database
   triggerContext?: any; // JSONB trigger context
+  chatMessageId?: string | null; // Link to ChatMessage for ExecutionSteps
   status?: string;
   result?: any;
   error?: string | null;
@@ -34,6 +35,14 @@ export interface UpdateTaskData {
   logs?: string[];
   startedAt?: Date | null;
   completedAt?: Date | null;
+  currentStepId?: string | null;
+  pendingHumanSteps?: Array<{
+    stepId: string;
+    assignedTo: string;
+    inputs: Record<string, any>;
+    completedAt?: string;
+    outputs?: Record<string, any>;
+  }>;
 }
 
 export interface ITaskRepository {
@@ -67,4 +76,21 @@ export interface ITaskRepository {
   // Cleanup operations
   deleteCompletedOlderThan(cutoffDate: Date): Promise<number>;
   deleteFailedOlderThan(cutoffDate: Date): Promise<number>;
+
+  // Raw methods (bypass RLS - system scheduler use only)
+  /**
+   * Find pending tasks bypassing RLS (system scheduler use only)
+   * WARNING: Completely bypasses row-level security.
+   * ONLY use for cross-org batch operations in trusted system processes.
+   * Requires rawDb to be configured in repository constructor.
+   */
+  findPendingTasksRaw(limit?: number): Promise<Task[]>;
+
+  /**
+   * Find stuck in-progress tasks bypassing RLS (system scheduler use only)
+   * WARNING: Completely bypasses row-level security.
+   * ONLY use for cross-org batch operations in trusted system processes.
+   * Requires rawDb to be configured in repository constructor.
+   */
+  findStuckInProgressRaw(olderThan: Date): Promise<Task[]>;
 }

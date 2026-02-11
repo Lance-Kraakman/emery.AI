@@ -2,15 +2,7 @@
 
 // Server Actions for role management in RBAC system
 // Handles CRUD operations for organization-specific roles and their permissions
-
-// Export types for use in components
-export type { 
-  CustomRole, 
-  CreateRoleCommand, 
-  UpdateRoleCommand, 
-  RoleResult, 
-  RoleSelectionOption 
-} from './types';
+// Note: Types should be imported directly from '@/app/actions/types'
 
 import { revalidatePath } from "next/cache";
 import { db } from '@/ddd/infrastructure/db/client';
@@ -18,8 +10,6 @@ import { roles, permissions, rolePermissions, userRoles } from '@/ddd/infrastruc
 import { eq, and, or, isNull, sql, ne } from 'drizzle-orm';
 import type { 
   CustomRole, 
-  CreateRoleCommand, 
-  UpdateRoleCommand, 
   RoleResult as Result, 
   RoleSelectionOption 
 } from './types';

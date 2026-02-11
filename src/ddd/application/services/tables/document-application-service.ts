@@ -20,7 +20,6 @@ import { OrganizationId, TableId, FieldId, UserId } from '@/ddd/domain/shared/va
 import { Result } from '@/ddd/domain/shared/result';
 import { DynamicTableService } from '@/ddd/domain/tables/services/dynamic-table-service';
 import { Row } from '@/ddd/domain/tables/value-objects/row';
-import { FieldValue } from '@/ddd/domain/tables/value-objects/field-values';
 import { IFileStorageRepository } from '@/ddd/domain/tables/repositories/file-storage-repository';
 import { IDynamicTableRepository } from '@/ddd/domain/tables/repositories/dynamic-table-repository';
 import { getFieldDefaultValue } from '@/app/mappers/dsg-mapper';

@@ -20,32 +20,32 @@ to create a cohesive, standalone package for context engineering functionality.
 
 # Models
 from .models import (
-    ExecutionContext,
-    ExecutionInsight,
-    InsightType,
-    StepResult,
-    create_insight,
-    ExecutionEvolutionTracker,
-    ExecutionDelta,
-    ExecutionSnapshot,
     ExecutionChangeType,
-    StrategyRegistry,
-    StrategyRecord,
+    ExecutionContext,
+    ExecutionDelta,
+    ExecutionEvolutionTracker,
+    ExecutionInsight,
     ExecutionPattern,
-    StrategyOutcome,
+    ExecutionSnapshot,
+    InsightType,
+    PhaseGoal,
     PlanningContext,
     PlanningInsight,
     PlanningInsightType,
-    PhaseGoal,
+    StepResult,
+    StrategyOutcome,
+    StrategyRecord,
+    StrategyRegistry,
+    create_insight,
 )
 
 # Services
 from .services import (
     ExecutionContextService,
-    create_execution_context_service,
-    StrategyAccumulationService,
-    create_strategy_accumulation_service,
     PlanningContextService,
+    StrategyAccumulationService,
+    create_execution_context_service,
+    create_strategy_accumulation_service,
 )
 
 __all__ = [

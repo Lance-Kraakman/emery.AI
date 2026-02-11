@@ -6,13 +6,13 @@ Ported from tools/pipedream_tools.py - removes smolagents.Tool dependency.
 
 from __future__ import annotations
 
-import inspect
 import json
 import logging
 import os
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import requests
 
@@ -21,15 +21,24 @@ from emery_agents.entities.tool_config import ToolConfig
 logger = logging.getLogger(__name__)
 
 # Shared thread pool for HTTP requests to prevent blocking gRPC event loop
-_http_thread_pool = ThreadPoolExecutor(max_workers=10, thread_name_prefix="pipedream-http")
+_http_thread_pool = ThreadPoolExecutor(
+    max_workers=10, thread_name_prefix="pipedream-http"
+)
 
 # Load metadata once from unified_metadata.json
-METADATA_PATH = Path(__file__).parent.parent.parent / "execution" / "tools" / "unified_metadata.json"
+METADATA_PATH = (
+    Path(__file__).parent.parent.parent
+    / "execution"
+    / "tools"
+    / "unified_metadata.json"
+)
 try:
     with open(METADATA_PATH) as f:
         _unified = json.load(f)
         PIPEDREAM_METADATA = _unified.get("pipedream_tools", {})
-    logger.info(f"[PIPEDREAM-TOOLS] Loaded {len(PIPEDREAM_METADATA)} tools from unified metadata")
+    logger.info(
+        f"[PIPEDREAM-TOOLS] Loaded {len(PIPEDREAM_METADATA)} tools from unified metadata"
+    )
 except FileNotFoundError:
     logger.warning(f"Pipedream metadata not found at {METADATA_PATH}")
     PIPEDREAM_METADATA = {}
@@ -155,7 +164,10 @@ class PipedreamTool:
             elif response.status_code == 401:
                 return {"success": False, "error": "Authentication failed"}
             else:
-                return {"success": False, "error": f"Request failed: {response.status_code}"}
+                return {
+                    "success": False,
+                    "error": f"Request failed: {response.status_code}",
+                }
         except TimeoutError:
             return {"success": False, "error": "Request timeout after 35 seconds"}
         except Exception as e:
@@ -202,7 +214,10 @@ class PipedreamTool:
             elif response.status_code == 401:
                 return {"success": False, "error": "Authentication failed"}
             else:
-                return {"success": False, "error": f"MCP request failed: {response.status_code}"}
+                return {
+                    "success": False,
+                    "error": f"MCP request failed: {response.status_code}",
+                }
         except TimeoutError:
             return {"success": False, "error": "Request timeout after 35 seconds"}
         except Exception as e:

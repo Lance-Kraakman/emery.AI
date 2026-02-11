@@ -6,7 +6,7 @@ import type { IDelegationRepository } from '@/ddd/domain/delegations/repositorie
 import type { CredentialDelegation } from '@/ddd/domain/delegations/entities/credential-delegation';
 import { DelegationStatus } from '@/ddd/domain/delegations/entities/credential-delegation';
 import { credentialDelegations } from '@/ddd/infrastructure/db/schema';
-import { eq, and, arrayContains } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import type { InferSelectModel } from 'drizzle-orm';
 import { DelegationId, AgentId, UserId } from '@/ddd/domain/shared/value-objects';
 import { AppName } from '@/ddd/domain/connections/value-objects';

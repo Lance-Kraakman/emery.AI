@@ -3,7 +3,7 @@
  */
 
 import { NextRequest } from 'next/server';
-import { withAuthenticatedRoute, parseJsonBody, requireParam } from '@/lib/api/base';
+import { withAuthenticatedRoute, parseJsonBody, requireParam, parsePaginationParams, paginateResults } from '@/lib/api/base';
 import { hasPermission } from '@/lib/auth';
 import { logAgentMutation } from '@/lib/api/agent-context';
 import { getTableApplicationService } from "@/ddd/application/di/container";
@@ -63,6 +63,10 @@ export async function POST(request: NextRequest): Promise<Response> {
 
 /**
  * GET /api/tables - Get tables list
+ *
+ * Query params:
+ * - page: Page number (default: 1)
+ * - limit: Items per page (default: 20, max: 100)
  */
 export async function GET(request: NextRequest): Promise<Response> {
   return withAuthenticatedRoute(request, async (user) => {
@@ -75,6 +79,15 @@ export async function GET(request: NextRequest): Promise<Response> {
       OrganizationId.fromNumber(user.organizationId)
     );
 
-    return { success: true, data: userTables.map(TableMapper.toDTO) };
+    // AIDEV-NOTE: Apply pagination to results
+    const tableDTOs = userTables.map(TableMapper.toDTO);
+    const paginationParams = parsePaginationParams(request);
+    const paginatedResult = paginateResults(tableDTOs, paginationParams);
+
+    return {
+      success: true,
+      data: paginatedResult.data,
+      pagination: paginatedResult.pagination,
+    };
   });
 }

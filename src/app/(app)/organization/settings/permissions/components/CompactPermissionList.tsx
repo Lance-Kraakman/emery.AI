@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -436,7 +435,7 @@ export function CompactPermissionList({
       {Object.keys(filteredResourceGroups).length === 0 && searchTerm && (
         <div className="text-center py-8 text-muted-foreground">
           <Search className="w-8 h-8 mx-auto mb-2 opacity-50" />
-          <p>No permissions found matching "{searchTerm}"</p>
+          <p>No permissions found matching &quot;{searchTerm}&quot;</p>
           <Button
             variant="outline"
             size="sm"

@@ -9,7 +9,7 @@
 
 'use client'
 
-import React, { useCallback } from 'react'
+import React, { useCallback, useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -39,6 +39,14 @@ export function AudioViewer({
   const { fileField, fileName, fileUrl } = artifact.data
   const displayInfo = getFileDisplayInfo(artifact)
   const theme = useOptionalTheme()
+  const [formattedDate, setFormattedDate] = useState('')
+
+  // Format date after hydration to avoid server/client mismatch
+  useEffect(() => {
+    if (fileField?.uploadedAt) {
+      setFormattedDate(new Date(fileField.uploadedAt).toLocaleDateString())
+    }
+  }, [fileField?.uploadedAt])
 
   // Handle download
   const handleDownload = useCallback(() => {
@@ -145,10 +153,12 @@ export function AudioViewer({
         style={{ ...getThemedSectionStyle(theme), color: theme ? 'var(--theme-text-muted)' : undefined }}
       >
         <div className="flex items-center gap-4">
-          <span className="flex items-center gap-1">
-            <Calendar className="w-3 h-3" />
-            {new Date(fileField.uploadedAt).toLocaleDateString()}
-          </span>
+          {formattedDate && (
+            <span className="flex items-center gap-1">
+              <Calendar className="w-3 h-3" />
+              {formattedDate}
+            </span>
+          )}
           <span>{fileField.mimeType}</span>
         </div>
 

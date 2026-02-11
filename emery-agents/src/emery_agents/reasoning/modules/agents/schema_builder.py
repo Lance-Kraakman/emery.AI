@@ -70,8 +70,7 @@ class SchemaBuilderModule(dspy.Module):  # type: ignore[misc]
         """
         # Convert dicts to ExistingTable if needed
         tables = [
-            ExistingTable(**t) if isinstance(t, dict) else t
-            for t in existing_tables
+            ExistingTable(**t) if isinstance(t, dict) else t for t in existing_tables
         ]
 
         # Design the schema

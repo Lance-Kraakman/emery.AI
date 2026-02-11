@@ -616,6 +616,51 @@ export class ChatApplicationService {
   }
 
   /**
+   * Get a single message by ID
+   * Used to retrieve execution steps for task detail panel
+   */
+  async getMessage(dto: {
+    messageId: string;
+    userId: string;
+    organizationId: number;
+  }): Promise<Result<ChatMessageDTO>> {
+    try {
+      const messageId = ChatMessageId.fromString(dto.messageId);
+      const organizationId = OrganizationId.fromNumber(dto.organizationId);
+
+      // Get the message
+      const message = await this.messageRepository.findById(messageId);
+      if (!message) {
+        return {
+          success: false,
+          error: 'Message not found'
+        };
+      }
+
+      // Verify user has access to the chat containing this message
+      const chat = await this.chatRepository.findById(message.chatId, organizationId);
+      if (!chat) {
+        return {
+          success: false,
+          error: 'Access denied'
+        };
+      }
+
+      return {
+        success: true,
+        data: ChatMapper.toMessageDTO(message)
+      };
+
+    } catch (error) {
+      logger.error('Error getting message:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get message'
+      };
+    }
+  }
+
+  /**
    * Get chat statistics for an organization
    */
   async getChatStats(organizationId: OrganizationId): Promise<Result<{

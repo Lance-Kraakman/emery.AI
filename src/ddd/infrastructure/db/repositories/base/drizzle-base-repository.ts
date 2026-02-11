@@ -1,6 +1,5 @@
 import { eq } from 'drizzle-orm';
 import { BaseRepository } from './base-repository';
-import { BaseId } from '@/ddd/domain/shared/value-objects/base-id';
 import { OrganizationId } from '@/ddd/domain/shared/value-objects';
 
 /**

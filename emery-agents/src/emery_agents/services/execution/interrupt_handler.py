@@ -9,15 +9,14 @@ Extracted from ExecutionCoordinator for maintainability.
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Any, List, Optional
 
 from ...agents.interrupt_classifier import (
     InterruptClassification,
-    create_interrupt_classifier,
     build_classification_prompt,
+    create_interrupt_classifier,
 )
 from ...entities.models.plan import Plan, PlanStepStatus
-from ...entities.models.task_ledger import TaskLedger, LedgerEventType
+from ...entities.models.task_ledger import LedgerEventType, TaskLedger
 from ..protocols import ModelProviderProtocol
 
 logger = logging.getLogger(__name__)
@@ -26,6 +25,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class QueuedInterrupt:
     """Internal representation of a queued interrupt."""
+
     message: str
     phase: str  # "planning" or "executing"
 
@@ -42,8 +42,8 @@ class InterruptHandler:
 
     def __init__(
         self,
-        model_provider: Optional[ModelProviderProtocol] = None,
-        org_model: Optional[str] = None,
+        model_provider: ModelProviderProtocol | None = None,
+        org_model: str | None = None,
     ):
         """
         Initialize interrupt handler.
@@ -54,10 +54,12 @@ class InterruptHandler:
         """
         self.model_provider = model_provider
         self.org_model = org_model
-        self._interrupt_queue: List[str] = []
+        self._interrupt_queue: list[str] = []
         self._execution_paused: bool = False
 
-    def queue_interrupt(self, message: str, phase: str = "executing") -> QueuedInterrupt:
+    def queue_interrupt(
+        self, message: str, phase: str = "executing"
+    ) -> QueuedInterrupt:
         """
         Queue an interrupt message for processing.
 
@@ -78,7 +80,7 @@ class InterruptHandler:
         """Check if there are pending interrupts in the queue."""
         return len(self._interrupt_queue) > 0
 
-    def pop_interrupt(self) -> Optional[str]:
+    def pop_interrupt(self) -> str | None:
         """Pop the next interrupt from the queue."""
         if self._interrupt_queue:
             return self._interrupt_queue.pop(0)
@@ -104,7 +106,7 @@ class InterruptHandler:
     async def classify_interrupt(
         self,
         interrupt_message: str,
-        current_plan: Optional[Plan] = None,
+        current_plan: Plan | None = None,
     ) -> InterruptClassification:
         """
         Use subagent pattern to classify interrupt intent.
@@ -127,17 +129,27 @@ class InterruptHandler:
             )
 
         # Build context for classification
-        completed_steps = "\n".join([
-            f"- {s.description}"
-            for s in current_plan.steps
-            if s.status == PlanStepStatus.COMPLETED.value
-        ]) or "None yet"
+        completed_steps = (
+            "\n".join(
+                [
+                    f"- {s.description}"
+                    for s in current_plan.steps
+                    if s.status == PlanStepStatus.COMPLETED.value
+                ]
+            )
+            or "None yet"
+        )
 
-        remaining_steps = "\n".join([
-            f"- {s.description}"
-            for s in current_plan.steps
-            if s.status == PlanStepStatus.PENDING.value
-        ]) or "None remaining"
+        remaining_steps = (
+            "\n".join(
+                [
+                    f"- {s.description}"
+                    for s in current_plan.steps
+                    if s.status == PlanStepStatus.PENDING.value
+                ]
+            )
+            or "None remaining"
+        )
 
         prompt = build_classification_prompt(
             interrupt_message=interrupt_message,
@@ -158,7 +170,9 @@ class InterruptHandler:
                 return result
 
             # Tool wasn't called - default to CONTEXT_ADD
-            logger.warning("Interrupt classifier did not call report_classification tool")
+            logger.warning(
+                "Interrupt classifier did not call report_classification tool"
+            )
             return InterruptClassification(
                 classification="CONTEXT_ADD",
                 requires_replan=False,
@@ -177,7 +191,7 @@ class InterruptHandler:
 
     def inject_context(
         self,
-        ledger: Optional[TaskLedger],
+        ledger: TaskLedger | None,
         interrupt_msg: str,
     ) -> None:
         """
@@ -193,6 +207,8 @@ class InterruptHandler:
         if ledger:
             ledger._record_event(
                 event_type=LedgerEventType.USER_FEEDBACK,
-                data={"feedback": interrupt_msg}
+                data={"feedback": interrupt_msg},
             )
-            logger.info(f"💉 Injected interrupt context into ledger: {interrupt_msg[:50]}...")
+            logger.info(
+                f"💉 Injected interrupt context into ledger: {interrupt_msg[:50]}..."
+            )

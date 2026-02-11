@@ -8,12 +8,12 @@ Extracted from ExecutionCoordinator for maintainability.
 
 import asyncio
 import logging
-from typing import Any, List, Optional
+from typing import Any
 
 from ...entities.models.plan import Plan, PlanStep
 from ...reasoning.utils import StepOutcome
-from .plan_step_executor import PlanStepExecutor
 from ...utils.session_logger import SessionLogger
+from .plan_step_executor import PlanStepExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +28,8 @@ class StepExecutor:
 
     def __init__(
         self,
-        plan_step_executor: Optional[PlanStepExecutor] = None,
-        session_logger: Optional[SessionLogger] = None,
+        plan_step_executor: PlanStepExecutor | None = None,
+        session_logger: SessionLogger | None = None,
     ):
         self.plan_step_executor = plan_step_executor
         self.session_logger = session_logger
@@ -38,8 +38,8 @@ class StepExecutor:
         self,
         current_plan: Plan,
         step: PlanStep,
-        tools: List[Any],
-        managed_agents: Optional[List[Any]] = None,
+        tools: list[Any],
+        managed_agents: list[Any] | None = None,
     ) -> StepOutcome:
         """Execute a single plan step, returning structured outcome."""
         logger.info(f"Executing step {step.step_id}: {step.description[:100]}...")
@@ -70,16 +70,18 @@ class StepExecutor:
     async def _execute_tool_directly(
         self,
         step: PlanStep,
-        tools: List[Any],
+        tools: list[Any],
     ) -> str:
         """Execute a tool directly (fallback when no PlanStepExecutor configured)."""
         tool = None
         # Extract base tool name (before ':' if present, e.g., "tool:action" -> "tool")
-        tool_call_parts = step.tool_call.lower().split(':') if step.tool_call else []
-        target_tool_name = tool_call_parts[0] if tool_call_parts else (step.tool_call or "").lower()
+        tool_call_parts = step.tool_call.lower().split(":") if step.tool_call else []
+        target_tool_name = (
+            tool_call_parts[0] if tool_call_parts else (step.tool_call or "").lower()
+        )
 
         for t in tools:
-            tool_name = getattr(t, 'name', str(t))
+            tool_name = getattr(t, "name", str(t))
             if tool_name.lower() == target_tool_name:
                 tool = t
                 break

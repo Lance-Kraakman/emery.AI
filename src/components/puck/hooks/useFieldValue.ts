@@ -31,9 +31,11 @@ import { useQueryParams } from '@/components/puck/contexts/PageContext';
  * @returns Field value or null if not found
  */
 export function useFieldValue(fieldId: number | string): any {
-  // 1. Try nearest row context (DataContextBlock or RepeatBlock)
+  // All hooks must be called unconditionally at the top
   const rowContext = useRowData();
+  const queryParams = useQueryParams();
 
+  // 1. Try nearest row context (DataContextBlock or RepeatBlock)
   if (rowContext?.rowData) {
     // Special case: Row ID is stored as direct property, not as field value
     if (fieldId === 'id') {
@@ -49,16 +51,12 @@ export function useFieldValue(fieldId: number | string): any {
   }
 
   // 2. Fall back to query params (page-level context)
-  try {
-    const queryParams = useQueryParams();
+  if (queryParams) {
     const fieldKey = String(fieldId);
 
-    if (queryParams && queryParams[fieldKey] !== undefined) {
+    if (queryParams[fieldKey] !== undefined) {
       return queryParams[fieldKey];
     }
-  } catch (error) {
-    // useQueryParams throws if not in provider - that's okay, just means no page context
-    console.debug('[useFieldValue] No query param context available');
   }
 
   // 3. No data available

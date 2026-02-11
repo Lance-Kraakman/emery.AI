@@ -6,16 +6,15 @@ import {
   getCoreRowModel, 
   getSortedRowModel, 
   createColumnHelper,
-  flexRender,
-  type ColumnDef
+  flexRender
 } from '@tanstack/react-table';
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Settings, Trash2, Users, Shield, Crown, Loader2 } from "lucide-react";
-import { getOrganizationRoles, deleteCustomRole, type CustomRole } from "@/app/actions/roles";
+import { getOrganizationRoles, deleteCustomRole } from "@/app/actions/roles";
+import type { CustomRole } from "@/app/actions/types";
 import { CreateRoleDialog } from "./CreateRoleDialog";
 import { EditRoleDialog } from "./EditRoleDialog";
 import { 
@@ -322,7 +321,7 @@ export function RolesTab() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Role</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete the role "{deletingRole?.name}"? 
+              Are you sure you want to delete the role &quot;{deletingRole?.name}&quot;? 
               This action cannot be undone.
               {deletingRole?.userCount !== undefined && deletingRole.userCount > 0 && (
                 <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-yellow-800">

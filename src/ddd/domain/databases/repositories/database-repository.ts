@@ -2,7 +2,7 @@
 // Defines data access operations for Database entities
 
 import type { Database } from '../entities/database';
-import type { DatabaseId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
+import type { DatabaseId, OrganizationId } from '@/ddd/domain/shared/value-objects';
 
 // Data transfer objects for repository operations
 export interface CreateDatabaseData {
@@ -60,4 +60,11 @@ export interface IDatabaseRepository {
    * Count databases by organization
    */
   countByOrganization(organizationId: OrganizationId): Promise<number>;
+
+  /**
+   * Update the agent that owns this database
+   * @param id - Database ID
+   * @param agentId - Agent ID to assign, or null for org-level
+   */
+  updateAgent(id: DatabaseId, agentId: number | null): Promise<Database>;
 }

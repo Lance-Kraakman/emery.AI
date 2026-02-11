@@ -6,9 +6,9 @@ import type { Agent } from '@/ddd/domain/agents/entities/agent';
 import { AgentFactory } from '@/ddd/domain/agents/entities/agent';
 import { DrizzleBaseRepository } from '../base/drizzle-base-repository';
 import { agents } from '@/ddd/infrastructure/db/schema';
-import { eq, and, or, gte, isNotNull, sql, ne } from 'drizzle-orm';
+import { eq, and, or, gte, sql, ne } from 'drizzle-orm';
 import type { InferSelectModel } from 'drizzle-orm';
-import { AgentId, OrganizationId, UserId, AgentStatus, ApiKey } from '@/ddd/domain/shared/value-objects';
+import { AgentId, OrganizationId, UserId, ApiKey } from '@/ddd/domain/shared/value-objects';
 import type { DbClient } from '@/ddd/infrastructure/db/client';
 
 type AgentRow = InferSelectModel<typeof agents>;
@@ -16,7 +16,7 @@ type AgentRow = InferSelectModel<typeof agents>;
 export class DrizzleAgentRepository
   extends DrizzleBaseRepository<Agent, AgentId, CreateAgentData, UpdateAgentData, AgentRow>
   implements IAgentRepository {
-  
+
   protected readonly table = agents;
   protected readonly idColumn = agents.id;
   protected readonly organizationColumn = agents.organizationId;
@@ -162,6 +162,9 @@ export class DrizzleAgentRepository
       const hash = ApiKey.hash(apiKey.value);
       const now = new Date();
 
+      // NOTE: For cross-org API key lookups (authentication), use
+      // organizationRepository.findAgentByApiKey() which bypasses RLS.
+      // This method requires RLS context to be set.
       const [record] = await this.db
         .select()
         .from(agents)
@@ -189,6 +192,9 @@ export class DrizzleAgentRepository
 
   async findByWebhookToken(token: string): Promise<Agent | null> {
     try {
+      // NOTE: For cross-org webhook token lookups (authentication), use
+      // organizationRepository.findAgentByWebhookToken() which bypasses RLS.
+      // This method requires RLS context to be set.
       const [record] = await this.db
         .select()
         .from(agents)

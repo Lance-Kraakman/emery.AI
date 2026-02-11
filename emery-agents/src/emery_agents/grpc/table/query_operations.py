@@ -6,10 +6,11 @@ sorting, pagination, and metadata building.
 """
 
 import logging
-from typing import List, Dict, Any, Optional, Tuple
+from typing import Any
+
+import polars as pl
 import pyarrow as pa
 import pyarrow.types as pat
-import polars as pl
 from deltalake import DeltaTable
 
 from ..generated import table_service_pb2
@@ -21,8 +22,8 @@ logger = logging.getLogger(__name__)
 
 def load_filtered_data(
     delta_table: DeltaTable,
-    filters: List[table_service_pb2.RowFilter],
-    schema: pa.Schema
+    filters: list[table_service_pb2.RowFilter],
+    schema: pa.Schema,
 ) -> pl.DataFrame:
     """
     Load data from Delta table with predicate pushdown filtering.
@@ -52,8 +53,8 @@ def load_filtered_data(
 def apply_type_aware_sorting(
     df: pl.DataFrame,
     sort_column: str,
-    field: Optional[pa.Field],
-    order_direction: str = 'ASC'
+    field: pa.Field | None,
+    order_direction: str = "ASC",
 ) -> pl.DataFrame:
     """
     Apply type-aware sorting to a single column.
@@ -73,9 +74,7 @@ def apply_type_aware_sorting(
     if not field:
         # No field metadata, use simple sort
         return df.sort(
-            sort_column,
-            descending=(order_direction.upper() == 'DESC'),
-            nulls_last=True
+            sort_column, descending=(order_direction.upper() == "DESC"), nulls_last=True
         )
 
     field_type = field.type
@@ -86,15 +85,17 @@ def apply_type_aware_sorting(
 
     # Diagnostic logging for sorting
     sort_col = df.select(sort_column).to_series()
-    logger.info(f"[apply_type_aware_sorting] Sort: col={sort_column}, type={field_type}, is_autonumber={is_autonumber}, "
-              f"rows={len(sort_col)}, nulls={sort_col.null_count()}, unique={sort_col.n_unique()}")
+    logger.info(
+        f"[apply_type_aware_sorting] Sort: col={sort_column}, type={field_type}, is_autonumber={is_autonumber}, "
+        f"rows={len(sort_col)}, nulls={sort_col.null_count()}, unique={sort_col.n_unique()}"
+    )
 
     # Re-cast numeric/boolean/autonumber columns for safe sorting
     should_cast = field_type and (
-        pat.is_floating(field_type) or
-        pat.is_integer(field_type) or
-        pat.is_boolean(field_type) or
-        is_autonumber
+        pat.is_floating(field_type)
+        or pat.is_integer(field_type)
+        or pat.is_boolean(field_type)
+        or is_autonumber
     )
 
     if should_cast:
@@ -110,26 +111,22 @@ def apply_type_aware_sorting(
         else:
             target_type = pl.Utf8
 
-        logger.info(f"[apply_type_aware_sorting] Re-casting '{sort_column}' to {target_type} for safe sorting")
-        # Re-cast column with strict=False (empty strings → null, preserves valid values)
-        df = df.with_columns(
-            pl.col(sort_column).cast(target_type, strict=False)
+        logger.info(
+            f"[apply_type_aware_sorting] Re-casting '{sort_column}' to {target_type} for safe sorting"
         )
+        # Re-cast column with strict=False (empty strings → null, preserves valid values)
+        df = df.with_columns(pl.col(sort_column).cast(target_type, strict=False))
 
     # Perform sort with null handling
     df = df.sort(
-        sort_column,
-        descending=(order_direction.upper() == 'DESC'),
-        nulls_last=True
+        sort_column, descending=(order_direction.upper() == "DESC"), nulls_last=True
     )
     logger.info(f"[apply_type_aware_sorting] Sort successful, result shape: {df.shape}")
     return df
 
 
 def apply_pagination(
-    df: pl.DataFrame,
-    offset: int = 0,
-    limit: Optional[int] = None
+    df: pl.DataFrame, offset: int = 0, limit: int | None = None
 ) -> pl.DataFrame:
     """
     Apply pagination (offset and limit) to DataFrame.
@@ -153,12 +150,12 @@ def apply_pagination(
 
 def build_query_metadata(
     df: pl.DataFrame,
-    filters: List[table_service_pb2.RowFilter],
-    order_by: List[str],
-    limit: Optional[int],
+    filters: list[table_service_pb2.RowFilter],
+    order_by: list[str],
+    limit: int | None,
     offset: int,
-    aggregation: Optional[table_service_pb2.AggregationConfig]
-) -> Dict[str, Any]:
+    aggregation: table_service_pb2.AggregationConfig | None,
+) -> dict[str, Any]:
     """
     Build query metadata dictionary.
 
@@ -174,10 +171,10 @@ def build_query_metadata(
         Metadata dictionary
     """
     return {
-        'total_count': len(df),
-        'filters_applied': len(filters),
-        'sort_columns': order_by if not aggregation else [],
-        'limit': limit if not aggregation else None,
-        'offset': offset if not aggregation else None,
-        'aggregation_applied': aggregation is not None
+        "total_count": len(df),
+        "filters_applied": len(filters),
+        "sort_columns": order_by if not aggregation else [],
+        "limit": limit if not aggregation else None,
+        "offset": offset if not aggregation else None,
+        "aggregation_applied": aggregation is not None,
     }

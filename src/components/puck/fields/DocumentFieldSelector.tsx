@@ -122,7 +122,7 @@ export function DocumentFieldSelector({
       <FieldLabel label="Document Field">
         <div className="flex items-center gap-2 p-2 bg-amber-50 border border-amber-200 rounded-md text-amber-700 text-xs">
           <AlertCircle className="h-3 w-3 flex-shrink-0" />
-          No document fields found in this view's table.
+          No document fields found in this view&apos;s table.
         </div>
       </FieldLabel>
     );

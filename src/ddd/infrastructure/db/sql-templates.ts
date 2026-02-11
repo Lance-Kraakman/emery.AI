@@ -1,6 +1,5 @@
 // AIDEV-NOTE: SQL templates for dynamic table operations
 // Centralizes SQL query construction with clear parameter handling
-import type postgres from 'postgres';
 
 export interface SqlQuery {
   query: string;

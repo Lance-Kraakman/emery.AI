@@ -17,15 +17,23 @@ interface OrgChartDragContextValue {
   setDragType: (type: OrgChartNodeType | null) => void;
   /** Whether any drag is active */
   isDragging: boolean;
+  /** Callback to eject a skill to org-level */
+  onEjectSkill?: (skillId: number) => void;
+  /** Callback to eject a database to org-level */
+  onEjectDatabase?: (databaseId: number) => void;
 }
 
 const OrgChartDragContext = createContext<OrgChartDragContextValue | null>(null);
 
 interface OrgChartDragProviderProps {
   children: ReactNode;
+  /** Callback to eject a skill to org-level */
+  onEjectSkill?: (skillId: number) => void;
+  /** Callback to eject a database to org-level */
+  onEjectDatabase?: (databaseId: number) => void;
 }
 
-export function OrgChartDragProvider({ children }: OrgChartDragProviderProps) {
+export function OrgChartDragProvider({ children, onEjectSkill, onEjectDatabase }: OrgChartDragProviderProps) {
   const [dragType, setDragTypeState] = useState<OrgChartNodeType | null>(null);
 
   const setDragType = useCallback((type: OrgChartNodeType | null) => {
@@ -38,6 +46,8 @@ export function OrgChartDragProvider({ children }: OrgChartDragProviderProps) {
         dragType,
         setDragType,
         isDragging: dragType !== null,
+        onEjectSkill,
+        onEjectDatabase,
       }}
     >
       {children}
@@ -59,5 +69,5 @@ export function useOrgChartDrag() {
  */
 export function useOrgChartDragSafe(): OrgChartDragContextValue {
   const context = useContext(OrgChartDragContext);
-  return context ?? { dragType: null, setDragType: () => {}, isDragging: false };
+  return context ?? { dragType: null, setDragType: () => {}, isDragging: false, onEjectSkill: undefined, onEjectDatabase: undefined };
 }

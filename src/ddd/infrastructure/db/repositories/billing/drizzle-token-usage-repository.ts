@@ -3,7 +3,7 @@
  *
  * Infrastructure implementation of token usage repository using Drizzle ORM.
  */
-import { and, eq, gte, lte, desc, sql, sum, count, avg } from 'drizzle-orm';
+import { and, eq, gte, lte, desc, sql, sum, count } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { ITokenUsageRepository, UsageQueryFilters, UsageStatistics } from '@/ddd/domain/billing/repositories/token-usage-repository';
 import type { TokenUsage, CreateTokenUsageData, EntityType } from '@/ddd/domain/billing/entities/token-usage';

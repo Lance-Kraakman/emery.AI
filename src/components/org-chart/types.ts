@@ -39,20 +39,57 @@ interface BaseOrgChartNodeData {
   description?: string;
 }
 
+// =============================================================================
+// Inline Display Types (UI-specific minimal types for rendering)
+// =============================================================================
+
 /**
- * Agent container node data
+ * Minimal table info for inline display in database/agent nodes
+ */
+export interface InlineTableDisplay {
+  id: number;
+  name: string;
+}
+
+/**
+ * Minimal skill info for inline display in agent cards
+ */
+export interface InlineSkillDisplay {
+  id: number;
+  name: string;
+  executionType?: string;
+}
+
+/**
+ * Minimal database info for inline display in agent cards
+ */
+export interface InlineDatabaseDisplay {
+  id: number;
+  name: string;
+  slug?: string;
+  tables?: InlineTableDisplay[];
+}
+
+// =============================================================================
+// Node Data Types
+// =============================================================================
+
+/**
+ * Agent node data (compact card with inline skill/database lists)
  */
 export interface AgentContainerNodeData extends BaseOrgChartNodeData {
   agentId: number;
   role?: string;
   status?: string;
   avatar?: string;
-  /** Counts for collapsed view */
+  /** Counts for display */
   skillCount?: number;
   databaseCount?: number;
   automationCount?: number;
-  /** Whether the container is expanded */
-  isExpanded?: boolean;
+  /** Inline skills for compact display */
+  skills?: InlineSkillDisplay[];
+  /** Inline databases for compact display */
+  databases?: InlineDatabaseDisplay[];
 }
 
 /**
@@ -75,7 +112,7 @@ export interface DatabaseNodeData extends BaseOrgChartNodeData {
   agentId?: number | null; // null = org-scoped
   tableCount?: number;
   /** Tables for inline display in node */
-  tables?: Array<{ id: number; name: string }>;
+  tables?: InlineTableDisplay[];
 }
 
 /**

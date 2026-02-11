@@ -9,12 +9,13 @@ Keep both files in sync when adding or updating models.
 """
 
 from dataclasses import dataclass
-from typing import Dict, List, Literal, Optional
 from enum import Enum
+from typing import Literal
 
 
 class ModelCategory(Enum):
     """Performance category for models."""
+
     FAST = "fast"
     BALANCED = "balanced"
     ADVANCED = "advanced"
@@ -22,6 +23,7 @@ class ModelCategory(Enum):
 
 class ModelTier(Enum):
     """Minimum subscription tier required to access model."""
+
     FREE = "free"
     PRO = "pro"
     MAX = "max"
@@ -30,39 +32,43 @@ class ModelTier(Enum):
 @dataclass
 class ModelCapabilities:
     """Model capability flags."""
-    tool_calling: bool       # Supports function/tool calling
-    streaming: bool          # Supports streaming responses
-    vision: bool             # Supports image inputs
-    json_mode: bool          # Supports JSON output mode
-    multimodal: bool         # Supports multiple input types
+
+    tool_calling: bool  # Supports function/tool calling
+    streaming: bool  # Supports streaming responses
+    vision: bool  # Supports image inputs
+    json_mode: bool  # Supports JSON output mode
+    multimodal: bool  # Supports multiple input types
 
 
 @dataclass
 class ModelPricing:
     """Model pricing information."""
-    input_per_1m: float      # Cost per 1M input tokens in USD
-    output_per_1m: float     # Cost per 1M output tokens in USD
+
+    input_per_1m: float  # Cost per 1M input tokens in USD
+    output_per_1m: float  # Cost per 1M output tokens in USD
     currency: str = "USD"
 
 
 @dataclass
 class ModelEndpoint:
     """Endpoint configuration."""
+
     type: Literal["dedicated", "inference-api"]
-    url: Optional[str] = None  # For dedicated endpoints
+    url: str | None = None  # For dedicated endpoints
 
 
 @dataclass
 class ModelMetadata:
     """Complete model metadata."""
-    id: str                  # Unique identifier
-    name: str                # Display name
-    provider: str            # Provider name
-    description: str         # Model description
+
+    id: str  # Unique identifier
+    name: str  # Display name
+    provider: str  # Provider name
+    description: str  # Model description
 
     # Technical specifications
-    context_window: int      # Maximum context length in tokens
-    max_output_tokens: int   # Maximum output tokens
+    context_window: int  # Maximum context length in tokens
+    max_output_tokens: int  # Maximum output tokens
 
     # Capabilities
     capabilities: ModelCapabilities
@@ -71,7 +77,7 @@ class ModelMetadata:
     pricing: ModelPricing
 
     # Access control
-    tier: ModelTier          # Minimum tier required
+    tier: ModelTier  # Minimum tier required
     category: ModelCategory  # Performance category
 
     # Endpoint
@@ -81,12 +87,12 @@ class ModelMetadata:
     recommended: bool = False
 
     # Description of what the model is recommended for
-    recommended_for: Optional[str] = None
+    recommended_for: str | None = None
 
 
 # AIDEV-NOTE: HuggingFace Model Registry
 # Keep pricing updated from HuggingFace Inference API pricing page
-HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
+HUGGINGFACE_MODELS: dict[str, ModelMetadata] = {
     # Primary recommended model (dedicated endpoint) - Qwen2.5-Coder-32B
     "Qwen/Qwen2.5-Coder-32B-Instruct": ModelMetadata(
         id="Qwen/Qwen2.5-Coder-32B-Instruct",
@@ -115,7 +121,6 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         recommended=True,
         recommended_for="Complex reasoning & workflows",
     ),
-
     # Dedicated endpoint - small & fast for simple tasks
     "HuggingFaceTB/SmolLM3-3B": ModelMetadata(
         id="HuggingFaceTB/SmolLM3-3B",
@@ -144,7 +149,6 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         recommended=True,
         recommended_for="Simple & fast tasks",
     ),
-
     # Dedicated endpoint - fast & cost-efficient
     "ibm-granite/granite-3.3-8b-instruct": ModelMetadata(
         id="ibm-granite/granite-3.3-8b-instruct",
@@ -161,7 +165,7 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
             multimodal=False,
         ),
         pricing=ModelPricing(
-            input_per_1m=0.15,   # Custom pricing - adjust based on contract
+            input_per_1m=0.15,  # Custom pricing - adjust based on contract
             output_per_1m=0.60,  # Custom pricing - adjust based on contract
         ),
         tier=ModelTier.FREE,
@@ -173,11 +177,9 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         recommended=True,
         recommended_for="Fast & cost-efficient",
     ),
-
     # ============================================================================
     # GOOGLE GEMINI MODELS (via OpenAI-compatible API)
     # ============================================================================
-
     "google/gemini-2.0-flash": ModelMetadata(
         id="google/gemini-2.0-flash",
         name="Gemini 2.0 Flash",
@@ -199,7 +201,6 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         recommended=True,
         recommended_for="Fast & reliable fallback",
     ),
-
     "google/gemini-2.5-flash": ModelMetadata(
         id="google/gemini-2.5-flash",
         name="Gemini 2.5 Flash",
@@ -219,7 +220,6 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.FAST,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     "google/gemini-2.5-pro": ModelMetadata(
         id="google/gemini-2.5-pro",
         name="Gemini 2.5 Pro",
@@ -239,7 +239,6 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.ADVANCED,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     "google/gemini-2.0-flash-lite": ModelMetadata(
         id="google/gemini-2.0-flash-lite",
         name="Gemini 2.0 Flash Lite",
@@ -259,11 +258,9 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.FAST,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     # ============================================================================
     # HUGGINGFACE INFERENCE API MODELS
     # ============================================================================
-
     # HuggingFace Inference API models
     "Qwen/Qwen2.5-7B-Instruct": ModelMetadata(
         id="Qwen/Qwen2.5-7B-Instruct",
@@ -284,7 +281,6 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.FAST,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     "Qwen/Qwen2.5-14B-Instruct": ModelMetadata(
         id="Qwen/Qwen2.5-14B-Instruct",
         name="Qwen 2.5 14B Instruct",
@@ -304,7 +300,6 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.BALANCED,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     "Qwen/Qwen2.5-Coder-7B-Instruct": ModelMetadata(
         id="Qwen/Qwen2.5-Coder-7B-Instruct",
         name="Qwen 2.5 Coder 7B",
@@ -324,7 +319,6 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.FAST,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     "meta-llama/Llama-3.2-3B-Instruct": ModelMetadata(
         id="meta-llama/Llama-3.2-3B-Instruct",
         name="Llama 3.2 3B Instruct",
@@ -344,7 +338,6 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.FAST,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     "mistralai/Mistral-7B-Instruct-v0.3": ModelMetadata(
         id="mistralai/Mistral-7B-Instruct-v0.3",
         name="Mistral 7B Instruct",
@@ -364,7 +357,6 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.BALANCED,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     # Vision-language model for image understanding
     "Qwen/Qwen2.5-VL-7B-Instruct": ModelMetadata(
         id="Qwen/Qwen2.5-VL-7B-Instruct",
@@ -376,16 +368,15 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         capabilities=ModelCapabilities(
             tool_calling=True,
             streaming=True,
-            vision=True,       # Vision capability for image inputs
+            vision=True,  # Vision capability for image inputs
             json_mode=True,
-            multimodal=True,   # Multimodal support (text + images)
+            multimodal=True,  # Multimodal support (text + images)
         ),
         pricing=ModelPricing(input_per_1m=0.20, output_per_1m=0.80),
         tier=ModelTier.FREE,
         category=ModelCategory.BALANCED,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     # Vision model (basic)
     "llava-hf/llava-1.5-7b-hf": ModelMetadata(
         id="llava-hf/llava-1.5-7b-hf",
@@ -406,11 +397,9 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.BALANCED,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     # ============================================================================
     # CHAT LLMs WITH TOOL CALLING - 32B CLASS (Sweet Spot)
     # ============================================================================
-
     "Qwen/Qwen2.5-32B-Instruct": ModelMetadata(
         id="Qwen/Qwen2.5-32B-Instruct",
         name="Qwen 2.5 32B Instruct",
@@ -430,7 +419,6 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.BALANCED,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     "Qwen/QwQ-32B": ModelMetadata(
         id="Qwen/QwQ-32B",
         name="Qwen QwQ 32B (Reasoning)",
@@ -450,11 +438,9 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.BALANCED,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     # ============================================================================
     # CHAT LLMs WITH TOOL CALLING - SMALLER (Fast)
     # ============================================================================
-
     "meta-llama/Llama-3.1-8B-Instruct": ModelMetadata(
         id="meta-llama/Llama-3.1-8B-Instruct",
         name="Llama 3.1 8B Instruct",
@@ -474,11 +460,9 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.FAST,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     # ============================================================================
     # CHAT LLMs WITH TOOL CALLING - LARGER (Advanced)
     # ============================================================================
-
     "meta-llama/Llama-3.1-70B-Instruct": ModelMetadata(
         id="meta-llama/Llama-3.1-70B-Instruct",
         name="Llama 3.1 70B Instruct",
@@ -498,7 +482,6 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.ADVANCED,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     "Qwen/Qwen2.5-72B-Instruct": ModelMetadata(
         id="Qwen/Qwen2.5-72B-Instruct",
         name="Qwen 2.5 72B Instruct",
@@ -518,7 +501,6 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.ADVANCED,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     "deepseek-ai/DeepSeek-R1": ModelMetadata(
         id="deepseek-ai/DeepSeek-R1",
         name="DeepSeek R1 (Reasoning)",
@@ -538,11 +520,9 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.ADVANCED,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     # ============================================================================
     # VLM (Vision + Tool Calling)
     # ============================================================================
-
     "Qwen/Qwen2.5-VL-32B-Instruct": ModelMetadata(
         id="Qwen/Qwen2.5-VL-32B-Instruct",
         name="Qwen 2.5 VL 32B",
@@ -562,7 +542,6 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.BALANCED,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     "Qwen/Qwen2.5-VL-72B-Instruct": ModelMetadata(
         id="Qwen/Qwen2.5-VL-72B-Instruct",
         name="Qwen 2.5 VL 72B",
@@ -582,11 +561,9 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.ADVANCED,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     # ============================================================================
     # TASK-SPECIFIC MODELS - Image Generation
     # ============================================================================
-
     "black-forest-labs/FLUX.1-schnell": ModelMetadata(
         id="black-forest-labs/FLUX.1-schnell",
         name="FLUX.1 Schnell",
@@ -606,7 +583,6 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.FAST,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     "black-forest-labs/FLUX.1-dev": ModelMetadata(
         id="black-forest-labs/FLUX.1-dev",
         name="FLUX.1 Dev",
@@ -626,7 +602,6 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.BALANCED,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     "stabilityai/stable-diffusion-xl-base-1.0": ModelMetadata(
         id="stabilityai/stable-diffusion-xl-base-1.0",
         name="SDXL Base 1.0",
@@ -646,7 +621,6 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.BALANCED,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     "ByteDance/SDXL-Lightning": ModelMetadata(
         id="ByteDance/SDXL-Lightning",
         name="SDXL Lightning",
@@ -666,11 +640,9 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.FAST,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     # ============================================================================
     # TASK-SPECIFIC MODELS - Image-to-Image
     # ============================================================================
-
     "black-forest-labs/FLUX.1-Kontext-dev": ModelMetadata(
         id="black-forest-labs/FLUX.1-Kontext-dev",
         name="FLUX.1 Kontext",
@@ -690,7 +662,6 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.BALANCED,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     "timbrooks/instruct-pix2pix": ModelMetadata(
         id="timbrooks/instruct-pix2pix",
         name="InstructPix2Pix",
@@ -710,11 +681,9 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.BALANCED,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     # ============================================================================
     # TASK-SPECIFIC MODELS - Text-to-Video
     # ============================================================================
-
     "tencent/HunyuanVideo": ModelMetadata(
         id="tencent/HunyuanVideo",
         name="HunyuanVideo",
@@ -734,7 +703,6 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.ADVANCED,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     "genmo/mochi-1-preview": ModelMetadata(
         id="genmo/mochi-1-preview",
         name="Mochi 1 Preview",
@@ -754,11 +722,9 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.BALANCED,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     # ============================================================================
     # TASK-SPECIFIC MODELS - Audio
     # ============================================================================
-
     "openai/whisper-large-v3": ModelMetadata(
         id="openai/whisper-large-v3",
         name="Whisper Large V3",
@@ -778,7 +744,6 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.BALANCED,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     "distil-whisper/distil-large-v3": ModelMetadata(
         id="distil-whisper/distil-large-v3",
         name="Distil Whisper Large V3",
@@ -798,7 +763,6 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.FAST,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     "openai/whisper-large-v3-turbo": ModelMetadata(
         id="openai/whisper-large-v3-turbo",
         name="Whisper Large V3 Turbo",
@@ -818,7 +782,6 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.BALANCED,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     "nvidia/parakeet-tdt-0.6b-v2": ModelMetadata(
         id="nvidia/parakeet-tdt-0.6b-v2",
         name="NVIDIA Parakeet TDT",
@@ -838,7 +801,6 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.FAST,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     "suno/bark": ModelMetadata(
         id="suno/bark",
         name="Bark TTS",
@@ -858,7 +820,6 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.BALANCED,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     "facebook/mms-tts-eng": ModelMetadata(
         id="facebook/mms-tts-eng",
         name="MMS TTS English",
@@ -878,7 +839,6 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.FAST,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     "parler-tts/parler-tts-mini-v1": ModelMetadata(
         id="parler-tts/parler-tts-mini-v1",
         name="Parler TTS Mini",
@@ -898,11 +858,9 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.BALANCED,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     # ============================================================================
     # TASK-SPECIFIC MODELS - Vision Analysis
     # ============================================================================
-
     "facebook/detr-resnet-50": ModelMetadata(
         id="facebook/detr-resnet-50",
         name="DETR Object Detection",
@@ -922,7 +880,6 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.FAST,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     "google/vit-base-patch16-224": ModelMetadata(
         id="google/vit-base-patch16-224",
         name="ViT Image Classification",
@@ -942,11 +899,9 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.FAST,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     # ============================================================================
     # TASK-SPECIFIC MODELS - Image Segmentation
     # ============================================================================
-
     "facebook/sam2-hiera-large": ModelMetadata(
         id="facebook/sam2-hiera-large",
         name="SAM 2 Large",
@@ -966,7 +921,6 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.BALANCED,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     "facebook/detr-resnet-101-panoptic": ModelMetadata(
         id="facebook/detr-resnet-101-panoptic",
         name="DETR Panoptic Segmentation",
@@ -986,11 +940,9 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.BALANCED,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     # ============================================================================
     # TASK-SPECIFIC MODELS - Image Captioning (Image-to-Text)
     # ============================================================================
-
     "Salesforce/blip-image-captioning-large": ModelMetadata(
         id="Salesforce/blip-image-captioning-large",
         name="BLIP Image Captioning",
@@ -1010,7 +962,6 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.FAST,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     "nlpconnect/vit-gpt2-image-captioning": ModelMetadata(
         id="nlpconnect/vit-gpt2-image-captioning",
         name="ViT-GPT2 Image Captioning",
@@ -1030,11 +981,9 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.FAST,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     # ============================================================================
     # TASK-SPECIFIC MODELS - Text Processing
     # ============================================================================
-
     "deepset/roberta-base-squad2": ModelMetadata(
         id="deepset/roberta-base-squad2",
         name="RoBERTa Question Answering",
@@ -1054,7 +1003,6 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.FAST,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     "facebook/bart-large-mnli": ModelMetadata(
         id="facebook/bart-large-mnli",
         name="BART Zero-Shot Classification",
@@ -1074,7 +1022,6 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.FAST,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     "facebook/bart-large-cnn": ModelMetadata(
         id="facebook/bart-large-cnn",
         name="BART Summarization",
@@ -1094,11 +1041,9 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.FAST,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     # ============================================================================
     # TASK-SPECIFIC MODELS - Translation
     # ============================================================================
-
     "facebook/nllb-200-distilled-600M": ModelMetadata(
         id="facebook/nllb-200-distilled-600M",
         name="NLLB-200 Translation",
@@ -1118,7 +1063,6 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.BALANCED,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     "Helsinki-NLP/opus-mt-en-de": ModelMetadata(
         id="Helsinki-NLP/opus-mt-en-de",
         name="OPUS MT English-German",
@@ -1138,7 +1082,6 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.FAST,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     "Helsinki-NLP/opus-mt-en-es": ModelMetadata(
         id="Helsinki-NLP/opus-mt-en-es",
         name="OPUS MT English-Spanish",
@@ -1158,7 +1101,6 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.FAST,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     "Helsinki-NLP/opus-mt-en-fr": ModelMetadata(
         id="Helsinki-NLP/opus-mt-en-fr",
         name="OPUS MT English-French",
@@ -1178,11 +1120,9 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.FAST,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     # ============================================================================
     # TASK-SPECIFIC MODELS - Embeddings
     # ============================================================================
-
     "BAAI/bge-large-en-v1.5": ModelMetadata(
         id="BAAI/bge-large-en-v1.5",
         name="BGE Large English",
@@ -1202,7 +1142,6 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.FAST,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     "BAAI/bge-m3": ModelMetadata(
         id="BAAI/bge-m3",
         name="BGE M3 (Multilingual)",
@@ -1222,7 +1161,6 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.BALANCED,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     # Internal embedding models used by agent backend (capability discovery, planning)
     "google/gemini-embedding-001": ModelMetadata(
         id="google/gemini-embedding-001",
@@ -1243,7 +1181,6 @@ HUGGINGFACE_MODELS: Dict[str, ModelMetadata] = {
         category=ModelCategory.FAST,
         endpoint=ModelEndpoint(type="inference-api"),
     ),
-
     "sentence-transformers/all-MiniLM-L6-v2": ModelMetadata(
         id="sentence-transformers/all-MiniLM-L6-v2",
         name="MiniLM L6 v2",
@@ -1290,19 +1227,19 @@ def normalize_model_id(model_id: str) -> str:
     return model_id
 
 
-def get_model_metadata(model_id: str) -> Optional[ModelMetadata]:
+def get_model_metadata(model_id: str) -> ModelMetadata | None:
     """Get model metadata by ID."""
     # Normalize model ID to handle missing prefixes (e.g., Gemini models)
     normalized_id = normalize_model_id(model_id)
     return HUGGINGFACE_MODELS.get(normalized_id)
 
 
-def get_all_models() -> List[ModelMetadata]:
+def get_all_models() -> list[ModelMetadata]:
     """Get all available models."""
     return list(HUGGINGFACE_MODELS.values())
 
 
-def get_models_for_tier(tier: ModelTier) -> List[ModelMetadata]:
+def get_models_for_tier(tier: ModelTier) -> list[ModelMetadata]:
     """Get models available for a specific subscription tier."""
     tier_hierarchy = {
         ModelTier.FREE: 0,
@@ -1312,20 +1249,22 @@ def get_models_for_tier(tier: ModelTier) -> List[ModelMetadata]:
     user_tier_level = tier_hierarchy[tier]
 
     return [
-        model for model in get_all_models()
+        model
+        for model in get_all_models()
         if tier_hierarchy[model.tier] <= user_tier_level
     ]
 
 
-def get_models_by_category(category: ModelCategory) -> List[ModelMetadata]:
+def get_models_by_category(category: ModelCategory) -> list[ModelMetadata]:
     """Get models by performance category."""
     return [model for model in get_all_models() if model.category == category]
 
 
-def get_models_with_capability(capability: str) -> List[ModelMetadata]:
+def get_models_with_capability(capability: str) -> list[ModelMetadata]:
     """Get models with a specific capability."""
     return [
-        model for model in get_all_models()
+        model
+        for model in get_all_models()
         if getattr(model.capabilities, capability, False)
     ]
 
@@ -1353,7 +1292,7 @@ def calculate_token_cost(model_id: str, input_tokens: int, output_tokens: int) -
     return input_cost + output_cost
 
 
-def get_recommended_models() -> List[ModelMetadata]:
+def get_recommended_models() -> list[ModelMetadata]:
     """Get recommended models (dedicated endpoints with high reliability)."""
     return [model for model in get_all_models() if model.recommended]
 
@@ -1367,7 +1306,7 @@ def get_default_model_for_tier(tier: ModelTier) -> str:
 def can_access_model(
     model_id: str,
     organization_tier: ModelTier,
-    available_models: Optional[List[str]] = None
+    available_models: list[str] | None = None,
 ) -> bool:
     """
     Validate model access for organization.

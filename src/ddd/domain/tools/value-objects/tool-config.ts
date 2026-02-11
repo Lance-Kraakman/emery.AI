@@ -9,7 +9,6 @@
  * Extended with specific config types for different tool categories.
  */
 
-import type { AgentId, UserId, OrganizationId } from '@/ddd/domain/shared/value-objects'
 import type { InputDefinition } from '@/ddd/domain/skills/entities/skill'
 
 /**

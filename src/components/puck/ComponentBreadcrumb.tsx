@@ -55,7 +55,7 @@ export function ComponentBreadcrumb({ editingStack, onNavigate }: ComponentBread
 
     // Find the ID of the selected item
     let currentId: string | undefined;
-    let currentSelector = itemSelector;
+    const currentSelector = itemSelector;
 
     if (currentSelector.zone) {
       const colonIndex = currentSelector.zone.lastIndexOf(":");

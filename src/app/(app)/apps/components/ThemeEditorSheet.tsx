@@ -28,7 +28,6 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { ColorInput } from "@/components/ui/color-input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -38,7 +37,6 @@ import {
 } from "@/components/ui/select";
 import { FontSelect } from "@/components/ui/font-select";
 import {
-  ThemeConfig,
   type ThemeConfigProps,
   DEFAULT_THEME,
 } from "@/ddd/domain/puck/value-objects/theme-config";
@@ -59,8 +57,10 @@ export function ThemeSidebarPanel({
   onSave,
   mode,
 }: ThemeSidebarPanelProps) {
-  // For page mode, use context. For app mode, use props.
-  const themeContext = mode === "page" ? usePuckEditorTheme() : null;
+  // Always call the hook unconditionally - React hooks must be called in the same order
+  const themeContextResult = usePuckEditorTheme();
+  // Only use the context result for page mode
+  const themeContext = mode === "page" ? themeContextResult : null;
 
   const [selectedPreset, setSelectedPreset] = React.useState<string>("custom");
   const [isSaving, setIsSaving] = React.useState(false);

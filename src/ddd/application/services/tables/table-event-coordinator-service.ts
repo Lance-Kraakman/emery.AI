@@ -66,46 +66,80 @@ export class TableEventCoordinatorService {
             tableChange: event
           };
 
-          // Look up the skill to get instructions
+          // Look up the skill to get instructions and input definitions
           let skillInstructions = `Execute automation: ${match.automation.name}`;
+          let skillInputDefs: Array<{ name: string; inputMapping?: any }> = [];
           if (match.automation.skillId && this.skillRepository) {
             const skill = await this.skillRepository.findById(
               SkillId.fromNumber(match.automation.skillId)
             );
             if (skill) {
               skillInstructions = skill.instructions;
+              skillInputDefs = skill.inputs || [];
             }
           }
 
-          // Resolve skill inputs from automation inputMappings
-          // Supports variables: $row.*, $previousRow.*, $event.*
+          // Helper to resolve a trigger variable value
+          const resolveTriggerVariable = (variable: string): any => {
+            if (variable.startsWith('$row.')) {
+              const fieldName = variable.slice(5);
+              return event.rowData?.[fieldName];
+            } else if (variable.startsWith('$previousRow.')) {
+              const fieldName = variable.slice(13);
+              return event.previousRowData?.[fieldName];
+            } else if (variable.startsWith('$event.')) {
+              const fieldName = variable.slice(7);
+              switch (fieldName) {
+                case 'operation': return event.operation;
+                case 'tableId': return event.tableId;
+                case 'tableName': return event.tableName;
+                case 'rowId': return event.rowId;
+                case 'timestamp': return event.timestamp.toISOString();
+                default: return undefined;
+              }
+            } else if (variable.startsWith('$table.')) {
+              const fieldName = variable.slice(7);
+              switch (fieldName) {
+                case 'id': return event.tableId;
+                case 'name': return event.tableName;
+                default: return undefined;
+              }
+            } else if (variable.startsWith('$trigger.')) {
+              const fieldName = variable.slice(9);
+              switch (fieldName) {
+                case 'type': return 'DATABASE_EVENT';
+                case 'scheduleName': return match.automation.name;
+                default: return undefined;
+              }
+            }
+            return undefined;
+          };
+
+          // Resolve skill inputs from multiple sources
           const skillInputs: Record<string, any> = {};
+
+          // 1. From automation inputMappings (legacy approach)
           if (match.automation.inputMappings) {
             for (const mapping of match.automation.inputMappings) {
               let value: any = mapping.triggerField;
 
               // Resolve trigger variables
-              if (typeof value === 'string') {
-                if (value.startsWith('$row.')) {
-                  const fieldName = value.slice(5);
-                  value = event.rowData?.[fieldName];
-                } else if (value.startsWith('$previousRow.')) {
-                  const fieldName = value.slice(13);
-                  value = event.previousRowData?.[fieldName];
-                } else if (value.startsWith('$event.')) {
-                  const fieldName = value.slice(7);
-                  switch (fieldName) {
-                    case 'operation': value = event.operation; break;
-                    case 'tableId': value = event.tableId; break;
-                    case 'tableName': value = event.tableName; break;
-                    case 'rowId': value = event.rowId; break;
-                    case 'timestamp': value = event.timestamp.toISOString(); break;
-                    default: value = undefined;
-                  }
-                }
+              if (typeof value === 'string' && value.startsWith('$')) {
+                value = resolveTriggerVariable(value);
               }
 
               skillInputs[mapping.skillInputName] = value;
+            }
+          }
+
+          // 2. From skill input definitions with trigger_variable source
+          for (const inputDef of skillInputDefs) {
+            const source = inputDef.inputMapping?.source;
+            if (source && source.type === 'trigger_variable') {
+              const value = resolveTriggerVariable(source.variable);
+              if (value !== undefined) {
+                skillInputs[inputDef.name] = value;
+              }
             }
           }
 

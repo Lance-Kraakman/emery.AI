@@ -3,11 +3,12 @@
  * Supports REST API access for agent operations
  *
  * Query params for GET:
- * - name: Filter by agent name (for @mention resolution)
+ * - name: Filter by agent name (exact match for @mention resolution)
+ * - search: Filter by agent name (fuzzy search)
  */
 
 import { NextRequest } from 'next/server';
-import { authenticateRequest } from '@/lib/auth/test-auth';
+import { withAuthenticatedRoute, parseJsonBody, parsePaginationParams, paginateResults, type ApiResponse } from '@/lib/api/base';
 import { logAgentMutation } from '@/lib/api/agent-context';
 import { getAgentApplicationService } from '@/ddd/application/di/container';
 import type { CreateAgentDTO } from '@/app/dtos/agent.dto';
@@ -16,16 +17,13 @@ import type { CreateAgentDTO } from '@/app/dtos/agent.dto';
  * Create a new agent using AgentApplicationService
  */
 export async function POST(request: NextRequest): Promise<Response> {
-  try {
-    const authResult = await authenticateRequest(request);
+  return withAuthenticatedRoute(request, async (user) => {
+    const body = await parseJsonBody(request);
 
-    if (!authResult.success || !authResult.user) {
-      return Response.json({ error: authResult.error || 'Unauthorized' }, { status: 401 });
+    if (!body) {
+      return { success: false, error: 'Invalid request body', status: 400 };
     }
 
-    const userId = authResult.user.id;
-
-    const body = await request.json();
     const {
       name,
       role,
@@ -33,13 +31,14 @@ export async function POST(request: NextRequest): Promise<Response> {
       persona,
       organizationId,
       trigger,
-      skills
     } = body;
 
     if (!name || !organizationId) {
-      return Response.json({
-        error: 'Missing required fields: name, organizationId'
-      }, { status: 400 });
+      return {
+        success: false,
+        error: 'Missing required fields: name, organizationId',
+        status: 400
+      };
     }
 
     // Use AgentApplicationService for agent creation
@@ -52,7 +51,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       role,
       description,
       persona,
-      ownerId: userId,
+      ownerId: user.id,
       organizationId: parseInt(organizationId),
       automations: trigger ? [trigger] : []
     };
@@ -60,33 +59,29 @@ export async function POST(request: NextRequest): Promise<Response> {
     const result = await agentApplicationService.createAgent(dto);
 
     if (!result.success) {
-      return Response.json({
+      return {
         success: false,
-        error: result.error || 'Failed to create agent'
-      }, { status: 400 });
+        error: result.error || 'Failed to create agent',
+        status: 400
+      };
     }
 
-    logAgentMutation(request, authResult.user, {
+    logAgentMutation(request, user, {
       action: 'create',
       resourceType: 'agent',
       resourceId: String(result.data?.id),
       resourceName: body.name,
     });
 
-    return Response.json({
+    return {
       success: true,
-      message: 'Agent created successfully',
-      agent: result.data,
-      id: result.data?.id, // For compatibility with tests
-    });
-
-  } catch (error) {
-    console.error('Error creating agent:', error);
-    return Response.json({
-      success: false,
-      error: 'Failed to create agent'
-    }, { status: 500 });
-  }
+      data: {
+        message: 'Agent created successfully',
+        agent: result.data,
+        id: result.data?.id, // For compatibility with tests
+      }
+    };
+  });
 }
 
 /**
@@ -94,55 +89,54 @@ export async function POST(request: NextRequest): Promise<Response> {
  *
  * Query params:
  * - name: Filter by agent name (exact match, case-insensitive)
+ * - search: Filter by agent name/description (fuzzy search)
+ * - page: Page number (default: 1)
+ * - limit: Items per page (default: 20, max: 100)
  */
 export async function GET(request: NextRequest): Promise<Response> {
-  try {
-    const authResult = await authenticateRequest(request);
-
-    if (!authResult.success || !authResult.user) {
-      return Response.json({ error: authResult.error || 'Unauthorized' }, { status: 401 });
-    }
-
-    const userId = authResult.user.id;
-    const organizationId = authResult.user.organizationId;
+  return withAuthenticatedRoute(request, async (user): Promise<ApiResponse> => {
     const { searchParams } = new URL(request.url);
     const nameFilter = searchParams.get('name');
+    const searchQuery = searchParams.get('search');
 
     const agentApplicationService = getAgentApplicationService();
 
-    // If name filter, get specific agent by name
+    // If name filter, get specific agent by name (exact match)
     if (nameFilter) {
       const result = await agentApplicationService.getAgentByName(
         nameFilter,
-        organizationId!
+        user.organizationId!
       );
 
       if (!result.success || !result.data) {
-        return Response.json({
+        return {
           success: false,
-          error: `Agent '${nameFilter}' not found`
-        }, { status: 404 });
+          error: `Agent '${nameFilter}' not found`,
+          status: 404
+        };
       }
 
-      return Response.json({
+      return {
         success: true,
         data: result.data,
-      });
+      };
     }
 
-    // Get all agents for current organization
-    const userAgents = await agentApplicationService.getAgents({ organizationId: organizationId! });
-
-    return Response.json({
-      success: true,
-      agents: userAgents,
+    // Get all agents for current organization with optional search
+    const userAgents = await agentApplicationService.getAgents({
+      organizationId: user.organizationId!,
+      searchQuery: searchQuery || undefined
     });
 
-  } catch (error) {
-    console.error('Error fetching agents:', error);
-    return Response.json({
-      success: false,
-      error: 'Internal server error'
-    }, { status: 500 });
-  }
+    // AIDEV-NOTE: Apply pagination to results
+    const paginationParams = parsePaginationParams(request);
+    const paginatedResult = paginateResults(userAgents, paginationParams);
+
+    // Return paginated agents list
+    return {
+      success: true,
+      data: paginatedResult.data,
+      pagination: paginatedResult.pagination,
+    };
+  });
 }

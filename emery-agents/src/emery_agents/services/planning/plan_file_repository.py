@@ -1,7 +1,7 @@
 """
 Plan File Repository — Filesystem-backed plan persistence.
 
-Saves/loads session plans as JSON files in .agent/plans/ within the workspace.
+Saves/loads session plans as JSON files in .engine/plans/ within the workspace.
 Plans persist across sessions via S3 tar.gz sync (WorkspaceSync).
 
 Skill plans stay in the database (PlanRepository via gRPC). Only session/runtime
@@ -11,7 +11,6 @@ plans are stored here.
 import json
 import logging
 from pathlib import Path
-from typing import Optional
 
 from ...entities.models.plan import Plan
 
@@ -26,7 +25,7 @@ class PlanFileRepository:
     """
 
     def __init__(self, base_path: Path, workspace_id: str):
-        self._plans_dir = base_path / workspace_id / ".agent" / "plans"
+        self._plans_dir = base_path / workspace_id / ".engine" / "plans"
         self._plans_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"PlanFileRepository initialized: {self._plans_dir}")
 
@@ -46,7 +45,7 @@ class PlanFileRepository:
         logger.info(f"Saved plan {plan.id} to {path}")
         return path
 
-    def load(self, plan_id: str) -> Optional[Plan]:
+    def load(self, plan_id: str) -> Plan | None:
         """Load plan from filesystem by ID.
 
         Args:
@@ -73,7 +72,7 @@ class PlanFileRepository:
         """
         return [p.stem for p in self._plans_dir.glob("*.json")]
 
-    def load_latest(self) -> Optional[Plan]:
+    def load_latest(self) -> Plan | None:
         """Load the most recently modified plan.
 
         Returns:

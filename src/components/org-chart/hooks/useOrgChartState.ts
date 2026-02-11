@@ -19,7 +19,6 @@ import type {
   AgentContainerNodeData,
 } from '../types';
 import { orgChartNodeSizes } from '../theme';
-import { makeNodeId } from '../utils';
 
 export interface UseOrgChartStateReturn {
   nodes: OrgChartNode[];

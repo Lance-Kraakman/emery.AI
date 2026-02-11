@@ -5,63 +5,74 @@ import json
 import logging
 import re
 import time
-from dataclasses import dataclass, asdict, field
-from typing import Any, AsyncIterator, Callable, Dict, List, Literal, Optional, Set
+from collections.abc import AsyncIterator, Callable
+from dataclasses import asdict, dataclass, field
+from typing import Any, Literal
 
 import dspy
-
-from ...utils import run_async_in_thread
-from ...entities.tool_config import ToolConfig
-
-
+from simpleeval import simple_eval
 from tenacity import (
     AsyncRetrying,
-    stop_after_attempt,
-    wait_fixed,
-    wait_exponential,
+    RetryError,
     retry_if_exception,
-    RetryError
+    stop_after_attempt,
+    wait_exponential,
+    wait_fixed,
 )
 
+from emery_agents.tools.loader import UnifiedToolLoader
+
+from ...entities.models.plan import Plan
 from ...entities.skill_config import (
-    SkillConfig, SkillStep,
-    ErrorConfig, RetryConfig, StepOutput, LoopConfig,
-    ReadConfig, WriteConfig, ToolExecutionConfig,
-    AgenticStepConfig, InputDef, OutputDef,
-    RowIdSource, QueryFilter,
+    AgenticStepConfig,
+    ErrorConfig,
+    InputDef,
+    LoopConfig,
+    OutputDef,
+    QueryFilter,
+    ReadConfig,
+    RetryConfig,
+    RowIdSource,
+    SkillConfig,
+    SkillStep,
+    StepOutput,
+    ToolExecutionConfig,
+    WriteConfig,
 )
+from ...entities.tool_config import ToolConfig
 from ...reasoning.modules.extractor import OutputExtractorModule
 from ...types import SkillExecutionResult
+from ...utils import run_async_in_thread
 from ...utils.error_classifier import classify_error
-from ..agents.factory import AgentFactory, AgentConfig
+from ..agents.factory import AgentConfig, AgentFactory
 from ..execution.plan_step_executor import PlanStepExecutor
-from ...entities.models.plan import Plan
-from emery_agents.tools.loader import UnifiedToolLoader
-from simpleeval import simple_eval
 
 logger = logging.getLogger(__name__)
 
 
 # Regex to convert {{var}} template references to bare variable names
-_TEMPLATE_VAR = re.compile(r'\{\{(\w+)\}\}')
+_TEMPLATE_VAR = re.compile(r"\{\{(\w+)\}\}")
 # Regex to convert ! to 'not' (negative lookahead avoids replacing !=)
-_NEGATE = re.compile(r'!(?!=)')
+_NEGATE = re.compile(r"!(?!=)")
 # Built-in names for common literals (simpleeval uses Python syntax)
-_BUILTIN_NAMES: Dict[str, Any] = {
-    'true': True, 'false': False,
-    'null': None, 'none': None,
-    'True': True, 'False': False,
-    'None': None,
+_BUILTIN_NAMES: dict[str, Any] = {
+    "true": True,
+    "false": False,
+    "null": None,
+    "none": None,
+    "True": True,
+    "False": False,
+    "None": None,
 }
 
 
-def _flatten_json(obj: Any, prefix: str = '', max_depth: int = 5) -> Dict[str, Any]:
+def _flatten_json(obj: Any, prefix: str = "", max_depth: int = 5) -> dict[str, Any]:
     """Flatten nested JSON object into flat key-value structure.
 
     Used for converting tool responses into named outputs.
     Nested keys are joined with underscores.
     """
-    result: Dict[str, Any] = {}
+    result: dict[str, Any] = {}
 
     if max_depth <= 0 or obj is None:
         if prefix:
@@ -72,7 +83,7 @@ def _flatten_json(obj: Any, prefix: str = '', max_depth: int = 5) -> Dict[str, A
         if prefix:
             result[prefix] = obj
         else:
-            result['result'] = obj
+            result["result"] = obj
         return result
 
     for key, value in obj.items():
@@ -99,17 +110,21 @@ def _flatten_json(obj: Any, prefix: str = '', max_depth: int = 5) -> Dict[str, A
 # Internal Dataclasses - Clean types for step execution
 # =============================================================================
 
+
 @dataclass
 class StepProgress:
     """Progress update for a single step in a step-based workflow."""
+
     step: int
     total: int
     id: str  # Step UUID for context keying
     name: str  # Display name
     status: Literal["pending", "running", "completed", "failed", "skipped"]
-    result: Optional[str] = None
-    captured_data: Optional[Dict[str, Any]] = None  # Structured per-output data (None for text results)
-    error: Optional[str] = None
+    result: str | None = None
+    captured_data: dict[str, Any] | None = (
+        None  # Structured per-output data (None for text results)
+    )
+    error: str | None = None
     continued_after_error: bool = False
     retries_attempted: int = 0
 
@@ -117,6 +132,7 @@ class StepProgress:
 @dataclass
 class StepError:
     """Error details for storing in step context."""
+
     message: str
     error_type: str
     step_name: str
@@ -127,31 +143,34 @@ class StepError:
 @dataclass
 class Step:
     """Internal representation of a workflow step."""
+
     id: str  # Stable UUID for references (used for step_context keys)
     name: str  # Display name (user-editable)
     instruction: str = ""
     skill_id: int = 0
-    tools: List[str] = field(default_factory=list)
-    inputs: Dict[str, str] = field(default_factory=dict)
-    outputs: Dict[str, str] = field(default_factory=dict)
+    tools: list[str] = field(default_factory=list)
+    inputs: dict[str, str] = field(default_factory=dict)
+    outputs: dict[str, str] = field(default_factory=dict)
     condition: str = ""
-    input_defs: List[InputDef] = field(default_factory=list)
-    output_defs: List[OutputDef] = field(default_factory=list)
-    error_config: Optional[ErrorConfig] = None
-    retry_config: Optional[RetryConfig] = None
-    step_outputs: List[StepOutput] = field(default_factory=list)
+    input_defs: list[InputDef] = field(default_factory=list)
+    output_defs: list[OutputDef] = field(default_factory=list)
+    error_config: ErrorConfig | None = None
+    retry_config: RetryConfig | None = None
+    step_outputs: list[StepOutput] = field(default_factory=list)
     parallel_group: str = ""  # Steps with same group execute concurrently
-    loop_config: Optional[LoopConfig] = None  # For iteration support
+    loop_config: LoopConfig | None = None  # For iteration support
     # Step-level execution configs (for inline execution nodes)
-    read_config: Optional[ReadConfig] = None
-    write_config: Optional[WriteConfig] = None
-    tool_execution_config: Optional[ToolExecutionConfig] = None
-    agentic_config: Optional[AgenticStepConfig] = None  # For agentic steps with stored plan
+    read_config: ReadConfig | None = None
+    write_config: WriteConfig | None = None
+    tool_execution_config: ToolExecutionConfig | None = None
+    agentic_config: AgenticStepConfig | None = (
+        None  # For agentic steps with stored plan
+    )
     # UI state
     is_disabled: bool = False
 
     @classmethod
-    def from_dto(cls, dto: 'SkillStep') -> 'Step':
+    def from_dto(cls, dto: "SkillStep") -> "Step":
         """Convert SkillStep to internal Step.
 
         Straightforward field copy since DTO and Step share the same
@@ -185,6 +204,7 @@ class Step:
 # Helper Functions
 # =============================================================================
 
+
 def _is_retryable_error(exception: Exception) -> bool:
     """Check if an error should be retried using the error classifier."""
     classified = classify_error(exception)
@@ -195,16 +215,14 @@ def _get_wait_strategy(config: RetryConfig):
     """Get tenacity wait strategy based on config."""
     if config.backoff_type == "exponential":
         return wait_exponential(
-            multiplier=config.backoff_ms / 1000,
-            min=config.backoff_ms / 1000,
-            max=60
+            multiplier=config.backoff_ms / 1000, min=config.backoff_ms / 1000, max=60
         )
     elif config.backoff_type == "linear":
         return wait_exponential(
             multiplier=config.backoff_ms / 1000,
             min=config.backoff_ms / 1000,
             max=60,
-            exp_base=1.5
+            exp_base=1.5,
         )
     else:  # fixed
         return wait_fixed(config.backoff_ms / 1000)
@@ -213,6 +231,7 @@ def _get_wait_strategy(config: RetryConfig):
 # =============================================================================
 # Step Executor Service
 # =============================================================================
+
 
 class StepExecutorService:
     """Execute skills with DAG-based workflows.
@@ -229,7 +248,7 @@ class StepExecutorService:
         self,
         tool_loader: UnifiedToolLoader,
         agent_factory: AgentFactory,
-        skill_executor_callback: Optional[Callable] = None
+        skill_executor_callback: Callable | None = None,
     ):
         self.tool_loader = tool_loader
         self.agent_factory = agent_factory
@@ -239,13 +258,13 @@ class StepExecutorService:
 
     async def execute_steps(
         self,
-        steps: List[SkillStep],
-        available_skills: Dict[int, SkillConfig],
-        initial_inputs: Dict[str, Any],
-        org_model: Optional[str] = None,
+        steps: list[SkillStep],
+        available_skills: dict[int, SkillConfig],
+        initial_inputs: dict[str, Any],
+        org_model: str | None = None,
         api_key: str = "",
         organization_id: int = 0,
-        _execution_stack: Optional[Set[int]] = None
+        _execution_stack: set[int] | None = None,
     ) -> AsyncIterator[StepProgress]:
         """Execute steps as a DAG workflow.
 
@@ -263,18 +282,20 @@ class StepExecutorService:
         """
         # Convert DTO steps to internal Step objects
         internal_steps = [Step.from_dto(s) for s in steps]
-        step_by_id: Dict[str, Step] = {s.id: s for s in internal_steps}
+        step_by_id: dict[str, Step] = {s.id: s for s in internal_steps}
 
         # Initialize execution state (uses IDs for tracking)
-        step_context: Dict[str, Any] = dict(initial_inputs)
+        step_context: dict[str, Any] = dict(initial_inputs)
         execution_stack = _execution_stack if _execution_stack is not None else set()
-        executed_steps: Set[str] = set()  # Set of step IDs
+        executed_steps: set[str] = set()  # Set of step IDs
         total_steps = len(internal_steps)
 
         logger.info(f"🚀 Starting DAG execution with {total_steps} steps")
 
         # Start with the first step (use ID for tracking)
-        pending_steps: List[str] = [internal_steps[0].id] if internal_steps else []  # List of step IDs
+        pending_steps: list[str] = (
+            [internal_steps[0].id] if internal_steps else []
+        )  # List of step IDs
         step_counter = 0
 
         while pending_steps:
@@ -286,7 +307,9 @@ class StepExecutorService:
 
             if len(batch) > 1:
                 # Parallel execution
-                logger.info(f"⚡ Executing {len(batch)} steps in parallel: {[s.name for s in batch]}")
+                logger.info(
+                    f"⚡ Executing {len(batch)} steps in parallel: {[s.name for s in batch]}"
+                )
                 async for progress in self._execute_parallel_batch(
                     batch=batch,
                     step_counter=step_counter,
@@ -319,11 +342,15 @@ class StepExecutorService:
                         id=step.id,
                         name=step_name,
                         status="skipped",
-                        result="Step is disabled"
+                        result="Step is disabled",
                     )
                     self._queue_next_steps(
-                        step, internal_steps, pending_steps, executed_steps,
-                        "success", step_context
+                        step,
+                        internal_steps,
+                        pending_steps,
+                        executed_steps,
+                        "success",
+                        step_context,
                     )
                     continue
 
@@ -333,7 +360,7 @@ class StepExecutorService:
                     total=total_steps,
                     id=step.id,
                     name=step_name,
-                    status="running"
+                    status="running",
                 )
 
                 # Check entry condition
@@ -346,11 +373,15 @@ class StepExecutorService:
                             id=step.id,
                             name=step_name,
                             status="skipped",
-                            result="Condition not met"
+                            result="Condition not met",
                         )
                         self._queue_next_steps(
-                            step, internal_steps, pending_steps, executed_steps,
-                            "success", step_context
+                            step,
+                            internal_steps,
+                            pending_steps,
+                            executed_steps,
+                            "success",
+                            step_context,
                         )
                         continue
 
@@ -366,7 +397,7 @@ class StepExecutorService:
                         execution_stack=execution_stack,
                         org_model=org_model,
                         api_key=api_key,
-                        organization_id=organization_id
+                        organization_id=organization_id,
                     )
 
                     # Capture outputs
@@ -384,7 +415,7 @@ class StepExecutorService:
                         status="completed",
                         result=result_str,
                         captured_data=captured_data,
-                        retries_attempted=retries_attempted
+                        retries_attempted=retries_attempted,
                     )
 
                 except Exception as e:
@@ -393,7 +424,9 @@ class StepExecutorService:
                     execution_status = "error"
 
                     if retries_attempted > 0:
-                        logger.error(f"❌ Step {step_name} failed after {retries_attempted} retries: {error_msg}")
+                        logger.error(
+                            f"❌ Step {step_name} failed after {retries_attempted} retries: {error_msg}"
+                        )
                     else:
                         logger.error(f"❌ Step {step_name} failed: {error_msg}")
 
@@ -403,18 +436,28 @@ class StepExecutorService:
                         error_type=error_type,
                         step_name=step_name,
                         timestamp=time.time(),
-                        retries_attempted=retries_attempted
+                        retries_attempted=retries_attempted,
                     )
 
-                    error_var = step.error_config.error_output_var if step.error_config else "__error__"
+                    error_var = (
+                        step.error_config.error_output_var
+                        if step.error_config
+                        else "__error__"
+                    )
                     step_context[error_var] = asdict(step_error)
-                    step_context.setdefault("__errors__", {})[step_name] = asdict(step_error)
+                    step_context.setdefault("__errors__", {})[step_name] = asdict(
+                        step_error
+                    )
 
                     # Check if we should continue
-                    continue_on_error = step.error_config and step.error_config.continue_on_error
+                    continue_on_error = (
+                        step.error_config and step.error_config.continue_on_error
+                    )
 
                     if continue_on_error:
-                        logger.info(f"⚠️ Step {step_name} failed but continuing (continue_on_error=True)")
+                        logger.info(
+                            f"⚠️ Step {step_name} failed but continuing (continue_on_error=True)"
+                        )
                         yield StepProgress(
                             step=step_counter,
                             total=total_steps,
@@ -423,7 +466,7 @@ class StepExecutorService:
                             status="failed",
                             error=error_msg,
                             continued_after_error=True,
-                            retries_attempted=retries_attempted
+                            retries_attempted=retries_attempted,
                         )
                     else:
                         yield StepProgress(
@@ -433,24 +476,28 @@ class StepExecutorService:
                             name=step_name,
                             status="failed",
                             error=error_msg,
-                            retries_attempted=retries_attempted
+                            retries_attempted=retries_attempted,
                         )
                         raise
 
                 # Queue next steps based on outputs
                 self._queue_next_steps(
-                    step, internal_steps, pending_steps, executed_steps,
-                    execution_status, step_context
+                    step,
+                    internal_steps,
+                    pending_steps,
+                    executed_steps,
+                    execution_status,
+                    step_context,
                 )
 
         logger.info(f"🏁 DAG execution complete: {step_counter} steps executed")
 
     def _get_parallel_batch(
         self,
-        pending_steps: List[str],  # List of step IDs
-        step_by_id: Dict[str, Step],
-        executed_steps: Set[str]  # Set of step IDs
-    ) -> List[Step]:
+        pending_steps: list[str],  # List of step IDs
+        step_by_id: dict[str, Step],
+        executed_steps: set[str],  # Set of step IDs
+    ) -> list[Step]:
         """Get batch of steps to execute - either parallel group or single step."""
         while pending_steps:
             step_id = pending_steps.pop(0)
@@ -489,18 +536,18 @@ class StepExecutorService:
 
     async def _execute_parallel_batch(
         self,
-        batch: List[Step],
+        batch: list[Step],
         step_counter: int,
         total_steps: int,
-        step_context: Dict[str, Any],
-        available_skills: Dict[int, SkillConfig],
-        execution_stack: Set[int],
-        org_model: Optional[str],
+        step_context: dict[str, Any],
+        available_skills: dict[int, SkillConfig],
+        execution_stack: set[int],
+        org_model: str | None,
         api_key: str,
         organization_id: int,
-        internal_steps: List[Step],
-        pending_steps: List[str],  # List of step IDs
-        executed_steps: Set[str],  # Set of step IDs
+        internal_steps: list[Step],
+        pending_steps: list[str],  # List of step IDs
+        executed_steps: set[str],  # Set of step IDs
     ) -> AsyncIterator[StepProgress]:
         """Execute a batch of steps in parallel using asyncio.gather."""
         # Mark all as executed (by ID)
@@ -519,11 +566,15 @@ class StepExecutorService:
                     id=step.id,
                     name=step.name,
                     status="skipped",
-                    result="Step is disabled"
+                    result="Step is disabled",
                 )
                 self._queue_next_steps(
-                    step, internal_steps, pending_steps, executed_steps,
-                    "success", step_context
+                    step,
+                    internal_steps,
+                    pending_steps,
+                    executed_steps,
+                    "success",
+                    step_context,
                 )
                 skipped_count += 1
             else:
@@ -536,15 +587,19 @@ class StepExecutorService:
         # Warn about potential output conflicts in parallel steps
         # (parallel steps writing to same variable will overwrite each other)
         if len(active_batch) > 1:
-            output_targets: Dict[str, List[str]] = {}
+            output_targets: dict[str, list[str]] = {}
             for step in active_batch:
                 output_mappings = step.outputs or {}
                 if step.output_defs:
-                    output_mappings = output_mappings or {d.name: d.name for d in step.output_defs}
+                    output_mappings = output_mappings or {
+                        d.name: d.name for d in step.output_defs
+                    }
                 for target_var in output_mappings.values():
                     output_targets.setdefault(target_var, []).append(step.name)
 
-            conflicts = {var: steps for var, steps in output_targets.items() if len(steps) > 1}
+            conflicts = {
+                var: steps for var, steps in output_targets.items() if len(steps) > 1
+            }
             if conflicts:
                 logger.warning(
                     f"⚠️ Parallel steps have conflicting output targets (last write wins): "
@@ -558,11 +613,11 @@ class StepExecutorService:
                 total=total_steps,
                 id=step.id,
                 name=step.name,
-                status="running"
+                status="running",
             )
 
         # Create tasks for parallel execution
-        async def execute_one(step: Step) -> tuple[Step, Any, int, Optional[Exception]]:
+        async def execute_one(step: Step) -> tuple[Step, Any, int, Exception | None]:
             """Execute single step and return result or exception."""
             try:
                 result, retries = await self._execute_step(
@@ -572,7 +627,7 @@ class StepExecutorService:
                     execution_stack=execution_stack,
                     org_model=org_model,
                     api_key=api_key,
-                    organization_id=organization_id
+                    organization_id=organization_id,
                 )
                 return step, result, retries, None
             except Exception as e:
@@ -601,12 +656,16 @@ class StepExecutorService:
                     status="completed",
                     result=result_str,
                     captured_data=captured_data,
-                    retries_attempted=retries
+                    retries_attempted=retries,
                 )
 
                 self._queue_next_steps(
-                    step, internal_steps, pending_steps, executed_steps,
-                    "success", step_context
+                    step,
+                    internal_steps,
+                    pending_steps,
+                    executed_steps,
+                    "success",
+                    step_context,
                 )
             else:
                 # Error
@@ -619,14 +678,22 @@ class StepExecutorService:
                     error_type=error_type,
                     step_name=step.name,
                     timestamp=time.time(),
-                    retries_attempted=retries
+                    retries_attempted=retries,
                 )
 
-                error_var = step.error_config.error_output_var if step.error_config else "__error__"
+                error_var = (
+                    step.error_config.error_output_var
+                    if step.error_config
+                    else "__error__"
+                )
                 step_context[error_var] = asdict(step_error)
-                step_context.setdefault("__errors__", {})[step.name] = asdict(step_error)
+                step_context.setdefault("__errors__", {})[step.name] = asdict(
+                    step_error
+                )
 
-                continue_on_error = step.error_config and step.error_config.continue_on_error
+                continue_on_error = (
+                    step.error_config and step.error_config.continue_on_error
+                )
 
                 if continue_on_error:
                     yield StepProgress(
@@ -637,11 +704,15 @@ class StepExecutorService:
                         status="failed",
                         error=error_msg,
                         continued_after_error=True,
-                        retries_attempted=retries
+                        retries_attempted=retries,
                     )
                     self._queue_next_steps(
-                        step, internal_steps, pending_steps, executed_steps,
-                        "error", step_context
+                        step,
+                        internal_steps,
+                        pending_steps,
+                        executed_steps,
+                        "error",
+                        step_context,
                     )
                 else:
                     yield StepProgress(
@@ -651,21 +722,21 @@ class StepExecutorService:
                         name=step.name,
                         status="failed",
                         error=error_msg,
-                        retries_attempted=retries
+                        retries_attempted=retries,
                     )
                     raise error
 
     def _queue_next_steps(
         self,
         current_step: Step,
-        all_steps: List[Step],
-        pending_steps: List[str],  # List of step IDs
-        executed_steps: Set[str],  # Set of step IDs
+        all_steps: list[Step],
+        pending_steps: list[str],  # List of step IDs
+        executed_steps: set[str],  # Set of step IDs
         execution_status: Literal["success", "error"],
-        context: Dict[str, Any],
+        context: dict[str, Any],
     ) -> None:
         """Determine and queue next steps based on outputs or sequential order."""
-        next_step_ids: List[str] = []
+        next_step_ids: list[str] = []
         id_set = {s.id for s in all_steps}
 
         if current_step.step_outputs:
@@ -687,7 +758,11 @@ class StepExecutorService:
                 )
 
         for step_id in next_step_ids:
-            if step_id in id_set and step_id not in executed_steps and step_id not in pending_steps:
+            if (
+                step_id in id_set
+                and step_id not in executed_steps
+                and step_id not in pending_steps
+            ):
                 pending_steps.append(step_id)
                 logger.debug(f"📍 Queued next step: {step_id}")
 
@@ -695,16 +770,16 @@ class StepExecutorService:
         self,
         step: Step,
         execution_status: Literal["success", "error"],
-        context: Dict[str, Any]
-    ) -> List[str]:
+        context: dict[str, Any],
+    ) -> list[str]:
         """Determine next steps based on step outputs and execution status.
 
         Condition outputs use short-circuit evaluation (if/elif/else semantics):
         the first matching condition routes, remaining conditions are skipped.
         The 'default' output acts as the else branch.
         """
-        next_steps: List[str] = []
-        default_steps: List[str] = []
+        next_steps: list[str] = []
+        default_steps: list[str] = []
         condition_matched = False
 
         for output in step.step_outputs:
@@ -721,9 +796,13 @@ class StepExecutorService:
                     if self._evaluate_condition(output.condition, context):
                         next_steps.extend(output.next_steps)
                         condition_matched = True
-                        logger.debug(f"📍 Condition '{output.condition}' matched: routing to {output.next_steps}")
+                        logger.debug(
+                            f"📍 Condition '{output.condition}' matched: routing to {output.next_steps}"
+                        )
                     else:
-                        logger.debug(f"📍 Condition '{output.condition}' not matched, checking next")
+                        logger.debug(
+                            f"📍 Condition '{output.condition}' not matched, checking next"
+                        )
 
             elif output.type == "default":
                 default_steps.extend(output.next_steps)
@@ -738,12 +817,12 @@ class StepExecutorService:
     async def _execute_step(
         self,
         step: Step,
-        step_context: Dict[str, Any],
-        available_skills: Dict[int, SkillConfig],
-        execution_stack: Set[int],
-        org_model: Optional[str],
+        step_context: dict[str, Any],
+        available_skills: dict[int, SkillConfig],
+        execution_stack: set[int],
+        org_model: str | None,
         api_key: str,
-        organization_id: int
+        organization_id: int,
     ) -> tuple[Any, int]:
         """Execute a single step with optional retry and loop support.
 
@@ -759,7 +838,7 @@ class StepExecutorService:
                 execution_stack=execution_stack,
                 org_model=org_model,
                 api_key=api_key,
-                organization_id=organization_id
+                organization_id=organization_id,
             )
 
         # Resolve inputs
@@ -772,8 +851,13 @@ class StepExecutorService:
         async def _do_execute() -> Any:
             if step.skill_id:
                 return await self._execute_skill_step(
-                    step, step_inputs, available_skills, org_model,
-                    api_key, organization_id, execution_stack
+                    step,
+                    step_inputs,
+                    available_skills,
+                    org_model,
+                    api_key,
+                    organization_id,
+                    execution_stack,
                 )
             elif step.read_config:
                 return await self._execute_read_step(
@@ -789,8 +873,7 @@ class StepExecutorService:
                 )
             elif step.agentic_config:
                 return await self._execute_agentic_step(
-                    step, step_inputs, step_context, org_model,
-                    api_key, organization_id
+                    step, step_inputs, step_context, org_model, api_key, organization_id
                 )
             else:
                 return await self._execute_inline_step(
@@ -806,12 +889,14 @@ class StepExecutorService:
                     stop=stop_after_attempt(max_attempts),
                     wait=_get_wait_strategy(step.retry_config),
                     retry=retry_if_exception(_is_retryable_error),
-                    reraise=True
+                    reraise=True,
                 ):
                     with attempt:
                         retries_attempted = attempt.retry_state.attempt_number - 1
                         if retries_attempted > 0:
-                            logger.info(f"🔄 Retry {retries_attempted}/{max_attempts - 1} for step {step.name}")
+                            logger.info(
+                                f"🔄 Retry {retries_attempted}/{max_attempts - 1} for step {step.name}"
+                            )
                         result = await _do_execute()
                 return result, retries_attempted
             except RetryError as e:
@@ -824,12 +909,12 @@ class StepExecutorService:
     async def _execute_step_with_loop(
         self,
         step: Step,
-        step_context: Dict[str, Any],
-        available_skills: Dict[int, SkillConfig],
-        execution_stack: Set[int],
-        org_model: Optional[str],
+        step_context: dict[str, Any],
+        available_skills: dict[int, SkillConfig],
+        execution_stack: set[int],
+        org_model: str | None,
         api_key: str,
-        organization_id: int
+        organization_id: int,
     ) -> tuple[Any, int]:
         """Execute a step with loop iteration.
 
@@ -848,10 +933,12 @@ class StepExecutorService:
         loop_type = loop_config.type
         max_iterations = loop_config.max_iterations
         current_item_var = loop_config.current_item_var or "item"
-        results: List[Any] = []
+        results: list[Any] = []
         total_retries = 0
 
-        logger.info(f"🔁 Starting {loop_type} loop for step {step.name} (max: {max_iterations})")
+        logger.info(
+            f"🔁 Starting {loop_type} loop for step {step.name} (max: {max_iterations})"
+        )
 
         # Create a step copy without loop_config to avoid infinite recursion
         step_without_loop = Step(
@@ -868,7 +955,7 @@ class StepExecutorService:
             retry_config=step.retry_config,
             step_outputs=step.step_outputs,
             parallel_group=step.parallel_group,
-            loop_config=None  # Remove loop config to prevent recursion
+            loop_config=None,  # Remove loop config to prevent recursion
         )
 
         if loop_type == "for_each":
@@ -879,11 +966,15 @@ class StepExecutorService:
 
             items = step_context.get(items_var, [])
             if not isinstance(items, (list, tuple)):
-                logger.warning(f"items_var '{items_var}' is not a list, wrapping as single item")
+                logger.warning(
+                    f"items_var '{items_var}' is not a list, wrapping as single item"
+                )
                 items = [items] if items else []
 
             iteration_count = min(len(items), max_iterations)
-            logger.info(f"🔁 for_each: iterating over {iteration_count} items from '{items_var}'")
+            logger.info(
+                f"🔁 for_each: iterating over {iteration_count} items from '{items_var}'"
+            )
 
             for i, item in enumerate(items[:max_iterations]):
                 # Set loop variables in context
@@ -891,7 +982,9 @@ class StepExecutorService:
                 step_context["__loop_index__"] = i
                 step_context["__loop_iteration__"] = i + 1
 
-                logger.info(f"🔁 Iteration {i + 1}/{iteration_count}: {current_item_var}={str(item)[:50]}")
+                logger.info(
+                    f"🔁 Iteration {i + 1}/{iteration_count}: {current_item_var}={str(item)[:50]}"
+                )
 
                 result, retries = await self._execute_step(
                     step=step_without_loop,
@@ -900,7 +993,7 @@ class StepExecutorService:
                     execution_stack=execution_stack,
                     org_model=org_model,
                     api_key=api_key,
-                    organization_id=organization_id
+                    organization_id=organization_id,
                 )
                 results.append(result)
                 total_retries += retries
@@ -919,7 +1012,9 @@ class StepExecutorService:
             iteration = 0
             while iteration < max_iterations:
                 if not self._evaluate_condition(condition, step_context):
-                    logger.info(f"🔁 while loop: condition '{condition}' is false, stopping")
+                    logger.info(
+                        f"🔁 while loop: condition '{condition}' is false, stopping"
+                    )
                     break
 
                 step_context["__loop_index__"] = iteration
@@ -934,14 +1029,16 @@ class StepExecutorService:
                     execution_stack=execution_stack,
                     org_model=org_model,
                     api_key=api_key,
-                    organization_id=organization_id
+                    organization_id=organization_id,
                 )
                 results.append(result)
                 total_retries += retries
                 iteration += 1
 
             if iteration >= max_iterations:
-                logger.warning(f"🔁 while loop: reached max iterations ({max_iterations})")
+                logger.warning(
+                    f"🔁 while loop: reached max iterations ({max_iterations})"
+                )
 
             step_context.pop("__loop_index__", None)
             step_context.pop("__loop_iteration__", None)
@@ -966,7 +1063,7 @@ class StepExecutorService:
                     execution_stack=execution_stack,
                     org_model=org_model,
                     api_key=api_key,
-                    organization_id=organization_id
+                    organization_id=organization_id,
                 )
                 results.append(result)
                 total_retries += retries
@@ -974,11 +1071,15 @@ class StepExecutorService:
 
                 # Check condition after execution
                 if self._evaluate_condition(condition, step_context):
-                    logger.info(f"🔁 until loop: condition '{condition}' is now true, stopping")
+                    logger.info(
+                        f"🔁 until loop: condition '{condition}' is now true, stopping"
+                    )
                     break
 
             if iteration >= max_iterations:
-                logger.warning(f"🔁 until loop: reached max iterations ({max_iterations})")
+                logger.warning(
+                    f"🔁 until loop: reached max iterations ({max_iterations})"
+                )
 
             step_context.pop("__loop_index__", None)
             step_context.pop("__loop_iteration__", None)
@@ -986,7 +1087,9 @@ class StepExecutorService:
         else:
             raise ValueError(f"Unknown loop type: {loop_type}")
 
-        logger.info(f"🔁 Loop completed: {len(results)} iterations, {total_retries} total retries")
+        logger.info(
+            f"🔁 Loop completed: {len(results)} iterations, {total_retries} total retries"
+        )
 
         # Store results array in context
         step_context[f"{step.name}_results"] = results
@@ -996,12 +1099,12 @@ class StepExecutorService:
     async def _execute_skill_step(
         self,
         step: Step,
-        step_inputs: Dict[str, Any],
-        available_skills: Dict[int, SkillConfig],
-        org_model: Optional[str],
+        step_inputs: dict[str, Any],
+        available_skills: dict[int, SkillConfig],
+        org_model: str | None,
         api_key: str,
         organization_id: int,
-        execution_stack: Set[int]
+        execution_stack: set[int],
     ) -> Any:
         """Execute a step that references another skill."""
         skill_id = step.skill_id
@@ -1025,20 +1128,26 @@ class StepExecutorService:
             # Clean up before raising
             async with self._execution_stack_lock:
                 execution_stack.discard(skill_id)
-            raise ValueError("No skill executor callback configured for skill delegation")
+            raise ValueError(
+                "No skill executor callback configured for skill delegation"
+            )
 
         try:
             result = self.skill_executor_callback(
                 skill_config=skill_config,
                 runtime_inputs=step_inputs,
-                capture_outputs=True
+                capture_outputs=True,
             )
 
             if asyncio.iscoroutine(result):
                 result = await result
 
             if isinstance(result, SkillExecutionResult):
-                return result.captured_outputs if result.captured_outputs else result.result
+                return (
+                    result.captured_outputs
+                    if result.captured_outputs
+                    else result.result
+                )
 
             return result
         finally:
@@ -1047,9 +1156,9 @@ class StepExecutorService:
     async def _execute_inline_step(
         self,
         step: Step,
-        step_inputs: Dict[str, Any],
-        step_context: Dict[str, Any],
-        org_model: Optional[str]
+        step_inputs: dict[str, Any],
+        step_context: dict[str, Any],
+        org_model: str | None,
     ) -> Any:
         """Execute a step with inline instruction using a sub-agent."""
         instruction = self._inject_context(step.instruction, step_context)
@@ -1060,9 +1169,7 @@ class StepExecutorService:
             try:
                 tool_configs = [ToolConfig(name=name) for name in step.tools]
                 step_tools = self.tool_loader.load_tools_from_configs(
-                    tool_configs=tool_configs,
-                    api_key=None,
-                    api_key_mode="user"
+                    tool_configs=tool_configs, api_key=None, api_key_mode="user"
                 )
                 logger.info(f"🔧 Loaded {len(step_tools)} tools for step")
             except Exception as e:
@@ -1086,7 +1193,7 @@ class StepExecutorService:
             agent_name=f"step_{step.name}",
             agent_description=f"Sub-agent for step: {step.name}",
             enable_caching=False,
-            context_type="autonomous"
+            context_type="autonomous",
         )
 
         sub_agent = self.agent_factory.create_agent(agent_config)
@@ -1096,14 +1203,19 @@ class StepExecutorService:
         # Extract outputs using DSPy module if step has output_defs
         if step.output_defs:
             extractor = OutputExtractorModule(
-                skill_outputs=[{
-                    'name': d.name,
-                    'type': d.type,
-                    'description': getattr(d, 'description', '')
-                } for d in step.output_defs]
+                skill_outputs=[
+                    {
+                        "name": d.name,
+                        "type": d.type,
+                        "description": getattr(d, "description", ""),
+                    }
+                    for d in step.output_defs
+                ]
             )
             captured = extractor.extract(content=str(result))
-            logger.info(f"Extracted outputs from step {step.name}: {list(captured.keys())}")
+            logger.info(
+                f"Extracted outputs from step {step.name}: {list(captured.keys())}"
+            )
             return captured
 
         return result
@@ -1111,12 +1223,13 @@ class StepExecutorService:
     async def _execute_read_step(
         self,
         step: Step,
-        step_inputs: Dict[str, Any],
+        step_inputs: dict[str, Any],
         api_key: str,
-        organization_id: int
-    ) -> Dict[str, Any]:
+        organization_id: int,
+    ) -> dict[str, Any]:
         """Execute a direct table read step (no LLM)."""
         import os
+
         import httpx
 
         read_config = step.read_config
@@ -1139,13 +1252,14 @@ class StepExecutorService:
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             if mode == "single_row":
-                row_id = self._resolve_row_id_source(read_config.row_id_source, step_inputs)
+                row_id = self._resolve_row_id_source(
+                    read_config.row_id_source, step_inputs
+                )
                 if not row_id:
                     raise ValueError("Could not resolve row ID for single_row read")
 
                 response = await client.get(
-                    f"{base_url}/rows/{table_id}/{row_id}",
-                    headers=headers
+                    f"{base_url}/rows/{table_id}/{row_id}", headers=headers
                 )
                 if response.status_code >= 400:
                     raise ValueError(f"Table read failed: {response.text[:500]}")
@@ -1153,17 +1267,19 @@ class StepExecutorService:
                 row = response.json()
                 rows = [row] if row else []
             else:  # query mode
-                filters = self._build_query_filters(read_config.query_filters, step_inputs)
+                filters = self._build_query_filters(
+                    read_config.query_filters, step_inputs
+                )
                 limit = read_config.query_limit or 100
 
                 params = {"limit": limit}
-                for i, f in enumerate(filters):
-                    params[f"filter[field_{f['field_id']}]"] = f"{f['operator']}:{f['value']}"
+                for _i, f in enumerate(filters):
+                    params[f"filter[field_{f['field_id']}]"] = (
+                        f"{f['operator']}:{f['value']}"
+                    )
 
                 response = await client.get(
-                    f"{base_url}/rows/{table_id}",
-                    headers=headers,
-                    params=params
+                    f"{base_url}/rows/{table_id}", headers=headers, params=params
                 )
                 if response.status_code >= 400:
                     raise ValueError(f"Table query failed: {response.text[:500]}")
@@ -1188,12 +1304,13 @@ class StepExecutorService:
     async def _execute_write_step(
         self,
         step: Step,
-        step_inputs: Dict[str, Any],
+        step_inputs: dict[str, Any],
         api_key: str,
-        organization_id: int
-    ) -> Dict[str, Any]:
+        organization_id: int,
+    ) -> dict[str, Any]:
         """Execute a direct table write step (no LLM)."""
         import asyncio
+
         from emery_agents.api import RowAPI
 
         write_config = step.write_config
@@ -1203,7 +1320,9 @@ class StepExecutorService:
         table_id = write_config.target_table_id
         row_action = write_config.row_action or "create"
 
-        logger.info(f"📝 Step {step.name}: table write -> table {table_id} ({row_action})")
+        logger.info(
+            f"📝 Step {step.name}: table write -> table {table_id} ({row_action})"
+        )
         logger.info(f"📝 Write step_inputs keys: {list(step_inputs.keys())}")
         logger.info(f"📝 Write step_inputs: {step_inputs}")
 
@@ -1215,9 +1334,13 @@ class StepExecutorService:
             if skill_input in step_inputs:
                 field_values[field_id] = step_inputs[skill_input]
             else:
-                logger.warning(f"📝 Write mapping: '{skill_input}' not in step_inputs, skipping field {field_id}")
+                logger.warning(
+                    f"📝 Write mapping: '{skill_input}' not in step_inputs, skipping field {field_id}"
+                )
 
-        logger.info(f"📝 Write step field_values ({len(field_values)} fields): {field_values}")
+        logger.info(
+            f"📝 Write step field_values ({len(field_values)} fields): {field_values}"
+        )
 
         row_api = RowAPI(api_key=api_key, org_id=str(organization_id))
 
@@ -1228,7 +1351,9 @@ class StepExecutorService:
                 raise ValueError("Write step update mode requires update_match")
             match_input = write_config.update_match.skill_input_name
             if match_input not in step_inputs:
-                raise ValueError(f"Update match input '{match_input}' not in step inputs")
+                raise ValueError(
+                    f"Update match input '{match_input}' not in step inputs"
+                )
             result = await asyncio.to_thread(
                 row_api.update_row, table_id, step_inputs[match_input], field_values
             )
@@ -1245,9 +1370,9 @@ class StepExecutorService:
     async def _execute_tool_step(
         self,
         step: Step,
-        step_inputs: Dict[str, Any],
+        step_inputs: dict[str, Any],
         api_key: str,
-        organization_id: int
+        organization_id: int,
     ) -> Any:
         """Execute a direct tool call step (no LLM).
 
@@ -1275,9 +1400,7 @@ class StepExecutorService:
         tool_config = ToolConfig(name=tool_id, config={})
 
         tools = self.tool_loader.load_tools_from_configs(
-            tool_configs=[tool_config],
-            api_key=api_key,
-            api_key_mode="user"
+            tool_configs=[tool_config], api_key=api_key, api_key_mode="user"
         )
 
         if not tools:
@@ -1299,7 +1422,9 @@ class StepExecutorService:
         # The flattened keys become available as workflow variables (e.g., {{tool_1.threadId}})
         if tool_config.output_table_id:
             flattened = _flatten_json(result_dict)
-            logger.info(f"📊 Step {step.name}: flattened to {len(flattened)} outputs for table {tool_config.output_table_id}")
+            logger.info(
+                f"📊 Step {step.name}: flattened to {len(flattened)} outputs for table {tool_config.output_table_id}"
+            )
             return flattened
 
         return result_dict
@@ -1307,9 +1432,9 @@ class StepExecutorService:
     async def _execute_agentic_step(
         self,
         step: Step,
-        step_inputs: Dict[str, Any],
-        step_context: Dict[str, Any],
-        org_model: Optional[str],
+        step_inputs: dict[str, Any],
+        step_context: dict[str, Any],
+        org_model: str | None,
         api_key: str,
         organization_id: int,
     ) -> Any:
@@ -1330,7 +1455,7 @@ class StepExecutorService:
             )
 
         # Load configured skill tools so the LLM can call them
-        extra_tools: List[Any] = []
+        extra_tools: list[Any] = []
         if agentic_config.tools and self.tool_loader:
             tool_configs = [ToolConfig(name=t) for t in agentic_config.tools]
             extra_tools = self.tool_loader.load_tools_from_configs(
@@ -1338,7 +1463,9 @@ class StepExecutorService:
                 api_key=api_key,
                 api_key_mode="user",
             )
-            logger.info(f"🔧 Loaded {len(extra_tools)} skill tools for step {step.name}")
+            logger.info(
+                f"🔧 Loaded {len(extra_tools)} skill tools for step {step.name}"
+            )
 
         logger.info(f"📋 Step {step.name}: executing with stored plan")
         # _execute_with_plan is sync (PlanStepExecutor.execute is sync)
@@ -1354,11 +1481,11 @@ class StepExecutorService:
     def _execute_with_plan(
         self,
         plan: Plan,
-        skill_inputs: Dict[str, Any],
-        org_model: Optional[str],
+        skill_inputs: dict[str, Any],
+        org_model: str | None,
         api_key: str,
         organization_id: int,
-        extra_tools: Optional[List[Any]] = None,
+        extra_tools: list[Any] | None = None,
     ) -> str:
         """Execute a stored plan using PlanStepExecutor.
 
@@ -1387,16 +1514,16 @@ class StepExecutorService:
             outcome = executor.execute(plan, plan_step)
             results.append(outcome.summary)
             if not outcome.success:
-                logger.warning(f"Plan step {plan_step.step_id} failed: {outcome.summary}")
+                logger.warning(
+                    f"Plan step {plan_step.step_id} failed: {outcome.summary}"
+                )
                 break
 
         return "\n".join(results)
 
     def _resolve_row_id_source(
-        self,
-        row_id_source: Optional[RowIdSource],
-        step_inputs: Dict[str, Any]
-    ) -> Optional[str]:
+        self, row_id_source: RowIdSource | None, step_inputs: dict[str, Any]
+    ) -> str | None:
         """Resolve row ID from source configuration."""
         if not row_id_source:
             return None
@@ -1414,10 +1541,8 @@ class StepExecutorService:
             return None
 
     def _build_query_filters(
-        self,
-        query_filters: List[QueryFilter],
-        step_inputs: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
+        self, query_filters: list[QueryFilter], step_inputs: dict[str, Any]
+    ) -> list[dict[str, Any]]:
         """Build query filters from config."""
         filters = []
         for qf in query_filters:
@@ -1434,19 +1559,13 @@ class StepExecutorService:
             else:
                 value = ""
 
-            filters.append({
-                "field_id": field_id,
-                "operator": operator,
-                "value": value
-            })
+            filters.append({"field_id": field_id, "operator": operator, "value": value})
 
         return filters
 
     def _resolve_inputs(
-        self,
-        input_mappings: Dict[str, str],
-        context: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, input_mappings: dict[str, str], context: dict[str, Any]
+    ) -> dict[str, Any]:
         """Resolve input mappings from step_context.
 
         Missing template variables are skipped with a warning instead of
@@ -1469,10 +1588,7 @@ class StepExecutorService:
         return resolved
 
     def _capture_outputs(
-        self,
-        step: Step,
-        result: Any,
-        context: Dict[str, Any]
+        self, step: Step, result: Any, context: dict[str, Any]
     ) -> None:
         """Capture outputs to step_context."""
         output_mappings = step.outputs
@@ -1493,7 +1609,7 @@ class StepExecutorService:
 
         logger.debug(f"📤 Captured outputs: {list(output_mappings.values())}")
 
-    def _build_captured_data(self, step: Step, result: Any) -> Optional[Dict[str, Any]]:
+    def _build_captured_data(self, step: Step, result: Any) -> dict[str, Any] | None:
         """Build structured output dict keyed by output name.
 
         Returns None if result is not a dict (text results need extraction instead).
@@ -1515,7 +1631,7 @@ class StepExecutorService:
                 data[output_name] = result[output_name]
         return data if data else None
 
-    def _inject_context(self, instruction: str, context: Dict[str, Any]) -> str:
+    def _inject_context(self, instruction: str, context: dict[str, Any]) -> str:
         """Replace {{var}} placeholders in instruction with compact JSON."""
         result = instruction
         for key, value in context.items():
@@ -1523,13 +1639,13 @@ class StepExecutorService:
             if placeholder in result:
                 if isinstance(value, (dict, list)):
                     # Use compact JSON - DSPy adapters handle token efficiency
-                    value_str = json.dumps(value, separators=(',', ':'))
+                    value_str = json.dumps(value, separators=(",", ":"))
                 else:
                     value_str = str(value)
                 result = result.replace(placeholder, value_str)
         return result
 
-    def _evaluate_condition(self, condition: str, context: Dict[str, Any]) -> bool:
+    def _evaluate_condition(self, condition: str, context: dict[str, Any]) -> bool:
         """Evaluate condition expressions safely using simpleeval.
 
         Supports comparisons (==, !=, >, <, >=, <=), boolean operators
@@ -1543,10 +1659,10 @@ class StepExecutorService:
             '({{a}} > 5 || {{b}} < 3) && {{c}} == "yes"'
         """
         # Convert {{var}} → var (resolved via names dict)
-        expr = _TEMPLATE_VAR.sub(r'\1', condition)
+        expr = _TEMPLATE_VAR.sub(r"\1", condition)
         # Convert JS-style operators to Python: && → and, || → or, ! → not
-        expr = expr.replace('&&', ' and ').replace('||', ' or ')
-        expr = _NEGATE.sub(' not ', expr)
+        expr = expr.replace("&&", " and ").replace("||", " or ")
+        expr = _NEGATE.sub(" not ", expr)
 
         names = {**_BUILTIN_NAMES, **context}
         try:
@@ -1561,14 +1677,15 @@ class StepExecutorService:
 # Synchronous Wrapper
 # =============================================================================
 
+
 def execute_steps_sync(
     step_executor: StepExecutorService,
-    steps: List[SkillStep],
-    available_skills: Dict[int, SkillConfig],
-    initial_inputs: Dict[str, Any],
-    org_model: Optional[str] = None,
+    steps: list[SkillStep],
+    available_skills: dict[int, SkillConfig],
+    initial_inputs: dict[str, Any],
+    org_model: str | None = None,
     api_key: str = "",
-    organization_id: int = 0
+    organization_id: int = 0,
 ) -> SkillExecutionResult:
     """Synchronous wrapper for step execution."""
 
@@ -1582,7 +1699,7 @@ def execute_steps_sync(
             initial_inputs=initial_inputs,
             org_model=org_model,
             api_key=api_key,
-            organization_id=organization_id
+            organization_id=organization_id,
         ):
             results.append(progress)
             if progress.status == "completed":
@@ -1596,11 +1713,13 @@ def execute_steps_sync(
     for progress in results:
         if progress.status == "completed":
             if progress.captured_data:
-                captured[progress.id] = progress.captured_data  # Structured: {output_name: value}
+                captured[progress.id] = (
+                    progress.captured_data
+                )  # Structured: {output_name: value}
             elif progress.result:
                 captured[progress.id] = progress.result  # Fallback: raw string
 
     return SkillExecutionResult(
         result=final_result or "Steps completed",
-        captured_outputs=captured if captured else None
+        captured_outputs=captured if captured else None,
     )
