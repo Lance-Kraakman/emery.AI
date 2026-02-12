@@ -408,12 +408,32 @@ async def generate_plan_node(
 
     enriched_task = task
     if pre_selected_skill:
-        enriched_task = (
-            f"{task}\n\n"
-            f"[USER DIRECTIVE: The user explicitly selected the '{pre_selected_skill}' skill via @skill mention. "
-            f"Build a focused plan that uses this skill. Look up the skill by name using discovery tools, "
-            f"then create a plan step that executes it with inputs extracted from the user's message and conversation context.]"
-        )
+        # Check if we have a loaded skill tool we can use directly
+        loaded_skill_tool = None
+        for tool in tools:
+            if hasattr(tool, "skill_id"):
+                loaded_skill_tool = tool
+                break
+
+        if loaded_skill_tool:
+            # Skill tool is already loaded - tell planner to use it directly
+            skill_id = loaded_skill_tool.skill_id
+            tool_name = getattr(loaded_skill_tool, "name", f"skill_skill_{skill_id}")
+            enriched_task = (
+                f"{task}\n\n"
+                f"[USER DIRECTIVE: The user selected the '{pre_selected_skill}' skill via @skill mention. "
+                f"This skill is already loaded as tool '{tool_name}' (skill ID: {skill_id}). "
+                f"Use this tool directly in your plan - do NOT search for the skill. "
+                f"Extract any required inputs from the user's message and conversation context.]"
+            )
+        else:
+            # No loaded skill tool - fall back to discovery
+            enriched_task = (
+                f"{task}\n\n"
+                f"[USER DIRECTIVE: The user explicitly selected the '{pre_selected_skill}' skill via @skill mention. "
+                f"Build a focused plan that uses this skill. Look up the skill by name using discovery tools, "
+                f"then create a plan step that executes it with inputs extracted from the user's message and conversation context.]"
+            )
     elif pre_selected_agent:
         enriched_task = (
             f"{task}\n\n"
