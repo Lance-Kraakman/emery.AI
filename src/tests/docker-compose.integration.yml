@@ -130,7 +130,7 @@ services:
       AWS_SECRET_ACCESS_KEY: minioadmin
       AWS_REGION: us-east-1
       S3_BUCKET_NAME: enhancd-files
-      NEXTJS_BASE_URL: http://app-integration:3000
+      NEXTJS_BASE_URL: ${NEXTJS_BASE_URL_DOCKER:-http://app-integration:3000}
       EMERY_DEBUG_PROMPTS: "1"
       WORKSPACE_STORAGE_PATH: /mnt/storage/workspaces
     volumes:
