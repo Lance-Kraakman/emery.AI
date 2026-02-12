@@ -227,9 +227,9 @@ class SkillTool:
         try:
             enriched_kwargs = run_async_in_thread(self._resolve_input_mappings(kwargs))
 
-            from emery_agents.services.agents.executor import AgentExecutor
+            from emery_agents.services.context import get_current_context
 
-            parent_ctx = AgentExecutor.get_current_context()
+            parent_ctx = get_current_context()
             progress_callback = parent_ctx.progress_callback if parent_ctx else None
 
             # Always use capture_outputs=True to get SkillExecutionResult with status
@@ -440,13 +440,13 @@ class SkillTool:
         self, row_source: dict[str, Any], context: dict[str, Any]
     ) -> str | None:
         """Resolve row ID from row source configuration."""
-        from emery_agents.services.agents.executor import AgentExecutor
+        from emery_agents.services.context import get_current_context
 
         if row_source.get("use_source_row", False):
             if "__row_id__" in context:
                 return str(context["__row_id__"])
 
-            parent_ctx = AgentExecutor.get_current_context()
+            parent_ctx = get_current_context()
             if (
                 parent_ctx
                 and hasattr(parent_ctx, "source_row_id")

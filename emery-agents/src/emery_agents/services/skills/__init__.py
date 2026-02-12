@@ -1,12 +1,9 @@
 """
 Skills Module
 
-Skill execution and permission validation.
+Skill permission validation.
 
-Heavy modules (SkillExecutorService, StepExecutorService) are imported
-directly from their files to avoid circular imports:
-  from services.skills.executor import SkillExecutorService
-  from services.skills.step_executor import StepExecutorService
+NOTE: Skill execution now handled by services.executors.router.ExecutionRouter.
 """
 
 from .validator import (

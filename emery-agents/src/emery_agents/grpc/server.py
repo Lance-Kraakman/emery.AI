@@ -51,7 +51,6 @@ from ..infrastructure.storage import (
     WorkspaceStorage,
     WorkspaceType,
 )
-from ..services.agents.executor import AgentExecutor
 from ..services.tasks import TaskExecutor
 from .generated import (
     agent_worker_pb2,
@@ -93,15 +92,12 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
         logger.info("AgentWorkerServiceImplementation initialized")
 
         # Initialize all services (HF_TOKEN is guaranteed to exist)
-        self.agent_executor = AgentExecutor()
         self.tool_loader = UnifiedToolLoader()
         self.proto_mapper = ProtoMapper()
 
         # Shared task executor for both ExecuteTask and ProcessMessage paths
-        self.task_executor = TaskExecutor(
-            agent_executor=self.agent_executor,
-            api_service=None,  # No API service needed for background tasks
-        )
+        # Uses ExecutionRouter by default (use_new_router=True)
+        self.task_executor = TaskExecutor()
 
         # Initialize workspace storage (EFS/NFS/local filesystem)
         # Workspaces are stored directly on shared filesystem - no S3 needed

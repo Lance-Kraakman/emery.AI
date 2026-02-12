@@ -26,7 +26,6 @@ from .entities import (
 from .grpc.server import main as grpc_serve
 
 # Export services
-# AgentExecutor omitted: import directly from services.agents.executor (heavy, circular if eager)
 from .services import ModelProvider, TokenUsage
 
 # Export types

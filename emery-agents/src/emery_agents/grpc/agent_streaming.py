@@ -23,12 +23,11 @@ from ..entities.message import FileAttachment, HistoryMessage
 from ..entities.tool_config import ToolConfig
 from ..reasoning.config import get_dspy_lm
 from ..reasoning.modules.executor import ExecutorModule
-from ..services.agents.executor import AgentExecutor
+from ..services.context import set_current_context
 from ..services.context.session_manager import SessionManager
 from ..services.execution.state_machine import ActionType, Phase
 from ..services.models.provider import ModelProvider
 from ..services.plan_service import PlanService
-from ..services.skills.executor import SkillExecutorService
 from ..tools.execution.skill import SkillTool
 from ..tools.loader import UnifiedToolLoader
 from ..tools.tool_modes import ToolMode
@@ -69,7 +68,6 @@ class AgentStreamingHandler:
         self,
         session_manager: SessionManager,
         model_provider: ModelProvider,
-        skill_executor_service: SkillExecutorService,
         tool_loader: UnifiedToolLoader | None,
         plan_service: PlanService,
         coordinator_handler: CoordinatorStreamingHandler,
@@ -78,7 +76,6 @@ class AgentStreamingHandler:
     ):
         self.session_manager = session_manager
         self.model_provider = model_provider
-        self.skill_executor_service = skill_executor_service
         self.tool_loader = tool_loader
         self.plan_service = plan_service
         self.coordinator_handler = coordinator_handler
@@ -310,7 +307,7 @@ class AgentStreamingHandler:
             workspace_path=kwargs.get("workspace_path"),
             org_model=kwargs.get("org_model"),  # Propagate to sub-executions
         )
-        AgentExecutor.set_current_context(context)
+        set_current_context(context)
 
         if not skip_coordinator:
             # Extract only coordinator-accepted params from kwargs (type-safe)
@@ -383,7 +380,7 @@ class AgentStreamingHandler:
                 },
             )
         finally:
-            AgentExecutor.set_current_context(None)
+            set_current_context(None)
 
     async def _handle_execution_error(
         self,

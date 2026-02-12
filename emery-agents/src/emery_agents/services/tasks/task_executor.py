@@ -37,10 +37,10 @@ from emery_agents.tools.provider import ToolProvider
 from ...entities.execution_context import ExecutionContext
 from ...entities.task import TaskRequest
 from ...types import ExecutionMode
-from ..agents.executor import AgentExecutor
 from ..credentials import ResolvedCredentials
 from ..executors.adapters import context_to_request
 from ..executors.router import ExecutionRouter, get_execution_router
+
 
 logger = logging.getLogger(__name__)
 
@@ -140,7 +140,7 @@ class TaskExecutor:
 
     def __init__(
         self,
-        agent_executor: AgentExecutor,
+        agent_executor: Any = None,  # Legacy: AgentExecutor (deprecated)
         api_service: AgentAPIService | None = None,
         execution_router: ExecutionRouter | None = None,
         use_new_router: bool = True,
@@ -149,7 +149,7 @@ class TaskExecutor:
         Initialize task executor.
 
         Args:
-            agent_executor: AgentExecutor for actual task execution
+            agent_executor: Legacy AgentExecutor for fallback (optional when use_new_router=True)
             api_service: API service for credential/agent lookups
             execution_router: New ExecutionRouter (Phase 3 refactor)
             use_new_router: Enable routing via ExecutionRouter instead of AgentExecutor
@@ -234,9 +234,10 @@ class TaskExecutor:
                 )
 
             # 5. Build execution context
-            # If we have the original TaskRequest, use AgentExecutor.determine_execution_context
-            # which properly handles skills, tools, attachments, etc.
-            if task_data._task_request is not None:
+            # If we have the original TaskRequest and AgentExecutor, use
+            # AgentExecutor.determine_execution_context for full context building.
+            # Otherwise use simplified context building.
+            if task_data._task_request is not None and self.agent_executor is not None:
                 context = self.agent_executor.determine_execution_context(
                     task_data._task_request, pre_fetched_skill=pre_fetched_skill
                 )
@@ -244,7 +245,7 @@ class TaskExecutor:
                 context.agent_model = task_data.agent_model
                 context.org_model = task_data.org_model
             else:
-                # Fallback to simplified context (for chat tasks)
+                # Simplified context (for chat tasks or when agent_executor is None)
                 context = self._build_execution_context(task_data, credentials)
 
             # 6. Inject ToolProvider into context for credential isolation
@@ -262,6 +263,10 @@ class TaskExecutor:
                     yield progress
             else:
                 # Legacy path: use AgentExecutor directly
+                if self.agent_executor is None:
+                    raise RuntimeError(
+                        "Cannot use legacy path (use_new_router=False) without AgentExecutor"
+                    )
                 async for progress in self.agent_executor.execute_task(context):
                     progress["task_id"] = task_id
                     yield progress
@@ -323,6 +328,10 @@ class TaskExecutor:
                     progress["task_id"] = task_id
                     yield progress
             else:
+                if self.agent_executor is None:
+                    raise RuntimeError(
+                        "Cannot use legacy path (use_new_router=False) without AgentExecutor"
+                    )
                 async for progress in self.agent_executor.execute_task(context):
                     progress["task_id"] = task_id
                     yield progress

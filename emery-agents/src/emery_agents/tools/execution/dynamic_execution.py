@@ -8,7 +8,7 @@ AIDEV-NOTE: Part of dynamic execution architecture (Jan 2026).
 - Skills are fetched via POST /api/skills/:id/execution-config
 - Agents are fetched via POST /api/agents/:id/execution-config
 - Credentials are resolved based on skill.agentId / agent ownership
-- Execution happens in-process via SkillExecutorService/AgentExecutor
+- Execution happens in-process via ExecutionRouter
 """
 
 from __future__ import annotations
@@ -21,11 +21,9 @@ from typing import Any
 import requests
 
 from emery_agents.api.http_client import get_base_url
-from emery_agents.entities.execution_context import ExecutionContext
 from emery_agents.entities.skill_config import SkillConfig
 from emery_agents.services.context import get_current_context, signal_human_skill_awaiting
 from emery_agents.tools.execution.skill import HumanSkillAwaitingException
-from emery_agents.types import ExecutionMode
 from emery_agents.utils import run_async_in_thread
 
 logger = logging.getLogger(__name__)
@@ -76,7 +74,7 @@ def execute_skill_by_id(
     Flow:
     1. Fetch skill config from API (includes agentId)
     2. Resolve credentials from skill ownership
-    3. Execute skill in-process using SkillExecutorService
+    3. Execute skill in-process using ExecutionRouter
 
     Args:
         skill_id: The skill ID to execute
@@ -134,35 +132,25 @@ def execute_skill_by_id(
         f"[DYNAMIC-EXEC] Skill config: {skill_config.name} (type={skill_config.execution_type})"
     )
 
-    # 4. Create executor and execute in-process
+    # 4. Execute via ExecutionRouter
     try:
-        # Lazy imports to avoid circular dependency:
-        # tools/loader -> tools/crud -> dynamic_execution -> services/skills/executor -> tools/loader
-        from emery_agents.services.agents.factory import AgentFactory
-        from emery_agents.services.models.provider import ModelProvider
-        from emery_agents.services.skills.executor import (
-            SkillExecutorService,
-            SkillExecutionResult,
-        )
-        from emery_agents.tools.loader import UnifiedToolLoader
+        # Lazy imports to avoid circular dependency
+        from emery_agents.entities.configs import AuthConfig, SkillRequest
+        from emery_agents.services.executors.router import get_execution_router
+        from emery_agents.types import SkillExecutionResult
 
-        tool_loader = UnifiedToolLoader()
-        model_provider = ModelProvider()
-        agent_factory = AgentFactory(model_provider)
+        router = get_execution_router()
 
-        skill_executor = SkillExecutorService(
-            tool_loader=tool_loader,
-            agent_factory=agent_factory,
+        # Build typed request
+        request = SkillRequest(
+            skill=skill_config,
+            inputs=inputs,
+            auth=AuthConfig(api_key=execution_api_key, org_id=int(org_id)),
+            capture_outputs=True,
         )
 
-        # Use capture_outputs=True to get SkillExecutionResult with status
-        result = skill_executor.execute_skill(
-            skill_config=skill_config,
-            runtime_inputs=inputs,
-            capture_outputs=True,  # Changed: get full result with status
-            api_key=execution_api_key,
-            organization_id=int(org_id),
-        )
+        # Execute via router
+        result = router.execute_skill(request)
 
         logger.info(f"[DYNAMIC-EXEC] Skill {skill_id} execution complete")
 
@@ -286,7 +274,7 @@ def execute_agent_by_id(
     Flow:
     1. Fetch agent config + credentials from API
     2. Use agent's own API key (no fallback)
-    3. Execute task in-process using AgentExecutor
+    3. Execute task in-process using ExecutionRouter
 
     Args:
         agent_id: The agent ID to execute
@@ -324,34 +312,39 @@ def execute_agent_by_id(
         f"(using agent's own API key)"
     )
 
-    # 2. Build ExecutionContext - inherit org_model from parent context
+    # 2. Build InteractiveRequest - inherit org_model from parent context
     parent_context = get_current_context()
     parent_org_model = parent_context.org_model if parent_context else None
 
-    context = ExecutionContext(
-        mode=ExecutionMode.INTERACTIVE,
-        task=task,
-        available_tools=[],
-        agent_id=agent_id,
-        organization_id=int(org_id),
-        org_model=parent_org_model,  # Inherit from parent execution
-    )
-
-    # 3. Execute in-process using AgentExecutor
+    # 3. Execute via ExecutionRouter
     try:
         # Lazy import to avoid circular dependency
-        from emery_agents.services.agents.executor import AgentExecutor
+        from emery_agents.entities.configs import AuthConfig, InteractiveRequest
+        from emery_agents.services.executors.router import get_execution_router
 
-        agent_executor = AgentExecutor()
+        router = get_execution_router()
+
+        request = InteractiveRequest(
+            task=task,
+            auth=AuthConfig(
+                api_key=exec_config.agent_api_key,
+                org_id=int(org_id),
+                org_model=parent_org_model,
+            ),
+            agent_id=agent_id,
+            tools=[],
+        )
 
         # Collect results from async iterator
         async def collect_results() -> str | None:
             final_result = None
-            async for update in agent_executor.execute_task(context):
+            async for update in router.execute_interactive(request):
                 if update.get("type") == "final_answer":
                     final_result = update.get("content", "")
                 elif update.get("final_answer"):
                     final_result = update.get("final_answer")
+                elif update.get("output"):
+                    final_result = update.get("output")
             return final_result
 
         result = run_async_in_thread(collect_results(), timeout=300)

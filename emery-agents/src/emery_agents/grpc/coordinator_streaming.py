@@ -28,10 +28,8 @@ from ..entities.models.plan import Plan
 from ..orchestrators import RuntimeContext, create_session_graph
 from ..orchestrators.nodes.planning import _build_workspace_context
 from ..orchestrators.state import DEFAULT_STATE
-from ..services.agents.executor import AgentExecutor
-
 # MemoryService now accessed via engine.memory
-from ..services.context import ConversationMessage, WorkspaceContext
+from ..services.context import ConversationMessage, WorkspaceContext, set_current_context
 from ..services.execution.events import (
     ExecutionCompletedEvent,
     FinalSynthesisEvent,
@@ -350,7 +348,7 @@ class CoordinatorStreamingHandler:
         # Set execution context for tool mode
         if context.tool_provider:
             context.tool_mode = ToolMode.EXECUTION
-            AgentExecutor.set_current_context(context)
+            set_current_context(context)
 
         # Resume with Command
         resume_input: Any = Command(resume=response)
