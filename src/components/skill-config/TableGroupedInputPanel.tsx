@@ -19,17 +19,21 @@ import type { TableDTO } from '@/app/mappers/table-mapper';
 import type { DatabaseDTO } from '@/app/dtos/database.dto';
 import type { FieldDTO } from '@/app/mappers/field-mapper';
 import type { FieldType } from '@/ddd/domain/tables/value-objects/table-field';
+import type { AutomationConfigurationDTO } from '@/app/dtos/automation.dto';
 
 interface TableGroupedInputPanelProps {
   inputs: InputDefinition[];
   onInputsChange: (inputs: InputDefinition[]) => void;
   isReadOnly?: boolean;
+  /** Optional list of agent automations for "From Automation" feature */
+  automations?: AutomationConfigurationDTO[];
 }
 
 export function TableGroupedInputPanel({
   inputs,
   onInputsChange,
   isReadOnly = false,
+  automations = [],
 }: TableGroupedInputPanelProps) {
   const [tables, setTables] = useState<TableDTO[]>([]);
   const [databases, setDatabases] = useState<DatabaseDTO[]>([]);
@@ -346,6 +350,7 @@ export function TableGroupedInputPanel({
             setShowTriggerPanel(false);
           }}
           existingInputNames={new Set(inputs.map(i => i.name))}
+          automations={automations}
         />
       )}
     </div>
