@@ -40,7 +40,7 @@ jobs:
 
   build-frontend:
     needs: [get-environment]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     environment: ${{ needs.get-environment.outputs.env_name }}
     permissions:
       contents: read
@@ -103,7 +103,7 @@ jobs:
 
   build-agent:
     needs: [get-environment]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     environment: ${{ needs.get-environment.outputs.env_name }}
     permissions:
       contents: read
