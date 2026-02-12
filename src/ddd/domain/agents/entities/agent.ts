@@ -8,8 +8,7 @@ import {
   AgentId,
   OrganizationId,
   UserId,
-  AgentStatus,
-  ApiKey
+  AgentStatus
 } from '@/ddd/domain/shared/value-objects';
 import type { AvatarConfig } from '@/lib/avatars';
 import type { AgentPlan } from '@/ddd/domain/agents/types/plan';
@@ -98,10 +97,6 @@ export interface Agent {
   status: AgentStatus;                        // required with default 'active'
   organizationId: OrganizationId;             // DDD Value Object for type safety
   ownerId: UserId;                            // DDD Value Object for type safety - used for OAuth resolution via proxy
-  apiKey?: ApiKey | null;                     // Stores hash (not plaintext)
-  apiKeyPrefix?: string | null;              // First 12 chars for display
-  previousApiKeyHash?: string | null;
-  previousApiKeyExpiresAt?: Date | null;
   webhookToken?: string | null;               // For webhook authentication (Pipedream, etc.)
   defaultModel?: string | null;               // AI model override for this agent
   allowNetwork: boolean;                      // Whether bash commands have network access (git, curl, etc.)
@@ -126,10 +121,6 @@ export interface AgentPersistenceRecord {
   status: string;
   organizationId: number;
   ownerId: string;
-  apiKeyHash?: string | null;
-  apiKeyPrefix?: string | null;
-  previousApiKeyHash?: string | null;
-  previousApiKeyExpiresAt?: Date | null;
   webhookToken?: string | null;
   defaultModel?: string | null;
   allowNetwork: boolean;
@@ -165,10 +156,6 @@ export class AgentFactory {
       status: AgentStatus.fromString(record.status),
       organizationId: OrganizationId.fromNumber(record.organizationId),
       ownerId: UserId.fromString(record.ownerId),
-      apiKey: record.apiKeyHash ? ApiKey.fromString(record.apiKeyHash) : null,
-      apiKeyPrefix: record.apiKeyPrefix || null,
-      previousApiKeyHash: record.previousApiKeyHash || null,
-      previousApiKeyExpiresAt: record.previousApiKeyExpiresAt || null,
       webhookToken: record.webhookToken || null,
       defaultModel: record.defaultModel || null,
       allowNetwork: record.allowNetwork ?? true, // Default true for new agents
@@ -203,10 +190,6 @@ export class AgentFactory {
       status: agent.status.value,
       organizationId: agent.organizationId.value,
       ownerId: agent.ownerId.value,
-      apiKeyHash: agent.apiKey?.value || null,
-      apiKeyPrefix: agent.apiKeyPrefix || null,
-      previousApiKeyHash: agent.previousApiKeyHash || null,
-      previousApiKeyExpiresAt: agent.previousApiKeyExpiresAt || null,
       webhookToken: agent.webhookToken || null,
       defaultModel: agent.defaultModel || null,
       allowNetwork: agent.allowNetwork,
@@ -243,10 +226,6 @@ export interface UpdateAgentData {
   automations?: AutomationConfiguration[];    // Automations (trigger + skill reference)
   databaseId?: string;
   status?: AgentStatus;
-  apiKeyHash?: string;
-  apiKeyPrefix?: string;
-  previousApiKeyHash?: string | null;
-  previousApiKeyExpiresAt?: Date | null;
   avatarConfig?: AvatarConfig | null;  // Avatar configuration with icon + color (versioned JSON)
   defaultModel?: string | null;  // AI model override for this agent
   allowNetwork?: boolean;  // Network access for bash commands (git, curl, wget)
@@ -259,7 +238,7 @@ export interface UpdateAgentData {
 // Default agent roles
 export const AGENT_ROLES = {
   ASSISTANT: 'assistant',
-  ANALYST: 'analyst', 
+  ANALYST: 'analyst',
   EXECUTOR: 'executor',
   MONITOR: 'monitor',
   COORDINATOR: 'coordinator'

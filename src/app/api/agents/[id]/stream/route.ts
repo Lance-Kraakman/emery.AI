@@ -5,7 +5,8 @@ import { tasks, agents } from '@/ddd/infrastructure/db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { readFile, access } from 'fs/promises';
 import { join } from 'path';
-import { validateUserApiKey, extractApiKeyFromHeader } from '@/lib/auth/user-api-keys';
+import { extractApiKeyFromHeader } from '@/lib/auth/user-api-keys';
+import { validateToken } from '@/lib/auth/token-service';
 
 const WORKSPACE_BASE = process.env.WORKSPACE_STORAGE_PATH || '/mnt/storage/workspaces';
 
@@ -36,15 +37,16 @@ export async function GET(
     if (session?.user?.id) {
       userId = session.user.id;
     } else {
-      // Try Bearer token auth
+      // Try Bearer token auth (supports device tokens, callback tokens, user API keys)
       const authHeader = request.headers.get('authorization');
       const apiKey = extractApiKeyFromHeader(authHeader);
       console.log('[AGENT-STREAM] Auth attempt - session:', !!session?.user?.id, 'authHeader:', !!authHeader, 'apiKey prefix:', apiKey?.substring(0, 10));
       if (apiKey) {
-        const userInfo = await validateUserApiKey(apiKey);
-        console.log('[AGENT-STREAM] API key validation result:', !!userInfo);
-        if (userInfo) {
-          userId = userInfo.id;
+        // Use unified token validation (handles device_, cb_, user_ tokens)
+        const validatedToken = await validateToken(apiKey, ['workspace:sync']);
+        console.log('[AGENT-STREAM] Token validation result:', !!validatedToken);
+        if (validatedToken?.user) {
+          userId = validatedToken.user.id;
         }
       }
     }

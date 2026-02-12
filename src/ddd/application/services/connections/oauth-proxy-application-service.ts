@@ -11,7 +11,7 @@ import { oauthAuditLogger } from '@/lib/audit/oauth-audit-logger';
 
 const logger = createDebugLogger('OAuthProxy');
 import { getExternalUserIdForAgent } from '@/ddd/infrastructure/external/pipedream/client';
-import { ApiKey, UserId } from '@/ddd/domain/shared/value-objects';
+import { UserId, AgentId } from '@/ddd/domain/shared/value-objects';
 import { AppName } from '@/ddd/domain/connections/value-objects';
 import type { IAgentRepository } from '@/ddd/domain/agents/repositories/agent-repository';
 import type { CredentialDelegationApplicationService } from '@/ddd/application/services/delegations/credential-delegation-application-service';
@@ -41,16 +41,17 @@ export class OAuthProxyApplicationService {
 
   /**
    * Execute an OAuth API call on behalf of an agent using the agent owner's credentials
+   * Token validation happens before this method is called (in the route handler)
    */
-  async executeAgentOAuthCall(
-    agentApiKey: ApiKey,
+  async executeAgentOAuthCallByAgentId(
+    agentId: number,
     request: OAuthProxyRequest
   ): Promise<Result<OAuthProxyResult>> {
     try {
-      // 1. Find agent by API key
-      const agent = await this.agentRepository.findByApiKey(agentApiKey);
+      // 1. Find agent by ID (token already validated by route)
+      const agent = await this.agentRepository.findById(AgentId.fromNumber(agentId));
       if (!agent) {
-        return ResultHelpers.failure<OAuthProxyResult>('Invalid API key');
+        return ResultHelpers.failure<OAuthProxyResult>('Agent not found');
       }
 
       // 2. Validate request
@@ -101,12 +102,9 @@ export class OAuthProxyApplicationService {
         service: request.service
       });
 
-      // 4. Update agent last used timestamp
-      await this.agentRepository.updateLastUsed(agent.id);
-
       console.log(`[OAUTH-PROXY] Agent ${agent.id.value} (${agent.name}) calling ${request.service}.${request.action} for user ${agent.ownerId.value}`);
 
-      // 5. Execute OAuth call using agent owner's credentials
+      // 4. Execute OAuth call using agent owner's credentials
       const result = await this.executeWithOwnerCredentials(
         agent.ownerId,
         request.service,
@@ -131,9 +129,6 @@ export class OAuthProxyApplicationService {
 
     } catch (error) {
       console.error('OAuth proxy error:', error);
-
-      // AUDIT: Log failed OAuth call (if we have agent context)
-      // Note: Error may occur before agent is loaded, so we can't always log agent details
 
       return ResultHelpers.failure<OAuthProxyResult>(
         error instanceof Error ? error.message : 'Unknown error'

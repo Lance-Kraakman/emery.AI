@@ -625,10 +625,6 @@ export const users = pgTable("users", {
   currentOrganizationId: integer("current_organization_id").references(() => organizations.id),
   jobTitle: text("job_title"),
   teams: text("teams").array(),
-  apiKeyHash: text("api_key_hash").unique(),
-  apiKeyPrefix: text("api_key_prefix"),
-  previousApiKeyHash: text("previous_api_key_hash"),
-  previousApiKeyExpiresAt: timestamp("previous_api_key_expires_at"),
   createdAt: timestamp("created_at").defaultNow(),
 
   // Published app authentication fields
@@ -835,12 +831,7 @@ export const agents = pgTable("agents", {
   databaseId: text("database_id"),
   status: text("status").default("active"),
   organizationId: integer("organization_id").notNull().references(() => organizations.id),
-  apiKeyHash: text("api_key_hash").unique(),
-  apiKeyPrefix: text("api_key_prefix"),
-  previousApiKeyHash: text("previous_api_key_hash"),
-  previousApiKeyExpiresAt: timestamp("previous_api_key_expires_at"),
   webhookToken: text("webhook_token").unique().$defaultFn(() => randomUUID()), // For webhook authentication (Pipedream, etc.)
-  lastUsedAt: timestamp("last_used_at"), // Track API key usage
 
   // Model configuration
   // AIDEV-NOTE: Used for agent task execution, NOT for chat conversations
@@ -2682,4 +2673,46 @@ export const userSshKeys = pgTable("user_ssh_keys", {
   index("user_ssh_keys_user_idx").on(table.userId),
   index("user_ssh_keys_fingerprint_idx").on(table.fingerprint),
   index("user_ssh_keys_org_idx").on(table.organizationId),
+]);
+
+/**
+ * API Tokens - Unified token storage for all authentication types
+ *
+ * Token types:
+ * - 'user_api': User automation, manual use (prefix: user_)
+ * - 'device': Tauri desktop sync, stable (prefix: device_)
+ * - 'callback': Agent execution callbacks, 1hr TTL (prefix: cb_)
+ * - 'agent_api': Agent identity (prefix: agent_)
+ * - 'published_agent': External API access (prefix: pk_)
+ */
+export const apiTokens = pgTable("api_tokens", {
+  id: serial("id").primaryKey(),
+
+  // Token identity
+  tokenType: text("token_type").notNull(), // 'user_api', 'device', 'callback', 'agent_api', 'published_agent'
+  tokenHash: text("token_hash").unique().notNull(),
+  tokenPrefix: text("token_prefix").notNull(), // First 8+ chars for identification
+
+  // Owner (one of these will be set)
+  userId: uuid("user_id").references(() => users.id, { onDelete: 'cascade' }),
+  agentId: integer("agent_id").references(() => agents.id, { onDelete: 'cascade' }),
+
+  // Access control
+  scopes: jsonb("scopes").$type<string[]>().notNull().default([]),
+  expiresAt: timestamp("expires_at", { withTimezone: true }), // NULL = never expires
+  isRevoked: boolean("is_revoked").notNull().default(false),
+
+  // Grace period for rotation
+  previousTokenHash: text("previous_token_hash"),
+  previousTokenExpiresAt: timestamp("previous_token_expires_at", { withTimezone: true }),
+
+  // Audit
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  usageCount: integer("usage_count").notNull().default(0),
+}, (table) => [
+  index("api_tokens_user_idx").on(table.userId),
+  index("api_tokens_agent_idx").on(table.agentId),
+  index("api_tokens_token_hash_idx").on(table.tokenHash),
+  index("api_tokens_type_user_idx").on(table.tokenType, table.userId),
 ]);

@@ -65,16 +65,10 @@ export function AgentApiKeysModal({ isOpen, onClose, agent, onUpdate }: AgentApi
         <div className="flex items-start gap-3 p-4 rounded-lg border bg-muted/30">
           <Key className="h-5 w-5 text-muted-foreground mt-0.5 shrink-0" />
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium">Current API Key</p>
-            {agent.hasApiKey ? (
-              <p className="text-sm text-muted-foreground mt-1">
-                <code className="px-1.5 py-0.5 rounded bg-muted text-xs font-mono">
-                  {agent.apiKeyPrefix}...
-                </code>
-              </p>
-            ) : (
-              <p className="text-sm text-muted-foreground mt-1">No API key configured</p>
-            )}
+            <p className="text-sm font-medium">Agent API Key</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Generate a key for webhook authentication and external integrations.
+            </p>
           </div>
         </div>
 
@@ -118,18 +112,16 @@ export function AgentApiKeysModal({ isOpen, onClose, agent, onUpdate }: AgentApi
         <Button
           onClick={handleRegenerate}
           disabled={regenerating}
-          variant={agent.hasApiKey ? 'outline' : 'default'}
+          variant="default"
           className="w-full"
         >
           <RefreshCw className={`h-4 w-4 mr-2 ${regenerating ? 'animate-spin' : ''}`} />
-          {agent.hasApiKey ? 'Regenerate API Key' : 'Generate API Key'}
+          Generate API Key
         </Button>
 
-        {agent.hasApiKey && (
-          <p className="text-xs text-muted-foreground">
-            The previous key will remain valid for 24 hours after regeneration.
-          </p>
-        )}
+        <p className="text-xs text-muted-foreground">
+          If a key already exists, the previous key will remain valid for 24 hours.
+        </p>
 
         {/* Usage info */}
         <div className="border-t pt-4">

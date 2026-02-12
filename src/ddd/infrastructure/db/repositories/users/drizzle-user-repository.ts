@@ -1,21 +1,21 @@
 // AIDEV-NOTE: Drizzle implementation of IUserRepository - handles user authentication and management
 // User business operations with organization relationships and role management
 
-import { eq, and, ne, or, gte } from 'drizzle-orm';
+import { eq, and, ne } from 'drizzle-orm';
 import type { InferSelectModel } from 'drizzle-orm';
 
 import { users, userOrganizations, organizations } from '@/ddd/infrastructure/db/schema';
 import type { IUserRepository } from '@/ddd/domain/users/repositories/user-repository';
 import { DrizzleBaseRepository } from '../base/drizzle-base-repository';
-import type { 
-  User, 
-  CreateUserData, 
-  UpdateUserData, 
+import type {
+  User,
+  CreateUserData,
+  UpdateUserData,
   UserOrganization,
   CreateUserOrganizationData
 } from '@/ddd/domain/users/entities/user';
 import type { Organization } from '@/ddd/domain/organizations/entities/organization';
-import { UserId, EmailAddress, ApiKey, OrganizationId, OrganizationName } from '@/ddd/domain/shared/value-objects';
+import { UserId, EmailAddress, OrganizationId, OrganizationName } from '@/ddd/domain/shared/value-objects';
 import { SystemRoleType, SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
 import { SYSTEM_USER_ID_VALUE } from '@/ddd/infrastructure/db/system-context';
 
@@ -24,7 +24,7 @@ type UserRow = InferSelectModel<typeof users>;
 export class DrizzleUserRepository
   extends DrizzleBaseRepository<User, UserId, CreateUserData, UpdateUserData, UserRow>
   implements IUserRepository {
-  
+
   protected readonly table = users;
   protected readonly idColumn = users.id;
   protected readonly organizationColumn = undefined; // Users are not org-scoped directly
@@ -51,9 +51,6 @@ export class DrizzleUserRepository
       emailVerified: data.emailVerified,
       image: data.image,
       currentOrganizationId: data.currentOrganizationId?.value || null,
-      // organizationRole removed in RBAC system
-      apiKeyHash: data.apiKeyHash || null,
-      apiKeyPrefix: data.apiKeyPrefix || null
     };
 
     const [newUser] = await this.db
@@ -76,10 +73,8 @@ export class DrizzleUserRepository
     if (data.emailVerified !== undefined) updateData.emailVerified = data.emailVerified;
     if (data.image !== undefined) updateData.image = data.image;
     if (data.currentOrganizationId !== undefined) updateData.currentOrganizationId = data.currentOrganizationId?.value || null;
-    // organizationRole field removed in RBAC system
     if (data.jobTitle !== undefined) updateData.jobTitle = data.jobTitle;
     if (data.teams !== undefined) updateData.teams = data.teams;
-    // Note: apiKey updates handled through separate methods for security
 
     const [updatedUser] = await this.db
       .update(users)
@@ -107,73 +102,8 @@ export class DrizzleUserRepository
   }
 
   // AIDEV-NOTE: Role management now handled through RBAC system
-  // TODO: Reimplement this method to work with user_roles table when RBAC is fully integrated
   async updateUserRole(userId: UserId, role: string): Promise<User> {
     throw new Error('Role updates not yet implemented for RBAC system. Use role management through user_roles table.');
-  }
-
-  // API Key management (SHA-256 hashed)
-  async generateApiKey(userId: UserId): Promise<{ apiKey: ApiKey, plaintext: string }> {
-    const { plaintext, hash, prefix } = ApiKey.generateUserKeyWithHash();
-
-    // Move current key to grace period
-    const currentUser = await this.findById(userId);
-    const previousHash = currentUser?.apiKey?.value || null;
-
-    const [updatedUser] = await this.db
-      .update(users)
-      .set({
-        apiKeyHash: hash,
-        apiKeyPrefix: prefix,
-        previousApiKeyHash: previousHash,
-        previousApiKeyExpiresAt: previousHash ? new Date(Date.now() + 24 * 3600000) : null,
-      })
-      .where(eq(users.id, userId.value))
-      .returning();
-
-    if (!updatedUser) {
-      throw new Error(`User with id ${userId.value} not found`);
-    }
-
-    return { apiKey: ApiKey.fromString(hash), plaintext };
-  }
-
-  async findByApiKey(apiKey: ApiKey): Promise<User | null> {
-    const hash = ApiKey.hash(apiKey.value);
-    const now = new Date();
-
-    const result = await this.db
-      .select()
-      .from(users)
-      .where(
-        or(
-          eq(users.apiKeyHash, hash),
-          and(
-            eq(users.previousApiKeyHash, hash),
-            gte(users.previousApiKeyExpiresAt, now)
-          )
-        )
-      )
-      .limit(1);
-
-    return result[0] ? this.fromPersistence(result[0]) : null;
-  }
-
-  async revokeApiKey(userId: UserId): Promise<void> {
-    const [updatedUser] = await this.db
-      .update(users)
-      .set({
-        apiKeyHash: null,
-        apiKeyPrefix: null,
-        previousApiKeyHash: null,
-        previousApiKeyExpiresAt: null,
-      })
-      .where(eq(users.id, userId.value))
-      .returning();
-
-    if (!updatedUser) {
-      throw new Error(`User with id ${userId.value} not found`);
-    }
   }
 
   // Organization management
@@ -207,7 +137,7 @@ export class DrizzleUserRepository
 
   async getUserOrganizations(userId: UserId): Promise<Organization[]> {
     console.log("🗃️ DrizzleUserRepository.getUserOrganizations() - Querying for user:", userId.value);
-    
+
     const result = await this.db
       .select({
         organization: organizations
@@ -231,9 +161,9 @@ export class DrizzleUserRepository
       name: OrganizationName.fromString(r.organization.name),
       viewConfig: r.organization.viewConfig as Record<string, any> | null
     }));
-    
+
     console.log("🗃️ DrizzleUserRepository.getUserOrganizations() - Mapped results:", mappedResults.length);
-    
+
     return mappedResults;
   }
 
@@ -242,7 +172,6 @@ export class DrizzleUserRepository
     const relationshipData = {
       userId: data.userId.value,
       organizationId: data.organizationId.value,
-      // role field removed in RBAC system
     };
 
     const [newRelationship] = await this.db
@@ -283,7 +212,6 @@ export class DrizzleUserRepository
 
 
   async updateUserOrganizationRole(userId: UserId, organizationId: OrganizationId, systemRole: SystemRoleType): Promise<UserOrganization> {
-    // TODO: Update for RBAC system - roles now managed through user_roles table
     throw new Error('Role updates not yet implemented for RBAC system. Use role management through user_roles table.');
   }
 
@@ -379,7 +307,7 @@ export class DrizzleUserRepository
 
   async getUserOrganizationRole(userId: UserId, organizationId: OrganizationId): Promise<string | null> {
     const result = await this.db
-      .select({ id: users.id }) /* organizationRole removed */
+      .select({ id: users.id })
       .from(users)
       .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
       .where(
@@ -403,11 +331,6 @@ export class DrizzleUserRepository
       emailVerified: data.emailVerified,
       image: data.image,
       currentOrganizationId: data.currentOrganizationId ? OrganizationId.fromNumber(data.currentOrganizationId) : null,
-      // organizationRole removed in RBAC system
-      apiKey: data.apiKeyHash ? ApiKey.fromString(data.apiKeyHash) : null,
-      apiKeyPrefix: data.apiKeyPrefix || null,
-      previousApiKeyHash: data.previousApiKeyHash || null,
-      previousApiKeyExpiresAt: data.previousApiKeyExpiresAt || null,
       createdAt: data.createdAt
     };
   }
@@ -421,10 +344,6 @@ export class DrizzleUserRepository
       emailVerified: user.emailVerified,
       image: user.image,
       currentOrganizationId: user.currentOrganizationId?.value || null,
-      apiKeyHash: user.apiKey?.value || null,
-      apiKeyPrefix: user.apiKeyPrefix || null,
-      previousApiKeyHash: user.previousApiKeyHash || null,
-      previousApiKeyExpiresAt: user.previousApiKeyExpiresAt || null,
       createdAt: user.createdAt
     };
   }

@@ -1,15 +1,15 @@
 // AIDEV-NOTE: Drizzle implementation of Agent repository
 // Handles data persistence for Agent domain entities
+// NOTE: API key management moved to token-service.ts (unified token system)
 
 import type { IAgentRepository, CreateAgentData, UpdateAgentData } from '@/ddd/domain/agents/repositories/agent-repository';
 import type { Agent } from '@/ddd/domain/agents/entities/agent';
 import { AgentFactory } from '@/ddd/domain/agents/entities/agent';
 import { DrizzleBaseRepository } from '../base/drizzle-base-repository';
 import { agents } from '@/ddd/infrastructure/db/schema';
-import { eq, and, or, gte, sql, ne } from 'drizzle-orm';
+import { eq, and, sql, ne } from 'drizzle-orm';
 import type { InferSelectModel } from 'drizzle-orm';
-import { AgentId, OrganizationId, UserId, ApiKey } from '@/ddd/domain/shared/value-objects';
-import type { DbClient } from '@/ddd/infrastructure/db/client';
+import { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 
 type AgentRow = InferSelectModel<typeof agents>;
 
@@ -26,21 +26,21 @@ export class DrizzleAgentRepository
       .insert(agents)
       .values(data)
       .returning();
-    
+
     return this.fromPersistence(record);
   }
-  
+
   async update(id: AgentId, data: UpdateAgentData): Promise<Agent> {
     const [record] = await this.db
       .update(agents)
       .set(data)
       .where(eq(agents.id, id.value))
       .returning();
-    
+
     if (!record) {
       throw new Error(`Agent with id ${id.value} not found`);
     }
-    
+
     return this.fromPersistence(record);
   }
 
@@ -133,7 +133,7 @@ export class DrizzleAgentRepository
   protected fromPersistence(record: any): Agent {
     return AgentFactory.fromPersistence(record);
   }
-  
+
   protected toPersistence(agent: Agent): any {
     return AgentFactory.toPersistence(agent);
   }
@@ -157,39 +157,6 @@ export class DrizzleAgentRepository
     return !record;
   }
 
-  async findByApiKey(apiKey: ApiKey): Promise<Agent | null> {
-    try {
-      const hash = ApiKey.hash(apiKey.value);
-      const now = new Date();
-
-      // NOTE: For cross-org API key lookups (authentication), use
-      // organizationRepository.findAgentByApiKey() which bypasses RLS.
-      // This method requires RLS context to be set.
-      const [record] = await this.db
-        .select()
-        .from(agents)
-        .where(
-          or(
-            eq(agents.apiKeyHash, hash),
-            and(
-              eq(agents.previousApiKeyHash, hash),
-              gte(agents.previousApiKeyExpiresAt, now)
-            )
-          )
-        )
-        .limit(1);
-
-      if (!record) {
-        return null;
-      }
-
-      return this.fromPersistence(record);
-    } catch (error) {
-      console.error('Error finding agent by API key:', error);
-      return null;
-    }
-  }
-
   async findByWebhookToken(token: string): Promise<Agent | null> {
     try {
       // NOTE: For cross-org webhook token lookups (authentication), use
@@ -209,17 +176,6 @@ export class DrizzleAgentRepository
     } catch (error) {
       console.error('Error finding agent by webhook token:', error);
       return null;
-    }
-  }
-
-  async updateLastUsed(id: AgentId): Promise<void> {
-    try {
-      await this.db
-        .update(agents)
-        .set({ lastUsedAt: new Date() })
-        .where(eq(agents.id, id.value));
-    } catch (error) {
-      console.error('Error updating agent last used:', error);
     }
   }
 }

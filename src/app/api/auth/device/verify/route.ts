@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { consumeDeviceSession, isValidDeviceCode } from '@/lib/auth/device-flow';
-import { ensureFreshUserApiKey } from '@/lib/auth/user-api-keys';
+import { getOrCreateDeviceToken } from '@/lib/auth/token-service';
 import { db } from '@/ddd/infrastructure/db/client';
 import { sessions } from '@/ddd/infrastructure/db/schema';
 import { eq } from 'drizzle-orm';
@@ -40,13 +40,14 @@ export async function GET(request: NextRequest) {
       .where(eq(sessions.sessionToken, sessionToken))
       .limit(1);
 
-    // Generate API key for Tauri to use with Rust commands
+    // Generate device token for Tauri to use with Rust commands
+    // Device tokens are stable and won't be rotated by agent/skill execution
     let apiKey: string | undefined;
     if (session?.userId) {
       try {
-        apiKey = await ensureFreshUserApiKey(session.userId);
+        apiKey = await getOrCreateDeviceToken(session.userId);
       } catch (err) {
-        console.error('[Device Flow] Failed to generate API key:', err);
+        console.error('[Device Flow] Failed to generate device token:', err);
         // Continue without API key - user can still use the session
       }
     }

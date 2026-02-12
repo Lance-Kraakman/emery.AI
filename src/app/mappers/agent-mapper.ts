@@ -23,8 +23,6 @@ export interface AgentDTO {
   status: string;
   organizationId: number;
   ownerId: string; // Used for OAuth resolution via proxy
-  apiKeyPrefix?: string | null; // First 12 chars of API key (hash stored, never exposed)
-  hasApiKey?: boolean; // Whether agent has an API key configured
   defaultModel?: string | null; // AI model override for this agent
   allowNetwork: boolean; // Network access for bash commands (git, curl, wget)
   avatarConfig?: AvatarConfig | null; // Avatar configuration with icon + color
@@ -46,8 +44,6 @@ export class AgentMapper {
       status: agent.status.value,
       organizationId: agent.organizationId.value,
       ownerId: agent.ownerId.value,
-      apiKeyPrefix: agent.apiKeyPrefix || null,
-      hasApiKey: !!agent.apiKey,
       defaultModel: agent.defaultModel || null,
       allowNetwork: agent.allowNetwork,
       avatarConfig: agent.avatarConfig || null,

@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import crypto from 'crypto';
 import { z } from 'zod';
-import { AgentId, ApiKey } from '@/ddd/domain/shared/value-objects';
+import { AgentId } from '@/ddd/domain/shared/value-objects';
 import { getAgentRepository, getAgentTaskApplicationService } from '@/ddd/application/di/container';
 import { withSystemContext } from '@/ddd/infrastructure/db/system-context';
 import { WebhookTriggerConfig, TriggerConfigFromJSON } from '@/ddd/domain/scheduling/value-objects/trigger-config';
+import { validateToken } from '@/lib/auth/token-service';
 
 // AIDEV-NOTE: Webhook API endpoint for triggering agent tasks via external HTTP calls
 // Provides multi-layer security: API key + HMAC signature + origin validation
@@ -59,15 +60,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
     
-    // Validate API key: hash incoming plaintext and compare with stored hash
-    const incomingHash = ApiKey.hash(apiKey);
-    const currentKeyMatch = agent.apiKey?.value === incomingHash;
-    const graceKeyMatch = agent.previousApiKeyHash
-      && agent.previousApiKeyExpiresAt
-      && agent.previousApiKeyExpiresAt >= new Date()
-      && agent.previousApiKeyHash === incomingHash;
-
-    if (!currentKeyMatch && !graceKeyMatch) {
+    // Validate API token using unified token service
+    const validatedToken = await validateToken(apiKey);
+    if (!validatedToken || validatedToken.agentId !== agent.id.value) {
       return NextResponse.json(
         { error: 'Invalid API key' },
         { status: 401 }

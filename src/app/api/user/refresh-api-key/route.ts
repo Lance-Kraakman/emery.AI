@@ -3,13 +3,14 @@
  *
  * POST /api/user/refresh-api-key
  *
- * Generates a fresh API key for the authenticated user.
- * Used by Tauri desktop app when no API key is stored (e.g., signed in before feature existed).
+ * Returns a device token for the authenticated user.
+ * Used by Tauri desktop app for workspace sync.
+ * Device tokens are stable and don't get rotated by agent execution.
  */
 
 import { NextRequest } from 'next/server';
 import { auth } from '@/lib/auth';
-import { ensureFreshUserApiKey } from '@/lib/auth/user-api-keys';
+import { getOrCreateDeviceToken } from '@/lib/auth/token-service';
 
 export async function POST(request: NextRequest) {
   const session = await auth();
@@ -18,10 +19,10 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const apiKey = await ensureFreshUserApiKey(session.user.id);
+    const apiKey = await getOrCreateDeviceToken(session.user.id);
     return Response.json({ success: true, apiKey });
   } catch (error) {
     console.error('[refresh-api-key] Error:', error);
-    return Response.json({ error: 'Failed to generate API key' }, { status: 500 });
+    return Response.json({ error: 'Failed to generate device token' }, { status: 500 });
   }
 }
