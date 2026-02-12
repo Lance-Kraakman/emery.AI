@@ -9,20 +9,34 @@ import logging
 from typing import Any
 
 from ...ace import StepResult
+from ...api.skill_api import SkillAPIService
+from ...entities.output_mapping import (
+    FieldMapping,
+    FieldSource,
+    OutputMappingConfig,
+    RowAction,
+    RowIdSource,
+    TableMapping,
+)
+from ...entities.skill_config import OutputTableMapping, SkillConfig
+from ...entities.task import SkillOutputValue
 from ...reasoning.utils import StepOutcome
+from ...services.data.output_mapping import MappingContext, OutputMappingService
 from ...services.execution.events import (
     AwaitingHumanSkillEvent,
     StepCompletedEvent,
     StepFailedEvent,
     StepStartedEvent,
+    ToolLoadedEvent,
 )
 from ...services.execution.plan_step_executor import PlanStepExecutor
 from ...services.execution.step_executor import StepExecutor
 from ...services.memory import create_memory_crud
 from ...services.plan_service import PlanService
 from ...tools.execution.skill import HumanSkillAwaitingException
+from ...tools.loader import UnifiedToolLoader
 from ..runtime import RuntimeContext
-from ..state import PlanExecuteState
+from ..state import HumanSkillCompleted, PlanExecuteState
 
 logger = logging.getLogger(__name__)
 
@@ -57,13 +71,24 @@ async def execute_step_node(
     human_skill_completed = state.get("human_skill_completed")
     if human_skill_completed:
         completed_step_id = human_skill_completed.get("step_id")
+        skill_id = human_skill_completed.get("skill_id")
         skill_name = human_skill_completed.get("skill_name", "unknown")
         human_outputs = human_skill_completed.get("outputs", {})
 
         logger.info(
-            f"Human skill '{skill_name}' completed for step {completed_step_id} - "
+            f"Human skill '{skill_name}' (id={skill_id}) completed for step {completed_step_id} - "
             f"marking step as done"
         )
+
+        # Apply output mappings if skill has them configured
+        if skill_id and runtime.api_key:
+            await _apply_human_skill_output_mappings(
+                skill_id=skill_id,
+                outputs=human_outputs,
+                api_key=runtime.api_key,
+                org_id=runtime.org_id,
+                extra_headers=runtime.extra_headers,
+            )
 
         # Format outputs for result
         outputs_str = ", ".join(
@@ -136,6 +161,14 @@ async def execute_step_node(
     if runtime.engine:
         extra_tools.append(create_memory_crud(runtime.engine.memory))
 
+    # Add external tools from runtime (Pipedream tools selected in chat UI)
+    if runtime.tools:
+        extra_tools.extend(runtime.tools)
+        logger.info(f"Added {len(runtime.tools)} external tools from runtime")
+
+    # Create tool loader for dynamic tool loading during execution
+    tool_loader = UnifiedToolLoader()
+
     # Create fresh PlanStepExecutor per step from RuntimeContext
     plan_step_executor = PlanStepExecutor(
         api_key=runtime.api_key,
@@ -149,6 +182,7 @@ async def execute_step_node(
         llm_tracker=runtime.token_accumulator.get_llm_tracker()
         if runtime.token_accumulator
         else None,
+        tool_loader=tool_loader,  # Enable dynamic tool loading
     )
 
     # Hydrate with previous step results so context flows between steps
@@ -170,6 +204,13 @@ async def execute_step_node(
             tools=tools,
             managed_agents=managed_agents,
         )
+
+        # Emit events for dynamically loaded tools (frontend sync)
+        if plan_step_executor.loaded_tool_events:
+            events.extend(plan_step_executor.loaded_tool_events)
+            logger.info(
+                f"Emitting {len(plan_step_executor.loaded_tool_events)} tool loaded events"
+            )
 
         # Store structured outcome
         step_outcomes[step.step_id] = outcome.to_dict()
@@ -295,3 +336,145 @@ async def execute_step_node(
             "error": error_msg,
             "events": events,
         }
+
+
+async def _apply_human_skill_output_mappings(
+    skill_id: str,
+    outputs: dict[str, Any],
+    api_key: str,
+    org_id: str,
+    extra_headers: dict[str, str] | None = None,
+) -> None:
+    """
+    Apply output mappings for a completed human skill.
+
+    Fetches the skill config, finds outputs with output_mapping configured,
+    and writes the human-provided values to the target database tables.
+
+    Args:
+        skill_id: The skill ID to fetch config for
+        outputs: Human-provided output values (name -> value)
+        api_key: API key for authentication
+        org_id: Organization ID
+        extra_headers: Optional extra headers for API calls
+    """
+    try:
+        # Fetch skill config from API
+        skill_api = SkillAPIService(
+            api_key=api_key, organization_id=int(org_id) if org_id else None
+        )
+        skill_data = await skill_api.fetch_skill_by_id(skill_id)
+
+        if not skill_data or not skill_data.raw:
+            logger.warning(f"Could not fetch skill config for {skill_id}")
+            return
+
+        # Parse skill config
+        skill_config = SkillConfig.from_api_response(skill_data.raw)
+
+        # Find outputs with output mappings
+        outputs_with_mappings = [
+            output
+            for output in skill_config.outputs
+            if output.output_mapping is not None
+        ]
+
+        if not outputs_with_mappings:
+            logger.info(f"Skill {skill_id} has no output mappings configured")
+            return
+
+        # Convert human outputs to SkillOutputValue list
+        skill_output_values = [
+            SkillOutputValue(name=name, value=value)
+            for name, value in outputs.items()
+        ]
+
+        # Create mapping context
+        ctx = MappingContext(api_key=api_key, organization_id=org_id)
+
+        # Apply output mappings for each output that has them
+        for output_def in outputs_with_mappings:
+            if output_def.output_mapping is None:
+                continue
+
+            # Convert skill_config types to output_mapping types
+            config = OutputMappingConfig(
+                mode=output_def.output_mapping.mode,
+                table_mappings=[
+                    _convert_table_mapping(tm)
+                    for tm in output_def.output_mapping.table_mappings
+                ],
+            )
+
+            logger.info(
+                f"Applying output mapping for '{output_def.name}' "
+                f"with {len(config.table_mappings)} table mappings"
+            )
+
+            results = await OutputMappingService.apply_multi_table_mapping(
+                ctx=ctx,
+                config=config,
+                skill_outputs=skill_output_values,
+            )
+
+            logger.info(
+                f"✅ Human skill output mapping complete: {len(results)} tables updated"
+            )
+
+    except Exception as e:
+        logger.error(f"Failed to apply human skill output mappings: {e}", exc_info=True)
+
+
+def _convert_table_mapping(tm: OutputTableMapping) -> TableMapping:
+    """Convert skill_config OutputTableMapping to output_mapping TableMapping.
+
+    These are two different type hierarchies:
+    - skill_config types: Used for parsing API responses (camelCase -> snake_case)
+    - output_mapping types: Used by OutputMappingService for execution
+
+    Args:
+        tm: OutputTableMapping from skill_config module
+
+    Returns:
+        TableMapping compatible with OutputMappingService
+    """
+    # Convert row_id_source with proper use_source_row handling
+    row_id_source = None
+    if tm.row_id_source:
+        # Handle use_source_row flag → type="source_row"
+        row_type = tm.row_id_source.type
+        if tm.row_id_source.use_source_row:
+            row_type = "source_row"
+
+        row_id_source = RowIdSource(
+            type=row_type,
+            static_id=tm.row_id_source.static_id or None,
+            skill_input=tm.row_id_source.skill_input or None,
+            skill_output=tm.row_id_source.skill_output or None,
+        )
+
+    # Convert field mappings
+    field_mappings = [
+        FieldMapping(
+            source=FieldSource(
+                type=fm.source.type,
+                name=fm.source.name or None,
+                order=fm.source.order or None,
+                field=fm.source.field or None,
+            ),
+            target_field_id=fm.target_field_id,
+            append_mode=fm.append_mode,
+        )
+        for fm in tm.mappings
+    ]
+
+    # Convert row_action string to enum
+    row_action = RowAction.UPDATE if tm.row_action == "update" else RowAction.CREATE
+
+    return TableMapping(
+        order=tm.order,
+        target_table_id=tm.target_table_id,
+        row_action=row_action,
+        row_id_source=row_id_source,
+        mappings=field_mappings,
+    )

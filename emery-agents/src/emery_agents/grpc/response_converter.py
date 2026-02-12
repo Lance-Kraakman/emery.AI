@@ -171,6 +171,44 @@ def convert_permission_request(
     )
 
 
+def convert_tool_loaded(
+    response_dict: dict[str, Any],
+) -> agent_worker_pb2.ProcessMessageResponse:
+    """Convert tool_loaded event to step_progress with TOOL_LOADED metadata.
+
+    Since the proto doesn't have a dedicated tool_loaded message type,
+    we use step_progress with step_type=STEP_ACTION and include tool data
+    in the metadata. The TypeScript side detects this via metadata.event_type.
+    """
+    tool_name = response_dict.get("tool_name", "")
+    tool_display_name = response_dict.get("tool_display_name", tool_name)
+    tool_description = response_dict.get("tool_description", "")
+    app_name = response_dict.get("app_name", "")
+
+    step_progress_msg = agent_worker_pb2.StepProgress(
+        step_type=agent_worker_pb2.STEP_ACTION,
+        step_name=f"Loaded tool: {tool_display_name}",
+        content=f"Dynamically loaded {tool_name}",
+        step_index=0,
+    )
+
+    # Include tool data in metadata for frontend to extract
+    _populate_protobuf_map(
+        step_progress_msg.metadata,
+        {
+            "event_type": "tool_loaded",
+            "tool_name": tool_name,
+            "tool_display_name": tool_display_name,
+            "tool_description": tool_description,
+            "app_name": app_name,
+        },
+    )
+
+    return agent_worker_pb2.ProcessMessageResponse(
+        step_progress=step_progress_msg, timestamp=int(time.time() * 1000)
+    )
+
+
 def convert_response_to_proto(
     response_dict: StreamResponseDict,
     sequence: int,
@@ -212,6 +250,11 @@ def convert_response_to_proto(
     elif response_type == "permission_request":
         return ConversionResult(
             convert_permission_request(response_dict), "", None, False, 0
+        )
+
+    elif response_type == "tool_loaded":
+        return ConversionResult(
+            convert_tool_loaded(response_dict), "", None, False, 0
         )
 
     # NOTE: awaiting_human_skill is now handled via awaiting_input with input_type="human_skill"

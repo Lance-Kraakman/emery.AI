@@ -39,6 +39,7 @@ from ..services.execution.events import (
     StepCompletedEvent,
     StepFailedEvent,
     StepStartedEvent,
+    ToolLoadedEvent,
 )
 from .mappers import format_clarifying_questions
 from .response_types import (
@@ -501,6 +502,16 @@ def convert_coordinator_event(
                 "plan_json": json.dumps(human_skill_data),
                 "session_id": event.session_id,
             },
+        }
+
+    elif isinstance(event, ToolLoadedEvent):
+        # Tool was dynamically loaded - notify frontend to update ToolPanel
+        return {
+            "type": "tool_loaded",
+            "tool_name": event.tool_name,
+            "tool_display_name": event.tool_display_name,
+            "tool_description": event.tool_description,
+            "app_name": event.app_name,
         }
 
     return None  # Unknown event type

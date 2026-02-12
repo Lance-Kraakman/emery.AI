@@ -25,8 +25,10 @@ from typing import Any
 
 import dspy
 
+from emery_agents.entities.tool_config import ToolConfig, extract_app_name
 from emery_agents.tools.capability_registry import CapabilityRegistry
 from emery_agents.tools.factories import create_all_tools
+from emery_agents.tools.loader import UnifiedToolLoader
 
 from ...ace import StepResult
 from ...entities.models.plan import Plan, PlanStep, PlanStepStatus
@@ -34,6 +36,7 @@ from ...reasoning.config import get_dspy_lm
 from ...reasoning.modules.executor import ExecutorModule, SimpleExecutorModule
 from ...reasoning.utils import StepOutcome, build_step_outcome, extract_dspy_result
 from ...services.analysis.llm_usage import LlmUsageTracker, record_from_lm
+from ...services.execution.events import ToolLoadedEvent
 from ...utils.session_logger import get_session_logger
 from ..protocols import ModelProviderProtocol
 from .prompt_template_resolver import resolve_prompt_template
@@ -166,6 +169,7 @@ class PlanStepExecutor:
         extra_tools: list[Any] | None = None,
         extra_headers: dict[str, str] | None = None,
         llm_tracker: LlmUsageTracker | None = None,
+        tool_loader: UnifiedToolLoader | None = None,
     ):
         """
         Initialize PlanStepExecutor.
@@ -188,6 +192,7 @@ class PlanStepExecutor:
         self.skill_inputs = skill_inputs if skill_inputs is not None else {}
         self.capability_registry = capability_registry
         self.llm_tracker = llm_tracker
+        self.tool_loader = tool_loader
 
         # Create DSPy tools with auth captured (includes CRUD + discovery tools)
         self._crud_tools = create_all_tools(
@@ -207,6 +212,9 @@ class PlanStepExecutor:
         # Track results from previous steps for prompt template resolution and ACE curation
         self._step_results: dict[str, StepResult] = {}
 
+        # Track dynamically loaded tools for frontend sync
+        self._loaded_tool_events: list[ToolLoadedEvent] = []
+
         logger.info(f"Created PlanStepExecutor with {len(self._all_tools)} DSPy tools")
 
     @property
@@ -218,6 +226,58 @@ class PlanStepExecutor:
         Used by ExecutionContextService for context curation (ACE pattern).
         """
         return self._step_results
+
+    @property
+    def loaded_tool_events(self) -> list[ToolLoadedEvent]:
+        """
+        Get events for dynamically loaded tools.
+
+        Used by execution node to emit ToolLoadedEvent to frontend.
+        """
+        return self._loaded_tool_events
+
+    def _ensure_tool_available(self, tool_name: str) -> bool:
+        """
+        Dynamically load tool if specified in step.tool_call but not in _all_tools.
+
+        Args:
+            tool_name: Name of the tool to ensure is available
+
+        Returns:
+            True if tool is available (already loaded or dynamically loaded)
+        """
+        # Check if already available
+        if any(getattr(t, "name", None) == tool_name for t in self._all_tools):
+            logger.debug(f"Tool {tool_name} already available")
+            return True
+
+        if not self.tool_loader:
+            logger.warning(f"Tool {tool_name} not available and no tool_loader to load it")
+            return False
+
+        try:
+            tool = self.tool_loader.load_tool(
+                ToolConfig(name=tool_name),
+                api_key=self.api_key,
+            )
+            if tool:
+                self._all_tools.append(tool)
+                logger.info(f"Dynamically loaded tool: {tool_name}")
+
+                # Create event for frontend sync
+                tool_description = getattr(tool, "description", tool_name)
+                self._loaded_tool_events.append(
+                    ToolLoadedEvent(
+                        tool_name=tool_name,
+                        tool_display_name=tool_description[:50],
+                        tool_description=tool_description,
+                        app_name=extract_app_name(tool_name),
+                    )
+                )
+                return True
+        except Exception as e:
+            logger.error(f"Failed to dynamically load tool {tool_name}: {e}")
+        return False
 
     def execute(
         self,
@@ -400,6 +460,10 @@ class PlanStepExecutor:
                     "step_index": step_index,
                 },
             )
+
+        # Ensure required tool is available (dynamic loading if needed)
+        if current_step.tool_call:
+            self._ensure_tool_available(current_step.tool_call)
 
         try:
             # Get DSPy LM for execution

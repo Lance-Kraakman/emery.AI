@@ -358,3 +358,18 @@ class AwaitingHumanSkillEvent:
     assigned_to: str  # User ID of assignee
     external_links: List[str] = field(default_factory=list)  # Optional external URLs
     session_id: str = ""  # For resuming execution
+
+
+@dataclass
+class ToolLoadedEvent:
+    """Event emitted when a tool is dynamically loaded during execution.
+
+    AIDEV-NOTE: Emitted by PlanStepExecutor when a tool specified in step.tool_call
+    is not in the available tools and is dynamically loaded via UnifiedToolLoader.
+    Frontend uses this to update the ToolPanel UI.
+    """
+
+    tool_name: str  # e.g., "gmail_find_email"
+    tool_display_name: str  # Human-readable name
+    tool_description: str
+    app_name: str  # e.g., "gmail" - for grouping/icon display

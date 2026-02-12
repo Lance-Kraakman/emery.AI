@@ -26,6 +26,8 @@ import {
   isAwaitingHumanSkillEvent,
   type PermissionRequestEvent
 } from '@/lib/chat/types/sse-events'
+import { ToolCategory, ConnectionType } from '@/ddd/domain/tools/value-objects/tool-metadata'
+import type { OAuthToolDefinitionData } from '@/ddd/infrastructure/db/schema'
 import type { PendingPlanApproval, ActivePlanExecution, PlanExecutionStatus, AwaitingInputState, HumanTaskState } from './types/extended-chat-handler'
 
 const logger = createDebugLogger('ChatGRPC')
@@ -572,6 +574,50 @@ export function useChatGRPC(
                 onChatCreated?.(chatId)
 
               } else if (isStepProgressEvent(eventData)) {
+                // Check if this is a tool_loaded event (carried via step_progress metadata)
+                if (eventData.metadata?.event_type === 'tool_loaded') {
+                  const toolName = eventData.metadata.tool_name || '';
+                  const toolDisplayName = eventData.metadata.tool_display_name || toolName;
+                  const toolDescription = eventData.metadata.tool_description || '';
+
+                  logger.debug('Tool dynamically loaded (via step_progress)', {
+                    toolName,
+                    appName: eventData.metadata.app_name
+                  });
+
+                  // Create minimal OAuth tool config for UI display
+                  const oauthConfig: OAuthToolDefinitionData = {
+                    type: 'oauth',
+                    implementation: {
+                      pipedream_key: toolName,
+                      requires_auth: true,
+                    },
+                    ui_config: {
+                      insert_text: `@tool:${toolName}`,
+                    },
+                    parameters: {},
+                  };
+
+                  // Add to selected tools so it appears in ToolPanel
+                  addTool({
+                    name: toolName,
+                    displayName: toolDisplayName,
+                    description: toolDescription,
+                    type: 'system',
+                    category: ToolCategory.APPS,
+                    version: '',
+                    config: oauthConfig,
+                    tags: [],
+                    requiresConnection: true,
+                    connectionType: ConnectionType.OAUTH,
+                    supportsArtifacts: false,
+                  });
+
+                  logger.summary('Dynamically loaded tool added to UI', { toolName });
+                  // Don't show tool_loaded as a visible step progress - skip to next event
+                  continue;
+                }
+
                 setCurrentStep({
                   type: eventData.stepType,
                   name: eventData.stepName,
@@ -849,6 +895,7 @@ export function useChatGRPC(
                   skillName: eventData.skillName
                 });
               }
+              // NOTE: tool_loaded events are now handled via step_progress with metadata.event_type
             } catch (e) {
               logger.debug('Failed to parse SSE event', e)
             }
@@ -1103,19 +1150,37 @@ export function useChatGRPC(
     // Clear human task state
     setHumanTask(null)
 
-    // Format outputs as a structured response
-    // AIDEV-NOTE: The response is sent as a user message that the agent
-    // will parse to continue execution with the human-provided outputs
+    // Build structured completion message for Python to parse
+    // AIDEV-NOTE: Sent as JSON so Python can:
+    // 1. Detect this is a human skill completion (not regular chat)
+    // 2. Resume execution with structured outputs
+    // 3. Apply output mappings to write to database
+    const completionData = {
+      type: 'human_skill_completion',
+      skillId: humanTask.skillId,
+      skillName: humanTask.skillName,
+      stepId: humanTask.stepId,
+      sessionId: humanTask.sessionId,
+      outputs: outputs,
+    }
+
+    // Also format a human-readable version for chat history display
     const outputEntries = Object.entries(outputs)
       .map(([name, value]) => `- **${name}**: ${value}`)
       .join('\n')
+    const displayText = `Human task "${humanTask.skillName}" completed:\n\n${outputEntries}`
 
-    const response = `Human task "${humanTask.skillName}" completed:\n\n${outputEntries}`
+    // Send as JSON with display text as fallback
+    // The message contains both structured data and readable text
+    const message = JSON.stringify({
+      ...completionData,
+      _displayText: displayText,  // For chat history rendering
+    })
 
     await append({
       id: generateId(),
       role: 'user',
-      parts: [{ type: 'text', text: response }]
+      parts: [{ type: 'text', text: message }]
     })
 
     logger.summary('Human task submitted', {
