@@ -79,6 +79,14 @@ async def replan_node(
         raise ValueError("TokenAccumulator is required for replanning.")
     tracker = runtime.token_accumulator.get_llm_tracker()
 
+    # Check for human skill interrupt FIRST - don't proceed with replan logic.
+    # Human skill sets awaiting_input but step is "in_progress" (not "pending"),
+    # so get_pending_steps() would return empty and we'd incorrectly finish the plan.
+    # Instead, pass through to await_approval node which will call interrupt().
+    if state.get("awaiting_input") == "human_skill":
+        logger.info("Human skill awaiting input - deferring to await_approval node")
+        return {"events": events}
+
     if error:
         return await _handle_step_failure(state, runtime, events, tracker)
 
