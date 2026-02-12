@@ -212,6 +212,37 @@ class UnifiedToolLoader:
         Returns:
             Tool instance
         """
+        # Handle skill:{id} pattern for lazy loading during execution
+        # This pattern is used when the planner discovers a skill and creates a step
+        # with tool_call="skill:25" - we create DynamicSkillTool on-demand
+        if tool_config.name.startswith("skill:"):
+            try:
+                skill_id = int(tool_config.name.split(":")[1])
+                org_id = organization_id if organization_id else 0
+                logger.info(f"[TOOL-LOADER] Lazy-loading DynamicSkillTool for skill:{skill_id}")
+                return DynamicSkillTool(
+                    skill_id=skill_id,
+                    api_key=api_key,
+                    organization_id=org_id,
+                ).to_dspy_tool()
+            except (IndexError, ValueError) as e:
+                raise ValueError(f"Invalid skill:{id} pattern: {tool_config.name}") from e
+
+        # Handle agent:{id} pattern for lazy loading during execution
+        # Same pattern as skill:{id} but for agents
+        if tool_config.name.startswith("agent:"):
+            try:
+                agent_id = int(tool_config.name.split(":")[1])
+                org_id = organization_id if organization_id else 0
+                logger.info(f"[TOOL-LOADER] Lazy-loading DynamicAgentTool for agent:{agent_id}")
+                return DynamicAgentTool(
+                    agent_id=agent_id,
+                    api_key=api_key,
+                    organization_id=org_id,
+                ).to_dspy_tool()
+            except (IndexError, ValueError) as e:
+                raise ValueError(f"Invalid agent:{id} pattern: {tool_config.name}") from e
+
         # Handle skill_reference tools dynamically
         # AIDEV-NOTE: skill_reference tools come from frontend @skill UI selection
         # They contain skill_id - we create DynamicSkillTool which fetches via API
@@ -230,7 +261,7 @@ class UnifiedToolLoader:
                 skill_id=skill_id,
                 api_key=api_key,
                 organization_id=org_id,
-            )
+            ).to_dspy_tool()
 
         # Handle agent reference tools (type: 'reference', name: 'agent-{id}')
         # These are agent-to-agent references in tool configurations
@@ -246,7 +277,7 @@ class UnifiedToolLoader:
                     agent_id=agent_ref_id,
                     api_key=api_key,
                     organization_id=org_id,
-                )
+                ).to_dspy_tool()
 
         # AIDEV-NOTE: Handle CRUD tools from database - they don't need unified_metadata
         # These tools are seeded in the DB and sent with full config via gRPC
@@ -307,7 +338,7 @@ class UnifiedToolLoader:
         )
 
         # Create Pipedream tool with enhanced config containing API key
-        return PipedreamTool(tool_id=unified_tool["id"], config=enhanced_config)
+        return PipedreamTool(tool_id=unified_tool["id"], config=enhanced_config).to_dspy_tool()
 
     def _load_emery_tool(
         self,

@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import dspy
 import requests
 
 from emery_agents.api.http_client import get_base_url
@@ -54,9 +55,12 @@ class DynamicSkillTool:
         # Fetch skill metadata for LLM tool registration
         self._skill_metadata = self._fetch_skill_metadata()
 
-        # DSPy tool properties
-        skill_name = self._skill_metadata.get("name", f"skill_{skill_id}")
-        self.name = f"skill_{skill_name.replace(':', '').replace(' ', '_').replace('-', '_').lower()}"
+        # DSPy tool properties - use ID + name slug for better LLM context
+        # Format: skill_{id}_{name_slug} (e.g., skill_30_go_for_a_walk)
+        skill_name = self._skill_metadata.get("name", "")
+        safe_name = skill_name.replace(":", "").replace(" ", "_").replace("-", "_").lower()
+        self.name = f"skill_{skill_id}_{safe_name}" if safe_name else f"skill_{skill_id}"
+
         self.description = self._skill_metadata.get(
             "description", f"Execute skill {skill_id}"
         )
@@ -213,3 +217,20 @@ class DynamicSkillTool:
             "date": "string",  # Dates as ISO strings
         }
         return type_mappings.get(skill_type.lower(), "string")
+
+    def to_dspy_tool(self) -> dspy.Tool:
+        """Convert to dspy.Tool with proper metadata.
+
+        DSPy ReAct auto-wraps callables but loses custom attributes.
+        This method creates a proper dspy.Tool with explicit metadata.
+        """
+        return dspy.Tool(
+            func=self.forward,
+            name=self.name,
+            desc=self.description,
+            args={name: {"type": info["type"]} for name, info in self.inputs.items()},
+            arg_desc={
+                name: info.get("description", name)
+                for name, info in self.inputs.items()
+            },
+        )

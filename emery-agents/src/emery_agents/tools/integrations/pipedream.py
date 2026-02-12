@@ -14,6 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
+import dspy
 import requests
 
 from emery_agents.entities.tool_config import ToolConfig
@@ -222,6 +223,23 @@ class PipedreamTool:
             return {"success": False, "error": "Request timeout after 35 seconds"}
         except Exception as e:
             return {"success": False, "error": f"Request error: {str(e)}"}
+
+    def to_dspy_tool(self) -> dspy.Tool:
+        """Convert to dspy.Tool with proper metadata.
+
+        DSPy ReAct auto-wraps callables but loses custom attributes.
+        This method creates a proper dspy.Tool with explicit metadata.
+        """
+        return dspy.Tool(
+            func=self.forward,
+            name=self.name,
+            desc=self.description,
+            args={name: {"type": info["type"]} for name, info in self.inputs.items()},
+            arg_desc={
+                name: info.get("description", name)
+                for name, info in self.inputs.items()
+            },
+        )
 
 
 # Tool registry
