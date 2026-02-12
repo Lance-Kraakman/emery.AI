@@ -26,7 +26,7 @@ import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal, TypedDict
+from typing import Any, Literal, TypedDict
 
 from emery_agents.api import AgentAPIService, SkillAPIService
 from emery_agents.services.tasks import workspace_lock
@@ -39,6 +39,8 @@ from ...entities.task import TaskRequest
 from ...types import ExecutionMode
 from ..agents.executor import AgentExecutor
 from ..credentials import ResolvedCredentials
+from ..executors.adapters import context_to_request
+from ..executors.router import ExecutionRouter, get_execution_router
 
 logger = logging.getLogger(__name__)
 
@@ -140,6 +142,8 @@ class TaskExecutor:
         self,
         agent_executor: AgentExecutor,
         api_service: AgentAPIService | None = None,
+        execution_router: ExecutionRouter | None = None,
+        use_new_router: bool = True,
     ):
         """
         Initialize task executor.
@@ -147,14 +151,18 @@ class TaskExecutor:
         Args:
             agent_executor: AgentExecutor for actual task execution
             api_service: API service for credential/agent lookups
+            execution_router: New ExecutionRouter (Phase 3 refactor)
+            use_new_router: Enable routing via ExecutionRouter instead of AgentExecutor
         """
         self.agent_executor = agent_executor
         self.api_service = api_service
+        self.execution_router = execution_router
+        self.use_new_router = use_new_router
 
     async def execute(
         self,
         task_data: TaskData,
-    ) -> AsyncIterator[TaskProgressDict]:
+    ) -> AsyncIterator[dict[str, Any]]:
         """
         Execute a task and stream progress.
 
@@ -246,11 +254,17 @@ class TaskExecutor:
             if task_data.workspace_path:
                 context.workspace_path = task_data.workspace_path
 
-            # 8. Execute via AgentExecutor (reuse existing logic)
-            async for progress in self.agent_executor.execute_task(context):
-                # Add task_id to all progress events
-                progress["task_id"] = task_id
-                yield progress
+            # 8. Execute via appropriate executor
+            if self.use_new_router:
+                logger.info(f"[TASK-{task_id[:8]}] Using ExecutionRouter")
+                async for progress in self._execute_via_router(context):
+                    progress["task_id"] = task_id
+                    yield progress
+            else:
+                # Legacy path: use AgentExecutor directly
+                async for progress in self.agent_executor.execute_task(context):
+                    progress["task_id"] = task_id
+                    yield progress
 
             # Log completion
             elapsed = time.time() - start_time
@@ -283,7 +297,7 @@ class TaskExecutor:
         self,
         task_id: str,
         context: ExecutionContext,
-    ) -> AsyncIterator[TaskProgressDict]:
+    ) -> AsyncIterator[dict[str, Any]]:
         """
         Execute with a pre-built ExecutionContext.
 
@@ -302,9 +316,16 @@ class TaskExecutor:
         logger.info(f"[TASK-{task_id[:8]}] Starting chat-based execution")
 
         try:
-            async for progress in self.agent_executor.execute_task(context):
-                progress["task_id"] = task_id
-                yield progress
+            # Use new router if enabled, otherwise fall back to AgentExecutor
+            if self.use_new_router:
+                logger.info(f"[TASK-{task_id[:8]}] Using ExecutionRouter")
+                async for progress in self._execute_via_router(context):
+                    progress["task_id"] = task_id
+                    yield progress
+            else:
+                async for progress in self.agent_executor.execute_task(context):
+                    progress["task_id"] = task_id
+                    yield progress
 
             elapsed = time.time() - start_time
             logger.info(f"[TASK-{task_id[:8]}] Completed in {elapsed:.2f}s")
@@ -320,6 +341,76 @@ class TaskExecutor:
                 "timestamp_ms": int(time.time() * 1000),
                 "progress_percent": 0.0,
             }
+
+    async def _execute_via_router(
+        self,
+        context: ExecutionContext,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """
+        Execute via the new ExecutionRouter.
+
+        Converts ExecutionContext to typed request and routes to appropriate executor.
+
+        Args:
+            context: ExecutionContext to execute
+
+        Yields:
+            Progress dicts compatible with TaskProgressDict
+        """
+        from emery_agents.entities.configs import (
+            CoordinatorRequest,
+            InteractiveRequest,
+            SkillRequest,
+            WorkflowRequest,
+        )
+        from emery_agents.types import SkillExecutionResult
+
+        router = self.execution_router or get_execution_router()
+        request = context_to_request(context)
+
+        logger.info(f"Routing via ExecutionRouter: {type(request).__name__}")
+
+        # Route based on request type
+        if isinstance(request, InteractiveRequest):
+            async for progress in router.execute_interactive(request):
+                yield dict(progress)
+
+        elif isinstance(request, CoordinatorRequest):
+            async for progress in router.execute_coordinator(request):
+                yield dict(progress)
+
+        elif isinstance(request, WorkflowRequest):
+            async for progress in router.execute_workflow(request):
+                yield dict(progress)
+
+        elif isinstance(request, SkillRequest):
+            # SkillRequest uses sync path - convert to async
+            if request.skill.is_workflow():
+                # Route to workflow executor
+                workflow_request = WorkflowRequest(
+                    steps=list(request.skill.steps),
+                    initial_inputs=request.inputs,
+                    auth=request.auth,
+                    available_skills={s.id: s for s in request.available_skills},
+                    skill_model=request.skill_model,
+                )
+                async for progress in router.execute_workflow(workflow_request):
+                    yield dict(progress)
+            else:
+                # Run sync skill execution and yield result
+                result = router.execute_skill(request)
+                # Handle both str and SkillExecutionResult return types
+                if isinstance(result, SkillExecutionResult):
+                    output = result.result
+                else:
+                    output = str(result)
+                yield {
+                    "status": "completed",
+                    "output": output,
+                    "error_message": "",
+                    "timestamp_ms": int(time.time() * 1000),
+                    "progress_percent": 1.0,
+                }
 
     @staticmethod
     def _build_agent_headers(task_data: TaskData) -> dict[str, str] | None:
