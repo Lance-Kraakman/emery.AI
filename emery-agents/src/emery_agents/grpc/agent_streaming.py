@@ -115,7 +115,7 @@ class AgentStreamingHandler:
         current_task: str = "Starting conversation..."
 
         try:
-            smolagents_tools = self._convert_tools_to_smolagents(
+            loaded_tools = self._load_tools_from_configs(
                 tools,
                 agent_config=agent_config,
                 org_model=org_model,
@@ -143,7 +143,7 @@ class AgentStreamingHandler:
                 )
                 agent = await self._create_agent_cold_path(
                     tool_provider=tool_provider,
-                    smolagents_tools=smolagents_tools,
+                    loaded_tools=loaded_tools,
                     org_model=org_model,
                     has_images=has_images,
                     file_attachments=file_attachments,
@@ -185,7 +185,7 @@ class AgentStreamingHandler:
             async for event in stream_with_heartbeat(
                 self._execute_with_streaming(
                     agent=agent,
-                    tools=smolagents_tools,
+                    tools=loaded_tools,
                     tool_provider=tool_provider,
                     current_task=current_task,
                     images=images,
@@ -453,10 +453,10 @@ class AgentStreamingHandler:
                         return cast(str, step.plan)
         return None
 
-    def _convert_tools_to_smolagents(
+    def _load_tools_from_configs(
         self, tools: list[ToolConfig], **kwargs: Any
     ) -> list[Any]:
-        """Convert entity ToolConfig objects to smolagents tools."""
+        """Load tools from ToolConfig entities using UnifiedToolLoader."""
         if not self.tool_loader:
             return []
         return self.tool_loader.load_tools_from_configs(

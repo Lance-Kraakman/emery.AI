@@ -4,7 +4,8 @@ Manages the SandboxProxy subprocess lifecycle.
 The proxy runs as a SEPARATE subprocess (not in the gRPC server process)
 so that a proxy exploit doesn't directly compromise the gRPC server.
 
-Singleton per container — started lazily on first allow_network=True execution.
+Singleton per container — started lazily on first sandbox execution.
+All network access is filtered through this proxy (blocks private IPs, AWS metadata).
 """
 
 import logging

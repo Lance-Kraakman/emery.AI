@@ -240,6 +240,10 @@ class PlanStepExecutor:
         """
         Dynamically load tool if specified in step.tool_call but not in _all_tools.
 
+        Supports lazy loading patterns:
+        - skill:{id} → Creates DynamicSkillTool with typed inputs
+        - agent:{id} → Creates DynamicAgentTool with proper context
+
         Args:
             tool_name: Name of the tool to ensure is available
 
@@ -256,22 +260,29 @@ class PlanStepExecutor:
             return False
 
         try:
+            # Parse org_id for tool loading
+            org_id_int = int(self.org_id) if self.org_id else None
+
             tool = self.tool_loader.load_tool(
                 ToolConfig(name=tool_name),
                 api_key=self.api_key,
+                organization_id=org_id_int,
             )
             if tool:
                 self._all_tools.append(tool)
-                logger.info(f"Dynamically loaded tool: {tool_name}")
+
+                # Get the actual tool name (may differ for skill:{id} → skill_30_name)
+                actual_tool_name = getattr(tool, "name", tool_name)
+                logger.info(f"Dynamically loaded tool: {tool_name} → {actual_tool_name}")
 
                 # Create event for frontend sync
-                tool_description = getattr(tool, "description", tool_name)
+                tool_description = getattr(tool, "description", actual_tool_name)
                 self._loaded_tool_events.append(
                     ToolLoadedEvent(
-                        tool_name=tool_name,
+                        tool_name=actual_tool_name,
                         tool_display_name=tool_description[:50],
                         tool_description=tool_description,
-                        app_name=extract_app_name(tool_name),
+                        app_name=extract_app_name(actual_tool_name),
                     )
                 )
                 return True

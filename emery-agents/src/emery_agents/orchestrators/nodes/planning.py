@@ -35,6 +35,8 @@ from ...services.execution.events import (
     PlanningStartedEvent,
 )
 from ...services.plan_service import PlanService
+from ...tools.integrations.dynamic_agent import DynamicAgentTool
+from ...tools.integrations.dynamic_skill import DynamicSkillTool
 from ...tools.tool_modes import ToolMode, filter_tools_for_mode
 from ..runtime import RuntimeContext
 from ..state import PlanExecuteState
@@ -409,8 +411,6 @@ async def generate_plan_node(
     enriched_task = task
     if pre_selected_skill:
         # Check if we have a loaded skill tool we can use directly
-        from emery_agents.tools.integrations.dynamic_skill import DynamicSkillTool
-
         loaded_skill_tool: DynamicSkillTool | None = None
         for tool in tools:
             if isinstance(tool, DynamicSkillTool):
@@ -424,25 +424,48 @@ async def generate_plan_node(
             enriched_task = (
                 f"{task}\n\n"
                 f"[USER DIRECTIVE: The user selected the '{pre_selected_skill}' skill via @skill mention. "
-                f"This skill is already loaded as tool '{tool_name}' (skill ID: {skill_id}). "
-                f"Use this tool directly in your plan - do NOT search for the skill. "
+                f"This skill is ALREADY LOADED as tool '{tool_name}' (skill ID: {skill_id}). "
+                f"Use this tool directly in your plan - do NOT use discovery tools to search for it. "
+                f"Do NOT execute other skills unless explicitly requested. "
                 f"Extract any required inputs from the user's message and conversation context.]"
             )
         else:
-            # No loaded skill tool - fall back to discovery
+            # No loaded skill tool - fall back to discovery then skill:{id}
             enriched_task = (
                 f"{task}\n\n"
                 f"[USER DIRECTIVE: The user explicitly selected the '{pre_selected_skill}' skill via @skill mention. "
-                f"Build a focused plan that uses this skill. Look up the skill by name using discovery tools, "
-                f"then create a plan step that executes it with inputs extracted from the user's message and conversation context.]"
+                f"First, use skill_crud(method='list') to find the skill ID. "
+                f"Then create a plan step with tool_call='skill:{{id}}' (e.g., skill:30) to execute it. "
+                f"The skill:{'{id}'} pattern lazy-loads typed inputs from the skill schema. "
+                f"Extract any required inputs from the user's message and conversation context.]"
             )
     elif pre_selected_agent:
-        enriched_task = (
-            f"{task}\n\n"
-            f"[USER DIRECTIVE: The user explicitly selected the '{pre_selected_agent}' agent via @agent mention. "
-            f"Build a focused plan that delegates to this agent. Use agent_crud(method='execute') to run the agent, "
-            f"passing the user's task as input.]"
-        )
+        # Check if we have a loaded agent tool
+        loaded_agent_tool: DynamicAgentTool | None = None
+        for tool in tools:
+            if isinstance(tool, DynamicAgentTool):
+                loaded_agent_tool = tool
+                break
+
+        if loaded_agent_tool:
+            agent_id = loaded_agent_tool.agent_id
+            tool_name = loaded_agent_tool.name
+            enriched_task = (
+                f"{task}\n\n"
+                f"[USER DIRECTIVE: The user selected the '{pre_selected_agent}' agent via @agent mention. "
+                f"This agent is ALREADY LOADED as tool '{tool_name}' (agent ID: {agent_id}). "
+                f"Use this tool directly in your plan - do NOT use discovery tools to search for it. "
+                f"Pass the user's task to the agent.]"
+            )
+        else:
+            enriched_task = (
+                f"{task}\n\n"
+                f"[USER DIRECTIVE: The user explicitly selected the '{pre_selected_agent}' agent via @agent mention. "
+                f"First, use agent_crud(method='list') to find the agent ID. "
+                f"Then create a plan step with tool_call='agent:{{id}}' (e.g., agent:5) to execute it. "
+                f"The agent:{'{id}'} pattern lazy-loads the agent with proper context. "
+                f"Pass the user's task to the agent.]"
+            )
     elif pre_selected_tool:
         enriched_task = (
             f"{task}\n\n"

@@ -97,14 +97,17 @@ class AgentEngine:
         return self._sandbox
 
     def execute_command(
-        self, command: str, allow_network: bool = False, timeout: int = 300
+        self, command: str, timeout: int = 300
     ) -> str:
-        """Execute command in sandboxed workspace."""
+        """Execute command in sandboxed workspace.
+
+        Network access is always enabled via filtered proxy
+        (blocks private IPs, AWS metadata).
+        """
         result = self.sandbox.execute(
             command=command,
             workspace_path=self.paths.root,
             timeout=timeout,
-            allow_network=allow_network,
         )
         return str(result)
 

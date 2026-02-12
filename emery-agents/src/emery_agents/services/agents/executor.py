@@ -53,6 +53,7 @@ from ..execution.events import (
     StepFailedEvent,
     StepStartedEvent,
 )
+from ..executors.shared.human_skill import HumanSkillHandler, get_human_skill_handler
 from ..models import ModelProvider
 from ..skills.executor import SkillExecutorService
 from ..skills.step_executor import StepExecutorService
@@ -148,43 +149,14 @@ class AgentExecutor:
         Yields:
             Progress dict with status="awaiting_human" and human skill context
         """
-        human_config = skill.human_skill_config
-        instructions = (
-            human_config.instructions if human_config else skill.instructions
-        )
-
-        # Build output schema from skill outputs
-        output_schema = [
-            {"name": out.name, "type": out.type}
-            for out in skill.outputs
-        ]
-
-        # Resolve assignee
-        assigned_to = ""
-        if human_config:
-            if human_config.assignee_type == "specific_user" and human_config.assignee_id:
-                assigned_to = human_config.assignee_id
-            elif human_config.assignee_type == "role" and human_config.assignee_role:
-                assigned_to = f"role:{human_config.assignee_role}"
-            # For "owner", the task layer resolves the actual user
-
-        # Yield awaiting_human progress event
-        yield {
-            "status": "awaiting_human",
-            "output": json.dumps({
-                "type": "awaiting_human_skill",
-                "skill_id": skill.id,
-                "skill_name": skill.name,
-                "step_id": "",  # Empty for top-level skill
-                "instructions": instructions,
-                "inputs": context.skill_inputs or {},
-                "output_schema": output_schema,
-                "assigned_to": assigned_to,
-            }),
-            "error_message": "",
-            "timestamp_ms": int(time.time() * 1000),
-            "progress_percent": 0.0,
-        }
+        # Delegate to unified HumanSkillHandler
+        handler = get_human_skill_handler()
+        async for progress in handler.emit_and_pause(
+            skill=skill,
+            runtime_inputs=context.skill_inputs or {},
+            step_id="",  # Empty for top-level skill
+        ):
+            yield progress
 
         elapsed = time.time() - start_time
         logger.info(
@@ -302,10 +274,6 @@ class AgentExecutor:
                     f"📥 Skill inputs from trigger_data: {list(skill_inputs.keys())}"
                 )
 
-        # For skill execution, use skill's allow_network setting
-        # Skills default to False, but can be set to True for git/code skills
-        skill_allow_network = skill.allow_network if skill else False
-
         return ExecutionContext(
             mode=ExecutionMode.AUTONOMOUS,  # Skill execution = autonomous (no HITL)
             task=skill.instructions,  # Changed from 'instructions'
@@ -323,7 +291,6 @@ class AgentExecutor:
             environment={},
             skill_inputs=skill_inputs,  # Runtime values for skill inputs
             resolved_context=request.resolved_context,  # Context table mappings
-            allow_network=skill_allow_network,  # From skill config
         )
 
     def _create_instruction_context(self, request: TaskRequest) -> ExecutionContext:
@@ -356,9 +323,6 @@ class AgentExecutor:
             else []
         )
 
-        # Get agent's allow_network setting (default True for backwards compatibility)
-        agent_allow_network = getattr(request.agent_config, "allow_network", True)
-
         return ExecutionContext(
             mode=ExecutionMode.INTERACTIVE,  # Instruction-based = interactive (with HITL)
             task=instruction_config.task,  # Changed from 'instructions'
@@ -374,7 +338,6 @@ class AgentExecutor:
             org_model=org_model,
             environment={},
             resolved_context=request.resolved_context,  # Context table mappings
-            allow_network=agent_allow_network,  # From agent config
         )
 
     def _find_skill_by_name(
@@ -1067,11 +1030,8 @@ class AgentExecutor:
 
             workspace = Path(context.workspace_path)
 
-            # Use context.allow_network (from agent config, defaults to True)
-            allow_net = context.allow_network
             bash_tool = create_bash_tool(
                 workspace_path=workspace,
-                allow_network=allow_net,
                 timeout=300,
             )
             tools.append(bash_tool)
@@ -1081,7 +1041,7 @@ class AgentExecutor:
             tools.extend(fs_tools)
 
             logger.info(
-                f"Added bash + filesystem tools with workspace: {context.workspace_path}, network={'enabled' if allow_net else 'disabled'}"
+                f"Added bash + filesystem tools with workspace: {context.workspace_path}"
             )
 
             # Debug: log what files exist in workspace
@@ -1143,10 +1103,8 @@ class AgentExecutor:
 
             workspace = Path(context.workspace_path)
 
-            allow_net = skill.allow_network if skill else False
             bash_tool = create_bash_tool(
                 workspace_path=workspace,
-                allow_network=allow_net,
                 timeout=300,
             )
             tools.append(bash_tool)
@@ -1156,7 +1114,7 @@ class AgentExecutor:
             tools.extend(fs_tools)
 
             logger.info(
-                f"Added bash + filesystem tools with workspace: {context.workspace_path}, network={'enabled' if allow_net else 'disabled'}"
+                f"Added bash + filesystem tools with workspace: {context.workspace_path}"
             )
 
             # Debug: log what files exist in workspace

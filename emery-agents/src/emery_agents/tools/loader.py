@@ -14,6 +14,7 @@ import json
 import logging
 import os
 import re
+import traceback
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -560,10 +561,6 @@ class UnifiedToolLoader:
         Returns:
             List of ToolConfig entities
         """
-        import logging
-
-        logger = logging.getLogger(__name__)
-
         tool_configs = []
 
         for tool_name in tool_names:
@@ -642,10 +639,6 @@ class UnifiedToolLoader:
         Returns:
             List of successfully loaded tool instances
         """
-        import logging
-
-        logger = logging.getLogger(__name__)
-
         if not tool_configs:
             logger.info("No tools provided to convert")
             return []
@@ -688,8 +681,6 @@ class UnifiedToolLoader:
                 logger.error(
                     f"❌ Tool config was: {safe_config if safe_config else 'empty'}"
                 )
-                import traceback
-
                 logger.error(f"❌ Tool loading traceback: {traceback.format_exc()}")
                 # Continue with other tools instead of failing completely
 

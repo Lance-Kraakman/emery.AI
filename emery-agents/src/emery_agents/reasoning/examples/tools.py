@@ -42,50 +42,56 @@ def _tool_example(
 # =============================================================================
 
 INTERNAL_TOOL_EXAMPLES: list[dspy.Example] = [
-    # --- Skill Execution ---
+    # --- Skill Execution (Pre-loaded via @mention) ---
+    # When a skill is @mentioned, it's pre-loaded as a DynamicSkillTool.
+    # The tool name follows the pattern: skill_{id}_{name_slug}
     _tool_example(
         request="@skill:go-for-a-walk",
-        tool_id="skill_executor",
-        tool_args={"skill_id": 30, "inputs": {}},
+        tool_id="skill_30_go_for_a_walk",  # Pre-loaded tool with typed inputs
+        tool_args={},  # Inputs are typed from skill schema
         expected_output="Skill 'Go for a Walk' executed. Awaiting user completion.",
     ),
+
+    # --- Skill Execution (Discovered via list → skill:{id}) ---
+    # When a skill isn't @mentioned, first list skills then use skill:{id} pattern
+    # This lazy-loads a DynamicSkillTool with typed inputs
     _tool_example(
         request="Run the weekly report skill",
-        tool_id="skill_executor",
-        tool_args={"skill_id": 25, "inputs": {}},
+        tool_id="skill:25",  # Lazy-load pattern for discovered skills
+        tool_args={"recipient_email": "team@company.com"},  # Typed inputs
         expected_output="Weekly Report skill executed successfully.",
     ),
     _tool_example(
         request="Execute send-newsletter skill with recipient team@company.com",
-        tool_id="skill_executor",
-        tool_args={"skill_id": 35, "inputs": {"recipient_email": "team@company.com"}},
+        tool_id="skill:35",  # Lazy-load pattern
+        tool_args={"recipient_email": "team@company.com"},
         expected_output="Newsletter sent to team@company.com",
     ),
     _tool_example(
         request="Trigger the backup skill now",
-        tool_id="skill_executor",
-        tool_args={"skill_id": 40, "inputs": {}},
+        tool_id="skill:40",  # Lazy-load pattern
+        tool_args={},
         expected_output="Backup completed successfully.",
     ),
 
-    # --- Skill CRUD ---
+    # --- Skill CRUD (Management only, no execute) ---
     _tool_example(
         request="What skills do I have?",
         tool_id="skill_crud",
-        tool_args={"action": "list"},
+        tool_args={"method": "list"},
         expected_output='[{"id": 25, "name": "Weekly Report"}, {"id": 30, "name": "Go for a Walk"}]',
     ),
     _tool_example(
         request="Show me the details of the weekly report skill",
         tool_id="skill_crud",
-        tool_args={"action": "read", "skill_id": 25},
+        tool_args={"method": "read", "skill_id": "25"},
         expected_output='{"id": 25, "name": "Weekly Report", "type": "automated", "inputs": ["recipient_email"]}',
     ),
     _tool_example(
-        request="Delete the old backup skill",
+        request="Create a new skill for sending daily summaries",
         tool_id="skill_crud",
-        tool_args={"action": "delete", "skill_id": 40},
-        expected_output="Skill deleted successfully.",
+        tool_args={"method": "create", "agent_id": "1", "data": {"name": "Daily Summary", "instructions": "..."}},
+        expected_output='{"id": 45, "name": "Daily Summary"}',
     ),
 
     # --- Table CRUD ---
@@ -204,18 +210,27 @@ INTERNAL_TOOL_EXAMPLES: list[dspy.Example] = [
         expected_output='{"id": "view_1", "type": "table", "table_id": "tbl_1"}',
     ),
 
-    # --- Agent CRUD ---
+    # --- Agent CRUD (Management only, no execute) ---
     _tool_example(
         request="Create a new agent for sales automation",
         tool_id="agent_crud",
-        tool_args={"action": "create", "name": "Sales Bot", "description": "Handles sales automation"},
-        expected_output='{"id": "agent_1", "name": "Sales Bot"}',
+        tool_args={"method": "create", "data": {"name": "Sales Bot", "description": "Handles sales automation"}},
+        expected_output='{"id": 5, "name": "Sales Bot"}',
     ),
     _tool_example(
         request="List all my agents",
         tool_id="agent_crud",
-        tool_args={"action": "list"},
-        expected_output='[{"id": "agent_1", "name": "Sales Bot"}, {"id": "agent_2", "name": "Support Bot"}]',
+        tool_args={"method": "list"},
+        expected_output='[{"id": 5, "name": "Sales Bot"}, {"id": 6, "name": "Support Bot"}]',
+    ),
+
+    # --- Agent Execution (Discovered via list → agent:{id}) ---
+    # When an agent isn't @mentioned, first list agents then use agent:{id} pattern
+    _tool_example(
+        request="Run the sales automation agent with task 'process new leads'",
+        tool_id="agent:5",  # Lazy-load pattern for discovered agents
+        tool_args={"task": "Process new leads from today"},
+        expected_output="Sales Bot completed: Processed 12 new leads.",
     ),
 
     # --- Discovery/Research Tools ---

@@ -688,7 +688,6 @@ class SkillConfig:
     tools: list[StepToolConfig] = field(default_factory=list)
     steps: list[SkillStep] = field(default_factory=list)
     content: list[Any] = field(default_factory=list)
-    allow_network: bool = False  # Whether bash tool should have network access (for git/code skills)
     human_skill_config: HumanSkillConfig | None = None  # Config for human-executed skills
 
     @classmethod
@@ -736,7 +735,6 @@ class SkillConfig:
             outputs=outputs,
             tools=tools,
             steps=steps,
-            allow_network=data.get("allowNetwork", data.get("allow_network", False)),
             human_skill_config=human_skill_config,
         )
 

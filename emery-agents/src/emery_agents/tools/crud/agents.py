@@ -2,7 +2,7 @@
 Agent CRUD operations as DSPy-compatible functions.
 
 Ported from tools/crud_tools.py (load_agent_crud).
-Includes dynamic execution via execute method.
+To EXECUTE agents, use DynamicAgentTool (agent:{id} pattern for lazy loading).
 """
 
 from __future__ import annotations
@@ -13,7 +13,6 @@ import dspy
 
 from emery_agents.api.http_client import make_request
 
-from ..execution.dynamic_execution import execute_agent_by_id
 from ..mutation_guard import check_mutation_allowed
 
 
@@ -36,16 +35,17 @@ def create_agent_crud(
         agent_id: str | None = None,
         data: dict[str, Any] | None = None,
         filters: dict[str, Any] | None = None,
-        task: str | None = None,
     ) -> str:
-        """Agent management: create, read, update, delete, list, execute.
+        """Agent management: create, read, update, delete, list.
+
+        To EXECUTE an agent, use the agent:{id} tool format which creates a
+        DynamicAgentTool with proper context.
 
         Args:
-            method: Operation - create, read, update, delete, list, execute
-            agent_id: Agent ID for read, update, delete, execute operations
+            method: Operation - create, read, update, delete, list
+            agent_id: Agent ID for read, update, delete operations
             data: Agent data for create and update operations
             filters: Filter criteria for list operation
-            task: Task instructions for execute operation
 
         Returns:
             JSON string with result or error message
@@ -120,41 +120,23 @@ def create_agent_crud(
                 extra_headers=extra_headers,
             )
 
-        elif method == "execute":
-            if not agent_id:
-                return "ERROR: agent_id is required for execute operation"
-            if not task:
-                return "ERROR: task is required for execute operation"
-
-            # Validate agent_id is numeric
-            try:
-                agent_id_int = int(agent_id)
-            except ValueError:
-                return (
-                    f"ERROR: agent_id must be a NUMBER, not '{agent_id}'. "
-                    f"First call agent_crud(method='list') to find agent IDs."
-                )
-
-            # Execute agent with dynamic credential resolution
-            return execute_agent_by_id(
-                agent_id=agent_id_int,
-                task=task,
-                api_key=api_key,
-                org_id=org_id,
-            )
-
         else:
-            return f"ERROR: Unknown method: {method}. Supported: create, read, update, delete, list, execute"
+            return (
+                f"ERROR: Unknown method: {method}. Supported: create, read, update, delete, list. "
+                f"To EXECUTE an agent, use the agent:{{id}} tool format (e.g., agent:5)."
+            )
 
     return dspy.Tool(
         func=agent_crud,
         name="agent_crud",
-        desc="Agent management: create, read, update, delete, list, execute agents.",
+        desc=(
+            "Agent management: create, read, update, delete, list agents. "
+            "To EXECUTE an agent, use the agent:{id} tool format (e.g., agent:5) which provides proper context."
+        ),
         arg_desc={
-            "method": "Operation: create, read, update, delete, list, execute",
-            "agent_id": "Agent ID (required for read, update, delete, execute)",
+            "method": "Operation: create, read, update, delete, list. For execution, use agent:{id} tool.",
+            "agent_id": "Agent ID (required for read, update, delete)",
             "data": "Agent data for create/update operations",
             "filters": "Filter criteria for list operation",
-            "task": "Task instructions for execute operation",
         },
     )
