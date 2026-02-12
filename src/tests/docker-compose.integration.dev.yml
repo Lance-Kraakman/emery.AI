@@ -42,8 +42,10 @@ services:
       - USER_PASSWORD=test123
       - API_HOST=host.docker.internal:3002
 
-  # Python agents: mount source for code changes without rebuild
+  # Python agents: mount source for code changes without rebuild + point to local app
   agent-chat-integration:
+    environment:
+      NEXTJS_BASE_URL: http://host.docker.internal:3002
     volumes:
       - ../../emery-agents/src:/usr/src/app/src
       - workspace_data:/mnt/storage/workspaces
