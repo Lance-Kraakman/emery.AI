@@ -33,60 +33,16 @@ from ...entities.skill_config import (
 from ...entities.skill_config import (
     WriteConfig as WriteConfigDTO,
 )
-from ...reasoning.config import get_dspy_lm
-from ...reasoning.modules.extractor import OutputExtractorModule
 from ...reasoning.signatures.extraction import TargetFieldMeta
 from ...types import SkillExecutionResult
+from ..executors.shared.human_skill import HumanSkillHandler, get_human_skill_handler
+from ..executors.shared.output_pipeline import OutputPipeline, get_output_pipeline
 from ...utils import run_async_in_thread
 from ...utils.step_utils import RawProgressDict, step_to_progress_dict
 from ..agents.factory import AgentConfig, AgentFactory
 from .step_executor import StepExecutorService, execute_steps_sync
 
 logger = logging.getLogger(__name__)
-
-
-def _coerce_extracted_values(
-    values: dict[str, Any],
-    field_metadata: dict[str, TargetFieldMeta],
-) -> dict[str, Any]:
-    """Deterministic coercion of extracted values based on target field constraints.
-
-    Normalizes LLM output to match backend expectations:
-    - single-select: case-insensitive match to valid options
-    - multi-select: same, per item
-    - boolean: normalize string representations
-    """
-    coerced: dict[str, Any] = {}
-    for name, value in values.items():
-        if value is None:
-            coerced[name] = value
-            continue
-        meta = field_metadata.get(name)
-        if meta is None:
-            coerced[name] = value
-            continue
-
-        if meta.type == "single-select" and meta.options:
-            lookup = {o.lower(): o for o in meta.options}
-            coerced[name] = lookup.get(str(value).strip().lower())
-        elif meta.type == "multi-select" and meta.options:
-            lookup = {o.lower(): o for o in meta.options}
-            if isinstance(value, list):
-                coerced[name] = [
-                    v
-                    for v in (lookup.get(str(v).strip().lower()) for v in value)
-                    if v is not None
-                ]
-            else:
-                coerced[name] = value
-        elif meta.type == "boolean":
-            if isinstance(value, str):
-                coerced[name] = value.strip().lower() in ("true", "yes", "1")
-            else:
-                coerced[name] = bool(value)
-        else:
-            coerced[name] = value
-    return coerced
 
 
 def map_node_outputs_to_skill_outputs(
@@ -178,55 +134,15 @@ class SkillExecutorService:
         Returns:
             SkillExecutionResult with awaiting_human status
         """
-        logger.info(f"👤 Human skill detected: {skill_config.name}")
-
-        human_config = skill_config.human_skill_config
-        instructions = (
-            human_config.instructions if human_config else skill_config.instructions
+        # Delegate to unified HumanSkillHandler
+        handler = get_human_skill_handler()
+        return handler.emit_sync(
+            skill=skill_config,
+            runtime_inputs=runtime_inputs,
+            progress_callback=progress_callback,
+            capture_outputs=capture_outputs,
+            step_id="",  # Empty for top-level skill
         )
-
-        # Build output schema from skill outputs
-        output_schema = [
-            {"name": out.name, "type": out.type}
-            for out in skill_config.outputs
-        ]
-
-        # Resolve assignee (simplified - full resolution happens at task layer)
-        assigned_to = ""
-        if human_config:
-            if human_config.assignee_type == "specific_user" and human_config.assignee_id:
-                assigned_to = human_config.assignee_id
-            elif human_config.assignee_type == "role" and human_config.assignee_role:
-                assigned_to = f"role:{human_config.assignee_role}"
-            # For "owner", the task layer resolves the actual user
-
-        # Build awaiting human skill event
-        event_data = {
-            "type": "awaiting_human_skill",
-            "skill_id": skill_config.id,
-            "skill_name": skill_config.name,
-            "step_id": "",  # Empty for top-level skill
-            "instructions": instructions,
-            "inputs": runtime_inputs,
-            "output_schema": output_schema,
-            "assigned_to": assigned_to,
-            "external_links": [],
-        }
-
-        # Emit event via progress callback if available
-        if progress_callback:
-            progress_callback(event_data)
-            logger.info(f"📤 Emitted awaiting_human_skill event for {skill_config.name}")
-
-        # Return result indicating skill is awaiting human
-        result_msg = f"Awaiting human: {skill_config.name}"
-        if capture_outputs:
-            return SkillExecutionResult(
-                result=result_msg,
-                captured_outputs=None,
-                status="awaiting_human",
-            )
-        return result_msg
 
     def _build_wrapper_dag(
         self,
@@ -495,21 +411,15 @@ class SkillExecutorService:
                 logger.info(
                     f"🔍 Extracting {len(unmapped)} unmapped outputs from text result"
                 )
-                extractor = OutputExtractorModule(
-                    skill_outputs=[
-                        {"name": o.name, "type": o.type, "description": o.description}
-                        for o in unmapped
-                    ],
-                    target_field_metadata=target_field_metadata or None,
+                # Use OutputPipeline for extraction and coercion
+                output_pipeline = get_output_pipeline()
+                extracted = output_pipeline.extract_and_coerce(
+                    content=result.result,
+                    skill_outputs=unmapped,
+                    skill_model=skill_config.model,
+                    org_model=org_model,
+                    target_field_metadata=target_field_metadata,
                 )
-                lm = get_dspy_lm(skill_model=skill_config.model, org_model=org_model)
-                with dspy.context(lm=lm):
-                    extracted = extractor.extract(content=result.result)
-                # Coerce extracted values to match target field constraints
-                if extracted and target_field_metadata:
-                    extracted = _coerce_extracted_values(
-                        extracted, target_field_metadata
-                    )
                 if extracted:
                     if skill_outputs is None:
                         skill_outputs = {}
@@ -850,16 +760,14 @@ class SkillExecutorService:
 
         # 8. Return with captured outputs if requested
         if capture_outputs and skill_config.outputs:
-            # Extract outputs using DSPy module (separate extraction step)
-            extractor = OutputExtractorModule(
-                skill_outputs=[
-                    {"name": o.name, "type": o.type, "description": o.description}
-                    for o in skill_config.outputs
-                ]
+            # Extract outputs using OutputPipeline
+            output_pipeline = get_output_pipeline()
+            captured = output_pipeline.extract_outputs(
+                content=result_json,
+                skill_outputs=list(skill_config.outputs),
+                skill_model=skill_config.model,
+                org_model=org_model,
             )
-            lm = get_dspy_lm(skill_model=skill_config.model, org_model=org_model)
-            with dspy.context(lm=lm):
-                captured = extractor.extract(content=result_json)
 
             # Check if all values are null (complete extraction failure)
             if captured and all(v is None for v in captured.values()):

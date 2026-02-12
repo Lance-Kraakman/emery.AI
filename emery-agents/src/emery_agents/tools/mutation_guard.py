@@ -7,7 +7,6 @@ Ported from tools/tool_modes.py and tools/crud_tools.py.
 
 from __future__ import annotations
 
-from emery_agents.services.context import get_current_context
 from emery_agents.tools.tool_modes import MUTATION_METHODS, ToolMode
 
 
@@ -25,6 +24,10 @@ def check_mutation_allowed(method: str) -> str | None:
         None if mutation is allowed.
         Error message string if mutation is blocked.
     """
+    # Defer import to avoid circular dependency:
+    # tools/loader → mutation_guard → services/context → services/__init__ → executors
+    from emery_agents.services.context import get_current_context
+
     ctx = get_current_context()
     if ctx and ctx.tool_mode == ToolMode.PLANNING:
         method_lower = method.lower()
