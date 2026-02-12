@@ -10,6 +10,22 @@ import { Label } from '@/components/ui/label'
 import ReactMarkdown from 'react-markdown'
 import type { HumanTaskState } from './types/extended-chat-handler'
 
+/**
+ * Format field names for display by converting snake_case/camelCase to Title Case
+ * Examples:
+ *   "next_steps_required_by_client" → "Next steps required by client"
+ *   "clientName" → "Client name"
+ */
+function formatFieldName(name: string): string {
+  return name
+    .replace(/_/g, ' ')                    // Replace underscores with spaces
+    .replace(/([A-Z])/g, ' $1')            // Add space before capitals (camelCase)
+    .replace(/^./, s => s.toUpperCase())   // Capitalize first letter
+    .toLowerCase()                          // Lowercase everything
+    .replace(/^./, s => s.toUpperCase())   // Re-capitalize first letter
+    .trim()
+}
+
 interface HumanTaskCardProps {
   humanTask: HumanTaskState
   onSubmit: (outputs: Record<string, string>) => void
@@ -90,7 +106,7 @@ export function HumanTaskCard({
             {humanTask.inputs.map((input, idx) => (
               <div key={idx} className="flex items-start gap-2">
                 <span className="text-xs font-medium text-gray-600 dark:text-gray-400 min-w-[80px]">
-                  {input.name}:
+                  {formatFieldName(input.name)}:
                 </span>
                 <span className="text-sm text-gray-800 dark:text-gray-200">
                   {input.value}
@@ -133,7 +149,7 @@ export function HumanTaskCard({
           {humanTask.outputSchema.map((output, idx) => (
             <div key={idx} className="space-y-1.5">
               <Label htmlFor={`output-${output.name}`} className="text-sm font-medium">
-                {output.name}
+                {formatFieldName(output.name)}
                 {output.description && (
                   <span className="ml-1 text-xs text-gray-500 font-normal">
                     ({output.description})
@@ -145,7 +161,7 @@ export function HumanTaskCard({
                   id={`output-${output.name}`}
                   value={outputs[output.name] || ''}
                   onChange={(e) => handleOutputChange(output.name, e.target.value)}
-                  placeholder={`Enter ${output.name}...`}
+                  placeholder={`Enter ${formatFieldName(output.name).toLowerCase()}...`}
                   disabled={disabled || isSubmitting}
                   className="bg-white dark:bg-gray-900"
                 />
@@ -154,7 +170,7 @@ export function HumanTaskCard({
                   id={`output-${output.name}`}
                   value={outputs[output.name] || ''}
                   onChange={(e) => handleOutputChange(output.name, e.target.value)}
-                  placeholder={`Enter ${output.name}...`}
+                  placeholder={`Enter ${formatFieldName(output.name).toLowerCase()}...`}
                   disabled={disabled || isSubmitting}
                   rows={3}
                   className="bg-white dark:bg-gray-900"
@@ -164,7 +180,7 @@ export function HumanTaskCard({
                   id={`output-${output.name}`}
                   value={outputs[output.name] || ''}
                   onChange={(e) => handleOutputChange(output.name, e.target.value)}
-                  placeholder={`Enter ${output.name}...`}
+                  placeholder={`Enter ${formatFieldName(output.name).toLowerCase()}...`}
                   disabled={disabled || isSubmitting}
                   className="bg-white dark:bg-gray-900"
                 />

@@ -52,6 +52,47 @@ import type { ChatMessage as EmeryChatMessage } from './types/extended-chat-hand
 
 const logger = createDebugLogger('EmeryChat')
 
+/**
+ * Extract display text from JSON messages that contain _displayText field.
+ * Used for human skill completion messages that carry structured data for the backend
+ * but should display a clean, human-readable message to the user.
+ *
+ * @example
+ * Input: '{"type":"human_skill_completion","outputs":{...},"_displayText":"Task completed..."}'
+ * Output: 'Task completed...'
+ */
+function extractDisplayText(text: string): string {
+  try {
+    const parsed = JSON.parse(text)
+    if (typeof parsed === 'object' && parsed !== null && typeof parsed._displayText === 'string') {
+      return parsed._displayText
+    }
+  } catch {
+    // Not JSON, return as-is
+  }
+  return text
+}
+
+/**
+ * Transform a message to extract _displayText from any JSON text parts.
+ * Returns a new message object with transformed text parts.
+ */
+function transformMessageForDisplay(message: EmeryChatMessage): EmeryChatMessage {
+  if (!message.parts || message.parts.length === 0) {
+    return message
+  }
+
+  const transformedParts = message.parts.map(part => {
+    // Check if this is a text part with the text property
+    if (part.type === 'text' && 'text' in part && typeof part.text === 'string') {
+      return { ...part, text: extractDisplayText(part.text) }
+    }
+    return part
+  })
+
+  return { ...message, parts: transformedParts }
+}
+
 // Chat panel width constants - shared across chat components
 export const CHAT_COLLAPSED_WIDTH = 'w-12'  // 48px
 export const CHAT_HISTORY_EXPANDED_WIDTH = 'w-80'  // 320px
@@ -378,6 +419,8 @@ function ChatContentWithCanvas({
               {handler.messages.map((message: EmeryChatMessage, index) => {
                 // Extract execution steps from message metadata
                 const steps = message.experimental_metadata?.executionSteps
+                // Transform message to extract _displayText from JSON for clean rendering
+                const displayMessage = transformMessageForDisplay(message)
 
                 return (
                   <React.Fragment key={message.id || index}>
@@ -388,7 +431,7 @@ function ChatContentWithCanvas({
                       </div>
                     )}
                     <ChatMessage
-                      message={message}
+                      message={displayMessage}
                       isLast={index === handler.messages.length - 1}
                       className={cn(
                         "my-0.5 mx-2",
