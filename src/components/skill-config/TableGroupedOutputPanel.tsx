@@ -591,7 +591,7 @@ export function TableGroupedOutputPanel({
   );
 }
 
-/** Button to add outputs to a table - toggles table selector */
+/** Button to add outputs to a table - dropdown opens on first click */
 function ToTableButton({
   tables,
   databases,
@@ -601,7 +601,6 @@ function ToTableButton({
   databases: DatabaseDTO[];
   onAddFields: (tableId: number, fields: FieldDTO[]) => void;
 }) {
-  const [showSelector, setShowSelector] = useState(false);
   const [selectedTableId, setSelectedTableId] = useState<number | null>(null);
 
   // Group tables by database
@@ -628,17 +627,13 @@ function ToTableButton({
           onSelectFields={(fields) => {
             onAddFields(selectedTableId, fields);
             setSelectedTableId(null);
-            setShowSelector(false);
           }}
         />
         <Button
           type="button"
           variant="ghost"
           size="sm"
-          onClick={() => {
-            setSelectedTableId(null);
-            setShowSelector(false);
-          }}
+          onClick={() => setSelectedTableId(null)}
           className="h-5 px-1"
         >
           <X className="h-3 w-3" />
@@ -647,58 +642,32 @@ function ToTableButton({
     );
   }
 
-  // Show table selector
-  if (showSelector) {
-    return (
-      <div className="flex items-center gap-1.5">
-        <Select
-          onValueChange={(v) => {
-            setSelectedTableId(parseInt(v));
-          }}
-        >
-          <SelectTrigger className="h-6 w-[120px] text-[10px]">
-            <SelectValue placeholder="Select table..." />
-          </SelectTrigger>
-          <SelectContent>
-            {Array.from(tablesByDatabase.entries()).map(([dbId, dbTables]) => {
-              const db = databases.find((d) => d.id === dbId);
-              return (
-                <SelectGroup key={dbId}>
-                  <SelectLabel className="text-[10px] text-muted-foreground">{db?.name || 'Unknown'}</SelectLabel>
-                  {dbTables.map((table) => (
-                    <SelectItem key={table.id} value={table.id.toString()}>
-                      {table.name}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              );
-            })}
-          </SelectContent>
-        </Select>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => setShowSelector(false)}
-          className="h-5 px-1"
-        >
-          <X className="h-3 w-3" />
-        </Button>
-      </div>
-    );
-  }
-
-  // Default: show button
+  // Default: show dropdown directly
   return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="sm"
-      onClick={() => setShowSelector(true)}
-      className="h-6 px-2 text-[10px] text-muted-foreground"
+    <Select
+      onValueChange={(v) => {
+        setSelectedTableId(parseInt(v));
+      }}
     >
-      <Table2 className="h-3 w-3 mr-1" />
-      To Table
-    </Button>
+      <SelectTrigger className="h-6 w-auto min-w-0 px-2 text-[10px] text-muted-foreground border-0 bg-transparent hover:bg-accent">
+        <Table2 className="h-3 w-3 mr-1" />
+        <span>To Table</span>
+      </SelectTrigger>
+      <SelectContent>
+        {Array.from(tablesByDatabase.entries()).map(([dbId, dbTables]) => {
+          const db = databases.find((d) => d.id === dbId);
+          return (
+            <SelectGroup key={dbId}>
+              <SelectLabel className="text-[10px] text-muted-foreground">{db?.name || 'Unknown'}</SelectLabel>
+              {dbTables.map((table) => (
+                <SelectItem key={table.id} value={table.id.toString()}>
+                  {table.name}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          );
+        })}
+      </SelectContent>
+    </Select>
   );
 }

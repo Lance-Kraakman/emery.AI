@@ -409,16 +409,18 @@ async def generate_plan_node(
     enriched_task = task
     if pre_selected_skill:
         # Check if we have a loaded skill tool we can use directly
-        loaded_skill_tool = None
+        from emery_agents.tools.integrations.dynamic_skill import DynamicSkillTool
+
+        loaded_skill_tool: DynamicSkillTool | None = None
         for tool in tools:
-            if hasattr(tool, "skill_id"):
+            if isinstance(tool, DynamicSkillTool):
                 loaded_skill_tool = tool
                 break
 
         if loaded_skill_tool:
             # Skill tool is already loaded - tell planner to use it directly
             skill_id = loaded_skill_tool.skill_id
-            tool_name = getattr(loaded_skill_tool, "name", f"skill_skill_{skill_id}")
+            tool_name = loaded_skill_tool.name
             enriched_task = (
                 f"{task}\n\n"
                 f"[USER DIRECTIVE: The user selected the '{pre_selected_skill}' skill via @skill mention. "
