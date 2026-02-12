@@ -2,7 +2,7 @@
 
 import json
 import time
-from typing import Any, Dict, NamedTuple
+from typing import Any, NamedTuple
 
 from .generated import agent_worker_pb2
 from .response_types import StreamResponseDict
@@ -171,42 +171,41 @@ def convert_permission_request(
     )
 
 
-def convert_awaiting_human_skill(response_dict: Dict[str, Any]) -> agent_worker_pb2.ProcessMessageResponse:
-    """Convert awaiting_human_skill event to proto response.
+def convert_tool_loaded(
+    response_dict: dict[str, Any],
+) -> agent_worker_pb2.ProcessMessageResponse:
+    """Convert tool_loaded event to step_progress with TOOL_LOADED metadata.
 
-    AIDEV-NOTE: Uses the AwaitingHumanSkill proto message defined in agent_worker.proto.
-    This event signals that execution has paused for human action.
+    Since the proto doesn't have a dedicated tool_loaded message type,
+    we use step_progress with step_type=STEP_ACTION and include tool data
+    in the metadata. The TypeScript side detects this via metadata.event_type.
     """
-    # Build output schema
-    output_defs = []
-    for output in response_dict.get("output_schema", []):
-        output_defs.append(agent_worker_pb2.OutputDefinition(
-            name=output.get("name", ""),
-            type=output.get("type", "text")
-        ))
+    tool_name = response_dict.get("tool_name", "")
+    tool_display_name = response_dict.get("tool_display_name", tool_name)
+    tool_description = response_dict.get("tool_description", "")
+    app_name = response_dict.get("app_name", "")
 
-    # Build input values
-    input_values = []
-    for name, value in response_dict.get("inputs", {}).items():
-        input_values.append(agent_worker_pb2.SkillInputValue(
-            name=name,
-            type="text",  # Simplified - full type resolution at frontend
-            string_value=str(value) if value is not None else ""
-        ))
+    step_progress_msg = agent_worker_pb2.StepProgress(
+        step_type=agent_worker_pb2.STEP_ACTION,
+        step_name=f"Loaded tool: {tool_display_name}",
+        content=f"Dynamically loaded {tool_name}",
+        step_index=0,
+    )
+
+    # Include tool data in metadata for frontend to extract
+    _populate_protobuf_map(
+        step_progress_msg.metadata,
+        {
+            "event_type": "tool_loaded",
+            "tool_name": tool_name,
+            "tool_display_name": tool_display_name,
+            "tool_description": tool_description,
+            "app_name": app_name,
+        },
+    )
 
     return agent_worker_pb2.ProcessMessageResponse(
-        awaiting_human_skill=agent_worker_pb2.AwaitingHumanSkill(
-            skill_id=response_dict.get("skill_id", 0),
-            skill_name=response_dict.get("skill_name", ""),
-            step_id=response_dict.get("step_id", ""),
-            instructions=response_dict.get("instructions", ""),
-            inputs=input_values,
-            output_schema=output_defs,
-            assigned_to=response_dict.get("assigned_to", ""),
-            external_links=response_dict.get("external_links", []),
-            session_id=response_dict.get("session_id", "")
-        ),
-        timestamp=int(time.time() * 1000)
+        step_progress=step_progress_msg, timestamp=int(time.time() * 1000)
     )
 
 
@@ -237,8 +236,12 @@ def convert_response_to_proto(
         )
 
     elif response_type == "awaiting_input":
+        # Human skill needs stream closure (should_break=True)
+        data = response_dict.get("data", {})
+        input_type = data.get("input_type", "")
+        should_break = input_type == "human_skill"
         return ConversionResult(
-            convert_awaiting_input(response_dict), "", None, False, 0
+            convert_awaiting_input(response_dict), "", None, should_break, 0
         )
 
     elif response_type == "plan_metadata":
@@ -249,9 +252,12 @@ def convert_response_to_proto(
             convert_permission_request(response_dict), "", None, False, 0
         )
 
-    elif response_type == "awaiting_human_skill":
-        # Human skill event - stream should close after this
-        return ConversionResult(convert_awaiting_human_skill(response_dict), "", None, True, 0)
+    elif response_type == "tool_loaded":
+        return ConversionResult(
+            convert_tool_loaded(response_dict), "", None, False, 0
+        )
+
+    # NOTE: awaiting_human_skill is now handled via awaiting_input with input_type="human_skill"
 
     else:
         return ConversionResult(None, "", None, False, 0)

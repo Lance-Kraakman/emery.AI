@@ -1,18 +1,20 @@
 /**
  * Hybrid authentication system
  *
- * Supports NextAuth sessions (production), user API keys (automation/testing),
- * and agent API keys (tool execution using agent owner's identity).
+ * Supports NextAuth sessions (production) and unified API tokens:
+ * - user_*: User API keys
+ * - device_*: Device tokens for Tauri sync
+ * - cb_*: Callback tokens for agent execution
+ * - agent_*: Agent API keys
  */
 
 import { NextRequest } from 'next/server';
 import { auth, getUserIdFromRequest } from '@/lib/auth';
-import { validateUserApiKey, extractApiKeyFromHeader } from './user-api-keys';
+import { extractApiKeyFromHeader } from './user-api-keys';
+import { validateToken, getTokenTypeFromPrefix } from './token-service';
 import { db } from '@/ddd/infrastructure/db/client';
 import { users } from '@/ddd/infrastructure/db/schema';
 import { eq } from 'drizzle-orm';
-import { getOrganizationRepository, getUserRepository } from '@/ddd/application/di/container';
-import { ApiKey } from '@/ddd/domain/shared/value-objects';
 
 export interface AuthResult {
   success: boolean;
@@ -27,77 +29,49 @@ export interface AuthResult {
 }
 
 /**
- * Authenticate with an API key (user or agent)
+ * Authenticate with an API token (unified token system)
  * Returns a session-like object for compatibility with both NextRequest and server action contexts
  *
- * This is the shared authentication logic used by both:
- * - authenticateRequest() in API routes
- * - requireAuth() in server actions
+ * Supports:
+ * - user_*: User API keys
+ * - device_*: Device tokens for Tauri sync
+ * - cb_*: Callback tokens for agent execution
+ * - agent_*: Agent API keys
  */
 export async function authenticateWithApiKey(apiKeyString: string): Promise<AuthResult> {
-  // Try user API key first (format: user_*)
-  if (apiKeyString.startsWith('user_')) {
-    const apiKeyUser = await validateUserApiKey(apiKeyString);
-    if (apiKeyUser) {
-      return {
-        success: true,
-        user: {
-          id: apiKeyUser.id,
-          email: apiKeyUser.email,
-          name: apiKeyUser.name,
-          organizationId: apiKeyUser.organizationId,
-          organizationRole: 'member',
-        },
-      };
-    }
+  const tokenType = getTokenTypeFromPrefix(apiKeyString);
+
+  if (!tokenType) {
+    return { success: false, error: 'Invalid token format' };
   }
 
-  // Try agent API key (uses agent owner's identity)
-  try {
-    const organizationRepository = getOrganizationRepository();
-    const apiKey = ApiKey.fromString(apiKeyString);
-    // Use org repository for cross-org API key lookup (bypasses RLS)
-    const agent = await organizationRepository.findAgentByApiKey(apiKey);
-
-    if (!agent) {
-      return { success: false, error: 'Invalid API key' };
-    }
-
-    // Use agent owner's identity (same pattern as Pipedream proxy)
-    const userRepository = getUserRepository();
-    const owner = await userRepository.findById(agent.ownerId);
-
-    if (!owner) {
-      return { success: false, error: 'Agent owner not found' };
-    }
-
+  // Use unified token validation
+  const validatedToken = await validateToken(apiKeyString);
+  if (validatedToken?.user) {
     return {
       success: true,
       user: {
-        id: owner.id.value,
-        email: owner.email?.value || '',
-        name: owner.name ?? null,
-        organizationId: owner.currentOrganizationId?.value ?? null,
+        id: validatedToken.user.id,
+        email: validatedToken.user.email,
+        name: validatedToken.user.name,
+        organizationId: validatedToken.user.organizationId,
         organizationRole: 'member',
       },
     };
-  } catch (error) {
-    console.error('API key authentication error:', error);
-    return { success: false, error: 'API key authentication failed' };
   }
+
+  return { success: false, error: 'Invalid API token' };
 }
 
 /**
- * Authenticate a request using session, user API key, agent API key, or development bypass
+ * Authenticate a request using session or API token
  *
  * Priority:
  * 1. NextAuth session (production authentication)
- * 2. User API key (automation/testing authentication - format: user_*)
- * 3. Agent API key (tool execution using agent owner's identity)
- * 4. Development bypass (testing with x-test-user-id header)
+ * 2. API token (Bearer header)
  *
  * AIDEV-NOTE: X-Organization-ID header is used as fallback when auth succeeds
- * but organizationId is missing (e.g., agent API keys with owner having no current org).
+ * but organizationId is missing.
  */
 export async function authenticateRequest(request: NextRequest): Promise<AuthResult> {
   try {
@@ -120,7 +94,7 @@ export async function authenticateRequest(request: NextRequest): Promise<AuthRes
       };
     }
 
-    // If no session, check for API key (user or agent)
+    // If no session, check for API token
     const authHeader = request.headers.get('authorization');
     const apiKey = extractApiKeyFromHeader(authHeader);
 
@@ -154,7 +128,6 @@ export async function authenticateRequest(request: NextRequest): Promise<AuthRes
             email: user.email || '',
             name: user.name,
             organizationId: user.currentOrganizationId || (headerOrgId && !isNaN(headerOrgId) ? headerOrgId : null),
-            // organizationRole removed in RBAC system
           },
         };
       }
@@ -162,7 +135,7 @@ export async function authenticateRequest(request: NextRequest): Promise<AuthRes
 
     return {
       success: false,
-      error: 'No valid authentication found - requires NextAuth session, user API key, or agent API key',
+      error: 'No valid authentication found - requires NextAuth session or API token',
     };
   } catch (error) {
     console.error('Authentication error:', error);
@@ -181,7 +154,7 @@ export async function withAuth<T>(
   handler: (user: NonNullable<AuthResult['user']>) => Promise<T>
 ): Promise<T | Response> {
   const authResult = await authenticateRequest(request);
-  
+
   if (!authResult.success || !authResult.user) {
     return Response.json(
       { error: authResult.error || 'Unauthorized' },

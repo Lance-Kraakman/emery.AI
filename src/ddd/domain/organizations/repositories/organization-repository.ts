@@ -1,7 +1,8 @@
 import { Organization, CreateOrganizationData, UpdateOrganizationData, OrganizationWithMembers, OrganizationMember } from '../entities/organization';
-import { OrganizationId, UserId, ApiKey } from '@/ddd/domain/shared/value-objects';
+import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 import { SystemRoleType } from '@/ddd/domain/rbac/entities/role';
 import type { Agent } from '@/ddd/domain/agents/entities/agent';
+// NOTE: API key authentication moved to token-service.ts (unified token system)
 
 export interface IOrganizationRepository {
   /**
@@ -29,14 +30,6 @@ export interface IOrganizationRepository {
    * Requires rawDb to be configured in repository constructor.
    */
   findAllRaw(): Promise<Organization[]>;
-
-  /**
-   * Find agent by API key (cross-org authentication query)
-   * Used during API key authentication before user context is established.
-   * Bypasses RLS because this is how we establish the user context.
-   * Requires rawDb to be configured in repository constructor.
-   */
-  findAgentByApiKey(apiKey: ApiKey): Promise<Agent | null>;
 
   /**
    * Find agent by webhook token (cross-org authentication query)

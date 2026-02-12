@@ -39,7 +39,7 @@ export function FieldMappingRow({
   const effectiveAppendMode = mapping.appendMode ?? isRelationField;
 
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex items-center gap-1">
       {/* Source selector (typed) */}
       <FieldSourceSelector
         value={mapping.source}
@@ -78,14 +78,14 @@ export function FieldMappingRow({
         }}
         disabled={isReadOnly || targetFields.length === 0}
       >
-        <SelectTrigger className="w-[130px] h-7 text-[11px]">
+        <SelectTrigger className="w-[120px] h-6 text-[10px]">
           <SelectValue placeholder="Target..." />
         </SelectTrigger>
         <SelectContent>
           {targetFields.map((field) => (
             <SelectItem key={field.id} value={field.id.toString()}>
               <span>{field.name}</span>
-              <span className="text-[10px] text-muted-foreground ml-1">({field.type})</span>
+              <span className="text-[9px] text-muted-foreground ml-1">({field.type})</span>
             </SelectItem>
           ))}
         </SelectContent>
@@ -98,7 +98,7 @@ export function FieldMappingRow({
           onValueChange={(v) => onUpdate({ ...mapping, appendMode: v === 'append' })}
           disabled={isReadOnly}
         >
-          <SelectTrigger className="w-[80px] h-7 text-[11px]">
+          <SelectTrigger className="w-[70px] h-6 text-[10px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

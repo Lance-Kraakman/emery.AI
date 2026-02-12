@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { withAuthContext } from '@/lib/auth/with-context';
 import { getSkillApplicationService, getAgentApplicationService, getStorageQuotaApplicationService, getAuditApplicationService } from '@/ddd/application/di/container';
 import { getOrganizationRepository } from '@/ddd/application/di/getters';
-import { ensureFreshUserApiKey } from '@/lib/auth/user-api-keys';
+import { createCallbackToken } from '@/lib/auth/token-service';
 import { OrganizationId } from '@/ddd/domain/shared/value-objects';
 import { SkillMapper } from '@/app/mappers/skill-mapper';
 import { AgentId } from '@/ddd/domain/shared/value-objects/agent-id';
@@ -1482,12 +1482,12 @@ export async function generateSkillPlan(
       await requireResourcePermission("skills:manage", "skill", skillId);
     }
 
-    // Get user API key for managed agents (always generates fresh key, hash stored)
+    // Create callback token for skill execution (short-lived, doesn't rotate user's main API key)
     let userApiKey = '';
     try {
-      userApiKey = await ensureFreshUserApiKey(session.user.id);
+      userApiKey = await createCallbackToken(session.user.id);
     } catch (error) {
-      console.error('[generateSkillPlan] Error generating user API key:', error);
+      console.error('[generateSkillPlan] Error generating callback token:', error);
     }
 
     // Get organization default model (same pattern as agent-task-application-service)

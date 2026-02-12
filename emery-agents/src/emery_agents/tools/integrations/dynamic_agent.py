@@ -13,6 +13,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import dspy
+
 from emery_agents.api import fetch_agent_by_id_sync
 
 logger = logging.getLogger(__name__)
@@ -29,9 +31,11 @@ class DynamicAgentTool:
         # Fetch agent metadata for DSPy tool registration
         agent_data = fetch_agent_by_id_sync(agent_id, api_key, organization_id)
 
+        # Use ID + name slug for better LLM context
+        # Format: agent_{id}_{name_slug} (e.g., agent_5_sales_assistant)
         if agent_data:
             safe_name = agent_data.name.replace(" ", "_").replace("-", "_").lower()
-            self.name = f"agent_{safe_name}"
+            self.name = f"agent_{agent_id}_{safe_name}" if safe_name else f"agent_{agent_id}"
             self.description = (
                 agent_data.description or f"Execute agent: {agent_data.name}"
             )
@@ -64,4 +68,21 @@ class DynamicAgentTool:
             task=task,
             api_key=self.api_key,
             org_id=str(self.organization_id),
+        )
+
+    def to_dspy_tool(self) -> dspy.Tool:
+        """Convert to dspy.Tool with proper metadata.
+
+        DSPy ReAct auto-wraps callables but loses custom attributes.
+        This method creates a proper dspy.Tool with explicit metadata.
+        """
+        return dspy.Tool(
+            func=self.forward,
+            name=self.name,
+            desc=self.description,
+            args={name: {"type": info["type"]} for name, info in self.inputs.items()},
+            arg_desc={
+                name: info.get("description", name)
+                for name, info in self.inputs.items()
+            },
         )

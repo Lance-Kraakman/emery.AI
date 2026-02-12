@@ -184,6 +184,22 @@ export interface AwaitingHumanSkillEvent {
 }
 
 /**
+ * Tool loaded event
+ * Emitted when a tool is dynamically loaded during execution
+ *
+ * AIDEV-NOTE: Emitted by PlanStepExecutor when step.tool_call specifies
+ * a tool not in available tools and it's dynamically loaded.
+ * Frontend uses this to update the ToolPanel UI.
+ */
+export interface ToolLoadedEvent {
+  type: 'tool_loaded'
+  toolName: string        // e.g., "gmail_find_email"
+  toolDisplayName: string // Human-readable name
+  toolDescription: string
+  appName: string         // e.g., "gmail" - for grouping/icon display
+}
+
+/**
  * Union type for all SSE chat events
  */
 export type SSEChatEvent =
@@ -195,6 +211,7 @@ export type SSEChatEvent =
   | AwaitingInputEvent
   | PermissionRequestEvent
   | AwaitingHumanSkillEvent
+  | ToolLoadedEvent
 
 /**
  * Type guards for event discrimination
@@ -229,4 +246,21 @@ export function isPermissionRequestEvent(event: any): event is PermissionRequest
 
 export function isAwaitingHumanSkillEvent(event: any): event is AwaitingHumanSkillEvent {
   return event?.type === 'awaiting_human_skill'
+}
+
+export function isToolLoadedEvent(event: any): event is ToolLoadedEvent {
+  return event?.type === 'tool_loaded'
+}
+
+/**
+ * Extract app name from tool name.
+ *
+ * Convention: External tool names follow the pattern "{app}_{action}"
+ * e.g., "gmail_find_email" -> "gmail", "slack_send_message" -> "slack"
+ *
+ * @param toolName Full tool name
+ * @returns App name (prefix before first underscore, or full name if no underscore)
+ */
+export function extractAppName(toolName: string): string {
+  return toolName.includes('_') ? toolName.split('_')[0] : toolName
 }

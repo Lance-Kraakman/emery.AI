@@ -63,7 +63,7 @@ export interface StreamingChatResponse {
     };
   };
   stepProgress?: StepProgress;
-  awaitingInput?: AwaitingInput;  // HITL: Plan approval or question
+  awaitingInput?: AwaitingInput;  // HITL: Plan approval, question, or human_skill
   taskId?: string;  // Task ID from response (for logging/tracking)
   timestamp: number;
 }

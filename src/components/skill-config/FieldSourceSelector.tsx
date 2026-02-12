@@ -37,7 +37,7 @@ export function FieldSourceSelector({
       }}
       disabled={disabled}
     >
-      <SelectTrigger className="w-[150px] h-7 text-[11px]">
+      <SelectTrigger className="w-[140px] h-6 text-[10px]">
         <SelectValue placeholder="Select source..." />
       </SelectTrigger>
       <SelectContent>

@@ -152,54 +152,10 @@ export function TableGroupedInputPanel({
 
   return (
     <div className="space-y-3">
-      {/* Header with inline actions */}
-      <div className="flex items-center gap-2">
+      {/* Header */}
+      <div className="flex items-center justify-between">
         <Label className="text-xs font-medium">Inputs</Label>
-
-        {!isReadOnly && (
-          <div className="flex items-center gap-1.5 flex-1">
-            {!showAddManual && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowAddManual(true)}
-                className="h-6 px-2 text-[10px] text-muted-foreground"
-              >
-                <Plus className="h-3 w-3 mr-1" />
-                Add input
-              </Button>
-            )}
-            {!tablesLoading && tables.length > 0 && (
-              <AddFromTableButton
-                tables={tables}
-                databases={databases}
-                onSelectTable={(tableId) => fetchFieldsForTable(tableId)}
-                onAddFields={(tableId, fields) => handleAddInputsFromTable(tableId, fields)}
-              />
-            )}
-            <AddFromAutomationButton
-              onSelectType={(type) => {
-                setShowTriggerPanel(true);
-              }}
-              isActive={showTriggerPanel}
-            />
-          </div>
-        )}
-
         <span className="text-[10px] text-muted-foreground">{inputs.length} total</span>
-
-        {!isReadOnly && inputs.length > 0 && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={handleClearAll}
-            className="h-6 px-2 text-[10px] text-muted-foreground hover:text-destructive"
-          >
-            Clear all
-          </Button>
-        )}
       </div>
 
       {/* Table-grouped inputs */}
@@ -331,6 +287,53 @@ export function TableGroupedInputPanel({
                 <X className="h-3 w-3" />
               </Button>
             </div>
+          )}
+        </div>
+      )}
+
+      {/* Action buttons */}
+      {!isReadOnly && (
+        <div className="flex items-center gap-2 flex-wrap">
+          {!showAddManual && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowAddManual(true)}
+              className="h-6 px-2 text-[10px] text-muted-foreground"
+            >
+              <Plus className="h-3 w-3 mr-1" />
+              Add input
+            </Button>
+          )}
+          {!tablesLoading && tables.length > 0 && (
+            <FromTableButton
+              tables={tables}
+              databases={databases}
+              onSelectTable={(tableId) => fetchFieldsForTable(tableId)}
+              onAddFields={(tableId, fields) => handleAddInputsFromTable(tableId, fields)}
+            />
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowTriggerPanel(!showTriggerPanel)}
+            className={`h-6 px-2 text-[10px] ${showTriggerPanel ? 'text-primary bg-primary/10' : 'text-muted-foreground'}`}
+          >
+            <Zap className="h-3 w-3 mr-1" />
+            From Automation
+          </Button>
+          {inputs.length > 0 && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={handleClearAll}
+              className="h-6 px-2 text-[10px] text-muted-foreground hover:text-destructive ml-auto"
+            >
+              Clear all
+            </Button>
           )}
         </div>
       )}
@@ -471,8 +474,8 @@ function InputMappingRow({
   );
 }
 
-/** Button to add inputs from a new table (table picker → field picker) */
-function AddFromTableButton({
+/** Button to add inputs from a table - dropdown opens on first click */
+function FromTableButton({
   tables,
   databases,
   onSelectTable,
@@ -496,6 +499,7 @@ function AddFromTableButton({
     return grouped;
   }, [tables]);
 
+  // Show field picker after table selected
   if (selectedTableId) {
     return (
       <div className="flex items-center gap-1.5">
@@ -523,6 +527,7 @@ function AddFromTableButton({
     );
   }
 
+  // Default: show dropdown directly
   return (
     <Select
       onValueChange={(v) => {
@@ -531,9 +536,9 @@ function AddFromTableButton({
         setSelectedTableId(id);
       }}
     >
-      <SelectTrigger className="h-6 w-[130px] text-[10px] text-muted-foreground">
-        <Table2 className="h-3 w-3 mr-1 shrink-0" />
-        <SelectValue placeholder="Add from table" />
+      <SelectTrigger className="h-6 w-auto min-w-0 px-2 text-[10px] text-muted-foreground border-0 bg-transparent hover:bg-accent">
+        <Table2 className="h-3 w-3 mr-1" />
+        <span>From Table</span>
       </SelectTrigger>
       <SelectContent>
         {Array.from(tablesByDatabase.entries()).map(([dbId, dbTables]) => {
@@ -551,27 +556,5 @@ function AddFromTableButton({
         })}
       </SelectContent>
     </Select>
-  );
-}
-
-/** Button to add inputs from automation trigger variables */
-function AddFromAutomationButton({
-  onSelectType,
-  isActive,
-}: {
-  onSelectType: (type: string) => void;
-  isActive: boolean;
-}) {
-  return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="sm"
-      onClick={() => onSelectType('toggle')}
-      className={`h-6 px-2 text-[10px] ${isActive ? 'text-primary bg-primary/10' : 'text-muted-foreground'}`}
-    >
-      <Zap className="h-3 w-3 mr-1" />
-      Add from automation
-    </Button>
   );
 }

@@ -39,6 +39,7 @@ from ..services.execution.events import (
     StepCompletedEvent,
     StepFailedEvent,
     StepStartedEvent,
+    ToolLoadedEvent,
 )
 from .mappers import format_clarifying_questions
 from .response_types import (
@@ -478,18 +479,39 @@ def convert_coordinator_event(
         }
 
     elif isinstance(event, AwaitingHumanSkillEvent):
-        # Human skill requires human action - stream should close after this
-        return {
-            "type": "awaiting_human_skill",
+        # Human skill requires human action - consolidate into awaiting_input flow
+        # Human skill data is passed via plan_json as JSON
+        import json
+        human_skill_data = {
             "skill_id": event.skill_id,
             "skill_name": event.skill_name,
             "step_id": event.step_id,
-            "instructions": event.instructions,
             "inputs": event.inputs,
             "output_schema": event.output_schema,
             "assigned_to": event.assigned_to,
             "external_links": event.external_links,
             "session_id": event.session_id,
+        }
+        return {
+            "type": "awaiting_input",
+            "data": {
+                "input_type": "human_skill",
+                "title": f"Human Task: {event.skill_name}",
+                "content": event.instructions,
+                "options": [],
+                "plan_json": json.dumps(human_skill_data),
+                "session_id": event.session_id,
+            },
+        }
+
+    elif isinstance(event, ToolLoadedEvent):
+        # Tool was dynamically loaded - notify frontend to update ToolPanel
+        return {
+            "type": "tool_loaded",
+            "tool_name": event.tool_name,
+            "tool_display_name": event.tool_display_name,
+            "tool_description": event.tool_description,
+            "app_name": event.app_name,
         }
 
     return None  # Unknown event type

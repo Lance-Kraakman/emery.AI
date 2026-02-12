@@ -1,9 +1,8 @@
 // AIDEV-NOTE: Updated User entity to use DDD Value Objects for type safety
-import { 
-  UserId, 
-  OrganizationId, 
-  EmailAddress, 
-  ApiKey
+import {
+  UserId,
+  OrganizationId,
+  EmailAddress
 } from '@/ddd/domain/shared/value-objects';
 import { SystemRoleType } from '@/ddd/domain/rbac/entities/role';
 
@@ -18,10 +17,6 @@ export interface User {
   // organizationRole field removed - use RBAC system instead
   jobTitle?: string | null;
   teams?: string[] | null;
-  apiKey?: ApiKey | null;              // Stores hash (not plaintext)
-  apiKeyPrefix?: string | null;        // First 12 chars for display
-  previousApiKeyHash?: string | null;
-  previousApiKeyExpiresAt?: Date | null;
   createdAt?: Date | null;
   // Published app authentication fields
   isAppOnlyUser?: boolean;
@@ -39,8 +34,6 @@ export interface CreateUserData {
   // organizationRole field removed - use assignRole() method instead
   jobTitle?: string;
   teams?: string[];
-  apiKeyHash?: string;
-  apiKeyPrefix?: string;
   // Published app authentication fields
   isAppOnlyUser?: boolean;
   allowedApps?: number[];
@@ -56,7 +49,6 @@ export interface UpdateUserData {
   // organizationRole field removed - use updateUserRole() method instead
   jobTitle?: string;
   teams?: string[];
-  // Note: apiKey updates handled through separate methods for security
   // Published app authentication fields
   isAppOnlyUser?: boolean;
   allowedApps?: number[];
@@ -76,4 +68,3 @@ export interface CreateUserOrganizationData {
   organizationId: OrganizationId;
   // roles: UserRole
 }
-

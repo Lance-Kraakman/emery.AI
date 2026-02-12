@@ -17,7 +17,7 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const organizationId = searchParams.get('organizationId');
 
-    // Safe columns — excludes apiKeyHash, previousApiKeyHash
+    // Safe columns
     const safeColumns = {
       id: true,
       name: true,
@@ -25,7 +25,6 @@ export async function GET(req: Request) {
       currentOrganizationId: true,
       jobTitle: true,
       isAppOnlyUser: true,
-      apiKeyPrefix: true,
       createdAt: true,
     } as const;
 
@@ -44,7 +43,6 @@ export async function GET(req: Request) {
           currentOrganizationId: users.currentOrganizationId,
           jobTitle: users.jobTitle,
           isAppOnlyUser: users.isAppOnlyUser,
-          apiKeyPrefix: users.apiKeyPrefix,
           createdAt: users.createdAt,
         })
         .from(users)

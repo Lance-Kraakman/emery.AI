@@ -1,8 +1,9 @@
 // AIDEV-NOTE: Agent repository interface
 // Defines data access operations for Agent entities
+// NOTE: API key management moved to token-service.ts (unified token system)
 
 import type { Agent, CreateAgentData as CreateAgentDataEntity, UpdateAgentData as UpdateAgentDataEntity } from '../entities/agent';
-import type { AgentId, OrganizationId, UserId, ApiKey } from '@/ddd/domain/shared/value-objects';
+import type { AgentId, OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
 
 // Re-export for backward compatibility
 export type { CreateAgentDataEntity as CreateAgentData, UpdateAgentDataEntity as UpdateAgentData };
@@ -69,19 +70,7 @@ export interface IAgentRepository {
   findAll(organizationId?: OrganizationId): Promise<Agent[]>;
 
   /**
-   * Find agent by API key
-   * NOTE: For cross-org auth, use organizationRepository.findAgentByApiKey()
-   */
-  findByApiKey(apiKey: ApiKey): Promise<Agent | null>;
-
-  /**
    * Find agent by webhook token
    */
   findByWebhookToken(token: string): Promise<Agent | null>;
-
-  /**
-   * Update agent's last used timestamp
-   */
-  updateLastUsed(id: AgentId): Promise<void>;
-
 }

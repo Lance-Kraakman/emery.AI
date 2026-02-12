@@ -62,10 +62,7 @@ def _serialize_item(item: KnowledgeItem) -> dict[str, Any]:
 
 
 def _deserialize_item(data: dict[str, Any]) -> KnowledgeItem:
-    """Deserialize KnowledgeItem from dict.
-
-    Note: Embeddings are NOT loaded here - they're computed from disk cache.
-    """
+    """Deserialize KnowledgeItem from dict."""
     examples = [_deserialize_example(ex_data) for ex_data in data.get("examples", [])]
 
     return KnowledgeItem(
@@ -77,7 +74,6 @@ def _deserialize_item(data: dict[str, Any]) -> KnowledgeItem:
         tags=data.get("tags", []),
         examples=examples,
         metadata=data.get("metadata", {}),
-        embedding=None,  # Computed from disk cache in _build_index()
     )
 
 
@@ -106,7 +102,7 @@ def load_knowledge_cache(s3_bucket: str) -> KnowledgeBase | None:
         items = [_deserialize_item(d) for d in data["items"]]
 
         kb = KnowledgeBase()
-        kb.add(items, build_index=True)
+        kb.add(items)
 
         logger.info(
             f"Loaded knowledge cache: {kb.count()} items, "
@@ -202,7 +198,7 @@ def load_knowledge_local(path: str) -> KnowledgeBase | None:
         items = [_deserialize_item(d) for d in data["items"]]
 
         kb = KnowledgeBase()
-        kb.add(items, build_index=True)
+        kb.add(items)
 
         logger.info(f"Loaded knowledge cache locally: {kb.count()} items from {path}")
         return kb

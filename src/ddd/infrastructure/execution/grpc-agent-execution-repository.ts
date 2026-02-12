@@ -14,7 +14,7 @@ import { AgentId } from '@/ddd/domain/shared/value-objects';
 import { ToolConfig } from '@/ddd/domain/tools/value-objects/tool-config';
 import { TokenUsageApplicationService } from '@/ddd/application/services/billing/token-usage-application-service';
 import { getTokenUsageRepository, getOrganizationRepository, getContextMappingApplicationService } from '@/ddd/application/di/getters';
-import { ensureFreshAgentApiKey } from '@/lib/auth/agent-api-keys';
+import { createCallbackToken } from '@/lib/auth/token-service';
 import type { ContextMapping } from '@/ddd/domain/context/entities/context-mapping';
 
 export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
@@ -105,8 +105,8 @@ export class GrpcAgentExecutionRepository implements IAgentExecutionRepository {
         // Context tables are optional - continue execution without them
       }
 
-      // 6. Generate fresh agent API key (plaintext for tool auth, hash stored in DB)
-      const agentApiKey = await ensureFreshAgentApiKey(agent.id.value, orgId);
+      // 6. Generate short-lived callback token for tool authentication
+      const agentApiKey = await createCallbackToken(agent.ownerId.value, agent.id.value);
 
       // 7. Create proto task request
       // Use skill-based execution if skill is provided, otherwise instruction-based

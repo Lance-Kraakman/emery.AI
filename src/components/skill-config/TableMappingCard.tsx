@@ -123,9 +123,9 @@ export function TableMappingCard({
   };
 
   const innerContent = (
-    <div className="space-y-2">
+    <div className="space-y-1.5">
       {/* Table, action, and mode selectors */}
-      <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex items-center gap-1.5 flex-wrap">
         {!hideTableSelector && (
           <Select
             value={tableMapping.targetTableId?.toString()}
@@ -134,7 +134,7 @@ export function TableMappingCard({
             }
             disabled={isReadOnly}
           >
-            <SelectTrigger className="h-7 w-[130px] text-[11px]">
+            <SelectTrigger className="h-6 w-[120px] text-[10px]">
               <SelectValue placeholder="Table..." />
             </SelectTrigger>
             <SelectContent>
@@ -173,7 +173,7 @@ export function TableMappingCard({
           }
           disabled={isReadOnly}
         >
-          <SelectTrigger className="h-7 w-[90px] text-[11px]">
+          <SelectTrigger className="h-6 w-[80px] text-[10px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -194,7 +194,7 @@ export function TableMappingCard({
           }
           disabled={isReadOnly}
         >
-          <SelectTrigger className="h-7 w-[80px] text-[11px]">
+          <SelectTrigger className="h-6 w-[70px] text-[10px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -206,8 +206,8 @@ export function TableMappingCard({
 
       {/* Row ID source selector for update mode */}
       {tableMapping.rowAction === 'update' && (
-        <div className="flex items-center gap-2">
-          <Label className="text-[10px] text-muted-foreground">Row ID from:</Label>
+        <div className="flex items-center gap-1.5">
+          <Label className="text-[9px] text-muted-foreground">Row ID:</Label>
           <Select
             value={serializeRowIdSource(tableMapping.rowIdSource)}
             onValueChange={(v) =>
@@ -215,7 +215,7 @@ export function TableMappingCard({
             }
             disabled={isReadOnly}
           >
-            <SelectTrigger className="h-7 w-[160px] text-[11px]">
+            <SelectTrigger className="h-6 w-[140px] text-[10px]">
               <SelectValue placeholder="Select source..." />
             </SelectTrigger>
             <SelectContent>
@@ -260,8 +260,8 @@ export function TableMappingCard({
 
       {/* Match fields selector for upsert mode (multi-select) */}
       {tableMapping.rowAction === 'upsert' && (
-        <div className="flex items-center gap-2 flex-wrap">
-          <Label className="text-[10px] text-muted-foreground shrink-0">Match on:</Label>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <Label className="text-[9px] text-muted-foreground shrink-0">Match:</Label>
           {targetFields.map((field) => {
             const isSelected = tableMapping.matchFieldIds?.includes(field.id) ?? false;
             return (
@@ -296,7 +296,7 @@ export function TableMappingCard({
       )}
 
       {/* Field mappings */}
-      <div className="space-y-1.5">
+      <div className="space-y-1">
         {tableMapping.mappings.map((mapping, index) => (
           <FieldMappingRow
             key={index}
@@ -312,13 +312,13 @@ export function TableMappingCard({
           />
         ))}
         {!isReadOnly && tableMapping.targetTableId > 0 && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <Button
               type="button"
               variant="ghost"
               size="sm"
               onClick={handleAddMapping}
-              className="h-6 px-2 text-[11px]"
+              className="h-5 px-2 text-[10px]"
             >
               <Plus className="h-3 w-3 mr-1" />
               Add Field
@@ -329,7 +329,7 @@ export function TableMappingCard({
                 variant="ghost"
                 size="sm"
                 onClick={handleAutoMap}
-                className="h-6 px-2 text-[11px]"
+                className="h-5 px-2 text-[10px]"
               >
                 Auto-map
               </Button>

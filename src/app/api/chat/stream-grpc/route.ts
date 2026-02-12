@@ -35,8 +35,8 @@ import { getTokenUsageRepository } from '@/ddd/application/di/getters';
 import type { CreateChatDTO, SendMessageDTO, UpdateMessageDTO, ExecutionStep } from '@/app/dtos/chat.dto';
 import type { EnrichToolsWithUserApiKeyCommand } from '@/ddd/application/services/tools/tool-configuration-application-service';
 
-// Import user API key utilities
-import { ensureFreshUserApiKey } from '@/lib/auth/user-api-keys';
+// Import callback token for agent execution (doesn't rotate user's main API key)
+import { createCallbackToken } from '@/lib/auth/token-service';
 
 // Import shared chat utilities
 import { getMessageContent } from '@/lib/chat/message-helpers';
@@ -490,15 +490,15 @@ export async function POST(req: NextRequest) {
       toolNames: tools.map((t: any) => t.name)
     });
 
-    // 5.1 Always fetch user API key for managed agents (skill_builder, etc.)
-    // This is needed even when there are no tools configured
-    // Always generates a fresh key (hash stored, plaintext returned for injection)
+    // 5.1 Create callback token for agent execution
+    // Callback tokens are short-lived (1hr) and scoped to agent callbacks
+    // This avoids rotating the user's main API key (which breaks Tauri sync)
     let userApiKey: string | null = null;
     if (userId) {
       try {
-        userApiKey = await ensureFreshUserApiKey(userId);
+        userApiKey = await createCallbackToken(userId);
       } catch (error) {
-        console.error('[CHAT-GRPC-API] Error generating user API key:', error);
+        console.error('[CHAT-GRPC-API] Error generating callback token:', error);
         // Don't silently continue - fail early with clear error
         return new Response(
           JSON.stringify({ error: 'Failed to generate API credentials for chat session' }),
@@ -999,6 +999,42 @@ export async function POST(req: NextRequest) {
                     console.log(`[CHAT-GRPC-API] Sent permission_request event (permission=${permissionData.permission})`);
                   } catch (parseError) {
                     console.error('[CHAT-GRPC-API] Failed to parse permission data:', parseError);
+                    // Fallback to generic awaiting_input
+                    const fallbackEvent = {
+                      type: 'awaiting_input',
+                      inputType: response.awaitingInput.inputType,
+                      title: response.awaitingInput.title,
+                      content: response.awaitingInput.content,
+                      options: response.awaitingInput.options || [],
+                      planJson: response.awaitingInput.planJson || null
+                    };
+                    controller.enqueue(encodeSSEEvent(fallbackEvent));
+                  }
+                  return; // Don't fall through to generic awaiting_input handling
+                }
+
+                // Special handling for human_skill - emit dedicated event type
+                // AIDEV-NOTE: Human skills are sent as awaiting_input from Python
+                // but converted to awaiting_human_skill SSE events for the frontend
+                if (response.awaitingInput.inputType === 'human_skill') {
+                  try {
+                    const humanSkillData = JSON.parse(response.awaitingInput.planJson || '{}');
+                    const humanSkillEvent = {
+                      type: 'awaiting_human_skill',
+                      skillId: humanSkillData.skill_id,
+                      skillName: humanSkillData.skill_name,
+                      stepId: humanSkillData.step_id || '',
+                      instructions: response.awaitingInput.content,
+                      inputs: humanSkillData.inputs || [],
+                      outputSchema: humanSkillData.output_schema || [],
+                      assignedTo: humanSkillData.assigned_to || '',
+                      externalLinks: humanSkillData.external_links || [],
+                      sessionId: humanSkillData.session_id || '',
+                    };
+                    controller.enqueue(encodeSSEEvent(humanSkillEvent));
+                    console.log(`[CHAT-GRPC-API] Sent awaiting_human_skill event (skill=${humanSkillData.skill_name})`);
+                  } catch (parseError) {
+                    console.error('[CHAT-GRPC-API] Failed to parse human skill data:', parseError);
                     // Fallback to generic awaiting_input
                     const fallbackEvent = {
                       type: 'awaiting_input',

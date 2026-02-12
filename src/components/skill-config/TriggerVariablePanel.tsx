@@ -1,9 +1,8 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { Zap, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -136,22 +135,11 @@ export function TriggerVariablePanel({
   };
 
   return (
-    <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
-      <div className="flex items-center justify-between">
-        <Label className="text-sm font-medium flex items-center gap-2">
-          <Zap className="h-4 w-4" />
-          Add from Automation
-        </Label>
-        <Badge variant="outline" className="text-xs">
-          {selectedVariables.size} selected
-        </Badge>
-      </div>
-
-      {/* Trigger Type Selector */}
-      <div className="space-y-2">
-        <Label className="text-xs">Trigger Type</Label>
+    <div className="space-y-2 p-3 border rounded-lg bg-muted/30">
+      {/* Inline selectors row */}
+      <div className="flex items-center gap-2 flex-wrap">
         <Select value={triggerType} onValueChange={(v) => setTriggerType(v as TriggerType)}>
-          <SelectTrigger className="h-8">
+          <SelectTrigger className="h-6 w-[130px] text-[10px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -161,70 +149,64 @@ export function TriggerVariablePanel({
             <SelectItem value="PIPEDREAM_EVENT">External Event</SelectItem>
           </SelectContent>
         </Select>
-      </div>
 
-      {/* Table Selector for DATABASE_EVENT */}
-      {triggerType === 'DATABASE_EVENT' && (
-        <div className="space-y-2">
-          <Label className="text-xs">Table (for row fields)</Label>
+        {triggerType === 'DATABASE_EVENT' && (
           <TableSelector
             value={selectedTableId}
             onValueChange={handleTableSelect}
-            placeholder="Select table to see row fields..."
+            placeholder="Select table..."
+            className="h-6 text-[10px] w-[140px]"
           />
-        </div>
-      )}
+        )}
 
-      {/* Available Variables */}
-      <div className="space-y-2">
-        <Label className="text-xs">Available Variables</Label>
-        <div className="max-h-[200px] overflow-y-auto space-y-1">
-          {allVariables.length === 0 ? (
-            <p className="text-xs text-muted-foreground py-2">
-              {triggerType === 'DATABASE_EVENT' && !localSampleData
-                ? 'Select a table to see row fields'
-                : 'No variables available'}
-            </p>
-          ) : (
-            allVariables.map(v => (
-              <div
-                key={v.name}
-                className={`flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-muted transition-colors ${
-                  selectedVariables.has(v.name) ? 'bg-primary/10' : ''
-                }`}
-                onClick={() => toggleVariable(v.name)}
-              >
-                <Checkbox
-                  checked={selectedVariables.has(v.name)}
-                  onCheckedChange={() => toggleVariable(v.name)}
-                  className="h-3.5 w-3.5"
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <code className="text-xs font-mono text-primary">${v.name}</code>
-                    {v.isDynamic && (
-                      <Badge variant="outline" className="text-[9px] px-1 py-0">row</Badge>
-                    )}
-                  </div>
-                  <p className="text-[10px] text-muted-foreground truncate">
-                    {v.description}
-                  </p>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
+        <Badge variant="outline" className="text-[9px] ml-auto">
+          {selectedVariables.size} selected
+        </Badge>
       </div>
 
-      {/* Add Button */}
+      {/* Compact variable list */}
+      <div className="max-h-[160px] overflow-y-auto space-y-0.5">
+        {allVariables.length === 0 ? (
+          <p className="text-[10px] text-muted-foreground py-1">
+            {triggerType === 'DATABASE_EVENT' && !localSampleData
+              ? 'Select a table to see row fields'
+              : 'No variables available'}
+          </p>
+        ) : (
+          allVariables.map(v => (
+            <div
+              key={v.name}
+              className={`flex items-center gap-1.5 py-1 px-2 rounded cursor-pointer hover:bg-muted transition-colors ${
+                selectedVariables.has(v.name) ? 'bg-primary/10' : ''
+              }`}
+              onClick={() => toggleVariable(v.name)}
+            >
+              <Checkbox
+                checked={selectedVariables.has(v.name)}
+                onCheckedChange={() => toggleVariable(v.name)}
+                className="h-3 w-3"
+              />
+              <code className="text-[10px] font-mono text-primary">${v.name}</code>
+              {v.isDynamic && (
+                <Badge variant="outline" className="text-[8px] px-1 py-0 h-3.5">row</Badge>
+              )}
+              <span className="text-[9px] text-muted-foreground truncate flex-1">
+                {v.description}
+              </span>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Compact add button */}
       <Button
         onClick={handleAddSelected}
         disabled={selectedVariables.size === 0}
-        className="w-full"
+        className="w-full h-7 text-[11px]"
         size="sm"
       >
         <Plus className="h-3 w-3 mr-1" />
-        Add {selectedVariables.size > 0 ? `${selectedVariables.size} ` : ''}Selected as Inputs
+        Add {selectedVariables.size > 0 ? `${selectedVariables.size} ` : ''}Selected
       </Button>
     </div>
   );

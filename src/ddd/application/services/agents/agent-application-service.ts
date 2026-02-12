@@ -17,7 +17,8 @@ import {
 } from '@/ddd/domain/agents/entities/agent';
 import type { Result } from '@/ddd/domain/shared/result';
 import { createAgentDefaults } from '@/ddd/domain/agents/entities/agent';
-import { AgentId, OrganizationId, UserId, TeamId, AgentStatus, ApiKey } from '@/ddd/domain/shared/value-objects';
+import { AgentId, OrganizationId, UserId, TeamId, AgentStatus } from '@/ddd/domain/shared/value-objects';
+import { createToken, TokenType } from '@/lib/auth/token-service';
 import { TriggerConfigFromJSON } from '@/ddd/domain/scheduling/value-objects/trigger-config';
 import type { CreateAgentDTO, UpdateAgentDTO, AgentFiltersDTO, AgentDTO } from '@/app/dtos/agent.dto';
 import type { AutomationConfiguration } from '@/ddd/domain/agents/entities/agent';
@@ -94,11 +95,11 @@ export class AgentApplicationService {
 
       const savedAgent = await this.agentRepository.create(createData);
 
-      // Generate API key (hash stored, plaintext returned once)
-      const { plaintext: apiKeyPlaintext, hash: apiKeyHash, prefix: apiKeyPrefix } = ApiKey.generateWithHash();
-      await this.agentRepository.update(savedAgent.id, {
-        apiKeyHash,
-        apiKeyPrefix,
+      // Generate API token for agent (stored in api_tokens table)
+      const apiKeyPlaintext = await createToken({
+        tokenType: TokenType.AGENT_API,
+        agentId: savedAgent.id.value,
+        userId: ownerId.value,
       });
 
       // SECURITY: Delegations must be explicitly created by the owner
@@ -301,6 +302,7 @@ export class AgentApplicationService {
 
   /**
    * Regenerate API key for agent
+   * Creates a new token in the api_tokens table
    */
   async regenerateApiKey(agentId: number): Promise<Result<{ apiKey: string, prefix: string }>> {
     try {
@@ -312,22 +314,16 @@ export class AgentApplicationService {
         };
       }
 
-      // Generate new API key (256-bit entropy)
-      const { plaintext, hash, prefix } = ApiKey.generateWithHash();
-
-      // Move current hash to grace period (24h)
-      const previousHash = existingAgent.apiKey?.value || null;
-
-      await this.agentRepository.update(AgentId.fromNumber(agentId), {
-        apiKeyHash: hash,
-        apiKeyPrefix: prefix,
-        previousApiKeyHash: previousHash,
-        previousApiKeyExpiresAt: previousHash ? new Date(Date.now() + 24 * 60 * 60 * 1000) : null,
+      // Generate new API token (stored in api_tokens table with rotation support)
+      const plaintext = await createToken({
+        tokenType: TokenType.AGENT_API,
+        agentId: agentId,
+        userId: existingAgent.ownerId.value,
       });
 
       return {
         success: true,
-        data: { apiKey: plaintext, prefix }
+        data: { apiKey: plaintext, prefix: plaintext.substring(0, 12) }
       };
     } catch (error) {
       logger.error("Error regenerating API key", error);

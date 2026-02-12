@@ -1208,9 +1208,9 @@ class AgentExecutor:
         org_model: str | None = None,
         api_key: str | None = None,
         organization_id: int | None = None,
-    ) -> list[SkillTool]:
-        """Create SkillTool instances for skill delegation."""
-        skill_tools = []
+    ) -> list[dspy.Tool]:
+        """Create dspy.Tool instances for skill delegation."""
+        skill_tools: list[dspy.Tool] = []
 
         # Create shared executor callback for all skill tools
         skill_executor_callback = self.skill_executor_service.create_executor_callback(
@@ -1227,7 +1227,7 @@ class AgentExecutor:
                     skill_executor=skill_executor_callback,
                     api_key=api_key,
                     organization_id=organization_id,
-                )
+                ).to_dspy_tool()
                 skill_tools.append(skill_tool)
                 logger.debug(f"Created SkillTool for: {skill_config.name}")
             except Exception as e:

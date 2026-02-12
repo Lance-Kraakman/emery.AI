@@ -366,8 +366,8 @@ export function TableGroupedOutputPanel({
 
   return (
     <div className="space-y-3">
-      {/* Header with inline actions */}
-      <div className="flex items-center gap-2">
+      {/* Header */}
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <Label className="text-xs font-medium">Outputs</Label>
           <div className="group relative">
@@ -377,44 +377,7 @@ export function TableGroupedOutputPanel({
             </div>
           </div>
         </div>
-
-        {!isReadOnly && (
-          <div className="flex items-center gap-1.5 flex-1">
-            {!showAddManual && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowAddManual(true)}
-                className="h-6 px-2 text-[10px] text-muted-foreground"
-              >
-                <Plus className="h-3 w-3 mr-1" />
-                Add output
-              </Button>
-            )}
-            {!tablesLoading && tables.length > 0 && (
-              <AddToTableButton
-                tables={tables}
-                databases={databases}
-                onAddFields={(tableId, fields) => handleAddOutputsToTable(tableId, fields)}
-              />
-            )}
-          </div>
-        )}
-
         <span className="text-[10px] text-muted-foreground">{outputs.length} total</span>
-
-        {!isReadOnly && outputs.length > 0 && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={handleClearAll}
-            className="h-6 px-2 text-[10px] text-muted-foreground hover:text-destructive"
-          >
-            Clear all
-          </Button>
-        )}
       </div>
 
       {/* Table-grouped output mappings */}
@@ -589,12 +552,47 @@ export function TableGroupedOutputPanel({
         </div>
       )}
 
+      {/* Action buttons */}
+      {!isReadOnly && (
+        <div className="flex items-center gap-2 flex-wrap">
+          {!showAddManual && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowAddManual(true)}
+              className="h-6 px-2 text-[10px] text-muted-foreground"
+            >
+              <Plus className="h-3 w-3 mr-1" />
+              Add output
+            </Button>
+          )}
+          {!tablesLoading && tables.length > 0 && (
+            <ToTableButton
+              tables={tables}
+              databases={databases}
+              onAddFields={(tableId, fields) => handleAddOutputsToTable(tableId, fields)}
+            />
+          )}
+          {outputs.length > 0 && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={handleClearAll}
+              className="h-6 px-2 text-[10px] text-muted-foreground hover:text-destructive ml-auto"
+            >
+              Clear all
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
-/** Button to add outputs to a new table (table picker → field picker) */
-function AddToTableButton({
+/** Button to add outputs to a table - dropdown opens on first click */
+function ToTableButton({
   tables,
   databases,
   onAddFields,
@@ -616,6 +614,7 @@ function AddToTableButton({
     return grouped;
   }, [tables]);
 
+  // Show field picker after table selected
   if (selectedTableId) {
     return (
       <div className="flex items-center gap-1.5">
@@ -643,15 +642,16 @@ function AddToTableButton({
     );
   }
 
+  // Default: show dropdown directly
   return (
     <Select
       onValueChange={(v) => {
         setSelectedTableId(parseInt(v));
       }}
     >
-      <SelectTrigger className="h-6 w-[120px] text-[10px] text-muted-foreground">
-        <Table2 className="h-3 w-3 mr-1 shrink-0" />
-        <SelectValue placeholder="Add to table" />
+      <SelectTrigger className="h-6 w-auto min-w-0 px-2 text-[10px] text-muted-foreground border-0 bg-transparent hover:bg-accent">
+        <Table2 className="h-3 w-3 mr-1" />
+        <span>To Table</span>
       </SelectTrigger>
       <SelectContent>
         {Array.from(tablesByDatabase.entries()).map(([dbId, dbTables]) => {

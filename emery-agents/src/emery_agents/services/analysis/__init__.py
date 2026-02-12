@@ -18,7 +18,6 @@ from .gap_analyzer import GapAnalyzer, GapAnalyzerModule
 from .llm_usage import LlmUsageTracker, record_from_lm
 from .token_accumulator import TokenAccumulator
 from .token_usage import TokenUsageExtractor
-from .vector_search import VectorIndex, create_index_from_texts
 
 __all__ = [
     # Token usage
@@ -36,7 +35,4 @@ __all__ = [
     "cosine_similarity",
     "clear_cache",
     "get_cache_info",
-    # Vector search
-    "VectorIndex",
-    "create_index_from_texts",
 ]

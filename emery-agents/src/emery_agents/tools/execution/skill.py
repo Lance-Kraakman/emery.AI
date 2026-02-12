@@ -16,6 +16,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+import dspy
+
 from emery_agents.entities.skill_config import SkillConfig
 from emery_agents.services.data.output_mapping import (
     MappingContext,
@@ -503,3 +505,20 @@ class SkillTool:
         except Exception as e:
             logger.error(f"Error reading table field: {e}")
             return None
+
+    def to_dspy_tool(self) -> dspy.Tool:
+        """Convert to dspy.Tool with proper metadata.
+
+        DSPy ReAct auto-wraps callables but loses custom attributes.
+        This method creates a proper dspy.Tool with explicit metadata.
+        """
+        return dspy.Tool(
+            func=self.forward,
+            name=self.name,
+            desc=self.description,
+            args={name: {"type": info["type"]} for name, info in self.inputs.items()},
+            arg_desc={
+                name: info.get("description", name)
+                for name, info in self.inputs.items()
+            },
+        )
