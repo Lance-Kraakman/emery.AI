@@ -29,7 +29,7 @@ export interface UseBulkRowUpdateParams {
   sortBy: { field?: string; order?: 'asc' | 'desc' }
   /** Active filter configurations */
   activeFilters: FilterConfig[]
-  /** Debounce delay in milliseconds (default: 500ms) */
+  /** Debounce delay in milliseconds (default: 2000ms) */
   debounceMs?: number
 }
 
@@ -62,7 +62,7 @@ export function useBulkRowUpdate({
   selectedTableId,
   sortBy,
   activeFilters,
-  debounceMs = 500
+  debounceMs = 2000
 }: UseBulkRowUpdateParams) {
   const queryClient = useQueryClient()
 
