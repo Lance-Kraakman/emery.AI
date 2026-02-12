@@ -666,6 +666,9 @@ class AppStack(Stack):
 
         # Chat container (port 50051): AgentWorker + ChatProcessingService
         # SYS_PTRACE capability required for gVisor sandbox (ptrace platform)
+        chat_linux_params = ecs.LinuxParameters(self, f"{prefix}AgentChatLinuxParams")
+        chat_linux_params.add_capabilities(ecs.Capability.SYS_PTRACE)
+
         chat_container = agent_task_definition.add_container(
             f"{prefix}AgentChatContainer",
             image=agent_image,
@@ -684,10 +687,7 @@ class AppStack(Stack):
                 log_retention=log_retention,
             ),
             essential=True,  # Task restarts if chat container fails
-            linux_parameters=ecs.LinuxParameters(
-                self, f"{prefix}AgentChatLinuxParams",
-                add_capabilities=[ecs.Capability.SYS_PTRACE],  # Required for gVisor sandbox
-            ),
+            linux_parameters=chat_linux_params,
         )
 
         # Mount EFS workspace storage in chat container
@@ -910,4 +910,87 @@ class AppStack(Stack):
         scheduler_container.add_environment(
             "AWS_REGION",
             aws_region
+        )
+
+        # ========== SSH SERVER FOR WORKSPACE SYNC ==========
+        # EC2 instance running SSH + rsync for Tauri desktop client workspace sync.
+        # Uses AuthorizedKeysCommand to fetch SSH keys dynamically from the API.
+        # COST: t4g.micro ~$8/month - can handle 20-50 concurrent rsync sessions.
+
+        # Security group for SSH server
+        ssh_security_group = ec2.SecurityGroup(
+            self, f"{prefix}SshSyncSecurityGroup",
+            vpc=data_stack.vpc,
+            description="SSH server for workspace sync",
+            allow_all_outbound=True,
+        )
+
+        # Allow SSH from anywhere (desktop clients connect from various IPs)
+        ssh_security_group.add_ingress_rule(
+            ec2.Peer.any_ipv4(),
+            ec2.Port.tcp(22),
+            "Allow SSH from anywhere"
+        )
+
+        # Allow SSH server to access EFS for workspace storage
+        workspace_fs.connections.allow_default_port_from(
+            ec2.Connections(security_groups=[ssh_security_group]),
+            "Allow NFS from SSH server"
+        )
+
+        # IAM role for SSH server (SSM access for management)
+        ssh_role = iam.Role(
+            self, f"{prefix}SshServerRole",
+            assumed_by=iam.ServicePrincipal("ec2.amazonaws.com"),
+            managed_policies=[
+                iam.ManagedPolicy.from_aws_managed_policy_name("AmazonSSMManagedInstanceCore"),
+            ],
+        )
+
+        # Load setup script from file (keeps CDK clean, script maintainable)
+        setup_script_path = os.path.join(os.path.dirname(__file__), "../../docker/ssh-sync/setup-ec2.sh")
+        with open(setup_script_path, "r") as f:
+            setup_script = f.read()
+
+        # Build the internal API URL (use ALB to bypass CloudFront/WAF)
+        internal_api_url = f"http://{frontend_service.load_balancer.load_balancer_dns_name}"
+
+        # Create user_data with environment variables + script
+        # Note: INTERNAL_API_SECRET must be set via SSM after deployment
+        ssh_user_data = ec2.UserData.for_linux()
+        ssh_user_data.add_commands(
+            f"export EFS_ID='{workspace_fs.file_system_id}'",
+            f"export API_HOST='{internal_api_url}'",
+            "export INTERNAL_API_SECRET='PLACEHOLDER'",  # Set via SSM post-deploy
+            "",
+        )
+        ssh_user_data.add_commands(setup_script)
+
+        # EC2 instance for SSH server (t4g.micro for ARM64 cost savings)
+        ssh_server = ec2.Instance(
+            self, f"{prefix}SshSyncServer",
+            instance_type=ec2.InstanceType("t4g.micro"),
+            machine_image=ec2.MachineImage.latest_amazon_linux_2023(
+                cpu_type=ec2.AmazonLinuxCpuType.ARM_64
+            ),
+            vpc=data_stack.vpc,
+            vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC),
+            security_group=ssh_security_group,
+            role=ssh_role,
+            user_data=ssh_user_data,
+        )
+
+        # Output SSH server IP for DNS configuration
+        # NOTE: DNS record (ssh.enhancd.ai) must be configured manually in Route53
+        # to point to this IP address, or use an Elastic IP for stability
+        CfnOutput(
+            self, f"{prefix}SshServerPublicIp",
+            value=ssh_server.instance_public_ip,
+            description="SSH server public IP - configure ssh.enhancd.ai DNS to point here"
+        )
+
+        CfnOutput(
+            self, f"{prefix}SshSyncSetupNote",
+            value="After deployment: 1) Add INTERNAL_API_SECRET to /etc/ssh-sync-env on SSH server, 2) Configure ssh.enhancd.ai DNS record",
+            description="Post-deployment setup steps for SSH sync"
         )
