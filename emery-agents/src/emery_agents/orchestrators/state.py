@@ -17,6 +17,19 @@ from ..entities.models.task_ledger import TaskLedger
 from ..services.context import WorkspaceContext
 
 
+class HumanSkillCompleted(TypedDict):
+    """Structured data for completed human skill.
+
+    Used when a human skill finishes and returns outputs to be
+    applied via OutputMappingService.
+    """
+
+    step_id: str
+    skill_id: str
+    skill_name: str
+    outputs: dict[str, Any]
+
+
 class PlanExecuteState(TypedDict, total=False):
     """
     Serializable state for plan-and-execute orchestrator.
@@ -69,7 +82,7 @@ class PlanExecuteState(TypedDict, total=False):
     awaiting_input: str | None  # "approval", "clarification", "recovery", "human_skill"
     clarifying_questions: list[dict[str, Any]]
     human_skill_info: dict[str, Any] | None  # Info for human skill interrupt
-    human_skill_completed: dict[str, Any] | None  # {step_id, outputs} - set after human completes
+    human_skill_completed: HumanSkillCompleted | None  # Structured completion data
 
     # === Event accumulator (append-only for UI streaming) ===
     events: Annotated[list[Any], operator.add]
