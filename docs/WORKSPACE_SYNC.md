@@ -1,11 +1,48 @@
 # Workspace Sync Feature
 
-Bidirectional file sync between local folders and agent workspaces via rsync over SSH in the Tauri desktop app.
+Bidirectional file sync between local folders and agent workspaces via rsync over SSH in the Tauri desktop app, with real-time SSE notifications.
 
-## Status: Phase 2 In Progress
+## Status: Production Ready
 
 - Phase 1 (Local Dev): Complete - rsync + SSH working locally
-- Phase 2 (Cloud Deploy): In progress - SSH bastion/container deployment
+- Phase 2 (Cloud Deploy): Complete - SSH bastion/container deployed
+- Phase 3 (Real-time): Complete - SSE notifications for workspace changes
+
+## Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        SERVER SIDE                          │
+│                                                             │
+│   ┌─────────────────┐         ┌─────────────────┐          │
+│   │  Python Worker  │         │   Next.js API   │          │
+│   │  (task exec)    │         │   (SSE/REST)    │          │
+│   └────────┬────────┘         └────────┬────────┘          │
+│            │ direct fs                 │ direct fs          │
+│            │                           │                    │
+│            ▼                           ▼                    │
+│   ┌─────────────────────────────────────────────────────┐  │
+│   │                      EFS / NFS                       │  │
+│   │  .emery-lock   .emery-sync-version   user-files/    │  │
+│   └─────────────────────────────────────────────────────┘  │
+│                              ▲                              │
+└──────────────────────────────┼──────────────────────────────┘
+                               │ rsync (SSH)
+                               │ ⬅️ EXCLUSIONS APPLY HERE
+┌──────────────────────────────┼──────────────────────────────┐
+│                              ▼                              │
+│   ┌─────────────────────────────────────────────────────┐  │
+│   │               Local Filesystem (Mac/Win)             │  │
+│   │  .emery-lock ❌  .emery-sync-version ❌  user-files/ │  │
+│   └─────────────────────────────────────────────────────┘  │
+│                        CLIENT SIDE                          │
+│                     (Tauri Desktop)                         │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Key insight:** rsync exclusions only affect Tauri ↔ EFS sync. They don't affect:
+- Python agent reading/writing `.emery-lock` on EFS (direct filesystem)
+- SSE endpoint reading files on EFS (direct filesystem)
 
 ## Architecture
 
@@ -111,6 +148,217 @@ File-based locking prevents sync conflicts during agent execution:
 - **Tauri behavior**: Queues changes locally, shows "Agent working..."
 - **Stale locks**: Ignored after 1 hour (agent crashed)
 - **Lock check**: Via HTTP API (not rsync)
+
+## Real-Time Updates (SSE)
+
+### Event System Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              NEXT.JS SERVER                                  │
+│                                                                              │
+│  GET /api/agents/[id]/stream (stream/route.ts)                               │
+│  ├── Creates ReadableStream                                                  │
+│  ├── Polls EVERY 1 SECOND                                                    │
+│  │                                                                           │
+│  │   Each poll cycle:                                                        │
+│  │   ├── Reads DB for tasks                                                  │
+│  │   ├── Reads .emery-lock file existence                                    │
+│  │   │   └── access(join(workspacePath, '.emery-lock'))                      │
+│  │   ├── Reads .emery-sync-version content                                   │
+│  │   │   └── readFile(join(workspacePath, '.emery-sync-version'))            │
+│  │   │                                                                       │
+│  │   └── IF value changed from last poll:                                    │
+│  │       └── sendEvent() → writes to SSE stream                              │
+│  │                                                                           │
+│  └── Events emitted:                                                         │
+│      ├── lock_changed: { locked: boolean }                                   │
+│      ├── workspace_updated: { version: string }                              │
+│      └── tasks_updated: [...]                                                │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    │ SSE Stream (HTTP long-poll)
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              TAURI DESKTOP                                   │
+│                                                                              │
+│  start_agent_sse (workspace_sync.rs)                                         │
+│  ├── Creates EventSource connection to /api/agents/[id]/stream              │
+│  ├── Runs in background tokio task                                           │
+│  │                                                                           │
+│  └── On receiving SSE event:                                                 │
+│      ├── "lock_changed" → app.emit("agent-lock-changed", { locked })         │
+│      └── "workspace_updated" → app.emit("agent-workspace-updated", { ver })  │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    │ Tauri Events (in-process)
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              REACT FRONTEND                                  │
+│                                                                              │
+│  useWorkspaceSync.ts                                                         │
+│  ├── listen("agent-lock-changed") → handleLockChange(locked)                 │
+│  │   └── If locked: true→false transition (agent finished)                   │
+│  │       └── Calls pull_workspace (rsync pull)                               │
+│  │                                                                           │
+│  └── listen("agent-workspace-updated") → handleWorkspaceUpdate(version)      │
+│      └── Calls pull_workspace (rsync pull)                                   │
+│                                                                              │
+│  WorkspaceSection.tsx                                                        │
+│  └── useAgentStream → onWorkspaceUpdate + onLockChange                       │
+│      └── Calls refreshEntries() (silent, no loading spinner)                 │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Coordination Files
+
+| File | Purpose | Location | Written By |
+|------|---------|----------|------------|
+| `.emery-lock` | Workspace locking | EFS only | Python agent |
+| `.emery-sync-version` | Change detection | EFS only | Web editor, sync/push API, desktop (via SSH) |
+
+**Important:** These files are **excluded from rsync** to prevent sync loops. They are server-side only coordination files.
+
+### Who Reads/Writes Coordination Files
+
+#### `.emery-lock`
+
+| Component | Operation | Access Method |
+|-----------|-----------|---------------|
+| Python Worker | CREATE (acquire) | Direct FS on EFS |
+| Python Worker | DELETE (release) | Direct FS on EFS |
+| Python Worker | READ (check) | Direct FS on EFS |
+| SSE Endpoint | READ (check exists) | Direct FS on EFS |
+| Tauri Desktop | READ (check) | HTTP API call |
+| File Watcher | IGNORED | `IGNORED_PATTERNS` |
+| rsync | EXCLUDED | `--exclude .emery-lock` |
+
+#### `.emery-sync-version`
+
+| Component | Operation | Access Method |
+|-----------|-----------|---------------|
+| Web File Editor | WRITE (timestamp) | Direct FS on EFS |
+| sync/push API | WRITE (timestamp) | Direct FS on EFS |
+| Desktop rsync push | WRITE (timestamp) | SSH command after rsync |
+| SSE Endpoint | READ (detect changes) | Direct FS on EFS |
+| File Watcher | IGNORED | `IGNORED_PATTERNS` |
+| rsync | EXCLUDED | `--exclude .emery-sync-version` |
+
+### When `.emery-sync-version` Gets Updated
+
+| Event | Updates Version | Location |
+|-------|-----------------|----------|
+| Web editor saves file | ✅ Yes | `file/route.ts` |
+| Web deletes via sync/push | ✅ Yes | `sync/push/route.ts` |
+| Desktop rsync push | ✅ Yes | SSH write after rsync |
+| Agent task completion | ❌ No | Uses lock release as proxy |
+
+**Agent changes:** The UI refreshes on `lock_changed: false` event (agent finished working), not on workspace_updated.
+
+## Data Flows
+
+### Flow A: Desktop User Edits File
+
+```
+1. User edits file in local synced folder
+   ↓
+2. File watcher detects change (workspace_sync.rs)
+   - Filters via IGNORED_PATTERNS (excludes .emery-lock, .emery-sync-version)
+   - Emits "workspace-file-change" event
+   ↓
+3. useWorkspaceSync receives event
+   - Calls push() → push_workspace
+   ↓
+4. push_workspace runs rsync PUSH
+   - Uses excludes: .DS_Store, Thumbs.db, *.swp, *.swo, *~, .emery-lock, .emery-sync-version
+   - Syncs only user files to EFS
+   ↓
+5. SSH write updates .emery-sync-version on server
+   - echo '{timestamp}' > {remote}/.emery-sync-version
+   ↓
+6. SSE detects version change
+   - Sends workspace_updated event
+   ↓
+7. Web UI receives event
+   - WorkspaceSection calls refreshEntries() (no loading spinner)
+   - File tree updates to show new content
+```
+
+### Flow B: Web Editor Saves File
+
+```
+1. Web editor PUT /api/agents/[id]/workspace/file
+   ↓
+2. file/route.ts
+   - Writes file to EFS
+   - Writes .emery-sync-version = Date.now()
+   ↓
+3. SSE detects version change
+   - Sends workspace_updated event
+   ↓
+4. Tauri receives event via SSE client
+   - Emits 'agent-workspace-updated' Tauri event
+   ↓
+5. useWorkspaceSync handles event
+   - Calls pull_workspace() → rsync pull
+   - Local folder updated (excludes coordination files)
+```
+
+### Flow C: Agent Task Execution
+
+```
+1. Python worker receives task via gRPC
+   ↓
+2. Acquire lock (workspace_lock.py)
+   - Creates .emery-lock on EFS
+   ↓
+3. SSE detects lock file exists
+   - Sends lock_changed: { locked: true }
+   ↓
+4. Tauri receives lock event
+   - Sets lockState = true
+   - User edits are queued instead of pushed
+   ↓
+5. Agent modifies workspace files on EFS
+   - Does NOT update .emery-sync-version (uses lock as proxy)
+   ↓
+6. Release lock (workspace_lock.py)
+   - Deletes .emery-lock on EFS
+   ↓
+7. SSE detects lock gone
+   - Sends lock_changed: { locked: false }
+   ↓
+8. Tauri receives event
+   - Detects transition: locked=true → locked=false
+   - Calls pull_workspace() → gets agent's file changes
+   - Syncs any pending local changes
+   ↓
+9. Web UI receives lock_changed event
+   - WorkspaceSection calls refreshEntries()
+   - File tree shows agent's changes
+```
+
+### Flow D: Web Delete via sync/push API
+
+```
+1. User clicks delete in WorkspaceSection
+   ↓
+2. confirmDelete() → POST /api/agents/[id]/workspace/sync/push
+   - Body: { deleted: ["path/to/file"], files: {} }
+   ↓
+3. sync/push/route.ts processes
+   - rm(fullPath, { recursive: true, force: true })
+   - Updates .emery-sync-version
+   ↓
+4. SSE detects version change
+   - Sends workspace_updated event
+   ↓
+5. Tauri receives, pulls changes
+   - rsync --delete removes local file too
+```
 
 ## API Endpoints
 
@@ -234,7 +482,89 @@ Download from: https://itefix.net/cwrsync (free version)
 | EFS | Same | Same |
 | **Total** | $216+/mo | ~$3/mo |
 
+## rsync Configuration
+
+### Exclude Patterns
+
+Both push and pull operations use the same excludes:
+
+```
+--exclude .DS_Store
+--exclude Thumbs.db
+--exclude *.swp
+--exclude *.swo
+--exclude *~
+--exclude .emery-lock
+--exclude .emery-sync-version
+```
+
+**Why exclude coordination files:**
+- `.emery-lock` and `.emery-sync-version` are server-side only
+- Desktop reads them via HTTP API / SSE events, NOT from local filesystem
+- Syncing them causes stale values to overwrite server values
+- This triggers false "change detected" events → sync loops
+
+### File Watcher Patterns
+
+The file watcher uses `IGNORED_PATTERNS` to filter events:
+
+```rust
+const IGNORED_PATTERNS: &[&str] = &[
+    ".git",
+    ".svn",
+    ".hg",
+    "node_modules",
+    "__pycache__",
+    "target",
+    ".DS_Store",
+    "Thumbs.db",
+    "*.swp",
+    "*.swo",
+    "*~",
+    ".emery-lock",
+    ".emery-sync-version",
+];
+```
+
+## Troubleshooting
+
+### Sync Loop (Constant Refreshes)
+
+**Symptoms:**
+- WorkspaceSection refreshes every second
+- Network tab shows constant `/workspace/browse` requests
+- SSE sends `workspace_updated` events continuously
+
+**Root Cause (Fixed):**
+rsync was syncing `.emery-sync-version` bidirectionally:
+1. Web editor saves → writes `.emery-sync-version = "1707500000"` on server
+2. SSE detects → sends `workspace_updated`
+3. Tauri rsync PULL → copied `.emery-sync-version` to local
+4. User edits → Tauri rsync PUSH
+5. rsync PUSHED old `.emery-sync-version` back to server
+6. SSE sees "change" → sends another event
+7. LOOP!
+
+**Solution:**
+- Added rsync excludes for `.emery-lock` and `.emery-sync-version`
+- Files stay server-side only, no sync loop
+
+### Workspace Not Updating After Agent Task
+
+**Check:**
+1. Is SSE connection active? Check network tab for `/api/agents/[id]/stream`
+2. Is `lock_changed` event being received? Check console for `agent-lock-changed`
+3. Does WorkspaceSection have `onLockChange` handler?
+
+### Desktop Edits Not Syncing to Web
+
+**Check:**
+1. Is file watcher running? Check sync popover status
+2. Is workspace locked? Agent might be working
+3. Is rsync push succeeding? Check Tauri logs
+4. Is SSH write to `.emery-sync-version` succeeding?
+
 ## See Also
 
-- Plan file: `.claude/plans/refactored-wiggling-scone.md`
+- Plan file: `.claude/plans/gleaming-petting-newt.md`
 - Original SFTP implementation: git history
