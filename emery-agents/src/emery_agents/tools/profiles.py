@@ -40,8 +40,8 @@ CONTENT_TOOLS = {"document_crud", "file_crud"}
 ADMIN_TOOLS = {"team_crud"}
 
 # Discovery tools — always included in direct execution
-# Note: search_capabilities removed - KNNFewShot with TOOL_EXAMPLES provides
-# tool selection learning via few-shot demos instead of runtime search
+# Note: search_capabilities and search_knowledge removed - KNNFewShot with
+# TOOL_EXAMPLES provides tool selection, KnowledgeRetriever handles knowledge search
 DISCOVERY_TOOL_NAMES = {
     "system_research",
     "workspace_overview",
@@ -49,7 +49,6 @@ DISCOVERY_TOOL_NAMES = {
     "web_search",
     "memory_crud",
     "conversation_history",
-    "search_knowledge",
     "search_planning_patterns",
 }
 

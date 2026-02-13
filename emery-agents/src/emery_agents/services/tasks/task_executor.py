@@ -119,15 +119,16 @@ class TaskExecutor:
 
     Handles:
     - Credential resolution (org-level vs agent-level)
-    - Execution context building (delegates to AgentExecutor for full proto support)
+    - Execution context building
     - Streaming progress with task_id
+    - Routing via ExecutionRouter to appropriate executor
 
     Two execution modes:
     - execute(): For background tasks with full TaskRequest proto
     - execute_with_context(): For chat tasks with pre-built ExecutionContext
 
     Usage:
-        executor = TaskExecutor(agent_executor, api_service)
+        executor = TaskExecutor(api_service)
 
         # Background task (ExecuteTask gRPC)
         async for progress in executor.execute(task_data):
@@ -140,24 +141,18 @@ class TaskExecutor:
 
     def __init__(
         self,
-        agent_executor: Any = None,  # Legacy: AgentExecutor (deprecated)
         api_service: AgentAPIService | None = None,
         execution_router: ExecutionRouter | None = None,
-        use_new_router: bool = True,
     ):
         """
         Initialize task executor.
 
         Args:
-            agent_executor: Legacy AgentExecutor for fallback (optional when use_new_router=True)
             api_service: API service for credential/agent lookups
-            execution_router: New ExecutionRouter (Phase 3 refactor)
-            use_new_router: Enable routing via ExecutionRouter instead of AgentExecutor
+            execution_router: ExecutionRouter for routing to appropriate executor
         """
-        self.agent_executor = agent_executor
         self.api_service = api_service
         self.execution_router = execution_router
-        self.use_new_router = use_new_router
 
     async def execute(
         self,
@@ -234,19 +229,7 @@ class TaskExecutor:
                 )
 
             # 5. Build execution context
-            # If we have the original TaskRequest and AgentExecutor, use
-            # AgentExecutor.determine_execution_context for full context building.
-            # Otherwise use simplified context building.
-            if task_data._task_request is not None and self.agent_executor is not None:
-                context = self.agent_executor.determine_execution_context(
-                    task_data._task_request, pre_fetched_skill=pre_fetched_skill
-                )
-                # Add model parameters from task_data
-                context.agent_model = task_data.agent_model
-                context.org_model = task_data.org_model
-            else:
-                # Simplified context (for chat tasks or when agent_executor is None)
-                context = self._build_execution_context(task_data, credentials)
+            context = self._build_execution_context(task_data, credentials)
 
             # 6. Inject ToolProvider into context for credential isolation
             context.tool_provider = tool_provider
@@ -255,21 +238,15 @@ class TaskExecutor:
             if task_data.workspace_path:
                 context.workspace_path = task_data.workspace_path
 
-            # 8. Execute via appropriate executor
-            if self.use_new_router:
-                logger.info(f"[TASK-{task_id[:8]}] Using ExecutionRouter")
-                async for progress in self._execute_via_router(context):
-                    progress["task_id"] = task_id
-                    yield progress
-            else:
-                # Legacy path: use AgentExecutor directly
-                if self.agent_executor is None:
-                    raise RuntimeError(
-                        "Cannot use legacy path (use_new_router=False) without AgentExecutor"
-                    )
-                async for progress in self.agent_executor.execute_task(context):
-                    progress["task_id"] = task_id
-                    yield progress
+            # 8. Inject pre-fetched skill if available
+            if pre_fetched_skill:
+                context.skill = pre_fetched_skill
+
+            # 9. Execute via ExecutionRouter
+            logger.info(f"[TASK-{task_id[:8]}] Using ExecutionRouter")
+            async for progress in self._execute_via_router(context):
+                progress["task_id"] = task_id
+                yield progress
 
             # Log completion
             elapsed = time.time() - start_time
@@ -321,20 +298,11 @@ class TaskExecutor:
         logger.info(f"[TASK-{task_id[:8]}] Starting chat-based execution")
 
         try:
-            # Use new router if enabled, otherwise fall back to AgentExecutor
-            if self.use_new_router:
-                logger.info(f"[TASK-{task_id[:8]}] Using ExecutionRouter")
-                async for progress in self._execute_via_router(context):
-                    progress["task_id"] = task_id
-                    yield progress
-            else:
-                if self.agent_executor is None:
-                    raise RuntimeError(
-                        "Cannot use legacy path (use_new_router=False) without AgentExecutor"
-                    )
-                async for progress in self.agent_executor.execute_task(context):
-                    progress["task_id"] = task_id
-                    yield progress
+            # Execute via ExecutionRouter
+            logger.info(f"[TASK-{task_id[:8]}] Using ExecutionRouter")
+            async for progress in self._execute_via_router(context):
+                progress["task_id"] = task_id
+                yield progress
 
             elapsed = time.time() - start_time
             logger.info(f"[TASK-{task_id[:8]}] Completed in {elapsed:.2f}s")
