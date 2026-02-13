@@ -20,7 +20,7 @@
 
 import { NextRequest } from 'next/server';
 import { createHash } from 'crypto';
-import { mkdir, readFile, writeFile, unlink, access } from 'fs/promises';
+import { mkdir, readFile, writeFile, rm, access } from 'fs/promises';
 import { join, dirname } from 'path';
 import { authenticateRequest } from '@/lib/auth/test-auth';
 import { getAgentApplicationService, contextManager } from '@/ddd/application/di/container';
@@ -138,10 +138,10 @@ export async function POST(
 
         const fullPath = join(workspacePath, path);
         try {
-          await unlink(fullPath);
+          await rm(fullPath, { recursive: true, force: true });
           filesDeleted.push(path);
         } catch {
-          // File might not exist, that's okay
+          // Path might not exist, that's okay
         }
       }
     }
@@ -209,6 +209,12 @@ export async function POST(
         hash,
         size: content.length,
       };
+    }
+
+    // Update sync version to notify SSE clients of changes
+    if (filesAdded.length > 0 || filesUpdated.length > 0 || filesDeleted.length > 0) {
+      const syncVersionPath = join(workspacePath, '.emery-sync-version');
+      await writeFile(syncVersionPath, Date.now().toString(), 'utf-8');
     }
 
     return Response.json({

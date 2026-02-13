@@ -25,7 +25,7 @@ export function AutomationsSection({ agent, automations }: AutomationsSectionPro
   const { openModal } = useModal();
 
   const handleAutomationClick = (automation: AutomationConfigurationDTO, index: number) => {
-    openModal('trigger-config', { agent, automation, automationIndex: index });
+    openModal('trigger-config', { agent, mode: 'edit', scheduleIndex: index });
   };
 
   const handleAddAutomation = () => {

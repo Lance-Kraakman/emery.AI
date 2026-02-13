@@ -556,6 +556,8 @@ fn run_rsync_push(local_path: &Path, conn: &SshConnectionInfo) -> Result<(u32, u
             "--exclude", "*.swp",
             "--exclude", "*.swo",
             "--exclude", "*~",
+            "--exclude", ".emery-lock",
+            "--exclude", ".emery-sync-version",
             &format!("{}/", local_path.display()),
             &remote,
         ])
@@ -598,6 +600,8 @@ fn run_rsync_pull(local_path: &Path, conn: &SshConnectionInfo) -> Result<(u32, u
             "--exclude", "*.swp",
             "--exclude", "*.swo",
             "--exclude", "*~",
+            "--exclude", ".emery-lock",
+            "--exclude", ".emery-sync-version",
             &remote,
             &format!("{}/", local_path.display()),
         ])
@@ -1027,6 +1031,28 @@ pub async fn push_workspace(
 
     // Run rsync
     let (files_synced, bytes_transferred) = run_rsync_push(&local_dir, &conn)?;
+
+    // Notify server of changes by writing .emery-sync-version via SSH
+    if files_synced > 0 {
+        let ssh = get_ssh_path();
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
+
+        let _ = Command::new(&ssh)
+            .args([
+                "-i", &conn.key_path.to_string_lossy(),
+                "-p", &conn.port.to_string(),
+                "-o", "StrictHostKeyChecking=no",
+                "-o", "UserKnownHostsFile=/dev/null",
+                &format!("{}@{}", conn.username, conn.host),
+                &format!("echo '{}' > {}/.emery-sync-version", timestamp, conn.remote_path),
+            ])
+            .output();
+
+        log::debug!("push_workspace: Updated .emery-sync-version to {}", timestamp);
+    }
 
     // Clear pending changes
     let store = app
