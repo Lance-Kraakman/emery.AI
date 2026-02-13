@@ -89,6 +89,10 @@ export async function GET(
         let lastSyncVersion: string | null = null;
 
         const sendEvent = (type: string, data: unknown) => {
+          // Check if connection is still open before sending
+          if (request.signal.aborted) {
+            return;
+          }
           const event = {
             type,
             timestamp: new Date().toISOString(),
@@ -156,6 +160,10 @@ export async function GET(
 
         // Poll for changes
         const pollInterval = setInterval(async () => {
+          // Skip if connection closed
+          if (request.signal.aborted) {
+            return;
+          }
           try {
             // Check tasks for changes
             const taskList = await db

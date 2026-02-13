@@ -23,6 +23,7 @@ from emery_agents.tools.capability_registry import CapabilityRegistry
 from emery_agents.tools.knowledge import get_knowledge_base
 
 from ..engine import AgentEngine
+from ..infrastructure.storage import WORKSPACE_STORAGE_PATH
 from ..entities.execution_context import ExecutionContext
 from ..entities.models.plan import Plan
 from ..orchestrators import RuntimeContext, create_session_graph
@@ -162,12 +163,16 @@ class CoordinatorStreamingHandler:
         # Initialize AgentEngine for unified workspace management
         engine = None
         memory_context_str = ""
-        if workspace_type and workspace_id:
+        org_id = str(context.tool_provider.organization_id)
+        if workspace_type and workspace_id and org_id:
             try:
+                # Build proper workspace path: {WORKSPACE_STORAGE_PATH}/{org_id}/{workspace_type}
+                # AgentEngine will append workspace_id to create full path
+                workspace_base = WORKSPACE_STORAGE_PATH / org_id / workspace_type
                 engine = AgentEngine(
                     workspace_id=workspace_id,
                     workspace_type=workspace_type,
-                    base_path=Path("/tmp/workspace"),
+                    base_path=workspace_base,
                 )
                 engine.initialize()
 
