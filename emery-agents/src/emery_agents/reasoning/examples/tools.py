@@ -17,16 +17,22 @@ def _tool_example(
     tool_args: dict[str, Any] | None = None,
     expected_output: str | None = None,
 ) -> dspy.Example:
-    """Create a tool selection example with optional args and output.
+    """Create a tool selection example with all executor input fields.
+
+    The executor signature is: step_description, context -> result
+    Examples must include all InputFields to avoid DSPy warnings.
 
     Args:
-        request: Natural language request (INPUT) - uses 'request' to match PLANNING_DEMOS
+        request: Natural language request - mapped to step_description for KNN matching
         tool_id: Tool to use for this task (OUTPUT)
         tool_args: Example input arguments for the tool
         expected_output: Example of what the tool returns
     """
     example_dict: dict[str, Any] = {
-        "request": request,
+        # Inputs (match executor signature)
+        "step_description": request,  # KNN matches on this field
+        "context": "",  # Runtime context - empty in demos
+        # Outputs
         "tool_id": tool_id,
     }
     if tool_args:
@@ -34,7 +40,7 @@ def _tool_example(
     if expected_output:
         example_dict["expected_output"] = expected_output
 
-    return dspy.Example(**example_dict).with_inputs("request")
+    return dspy.Example(**example_dict).with_inputs("step_description", "context")
 
 
 # =============================================================================
