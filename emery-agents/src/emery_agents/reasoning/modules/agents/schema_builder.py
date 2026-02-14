@@ -80,7 +80,7 @@ class SchemaBuilderModule(dspy.Module):  # type: ignore[misc]
             workspace_patterns=workspace_patterns,
         )
 
-        schema = result.schema
+        schema = result.table_schema
 
         # Optionally create using tools
         if self.auto_create and self.creator:

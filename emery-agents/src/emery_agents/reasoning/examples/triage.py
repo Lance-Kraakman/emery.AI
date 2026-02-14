@@ -21,21 +21,27 @@ def _example(
     external_services: list[str] | None = None,
     response: str = "",
 ) -> dspy.Example:
-    """Create a triage example with task (input) and routing outputs.
+    """Create a triage example with all input fields and routing outputs.
 
-    Only `task` is marked as input for KNN matching.
+    All signature InputFields must be present to avoid DSPy warnings.
+    Only `task` varies per demo; context fields are empty (runtime values).
     """
     return dspy.Example(
+        # Inputs (all signature InputFields must be present)
         task=task,
+        workspace_context="",  # Runtime context - empty in demos
+        memory_context="",     # Runtime context - empty in demos
+        image_context="",      # Runtime context - empty in demos
+        # Outputs
         execution_mode=execution_mode,
         intent=intent,
         reasoning=reasoning,
         approach=approach,
         entities=entities or [],
         external_services=external_services or [],
-        context_notes="",  # Always empty in examples
+        context_notes="",
         response=response,
-    ).with_inputs("task")
+    ).with_inputs("task", "workspace_context", "memory_context", "image_context")
 
 
 # =============================================================================

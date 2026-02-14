@@ -266,9 +266,6 @@ EXAMPLE_NEEDS_CLARIFICATION = _example(
 )
 
 
-# =============================================================================
-# Collected demos for export
-# =============================================================================
 PLANNING_DEMOS: list[dspy.Example] = [
     # Skill execution (highest priority for @skill: requests)
     EXAMPLE_EXECUTE_SKILL,
@@ -284,4 +281,12 @@ PLANNING_DEMOS: list[dspy.Example] = [
     EXAMPLE_RESEARCH,
     # Clarification
     EXAMPLE_NEEDS_CLARIFICATION,
+]
+
+# Autonomous demos: PlanOutput directly (not wrapped in PlanOrQuestionsOutput)
+# Derived from PLANNING_DEMOS, excludes clarification examples
+AUTONOMOUS_PLANNING_DEMOS: list[dspy.Example] = [
+    dspy.Example(request=ex.request, result=ex.result.plan).with_inputs("request")
+    for ex in PLANNING_DEMOS
+    if ex.result.plan is not None
 ]

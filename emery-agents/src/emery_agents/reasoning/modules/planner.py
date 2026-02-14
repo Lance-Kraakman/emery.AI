@@ -19,21 +19,26 @@ from typing import Any
 import dspy
 from dspy import LabeledFewShot
 
-logger = logging.getLogger(__name__)
-
-from emery_agents.reasoning.examples.planning import PLANNING_DEMOS
+from emery_agents.reasoning.examples.planning import (
+    AUTONOMOUS_PLANNING_DEMOS,
+    PLANNING_DEMOS,
+)
 from emery_agents.reasoning.examples.skill_templates import SKILL_TEMPLATE_DEMOS
 from emery_agents.reasoning.signatures.planning import (
     AnalyzeTask,
     CreatePlan,
+    CreatePlanAutonomous,
     CreateSkillTemplate,
     PlanOrQuestionsOutput,
+    PlanOutput,
     PlanReflection,
     ReflectOnPlan,
     SkillInputSpec,
     SkillOutputSpec,
     SkillTemplatePlanOutput,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class PlannerModule(dspy.Module):  # type: ignore[misc]
@@ -101,6 +106,21 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         # Reflexion module for extended thinking - critiques and improves plans
         self.reflector = dspy.ChainOfThought(ReflectOnPlan)
 
+        # Autonomous planners: use CreatePlanAutonomous (no questions allowed)
+        # These planners output PlanOutput directly, not PlanOrQuestionsOutput
+        # Use AUTONOMOUS_PLANNING_DEMOS which have PlanOutput structure (not wrapped)
+        base_autonomous = dspy.ChainOfThought(CreatePlanAutonomous)
+        self.autonomous_planner = LabeledFewShot(k=5).compile(
+            base_autonomous, trainset=AUTONOMOUS_PLANNING_DEMOS
+        )
+
+        base_autonomous_complex = dspy.ReAct(
+            CreatePlanAutonomous, tools=self.external_tools, max_iters=4
+        )
+        self.autonomous_complex_planner = LabeledFewShot(k=5).compile(
+            base_autonomous_complex, trainset=AUTONOMOUS_PLANNING_DEMOS
+        )
+
     def forward(
         self,
         request: str,
@@ -116,6 +136,7 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         retrieved_knowledge: str = "",
         retrieved_strategies: str = "",
         use_complex_planner: bool = False,
+        autonomous_mode: bool = False,
     ) -> PlanOrQuestionsOutput:
         """
         Generate a plan or clarifying questions for a user request.
@@ -143,7 +164,8 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         Returns:
             PlanOrQuestionsOutput with either a plan or clarifying questions
         """
-        has_delegation = self._has_delegation_phrase(request)
+        # Autonomous mode (gRPC Tasks) forces delegation to skip clarifying questions
+        has_delegation = autonomous_mode or self._has_delegation_phrase(request)
 
         # Use pre-computed triage analysis if available, otherwise run AnalyzeTask
         if triage_analysis and triage_analysis.get("intent"):
@@ -186,11 +208,24 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
             or bool(self.external_tools)
         )
 
-        planner = self.complex_planner if needs_external_data else self.standard_planner
-        logger.debug(
-            f"Using {'complex' if needs_external_data else 'standard'} planner "
-            f"(external_services={external_services})"
-        )
+        # Route to autonomous planners when autonomous_mode=True
+        # These use CreatePlanAutonomous signature which outputs PlanOutput directly
+        if autonomous_mode:
+            planner = (
+                self.autonomous_complex_planner
+                if needs_external_data
+                else self.autonomous_planner
+            )
+            logger.debug(
+                f"Using autonomous {'complex' if needs_external_data else 'standard'} planner "
+                f"(no questions allowed)"
+            )
+        else:
+            planner = self.complex_planner if needs_external_data else self.standard_planner
+            logger.debug(
+                f"Using {'complex' if needs_external_data else 'standard'} planner "
+                f"(external_services={external_services})"
+            )
 
         # Call planner with consolidated fields
         result = planner(
@@ -201,6 +236,15 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
             conversation_history=conversation_history,
             configured_tools=configured_tools,
         )
+
+        # Handle result type based on planner used
+        if autonomous_mode:
+            # Autonomous planners return PlanOutput directly - wrap for consistency
+            plan_output: PlanOutput = result.result
+            plan_result = PlanOrQuestionsOutput(plan=plan_output, questions=None)
+            # Skip reflexion for autonomous mode - already made sensible defaults
+            self._ensure_valid_output(plan_result)
+            return plan_result
 
         plan_result = result.result
 
