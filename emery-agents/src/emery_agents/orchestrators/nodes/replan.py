@@ -47,7 +47,6 @@ from ...services.execution.replan_handler import (
     ReplanHandler,
     ReplanNeedsClarificationError,
 )
-from ...services.plan_service import PlanService
 from ..runtime import RuntimeContext
 from ..state import PlanExecuteState
 
@@ -252,7 +251,7 @@ async def _handle_step_failure(
         return {"awaiting_input": "recovery", "events": events}
 
     try:
-        plan_service = PlanService()
+        plan_service = runtime.engine.planner
         recovery = plan_service.analyze_step_failure(
             failed_step=failed_step,
             error_message=error,

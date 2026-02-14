@@ -34,7 +34,6 @@ from ...services.execution.events import (
     PlanCreatedEvent,
     PlanningStartedEvent,
 )
-from ...services.plan_service import PlanService
 from ...tools.integrations.dynamic_agent import DynamicAgentTool
 from ...tools.integrations.dynamic_skill import DynamicSkillTool
 from ...tools.tool_modes import ToolMode, filter_tools_for_mode
@@ -395,6 +394,12 @@ async def generate_plan_node(
     capability_registry = runtime.capability_registry
     conversation_history = runtime.conversation_history
 
+    # Get names of ALL execution tools (including write tools like write_file, bash)
+    # Define early so it's available for task enrichment below
+    all_execution_tool_names = [
+        getattr(t, "name", str(t)) for t in tools if hasattr(t, "name")
+    ]
+
     # Read serializable session config from state
     api_key = state.get("api_key")
     org_id = state.get("org_id")
@@ -474,6 +479,20 @@ async def generate_plan_node(
             f"and conversation context.]"
         )
 
+    # Add execution tools info so planner knows what tools to set in tool_call field
+    # Filter to include only workspace tools (write_file, bash, etc.) - these are the ones
+    # the planner needs to explicitly specify since they're not in planning_tools
+    workspace_tool_names = [
+        name for name in all_execution_tool_names
+        if name in ("write_file", "bash", "read_file", "edit_file", "glob_files", "grep_content")
+    ]
+    if workspace_tool_names:
+        enriched_task = (
+            f"{enriched_task}\n\n"
+            f"[EXECUTION TOOLS: The following workspace tools are available for execution: {', '.join(workspace_tool_names)}. "
+            f"When your plan step uses one of these tools, set tool_call to the exact tool name (e.g., tool_call='write_file').]"
+        )
+
     # Construct synthetic triage_analysis when triage was skipped (@mention path)
     if (
         pre_selected_skill or pre_selected_agent or pre_selected_tool
@@ -494,8 +513,9 @@ async def generate_plan_node(
     events: list[Any] = []
 
     logger.info("Creating plan (planner handles clarification if needed)")
+    logger.info(f"Available execution tools: {all_execution_tool_names}")
 
-    # Filter tools to read-only for planning
+    # Filter tools to read-only for planning (planner can only CALL these)
     planning_tools = filter_tools_for_mode(tools, ToolMode.PLANNING)
 
     # Create external discovery tools for ReAct planner
@@ -620,8 +640,8 @@ async def generate_plan_node(
         else None
     )
 
-    # Create PlanService with discovery tools for ReAct planner
-    plan_service = PlanService(model_provider=None, discovery_tools=discovery_tools)
+    # Use workspace-scoped planner from engine
+    plan_service = runtime.engine.planner
 
     try:
         result = await plan_service.generate_plan(
@@ -645,6 +665,8 @@ async def generate_plan_node(
             retrieved_patterns=retrieved_patterns,
             retrieved_knowledge=retrieved_knowledge,
             retrieved_strategies=retrieved_strategies,
+            autonomous_mode=runtime.autonomous_mode,
+            discovery_tools=discovery_tools,
         )
     except Exception as e:
         logger.error(f"Plan generation failed: {e}")
@@ -701,10 +723,17 @@ async def generate_plan_node(
         except Exception as e:
             logger.warning(f"Failed to save plan to filesystem: {e}")
 
-    # Auto-approve low-risk plans (additive only, no external OAuth, no deletions)
+    # Auto-approve when:
+    # 1. autonomous_mode is True (task API - always auto-approve)
+    # 2. OR plan is low-risk (interactive but simple plan)
     # Skip auto-approve for template generation — the GeneratePlan RPC expects PlanCreatedEvent
-    if _is_low_risk_plan(plan) and not is_template_generation:
-        logger.info(f"Plan {plan.id} auto-approved (low-risk, {len(plan.steps)} steps)")
+    should_auto_approve = (
+        runtime.autonomous_mode or _is_low_risk_plan(plan)
+    ) and not is_template_generation
+
+    if should_auto_approve:
+        reason = "autonomous_mode" if runtime.autonomous_mode else "low-risk"
+        logger.info(f"Plan {plan.id} auto-approved ({reason}, {len(plan.steps)} steps)")
         approved_plan = plan.approve().start_execution()
         ledger.record_plan_approved()
         # Skip PlanCreatedEvent for auto-approved plans — it triggers approval UI flicker

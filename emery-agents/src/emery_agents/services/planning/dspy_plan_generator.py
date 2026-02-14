@@ -68,35 +68,35 @@ class DSPyPlanGenerator:
     4. Converts DSPy output to PlanGenerationResult
     """
 
-    def __init__(
-        self,
-        discovery_tools: list[Tool] | None = None,
-    ) -> None:
-        self.discovery_tools = discovery_tools or []
+    def __init__(self) -> None:
         self._last_strategy_guidance: str = ""
 
-        # Initialize planner modules (will be configured with model on each call)
+        # Planner modules cached per discovery_tools config
         self._planner: PlannerModule | None = None
         self._template_planner: SkillTemplatePlannerModule | None = None
+        self._current_tools_hash: int = 0
 
-    def _get_planner(self) -> PlannerModule:
-        """Get or create planner module."""
-        if self._planner is None:
-            self._planner = PlannerModule(external_tools=self.discovery_tools)
+    def _get_planner(self, discovery_tools: list[Tool] | None = None) -> PlannerModule:
+        """Get or create planner module with current discovery_tools."""
+        tools = discovery_tools or []
+        tools_hash = hash(tuple(t.name for t in tools)) if tools else 0
+        if self._planner is None or tools_hash != self._current_tools_hash:
+            self._planner = PlannerModule(external_tools=tools)
+            self._current_tools_hash = tools_hash
         return self._planner
 
-    def _get_template_planner(self) -> SkillTemplatePlannerModule:
-        """Get or create skill template planner module."""
+    def _get_template_planner(self, discovery_tools: list[Tool] | None = None) -> SkillTemplatePlannerModule:
+        """Get or create skill template planner module with current discovery_tools."""
+        tools = discovery_tools or []
         if self._template_planner is None:
-            self._template_planner = SkillTemplatePlannerModule(
-                external_tools=self.discovery_tools
-            )
+            self._template_planner = SkillTemplatePlannerModule(external_tools=tools)
         return self._template_planner
 
     async def generate(
         self,
         request: PlanGenerationRequest,
         strategy_service: StrategyAccumulationService | None = None,
+        discovery_tools: list[Tool] | None = None,
     ) -> PlanGenerationResult:
         """Generate plan using DSPy PlannerModule. Returns plan or clarifying questions."""
         # ACE: Get strategy guidance from past successful executions
@@ -123,20 +123,21 @@ class DSPyPlanGenerator:
 
         # Route to appropriate module based on template generation mode
         if request.is_template_generation and request.skill_inputs:
-            return await self._generate_template(request, lm, strategy_guidance)
+            return await self._generate_template(request, lm, strategy_guidance, discovery_tools)
         else:
-            return await self._generate_plan(request, lm, strategy_guidance)
+            return await self._generate_plan(request, lm, strategy_guidance, discovery_tools)
 
     async def _generate_plan(
         self,
         request: PlanGenerationRequest,
         lm: Any,
         strategy_guidance: str,
+        discovery_tools: list[Tool] | None = None,
     ) -> PlanGenerationResult:
         """Generate regular plan using PlannerModule."""
         logger.info("📋 Generating plan using DSPy PlannerModule")
 
-        planner = self._get_planner()
+        planner = self._get_planner(discovery_tools)
         workspace_context = self._format_workspace_context(request.workspace)
         capability_guidance = self._get_capability_guidance(request)
         conversation_history = format_conversation_history(request.conversation_history)
@@ -156,6 +157,7 @@ class DSPyPlanGenerator:
                     retrieved_patterns=request.retrieved_patterns,
                     retrieved_knowledge=request.retrieved_knowledge,
                     retrieved_strategies=request.retrieved_strategies,
+                    autonomous_mode=request.autonomous_mode,
                 )
             record_from_lm(lm, request.token_accumulator.get_llm_tracker())
         except Exception as e:
@@ -192,11 +194,12 @@ class DSPyPlanGenerator:
         request: PlanGenerationRequest,
         lm: Any,
         strategy_guidance: str,
+        discovery_tools: list[Tool] | None = None,
     ) -> PlanGenerationResult:
         """Generate skill template using SkillTemplatePlannerModule."""
         logger.info("📋 Generating skill template using SkillTemplatePlannerModule")
 
-        template_planner = self._get_template_planner()
+        template_planner = self._get_template_planner(discovery_tools)
         workspace_context = self._format_workspace_context(request.workspace)
         capability_guidance = self._get_capability_guidance(request)
         conversation_history = format_conversation_history(request.conversation_history)

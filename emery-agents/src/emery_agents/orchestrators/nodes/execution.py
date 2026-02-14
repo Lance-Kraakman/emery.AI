@@ -32,7 +32,6 @@ from ...services.execution.events import (
 from ...services.execution.plan_step_executor import PlanStepExecutor
 from ...services.execution.step_executor import StepExecutor
 from ...services.memory import create_memory_crud
-from ...services.plan_service import PlanService
 from ...tools.execution.skill import HumanSkillAwaitingException
 from ...tools.loader import UnifiedToolLoader
 from ..runtime import RuntimeContext
@@ -105,7 +104,7 @@ async def execute_step_node(
         }
 
         # Mark step as completed
-        plan_service = PlanService()
+        plan_service = runtime.engine.planner
         plan = await plan_service.update_step_status(
             plan, completed_step_id, "completed", result=result_summary
         )
@@ -153,7 +152,7 @@ async def execute_step_node(
     )
 
     # Mark step as in progress
-    plan_service = PlanService()
+    plan_service = runtime.engine.planner
     plan = await plan_service.update_step_status(plan, step.step_id, "in_progress")
 
     # Build extra tools (e.g., memory CRUD)
