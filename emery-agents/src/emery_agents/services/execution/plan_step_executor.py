@@ -73,20 +73,8 @@ def _build_step_prompt(
             ["", "## Original User Request (contains input data)", display_task]
         )
 
-    parts.extend(
-        [
-            "",
-            "## Before You Act",
-            "",
-            "You have discovery tools (`workspace_overview`, `system_research`, `search_capabilities`, `search_external`) ",
-            "and CRUD tools for listing, reading, creating, updating, and deleting resources.",
-            "",
-            "1. Discover what exists — use `workspace_overview` or list operations to find resources and IDs",
-            "2. Understand schemas — discover field names and types before creating or populating data",
-            "3. Use discovered info directly — do not ask the user for things you can look up",
-            "4. Chain discoveries — find the table, then list its fields, then populate rows",
-        ]
-    )
+    # No operational guidance here - tool selection comes from KNNFewShot examples
+    # The examples teach which tool to use for each task type
 
     if current_step.phase_name:
         parts.extend(["", f"## Phase: {current_step.phase_name}"])
@@ -476,13 +464,32 @@ class PlanStepExecutor:
         if current_step.tool_call:
             self._ensure_tool_available(current_step.tool_call)
 
+        # Filter tools when step specifies a tool_call (reduces token usage)
+        if current_step.tool_call:
+            step_tool = next(
+                (t for t in self._all_tools if getattr(t, "name", None) == current_step.tool_call),
+                None,
+            )
+            if step_tool:
+                step_tools = [step_tool]
+                logger.info(f"Filtered to single tool: {current_step.tool_call}")
+            else:
+                # Tool not found after ensure - fall back to all tools
+                logger.warning(
+                    f"Tool {current_step.tool_call} not found after ensure, using all tools"
+                )
+                step_tools = self._all_tools
+        else:
+            # No specific tool - executor chooses from all
+            step_tools = self._all_tools
+
         try:
             # Get DSPy LM for execution
             lm = get_dspy_lm(org_model=self.org_model)
 
-            # Create executor with tools
+            # Create executor with filtered tools
             executor = ExecutorModule(
-                execution_tools=self._all_tools,
+                execution_tools=step_tools,
                 max_iters=self.max_steps,
             )
 

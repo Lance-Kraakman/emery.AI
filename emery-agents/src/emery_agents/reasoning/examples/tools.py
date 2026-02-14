@@ -262,10 +262,10 @@ INTERNAL_TOOL_EXAMPLES: list[dspy.Example] = [
 
 
 # =============================================================================
-# FILESYSTEM TOOLS - Documents, Files
+# ATTACHMENT TOOLS - Database documents/files (NOT workspace files)
 # =============================================================================
 
-FILESYSTEM_TOOL_EXAMPLES: list[dspy.Example] = [
+ATTACHMENT_TOOL_EXAMPLES: list[dspy.Example] = [
     # --- Document CRUD ---
     _tool_example(
         request="Create a new document called 'Meeting Notes'",
@@ -530,15 +530,235 @@ INTEGRATION_TOOL_EXAMPLES: list[dspy.Example] = [
 
 
 # =============================================================================
+# WORKSPACE TOOLS - Agent workspace file operations (write_file, read_file, etc.)
+# =============================================================================
+
+WORKSPACE_TOOL_EXAMPLES: list[dspy.Example] = [
+    # --- write_file ---
+    _tool_example(
+        request="Write 'hello world' to a file called greeting.txt",
+        tool_id="write_file",
+        tool_args={"path": "greeting.txt", "content": "hello world"},
+        expected_output="Successfully wrote greeting.txt (1 lines, 11 bytes)",
+    ),
+    _tool_example(
+        request="Create a new Python file with a hello function",
+        tool_id="write_file",
+        tool_args={"path": "hello.py", "content": "def hello():\n    print('Hello')"},
+        expected_output="Successfully wrote hello.py (2 lines, 32 bytes)",
+    ),
+    _tool_example(
+        request="Save the JSON data to output.json",
+        tool_id="write_file",
+        tool_args={"path": "output.json", "content": '{"status": "complete"}'},
+        expected_output="Successfully wrote output.json",
+    ),
+    _tool_example(
+        request="Write the report to file.txt",
+        tool_id="write_file",
+        tool_args={"path": "file.txt", "content": "Report content here..."},
+        expected_output="Successfully wrote file.txt",
+    ),
+
+    # --- read_file ---
+    _tool_example(
+        request="Read the contents of config.json",
+        tool_id="read_file",
+        tool_args={"path": "config.json"},
+        expected_output='1: {\n2:   "debug": true\n3: }',
+    ),
+    _tool_example(
+        request="Show me what's in the README file",
+        tool_id="read_file",
+        tool_args={"path": "README.md"},
+        expected_output="1: # Project\n2: Description here...",
+    ),
+    _tool_example(
+        request="Look at lines 50-100 of main.py",
+        tool_id="read_file",
+        tool_args={"path": "main.py", "start_line": 50, "max_lines": 50},
+    ),
+    _tool_example(
+        request="Open and display the log file",
+        tool_id="read_file",
+        tool_args={"path": "app.log"},
+    ),
+
+    # --- edit_file ---
+    _tool_example(
+        request="Change the function name from old_name to new_name in main.py",
+        tool_id="edit_file",
+        tool_args={
+            "path": "main.py",
+            "old_content": "def old_name():",
+            "new_content": "def new_name():",
+        },
+        expected_output="Successfully edited main.py",
+    ),
+    _tool_example(
+        request="Fix the typo 'debg' to 'debug' in the config file",
+        tool_id="edit_file",
+        tool_args={
+            "path": "config.json",
+            "old_content": '"debg": true',
+            "new_content": '"debug": true',
+        },
+        expected_output="Successfully edited config.json",
+    ),
+    _tool_example(
+        request="Update the version number from 1.0 to 2.0",
+        tool_id="edit_file",
+        tool_args={
+            "path": "package.json",
+            "old_content": '"version": "1.0"',
+            "new_content": '"version": "2.0"',
+        },
+    ),
+
+    # --- glob (glob_files) ---
+    _tool_example(
+        request="Find all Python files in the project",
+        tool_id="glob_files",
+        tool_args={"pattern": "**/*.py"},
+        expected_output="src/main.py\nsrc/utils.py\ntests/test_main.py",
+    ),
+    _tool_example(
+        request="List all JSON config files",
+        tool_id="glob_files",
+        tool_args={"pattern": "**/*.json"},
+        expected_output="config.json\npackage.json",
+    ),
+    _tool_example(
+        request="What files are in this workspace?",
+        tool_id="glob_files",
+        tool_args={"pattern": "*"},
+        expected_output="README.md\nmain.py\nconfig.json",
+    ),
+
+    # --- grep (grep_content) ---
+    _tool_example(
+        request="Find where the User class is defined",
+        tool_id="grep_content",
+        tool_args={"pattern": "class User", "file_pattern": "*.py"},
+        expected_output="models/user.py:15:class User:",
+    ),
+    _tool_example(
+        request="Search for TODO comments in the code",
+        tool_id="grep_content",
+        tool_args={"pattern": "TODO"},
+        expected_output="main.py:42:# TODO: implement this",
+    ),
+    _tool_example(
+        request="Find all API endpoint definitions",
+        tool_id="grep_content",
+        tool_args={"pattern": "@app.route", "file_pattern": "*.py"},
+    ),
+
+    # --- bash (for commands, not file operations) ---
+    _tool_example(
+        request="Run the tests",
+        tool_id="bash",
+        tool_args={"command": "pytest"},
+        expected_output="===== 5 passed in 0.5s =====",
+    ),
+    _tool_example(
+        request="Install the dependencies",
+        tool_id="bash",
+        tool_args={"command": "pip install -r requirements.txt"},
+        expected_output="Successfully installed packages",
+    ),
+    _tool_example(
+        request="Check the git status",
+        tool_id="bash",
+        tool_args={"command": "git status"},
+        expected_output="On branch main\nnothing to commit",
+    ),
+    _tool_example(
+        request="Build the project",
+        tool_id="bash",
+        tool_args={"command": "npm run build"},
+    ),
+    _tool_example(
+        request="Start the development server",
+        tool_id="bash",
+        tool_args={"command": "npm run dev"},
+    ),
+    # Build/test tools
+    _tool_example(
+        request="Run the linter",
+        tool_id="bash",
+        tool_args={"command": "ruff check ."},
+        expected_output="All checks passed!",
+    ),
+    _tool_example(
+        request="Format the code",
+        tool_id="bash",
+        tool_args={"command": "black ."},
+        expected_output="reformatted 3 files",
+    ),
+    _tool_example(
+        request="Check types with mypy",
+        tool_id="bash",
+        tool_args={"command": "mypy ."},
+        expected_output="Success: no issues found",
+    ),
+    # File operations via bash
+    _tool_example(
+        request="Make the script executable",
+        tool_id="bash",
+        tool_args={"command": "chmod +x script.sh"},
+        expected_output="",
+    ),
+    _tool_example(
+        request="Extract the archive",
+        tool_id="bash",
+        tool_args={"command": "tar -xzf archive.tar.gz"},
+    ),
+    _tool_example(
+        request="List directory contents",
+        tool_id="bash",
+        tool_args={"command": "ls -la"},
+        expected_output="total 24\ndrwxr-xr-x  5 user  staff   160 Jan 15 10:00 .",
+    ),
+    # Package management
+    _tool_example(
+        request="List installed packages",
+        tool_id="bash",
+        tool_args={"command": "pip list"},
+        expected_output="Package    Version\n---------- -------\npip        23.0",
+    ),
+    _tool_example(
+        request="Create a virtual environment",
+        tool_id="bash",
+        tool_args={"command": "python -m venv .venv"},
+    ),
+    # Git operations
+    _tool_example(
+        request="Commit the changes",
+        tool_id="bash",
+        tool_args={"command": "git commit -m 'Update files'"},
+        expected_output="[main abc1234] Update files\n 2 files changed",
+    ),
+    _tool_example(
+        request="Pull the latest changes",
+        tool_id="bash",
+        tool_args={"command": "git pull"},
+        expected_output="Already up to date.",
+    ),
+]
+
+
+# =============================================================================
 # COMBINED EXPORTS
 # =============================================================================
 
 # Curated examples - high quality with full args/output
 CURATED_TOOL_EXAMPLES: list[dspy.Example] = (
     INTERNAL_TOOL_EXAMPLES
-    + FILESYSTEM_TOOL_EXAMPLES
+    + ATTACHMENT_TOOL_EXAMPLES
     + SYSTEM_AGENT_EXAMPLES
     + INTEGRATION_TOOL_EXAMPLES
+    + WORKSPACE_TOOL_EXAMPLES
 )
 
 # For backwards compatibility - all examples combined
