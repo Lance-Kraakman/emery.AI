@@ -29,8 +29,9 @@ from emery_agents.tools.knowledge import get_knowledge_base, set_knowledge_base
 from emery_agents.tools.loader import UnifiedToolLoader
 from emery_agents.tools.provider import ToolProvider
 
+from ..engine import AgentEngine
 from ..entities.models.plan import Plan, SkillInputDefinition, SkillOutputDefinition
-from ..infrastructure.storage import WorkspaceType, create_workspace_storage
+from ..infrastructure.storage import WORKSPACE_STORAGE_PATH, WorkspaceType, create_workspace_storage
 from ..orchestrators.nodes.planning import generate_plan_node
 from ..orchestrators.runtime import RuntimeContext
 from ..orchestrators.state import PlanExecuteState
@@ -763,12 +764,23 @@ class ChatProcessingServiceImplementation(
 
             yield _make_progress("Creating plan...", "planning")
 
+            # Create user engine for plan generation (skill template plans)
+            org_id_str = str(tool_provider.organization_id)
+            workspace_base = WORKSPACE_STORAGE_PATH / org_id_str / "sessions"
+            engine = AgentEngine(
+                workspace_id=session_id,
+                workspace_type="sessions",
+                base_path=workspace_base,
+            )
+            engine.initialize()
+
             # Build RuntimeContext for non-serializable objects
             runtime = RuntimeContext(
+                engine=engine,
                 tools=[],
                 managed_agents=managed_agents,
                 api_key=tool_provider.api_key,
-                org_id=str(tool_provider.organization_id),
+                org_id=org_id_str,
                 org_model=request.model or None,
                 capability_registry=capability_registry,
                 planning_registry=self.planning_registry,

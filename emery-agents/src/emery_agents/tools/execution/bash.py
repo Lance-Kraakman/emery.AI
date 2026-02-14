@@ -58,7 +58,7 @@ def create_bash_tool(
         WORKSPACE STRUCTURE:
         /workspace/               <- Current working directory (YOUR FILES ARE HERE!)
         ├── [your files]          <- Documents, code, data synced from local folder
-        ├── .agent/               <- Agent config & memory (don't modify)
+        ├── .engine/              <- Agent config & memory (don't modify)
         ├── history/              <- Execution logs (read-only)
         └── scratch/              <- Your working space for outputs
             ├── context/          <- Store processed data here
@@ -160,5 +160,9 @@ def create_bash_tool(
         except Exception as e:
             logger.exception(f"[BASH] Command failed: {e}")
             return f"Error executing command: {str(e)}"
+
+    # Add tool attributes for DSPy/capability registry compatibility
+    bash.name = "bash"  # type: ignore[attr-defined]
+    bash.description = "Execute bash commands in the agent's isolated workspace"  # type: ignore[attr-defined]
 
     return bash
