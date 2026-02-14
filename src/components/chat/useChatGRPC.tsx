@@ -1137,7 +1137,7 @@ export function useChatGRPC(
   }
 
   // Human task completion function
-  const submitHumanTask = async (outputs: Record<string, string>) => {
+  const submitHumanTask = async (outputs: Record<string, unknown>) => {
     if (!humanTask) {
       logger.debug('No human task to submit')
       return

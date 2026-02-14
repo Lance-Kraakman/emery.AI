@@ -152,6 +152,8 @@ export interface HumanSkillOutput {
   name: string
   type: string
   description?: string
+  /** Table field type for rich rendering (e.g., 'email-thread', 'file', 'date') */
+  fieldType?: string
 }
 
 /**
@@ -160,7 +162,9 @@ export interface HumanSkillOutput {
 export interface HumanSkillInput {
   name: string
   type: string
-  value: string
+  value: any  // Changed from string to any to support complex types like email threads
+  /** Table field type for rich rendering (e.g., 'email-thread', 'file', 'date') */
+  fieldType?: string
 }
 
 /**

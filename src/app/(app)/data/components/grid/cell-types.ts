@@ -12,6 +12,7 @@ import type {
   FileArrayFieldValue,
   DocumentArrayFieldValue,
   RelationArrayFieldValue,
+  EmailThreadFieldValue,
   FieldValue
 } from '@/ddd/domain/tables/value-objects/field-values'
 import type { EmbeddingFieldValue } from '@/components/tables/fields/EmbeddingField'
@@ -112,3 +113,13 @@ export interface JSONCellConfiguration extends BaseCellConfiguration {
   // JSON-specific config would go here
 }
 export type JSONCellProps = CellProps<JSONValue, JSONCellConfiguration>
+
+/**
+ * Email thread field cell types
+ * AIDEV-NOTE: EmailThreadField expects EmailThreadFieldValue with messages array
+ */
+export type EmailThreadValue = EmailThreadFieldValue | null | undefined
+export interface EmailThreadCellConfiguration extends BaseCellConfiguration {
+  // Email thread-specific config would go here
+}
+export type EmailThreadCellProps = CellProps<EmailThreadValue, EmailThreadCellConfiguration>

@@ -284,6 +284,7 @@ export function OutputDefinitionsSection({
                   {/* Format-specific */}
                   <SelectItem value="email">Email</SelectItem>
                   <SelectItem value="phone">Phone</SelectItem>
+                  <SelectItem value="email-thread">Email Thread</SelectItem>
                   {/* Select types */}
                   <SelectItem value="single-select">Single Select</SelectItem>
                   <SelectItem value="multi-select">Multi Select</SelectItem>

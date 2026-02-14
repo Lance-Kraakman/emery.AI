@@ -58,6 +58,7 @@ const fieldTypeIcons: Record<FieldType | 'id', React.ReactNode> = {
   'email': <Mail className="h-3.5 w-3.5" />,
   'phone': <Phone className="h-3.5 w-3.5" />,
   'json': <Braces className="h-3.5 w-3.5" />,
+  'email-thread': <Mail className="h-3.5 w-3.5" />,
 };
 
 // Human-readable type labels
@@ -79,6 +80,7 @@ const fieldTypeLabels: Record<FieldType | 'id', string> = {
   'email': 'Email',
   'phone': 'Phone',
   'json': 'JSON',
+  'email-thread': 'Email Thread',
 };
 
 interface FieldOption {

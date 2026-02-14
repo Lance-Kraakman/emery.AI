@@ -26,7 +26,8 @@ export type FieldType =
   | 'created-at'
   | 'email'
   | 'phone'
-  | 'json';  // Stores arbitrary JSON data (classification results, structured outputs, etc.)
+  | 'json'           // Stores arbitrary JSON data (classification results, structured outputs, etc.)
+  | 'email-thread';  // Stores email conversation threads with messages array
 
 export interface EmbeddingFieldMetadata {
   embeddingSize: 384 | 768 | 1536 | 3072;
@@ -81,6 +82,14 @@ export interface FileFieldConfig {
 
 export interface PhoneFieldConfig {
   defaultCountryCode?: string; // e.g., "+1", "+44"
+}
+
+// AIDEV-NOTE: Email thread field configuration for storing email conversations
+export interface EmailThreadFieldConfig {
+  connectionId?: string;        // Pipedream connection ID for reply capability
+  allowReplies?: boolean;       // Enable reply composer in UI
+  syncEnabled?: boolean;        // Auto-sync new messages via external events
+  displayMode?: 'thread' | 'latest-only';  // How to display in compact view
 }
 
 // AIDEV-NOTE: Field metadata stored as flexible Record for JSON compatibility
@@ -282,7 +291,8 @@ export class TableField {
       'created-at': 'TIMESTAMP WITH TIME ZONE',
       'email': 'TEXT',
       'phone': 'TEXT',
-      'json': 'JSONB'  // Arbitrary JSON data (classification results, structured outputs)
+      'json': 'JSONB',  // Arbitrary JSON data (classification results, structured outputs)
+      'email-thread': 'JSONB'  // Email conversation thread with messages array
     };
 
     return typeMapping[this._type];
@@ -553,4 +563,12 @@ export class TableField {
  */
 export function isArrayFieldType(type: FieldType | string): boolean {
   return ['relation', 'file', 'document', 'multi-select'].includes(type);
+}
+
+/**
+ * Check if a field type stores complex nested data (email-thread, json)
+ * These fields store JSONB with nested structures.
+ */
+export function isComplexFieldType(type: FieldType | string): boolean {
+  return ['email-thread', 'json'].includes(type);
 }

@@ -21,9 +21,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { RefreshCw, Clock, CheckCircle, XCircle, AlertCircle, User, Loader2 } from 'lucide-react';
+import { FieldRenderer } from '@/components/human-tasks/FieldRenderer';
 import { getTasks, getMyAwaitingTasks, getAwaitingHumanTasks, completeHumanStep } from '@/app/actions/tasks';
 import { getSkill } from '@/app/actions/skills';
 import type { TaskDTO } from '@/app/mappers/task-mapper';
@@ -70,10 +69,10 @@ interface HumanStepDialogProps {
 }
 
 function HumanStepDialog({ task, isOpen, onClose, onComplete }: HumanStepDialogProps) {
-  const [outputs, setOutputs] = useState<Record<string, string>>({});
+  const [outputs, setOutputs] = useState<Record<string, unknown>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [skillInstructions, setSkillInstructions] = useState<string>('');
-  const [outputSchema, setOutputSchema] = useState<Array<{ name: string; type?: string }>>([]);
+  const [outputSchema, setOutputSchema] = useState<Array<{ name: string; type?: string; fieldType?: string; description?: string }>>([]);
 
   // Get pending step info
   const pendingStep = task?.pendingHumanSteps?.find(s => !s.completedAt);
@@ -93,10 +92,10 @@ function HumanStepDialog({ task, isOpen, onClose, onComplete }: HumanStepDialogP
           );
           // Get output schema from skill outputs
           setOutputSchema(skill.outputs || []);
-          // Initialize outputs with empty values
-          const initialOutputs: Record<string, string> = {};
+          // Initialize outputs with empty/null values
+          const initialOutputs: Record<string, unknown> = {};
           (skill.outputs || []).forEach(o => {
-            initialOutputs[o.name] = '';
+            initialOutputs[o.name] = null;
           });
           setOutputs(initialOutputs);
         }
@@ -143,65 +142,77 @@ function HumanStepDialog({ task, isOpen, onClose, onComplete }: HumanStepDialogP
           {/* Inputs (read-only) */}
           {pendingStep.inputs && Object.keys(pendingStep.inputs).length > 0 && (
             <div>
-              <h4 className="font-medium mb-2">Inputs</h4>
-              <div className="bg-muted/50 p-3 rounded border space-y-2">
-                {Object.entries(pendingStep.inputs).map(([key, value]) => (
-                  <div key={key} className="text-sm">
-                    <span className="font-medium">{key}:</span>{' '}
-                    <span className="text-muted-foreground">
-                      {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-                    </span>
-                  </div>
-                ))}
+              <h4 className="font-medium mb-2">Context</h4>
+              <div className="bg-muted/50 p-3 rounded border space-y-3">
+                {Object.entries(pendingStep.inputs).map(([key, value]) => {
+                  // Try to find matching input definition for field type
+                  const inputDef = (outputSchema as any[]).find(
+                    (i: any) => i.name === key
+                  );
+                  return (
+                    <div key={key} className="space-y-1">
+                      <span className="text-xs font-medium text-muted-foreground">
+                        {key}
+                      </span>
+                      <div>
+                        <FieldRenderer
+                          fieldType={inputDef?.fieldType || inputDef?.type}
+                          value={value}
+                          mode="view"
+                          name={key}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
 
           {/* Outputs (editable) */}
           <div>
-            <h4 className="font-medium mb-2">Outputs</h4>
+            <h4 className="font-medium mb-2">Your Response</h4>
             <div className="space-y-3">
               {outputSchema.length > 0 ? (
-                outputSchema.map((output) => (
+                outputSchema.map((output: any) => (
                   <div key={output.name}>
-                    <Label htmlFor={output.name}>{output.name}</Label>
-                    {output.type === 'text' || !output.type ? (
-                      <Textarea
-                        id={output.name}
-                        value={outputs[output.name] || ''}
-                        onChange={(e) => setOutputs(prev => ({
-                          ...prev,
-                          [output.name]: e.target.value
-                        }))}
-                        placeholder={`Enter ${output.name}...`}
-                        rows={3}
-                      />
-                    ) : (
-                      <Input
-                        id={output.name}
-                        type={output.type === 'number' ? 'number' : 'text'}
-                        value={outputs[output.name] || ''}
-                        onChange={(e) => setOutputs(prev => ({
-                          ...prev,
-                          [output.name]: e.target.value
-                        }))}
-                        placeholder={`Enter ${output.name}...`}
-                      />
-                    )}
+                    <Label htmlFor={output.name}>
+                      {output.name}
+                      {output.description && (
+                        <span className="ml-1 text-xs text-muted-foreground font-normal">
+                          ({output.description})
+                        </span>
+                      )}
+                    </Label>
+                    <FieldRenderer
+                      fieldType={output.fieldType || output.type}
+                      value={outputs[output.name]}
+                      onChange={(value) => setOutputs(prev => ({
+                        ...prev,
+                        [output.name]: value
+                      }))}
+                      mode="edit"
+                      disabled={isSubmitting}
+                      placeholder={`Enter ${output.name}...`}
+                      name={output.name}
+                      description={output.description}
+                    />
                   </div>
                 ))
               ) : (
                 <div>
                   <Label htmlFor="result">Result</Label>
-                  <Textarea
-                    id="result"
-                    value={outputs.result || ''}
-                    onChange={(e) => setOutputs(prev => ({
+                  <FieldRenderer
+                    fieldType="text"
+                    value={outputs.result}
+                    onChange={(value) => setOutputs(prev => ({
                       ...prev,
-                      result: e.target.value
+                      result: value
                     }))}
+                    mode="edit"
+                    disabled={isSubmitting}
                     placeholder="Enter your response..."
-                    rows={4}
+                    name="result"
                   />
                 </div>
               )}

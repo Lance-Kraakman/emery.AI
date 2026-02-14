@@ -49,6 +49,7 @@ import { EmbeddingField } from '@/components/tables/fields/EmbeddingField'
 import { SingleSelectField } from '@/components/tables/fields/SingleSelectField'
 import { MultiSelectField } from '@/components/tables/fields/MultiSelectField'
 import { JSONField } from '@/components/tables/fields/JSONField'
+import { EmailThreadField } from '@/components/tables/fields/EmailThreadField'
 import { FileTypeDetector } from '@/ddd/domain/tables/services/file-type-detector'
 import { createFileArtifact, createDocumentArtifact } from '@/components/chat/types/chat-artifacts'
 import { uiStateActions } from '@/stores/ui-state.store'
@@ -70,7 +71,8 @@ import type {
   EmbeddingCellProps,
   SingleSelectCellProps,
   MultiSelectCellProps,
-  JSONCellProps
+  JSONCellProps,
+  EmailThreadCellProps
 } from './grid/cell-types'
 
 interface DynamicDataSheetGridProps {
@@ -411,6 +413,24 @@ const JSONCell = ({ rowData, setRowData, columnData, focus }: JSONCellProps) => 
   )
 }
 
+const EmailThreadCell = ({ rowData, setRowData, columnData, focus }: EmailThreadCellProps) => {
+  // AIDEV-NOTE: keyColumn passes the FIELD VALUE as rowData, not the full row object
+  // rowData = email thread value (EmailThreadFieldValue or null)
+  // setRowData(newValue) = updates the field value
+
+  return (
+    <EmailThreadField
+      value={rowData}
+      onChange={(newValue) => {
+        setRowData(newValue)
+      }}
+      isEditMode={true}
+      compact={true}
+      focus={focus}
+    />
+  )
+}
+
 // Loading state component
 const LoadingState = () => (
   <div className="flex items-center justify-center h-32 text-muted-foreground">
@@ -607,6 +627,7 @@ export function DynamicDataSheetGrid({
     SingleSelectCell,
     MultiSelectCell,
     JSONCell,
+    EmailThreadCell,
   })
 
   // Create a stable fingerprint of field structure - only changes when fields are added/removed

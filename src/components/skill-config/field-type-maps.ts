@@ -19,6 +19,7 @@ export const fieldTypeToInputType: Record<FieldType, InputDefinition['type'] | n
   'autonumber': null,
   'last-updated': null,
   'created-at': null,
+  'email-thread': 'text',  // Email threads are passed as JSON text to skills
 };
 
 /** Map table field types to skill output types. Returns null for system fields that shouldn't be mapped. */
@@ -39,4 +40,5 @@ export const fieldTypeToOutputType: Record<FieldType, OutputDefinition['type'] |
   'autonumber': null,
   'last-updated': null,
   'created-at': null,
+  'email-thread': 'email-thread',  // Email threads have their own field type
 };

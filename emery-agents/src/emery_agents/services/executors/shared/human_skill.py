@@ -55,11 +55,36 @@ class HumanSkillHandler:
             human_config.instructions if human_config else skill.instructions
         )
 
-        # Build output schema from skill outputs
-        output_schema = [
-            {"name": out.name, "type": out.type}
-            for out in skill.outputs
-        ]
+        # Build input definitions lookup for field types
+        input_defs_by_name = {inp.name: inp for inp in skill.inputs}
+
+        # Build inputs with field type info for rich rendering
+        inputs_with_types = []
+        for name, value in runtime_inputs.items():
+            input_def = input_defs_by_name.get(name)
+            input_item = {
+                "name": name,
+                "type": input_def.type if input_def else "string",
+                "value": value,
+            }
+            # Include fieldType if specified for rich rendering
+            if input_def and input_def.field_type:
+                input_item["fieldType"] = input_def.field_type
+            inputs_with_types.append(input_item)
+
+        # Build output schema from skill outputs with field type
+        output_schema = []
+        for out in skill.outputs:
+            output_item = {
+                "name": out.name,
+                "type": out.type,
+            }
+            if out.description:
+                output_item["description"] = out.description
+            # Include fieldType if specified for rich rendering
+            if out.field_type:
+                output_item["fieldType"] = out.field_type
+            output_schema.append(output_item)
 
         # Resolve assignee
         assigned_to = ""
@@ -76,7 +101,7 @@ class HumanSkillHandler:
             "skill_name": skill.name,
             "step_id": step_id,
             "instructions": instructions,
-            "inputs": runtime_inputs,
+            "inputs": inputs_with_types,
             "output_schema": output_schema,
             "assigned_to": assigned_to,
             "external_links": [],

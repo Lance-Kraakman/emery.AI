@@ -57,6 +57,7 @@ const OPERATORS_BY_TYPE: Record<FieldType | 'id' | 'unknown', ConditionOperator[
   // Special types
   'embedding': ['truthy', 'falsy'],
   'json': ['truthy', 'falsy'],
+  'email-thread': ['truthy', 'falsy'],
 
   // Default/unknown - show all operators
   'unknown': ['truthy', 'falsy', 'eq', 'ne', 'gt', 'gte', 'lt', 'lte', 'contains'],

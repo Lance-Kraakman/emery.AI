@@ -457,6 +457,8 @@ class InputDefinition:
     required: bool = False
     default_value: Any | None = None
     input_mapping: dict[str, Any] | None = None
+    # Phase 2: Field type for rich rendering in human tasks
+    field_type: str | None = None  # Table field type (e.g., 'email-thread', 'text', 'file')
 
     @classmethod
     def from_api_response(cls, data: dict[str, Any]) -> InputDefinition:
@@ -467,6 +469,7 @@ class InputDefinition:
             description=data.get("description", ""),
             required=data.get("required", False),
             default_value=data.get("defaultValue"),
+            field_type=data.get("fieldType", data.get("field_type")),
         )
 
 
@@ -496,6 +499,8 @@ class OutputDefinition:
     description: str = ""
     source: OutputSource | None = None
     output_mapping: OutputMappingConfig | None = None
+    # Phase 2: Field type for rich rendering in human tasks
+    field_type: str | None = None  # Table field type (e.g., 'email-thread', 'text', 'file')
 
     @classmethod
     def from_api_response(cls, data: dict[str, Any]) -> OutputDefinition:
@@ -515,6 +520,7 @@ class OutputDefinition:
             output_mapping=OutputMappingConfig.from_api_response(mapping_data)
             if mapping_data
             else None,
+            field_type=data.get("fieldType", data.get("field_type")),
         )
 
 
