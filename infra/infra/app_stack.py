@@ -970,7 +970,7 @@ class AppStack(Stack):
         ssh_server = ec2.Instance(
             self, f"{prefix}SshSyncServer",
             instance_type=ec2.InstanceType("t4g.micro"),
-            machine_image=ec2.MachineImage.latest_amazon_linux_2023(
+            machine_image=ec2.MachineImage.latest_amazon_linux2023(
                 cpu_type=ec2.AmazonLinuxCpuType.ARM_64
             ),
             vpc=data_stack.vpc,
