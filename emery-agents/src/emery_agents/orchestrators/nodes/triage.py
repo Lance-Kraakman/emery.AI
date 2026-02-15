@@ -15,6 +15,7 @@ from dspy import KNNFewShot
 
 from ...reasoning.config import get_dspy_lm
 from ...reasoning.examples.triage import TRIAGE_DEMOS
+from ...reasoning.modules.retrievers import WorkspaceRetriever
 from ...reasoning.signatures.planning import TriageTask
 from ...reasoning.signatures.planning.models import RecordContext, TriageAnalysis
 from ...services.analysis.embeddings import create_dspy_embedder
@@ -74,9 +75,26 @@ async def triage_node(
 
     events: list[Any] = []
 
-    # Build context for triage - includes table names/IDs for RecordContext extraction
+    # Build context for triage using KNN to find task-relevant tables (in-memory, no API calls)
     workspace = state.get("workspace_context")
-    workspace_summary = workspace.triage_context() if workspace else ""
+    workspace_summary = ""
+    if workspace:
+        retriever = WorkspaceRetriever(workspace, k=10)
+        filtered = retriever.filter_workspace(task)
+
+        # Build focused context with table IDs for RecordContext extraction
+        if filtered.existing_tables:
+            table_entries = [f"{t.name} (id={t.id})" for t in filtered.existing_tables]
+            workspace_summary = f"Relevant tables: {', '.join(table_entries)}"
+
+        # Add skills summary
+        if filtered.existing_skills:
+            skill_names = [s.name for s in filtered.existing_skills[:5]]
+            if workspace_summary:
+                workspace_summary += f"\nSkills: {', '.join(skill_names)}"
+            else:
+                workspace_summary = f"Skills: {', '.join(skill_names)}"
+
     memory_context = state.get("memory_context", "") or ""
 
     # Build image context for triage routing decisions

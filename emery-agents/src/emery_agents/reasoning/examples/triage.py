@@ -23,16 +23,18 @@ def _example(
     external_services: list[str] | None = None,
     response: str = "",
     record_context: RecordContext | None = None,
+    workspace_context: str = "",
 ) -> dspy.Example:
     """Create a triage example with all input fields and routing outputs.
 
     All signature InputFields must be present to avoid DSPy warnings.
-    Only `task` varies per demo; context fields are empty (runtime values).
+    For record context examples, include workspace_context with table IDs
+    so the model learns to map table names → IDs.
     """
     return dspy.Example(
         # Inputs (all signature InputFields must be present)
         task=task,
-        workspace_context="",  # Runtime context - empty in demos
+        workspace_context=workspace_context,  # Include for record context examples
         memory_context="",     # Runtime context - empty in demos
         image_context="",      # Runtime context - empty in demos
         # Outputs
@@ -255,6 +257,7 @@ EXAMPLE_UPDATE_CUSTOMER = _example(
     approach="step-by-step",
     entities=["ABC123", "customers", "address"],
     record_context=RecordContext(table_id="1", record_ids=["ABC123"]),
+    workspace_context="Relevant tables: Customers (id=1)",
 )
 
 EXAMPLE_DELETE_ORDER = _example(
@@ -265,6 +268,7 @@ EXAMPLE_DELETE_ORDER = _example(
     approach="step-by-step",
     entities=["ORD-456", "orders"],
     record_context=RecordContext(table_id="2", record_ids=["ORD-456"]),
+    workspace_context="Relevant tables: Orders (id=2)",
 )
 
 EXAMPLE_VIEW_CONTACT = _example(
@@ -275,6 +279,7 @@ EXAMPLE_VIEW_CONTACT = _example(
     approach="step-by-step",
     entities=["John Smith", "contacts"],
     record_context=RecordContext(table_id="3", record_ids=["John Smith"]),
+    workspace_context="Relevant tables: Contacts (id=3)",
 )
 
 EXAMPLE_MULTI_RECORD = _example(
@@ -285,6 +290,7 @@ EXAMPLE_MULTI_RECORD = _example(
     approach="step-by-step",
     entities=["ORD-001", "ORD-002", "ORD-003", "orders"],
     record_context=RecordContext(table_id="2", record_ids=["ORD-001", "ORD-002", "ORD-003"]),
+    workspace_context="Relevant tables: Orders (id=2)",
 )
 
 EXAMPLE_RELATED_RECORDS = _example(
@@ -295,6 +301,7 @@ EXAMPLE_RELATED_RECORDS = _example(
     approach="step-by-step",
     entities=["CUST-789", "orders", "customers"],
     record_context=RecordContext(table_id="1", record_ids=["CUST-789"]),
+    workspace_context="Relevant tables: Customers (id=1), Orders (id=2)",
 )
 
 EXAMPLE_TELL_ME_PERSON = _example(
@@ -305,6 +312,7 @@ EXAMPLE_TELL_ME_PERSON = _example(
     approach="step-by-step",
     entities=["John Smith"],
     record_context=RecordContext(table_id="4", record_ids=["John Smith"]),
+    workspace_context="Relevant tables: Clients (id=4)",
 )
 
 EXAMPLE_SOCIAL_HISTORY = _example(
@@ -315,6 +323,7 @@ EXAMPLE_SOCIAL_HISTORY = _example(
     approach="step-by-step",
     entities=["John Smith", "social history"],
     record_context=RecordContext(table_id="4", record_ids=["John Smith"]),
+    workspace_context="Relevant tables: Clients (id=4), Social History (id=5)",
 )
 
 EXAMPLE_PATIENT_INFO = _example(
@@ -325,6 +334,7 @@ EXAMPLE_PATIENT_INFO = _example(
     approach="step-by-step",
     entities=["Jane Doe", "patients"],
     record_context=RecordContext(table_id="5", record_ids=["Jane Doe"]),
+    workspace_context="Relevant tables: Patients (id=5)",
 )
 
 
