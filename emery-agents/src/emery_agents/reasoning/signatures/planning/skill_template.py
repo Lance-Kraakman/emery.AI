@@ -45,9 +45,6 @@ class CreateSkillTemplate(dspy.Signature):  # type: ignore[misc]
     workspace_context: str = dspy.InputField(
         desc="JSON of existing databases, tables, apps - check FIRST before asking"
     )
-    capability_guidance: str = dspy.InputField(
-        desc="Capability planning guidance - when to use each capability"
-    )
     proven_strategies: str = dspy.InputField(desc="ACE patterns for similar goals")
     conversation_history: str = dspy.InputField(
         desc="Previous messages in this session for context continuity"
