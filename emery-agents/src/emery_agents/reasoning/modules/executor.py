@@ -125,8 +125,19 @@ class ExecutorModule(dspy.Module):  # type: ignore[misc]
 
         # Get cached compiled module (avoids re-embedding TOOL_EXAMPLES each request)
         self.react = _get_compiled_executor_react(max_iters)
-        # Set tools for this instance (ReAct module has dynamic tools attribute)
-        self.react.tools = self.execution_tools  # type: ignore[attr-defined]
+
+        # CRITICAL: DSPy ReAct expects tools as a dict {name: Tool}, not a list!
+        # Setting a list causes "list indices must be integers" error at tool lookup.
+        # Must also include the 'finish' tool that ReAct uses to signal completion.
+        self.react.tools = {  # type: ignore[attr-defined]
+            tool.name: tool for tool in self.execution_tools
+        }
+        self.react.tools["finish"] = dspy.Tool(  # type: ignore[attr-defined]
+            func=lambda: "Completed.",
+            name="finish",
+            desc="Marks the task as complete.",
+            args={},
+        )
 
         logger.debug(
             f"ExecutorModule initialized with {len(self.execution_tools)} tools"
@@ -238,8 +249,19 @@ class DirectExecutorModule(dspy.Module):  # type: ignore[misc]
 
         # Get cached compiled module (avoids re-embedding TOOL_EXAMPLES each request)
         self.react = _get_compiled_direct_react(max_iters)
-        # Set tools for this instance (ReAct module has dynamic tools attribute)
-        self.react.tools = self.execution_tools  # type: ignore[attr-defined]
+
+        # CRITICAL: DSPy ReAct expects tools as a dict {name: Tool}, not a list!
+        # Setting a list causes "list indices must be integers" error at tool lookup.
+        # Must also include the 'finish' tool that ReAct uses to signal completion.
+        self.react.tools = {  # type: ignore[attr-defined]
+            tool.name: tool for tool in self.execution_tools
+        }
+        self.react.tools["finish"] = dspy.Tool(  # type: ignore[attr-defined]
+            func=lambda: "Completed.",
+            name="finish",
+            desc="Marks the task as complete.",
+            args={},
+        )
 
         logger.debug(
             f"DirectExecutorModule initialized with {len(self.execution_tools)} tools"
