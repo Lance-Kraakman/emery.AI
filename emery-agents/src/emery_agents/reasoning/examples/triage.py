@@ -267,9 +267,9 @@ EXAMPLE_DELETE_ORDER = _example(
 
 EXAMPLE_VIEW_CONTACT = _example(
     task="Show me John Smith's contact information",
-    execution_mode="direct",
+    execution_mode="plan",
     intent="View contact details for John Smith",
-    reasoning="Viewing a specific record is read-only - direct mode.",
+    reasoning="Record lookup with potential relationships - requires plan mode.",
     approach="step-by-step",
     entities=["John Smith", "contacts"],
     record_context='{"table_name": "contacts", "record_ids": ["John Smith"]}',
@@ -287,9 +287,9 @@ EXAMPLE_MULTI_RECORD = _example(
 
 EXAMPLE_RELATED_RECORDS = _example(
     task="Show me all orders for customer CUST-789",
-    execution_mode="direct",
+    execution_mode="plan",
     intent="View orders related to customer CUST-789",
-    reasoning="Querying related records is read-only - direct mode.",
+    reasoning="Querying related records across tables - requires plan mode.",
     approach="step-by-step",
     entities=["CUST-789", "orders", "customers"],
     record_context='{"table_name": "customers", "record_ids": ["CUST-789"]}',

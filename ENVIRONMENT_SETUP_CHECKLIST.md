@@ -51,6 +51,7 @@ Use this checklist when setting up a new environment (staging/production) or ver
 | `GRPC_SERVER_KEY` | [x] Done | Generated mTLS certs |
 | `GRPC_CLIENT_CERT` | [x] Done | Generated mTLS certs |
 | `GRPC_CLIENT_KEY` | [x] Done | Generated mTLS certs |
+| `INTERNAL_API_SECRET` | [x] Done | `openssl rand -base64 32` (service-to-service auth) |
 | `ADMIN_EMAILS` | [x] Done | `lancekraakman@outlook.com` |
 
 ---
@@ -103,6 +104,7 @@ aws secretsmanager create-secret \
 | `GRPC_SERVER_KEY` | [ ] TODO | Generate new certs for staging |
 | `GRPC_CLIENT_CERT` | [ ] TODO | Generate new certs for staging |
 | `GRPC_CLIENT_KEY` | [ ] TODO | Generate new certs for staging |
+| `INTERNAL_API_SECRET` | [ ] TODO | `openssl rand -base64 32` (service-to-service auth) |
 | `ADMIN_EMAILS` | [ ] TODO | `lancekraakman@outlook.com` |
 
 ---
@@ -155,6 +157,7 @@ aws secretsmanager create-secret \
 | `GRPC_SERVER_KEY` | [ ] TODO | Generate new certs for production |
 | `GRPC_CLIENT_CERT` | [ ] TODO | Generate new certs for production |
 | `GRPC_CLIENT_KEY` | [ ] TODO | Generate new certs for production |
+| `INTERNAL_API_SECRET` | [ ] TODO | `openssl rand -base64 32` (service-to-service auth) |
 | `ADMIN_EMAILS` | [ ] TODO | `lancekraakman@outlook.com` |
 
 ---

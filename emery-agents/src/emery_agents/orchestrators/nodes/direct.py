@@ -36,6 +36,7 @@ from ...types import ExecutionMode
 from ...tools.factories import create_direct_mode_tools
 from ...tools.output import QuestionCollector, create_ask_question_tool
 from ...types import ToolMode
+from ..helpers.graph import retrieve_graph_context
 from ..runtime import RuntimeContext
 from ..state import PlanExecuteState
 
@@ -62,6 +63,13 @@ async def direct_execute_node(
     workspace = state.get("workspace_context")
     memory_context = state.get("memory_context", "") or ""
     triage_context = state.get("triage_context", "") or ""
+
+    # Retrieve graph context for record-based queries
+    graph_context = retrieve_graph_context(
+        record_context=state.get("record_context"),
+        graph_service=runtime.graph_service,
+        org_id=state.get("organization_id"),
+    )
 
     events: list[Any] = []
 
@@ -120,6 +128,8 @@ async def direct_execute_node(
         execution_context["memory"] = memory_context
     if triage_context:
         execution_context["triage_findings"] = triage_context
+    if graph_context:
+        execution_context["related_records"] = graph_context
     conversation_str = format_conversation_history(runtime.conversation_history)
     if conversation_str:
         execution_context["conversation_history"] = conversation_str

@@ -779,8 +779,12 @@ class AppStack(Stack):
         )
 
         # Grant EFS access for workspace storage
+        # Security group access (port 2049)
         workspace_fs.connections.allow_default_port_from(agent_service)
         workspace_fs.connections.allow_default_port_from(frontend_service.service)
+        # IAM permissions for EFS mount with IAM auth enabled
+        workspace_fs.grant_read_write(agent_task_definition.task_role)
+        workspace_fs.grant_read_write(frontend_task_definition.task_role)
 
         # Add ECR permissions for agent service
         agent_task_definition.execution_role.add_managed_policy(

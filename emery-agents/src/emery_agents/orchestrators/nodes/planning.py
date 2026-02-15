@@ -10,7 +10,6 @@ from typing import Any
 
 from emery_agents.ace.services.strategy_service import StrategyAccumulationService
 from emery_agents.api import WorkspaceAPI
-from emery_agents.reasoning.modules.graph_retriever import GraphRetriever
 from emery_agents.reasoning.modules.retrievers import (
     WorkspaceRetriever,
     get_or_create_retrievers,
@@ -40,6 +39,7 @@ from ...services.execution.events import (
 from ...tools.integrations.dynamic_agent import DynamicAgentTool
 from ...tools.integrations.dynamic_skill import DynamicSkillTool
 from ...tools.tool_modes import ToolMode, filter_tools_for_mode
+from ..helpers.graph import retrieve_graph_context
 from ..runtime import RuntimeContext
 from ..state import PlanExecuteState
 
@@ -492,33 +492,11 @@ async def generate_plan_node(
             logger.warning(f"KNN retrieval failed, continuing without: {e}")
 
     # === Graph Retrieval: Get related records if record context exists ===
-    graph_context = ""
-    record_context = state.get("record_context")
-    state_org_id = state.get("organization_id")
-
-    if record_context and runtime.graph_service and state_org_id:
-        try:
-            graph_retriever = GraphRetriever(runtime.graph_service)
-            all_related: list[Any] = []
-
-            # Get table_id from record_context (may need to resolve from table_name)
-            table_id = record_context.get("table_id") or record_context.get("table_name", "")
-            record_ids = record_context.get("record_ids", [])
-
-            # Traverse from each starting record
-            for rid in record_ids[:3]:  # Limit to 3 starting points
-                related = graph_retriever(
-                    org_id=int(state_org_id),
-                    table=table_id,
-                    record_id=rid,
-                )
-                all_related.extend(related)
-
-            if all_related:
-                graph_context = graph_retriever.format_for_planner(all_related)
-                logger.info(f"Retrieved {len(all_related)} related records for planning")
-        except Exception as e:
-            logger.warning(f"Graph retrieval failed: {e}")
+    graph_context = retrieve_graph_context(
+        record_context=state.get("record_context"),
+        graph_service=runtime.graph_service,
+        org_id=state.get("organization_id"),
+    )
 
     # Build session config
     config = SessionConfig(
