@@ -22,6 +22,7 @@ from emery_agents.tools.capability_bootstrap import (
 )
 from emery_agents.tools.capability_registry import CapabilityRegistry
 from emery_agents.tools.knowledge import get_knowledge_base
+from emery_agents.services.graph import GraphService
 
 from ..engine import AgentEngine
 from ..infrastructure.storage import WORKSPACE_STORAGE_PATH
@@ -200,6 +201,14 @@ class CoordinatorStreamingHandler:
             logger.error(f"Failed to initialize AgentEngine: {e}")
             raise RuntimeError(f"Cannot process request: engine initialization failed: {e}")
 
+        # Initialize GraphService for Delta Lake relationship traversal
+        try:
+            graph_service: GraphService | None = GraphService()
+            logger.info("GraphService initialized for Delta Lake traversal")
+        except Exception as e:
+            logger.warning(f"GraphService unavailable (graph retrieval disabled): {e}")
+            graph_service = None
+
         runtime = RuntimeContext(
             # Engine (unified workspace management)
             engine=engine,
@@ -223,6 +232,8 @@ class CoordinatorStreamingHandler:
             images=images or [],
             extra_headers=context.tool_provider.extra_headers,
             token_accumulator=token_accumulator,
+            # Graph service for relationship traversal
+            graph_service=graph_service,
         )
 
         # Check if there's a pending graph interrupt to resume
