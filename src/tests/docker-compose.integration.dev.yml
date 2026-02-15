@@ -19,7 +19,7 @@ services:
       - ../..:/app
       - /app/node_modules
       - /app/.next
-      - workspace_data:/mnt/storage/workspaces
+      - ${WORKSPACE_HOST_PATH:-../../.workspace-data}:/mnt/storage/workspaces
 
   # Scheduler: use dev Dockerfile (skips next build)
   scheduler-integration:
@@ -48,9 +48,9 @@ services:
       NEXTJS_BASE_URL: http://host.docker.internal:3002
     volumes:
       - ../../emery-agents/src:/usr/src/app/src
-      - workspace_data:/mnt/storage/workspaces
+      - ${WORKSPACE_HOST_PATH:-../../.workspace-data}:/mnt/storage/workspaces
 
   agent-table-integration:
     volumes:
       - ../../emery-agents/src:/usr/src/app/src
-      - workspace_data:/mnt/storage/workspaces
+      - ${WORKSPACE_HOST_PATH:-../../.workspace-data}:/mnt/storage/workspaces
