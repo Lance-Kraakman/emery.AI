@@ -69,6 +69,7 @@ def context_to_request(ctx: ExecutionContext) -> ExecutionRequest:
     )
 
     # Route: Coordinator mode (two-phase plan-execute)
+    # TaskExecutor always uses autonomous_mode (skip clarifying questions)
     if ctx.use_coordinator:
         return CoordinatorRequest(
             goal=ctx.task,
@@ -80,6 +81,7 @@ def context_to_request(ctx: ExecutionContext) -> ExecutionRequest:
             workspace_path=ctx.workspace_path,
             agent_id=ctx.agent_id,
             max_steps=ctx.max_steps,
+            autonomous_mode=True,
         )
 
     # Route: Skill-based execution

@@ -45,7 +45,13 @@ logger = logging.getLogger(__name__)
 
 
 def route_entry(state: PlanExecuteState) -> str:
-    """Route at graph entry — handle autonomous, mention, or interactive mode."""
+    """Route at graph entry — handle plan-exists, autonomous, mention, or interactive mode."""
+    # If plan already exists (from CoordinatorExecutor), skip directly to execution
+    # This prevents double planning when CoordinatorExecutor pre-generates plan
+    if state.get("plan") is not None:
+        logger.info("Plan already in state, routing directly to execute_step")
+        return "execute_step"
+
     stored_plan = state.get("stored_plan")
     if stored_plan:
         return "autonomous"
@@ -235,10 +241,11 @@ def create_session_graph(
     graph.add_node("execute_step", _execute_step)
     graph.add_node("replan", _replan)
 
-    # === Entry point: triage, autonomous, or @mention (skip triage → plan) ===
+    # === Entry point: plan-exists, triage, autonomous, or @mention ===
     graph.set_conditional_entry_point(
         route_entry,
         {
+            "execute_step": "execute_step",  # Plan already exists (from CoordinatorExecutor)
             "autonomous": "setup_autonomous",
             "mention": "generate_plan",
             "interactive": "triage",

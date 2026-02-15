@@ -28,6 +28,8 @@ if TYPE_CHECKING:
         SkillRequest,
         WorkflowRequest,
     )
+    from emery_agents.planning.registry import PlanningRegistry
+    from emery_agents.tools.capability_registry import CapabilityRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -163,17 +165,25 @@ class ExecutionRouter:
     async def execute_coordinator(
         self,
         request: CoordinatorRequest,
+        capability_registry: "CapabilityRegistry | None" = None,
+        planning_registry: "PlanningRegistry | None" = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Execute a coordinator request (two-phase plan-execute).
 
         Args:
             request: CoordinatorRequest with goal, tools, auth
+            capability_registry: Pre-initialized capability registry (from gRPC handler)
+            planning_registry: Pre-initialized planning registry (from gRPC handler)
 
         Yields:
             Progress dicts with status, output, timestamp_ms, progress_percent
         """
         logger.info("📋 Routing to CoordinatorExecutor")
-        async for progress in self.coordinator.execute(request):
+        async for progress in self.coordinator.execute(
+            request,
+            capability_registry=capability_registry,
+            planning_registry=planning_registry,
+        ):
             yield progress
 
     def _execute_workflow_sync(

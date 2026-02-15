@@ -239,3 +239,4 @@ class CoordinatorRequest:
     workspace_path: Path | None = None
     agent_id: int | None = None
     max_steps: int = 10
+    autonomous_mode: bool = False  # Skip clarifying questions, execute directly

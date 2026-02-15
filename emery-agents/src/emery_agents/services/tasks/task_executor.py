@@ -29,8 +29,10 @@ from pathlib import Path
 from typing import Any, Literal, TypedDict
 
 from emery_agents.api import AgentAPIService, SkillAPIService
+from emery_agents.planning.registry import PlanningRegistry
 from emery_agents.services.tasks import workspace_lock
 from emery_agents.entities.skill_config import SkillConfig
+from emery_agents.tools.capability_registry import CapabilityRegistry
 from emery_agents.tools.execution.dynamic_execution import fetch_skill_execution_config
 from emery_agents.tools.provider import ToolProvider
 
@@ -143,6 +145,8 @@ class TaskExecutor:
         self,
         api_service: AgentAPIService | None = None,
         execution_router: ExecutionRouter | None = None,
+        capability_registry: CapabilityRegistry | None = None,
+        planning_registry: PlanningRegistry | None = None,
     ):
         """
         Initialize task executor.
@@ -150,9 +154,13 @@ class TaskExecutor:
         Args:
             api_service: API service for credential/agent lookups
             execution_router: ExecutionRouter for routing to appropriate executor
+            capability_registry: Pre-initialized capability registry (from gRPC handler)
+            planning_registry: Pre-initialized planning registry (from gRPC handler)
         """
         self.api_service = api_service
         self.execution_router = execution_router
+        self.capability_registry = capability_registry
+        self.planning_registry = planning_registry
 
     async def execute(
         self,
@@ -353,7 +361,11 @@ class TaskExecutor:
                 yield dict(progress)
 
         elif isinstance(request, CoordinatorRequest):
-            async for progress in router.execute_coordinator(request):
+            async for progress in router.execute_coordinator(
+                request,
+                capability_registry=self.capability_registry,
+                planning_registry=self.planning_registry,
+            ):
                 yield dict(progress)
 
         elif isinstance(request, WorkflowRequest):
@@ -623,11 +635,16 @@ class TaskExecutor:
         else:
             mode = ExecutionMode.INTERACTIVE
 
+        # Agent tasks should use coordinator for proper tool loading
+        # The coordinator path (CoordinatorStreamingHandler) properly loads tools
+        # via RuntimeContext.tools and capability registry population
+        use_coordinator = task_data.agent_id is not None
+
         # Build context
         context = ExecutionContext(
             mode=mode,
             task=task_data.instructions.get("task", ""),
-            available_tools=[],
+            available_tools=[],  # Tools loaded by coordinator
             agent_id=task_data.agent_id,
             organization_id=str(task_data.organization_id),
             skill_name=None,  # Will be resolved from skill_id if needed
@@ -635,6 +652,7 @@ class TaskExecutor:
             agent_model=task_data.agent_model,
             org_model=task_data.org_model,
             workspace_path=task_data.workspace_path,
+            use_coordinator=use_coordinator,
         )
 
         return context
