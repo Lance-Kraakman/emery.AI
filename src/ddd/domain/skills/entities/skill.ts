@@ -352,7 +352,8 @@ export type SkillParameterType =
   | 'text' | 'number' | 'boolean' | 'date' | 'json'
   | 'email' | 'phone'
   | 'single-select' | 'multi-select'
-  | 'image' | 'file' | 'audio' | 'video' | 'document';
+  | 'image' | 'file' | 'audio' | 'video' | 'document'
+  | 'email-thread';
 
 // =============================================================================
 // Input Mapping Types (read from tables or trigger context into skill inputs)

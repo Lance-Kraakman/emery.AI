@@ -114,6 +114,11 @@ export function getInputComponentForField(
       // Embeddings are typically system-managed, treat as read-only
       return ReadOnlyInput as any;
 
+    // Email thread fields (complex type, read-only in standard forms)
+    case 'email-thread':
+      // Email threads need special viewer, treat as read-only in standard forms
+      return ReadOnlyInput as any;
+
     // Default fallback
     default:
       console.warn(`[input-mapper] Unknown field type: ${field.type}, using TextInput as fallback`);
@@ -125,6 +130,7 @@ export function getInputComponentForField(
  * Check if a field type is editable in forms
  */
 export function isFieldEditable(fieldType: string): boolean {
+  // Note: json and email-thread are editable in grid but read-only in standard forms
   const readOnlyTypes = ['autonumber', 'created-at', 'last-updated', 'embedding'];
   return !readOnlyTypes.includes(fieldType);
 }
@@ -164,6 +170,9 @@ export function getDefaultValueForField(field: FieldDTO): any {
     case 'last-updated':
     case 'embedding':
       return null; // Read-only, value set by system
+
+    case 'email-thread':
+      return null; // Email thread, set by external events/workflows
 
     default:
       return null;

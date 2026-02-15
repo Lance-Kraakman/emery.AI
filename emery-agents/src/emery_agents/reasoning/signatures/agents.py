@@ -124,7 +124,7 @@ class BuildSchema(dspy.Signature):  # type: ignore[misc]
         desc="Common patterns and conventions in this workspace"
     )
 
-    schema: TableSchema = dspy.OutputField()
+    table_schema: TableSchema = dspy.OutputField()
 
 
 # ============== SKILL TYPES ==============

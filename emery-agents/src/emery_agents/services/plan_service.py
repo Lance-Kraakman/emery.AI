@@ -48,15 +48,12 @@ class PlanService:
         self,
         grpc_client: GRPCClient | None = None,
         model_provider: ModelProviderProtocol | None = None,
-        discovery_tools: list[Tool] | None = None,
     ):
         self.grpc_client = grpc_client
         self.model_provider = model_provider
 
-        # Initialize DSPy generator
-        self._generator: DSPyPlanGenerator = DSPyPlanGenerator(
-            discovery_tools=discovery_tools,
-        )
+        # Initialize DSPy generator (discovery_tools passed at generate time)
+        self._generator: DSPyPlanGenerator = DSPyPlanGenerator()
         logger.info(
             "📋 PlanService initialized with DSPy generator (smolagents disabled)"
         )
@@ -91,6 +88,9 @@ class PlanService:
         retrieved_patterns: str = "",
         retrieved_knowledge: str = "",
         retrieved_strategies: str = "",
+        graph_context: str = "",
+        autonomous_mode: bool = False,
+        discovery_tools: list[Tool] | None = None,
     ) -> PlanGenerationResult:
         """Generate plan using DSPy PlannerModule. Returns plan or clarifying questions."""
         # Build request dataclass (includes all config for plan generation)
@@ -117,12 +117,15 @@ class PlanService:
             retrieved_patterns=retrieved_patterns,
             retrieved_knowledge=retrieved_knowledge,
             retrieved_strategies=retrieved_strategies,
+            graph_context=graph_context,
+            autonomous_mode=autonomous_mode,
         )
 
         # Delegate to generator (uses capability-based discovery)
         result = await self._generator.generate(
             request,
             strategy_service=strategy_service,
+            discovery_tools=discovery_tools,
         )
 
         return result
@@ -241,16 +244,13 @@ class PlanServiceFactory:
         self,
         grpc_client: GRPCClient | None = None,
         model_provider: ModelProviderProtocol | None = None,
-        discovery_tools: list[Tool] | None = None,
     ) -> None:
         self.grpc_client = grpc_client
         self.model_provider = model_provider
-        self.discovery_tools = discovery_tools
 
     def create(self) -> PlanService:
         """Create a PlanService instance."""
         return PlanService(
             grpc_client=self.grpc_client,
             model_provider=self.model_provider,
-            discovery_tools=self.discovery_tools,
         )

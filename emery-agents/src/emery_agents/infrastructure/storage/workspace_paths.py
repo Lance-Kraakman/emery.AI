@@ -10,7 +10,7 @@ Environment Variables:
 Structure:
     {base}/{org_id}/agents/{agent_id}/
     ├── [user files]           <- Synced from local folder
-    ├── .agent/                <- Agent config + memory
+    ├── .engine/               <- Agent config + memory
     ├── history/               <- Task execution logs
     └── scratch/               <- Agent working space
 """
@@ -26,7 +26,7 @@ WORKSPACE_STORAGE_PATH = Path(
 )
 
 # Subdirectory names (engine-created)
-AGENT_CONFIG_DIR = ".agent"
+AGENT_CONFIG_DIR = ".engine"
 HISTORY_DIR = "history"
 SCRATCH_DIR = "scratch"
 SCRATCH_CONTEXT_DIR = "scratch/context"

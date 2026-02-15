@@ -325,7 +325,7 @@ class StrategyRegistry:
         """Save registry to JSON file.
 
         Args:
-            path: Path to save the registry to (e.g., .agent/strategies.json)
+            path: Path to save the registry to (e.g., .engine/strategies.json)
         """
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w") as f:

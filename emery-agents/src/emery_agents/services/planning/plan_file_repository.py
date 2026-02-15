@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 class PlanFileRepository:
     """Filesystem-backed plan persistence.
 
-    Saves/loads plans as JSON files in .agent/plans/ within the workspace.
+    Saves/loads plans as JSON files in .engine/plans/ within the workspace.
     Uses the same base_path + workspace_id pattern as MemoryService.
     """
 

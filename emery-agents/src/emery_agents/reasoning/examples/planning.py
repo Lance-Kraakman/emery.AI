@@ -237,6 +237,120 @@ EXAMPLE_RESEARCH = _example(
 
 
 # =============================================================================
+# Workspace File Operations (write_file, read_file, bash)
+# =============================================================================
+
+EXAMPLE_WRITE_FILE = _example(
+    request="Write 'hello world' to a file called greeting.txt",
+    result=PlanOrQuestionsOutput(
+        plan=PlanOutput(
+            plan_id="plan_write_file",
+            goal="Write hello world content to greeting.txt file",
+            context="Simple file write operation.",
+            analysis="Direct file operation. Use write_file tool.",
+            steps=[
+                PlanStepOutput(
+                    step_id="step_1_write_file",
+                    description="Write 'hello world' to greeting.txt using write_file tool.",
+                    tool_call="write_file",
+                    parameters={"path": "greeting.txt", "content": "hello world"},
+                    phase_name="Execution",
+                    phase_order=1,
+                )
+            ],
+            auto_approve_policy="auto",
+            matched_conditions=["single_resource", "additive_only"],
+        ),
+        questions=None,
+    ),
+)
+
+EXAMPLE_READ_FILE = _example(
+    request="Read config.json and tell me what's in it",
+    result=PlanOrQuestionsOutput(
+        plan=PlanOutput(
+            plan_id="plan_read_file",
+            goal="Read and display contents of config.json",
+            context="File read operation.",
+            analysis="Direct file read. Use read_file tool.",
+            steps=[
+                PlanStepOutput(
+                    step_id="step_1_read_file",
+                    description="Read contents of config.json using read_file tool.",
+                    tool_call="read_file",
+                    parameters={"path": "config.json"},
+                    phase_name="Discovery",
+                    phase_order=1,
+                )
+            ],
+            auto_approve_policy="auto",
+            matched_conditions=["read_only"],
+        ),
+        questions=None,
+    ),
+)
+
+EXAMPLE_RUN_TESTS = _example(
+    request="Run the pytest tests",
+    result=PlanOrQuestionsOutput(
+        plan=PlanOutput(
+            plan_id="plan_run_tests",
+            goal="Execute pytest test suite",
+            context="Command execution.",
+            analysis="Run command in workspace. Use bash tool.",
+            steps=[
+                PlanStepOutput(
+                    step_id="step_1_run_tests",
+                    description="Run pytest to execute test suite using bash tool.",
+                    tool_call="bash",
+                    parameters={"command": "pytest"},
+                    phase_name="Execution",
+                    phase_order=1,
+                )
+            ],
+            auto_approve_policy="auto",
+            matched_conditions=["single_resource"],
+        ),
+        questions=None,
+    ),
+)
+
+EXAMPLE_CREATE_AND_RUN_SCRIPT = _example(
+    request="Create a Python script that prints numbers 1 to 10 and run it",
+    result=PlanOrQuestionsOutput(
+        plan=PlanOutput(
+            plan_id="plan_create_script",
+            goal="Create and execute Python script printing 1-10",
+            context="Code generation and execution.",
+            analysis="Two steps: write script, then run it.",
+            steps=[
+                PlanStepOutput(
+                    step_id="step_1_write_script",
+                    description="Write Python script with for loop printing 1-10.",
+                    tool_call="write_file",
+                    parameters={"path": "numbers.py", "content": "for i in range(1, 11):\n    print(i)"},
+                    phase_name="Execution",
+                    phase_order=1,
+                ),
+                PlanStepOutput(
+                    step_id="step_2_run_script",
+                    description="Execute the Python script.",
+                    tool_call="bash",
+                    parameters={"command": "python numbers.py"},
+                    required_context=["step_1_write_script"],
+                    phase_name="Execution",
+                    phase_order=2,
+                ),
+            ],
+            auto_approve_policy="auto",
+            matched_conditions=["multi_step"],
+        ),
+        questions=None,
+    ),
+)
+
+
+# =============================================================================
 # Clarification Examples
 # =============================================================================
 
@@ -266,9 +380,6 @@ EXAMPLE_NEEDS_CLARIFICATION = _example(
 )
 
 
-# =============================================================================
-# Collected demos for export
-# =============================================================================
 PLANNING_DEMOS: list[dspy.Example] = [
     # Skill execution (highest priority for @skill: requests)
     EXAMPLE_EXECUTE_SKILL,
@@ -282,6 +393,19 @@ PLANNING_DEMOS: list[dspy.Example] = [
     EXAMPLE_BUILD_DASHBOARD,
     # Research
     EXAMPLE_RESEARCH,
+    # Workspace file operations (write_file, read_file, bash)
+    EXAMPLE_WRITE_FILE,
+    EXAMPLE_READ_FILE,
+    EXAMPLE_RUN_TESTS,
+    EXAMPLE_CREATE_AND_RUN_SCRIPT,
     # Clarification
     EXAMPLE_NEEDS_CLARIFICATION,
+]
+
+# Autonomous demos: PlanOutput directly (not wrapped in PlanOrQuestionsOutput)
+# Derived from PLANNING_DEMOS, excludes clarification examples
+AUTONOMOUS_PLANNING_DEMOS: list[dspy.Example] = [
+    dspy.Example(request=ex.request, result=ex.result.plan).with_inputs("request")
+    for ex in PLANNING_DEMOS
+    if ex.result.plan is not None
 ]

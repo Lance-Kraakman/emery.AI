@@ -1,16 +1,18 @@
-# Configure DSPy cache FIRST, before any module imports dspy
+# Configure DSPy cache and mem0 dir FIRST, before any module imports them
 import logging
+import os
 from pathlib import Path
+import subprocess
+import traceback
+
+import dspy
 
 
 def _configure_dspy_cache() -> None:
     """Configure DSPy cache before any other imports trigger dspy initialization."""
-    import dspy
-
-    # EFS workspaces (writable in production) or ~/.cache (local dev)
-    efs_path = Path("/mnt/storage/workspaces")
+    efs_path = Path(os.getenv("WORKSPACE_STORAGE_PATH", "/mnt/storage/workspaces"))
     if efs_path.exists() and efs_path.is_dir():
-        cache_dir = Path("/mnt/storage/workspaces/.cache/dspy")
+        cache_dir = efs_path / ".cache" / "dspy"
     else:
         cache_dir = Path.home() / ".cache" / "dspy"
 
@@ -29,12 +31,30 @@ def _configure_dspy_cache() -> None:
         dspy.configure_cache(enable_disk_cache=False, enable_memory_cache=True)
 
 
-_configure_dspy_cache()
+def _configure_mem0_dir() -> None:
+    """Set MEM0_DIR before mem0 is imported to avoid permission errors in containers.
 
-# Now safe to import other modules that may use dspy
+    mem0 creates ~/.mem0 at import time for its cloud service config (which we don't use).
+    In Docker running as root without HOME, ~ expands to / which is read-only.
+    """
+    if os.environ.get("MEM0_DIR"):
+        return
+
+    workspace_path = Path(os.getenv("WORKSPACE_STORAGE_PATH", "/mnt/storage/workspaces"))
+    if workspace_path.exists() and workspace_path.is_dir():
+        mem0_dir = workspace_path / ".cache" / "mem0"
+    else:
+        mem0_dir = Path("/tmp/mem0")
+
+    os.environ["MEM0_DIR"] = str(mem0_dir)
+
+
+_configure_dspy_cache()
+_configure_mem0_dir()
+
+# Now safe to import other modules that may use dspy or mem0
 import asyncio
 import concurrent.futures
-import os
 import sys
 import time
 from collections.abc import AsyncIterator
@@ -43,7 +63,14 @@ from typing import Any
 import grpc
 from grpc import aio
 
+from emery_agents.planning.registry import PlanningRegistry
+from emery_agents.tools.capability_bootstrap import (
+    populate_integration_services,
+    populate_system_agents,
+)
+from emery_agents.tools.capability_registry import CapabilityRegistry
 from emery_agents.tools.loader import UnifiedToolLoader
+from .chat_processing_service import ChatProcessingServiceImplementation
 
 from ..services.sandbox.proxy_manager import ProxyManager
 from ..infrastructure.storage import (
@@ -51,7 +78,6 @@ from ..infrastructure.storage import (
     WorkspaceStorage,
     WorkspaceType,
 )
-from ..services.agents.executor import AgentExecutor
 from ..services.tasks import TaskExecutor
 from .generated import (
     agent_worker_pb2,
@@ -60,6 +86,8 @@ from .generated import (
 )
 from .mappers import ProtoMapper
 from .tls import get_server_credentials
+
+import argparse
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -93,14 +121,23 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
         logger.info("AgentWorkerServiceImplementation initialized")
 
         # Initialize all services (HF_TOKEN is guaranteed to exist)
-        self.agent_executor = AgentExecutor()
         self.tool_loader = UnifiedToolLoader()
         self.proto_mapper = ProtoMapper()
 
-        # Shared task executor for both ExecuteTask and ProcessMessage paths
+        # Initialize capability registry (matches ChatProcessingService pattern)
+        # Singleton lifetime - reused across all requests
+        self.capability_registry = CapabilityRegistry()
+        populate_system_agents(self.capability_registry)
+        populate_integration_services(self.capability_registry)
+        logger.info("Capability registry initialized at startup")
+
+        # Initialize planning registry
+        self.planning_registry = PlanningRegistry()
+
+        # Shared task executor with injected registries
         self.task_executor = TaskExecutor(
-            agent_executor=self.agent_executor,
-            api_service=None,  # No API service needed for background tasks
+            capability_registry=self.capability_registry,
+            planning_registry=self.planning_registry,
         )
 
         # Initialize workspace storage (EFS/NFS/local filesystem)
@@ -119,7 +156,6 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
         ProcessMessage task-based execution. Uses shared filesystem storage
         with workspace-level locking to prevent concurrent access.
         """
-        import subprocess
 
         # Convert protobuf to entity at boundary, then build TaskData
         task_request = self.proto_mapper.task_request_from_proto(request)
@@ -224,6 +260,11 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
             # Set workspace path in task data
             task_data.workspace_path = workspace_path
 
+            # Enable capabilities for this org (per-request)
+            # This matches the pattern in coordinator_streaming.py
+            org_id_str = str(task_data.organization_id)
+            self.capability_registry.enable_all_system_agents(org_id_str)
+
             # AIDEV-NOTE: Task timeout - prevents runaway tasks from consuming resources
             task_timeout = int(os.getenv("TASK_TIMEOUT_SECONDS", "3600"))  # Default 1 hour
             task_start_time = time.time()
@@ -275,7 +316,6 @@ class AgentWorkerServiceImplementation(agent_worker_pb2_grpc.AgentWorkerServicer
 
         except Exception as e:
             print(f"❌ [TASK-{task_data.task_id[:8]}] Failed: {str(e)}")
-            import traceback
 
             print(
                 f"📍 [TASK-{task_data.task_id[:8]}] Traceback: {traceback.format_exc()}"
@@ -374,9 +414,6 @@ def register_chat_services(server):
     # Add AgentWorker service
     agent_service_impl = AgentWorkerServiceImplementation()
     agent_worker_pb2_grpc.add_AgentWorkerServicer_to_server(agent_service_impl, server)
-
-    # Add ChatProcessing service
-    from .chat_processing_service import ChatProcessingServiceImplementation
 
     chat_service_impl = (
         ChatProcessingServiceImplementation()
@@ -521,8 +558,6 @@ async def serve_table_server(port: int):
 
 
 async def main():
-    import argparse
-
     parser = argparse.ArgumentParser(description="Emery Agents gRPC Worker")
     parser.add_argument(
         "--mode",

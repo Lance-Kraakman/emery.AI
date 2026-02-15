@@ -3,9 +3,10 @@ Agents Module
 
 Agent-related services.
 
-- AgentExecutor: Import directly from services.agents.executor (heavy, causes circular if eager)
 - AgentFactory: Factory for creating agents with configuration
 - AgentAPIService: Fetches agents/skills from Next.js API
+
+NOTE: Agent execution now handled by services.executors.router.ExecutionRouter.
 """
 
 from emery_agents.api import AgentAPIService

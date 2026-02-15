@@ -72,6 +72,66 @@ export interface DocumentFieldValue extends FileFieldValue {
 export type DocumentArrayFieldValue = DocumentFieldValue[];
 
 // ========================================
+// Email Thread Field Value Types
+// ========================================
+
+/**
+ * Represents a participant in an email thread (sender or recipient)
+ */
+export interface EmailParticipant {
+  email: string;
+  name?: string;
+}
+
+/**
+ * Represents an email attachment
+ */
+export interface EmailAttachment {
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  s3Key?: string;              // If stored locally in S3
+  externalUrl?: string;        // If referencing external source
+}
+
+/**
+ * Represents a single email message within a thread
+ */
+export interface EmailMessage {
+  id: string;                  // Unique message identifier
+  messageId?: string;          // Gmail/O365 message ID for external linking
+  threadId?: string;           // External thread ID for grouping
+  from: EmailParticipant;
+  to: EmailParticipant[];
+  cc?: EmailParticipant[];
+  bcc?: EmailParticipant[];
+  subject: string;
+  body: string;                // HTML or plain text content
+  bodyType: 'html' | 'text';
+  date: string;                // ISO timestamp
+  attachments?: EmailAttachment[];
+  labels?: string[];           // Gmail labels or folder tags
+  isRead?: boolean;
+  isStarred?: boolean;
+  sentByUser?: boolean;        // True if sent by the user (vs received)
+}
+
+/**
+ * Represents an email thread/conversation stored in a table field
+ */
+export interface EmailThreadFieldValue {
+  threadId?: string;           // External thread ID (Gmail/O365)
+  subject: string;             // Thread subject line
+  participants: EmailParticipant[];  // All participants in the thread
+  messages: EmailMessage[];    // Ordered oldest to newest
+  lastMessageAt: string;       // ISO timestamp of most recent message
+  snippet?: string;            // Preview text for compact display
+  connectionId?: string;       // Pipedream connection for reply capability
+  unreadCount?: number;        // Number of unread messages
+}
+
+// ========================================
 // Union Type for All Field Values
 // ========================================
 
@@ -83,6 +143,7 @@ export type FieldValue =
   | FileArrayFieldValue
   | RelationArrayFieldValue
   | DocumentArrayFieldValue
+  | EmailThreadFieldValue
   | JsonFieldValue
   | null
   | undefined;
@@ -136,7 +197,8 @@ export const FIELD_TYPE_MAPPING = {
   'relation': 'RelationFieldValue[]',
   'document': 'DocumentFieldValue[]',
   'tiptap_doc': 'DocumentFieldValue[]',
-  'json': 'Record<string, unknown>'  // Arbitrary JSON data
+  'json': 'Record<string, unknown>',  // Arbitrary JSON data
+  'email-thread': 'EmailThreadFieldValue'  // Email conversation thread
 } as const;
 
 /**
@@ -236,4 +298,83 @@ export function normalizeDocumentFieldValue(value: any): DocumentArrayFieldValue
   if (isDocumentArray(value)) return value;
   if (isDocumentFieldValue(value)) return [value];
   return []; // Fallback for invalid data
+}
+
+// ========================================
+// Email Thread Type Guards and Helpers
+// ========================================
+
+/**
+ * Type guard to check if a value is an EmailMessage
+ */
+export function isEmailMessage(value: any): value is EmailMessage {
+  return value &&
+    typeof value === 'object' &&
+    typeof value.id === 'string' &&
+    typeof value.subject === 'string' &&
+    typeof value.body === 'string' &&
+    typeof value.date === 'string' &&
+    value.from &&
+    typeof value.from.email === 'string' &&
+    Array.isArray(value.to);
+}
+
+/**
+ * Type guard to check if a value is an EmailThreadFieldValue
+ */
+export function isEmailThreadFieldValue(value: any): value is EmailThreadFieldValue {
+  return value &&
+    typeof value === 'object' &&
+    typeof value.subject === 'string' &&
+    Array.isArray(value.messages) &&
+    Array.isArray(value.participants) &&
+    typeof value.lastMessageAt === 'string';
+}
+
+/**
+ * Create an empty email thread with default values
+ */
+export function createEmptyEmailThread(subject: string = ''): EmailThreadFieldValue {
+  return {
+    subject,
+    participants: [],
+    messages: [],
+    lastMessageAt: new Date().toISOString(),
+    unreadCount: 0
+  };
+}
+
+/**
+ * Append a message to an existing email thread
+ */
+export function appendMessageToThread(
+  thread: EmailThreadFieldValue,
+  message: EmailMessage
+): EmailThreadFieldValue {
+  // Build updated participants list (dedupe by email)
+  const existingEmails = new Set(thread.participants.map(p => p.email.toLowerCase()));
+  const newParticipants = [...thread.participants];
+
+  // Add sender if not already in participants
+  if (!existingEmails.has(message.from.email.toLowerCase())) {
+    newParticipants.push(message.from);
+    existingEmails.add(message.from.email.toLowerCase());
+  }
+
+  // Add recipients if not already in participants
+  for (const recipient of message.to) {
+    if (!existingEmails.has(recipient.email.toLowerCase())) {
+      newParticipants.push(recipient);
+      existingEmails.add(recipient.email.toLowerCase());
+    }
+  }
+
+  return {
+    ...thread,
+    messages: [...thread.messages, message],
+    participants: newParticipants,
+    lastMessageAt: message.date,
+    snippet: message.body.substring(0, 100),
+    unreadCount: (thread.unreadCount || 0) + (message.isRead ? 0 : 1)
+  };
 }

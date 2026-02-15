@@ -153,12 +153,12 @@ export function useWorkspaceSync(agentId: number, orgId: number): UseWorkspaceSy
     return '';
   }, []);
 
-  const getApiKey = useCallback(async (): Promise<string> => {
-    let apiKey = await invokeTauri<string | null>('get_api_key');
+  const getApiKey = useCallback(async (forceRefresh = false): Promise<string> => {
+    let apiKey = forceRefresh ? null : await invokeTauri<string | null>('get_api_key');
 
-    // If no API key stored, try to fetch one from existing session
+    // If no API key stored (or force refresh), fetch from session
     if (!apiKey) {
-      console.log('[WorkspaceSync] No stored API key, fetching from session...');
+      console.log('[WorkspaceSync] Fetching fresh API key from session...');
       try {
         const res = await fetch('/api/user/refresh-api-key', {
           method: 'POST',
@@ -481,7 +481,9 @@ export function useWorkspaceSync(agentId: number, orgId: number): UseWorkspaceSy
 
     const setupSse = async () => {
       try {
-        const apiKey = await getApiKey();
+        // Always fetch fresh key for SSE since it's a long-lived connection
+        // and the stored key may have been rotated by other code
+        const apiKey = await getApiKey(true);
         const apiBase = getApiBase();
         const { listen } = await import('@tauri-apps/api/event');
 

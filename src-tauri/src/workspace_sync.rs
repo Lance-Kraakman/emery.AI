@@ -556,6 +556,8 @@ fn run_rsync_push(local_path: &Path, conn: &SshConnectionInfo) -> Result<(u32, u
             "--exclude", "*.swp",
             "--exclude", "*.swo",
             "--exclude", "*~",
+            "--exclude", ".emery-lock",
+            "--exclude", ".emery-sync-version",
             &format!("{}/", local_path.display()),
             &remote,
         ])
@@ -598,6 +600,8 @@ fn run_rsync_pull(local_path: &Path, conn: &SshConnectionInfo) -> Result<(u32, u
             "--exclude", "*.swp",
             "--exclude", "*.swo",
             "--exclude", "*~",
+            "--exclude", ".emery-lock",
+            "--exclude", ".emery-sync-version",
             &remote,
             &format!("{}/", local_path.display()),
         ])
@@ -709,6 +713,55 @@ pub async fn get_api_key(app: AppHandle) -> Result<Option<String>, String> {
 // Tauri Commands - SSH Connection
 // ============================================================================
 
+/// Determine if running in local development mode based on API base URL
+fn is_local_dev(api_base: &str) -> bool {
+    api_base.contains("localhost") || api_base.contains("127.0.0.1")
+}
+
+/// Get SSH connection info based on environment (no API call needed)
+/// - Local dev: localhost:2222
+/// - Production: ssh.enhancd.ai:22 (derived from API base or env var)
+fn get_ssh_config(api_base: &str, org_id: i64, agent_id: i64, key_path: PathBuf) -> SshConnectionInfo {
+    let ssh_root = std::env::var("SSH_WORKSPACE_ROOT")
+        .or_else(|_| std::env::var("SFTP_WORKSPACE_ROOT"))
+        .unwrap_or_else(|_| "/workspace".to_string());
+
+    let (host, port) = if is_local_dev(api_base) {
+        // Local development
+        log::info!("Using local dev SSH settings (localhost:2222)");
+        ("localhost".to_string(), 2222)
+    } else {
+        // Production: derive SSH host from API base or use env var
+        // e.g., https://app.enhancd.ai -> ssh.enhancd.ai
+        let ssh_host = std::env::var("EMERY_SSH_HOST").unwrap_or_else(|_| {
+            api_base
+                .replace("https://", "")
+                .replace("http://", "")
+                .replace("app.", "ssh.")
+                .split('/')
+                .next()
+                .unwrap_or("ssh.enhancd.ai")
+                .to_string()
+        });
+        let ssh_port = std::env::var("EMERY_SSH_PORT")
+            .ok()
+            .and_then(|p| p.parse().ok())
+            .unwrap_or(22);
+        log::info!("Using production SSH settings ({}:{})", ssh_host, ssh_port);
+        (ssh_host, ssh_port)
+    };
+
+    let remote_path = format!("{}/{}/agents/{}", ssh_root, org_id, agent_id);
+
+    SshConnectionInfo {
+        host,
+        port,
+        username: "agent".to_string(),
+        remote_path,
+        key_path,
+    }
+}
+
 /// Set up SSH connection for an agent workspace (generates key, registers with server)
 #[tauri::command]
 pub async fn sftp_connect(
@@ -718,11 +771,6 @@ pub async fn sftp_connect(
     api_key: String,
     api_base: String,
 ) -> Result<(), String> {
-    // Get workspace root from env var (configurable for local vs production)
-    let ssh_root = std::env::var("SSH_WORKSPACE_ROOT")
-        .or_else(|_| std::env::var("SFTP_WORKSPACE_ROOT"))
-        .unwrap_or_else(|_| "/workspace".to_string());
-
     // Ensure SSH key exists
     let key_path = ensure_ssh_key()?;
 
@@ -733,61 +781,21 @@ pub async fn sftp_connect(
         // Continue anyway - key might already be registered
     }
 
-    // Get SSH connection info from API or use local dev defaults
-    let client = reqwest::Client::new();
-    let url = format!("{}/api/agents/{}/workspace/ssh-info", api_base, agent_id);
+    // Get SSH connection info based on environment (no API call)
+    let conn_info = get_ssh_config(&api_base, org_id, agent_id, key_path);
 
-    let (host, port, username, remote_path) = match client
-        .get(&url)
-        .header("Authorization", format!("Bearer {}", api_key))
-        .send()
-        .await
-    {
-        Ok(response) if response.status().is_success() => {
-            #[derive(Deserialize)]
-            struct SshInfo {
-                host: String,
-                port: u16,
-                username: String,
-                remote_path: String,
-            }
-            #[derive(Deserialize)]
-            struct Response {
-                #[allow(dead_code)]
-                success: bool,
-                data: SshInfo,
-            }
-
-            match response.json::<Response>().await {
-                Ok(resp) => (resp.data.host, resp.data.port, resp.data.username, resp.data.remote_path),
-                Err(_) => {
-                    // Fallback to local dev
-                    let remote_path = format!("{}/{}/agents/{}", ssh_root, org_id, agent_id);
-                    ("localhost".to_string(), 2222, "agent".to_string(), remote_path)
-                }
-            }
-        }
-        _ => {
-            // Fallback to local dev defaults
-            log::info!("Using local dev SSH settings");
-            let remote_path = format!("{}/{}/agents/{}", ssh_root, org_id, agent_id);
-            ("localhost".to_string(), 2222, "agent".to_string(), remote_path)
-        }
-    };
-
-    let conn_info = SshConnectionInfo {
-        host,
-        port,
-        username,
-        remote_path: remote_path.clone(),
-        key_path,
-    };
+    log::info!(
+        "SSH connection configured for agent {}, remote: {}@{}:{}{}",
+        agent_id,
+        conn_info.username,
+        conn_info.host,
+        conn_info.port,
+        conn_info.remote_path
+    );
 
     // Store connection info
     let mut manager = CONNECTION_MANAGER.lock().map_err(|e| e.to_string())?;
     manager.set(agent_id, conn_info);
-
-    log::info!("SSH connection configured for agent {}, remote: {}", agent_id, remote_path);
 
     Ok(())
 }
@@ -1023,6 +1031,28 @@ pub async fn push_workspace(
 
     // Run rsync
     let (files_synced, bytes_transferred) = run_rsync_push(&local_dir, &conn)?;
+
+    // Notify server of changes by writing .emery-sync-version via SSH
+    if files_synced > 0 {
+        let ssh = get_ssh_path();
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
+
+        let _ = Command::new(&ssh)
+            .args([
+                "-i", &conn.key_path.to_string_lossy(),
+                "-p", &conn.port.to_string(),
+                "-o", "StrictHostKeyChecking=no",
+                "-o", "UserKnownHostsFile=/dev/null",
+                &format!("{}@{}", conn.username, conn.host),
+                &format!("echo '{}' > {}/.emery-sync-version", timestamp, conn.remote_path),
+            ])
+            .output();
+
+        log::debug!("push_workspace: Updated .emery-sync-version to {}", timestamp);
+    }
 
     // Clear pending changes
     let store = app

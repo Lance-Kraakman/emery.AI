@@ -16,7 +16,7 @@ from ...services.execution.events import (
     PlanFeedbackEvent,
     PlanRejectedEvent,
 )
-from ..state import PlanExecuteState
+from ..state import HumanSkillCompleted, PlanExecuteState
 
 logger = logging.getLogger(__name__)
 
@@ -165,15 +165,36 @@ async def await_approval_node(state: PlanExecuteState) -> dict[str, Any]:
 
         logger.info(f"Human skill {skill_name} completed with response: {str(response)[:100]}")
 
-        # The response contains the human's outputs as JSON or dict
-        # Inject into task context so the next step knows the skill completed
+        # Parse the response - may be structured human_skill_completion JSON
+        # or direct outputs dict/JSON
+        human_outputs: dict[str, Any] = {}
+        skill_id_from_response: str | None = None
+
         if isinstance(response, str):
             try:
-                human_outputs = json.loads(response)
+                parsed = json.loads(response)
+                # Check if this is our structured completion format
+                if isinstance(parsed, dict) and parsed.get("type") == "human_skill_completion":
+                    # Extract outputs from structured format
+                    human_outputs = parsed.get("outputs", {})
+                    skill_id_from_response = parsed.get("skillId")
+                    logger.info(f"Parsed structured human_skill_completion: skill_id={skill_id_from_response}")
+                elif isinstance(parsed, dict):
+                    # Direct outputs dict
+                    human_outputs = parsed
+                else:
+                    human_outputs = {"result": response}
             except json.JSONDecodeError:
                 human_outputs = {"result": response}
+        elif isinstance(response, dict):
+            # Check if this is our structured completion format
+            if response.get("type") == "human_skill_completion":
+                human_outputs = response.get("outputs", {})
+                skill_id_from_response = response.get("skillId")
+            else:
+                human_outputs = response
         else:
-            human_outputs = response if isinstance(response, dict) else {"result": str(response)}
+            human_outputs = {"result": str(response)}
 
         # Format outputs for task context
         outputs_summary = ", ".join(
@@ -182,16 +203,22 @@ async def await_approval_node(state: PlanExecuteState) -> dict[str, Any]:
 
         # Set human_skill_completed so execute_step knows to complete this step
         step_id = skill_info.get("step_id", "")
+        # Use skill_id from response if available, otherwise from skill_info
+        final_skill_id = skill_id_from_response or skill_info.get("skill_id", "")
+
+        # Build structured completion data
+        completed_data: HumanSkillCompleted = {
+            "step_id": step_id,
+            "skill_id": final_skill_id,
+            "skill_name": skill_name,
+            "outputs": human_outputs,
+        }
 
         return {
             "task": f"{task}\n\nHuman completed skill '{skill_name}' with outputs: {outputs_summary}",
             "awaiting_input": None,
             "human_skill_info": None,
-            "human_skill_completed": {
-                "step_id": step_id,
-                "skill_name": skill_name,
-                "outputs": human_outputs,
-            },
+            "human_skill_completed": completed_data,
             "user_response": str(response),
             "events": events,
         }

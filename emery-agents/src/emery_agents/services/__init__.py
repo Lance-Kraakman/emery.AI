@@ -22,7 +22,6 @@ Submodules:
 from ..entities.models.task_ledger import TaskLedger, create_ledger_from_plan
 
 # Agents (agent-related services)
-# AgentExecutor omitted: import directly from services.agents.executor (heavy, circular if eager)
 from .agents import AgentAPIService
 
 # Context (context and configuration)

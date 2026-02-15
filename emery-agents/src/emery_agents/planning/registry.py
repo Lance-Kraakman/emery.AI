@@ -11,21 +11,20 @@ from __future__ import annotations
 import logging
 
 from emery_agents.planning.pattern import AutoApprovePolicy, PlanningPattern
-from emery_agents.services.analysis import (
-    cosine_similarity,
-    get_embedding,
-    get_embeddings_batch,
-)
+from emery_agents.services.analysis import get_embeddings_batch
 
 logger = logging.getLogger(__name__)
 
 
 class PlanningRegistry:
     """
-    Searchable registry of planning patterns.
+    Registry of planning patterns.
 
-    Provides semantic search to find relevant planning strategies for a task.
+    Stores planning strategies for different task types.
     Each pattern includes strategy, examples, and auto-approve policy.
+
+    Note: Semantic search is handled by PatternRetriever in reasoning/modules/retrievers.py.
+    This registry provides storage, registration, and lookup by ID/capability.
 
     Usage:
         registry = PlanningRegistry()
@@ -41,11 +40,11 @@ class PlanningRegistry:
             auto_approve_policy=AutoApprovePolicy.CONFIRM,
         ))
 
-        # Semantic search for relevant patterns
-        patterns = registry.search("create a contacts table", limit=3)
-        for pattern in patterns:
-            print(pattern.strategy)
-            print(pattern.auto_approve_policy)
+        # Get all patterns (for PatternRetriever)
+        all_patterns = registry.all()
+
+        # Get patterns for a capability
+        patterns = registry.get_for_capability("agent:schema_builder")
     """
 
     def __init__(self) -> None:
@@ -78,72 +77,6 @@ class PlanningRegistry:
     def count(self) -> int:
         """Return total number of registered patterns."""
         return len(self._patterns)
-
-    # --- Search methods ---
-
-    @staticmethod
-    def _pattern_text(pattern: PlanningPattern) -> str:
-        """Build searchable text from pattern metadata."""
-        parts = [
-            pattern.name,
-            pattern.description,
-            " ".join(pattern.triggers),
-            " ".join(pattern.capability_ids),
-        ]
-        return " ".join(parts)
-
-    def _get_embedding(self, pattern: PlanningPattern) -> tuple[float, ...]:
-        """Get embedding for pattern, computing on-demand if needed."""
-        if pattern.id not in self._embeddings:
-            pattern_text = self._pattern_text(pattern)
-            self._embeddings[pattern.id] = get_embedding(pattern_text)
-        return self._embeddings[pattern.id]
-
-    def search(
-        self,
-        query: str,
-        *,
-        capability_id: str | None = None,
-        limit: int = 3,
-    ) -> list[PlanningPattern]:
-        """
-        Semantic search for relevant planning patterns.
-
-        Args:
-            query: Task description to match against
-            capability_id: Optional - filter to patterns for this capability
-            limit: Maximum results to return
-
-        Returns:
-            List of matching patterns ranked by relevance
-        """
-        candidates = list(self._patterns.values())
-
-        # Filter by capability if specified
-        if capability_id:
-            candidates = [p for p in candidates if capability_id in p.capability_ids]
-
-        if not candidates:
-            return []
-
-        try:
-            query_embedding = get_embedding(query)
-
-            scored: list[tuple[float, PlanningPattern]] = []
-            for pattern in candidates:
-                pattern_embedding = self._get_embedding(pattern)
-                score = cosine_similarity(query_embedding, pattern_embedding)
-                scored.append((score, pattern))
-
-            scored.sort(key=lambda x: x[0], reverse=True)
-
-            results = [pattern for _, pattern in scored[:limit]]
-            logger.debug(f"Pattern search '{query}' -> {len(results)} results")
-            return results
-
-        except Exception as e:
-            logger.warning(f"Pattern search failed: {e}")
-            return []
 
     def get_for_capability(self, capability_id: str) -> list[PlanningPattern]:
         """
@@ -204,7 +137,11 @@ class PlanningRegistry:
         if not patterns_without_emb:
             return 0
 
-        texts = [self._pattern_text(p) for p in patterns_without_emb]
+        # Build searchable text for each pattern
+        texts = [
+            f"{p.name} {p.description} {' '.join(p.triggers)} {' '.join(p.capability_ids)}"
+            for p in patterns_without_emb
+        ]
         embeddings = get_embeddings_batch(texts)
 
         for pattern, emb in zip(patterns_without_emb, embeddings):
@@ -217,8 +154,7 @@ class PlanningRegistry:
         """
         Format patterns as planning guidance string for the planner.
 
-        Generates a string compatible with the CreatePlan signature's
-        capability_guidance field.
+        Generates a string included in the planner's planning_context field.
 
         Args:
             patterns: Patterns to format

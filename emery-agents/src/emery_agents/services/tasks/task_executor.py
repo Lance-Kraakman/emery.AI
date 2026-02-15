@@ -26,19 +26,23 @@ import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal, TypedDict
+from typing import Any, Literal, TypedDict
 
 from emery_agents.api import AgentAPIService, SkillAPIService
+from emery_agents.planning.registry import PlanningRegistry
 from emery_agents.services.tasks import workspace_lock
 from emery_agents.entities.skill_config import SkillConfig
+from emery_agents.tools.capability_registry import CapabilityRegistry
 from emery_agents.tools.execution.dynamic_execution import fetch_skill_execution_config
 from emery_agents.tools.provider import ToolProvider
 
 from ...entities.execution_context import ExecutionContext
 from ...entities.task import TaskRequest
 from ...types import ExecutionMode
-from ..agents.executor import AgentExecutor
 from ..credentials import ResolvedCredentials
+from ..executors.adapters import context_to_request
+from ..executors.router import ExecutionRouter, get_execution_router
+
 
 logger = logging.getLogger(__name__)
 
@@ -117,15 +121,16 @@ class TaskExecutor:
 
     Handles:
     - Credential resolution (org-level vs agent-level)
-    - Execution context building (delegates to AgentExecutor for full proto support)
+    - Execution context building
     - Streaming progress with task_id
+    - Routing via ExecutionRouter to appropriate executor
 
     Two execution modes:
     - execute(): For background tasks with full TaskRequest proto
     - execute_with_context(): For chat tasks with pre-built ExecutionContext
 
     Usage:
-        executor = TaskExecutor(agent_executor, api_service)
+        executor = TaskExecutor(api_service)
 
         # Background task (ExecuteTask gRPC)
         async for progress in executor.execute(task_data):
@@ -138,23 +143,29 @@ class TaskExecutor:
 
     def __init__(
         self,
-        agent_executor: AgentExecutor,
         api_service: AgentAPIService | None = None,
+        execution_router: ExecutionRouter | None = None,
+        capability_registry: CapabilityRegistry | None = None,
+        planning_registry: PlanningRegistry | None = None,
     ):
         """
         Initialize task executor.
 
         Args:
-            agent_executor: AgentExecutor for actual task execution
             api_service: API service for credential/agent lookups
+            execution_router: ExecutionRouter for routing to appropriate executor
+            capability_registry: Pre-initialized capability registry (from gRPC handler)
+            planning_registry: Pre-initialized planning registry (from gRPC handler)
         """
-        self.agent_executor = agent_executor
         self.api_service = api_service
+        self.execution_router = execution_router
+        self.capability_registry = capability_registry
+        self.planning_registry = planning_registry
 
     async def execute(
         self,
         task_data: TaskData,
-    ) -> AsyncIterator[TaskProgressDict]:
+    ) -> AsyncIterator[dict[str, Any]]:
         """
         Execute a task and stream progress.
 
@@ -226,18 +237,7 @@ class TaskExecutor:
                 )
 
             # 5. Build execution context
-            # If we have the original TaskRequest, use AgentExecutor.determine_execution_context
-            # which properly handles skills, tools, attachments, etc.
-            if task_data._task_request is not None:
-                context = self.agent_executor.determine_execution_context(
-                    task_data._task_request, pre_fetched_skill=pre_fetched_skill
-                )
-                # Add model parameters from task_data
-                context.agent_model = task_data.agent_model
-                context.org_model = task_data.org_model
-            else:
-                # Fallback to simplified context (for chat tasks)
-                context = self._build_execution_context(task_data, credentials)
+            context = self._build_execution_context(task_data, credentials)
 
             # 6. Inject ToolProvider into context for credential isolation
             context.tool_provider = tool_provider
@@ -246,9 +246,13 @@ class TaskExecutor:
             if task_data.workspace_path:
                 context.workspace_path = task_data.workspace_path
 
-            # 8. Execute via AgentExecutor (reuse existing logic)
-            async for progress in self.agent_executor.execute_task(context):
-                # Add task_id to all progress events
+            # 8. Inject pre-fetched skill if available
+            if pre_fetched_skill:
+                context.skill = pre_fetched_skill
+
+            # 9. Execute via ExecutionRouter
+            logger.info(f"[TASK-{task_id[:8]}] Using ExecutionRouter")
+            async for progress in self._execute_via_router(context):
                 progress["task_id"] = task_id
                 yield progress
 
@@ -283,7 +287,7 @@ class TaskExecutor:
         self,
         task_id: str,
         context: ExecutionContext,
-    ) -> AsyncIterator[TaskProgressDict]:
+    ) -> AsyncIterator[dict[str, Any]]:
         """
         Execute with a pre-built ExecutionContext.
 
@@ -302,7 +306,9 @@ class TaskExecutor:
         logger.info(f"[TASK-{task_id[:8]}] Starting chat-based execution")
 
         try:
-            async for progress in self.agent_executor.execute_task(context):
+            # Execute via ExecutionRouter
+            logger.info(f"[TASK-{task_id[:8]}] Using ExecutionRouter")
+            async for progress in self._execute_via_router(context):
                 progress["task_id"] = task_id
                 yield progress
 
@@ -320,6 +326,80 @@ class TaskExecutor:
                 "timestamp_ms": int(time.time() * 1000),
                 "progress_percent": 0.0,
             }
+
+    async def _execute_via_router(
+        self,
+        context: ExecutionContext,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """
+        Execute via the new ExecutionRouter.
+
+        Converts ExecutionContext to typed request and routes to appropriate executor.
+
+        Args:
+            context: ExecutionContext to execute
+
+        Yields:
+            Progress dicts compatible with TaskProgressDict
+        """
+        from emery_agents.entities.configs import (
+            CoordinatorRequest,
+            InteractiveRequest,
+            SkillRequest,
+            WorkflowRequest,
+        )
+        from emery_agents.types import SkillExecutionResult
+
+        router = self.execution_router or get_execution_router()
+        request = context_to_request(context)
+
+        logger.info(f"Routing via ExecutionRouter: {type(request).__name__}")
+
+        # Route based on request type
+        if isinstance(request, InteractiveRequest):
+            async for progress in router.execute_interactive(request):
+                yield dict(progress)
+
+        elif isinstance(request, CoordinatorRequest):
+            async for progress in router.execute_coordinator(
+                request,
+                capability_registry=self.capability_registry,
+                planning_registry=self.planning_registry,
+            ):
+                yield dict(progress)
+
+        elif isinstance(request, WorkflowRequest):
+            async for progress in router.execute_workflow(request):
+                yield dict(progress)
+
+        elif isinstance(request, SkillRequest):
+            # SkillRequest uses sync path - convert to async
+            if request.skill.is_workflow():
+                # Route to workflow executor
+                workflow_request = WorkflowRequest(
+                    steps=list(request.skill.steps),
+                    initial_inputs=request.inputs,
+                    auth=request.auth,
+                    available_skills={s.id: s for s in request.available_skills},
+                    skill_model=request.skill_model,
+                )
+                async for progress in router.execute_workflow(workflow_request):
+                    yield dict(progress)
+            else:
+                # Run sync skill execution and yield result
+                result = router.execute_skill(request)
+                # Handle both str and SkillExecutionResult return types
+                if isinstance(result, SkillExecutionResult):
+                    output = result.result
+                else:
+                    output = str(result)
+                yield {
+                    "status": "completed",
+                    "output": output,
+                    "error_message": "",
+                    "timestamp_ms": int(time.time() * 1000),
+                    "progress_percent": 1.0,
+                }
 
     @staticmethod
     def _build_agent_headers(task_data: TaskData) -> dict[str, str] | None:
@@ -555,11 +635,16 @@ class TaskExecutor:
         else:
             mode = ExecutionMode.INTERACTIVE
 
+        # Agent tasks should use coordinator for proper tool loading
+        # The coordinator path (CoordinatorStreamingHandler) properly loads tools
+        # via RuntimeContext.tools and capability registry population
+        use_coordinator = task_data.agent_id is not None
+
         # Build context
         context = ExecutionContext(
             mode=mode,
             task=task_data.instructions.get("task", ""),
-            available_tools=[],
+            available_tools=[],  # Tools loaded by coordinator
             agent_id=task_data.agent_id,
             organization_id=str(task_data.organization_id),
             skill_name=None,  # Will be resolved from skill_id if needed
@@ -567,6 +652,7 @@ class TaskExecutor:
             agent_model=task_data.agent_model,
             org_model=task_data.org_model,
             workspace_path=task_data.workspace_path,
+            use_coordinator=use_coordinator,
         )
 
         return context

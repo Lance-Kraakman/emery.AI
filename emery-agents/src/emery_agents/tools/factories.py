@@ -21,6 +21,34 @@ from .crud import (
 from .discovery import create_discovery_tools
 
 
+def create_direct_mode_tools(
+    api_key: str,
+    org_id: str,
+) -> list[dspy.Tool]:
+    """Create lightweight tool set for direct execution.
+
+    Only includes tools useful for Q&A and lookup:
+    - Discovery tools (workspace_overview, system_research, web_search, search_external)
+    - row_crud (for looking up specific records like "John Smith")
+    - table_crud (for listing tables/fields)
+
+    This reduces token usage from ~440K (24 tools) to ~60K (6 tools).
+    Mutations are blocked via ToolMode.PLANNING in direct_execute_node.
+
+    Args:
+        api_key: Bearer token for authentication
+        org_id: Organization ID for RLS context
+
+    Returns:
+        List of 6 DSPy tool instances for direct mode
+    """
+    tools: list[dspy.Tool] = []
+    tools.extend(create_discovery_tools(api_key, org_id))  # 4 tools
+    tools.append(create_row_crud(api_key, org_id))  # For record lookup
+    tools.append(create_table_crud(api_key, org_id))  # For schema lookup
+    return tools
+
+
 def create_crud_tools(
     api_key: str,
     org_id: str,

@@ -1,24 +1,19 @@
 """
 Capability Registry - central storage for all capabilities.
 
-Provides discovery methods for the planner to find relevant capabilities
-without loading all 30K+ capabilities into context at once.
-
 Two-tier capability access:
 - Enabled: Capabilities the org has enabled (system agents, org skills, connected integrations)
 - Available: All other capabilities (marketplace, unconnected integrations)
 
-Uses semantic search (Gemini embeddings) for accurate capability matching.
+Note: Semantic search is handled by CapabilityRetriever (reasoning/modules/retrievers.py),
+which uses DSPy's FAISS-backed Embeddings. This registry provides basic storage and
+per-org enabled tracking.
 """
 
 import logging
 
 from emery_agents.entities.models.capability import Capability, CapabilityType
-from emery_agents.services.analysis import (
-    cosine_similarity,
-    get_embedding,
-    get_embeddings_batch,
-)
+from emery_agents.services.analysis import get_embeddings_batch
 
 logger = logging.getLogger(__name__)
 
@@ -186,56 +181,6 @@ class CapabilityRegistry:
         """Build searchable text from capability metadata."""
         return f"{cap.name} {cap.description} {' '.join(cap.actions)} {' '.join(cap.entities)}"
 
-    def _get_embedding(self, cap: Capability) -> tuple[float, ...]:
-        """Get embedding for capability, using registry cache if available."""
-        if cap.id not in self._embeddings:
-            cap_text = self._capability_text(cap)
-            self._embeddings[cap.id] = get_embedding(cap_text)
-        return self._embeddings[cap.id]
-
-    def _semantic_search(
-        self,
-        query: str,
-        candidates: list[Capability],
-        limit: int,
-    ) -> list[Capability]:
-        """Perform semantic search on a list of capabilities.
-
-        Embeddings are expected to be pre-computed at startup (via S3 cache
-        or batch API). Dynamic capabilities (user skills) are computed
-        on-demand via _get_embedding().
-
-        Args:
-            query: Search query string
-            candidates: Capabilities to search within
-            limit: Maximum results to return
-
-        Returns:
-            List of matching capabilities ranked by similarity.
-            Returns empty list if embedding service fails.
-        """
-        if not candidates:
-            return []
-
-        try:
-            query_embedding = get_embedding(query)
-
-            scored: list[tuple[float, Capability]] = []
-            for cap in candidates:
-                cap_embedding = self._get_embedding(cap)
-                score = cosine_similarity(query_embedding, cap_embedding)
-                scored.append((score, cap))
-
-            scored.sort(key=lambda x: x[0], reverse=True)
-
-            results = [cap for _, cap in scored[:limit]]
-            logger.debug(f"Semantic search '{query}' -> {len(results)} results")
-            return results
-
-        except Exception as e:
-            logger.warning(f"Semantic search failed: {e}")
-            return []
-
     # --- Embedding pre-computation ---
 
     def load_embeddings(self, embeddings: dict[str, tuple[float, ...]]) -> int:
@@ -292,41 +237,6 @@ class CapabilityRegistry:
         logger.info(f"Pre-computed {len(caps)} embeddings for '{prefix}*' capabilities")
         return len(caps)
 
-    def search(
-        self,
-        query: str,
-        *,
-        capability_type: CapabilityType | None = None,
-        domain: str | None = None,
-        limit: int = 10,
-    ) -> list[Capability]:
-        """
-        Search capabilities using semantic similarity.
-
-        Uses Gemini embeddings to find capabilities that match the query
-        semantically (not just keyword matching). This handles synonyms
-        and related concepts.
-
-        Args:
-            query: Search query string (e.g., "create database tables")
-            capability_type: Optional type filter (AGENT, SKILL, TOOL)
-            domain: Optional domain filter (emery, gmail, etc.)
-            limit: Maximum results to return (default 10)
-
-        Returns:
-            List of matching capabilities ranked by relevance, limited to `limit`
-        """
-        candidates: list[Capability] = list(self._capabilities.values())
-
-        # Apply pre-filters
-        if capability_type:
-            candidates = [c for c in candidates if c.type == capability_type]
-        if domain:
-            domain_lower = domain.lower()
-            candidates = [c for c in candidates if c.domain.lower() == domain_lower]
-
-        return self._semantic_search(query, candidates, limit)
-
     def list_domains(self) -> list[str]:
         """Return list of unique domains across all capabilities."""
         return sorted(set(c.domain for c in self._capabilities.values()))
@@ -381,45 +291,3 @@ class CapabilityRegistry:
         """Remove all enabled tracking for an org."""
         if org_id in self._enabled:
             del self._enabled[org_id]
-
-    def search_enabled(
-        self,
-        query: str,
-        org_id: str,
-        *,
-        limit: int = 5,
-    ) -> list[Capability]:
-        """
-        Search within org's enabled capabilities using semantic similarity.
-
-        Args:
-            query: Search query string
-            org_id: Organization ID
-            limit: Maximum results
-
-        Returns:
-            Matching enabled capabilities ranked by relevance
-        """
-        enabled = self.get_enabled(org_id)
-        return self._semantic_search(query, enabled, limit)
-
-    def search_available(
-        self,
-        query: str,
-        org_id: str,
-        *,
-        limit: int = 5,
-    ) -> list[Capability]:
-        """
-        Search within capabilities NOT enabled for org using semantic similarity.
-
-        Args:
-            query: Search query string
-            org_id: Organization ID
-            limit: Maximum results
-
-        Returns:
-            Matching available capabilities ranked by relevance
-        """
-        available = self.get_available(org_id)
-        return self._semantic_search(query, available, limit)

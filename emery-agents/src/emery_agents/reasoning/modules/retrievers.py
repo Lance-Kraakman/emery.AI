@@ -15,11 +15,19 @@ from dspy.retrievers import Embeddings
 
 from emery_agents.ace import StrategyAccumulationService, StrategyRecord
 from emery_agents.entities.models.capability import Capability
+from emery_agents.entities.workspace import (
+    WorkspaceAgent,
+    WorkspaceApp,
+    WorkspaceSkill,
+    WorkspaceTable,
+    WorkspaceView,
+)
 from emery_agents.knowledge.base import KnowledgeBase, KnowledgeItem
 from emery_agents.planning.pattern import PlanningPattern
 from emery_agents.planning.registry import PlanningRegistry
 from emery_agents.services.analysis.embedding_usage import get_current_tracker
 from emery_agents.services.analysis.embeddings import get_embeddings_batch
+from emery_agents.services.context import WorkspaceContext
 from emery_agents.tools.capability_registry import CapabilityRegistry
 
 logger = logging.getLogger(__name__)
@@ -223,6 +231,168 @@ class StrategyRetriever(BaseRetriever[StrategyRecord]):
                 for factor in pattern.success_factors[:3]:
                     parts.append(f"- {factor}")
             parts.append("")
+        return "\n".join(parts)
+
+
+# Union type for all workspace resource types
+WorkspaceResource = (
+    WorkspaceTable | WorkspaceApp | WorkspaceAgent | WorkspaceSkill | WorkspaceView
+)
+
+
+class WorkspaceRetriever(BaseRetriever[WorkspaceResource]):
+    """Retrieve relevant workspace resources using semantic similarity.
+
+    Replaces custom _filter_relevant_context() with standard retriever pattern.
+    Flattens all workspace resources into a searchable corpus.
+    """
+
+    # Resource type caps (max items per type in results)
+    TABLE_CAP = 15
+    APP_CAP = 10
+    AGENT_CAP = 10
+    SKILL_CAP = 10
+    VIEW_CAP = 10
+
+    def __init__(self, workspace: WorkspaceContext, k: int = 30) -> None:
+        self._workspace = workspace
+        self._resource_types: list[str] = []  # Track type for each item
+
+        # Flatten all resources with type tracking
+        items: list[WorkspaceResource] = []
+        corpus: list[str] = []
+
+        for table in workspace.existing_tables:
+            items.append(table)
+            self._resource_types.append("table")
+            corpus.append(self._table_to_text(table))
+
+        for app in workspace.existing_apps:
+            items.append(app)
+            self._resource_types.append("app")
+            corpus.append(self._app_to_text(app))
+
+        for agent in workspace.existing_agents:
+            items.append(agent)
+            self._resource_types.append("agent")
+            corpus.append(self._agent_to_text(agent))
+
+        for skill in workspace.existing_skills:
+            items.append(skill)
+            self._resource_types.append("skill")
+            corpus.append(self._skill_to_text(skill))
+
+        for view in workspace.existing_views:
+            items.append(view)
+            self._resource_types.append("view")
+            corpus.append(self._view_to_text(view))
+
+        super().__init__(items, corpus, k)
+        logger.info(f"WorkspaceRetriever: {len(items)} resources indexed")
+
+    @staticmethod
+    def _table_to_text(table: WorkspaceTable) -> str:
+        text = f"table {table.name}"
+        if table.fields:
+            text += f" fields: {' '.join(f.name for f in table.fields)}"
+        if table.database_name:
+            text += f" database: {table.database_name}"
+        return text
+
+    @staticmethod
+    def _app_to_text(app: WorkspaceApp) -> str:
+        text = f"app {app.name}"
+        if app.description:
+            text += f" {app.description}"
+        if app.pages:
+            text += f" pages: {' '.join(p.name for p in app.pages)}"
+        return text
+
+    @staticmethod
+    def _agent_to_text(agent: WorkspaceAgent) -> str:
+        text = f"agent {agent.name}"
+        if agent.description:
+            text += f" {agent.description}"
+        return text
+
+    @staticmethod
+    def _skill_to_text(skill: WorkspaceSkill) -> str:
+        text = f"skill {skill.name}"
+        if skill.description:
+            text += f" {skill.description}"
+        if skill.agent_name:
+            text += f" agent: {skill.agent_name}"
+        return text
+
+    @staticmethod
+    def _view_to_text(view: WorkspaceView) -> str:
+        return f"view {view.name} type: {view.view_type}"
+
+    def filter_workspace(self, query: str) -> WorkspaceContext:
+        """Filter workspace to resources relevant to query.
+
+        Returns a new WorkspaceContext with only relevant resources,
+        respecting per-type caps.
+        """
+        if not query.strip():
+            return self._workspace
+
+        # Get relevant items
+        relevant = self(query)
+        if not relevant:
+            return self._workspace  # Fallback to full context
+
+        # Separate by type with caps
+        tables: list[WorkspaceTable] = []
+        apps: list[WorkspaceApp] = []
+        agents: list[WorkspaceAgent] = []
+        skills: list[WorkspaceSkill] = []
+        views: list[WorkspaceView] = []
+
+        for item in relevant:
+            if isinstance(item, WorkspaceTable) and len(tables) < self.TABLE_CAP:
+                tables.append(item)
+            elif isinstance(item, WorkspaceApp) and len(apps) < self.APP_CAP:
+                apps.append(item)
+            elif isinstance(item, WorkspaceAgent) and len(agents) < self.AGENT_CAP:
+                agents.append(item)
+            elif isinstance(item, WorkspaceSkill) and len(skills) < self.SKILL_CAP:
+                skills.append(item)
+            elif isinstance(item, WorkspaceView) and len(views) < self.VIEW_CAP:
+                views.append(item)
+
+        return WorkspaceContext(
+            existing_databases=self._workspace.existing_databases,  # Always include all
+            existing_tables=tables,
+            existing_apps=apps,
+            existing_agents=agents,
+            existing_skills=skills,
+            existing_views=views,
+        )
+
+    def format_for_planner(self, resources: list[WorkspaceResource]) -> str:
+        """Format retrieved resources as markdown summary."""
+        if not resources:
+            return ""
+
+        parts = ["## Relevant Workspace Resources\n"]
+        tables = [r for r in resources if isinstance(r, WorkspaceTable)]
+        apps = [r for r in resources if isinstance(r, WorkspaceApp)]
+        agents = [r for r in resources if isinstance(r, WorkspaceAgent)]
+        skills = [r for r in resources if isinstance(r, WorkspaceSkill)]
+        views = [r for r in resources if isinstance(r, WorkspaceView)]
+
+        if tables:
+            parts.append(f"**Tables ({len(tables)}):** {', '.join(t.name for t in tables)}")
+        if apps:
+            parts.append(f"**Apps ({len(apps)}):** {', '.join(a.name for a in apps)}")
+        if agents:
+            parts.append(f"**Agents ({len(agents)}):** {', '.join(a.name for a in agents)}")
+        if skills:
+            parts.append(f"**Skills ({len(skills)}):** {', '.join(s.name for s in skills)}")
+        if views:
+            parts.append(f"**Views ({len(views)}):** {', '.join(v.name for v in views)}")
+
         return "\n".join(parts)
 
 

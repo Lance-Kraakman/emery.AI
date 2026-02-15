@@ -1,9 +1,11 @@
 'use client'
 
 import React from 'react'
-import { Loader2, XCircle } from 'lucide-react'
+import { Loader2, XCircle, CheckCircle2, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { getStepConfig } from '@/lib/chat/step-config'
+
+type StepStatus = 'executing' | 'completed' | 'failed'
 
 interface StepProgressIndicatorProps {
   currentStep: {
@@ -11,9 +13,25 @@ interface StepProgressIndicatorProps {
     name: string
     index: number
     content?: string
+    status?: StepStatus
   } | null
   isLoading: boolean
   onCancel?: () => void
+}
+
+/**
+ * Get the appropriate icon based on step status
+ */
+function getStatusIcon(status?: StepStatus) {
+  switch (status) {
+    case 'completed':
+      return <CheckCircle2 className="h-4 w-4 text-green-500" />
+    case 'failed':
+      return <AlertCircle className="h-4 w-4 text-red-500" />
+    case 'executing':
+    default:
+      return <Loader2 className="h-4 w-4 animate-spin" />
+  }
 }
 
 /**
@@ -31,9 +49,15 @@ export function StepProgressIndicator({
   }
 
   const config = getStepConfig(currentStep.type)
-  // Customize message based on step type
+  const status = currentStep.status || 'executing'
+
+  // Customize message based on step type and status
   let message: string = config.loadingMessage
-  if (currentStep.type === 'ACTION' && currentStep.name) {
+  if (status === 'completed') {
+    message = currentStep.name ? `Completed ${currentStep.name}` : 'Step completed'
+  } else if (status === 'failed') {
+    message = currentStep.name ? `Failed: ${currentStep.name}` : 'Step failed'
+  } else if (currentStep.type === 'ACTION' && currentStep.name) {
     message = `Using ${currentStep.name}...`
   } else if (currentStep.type === 'CODE_EXECUTION') {
     message = 'Executing code...'
@@ -43,13 +67,13 @@ export function StepProgressIndicator({
     <div className="transition-all duration-300">
       <div className="flex items-center justify-between mb-1">
         <div className="flex items-center gap-2 text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
+          {getStatusIcon(status)}
           <span className="text-sm">
             {message}
           </span>
         </div>
 
-        {onCancel && (
+        {onCancel && status === 'executing' && (
           <Button
             size="sm"
             variant="ghost"

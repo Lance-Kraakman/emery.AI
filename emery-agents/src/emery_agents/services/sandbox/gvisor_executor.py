@@ -11,9 +11,10 @@ Security model:
 - Synthetic /proc, /sys: No host information leakage
 - Platform: ptrace (works on Fargate, no KVM required)
 
-Network isolation:
-- Default: No network (--network=none)
-- With allowNetwork: Proxy socket mounted for filtered HTTP access
+Network access:
+- Always enabled via proxy socket mounted at /tmp/proxy.sock
+- Proxy filters private IPs (10.x, 192.168.x), AWS metadata (169.254.169.254)
+- gVisor itself uses --network=none, socat bridges to the proxy
 
 Reference: https://gvisor.dev/docs/
 """
@@ -122,17 +123,19 @@ class GVisorExecutor:
         return workspace_path
 
     def get_shell_for_id(
-        self, workspace_id: str, allow_network: bool = False
+        self, workspace_id: str
     ) -> "GVisorShell":
-        """Get a sandboxed shell for a workspace ID."""
+        """Get a sandboxed shell for a workspace ID.
+
+        Network access is always enabled via filtered proxy.
+        """
         workspace_path = self._validate_workspace_id(workspace_id)
-        return GVisorShell(self, workspace_path, allow_network)
+        return GVisorShell(self, workspace_path)
 
     def _create_oci_config(
         self,
         command: str,
         workspace_path: Path,
-        allow_network: bool = False,
         proxy_socket_path: str | None = None,
     ) -> dict:
         """Create OCI runtime specification for gVisor."""
@@ -189,8 +192,8 @@ class GVisorExecutor:
                 "options": ["rbind", "ro"],
             })
 
-        # Add proxy socket if network enabled
-        if allow_network and proxy_socket_path:
+        # Add proxy socket for network access (always enabled)
+        if proxy_socket_path:
             mounts.append({
                 "destination": "/tmp/proxy.sock",
                 "source": proxy_socket_path,
@@ -200,7 +203,7 @@ class GVisorExecutor:
 
         # Build environment
         env = [f"PATH={SANDBOX_PATH}"]
-        if allow_network and proxy_socket_path:
+        if proxy_socket_path:
             port = 18080
             env.extend([
                 f"http_proxy=http://127.0.0.1:{port}",
@@ -209,8 +212,8 @@ class GVisorExecutor:
                 f"HTTPS_PROXY=http://127.0.0.1:{port}",
             ])
 
-        # Build the command
-        if allow_network and proxy_socket_path:
+        # Build the command with network proxy setup
+        if proxy_socket_path:
             port = 18080
             full_command = (
                 f"ip link set lo up 2>/dev/null; "
@@ -264,16 +267,17 @@ class GVisorExecutor:
         command: str,
         workspace_path: Path,
         timeout: int = 300,
-        allow_network: bool = False,
     ) -> ExecutionResult:
         """
         Execute a command in a gVisor sandbox.
+
+        Network access is always enabled via filtered proxy
+        (blocks private IPs, AWS metadata).
 
         Args:
             command: Bash command to execute
             workspace_path: Path to agent's workspace (mounted at /workspace)
             timeout: Maximum execution time in seconds (default 5 minutes)
-            allow_network: Whether to allow filtered network access (default False)
 
         Returns:
             ExecutionResult with stdout, stderr, exit code, and timeout status
@@ -283,20 +287,17 @@ class GVisorExecutor:
             workspace_path.mkdir(parents=True, exist_ok=True)
             logger.info(f"Created workspace directory: {workspace_path}")
 
-        # Start network proxy if needed
+        # Start network proxy (always enabled, filters private IPs and AWS metadata)
         proxy_socket_path = None
-        if allow_network:
-            try:
-                proxy_mgr = ProxyManager.get_instance()
-                proxy_socket_path = proxy_mgr.ensure_running()
-                logger.info(
-                    f"Network access enabled via filtering proxy at {proxy_socket_path}"
-                )
-            except Exception as e:
-                logger.error(
-                    f"Failed to start network proxy, disabling network access: {e}"
-                )
-                proxy_socket_path = None
+        try:
+            proxy_mgr = ProxyManager.get_instance()
+            proxy_socket_path = proxy_mgr.ensure_running()
+            logger.debug(f"Network proxy running at {proxy_socket_path}")
+        except Exception as e:
+            logger.error(
+                f"Failed to start network proxy, disabling network access: {e}"
+            )
+            proxy_socket_path = None
 
         # Create temporary directory for OCI bundle
         container_id = f"{self.CONTAINER_PREFIX}{uuid.uuid4().hex[:12]}"
@@ -307,7 +308,6 @@ class GVisorExecutor:
             config = self._create_oci_config(
                 command,
                 workspace_path,
-                allow_network=allow_network,
                 proxy_socket_path=proxy_socket_path,
             )
 
@@ -388,10 +388,13 @@ class GVisorExecutor:
                 pass
 
     def get_shell(
-        self, workspace_path: Path, allow_network: bool = False
+        self, workspace_path: Path
     ) -> "GVisorShell":
-        """Get a shell bound to a specific workspace."""
-        return GVisorShell(self, workspace_path, allow_network)
+        """Get a shell bound to a specific workspace.
+
+        Network access is always enabled via filtered proxy.
+        """
+        return GVisorShell(self, workspace_path)
 
 
 class GVisorShell:
@@ -403,19 +406,20 @@ class GVisorShell:
     """
 
     def __init__(
-        self, executor: GVisorExecutor, workspace_path: Path, allow_network: bool = False
+        self, executor: GVisorExecutor, workspace_path: Path
     ):
         self._executor = executor
         self._workspace_path = workspace_path
-        self._allow_network = allow_network
 
     def run(self, command: str, timeout: int = 300) -> ExecutionResult:
-        """Run a bash command in the sandbox. Command runs in /workspace."""
+        """Run a bash command in the sandbox. Command runs in /workspace.
+
+        Network access is always enabled via filtered proxy.
+        """
         return self._executor.execute(
             command=command,
             workspace_path=self._workspace_path,
             timeout=timeout,
-            allow_network=self._allow_network,
         )
 
     def read_file(self, path: str) -> str:

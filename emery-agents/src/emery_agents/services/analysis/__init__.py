@@ -9,7 +9,6 @@ Analysis and utility services.
 from .embedding_usage import EmbeddingUsageTracker
 from .embeddings import (
     clear_cache,
-    cosine_similarity,
     get_cache_info,
     get_embedding,
     get_embeddings_batch,
@@ -32,7 +31,6 @@ __all__ = [
     # Embeddings
     "get_embedding",
     "get_embeddings_batch",
-    "cosine_similarity",
     "clear_cache",
     "get_cache_info",
 ]

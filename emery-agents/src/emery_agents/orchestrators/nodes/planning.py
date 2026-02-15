@@ -10,7 +10,11 @@ from typing import Any
 
 from emery_agents.ace.services.strategy_service import StrategyAccumulationService
 from emery_agents.api import WorkspaceAPI
-from emery_agents.reasoning.modules.retrievers import get_or_create_retrievers
+from emery_agents.reasoning.modules.graph_retriever import GraphRetriever
+from emery_agents.reasoning.modules.retrievers import (
+    WorkspaceRetriever,
+    get_or_create_retrievers,
+)
 from emery_agents.tools.discovery import create_discovery_tools
 
 from ...entities.models.plan import (
@@ -21,7 +25,6 @@ from ...entities.models.plan import (
 from ...entities.models.task_ledger import create_ledger_from_plan
 from ...entities.workspace import WorkspaceTable
 from ...services.analysis.embedding_usage import set_current_tracker
-from ...services.analysis.embeddings import cosine_similarity, get_embedding
 from ...services.analysis.token_accumulator import TokenAccumulator
 from ...services.context import (
     SessionConfig,
@@ -34,7 +37,8 @@ from ...services.execution.events import (
     PlanCreatedEvent,
     PlanningStartedEvent,
 )
-from ...services.plan_service import PlanService
+from ...tools.integrations.dynamic_agent import DynamicAgentTool
+from ...tools.integrations.dynamic_skill import DynamicSkillTool
 from ...tools.tool_modes import ToolMode, filter_tools_for_mode
 from ..runtime import RuntimeContext
 from ..state import PlanExecuteState
@@ -107,134 +111,6 @@ def _build_workspace_context(
         existing_skills=data.skills,
         existing_views=data.views,
     )
-
-
-# Minimum cosine similarity to consider a resource relevant.
-_RELEVANCE_THRESHOLD = 0.3
-
-
-def _score_resource(
-    task_embedding: tuple[float, ...],
-    name: str,
-    token_accumulator: TokenAccumulator,
-    description: str = "",
-) -> float:
-    """Score a resource's relevance to the task using semantic similarity.
-
-    Uses the same embedding infrastructure as CapabilityRegistry.search().
-    Embeddings are LRU-cached (1000 entries) so repeated resource names are free.
-    """
-    resource_text = f"{name} {description}".strip()
-    if not resource_text:
-        return 0.0
-    resource_embedding = get_embedding(
-        resource_text,
-        tracker=token_accumulator.get_embedding_tracker(),
-    )
-    return cosine_similarity(task_embedding, resource_embedding)
-
-
-def _top_n_relevant(
-    items: list,  # type: ignore[type-arg]
-    n: int,
-    score_fn: Any,
-    threshold: float = _RELEVANCE_THRESHOLD,
-) -> list:  # type: ignore[type-arg]
-    """Return top N items above the similarity threshold, sorted by score.
-
-    If no items score above the threshold, returns all items unchanged
-    (fallback: the task doesn't clearly relate to any resource).
-    """
-    scored = [(item, score_fn(item)) for item in items]
-    relevant = [(item, s) for item, s in scored if s >= threshold]
-    if not relevant:
-        return items  # Nothing matched — return all as fallback
-    relevant.sort(key=lambda x: x[1], reverse=True)
-    return [item for item, _ in relevant[:n]]
-
-
-def _filter_relevant_context(
-    workspace: WorkspaceContext,
-    task: str,
-    token_accumulator: TokenAccumulator,
-) -> WorkspaceContext:
-    """
-    Filter workspace context to resources relevant to the task.
-
-    Uses semantic embeddings (same as CapabilityRegistry.search()) to score
-    each resource by similarity to the task. Returns a filtered WorkspaceContext:
-    - ALL databases (always included — typically 1-3, negligible cost)
-    - Top-N most relevant tables, apps, agents, skills, views
-
-    Embeddings are LRU-cached, so after the first call resource embeddings are free.
-    If no resource scores above the threshold, returns full context unchanged.
-    """
-    if not task.strip():
-        return workspace
-
-    try:
-        task_embedding = get_embedding(
-            task,
-            tracker=token_accumulator.get_embedding_tracker(),
-        )
-
-        # Caps per resource type
-        TABLE_CAP = 15
-        APP_CAP = 10
-        AGENT_CAP = 10
-        SKILL_CAP = 10
-        VIEW_CAP = 10
-
-        filtered_tables = _top_n_relevant(
-            workspace.existing_tables,
-            TABLE_CAP,
-            lambda t: _score_resource(
-                task_embedding,
-                t.name,
-                token_accumulator,
-                " ".join(f.name for f in t.fields),
-            ),
-        )
-        filtered_apps = _top_n_relevant(
-            workspace.existing_apps,
-            APP_CAP,
-            lambda a: _score_resource(
-                task_embedding, a.name, token_accumulator, a.description
-            ),
-        )
-        filtered_agents = _top_n_relevant(
-            workspace.existing_agents,
-            AGENT_CAP,
-            lambda a: _score_resource(
-                task_embedding, a.name, token_accumulator, a.description
-            ),
-        )
-        filtered_skills = _top_n_relevant(
-            workspace.existing_skills,
-            SKILL_CAP,
-            lambda s: _score_resource(
-                task_embedding, s.name, token_accumulator, s.description
-            ),
-        )
-        filtered_views = _top_n_relevant(
-            workspace.existing_views,
-            VIEW_CAP,
-            lambda v: _score_resource(task_embedding, v.name, token_accumulator),
-        )
-
-        return WorkspaceContext(
-            existing_databases=workspace.existing_databases,  # Always include all
-            existing_tables=filtered_tables,
-            existing_apps=filtered_apps,
-            existing_agents=filtered_agents,
-            existing_skills=filtered_skills,
-            existing_views=filtered_views,
-        )
-    except Exception:
-        logger.warning(
-            "Embedding service unavailable, returning full workspace context"
-        )
-        return workspace
 
 
 _DESTRUCTIVE_KEYWORDS = {
@@ -393,6 +269,12 @@ async def generate_plan_node(
     capability_registry = runtime.capability_registry
     conversation_history = runtime.conversation_history
 
+    # Get names of ALL execution tools (including write tools like write_file, bash)
+    # Define early so it's available for task enrichment below
+    all_execution_tool_names = [
+        getattr(t, "name", str(t)) for t in tools if hasattr(t, "name")
+    ]
+
     # Read serializable session config from state
     api_key = state.get("api_key")
     org_id = state.get("org_id")
@@ -409,8 +291,6 @@ async def generate_plan_node(
     enriched_task = task
     if pre_selected_skill:
         # Check if we have a loaded skill tool we can use directly
-        from emery_agents.tools.integrations.dynamic_skill import DynamicSkillTool
-
         loaded_skill_tool: DynamicSkillTool | None = None
         for tool in tools:
             if isinstance(tool, DynamicSkillTool):
@@ -424,31 +304,68 @@ async def generate_plan_node(
             enriched_task = (
                 f"{task}\n\n"
                 f"[USER DIRECTIVE: The user selected the '{pre_selected_skill}' skill via @skill mention. "
-                f"This skill is already loaded as tool '{tool_name}' (skill ID: {skill_id}). "
-                f"Use this tool directly in your plan - do NOT search for the skill. "
+                f"This skill is ALREADY LOADED as tool '{tool_name}' (skill ID: {skill_id}). "
+                f"Use this tool directly in your plan - do NOT use discovery tools to search for it. "
+                f"Do NOT execute other skills unless explicitly requested. "
                 f"Extract any required inputs from the user's message and conversation context.]"
             )
         else:
-            # No loaded skill tool - fall back to discovery
+            # No loaded skill tool - fall back to discovery then skill:{id}
             enriched_task = (
                 f"{task}\n\n"
                 f"[USER DIRECTIVE: The user explicitly selected the '{pre_selected_skill}' skill via @skill mention. "
-                f"Build a focused plan that uses this skill. Look up the skill by name using discovery tools, "
-                f"then create a plan step that executes it with inputs extracted from the user's message and conversation context.]"
+                f"First, use skill_crud(method='list') to find the skill ID. "
+                f"Then create a plan step with tool_call='skill:{{id}}' (e.g., skill:30) to execute it. "
+                f"The skill:{'{id}'} pattern lazy-loads typed inputs from the skill schema. "
+                f"Extract any required inputs from the user's message and conversation context.]"
             )
     elif pre_selected_agent:
-        enriched_task = (
-            f"{task}\n\n"
-            f"[USER DIRECTIVE: The user explicitly selected the '{pre_selected_agent}' agent via @agent mention. "
-            f"Build a focused plan that delegates to this agent. Use agent_crud(method='execute') to run the agent, "
-            f"passing the user's task as input.]"
-        )
+        # Check if we have a loaded agent tool
+        loaded_agent_tool: DynamicAgentTool | None = None
+        for tool in tools:
+            if isinstance(tool, DynamicAgentTool):
+                loaded_agent_tool = tool
+                break
+
+        if loaded_agent_tool:
+            agent_id = loaded_agent_tool.agent_id
+            tool_name = loaded_agent_tool.name
+            enriched_task = (
+                f"{task}\n\n"
+                f"[USER DIRECTIVE: The user selected the '{pre_selected_agent}' agent via @agent mention. "
+                f"This agent is ALREADY LOADED as tool '{tool_name}' (agent ID: {agent_id}). "
+                f"Use this tool directly in your plan - do NOT use discovery tools to search for it. "
+                f"Pass the user's task to the agent.]"
+            )
+        else:
+            enriched_task = (
+                f"{task}\n\n"
+                f"[USER DIRECTIVE: The user explicitly selected the '{pre_selected_agent}' agent via @agent mention. "
+                f"First, use agent_crud(method='list') to find the agent ID. "
+                f"Then create a plan step with tool_call='agent:{{id}}' (e.g., agent:5) to execute it. "
+                f"The agent:{'{id}'} pattern lazy-loads the agent with proper context. "
+                f"Pass the user's task to the agent.]"
+            )
     elif pre_selected_tool:
         enriched_task = (
             f"{task}\n\n"
             f"[USER DIRECTIVE: The user explicitly selected the '{pre_selected_tool}' external tool via @tool mention. "
             f"Build a focused plan that uses this specific tool. Extract the required inputs from the user's message "
             f"and conversation context.]"
+        )
+
+    # Add execution tools info so planner knows what tools to set in tool_call field
+    # Filter to include only workspace tools (write_file, bash, etc.) - these are the ones
+    # the planner needs to explicitly specify since they're not in planning_tools
+    workspace_tool_names = [
+        name for name in all_execution_tool_names
+        if name in ("write_file", "bash", "read_file", "edit_file", "glob_files", "grep_content")
+    ]
+    if workspace_tool_names:
+        enriched_task = (
+            f"{enriched_task}\n\n"
+            f"[EXECUTION TOOLS: The following workspace tools are available for execution: {', '.join(workspace_tool_names)}. "
+            f"When your plan step uses one of these tools, set tool_call to the exact tool name (e.g., tool_call='write_file').]"
         )
 
     # Construct synthetic triage_analysis when triage was skipped (@mention path)
@@ -471,15 +388,18 @@ async def generate_plan_node(
     events: list[Any] = []
 
     logger.info("Creating plan (planner handles clarification if needed)")
+    logger.info(f"Available execution tools: {all_execution_tool_names}")
 
-    # Filter tools to read-only for planning
+    # Filter tools to read-only for planning (planner can only CALL these)
     planning_tools = filter_tools_for_mode(tools, ToolMode.PLANNING)
 
-    # Create external discovery tools for ReAct planner
-    # Internal search tools removed - replaced by KNN retrievers called below
+    # Create discovery tools for ReAct planner
+    # Includes search_capabilities for dynamic capability lookup during planning
     # Exclude workspace_overview — redundant with the static workspace_context below
     if api_key and org_id:
-        discovery_tools = create_discovery_tools(api_key, org_id)
+        discovery_tools = create_discovery_tools(
+            api_key, org_id, capability_registry=capability_registry
+        )
         discovery_tools = [t for t in discovery_tools if t.name != "workspace_overview"]
     else:
         discovery_tools = []
@@ -499,12 +419,9 @@ async def generate_plan_node(
             api_key, org_id, runtime.token_accumulator
         )
 
-    # Filter to task-relevant resources
-    if not runtime.token_accumulator:
-        raise ValueError("TokenAccumulator is required for planning.")
-    workspace_context = _filter_relevant_context(
-        full_workspace, task, runtime.token_accumulator
-    )
+    # Filter to task-relevant resources using standard retriever pattern
+    workspace_retriever = WorkspaceRetriever(full_workspace)
+    workspace_context = workspace_retriever.filter_workspace(task)
 
     # === ACE Service: Per-agent strategy accumulation ===
     # Create ACE service for agent workspaces to track execution patterns
@@ -574,6 +491,35 @@ async def generate_plan_node(
         except Exception as e:
             logger.warning(f"KNN retrieval failed, continuing without: {e}")
 
+    # === Graph Retrieval: Get related records if record context exists ===
+    graph_context = ""
+    record_context = state.get("record_context")
+    state_org_id = state.get("organization_id")
+
+    if record_context and runtime.graph_service and state_org_id:
+        try:
+            graph_retriever = GraphRetriever(runtime.graph_service)
+            all_related: list[Any] = []
+
+            # Get table_id from record_context (may need to resolve from table_name)
+            table_id = record_context.get("table_id") or record_context.get("table_name", "")
+            record_ids = record_context.get("record_ids", [])
+
+            # Traverse from each starting record
+            for rid in record_ids[:3]:  # Limit to 3 starting points
+                related = graph_retriever(
+                    org_id=int(state_org_id),
+                    table=table_id,
+                    record_id=rid,
+                )
+                all_related.extend(related)
+
+            if all_related:
+                graph_context = graph_retriever.format_for_planner(all_related)
+                logger.info(f"Retrieved {len(all_related)} related records for planning")
+        except Exception as e:
+            logger.warning(f"Graph retrieval failed: {e}")
+
     # Build session config
     config = SessionConfig(
         org_id=org_id or "",
@@ -597,8 +543,8 @@ async def generate_plan_node(
         else None
     )
 
-    # Create PlanService with discovery tools for ReAct planner
-    plan_service = PlanService(model_provider=None, discovery_tools=discovery_tools)
+    # Use workspace-scoped planner from engine
+    plan_service = runtime.engine.planner
 
     try:
         result = await plan_service.generate_plan(
@@ -622,6 +568,9 @@ async def generate_plan_node(
             retrieved_patterns=retrieved_patterns,
             retrieved_knowledge=retrieved_knowledge,
             retrieved_strategies=retrieved_strategies,
+            graph_context=graph_context,
+            autonomous_mode=runtime.autonomous_mode,
+            discovery_tools=discovery_tools,
         )
     except Exception as e:
         logger.error(f"Plan generation failed: {e}")
@@ -678,10 +627,17 @@ async def generate_plan_node(
         except Exception as e:
             logger.warning(f"Failed to save plan to filesystem: {e}")
 
-    # Auto-approve low-risk plans (additive only, no external OAuth, no deletions)
+    # Auto-approve when:
+    # 1. autonomous_mode is True (task API - always auto-approve)
+    # 2. OR plan is low-risk (interactive but simple plan)
     # Skip auto-approve for template generation — the GeneratePlan RPC expects PlanCreatedEvent
-    if _is_low_risk_plan(plan) and not is_template_generation:
-        logger.info(f"Plan {plan.id} auto-approved (low-risk, {len(plan.steps)} steps)")
+    should_auto_approve = (
+        runtime.autonomous_mode or _is_low_risk_plan(plan)
+    ) and not is_template_generation
+
+    if should_auto_approve:
+        reason = "autonomous_mode" if runtime.autonomous_mode else "low-risk"
+        logger.info(f"Plan {plan.id} auto-approved ({reason}, {len(plan.steps)} steps)")
         approved_plan = plan.approve().start_execution()
         ledger.record_plan_approved()
         # Skip PlanCreatedEvent for auto-approved plans — it triggers approval UI flicker

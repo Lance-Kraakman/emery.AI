@@ -177,7 +177,7 @@ export interface ExtendedChatHandler extends ChatHandler {
 
   // Human task completion (human skills)
   humanTask: HumanTaskState | null
-  submitHumanTask?: (outputs: Record<string, string>) => Promise<void>
+  submitHumanTask?: (outputs: Record<string, unknown>) => Promise<void>
   cancelHumanTask?: () => void
 
   // Permission request (RBAC errors)

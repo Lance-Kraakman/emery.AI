@@ -19,21 +19,26 @@ from typing import Any
 import dspy
 from dspy import LabeledFewShot
 
-logger = logging.getLogger(__name__)
-
-from emery_agents.reasoning.examples.planning import PLANNING_DEMOS
+from emery_agents.reasoning.examples.planning import (
+    AUTONOMOUS_PLANNING_DEMOS,
+    PLANNING_DEMOS,
+)
 from emery_agents.reasoning.examples.skill_templates import SKILL_TEMPLATE_DEMOS
 from emery_agents.reasoning.signatures.planning import (
     AnalyzeTask,
     CreatePlan,
+    CreatePlanAutonomous,
     CreateSkillTemplate,
     PlanOrQuestionsOutput,
+    PlanOutput,
     PlanReflection,
     ReflectOnPlan,
     SkillInputSpec,
     SkillOutputSpec,
     SkillTemplatePlanOutput,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class PlannerModule(dspy.Module):  # type: ignore[misc]
@@ -47,9 +52,8 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
     Each input field to the planner has one clear purpose:
     - request: what the user wants
     - workspace_context: what already exists
-    - capability_guidance: routing table + matched capability instructions
+    - planning_context: retrieved capabilities, patterns, strategies, task analysis
     - proven_strategies: what worked before (ACE)
-    - task_analysis: pre-analyzed intent, approach, external service hints
     """
 
     # Phrases that indicate user wants us to propose defaults
@@ -101,11 +105,25 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         # Reflexion module for extended thinking - critiques and improves plans
         self.reflector = dspy.ChainOfThought(ReflectOnPlan)
 
+        # Autonomous planners: use CreatePlanAutonomous (no questions allowed)
+        # These planners output PlanOutput directly, not PlanOrQuestionsOutput
+        # Use AUTONOMOUS_PLANNING_DEMOS which have PlanOutput structure (not wrapped)
+        base_autonomous = dspy.ChainOfThought(CreatePlanAutonomous)
+        self.autonomous_planner = LabeledFewShot(k=5).compile(
+            base_autonomous, trainset=AUTONOMOUS_PLANNING_DEMOS
+        )
+
+        base_autonomous_complex = dspy.ReAct(
+            CreatePlanAutonomous, tools=self.external_tools, max_iters=4
+        )
+        self.autonomous_complex_planner = LabeledFewShot(k=5).compile(
+            base_autonomous_complex, trainset=AUTONOMOUS_PLANNING_DEMOS
+        )
+
     def forward(
         self,
         request: str,
         workspace_context: str,
-        capability_guidance: str,
         proven_strategies: str,
         conversation_history: str = "",
         memory_context: str = "",
@@ -115,7 +133,9 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         retrieved_patterns: str = "",
         retrieved_knowledge: str = "",
         retrieved_strategies: str = "",
+        graph_context: str = "",
         use_complex_planner: bool = False,
+        autonomous_mode: bool = False,
     ) -> PlanOrQuestionsOutput:
         """
         Generate a plan or clarifying questions for a user request.
@@ -127,7 +147,6 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         Args:
             request: The user's goal or task description
             workspace_context: JSON string of existing workspace resources
-            capability_guidance: Routing table + matched capability instructions
             proven_strategies: ACE patterns for similar goals (legacy, prefer retrieved_strategies)
             conversation_history: Formatted previous messages for context continuity
             memory_context: Relevant memories from previous interactions
@@ -138,12 +157,14 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
             retrieved_patterns: Formatted patterns from PatternRetriever
             retrieved_knowledge: Formatted knowledge from KnowledgeRetriever
             retrieved_strategies: Formatted strategies from StrategyRetriever
+            graph_context: Formatted related records from GraphRetriever
             use_complex_planner: Force ReAct planner for external tool access
 
         Returns:
             PlanOrQuestionsOutput with either a plan or clarifying questions
         """
-        has_delegation = self._has_delegation_phrase(request)
+        # Autonomous mode (gRPC Tasks) forces delegation to skip clarifying questions
+        has_delegation = autonomous_mode or self._has_delegation_phrase(request)
 
         # Use pre-computed triage analysis if available, otherwise run AnalyzeTask
         if triage_analysis and triage_analysis.get("intent"):
@@ -172,6 +193,7 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
             retrieved_patterns=retrieved_patterns,
             retrieved_knowledge=retrieved_knowledge,
             retrieved_strategies=retrieved_strategies,
+            graph_context=graph_context,
         )
 
         # Route to appropriate planner
@@ -186,21 +208,42 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
             or bool(self.external_tools)
         )
 
-        planner = self.complex_planner if needs_external_data else self.standard_planner
-        logger.debug(
-            f"Using {'complex' if needs_external_data else 'standard'} planner "
-            f"(external_services={external_services})"
-        )
+        # Route to autonomous planners when autonomous_mode=True
+        # These use CreatePlanAutonomous signature which outputs PlanOutput directly
+        if autonomous_mode:
+            planner = (
+                self.autonomous_complex_planner
+                if needs_external_data
+                else self.autonomous_planner
+            )
+            logger.debug(
+                f"Using autonomous {'complex' if needs_external_data else 'standard'} planner "
+                f"(no questions allowed)"
+            )
+        else:
+            planner = self.complex_planner if needs_external_data else self.standard_planner
+            logger.debug(
+                f"Using {'complex' if needs_external_data else 'standard'} planner "
+                f"(external_services={external_services})"
+            )
 
         # Call planner with consolidated fields
         result = planner(
             request=request,
             workspace_context=workspace_context,
-            capability_guidance=capability_guidance,
             planning_context=planning_context,
             conversation_history=conversation_history,
             configured_tools=configured_tools,
         )
+
+        # Handle result type based on planner used
+        if autonomous_mode:
+            # Autonomous planners return PlanOutput directly - wrap for consistency
+            plan_output: PlanOutput = result.result
+            plan_result = PlanOrQuestionsOutput(plan=plan_output, questions=None)
+            # Skip reflexion for autonomous mode - already made sensible defaults
+            self._ensure_valid_output(plan_result)
+            return plan_result
 
         plan_result = result.result
 
@@ -242,7 +285,6 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
             result = planner(
                 request=request,
                 workspace_context=workspace_context,
-                capability_guidance=capability_guidance,
                 planning_context=planning_context + reflection_context,
                 conversation_history=conversation_history,
                 configured_tools=configured_tools,
@@ -263,6 +305,7 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         retrieved_patterns: str = "",
         retrieved_knowledge: str = "",
         retrieved_strategies: str = "",
+        graph_context: str = "",
     ) -> str:
         """Build merged planning_context from task analysis and retrieved context.
 
@@ -272,6 +315,7 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         - Retrieved patterns (from PatternRetriever)
         - Retrieved knowledge (from KnowledgeRetriever)
         - Retrieved strategies (from StrategyRetriever, preferred over proven_strategies)
+        - Graph context (from GraphRetriever - related records)
         - Memory context
         - Delegation hint
 
@@ -316,6 +360,10 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         elif proven_strategies and proven_strategies.strip():
             # Fallback to legacy proven_strategies if no retrieved_strategies
             sections.append(f"## Proven Strategies\n{proven_strategies}")
+
+        # Graph context (from GraphRetriever - related records)
+        if graph_context and graph_context.strip():
+            sections.append(graph_context)
 
         # Memory context (only if non-empty)
         if memory_context and memory_context.strip():
@@ -387,7 +435,6 @@ class SkillTemplatePlannerModule(PlannerModule):
         self,
         request: str,
         workspace_context: str,
-        capability_guidance: str,
         proven_strategies: str,
         conversation_history: str,
         skill_inputs: list[dict[str, Any]],
@@ -399,7 +446,6 @@ class SkillTemplatePlannerModule(PlannerModule):
         Args:
             request: What the skill should accomplish
             workspace_context: JSON of existing resources
-            capability_guidance: When to use each capability
             proven_strategies: ACE patterns
             conversation_history: Previous messages
             skill_inputs: List of {name, type, required}
@@ -408,9 +454,6 @@ class SkillTemplatePlannerModule(PlannerModule):
         Returns:
             SkillTemplatePlanOutput with steps containing prompt_template
         """
-        # Build template-specific guidance (adds template rules to base guidance)
-        template_guidance = self._build_template_guidance(capability_guidance)
-
         # Convert to typed specs
         input_specs = [SkillInputSpec(**inp) for inp in skill_inputs]
         output_specs = [SkillOutputSpec(**out) for out in skill_outputs]
@@ -418,7 +461,6 @@ class SkillTemplatePlannerModule(PlannerModule):
         result = self.template_planner(
             request=request,
             workspace_context=workspace_context,
-            capability_guidance=template_guidance,
             proven_strategies=proven_strategies,
             conversation_history=conversation_history,
             skill_inputs=input_specs,
@@ -429,31 +471,6 @@ class SkillTemplatePlannerModule(PlannerModule):
         plan = result.result
         self._validate_template_syntax(plan, skill_inputs)
         return plan  # type: ignore[no-any-return]
-
-    def _build_template_guidance(self, base_guidance: str) -> str:
-        """Add template-specific guidance to capability guidance."""
-        template_rules = """
-TEMPLATE MODE - Creating a REUSABLE skill template.
-
-FORBIDDEN - Never generate these patterns in goal, analysis, or description:
-- "Create a skill that..." or "This skill..."
-- "takes input X and returns/outputs Y" or "assigns X to Y"
-- "returns the value of X as Y"
-- "No external tools or databases are required"
-- Any text that just describes the input-to-output mapping
-
-Focus goal/analysis/description on the TASK PURPOSE, not on explaining I/O mechanics.
-
-PRESERVE USER'S RULES:
-- Copy conditional logic from request: "if X then Y" -> {% if X %}Y{% endif %}
-- Do NOT summarize - preserve verbatim
-
-VARIABLE SYNTAX:
-- Use {{ name }} in text and inside {% if %} blocks
-- description: Brief summary, {{ }} OK, NO {% if %}
-- prompt_template: Full logic with {% if %} for conditionals
-"""
-        return f"{template_rules}\n\n{base_guidance}"
 
     def _validate_template_syntax(
         self,

@@ -18,15 +18,16 @@ logger = logging.getLogger(__name__)
 
 def create_bash_tool(
     workspace_path: Path,
-    allow_network: bool = False,
     timeout: int = 300,
 ) -> Callable[[str], str]:
     """
     Factory: Create bash execution function with workspace captured in closure.
 
+    Network access is always enabled, routed through filtered proxy
+    (blocks private IPs, AWS metadata).
+
     Args:
         workspace_path: Path to agent's workspace (mounted at /workspace in sandbox)
-        allow_network: Whether to allow network access (default False)
         timeout: Command timeout in seconds (default 5 minutes)
 
     Returns:
@@ -36,7 +37,7 @@ def create_bash_tool(
 
     logger.info(
         f"BashTool initialized: workspace={workspace_path}, "
-        f"network={allow_network}, timeout={timeout}s"
+        f"network=enabled (via proxy), timeout={timeout}s"
     )
 
     def bash(command: str) -> str:
@@ -57,7 +58,7 @@ def create_bash_tool(
         WORKSPACE STRUCTURE:
         /workspace/               <- Current working directory (YOUR FILES ARE HERE!)
         ├── [your files]          <- Documents, code, data synced from local folder
-        ├── .agent/               <- Agent config & memory (don't modify)
+        ├── .engine/              <- Agent config & memory (don't modify)
         ├── history/              <- Execution logs (read-only)
         └── scratch/              <- Your working space for outputs
             ├── context/          <- Store processed data here
@@ -152,7 +153,6 @@ def create_bash_tool(
                 command=command,
                 workspace_path=workspace_path,
                 timeout=timeout,
-                allow_network=allow_network,
             )
             result_str = str(result)
             logger.info(f"[BASH] Result ({len(result_str)} chars): {result_str[:300]}")
@@ -160,5 +160,9 @@ def create_bash_tool(
         except Exception as e:
             logger.exception(f"[BASH] Command failed: {e}")
             return f"Error executing command: {str(e)}"
+
+    # Add tool attributes for DSPy/capability registry compatibility
+    bash.name = "bash"  # type: ignore[attr-defined]
+    bash.description = "Execute bash commands in the agent's isolated workspace"  # type: ignore[attr-defined]
 
     return bash

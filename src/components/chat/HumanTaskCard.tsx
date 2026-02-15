@@ -4,15 +4,30 @@ import React, { useState } from 'react'
 import { User, ExternalLink, CheckCircle, XCircle, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import ReactMarkdown from 'react-markdown'
+import { FieldRenderer } from '@/components/human-tasks/FieldRenderer'
 import type { HumanTaskState } from './types/extended-chat-handler'
+
+/**
+ * Format field names for display by converting snake_case/camelCase to Title Case
+ * Examples:
+ *   "next_steps_required_by_client" → "Next steps required by client"
+ *   "clientName" → "Client name"
+ */
+function formatFieldName(name: string): string {
+  return name
+    .replace(/_/g, ' ')                    // Replace underscores with spaces
+    .replace(/([A-Z])/g, ' $1')            // Add space before capitals (camelCase)
+    .replace(/^./, s => s.toUpperCase())   // Capitalize first letter
+    .toLowerCase()                          // Lowercase everything
+    .replace(/^./, s => s.toUpperCase())   // Re-capitalize first letter
+    .trim()
+}
 
 interface HumanTaskCardProps {
   humanTask: HumanTaskState
-  onSubmit: (outputs: Record<string, string>) => void
+  onSubmit: (outputs: Record<string, unknown>) => void
   onCancel?: () => void
   disabled?: boolean
 }
@@ -32,10 +47,10 @@ export function HumanTaskCard({
   onCancel,
   disabled = false,
 }: HumanTaskCardProps) {
-  const [outputs, setOutputs] = useState<Record<string, string>>({})
+  const [outputs, setOutputs] = useState<Record<string, unknown>>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const handleOutputChange = (name: string, value: string) => {
+  const handleOutputChange = (name: string, value: unknown) => {
     setOutputs(prev => ({ ...prev, [name]: value }))
   }
 
@@ -48,9 +63,12 @@ export function HumanTaskCard({
     }
   }
 
+  // Check if all required outputs have non-empty values
   const isValid = humanTask.outputSchema.every(output => {
     const value = outputs[output.name]
-    return value && value.trim().length > 0
+    if (value === null || value === undefined) return false
+    if (typeof value === 'string') return value.trim().length > 0
+    return true // Non-string values (boolean, number, etc.) are valid if present
   })
 
   return (
@@ -86,15 +104,20 @@ export function HumanTaskCard({
           <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
             Context
           </h4>
-          <div className="space-y-2">
+          <div className="space-y-3">
             {humanTask.inputs.map((input, idx) => (
-              <div key={idx} className="flex items-start gap-2">
-                <span className="text-xs font-medium text-gray-600 dark:text-gray-400 min-w-[80px]">
-                  {input.name}:
+              <div key={idx} className="space-y-1">
+                <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
+                  {formatFieldName(input.name)}
                 </span>
-                <span className="text-sm text-gray-800 dark:text-gray-200">
-                  {input.value}
-                </span>
+                <div className="text-gray-800 dark:text-gray-200">
+                  <FieldRenderer
+                    fieldType={input.fieldType || input.type}
+                    value={input.value}
+                    mode="view"
+                    name={input.name}
+                  />
+                </div>
               </div>
             ))}
           </div>
@@ -133,42 +156,23 @@ export function HumanTaskCard({
           {humanTask.outputSchema.map((output, idx) => (
             <div key={idx} className="space-y-1.5">
               <Label htmlFor={`output-${output.name}`} className="text-sm font-medium">
-                {output.name}
+                {formatFieldName(output.name)}
                 {output.description && (
                   <span className="ml-1 text-xs text-gray-500 font-normal">
                     ({output.description})
                   </span>
                 )}
               </Label>
-              {output.type === 'text' || output.type === 'string' ? (
-                <Input
-                  id={`output-${output.name}`}
-                  value={outputs[output.name] || ''}
-                  onChange={(e) => handleOutputChange(output.name, e.target.value)}
-                  placeholder={`Enter ${output.name}...`}
-                  disabled={disabled || isSubmitting}
-                  className="bg-white dark:bg-gray-900"
-                />
-              ) : output.type === 'long_text' || output.type === 'textarea' ? (
-                <Textarea
-                  id={`output-${output.name}`}
-                  value={outputs[output.name] || ''}
-                  onChange={(e) => handleOutputChange(output.name, e.target.value)}
-                  placeholder={`Enter ${output.name}...`}
-                  disabled={disabled || isSubmitting}
-                  rows={3}
-                  className="bg-white dark:bg-gray-900"
-                />
-              ) : (
-                <Input
-                  id={`output-${output.name}`}
-                  value={outputs[output.name] || ''}
-                  onChange={(e) => handleOutputChange(output.name, e.target.value)}
-                  placeholder={`Enter ${output.name}...`}
-                  disabled={disabled || isSubmitting}
-                  className="bg-white dark:bg-gray-900"
-                />
-              )}
+              <FieldRenderer
+                fieldType={output.fieldType || output.type}
+                value={outputs[output.name]}
+                onChange={(value) => handleOutputChange(output.name, value)}
+                mode="edit"
+                disabled={disabled || isSubmitting}
+                placeholder={`Enter ${formatFieldName(output.name).toLowerCase()}...`}
+                name={output.name}
+                description={output.description}
+              />
             </div>
           ))}
         </div>

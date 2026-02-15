@@ -24,11 +24,6 @@ import dspy
 
 from emery_agents.ace import StrategyAccumulationService
 from emery_agents.entities.models.plan import Plan, PlanStep, create_plan, create_step
-from emery_agents.reasoning.capabilities import (
-    CAPABILITY_ROUTING_HEADER,
-    format_planning_guidance,
-    get_planning_guidance,
-)
 from emery_agents.reasoning.config import get_dspy_lm
 from emery_agents.reasoning.modules.planner import (
     PlannerModule,
@@ -68,35 +63,35 @@ class DSPyPlanGenerator:
     4. Converts DSPy output to PlanGenerationResult
     """
 
-    def __init__(
-        self,
-        discovery_tools: list[Tool] | None = None,
-    ) -> None:
-        self.discovery_tools = discovery_tools or []
+    def __init__(self) -> None:
         self._last_strategy_guidance: str = ""
 
-        # Initialize planner modules (will be configured with model on each call)
+        # Planner modules cached per discovery_tools config
         self._planner: PlannerModule | None = None
         self._template_planner: SkillTemplatePlannerModule | None = None
+        self._current_tools_hash: int = 0
 
-    def _get_planner(self) -> PlannerModule:
-        """Get or create planner module."""
-        if self._planner is None:
-            self._planner = PlannerModule(external_tools=self.discovery_tools)
+    def _get_planner(self, discovery_tools: list[Tool] | None = None) -> PlannerModule:
+        """Get or create planner module with current discovery_tools."""
+        tools = discovery_tools or []
+        tools_hash = hash(tuple(t.name for t in tools)) if tools else 0
+        if self._planner is None or tools_hash != self._current_tools_hash:
+            self._planner = PlannerModule(external_tools=tools)
+            self._current_tools_hash = tools_hash
         return self._planner
 
-    def _get_template_planner(self) -> SkillTemplatePlannerModule:
-        """Get or create skill template planner module."""
+    def _get_template_planner(self, discovery_tools: list[Tool] | None = None) -> SkillTemplatePlannerModule:
+        """Get or create skill template planner module with current discovery_tools."""
+        tools = discovery_tools or []
         if self._template_planner is None:
-            self._template_planner = SkillTemplatePlannerModule(
-                external_tools=self.discovery_tools
-            )
+            self._template_planner = SkillTemplatePlannerModule(external_tools=tools)
         return self._template_planner
 
     async def generate(
         self,
         request: PlanGenerationRequest,
         strategy_service: StrategyAccumulationService | None = None,
+        discovery_tools: list[Tool] | None = None,
     ) -> PlanGenerationResult:
         """Generate plan using DSPy PlannerModule. Returns plan or clarifying questions."""
         # ACE: Get strategy guidance from past successful executions
@@ -123,22 +118,22 @@ class DSPyPlanGenerator:
 
         # Route to appropriate module based on template generation mode
         if request.is_template_generation and request.skill_inputs:
-            return await self._generate_template(request, lm, strategy_guidance)
+            return await self._generate_template(request, lm, strategy_guidance, discovery_tools)
         else:
-            return await self._generate_plan(request, lm, strategy_guidance)
+            return await self._generate_plan(request, lm, strategy_guidance, discovery_tools)
 
     async def _generate_plan(
         self,
         request: PlanGenerationRequest,
         lm: Any,
         strategy_guidance: str,
+        discovery_tools: list[Tool] | None = None,
     ) -> PlanGenerationResult:
         """Generate regular plan using PlannerModule."""
         logger.info("📋 Generating plan using DSPy PlannerModule")
 
-        planner = self._get_planner()
+        planner = self._get_planner(discovery_tools)
         workspace_context = self._format_workspace_context(request.workspace)
-        capability_guidance = self._get_capability_guidance(request)
         conversation_history = format_conversation_history(request.conversation_history)
 
         try:
@@ -146,7 +141,6 @@ class DSPyPlanGenerator:
                 result: PlanOrQuestionsOutput = planner(
                     request=request.basic_instructions,
                     workspace_context=workspace_context,
-                    capability_guidance=capability_guidance,
                     proven_strategies=strategy_guidance,
                     conversation_history=conversation_history,
                     memory_context=request.memory_context,
@@ -156,6 +150,8 @@ class DSPyPlanGenerator:
                     retrieved_patterns=request.retrieved_patterns,
                     retrieved_knowledge=request.retrieved_knowledge,
                     retrieved_strategies=request.retrieved_strategies,
+                    graph_context=request.graph_context,
+                    autonomous_mode=request.autonomous_mode,
                 )
             record_from_lm(lm, request.token_accumulator.get_llm_tracker())
         except Exception as e:
@@ -192,13 +188,13 @@ class DSPyPlanGenerator:
         request: PlanGenerationRequest,
         lm: Any,
         strategy_guidance: str,
+        discovery_tools: list[Tool] | None = None,
     ) -> PlanGenerationResult:
         """Generate skill template using SkillTemplatePlannerModule."""
         logger.info("📋 Generating skill template using SkillTemplatePlannerModule")
 
-        template_planner = self._get_template_planner()
+        template_planner = self._get_template_planner(discovery_tools)
         workspace_context = self._format_workspace_context(request.workspace)
-        capability_guidance = self._get_capability_guidance(request)
         conversation_history = format_conversation_history(request.conversation_history)
 
         # Convert skill inputs/outputs to dicts for the module
@@ -215,7 +211,6 @@ class DSPyPlanGenerator:
                 template_plan: SkillTemplatePlanOutput = template_planner(
                     request=request.basic_instructions,
                     workspace_context=workspace_context,
-                    capability_guidance=capability_guidance,
                     proven_strategies=strategy_guidance,
                     conversation_history=conversation_history,
                     skill_inputs=skill_inputs,
@@ -323,63 +318,6 @@ class DSPyPlanGenerator:
             indent=2,
             default=str,
         )
-
-    def _get_capability_guidance(
-        self,
-        request: PlanGenerationRequest,
-    ) -> str:
-        """Get capability planning guidance for the planner using semantic search.
-
-        Searches org's enabled capabilities directly (50-500) rather than all 30K
-        capabilities. Falls back to full registry search if no org_id available.
-
-        Matched capability guidance includes tool mappings and step description
-        templates — these are the primary instructions for writing executor-ready steps.
-        """
-        # Fallback: no registry means return all guidance (includes routing header)
-        if not request.capability_registry:
-            logger.warning(
-                "capability_registry missing in request — returning all guidance (this shouldn't happen)"
-            )
-            return format_planning_guidance()
-
-        org_id = request.config.org_id if request.config else None
-
-        try:
-            # Semantic search within org's enabled capabilities only (50-500, not 30K)
-            # Falls back to full registry search if no org_id
-            if org_id:
-                matched = request.capability_registry.search_enabled(
-                    query=request.basic_instructions,
-                    org_id=org_id,
-                    limit=3,
-                )
-            else:
-                matched = request.capability_registry.search(
-                    query=request.basic_instructions,
-                    limit=3,
-                )
-
-            # Get guidance for matched capabilities
-            guidance_parts = []
-            for cap in matched:
-                g = get_planning_guidance(cap.id)
-                if g:
-                    guidance_parts.append(g)
-
-            if guidance_parts:
-                logger.info(
-                    f"Matched {len(matched)} capabilities for guidance: "
-                    f"{[c.id for c in matched]}"
-                )
-                # Capability guidance first (step templates + tool mappings), routing header second
-                return "\n\n".join(guidance_parts) + "\n\n" + CAPABILITY_ROUTING_HEADER
-
-        except Exception as e:
-            logger.warning(f"Capability search failed, using all guidance: {e}")
-
-        # Fallback: return all guidance (includes routing header)
-        return format_planning_guidance()
 
     def _convert_questions(
         self,

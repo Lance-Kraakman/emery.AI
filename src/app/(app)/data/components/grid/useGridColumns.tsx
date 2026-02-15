@@ -31,6 +31,8 @@ import type {
   MultiSelectCellConfiguration,
   JSONValue,
   JSONCellConfiguration,
+  EmailThreadValue,
+  EmailThreadCellConfiguration,
 } from './cell-types'
 import { TextCell } from './cells/TextCell'
 import { NumberCell } from './cells/NumberCell'
@@ -78,6 +80,7 @@ interface UseGridColumnsParams {
   SingleSelectCell?: CellComponent<SingleSelectValue, SingleSelectCellConfiguration>
   MultiSelectCell?: CellComponent<MultiSelectValue, MultiSelectCellConfiguration>
   JSONCell?: CellComponent<JSONValue, JSONCellConfiguration>
+  EmailThreadCell?: CellComponent<EmailThreadValue, EmailThreadCellConfiguration>
 }
 
 /**
@@ -111,6 +114,7 @@ export function useGridColumns({
   SingleSelectCell,
   MultiSelectCell,
   JSONCell,
+  EmailThreadCell,
 }: UseGridColumnsParams) {
   console.log('[USE GRID COLUMNS] Hook called', {
     fieldsCount: fields.length,
@@ -324,6 +328,25 @@ export function useGridColumns({
           }
           break
 
+        case 'email-thread':
+          // Custom component for email thread display
+          if (EmailThreadCell) {
+            columnConfig = {
+              ...textColumn,  // ✅ CRITICAL: Extend base column type for proper data binding
+              component: EmailThreadCell,
+              disableKeys: true,
+              columnData: {
+                field,
+                onUpdateRow
+              }
+            }
+            basis = WIDE_COLUMN_BASIS
+            minWidth = WIDE_COLUMN_MIN_WIDTH
+          } else {
+            columnConfig = textColumn
+          }
+          break
+
         case 'autonumber':
           // Use textColumn to display formatted strings (e.g., "INV-00001")
           columnConfig = {
@@ -409,5 +432,5 @@ export function useGridColumns({
     columns.push(addColumnCol)
 
     return columns
-  }, [fields, fieldMappings, currentView, organizationId, tableId, data, onUpdateRow, onEditField, onDeleteField, onAddColumn, onFieldUpdate, availableTables, onSort, onClearSort, RelationCell, FileCell, DocumentCell, EmbeddingCell, SingleSelectCell, MultiSelectCell])
+  }, [fields, fieldMappings, currentView, organizationId, tableId, data, onUpdateRow, onEditField, onDeleteField, onAddColumn, onFieldUpdate, availableTables, onSort, onClearSort, RelationCell, FileCell, DocumentCell, EmbeddingCell, SingleSelectCell, MultiSelectCell, JSONCell, EmailThreadCell])
 }

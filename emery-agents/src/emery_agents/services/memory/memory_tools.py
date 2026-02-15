@@ -70,9 +70,7 @@ def create_memory_crud(memory_service: MemoryService) -> Callable[..., str]:
         elif method == "delete_memory":
             if not memory_id:
                 return "ERROR: memory_id is required for delete_memory"
-            success = memory_service.delete(memory_id)
-            if not success:
-                return "ERROR: Failed to delete memory"
+            memory_service.delete(memory_id)  # Raises on error
             return json.dumps({"success": True, "deleted_id": memory_id})
 
         else:

@@ -15,6 +15,7 @@ from PIL import Image
 
 from emery_agents.planning.registry import PlanningRegistry
 from emery_agents.services.analysis.token_accumulator import TokenAccumulator
+from emery_agents.services.tools.tool_preparation import get_tool_preparation_service
 from emery_agents.tools.capability_bootstrap import (
     populate_external_tools,
     populate_user_skills,
@@ -23,15 +24,14 @@ from emery_agents.tools.capability_registry import CapabilityRegistry
 from emery_agents.tools.knowledge import get_knowledge_base
 
 from ..engine import AgentEngine
+from ..infrastructure.storage import WORKSPACE_STORAGE_PATH
 from ..entities.execution_context import ExecutionContext
 from ..entities.models.plan import Plan
 from ..orchestrators import RuntimeContext, create_session_graph
 from ..orchestrators.nodes.planning import _build_workspace_context
 from ..orchestrators.state import DEFAULT_STATE
-from ..services.agents.executor import AgentExecutor
-
 # MemoryService now accessed via engine.memory
-from ..services.context import ConversationMessage, WorkspaceContext
+from ..services.context import ConversationMessage, WorkspaceContext, set_current_context
 from ..services.execution.events import (
     ExecutionCompletedEvent,
     FinalSynthesisEvent,
@@ -162,25 +162,43 @@ class CoordinatorStreamingHandler:
         assert context.tool_provider is not None, "tool_provider required"
 
         # Initialize AgentEngine for unified workspace management
-        engine = None
+        # Always create an engine - use session workspace if no agent workspace context
+        org_id = str(context.tool_provider.organization_id)
         memory_context_str = ""
-        if workspace_type and workspace_id:
-            try:
-                engine = AgentEngine(
-                    workspace_id=workspace_id,
-                    workspace_type=workspace_type,
-                    base_path=Path("/tmp/workspace"),
-                )
-                engine.initialize()
 
-                # Fetch relevant memories (passed separately to planner, not mixed into task)
+        # Determine workspace - fall back to session-based if not provided
+        effective_workspace_type = workspace_type or "sessions"
+        effective_workspace_id = workspace_id or thread_id
+
+        try:
+            workspace_base = WORKSPACE_STORAGE_PATH / org_id / effective_workspace_type
+            engine = AgentEngine(
+                workspace_id=effective_workspace_id,
+                workspace_type=effective_workspace_type,
+                base_path=workspace_base,
+            )
+            engine.initialize()
+
+            # Fetch relevant memories (only for real agent/user workspaces, not sessions)
+            if workspace_type and workspace_id:
                 memory_context_str = engine.memory.get_context_summary(task)
                 if memory_context_str:
                     logger.info(
                         f"Found relevant memory context ({len(memory_context_str)} chars)"
                     )
-            except Exception as e:
-                logger.warning(f"Failed to initialize AgentEngine: {e}")
+
+            # Add workspace tools (bash, filesystem) for real workspaces
+            if workspace_type and workspace_id and engine.paths and engine.paths.root:
+                prep = get_tool_preparation_service()
+                workspace_tools = prep.prepare_workspace_tools(engine.paths.root)
+                tools = list(tools) + workspace_tools
+                logger.info(
+                    f"🔧 Added {len(workspace_tools)} workspace tools "
+                    f"for {engine.paths.root}"
+                )
+        except Exception as e:
+            logger.error(f"Failed to initialize AgentEngine: {e}")
+            raise RuntimeError(f"Cannot process request: engine initialization failed: {e}")
 
         runtime = RuntimeContext(
             # Engine (unified workspace management)
@@ -350,7 +368,7 @@ class CoordinatorStreamingHandler:
         # Set execution context for tool mode
         if context.tool_provider:
             context.tool_mode = ToolMode.EXECUTION
-            AgentExecutor.set_current_context(context)
+            set_current_context(context)
 
         # Resume with Command
         resume_input: Any = Command(resume=response)

@@ -1,15 +1,21 @@
 """
 Execution Module
 
-Extracted components from ExecutionCoordinator for maintainability.
-
-- InterruptHandler: Manages interrupt queue and classification
-- ReplanHandler: Handles diff-based replanning
-- ExecutionState: Unified state management
-- Phase: Simplified phase enum (IDLE, WORKING, AWAITING_INPUT, COMPLETE, FAILED)
+This module exports lightweight components that don't cause circular imports:
 - Events: All coordinator event types for UI feedback
+- State: ExecutionState, Phase, WorkMode, etc.
+- Handlers: InterruptHandler, ReplanHandler
+- TaskBuilder: Utility for composing task strings
 
-Import directly from submodules to avoid circular imports:
+For executors, import directly from services.executors to avoid cycles:
+- from emery_agents.services.executors.agentic import AgenticExecutor
+- from emery_agents.services.executors.interactive import InteractiveExecutor
+- from emery_agents.services.executors.coordinator import CoordinatorExecutor
+- from emery_agents.services.executors.router import ExecutionRouter
+- from emery_agents.services.executors.shared.output_pipeline import OutputPipeline
+- from emery_agents.services.executors.shared.human_skill import HumanSkillHandler
+
+Other submodules (import directly):
 - StepExecutor: from .step_executor
 - PlanStepExecutor: from .plan_step_executor
 - CoordinatorMode, ExecutionCoordinatorConfig: from .config
@@ -83,7 +89,7 @@ class TaskBuilder:
 
 
 __all__ = [
-    # StepExecutor, PlanStepExecutor: import directly from submodules
+    # Interrupt handling
     "InterruptHandler",
     "QueuedInterrupt",
     "ReplanHandler",

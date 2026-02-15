@@ -172,6 +172,7 @@ export function useChatGRPC(
     name: string
     index: number
     content?: string
+    status?: 'executing' | 'completed' | 'failed'
   } | null>(null)
   const [streamingSteps, setStreamingSteps] = useState<ExecutionStep[]>([])
   const [currentMessageId, setCurrentMessageId] = useState<string | null>(null)
@@ -622,7 +623,8 @@ export function useChatGRPC(
                   type: eventData.stepType,
                   name: eventData.stepName,
                   index: eventData.stepIndex,
-                  content: eventData.content
+                  content: eventData.content,
+                  status: eventData.metadata?.skill_status as 'executing' | 'completed' | 'failed' | undefined
                 })
 
                 // Accumulate step for history display with deduplication
@@ -1135,7 +1137,7 @@ export function useChatGRPC(
   }
 
   // Human task completion function
-  const submitHumanTask = async (outputs: Record<string, string>) => {
+  const submitHumanTask = async (outputs: Record<string, unknown>) => {
     if (!humanTask) {
       logger.debug('No human task to submit')
       return

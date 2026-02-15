@@ -19,7 +19,7 @@ services:
       - ../..:/app
       - /app/node_modules
       - /app/.next
-      - workspace_data:/mnt/storage/workspaces
+      - ${WORKSPACE_HOST_PATH:-../../.workspace-data}:/mnt/storage/workspaces
 
   # Scheduler: use dev Dockerfile (skips next build)
   scheduler-integration:
@@ -42,13 +42,15 @@ services:
       - USER_PASSWORD=test123
       - API_HOST=host.docker.internal:3002
 
-  # Python agents: mount source for code changes without rebuild
+  # Python agents: mount source for code changes without rebuild + point to local app
   agent-chat-integration:
+    environment:
+      NEXTJS_BASE_URL: http://host.docker.internal:3002
     volumes:
       - ../../emery-agents/src:/usr/src/app/src
-      - workspace_data:/mnt/storage/workspaces
+      - ${WORKSPACE_HOST_PATH:-../../.workspace-data}:/mnt/storage/workspaces
 
   agent-table-integration:
     volumes:
       - ../../emery-agents/src:/usr/src/app/src
-      - workspace_data:/mnt/storage/workspaces
+      - ${WORKSPACE_HOST_PATH:-../../.workspace-data}:/mnt/storage/workspaces

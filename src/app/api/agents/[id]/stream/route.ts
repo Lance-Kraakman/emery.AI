@@ -40,11 +40,9 @@ export async function GET(
       // Try Bearer token auth (supports device tokens, callback tokens, user API keys)
       const authHeader = request.headers.get('authorization');
       const apiKey = extractApiKeyFromHeader(authHeader);
-      console.log('[AGENT-STREAM] Auth attempt - session:', !!session?.user?.id, 'authHeader:', !!authHeader, 'apiKey prefix:', apiKey?.substring(0, 10));
       if (apiKey) {
         // Use unified token validation (handles device_, cb_, user_ tokens)
         const validatedToken = await validateToken(apiKey, ['workspace:sync']);
-        console.log('[AGENT-STREAM] Token validation result:', !!validatedToken);
         if (validatedToken?.user) {
           userId = validatedToken.user.id;
         }
@@ -52,7 +50,6 @@ export async function GET(
     }
 
     if (!userId) {
-      console.log('[AGENT-STREAM] Auth failed - no userId');
       return new Response('Unauthorized', { status: 401 });
     }
 
@@ -89,6 +86,10 @@ export async function GET(
         let lastSyncVersion: string | null = null;
 
         const sendEvent = (type: string, data: unknown) => {
+          // Check if connection is still open before sending
+          if (request.signal.aborted) {
+            return;
+          }
           const event = {
             type,
             timestamp: new Date().toISOString(),
@@ -154,8 +155,12 @@ export async function GET(
         // Send initial state
         await fetchAndSendInitialState();
 
-        // Poll for changes
+        // Poll for changes (3s interval to reduce server load)
         const pollInterval = setInterval(async () => {
+          // Skip if connection closed
+          if (request.signal.aborted) {
+            return;
+          }
           try {
             // Check tasks for changes
             const taskList = await db
@@ -187,7 +192,7 @@ export async function GET(
           } catch (error) {
             console.error(`[AGENT-STREAM] Error polling agent ${agentId}:`, error);
           }
-        }, 1000); // Poll every second
+        }, 3000); // Poll every 3 seconds
 
         // Heartbeat to keep connection alive
         const heartbeatInterval = setInterval(() => {

@@ -49,6 +49,7 @@ const FIELD_TYPE_ICONS: Record<FieldType, React.ComponentType<{ className?: stri
   email: Mail,
   phone: Phone,
   json: Braces,
+  'email-thread': Mail,
 };
 
 /** Human-readable type labels */
@@ -69,10 +70,11 @@ const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   email: 'Email',
   phone: 'Phone',
   json: 'JSON',
+  'email-thread': 'Email Thread',
 };
 
 /** Field types that don't have a corresponding Puck field block */
-const UNSUPPORTED_FIELD_TYPES = new Set<FieldType>(['embedding', 'json']);
+const UNSUPPORTED_FIELD_TYPES = new Set<FieldType>(['embedding', 'json', 'email-thread']);
 
 export function DataFieldsPanel() {
   const { isActive, fields, dataBlockId, insertField } = useDataBlockFieldsForPanel();

@@ -29,18 +29,17 @@ from emery_agents.tools.knowledge import get_knowledge_base, set_knowledge_base
 from emery_agents.tools.loader import UnifiedToolLoader
 from emery_agents.tools.provider import ToolProvider
 
+from ..engine import AgentEngine
 from ..entities.models.plan import Plan, SkillInputDefinition, SkillOutputDefinition
-from ..infrastructure.storage import WorkspaceType, create_workspace_storage
+from ..infrastructure.storage import WORKSPACE_STORAGE_PATH, WorkspaceType, create_workspace_storage
 from ..orchestrators.nodes.planning import generate_plan_node
 from ..orchestrators.runtime import RuntimeContext
 from ..orchestrators.state import PlanExecuteState
-from ..services.agents.executor import AgentExecutor
 from ..services.agents.factory import AgentFactory
 from ..services.context.session_manager import SessionManager
 from ..services.execution.events import AwaitingClarificationEvent, PlanCreatedEvent
 from ..services.models.provider import ModelProvider
 from ..services.plan_service import PlanService
-from ..services.skills.executor import SkillExecutorService
 from ..services.tasks import TaskExecutor
 from ..services.tasks.task_executor import TaskData
 from .agent_streaming import AgentStreamingHandler
@@ -110,10 +109,6 @@ class ChatProcessingServiceImplementation(
         for pattern in ALL_PATTERNS:
             self.planning_registry.register(pattern)
 
-        self.skill_executor_service = SkillExecutorService(
-            tool_loader=self.tool_loader, agent_factory=self.agent_factory
-        )
-
         self.plan_service = PlanService(
             grpc_client=None,
             model_provider=self.model_provider,
@@ -123,7 +118,6 @@ class ChatProcessingServiceImplementation(
         self._agent_handler = AgentStreamingHandler(
             session_manager=self.session_manager,
             model_provider=self.model_provider,
-            skill_executor_service=self.skill_executor_service,
             tool_loader=self.tool_loader,
             plan_service=self.plan_service,
             coordinator_handler=self._coordinator_handler,
@@ -132,11 +126,8 @@ class ChatProcessingServiceImplementation(
         )
 
         # Shared TaskExecutor for task-based chat executions
-        self._agent_executor = AgentExecutor()
-        self._task_executor = TaskExecutor(
-            agent_executor=self._agent_executor,
-            api_service=None,  # No API service needed for chat tasks
-        )
+        # Uses ExecutionRouter by default (use_new_router=True)
+        self._task_executor = TaskExecutor()
 
         logger.info("✅ ChatProcessingService initialized successfully")
 
@@ -773,12 +764,23 @@ class ChatProcessingServiceImplementation(
 
             yield _make_progress("Creating plan...", "planning")
 
+            # Create user engine for plan generation (skill template plans)
+            org_id_str = str(tool_provider.organization_id)
+            workspace_base = WORKSPACE_STORAGE_PATH / org_id_str / "sessions"
+            engine = AgentEngine(
+                workspace_id=session_id,
+                workspace_type="sessions",
+                base_path=workspace_base,
+            )
+            engine.initialize()
+
             # Build RuntimeContext for non-serializable objects
             runtime = RuntimeContext(
+                engine=engine,
                 tools=[],
                 managed_agents=managed_agents,
                 api_key=tool_provider.api_key,
-                org_id=str(tool_provider.organization_id),
+                org_id=org_id_str,
                 org_model=request.model or None,
                 capability_registry=capability_registry,
                 planning_registry=self.planning_registry,
