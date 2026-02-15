@@ -41,9 +41,9 @@ class GraphService:
         self._setup()
 
     def _setup(self) -> None:
-        """Install and load required DuckDB extensions."""
-        self._conn.execute("INSTALL delta; LOAD delta")
-        self._conn.execute("INSTALL duckpgq; LOAD duckpgq")
+        """Load required DuckDB extensions (pre-installed in Docker image)."""
+        self._conn.load_extension("delta")
+        self._conn.load_extension("duckpgq")
         self._configure_s3()
 
     def _configure_s3(self) -> None:
