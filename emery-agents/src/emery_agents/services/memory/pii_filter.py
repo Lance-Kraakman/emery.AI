@@ -46,7 +46,6 @@ class PIIFilter:
         Args:
             entities: PII entity types to detect. Defaults to DEFAULT_PII_ENTITIES.
         """
-        # Use pre-installed en_core_web_sm instead of default en_core_web_lg
         provider = NlpEngineProvider(nlp_configuration=_NLP_CONFIG)
         nlp_engine = provider.create_engine()
         self._analyzer = AnalyzerEngine(nlp_engine=nlp_engine)

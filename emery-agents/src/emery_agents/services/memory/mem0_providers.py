@@ -3,23 +3,26 @@
 from __future__ import annotations
 
 import contextvars
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Any, Generator
+from typing import Any
 
 import dspy
-from mem0.embeddings.base import EmbeddingBase, BaseEmbedderConfig
-from mem0.llms.base import LLMBase, BaseLlmConfig
+from mem0.embeddings.base import BaseEmbedderConfig, EmbeddingBase
+from mem0.llms.base import BaseLlmConfig, LLMBase
 from mem0.utils.factory import EmbedderFactory, LlmFactory
 
 from ..analysis.embedding_usage import get_current_tracker, set_current_tracker
 from ..analysis.embeddings import get_embedding
-from ..analysis.llm_usage import record_from_lm
+from ..analysis.llm_usage import LlmUsageTracker, record_from_lm
+from ..analysis.token_accumulator import TokenAccumulator
 
-if TYPE_CHECKING:
-    from ..analysis.token_accumulator import TokenAccumulator
-
-_llm_tracker: contextvars.ContextVar[Any] = contextvars.ContextVar("_mem0_llm_tracker")
-_current_lm: contextvars.ContextVar[dspy.LM] = contextvars.ContextVar("_mem0_lm")
+_llm_tracker: contextvars.ContextVar[LlmUsageTracker | None] = contextvars.ContextVar(
+    "_mem0_llm_tracker", default=None
+)
+_current_lm: contextvars.ContextVar[dspy.LM | None] = contextvars.ContextVar(
+    "_mem0_lm", default=None
+)
 
 
 class TrackedEmbedder(EmbeddingBase):
@@ -41,15 +44,20 @@ class TrackedLLM(LLMBase):
         tool_choice: str = "auto",
         **kwargs: Any,
     ) -> str:
-        lm = _current_lm.get()  # Raises LookupError if not set
+        lm = _current_lm.get()
+        if lm is None:
+            raise LookupError("No LM set in memory tracking scope")
+        tracker = _llm_tracker.get()
+        if tracker is None:
+            raise LookupError("No LLM tracker set in memory tracking scope")
         response = lm(messages=messages)
-        record_from_lm(lm, _llm_tracker.get())
+        record_from_lm(lm, tracker)
         if not response:
             raise RuntimeError("LLM returned empty response")
         return str(response[0])
 
 
-def register_tracked_providers() -> None:
+def _register_tracked_providers() -> None:
     """Patch mem0 factories to support 'tracked' provider."""
     original_embedder_create = EmbedderFactory.create
     original_llm_create = LlmFactory.create
@@ -75,6 +83,7 @@ def memory_tracking_scope(
     token_accumulator: TokenAccumulator,
     lm: dspy.LM,
 ) -> Generator[None, None, None]:
+    """Context manager for tracking memory operations."""
     with set_current_tracker(token_accumulator.get_embedding_tracker()):
         llm_token = _llm_tracker.set(token_accumulator.get_llm_tracker())
         lm_token = _current_lm.set(lm)
@@ -85,5 +94,4 @@ def memory_tracking_scope(
             _current_lm.reset(lm_token)
 
 
-# Register on module load
-register_tracked_providers()
+_register_tracked_providers()

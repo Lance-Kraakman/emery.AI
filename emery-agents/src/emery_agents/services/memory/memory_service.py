@@ -10,7 +10,7 @@ from mem0.configs.base import EmbedderConfig, LlmConfig, MemoryConfig, VectorSto
 from mem0.configs.vector_stores.chroma import ChromaDbConfig
 from mem0.memory.main import Memory
 
-from .mem0_providers import TrackedEmbedder, TrackedLLM  # noqa: F401 - triggers provider registration
+from . import mem0_providers  # noqa: F401
 from .pii_filter import PIIFilter
 
 logger = logging.getLogger(__name__)
@@ -27,7 +27,6 @@ class MemoryService:
         storage_path = base_path / workspace_id / ".engine" / "memory"
         storage_path.mkdir(parents=True, exist_ok=True)
 
-        # Build config using model_construct to bypass Pydantic validation
         config = MemoryConfig.model_construct(
             llm=LlmConfig.model_construct(provider="tracked", config={}),
             embedder=EmbedderConfig.model_construct(provider="tracked", config={}),
@@ -52,7 +51,7 @@ class MemoryService:
             stored,
             user_id=self._workspace_id,
             metadata={"memory_type": memory_type, "workspace_type": self._workspace_type, **(metadata or {})},
-            infer=False,  # Disable LLM fact extraction for now (enable later with tracking)
+            infer=False,
         )
         if not result or not result.get("results"):
             raise RuntimeError(f"Failed to store memory: {content[:50]}")
@@ -68,12 +67,11 @@ class MemoryService:
             return []
 
         results = self._memory.search(query, user_id=self._workspace_id, limit=n_results)
-        memories = [
+        return [
             {"id": r["id"], "content": r["memory"], "metadata": r.get("metadata") or {}}
             for r in results.get("results", [])  # type: ignore[union-attr]
             if not memory_type or (r.get("metadata") or {}).get("memory_type") == memory_type
         ]
-        return memories
 
     def get_all(self, limit: int = 50) -> list[dict[str, Any]]:
         results = self._memory.get_all(user_id=self._workspace_id)
