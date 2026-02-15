@@ -18,6 +18,7 @@ from dspy.adapters.types.image import Image as DspyImage
 from ...reasoning.config import get_dspy_lm
 from ...reasoning.modules.executor import DirectExecutorModule, direct_execution_reward
 from ...reasoning.utils import extract_dspy_result
+from ...services.analysis.embedding_usage import set_current_tracker
 from ...services.analysis.llm_usage import record_from_lm
 from ...services.context import format_conversation_history
 from ...services.execution.events import (
@@ -136,15 +137,23 @@ async def direct_execute_node(
         organization_id=int(org_id) if org_id else None,
     )
 
+    # Set embedding tracker context for memory operations
+    embedding_tracker = (
+        runtime.token_accumulator.get_embedding_tracker()
+        if runtime.token_accumulator
+        else None
+    )
+
     try:
         lm = get_dspy_lm(org_model=org_model)
-        with execution_scope(ctx), dspy.context(lm=lm):
-            result = executor(
-                step_description=task,
-                context=json.dumps(execution_context),
-                images=dspy_images,
-            )
-        record_from_lm(lm, runtime.token_accumulator.get_llm_tracker())
+        with set_current_tracker(embedding_tracker):
+            with execution_scope(ctx), dspy.context(lm=lm):
+                result = executor(
+                    step_description=task,
+                    context=json.dumps(execution_context),
+                    images=dspy_images,
+                )
+            record_from_lm(lm, runtime.token_accumulator.get_llm_tracker())
 
         result_str = extract_dspy_result(result)
 

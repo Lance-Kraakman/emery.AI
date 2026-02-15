@@ -29,6 +29,7 @@ from ...services.execution.events import (
     StepStartedEvent,
     ToolLoadedEvent,
 )
+from ...services.analysis.embedding_usage import set_current_tracker
 from ...services.execution.plan_step_executor import PlanStepExecutor
 from ...services.execution.step_executor import StepExecutor
 from ...services.memory import create_memory_crud
@@ -196,13 +197,21 @@ async def execute_step_node(
 
     step_executor = StepExecutor(plan_step_executor=plan_step_executor)
 
+    # Set embedding tracker context for memory operations
+    embedding_tracker = (
+        runtime.token_accumulator.get_embedding_tracker()
+        if runtime.token_accumulator
+        else None
+    )
+
     try:
-        outcome: StepOutcome = await step_executor.execute_step(
-            current_plan=plan,
-            step=step,
-            tools=tools,
-            managed_agents=managed_agents,
-        )
+        with set_current_tracker(embedding_tracker):
+            outcome: StepOutcome = await step_executor.execute_step(
+                current_plan=plan,
+                step=step,
+                tools=tools,
+                managed_agents=managed_agents,
+            )
 
         # Emit events for dynamically loaded tools (frontend sync)
         if plan_step_executor.loaded_tool_events:
