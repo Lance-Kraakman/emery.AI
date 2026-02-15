@@ -25,7 +25,7 @@ STEP QUALITY RULES:
 - The plan step executor cannot see the plan goal, workspace context, or capability guidance.
   It only has the step description + tools. Write accordingly.
 - Include concrete names, values, and types — never use vague references like "the table" or "appropriate fields".
-- Use capability_guidance step format examples and templates as models for step descriptions.
+- Use retrieved capabilities and patterns from planning_context as models for step descriptions.
 - If a step requires looking something up first, write that INTO the description
   (e.g., "Look up the 'contacts' table schema, then add a 'phone' (phone) field").
 - One step per distinct action. Never combine multiple actions into one step.
@@ -43,7 +43,7 @@ The executor will automatically route steps to the appropriate agent.
 
 PLANNING PROCESS:
 - Check workspace_context for existing resources before creating new ones.
-- Use capability_guidance to understand what the system can do and which tools each capability uses.
+- Use planning_context to understand what the system can do via retrieved capabilities and patterns.
 - Use task_analysis for pre-analyzed intent, approach, and external service hints.
 
 EXTERNAL INTEGRATIONS: If task_analysis lists external services (Gmail, Slack, etc.),
