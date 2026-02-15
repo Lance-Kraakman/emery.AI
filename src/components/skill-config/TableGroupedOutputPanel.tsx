@@ -343,6 +343,10 @@ export function TableGroupedOutputPanel({
     onOutputsChange(outputs.filter((o) => o.name !== outputName));
   };
 
+  const handleUpdateOutput = (outputName: string, updated: OutputDefinition) => {
+    onOutputsChange(outputs.map((o) => (o.name === outputName ? updated : o)));
+  };
+
   const handleAddManualOutput = () => {
     const name = newOutputName.trim();
     if (!name || outputs.some((o) => o.name === name)) return;
@@ -510,6 +514,7 @@ export function TableGroupedOutputPanel({
                 key={output.name}
                 output={output}
                 onRemove={() => handleRemoveOutput(output.name)}
+                onTypeChange={(type) => handleUpdateOutput(output.name, { ...output, type })}
               />
             ))}
           </div>
