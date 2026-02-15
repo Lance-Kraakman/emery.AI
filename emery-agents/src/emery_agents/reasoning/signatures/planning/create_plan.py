@@ -22,12 +22,6 @@ class CreatePlan(dspy.Signature):  # type: ignore[misc]
         "For detailed field schemas, use system_research(resource_type='tables', query='<name>', include_details=True). "
         "Do NOT guess field names or types — look them up if needed."
     )
-    capability_guidance: str = dspy.InputField(
-        desc="Routing table and instructions for system capabilities. "
-        "Shows what the system can do, when to use each capability, "
-        "which tools each capability uses, and step description templates. "
-        "Use the step description templates to write executor-ready step descriptions."
-    )
     planning_context: str = dspy.InputField(
         desc="Combined context for planning: task analysis (intent, domain, entities, approach), "
         "proven strategies from past executions, background memories, and delegation hints. "

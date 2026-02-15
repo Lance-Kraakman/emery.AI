@@ -20,11 +20,6 @@ class CreatePlanAutonomous(dspy.Signature):  # type: ignore[misc]
         desc="Summary of existing workspace resources (databases, tables with field counts, "
         "apps, agents, skills). Check this BEFORE creating resources that may already exist."
     )
-    capability_guidance: str = dspy.InputField(
-        desc="Routing table and instructions for system capabilities. "
-        "Shows what the system can do, when to use each capability, "
-        "which tools each capability uses, and step description templates."
-    )
     planning_context: str = dspy.InputField(
         desc="Combined context for planning: task analysis (intent, domain, entities, approach), "
         "proven strategies from past executions, background memories, and delegation hints."

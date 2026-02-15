@@ -25,8 +25,6 @@ import dspy
 from emery_agents.ace import StrategyAccumulationService
 from emery_agents.entities.models.plan import Plan, PlanStep, create_plan, create_step
 from emery_agents.reasoning.capabilities import (
-    CAPABILITY_ROUTING_HEADER,
-    format_planning_guidance,
     get_planning_guidance,
 )
 from emery_agents.reasoning.config import get_dspy_lm
@@ -157,6 +155,7 @@ class DSPyPlanGenerator:
                     retrieved_patterns=request.retrieved_patterns,
                     retrieved_knowledge=request.retrieved_knowledge,
                     retrieved_strategies=request.retrieved_strategies,
+                    graph_context=request.graph_context,
                     autonomous_mode=request.autonomous_mode,
                 )
             record_from_lm(lm, request.token_accumulator.get_llm_tracker())
@@ -339,12 +338,7 @@ class DSPyPlanGenerator:
         Matched capability guidance includes tool mappings and step description
         templates — these are the primary instructions for writing executor-ready steps.
         """
-        # Fallback: no registry means return all guidance (includes routing header)
-        if not request.capability_registry:
-            logger.warning(
-                "capability_registry missing in request — returning all guidance (this shouldn't happen)"
-            )
-            return format_planning_guidance()
+   
 
         org_id = request.config.org_id if request.config else None
 
@@ -381,8 +375,7 @@ class DSPyPlanGenerator:
         except Exception as e:
             logger.warning(f"Capability search failed, using all guidance: {e}")
 
-        # Fallback: return all guidance (includes routing header)
-        return format_planning_guidance()
+        return ""
 
     def _convert_questions(
         self,

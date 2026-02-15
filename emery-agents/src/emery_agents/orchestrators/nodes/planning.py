@@ -10,6 +10,9 @@ from typing import Any
 
 from emery_agents.ace.services.strategy_service import StrategyAccumulationService
 from emery_agents.api import WorkspaceAPI
+from emery_agents.reasoning.capabilities import (
+    get_planning_guidance,
+)
 from emery_agents.reasoning.modules.graph_retriever import GraphRetriever
 from emery_agents.reasoning.modules.retrievers import (
     WorkspaceRetriever,
@@ -439,6 +442,7 @@ async def generate_plan_node(
     retrieved_patterns = ""
     retrieved_knowledge = ""
     retrieved_strategies = ""
+    capability_guidance = ""
 
     if org_id and (capability_registry or runtime.planning_registry):
         # Set embedding tracker context so retrievers track to this request
@@ -464,6 +468,20 @@ async def generate_plan_node(
                         "capabilities"
                     ].format_for_planner(caps)
                     logger.debug(f"Retrieved {len(caps)} capabilities for planning")
+
+                    # Get planning guidance for matched capabilities
+                    guidance_parts = []
+                    for cap in caps:
+                        g = get_planning_guidance(cap.id)
+                        if g:
+                            guidance_parts.append(g)
+                    if guidance_parts:
+                        capability_guidance = (
+                            "\n\n".join(guidance_parts) + "\n\n" + CAPABILITY_ROUTING_HEADER
+                        )
+                        logger.debug(
+                            f"Got guidance for {len(guidance_parts)} capabilities"
+                        )
 
                 if "patterns" in retrievers:
                     patterns = retrievers["patterns"](enriched_task)
@@ -567,6 +585,7 @@ async def generate_plan_node(
             retrieved_knowledge=retrieved_knowledge,
             retrieved_strategies=retrieved_strategies,
             graph_context=graph_context,
+            capability_guidance=capability_guidance,
             autonomous_mode=runtime.autonomous_mode,
             discovery_tools=discovery_tools,
         )

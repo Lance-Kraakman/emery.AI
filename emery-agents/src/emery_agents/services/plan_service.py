@@ -89,6 +89,7 @@ class PlanService:
         retrieved_knowledge: str = "",
         retrieved_strategies: str = "",
         graph_context: str = "",
+        capability_guidance: str = "",
         autonomous_mode: bool = False,
         discovery_tools: list[Tool] | None = None,
     ) -> PlanGenerationResult:
@@ -118,6 +119,7 @@ class PlanService:
             retrieved_knowledge=retrieved_knowledge,
             retrieved_strategies=retrieved_strategies,
             graph_context=graph_context,
+            capability_guidance=capability_guidance,
             autonomous_mode=autonomous_mode,
         )
 
