@@ -33,7 +33,7 @@ class SharedFilesystemStorage(WorkspaceStorage):
             ├── agents/
             │   └── {agent_id}/
             │       ├── [user files]         # Synced from local folder (rsync)
-            │       ├── .agent/              # Agent config + memory (persistent)
+            │       ├── .engine/             # Agent config + memory (persistent)
             │       │   ├── config.json
             │       │   ├── plans/
             │       │   └── memory/chroma/

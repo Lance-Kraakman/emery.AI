@@ -28,7 +28,7 @@ class WorkspaceStorage(ABC):
     Abstract interface for workspace storage.
 
     Workspaces are persistent directories that contain:
-    - .agent/ - Agent configuration and memory
+    - .engine/ - Agent configuration and memory
     - workspace/ - Working files (context, scratch, outputs)
     - history/ - Task execution history
 

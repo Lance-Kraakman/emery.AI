@@ -7,7 +7,7 @@ Part of the ACE (Agentic Context Engineering) pattern.
 Uses DSPy ChainOfThought with RankStrategies signature.
 
 Per-agent scoping: Each agent has its own strategy registry stored in
-{workspace_path}/.agent/strategies.json
+{workspace_path}/.engine/strategies.json
 """
 
 import hashlib
@@ -56,7 +56,7 @@ class StrategyAccumulationService:
     using semantic matching via DSPy.
 
     Per-agent scoping: Each agent has its own strategy registry stored in
-    {workspace_path}/.agent/strategies.json. Strategies are loaded on init
+    {workspace_path}/.engine/strategies.json. Strategies are loaded on init
     and saved after each recording.
     """
 
@@ -73,7 +73,7 @@ class StrategyAccumulationService:
     @property
     def _storage_path(self) -> Path:
         """Path to strategies file within agent workspace."""
-        return self.workspace_path / ".agent" / "strategies.json"
+        return self.workspace_path / ".engine" / "strategies.json"
 
     def _load(self) -> None:
         """Load registry from filesystem."""
