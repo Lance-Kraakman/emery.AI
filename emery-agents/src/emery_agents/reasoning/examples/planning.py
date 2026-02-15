@@ -40,6 +40,7 @@ EXAMPLE_EXECUTE_SKILL = _example(
                 PlanStepOutput(
                     step_id="step_1",
                     description="Execute skill 'Go for a Walk'. Human task - await completion.",
+                    # tool_call populated at runtime from configured_tools
                     phase_name="Execution",
                     phase_order=1,
                 )
@@ -63,6 +64,8 @@ EXAMPLE_SKILL_WITH_INPUTS = _example(
                 PlanStepOutput(
                     step_id="step_1",
                     description="Execute 'Weekly Report' skill with recipient_email='team@company.com'.",
+                    # tool_call populated at runtime from configured_tools
+                    parameters={"recipient_email": "team@company.com"},
                     phase_name="Execution",
                     phase_order=1,
                 )

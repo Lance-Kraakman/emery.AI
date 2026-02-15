@@ -85,15 +85,16 @@ def _build_step_prompt(
     else:
         parts.extend(["", "## Current Step", current_step.description])
 
-    # Skill execution hint — guide executor to use skill_crud
+    # Skill execution hint — guide executor to use skill:{id} tool
     if current_step.target_agent == "skill_executor":
         parts.extend(
             [
                 "",
                 "## Skill Execution",
-                "This step executes an existing skill. Use `skill_crud(method='execute', skill_id=<ID>, data={inputs})`.",
-                "If you don't have the skill_id yet, call `skill_crud(method='list')` first.",
-                "Do NOT replicate the skill's logic — just execute it by ID.",
+                "This step executes an existing skill. Use the `skill:{id}` tool pattern (e.g., `skill:30`).",
+                "Call like: skill:30(input_name='value', ...) with the skill's expected inputs.",
+                "If you don't have the skill_id, call `skill_crud(method='list')` first to find it.",
+                "Do NOT replicate the skill's logic — the skill tool handles execution.",
             ]
         )
 
@@ -203,6 +204,10 @@ class PlanStepExecutor:
         # Track dynamically loaded tools for frontend sync
         self._loaded_tool_events: list[ToolLoadedEvent] = []
 
+        # Mapping from planner tool names to actual loaded tool names
+        # e.g., "skill:30" → "skill_30_go_for_a_walk"
+        self._tool_name_mapping: dict[str, str] = {}
+
         logger.info(f"Created PlanStepExecutor with {len(self._all_tools)} DSPy tools")
 
     @property
@@ -263,8 +268,12 @@ class PlanStepExecutor:
                 actual_tool_name = getattr(tool, "name", tool_name)
                 logger.info(f"Dynamically loaded tool: {tool_name} → {actual_tool_name}")
 
+                # Store mapping for later lookup (skill:30 → skill_30_go_for_a_walk)
+                self._tool_name_mapping[tool_name] = actual_tool_name
+
                 # Create event for frontend sync
-                tool_description = getattr(tool, "description", actual_tool_name)
+                # Note: dspy.Tool uses 'desc' not 'description' (description is a method)
+                tool_description = getattr(tool, "desc", None) or actual_tool_name
                 self._loaded_tool_events.append(
                     ToolLoadedEvent(
                         tool_name=actual_tool_name,
@@ -466,17 +475,21 @@ class PlanStepExecutor:
 
         # Filter tools when step specifies a tool_call (reduces token usage)
         if current_step.tool_call:
+            # Use mapped name if tool was dynamically loaded (e.g., skill:30 → skill_30_go_for_a_walk)
+            actual_tool_name = self._tool_name_mapping.get(
+                current_step.tool_call, current_step.tool_call
+            )
             step_tool = next(
-                (t for t in self._all_tools if getattr(t, "name", None) == current_step.tool_call),
+                (t for t in self._all_tools if getattr(t, "name", None) == actual_tool_name),
                 None,
             )
             if step_tool:
                 step_tools = [step_tool]
-                logger.info(f"Filtered to single tool: {current_step.tool_call}")
+                logger.info(f"Filtered to single tool: {actual_tool_name}")
             else:
                 # Tool not found after ensure - fall back to all tools
                 logger.warning(
-                    f"Tool {current_step.tool_call} not found after ensure, using all tools"
+                    f"Tool {current_step.tool_call} (mapped: {actual_tool_name}) not found after ensure, using all tools"
                 )
                 step_tools = self._all_tools
         else:
