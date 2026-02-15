@@ -11,7 +11,7 @@ from mem0.configs.vector_stores.chroma import ChromaDbConfig
 from mem0.memory.main import Memory
 
 from . import mem0_providers  # noqa: F401
-from .pii_filter import PIIFilter
+from .pii_filter import get_pii_filter
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ class MemoryService:
     def __init__(self, workspace_type: str, workspace_id: str, base_path: Path):
         self._workspace_type = workspace_type
         self._workspace_id = workspace_id
-        self._pii_filter = PIIFilter() if workspace_type == "agents" else None
+        self._pii_filter = get_pii_filter() if workspace_type == "agents" else None
 
         storage_path = base_path / workspace_id / ".engine" / "memory"
         storage_path.mkdir(parents=True, exist_ok=True)

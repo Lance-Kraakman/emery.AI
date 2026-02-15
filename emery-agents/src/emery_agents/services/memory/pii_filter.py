@@ -24,7 +24,6 @@ _NLP_CONFIG = {
     "models": [{"lang_code": "en", "model_name": "en_core_web_sm"}],
 }
 
-# Default PII entities to detect and redact
 DEFAULT_PII_ENTITIES: list[str] = [
     "PERSON",
     "EMAIL_ADDRESS",
@@ -35,17 +34,23 @@ DEFAULT_PII_ENTITIES: list[str] = [
     "LOCATION",
 ]
 
+# Module-level singleton (lazy-initialized)
+_pii_filter: "PIIFilter | None" = None
+
+
+def get_pii_filter() -> "PIIFilter":
+    """Get the singleton PIIFilter instance (lazy-initialized)."""
+    global _pii_filter
+    if _pii_filter is None:
+        _pii_filter = PIIFilter()
+    return _pii_filter
+
 
 class PIIFilter:
-    """Strips PII from text before storage. Used for agent memories (shared)."""
+    """Strips PII from text. Stateless and thread-safe."""
 
     def __init__(self, entities: list[str] | None = None):
-        """
-        Initialize PII filter with Presidio engines.
-
-        Args:
-            entities: PII entity types to detect. Defaults to DEFAULT_PII_ENTITIES.
-        """
+        """Initialize Presidio engines. Use get_pii_filter() for singleton access."""
         provider = NlpEngineProvider(nlp_configuration=_NLP_CONFIG)
         nlp_engine = provider.create_engine()
         self._analyzer = AnalyzerEngine(nlp_engine=nlp_engine)
