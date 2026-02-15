@@ -11,13 +11,13 @@ import { getAuditApplicationService } from '@/ddd/application/di/getters';
 
 interface RouteParams {
   params: Promise<{
-    tableId: string;
+    id: string;
     rowId: string;
   }>;
 }
 
 /**
- * GET /api/tables/[tableId]/rows/[rowId]/history
+ * GET /api/tables/[id]/rows/[rowId]/history
  *
  * Get modification history for a row.
  *
@@ -38,7 +38,7 @@ export async function GET(
   { params }: RouteParams
 ): Promise<NextResponse> {
   return withAuthenticatedRoute(request, async () => {
-    const { tableId, rowId } = await params;
+    const { id, rowId } = await params;
     const { searchParams } = new URL(request.url);
 
     // Parse limit from query params
@@ -48,7 +48,7 @@ export async function GET(
     // Get row history using existing audit service
     const auditService = getAuditApplicationService();
     const history = await auditService.getRowHistory(
-      parseInt(tableId, 10),
+      parseInt(id, 10),
       rowId,
       limit
     );
@@ -64,7 +64,7 @@ export async function GET(
           version: h.version,
           field_changes: h.fieldChanges,
         })),
-        table_id: tableId,
+        table_id: id,
         row_id: rowId,
       },
     };
