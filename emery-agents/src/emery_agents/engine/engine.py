@@ -2,14 +2,14 @@
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING
+
+from ..ace.services.strategy_service import StrategyAccumulationService
+from ..services.memory import MemoryService
+from ..services.plan_service import PlanService
+from ..services.planning.plan_file_repository import PlanFileRepository
+from ..services.sandbox import GVisorExecutor
 
 from .paths import EnginePaths
-
-if TYPE_CHECKING:
-    from ..services.memory import MemoryService
-    from ..services.planning.plan_file_repository import PlanFileRepository
-    from ..services.sandbox import GVisorExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +42,8 @@ class AgentEngine:
         self._memory: MemoryService | None = None
         self._plans: PlanFileRepository | None = None
         self._sandbox: GVisorExecutor | None = None
+        self._ace: StrategyAccumulationService | None = None
+        self._planner: PlanService | None = None
         self._initialized = False
 
     def initialize(self) -> None:
@@ -60,12 +62,10 @@ class AgentEngine:
             self.initialize()
 
     @property
-    def memory(self) -> "MemoryService":
+    def memory(self) -> MemoryService:
         """ChromaDB-backed semantic memory."""
         self._ensure_initialized()
         if self._memory is None:
-            from ..services.memory import MemoryService
-
             self._memory = MemoryService(
                 workspace_type=self.workspace_type,
                 workspace_id=self.workspace_id,
@@ -74,12 +74,10 @@ class AgentEngine:
         return self._memory
 
     @property
-    def plans(self) -> "PlanFileRepository":
+    def plans(self) -> PlanFileRepository:
         """Filesystem-backed plan persistence."""
         self._ensure_initialized()
         if self._plans is None:
-            from ..services.planning.plan_file_repository import PlanFileRepository
-
             self._plans = PlanFileRepository(
                 base_path=self.base_path,
                 workspace_id=self.workspace_id,
@@ -87,14 +85,28 @@ class AgentEngine:
         return self._plans
 
     @property
-    def sandbox(self) -> "GVisorExecutor":
+    def sandbox(self) -> GVisorExecutor:
         """gVisor sandbox executor."""
         self._ensure_initialized()
         if self._sandbox is None:
-            from ..services.sandbox import GVisorExecutor
-
             self._sandbox = GVisorExecutor(base_path=self.base_path)
         return self._sandbox
+
+    @property
+    def ace(self) -> StrategyAccumulationService:
+        """ACE strategy accumulation service."""
+        self._ensure_initialized()
+        if self._ace is None:
+            self._ace = StrategyAccumulationService(workspace_path=self.paths.root)
+        return self._ace
+
+    @property
+    def planner(self) -> PlanService:
+        """Plan generation service."""
+        self._ensure_initialized()
+        if self._planner is None:
+            self._planner = PlanService()
+        return self._planner
 
     def execute_command(
         self, command: str, timeout: int = 300
@@ -116,6 +128,8 @@ class AgentEngine:
         self._memory = None
         self._plans = None
         self._sandbox = None
+        self._ace = None
+        self._planner = None
         self._initialized = False
         logger.info(f"AgentEngine cleaned up: {self.workspace_id}")
 
