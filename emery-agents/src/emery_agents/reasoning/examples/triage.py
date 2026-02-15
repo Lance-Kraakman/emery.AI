@@ -295,6 +295,36 @@ EXAMPLE_RELATED_RECORDS = _example(
     record_context='{"table_name": "customers", "record_ids": ["CUST-789"]}',
 )
 
+EXAMPLE_TELL_ME_PERSON = _example(
+    task="Tell me about John Smith",
+    execution_mode="plan",
+    intent="Retrieve information about person John Smith from database",
+    reasoning="Requesting info about a specific person record - requires plan mode.",
+    approach="step-by-step",
+    entities=["John Smith"],
+    record_context='{"table_name": "clients", "record_ids": ["John Smith"]}',
+)
+
+EXAMPLE_SOCIAL_HISTORY = _example(
+    task="Can you tell me about the social history of John Smith?",
+    execution_mode="plan",
+    intent="Retrieve social history for person John Smith",
+    reasoning="Querying specific person's record field - requires plan mode.",
+    approach="step-by-step",
+    entities=["John Smith", "social history"],
+    record_context='{"table_name": "clients", "record_ids": ["John Smith"]}',
+)
+
+EXAMPLE_PATIENT_INFO = _example(
+    task="What do we know about patient Jane Doe?",
+    execution_mode="plan",
+    intent="Retrieve all information about patient Jane Doe",
+    reasoning="Querying specific patient record - requires plan mode.",
+    approach="step-by-step",
+    entities=["Jane Doe", "patients"],
+    record_context='{"table_name": "patients", "record_ids": ["Jane Doe"]}',
+)
+
 
 # =============================================================================
 # Edge Cases - Tricky routing decisions
@@ -378,4 +408,7 @@ TRIAGE_DEMOS: list[dspy.Example] = [
     EXAMPLE_VIEW_CONTACT,
     EXAMPLE_MULTI_RECORD,
     EXAMPLE_RELATED_RECORDS,
+    EXAMPLE_TELL_ME_PERSON,
+    EXAMPLE_SOCIAL_HISTORY,
+    EXAMPLE_PATIENT_INFO,
 ]

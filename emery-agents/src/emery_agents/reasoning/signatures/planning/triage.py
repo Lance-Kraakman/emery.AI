@@ -41,14 +41,17 @@ class TriageTask(dspy.Signature):  # type: ignore[misc]
     Only use "plan" for EXPLICIT state modifications (create, update, delete, execute skill).
 
     Examples that should be "direct" (NOT plan):
-    - "Tell me about X" → direct
     - "How do I..." → direct
-    - "What is..." → direct
-    - "List all..." → direct
-    - "Explain..." → direct
-    - "Search for..." → direct
+    - "What is [concept]..." → direct (e.g., "What is a foreign key?")
+    - "Explain [concept]..." → direct (e.g., "Explain how workflows work")
+    - "Search for [information]..." → direct
+    - "Tell me about [concept/topic]" → direct (e.g., "Tell me about CRM best practices")
 
-    Examples that REQUIRE "plan":
+    Examples that REQUIRE "plan" (record lookups + state changes):
+    - "Tell me about [person/record]" → plan (e.g., "Tell me about John Smith")
+    - "Show me [record]'s details" → plan (requires row lookup)
+    - "What is [record]'s history/status" → plan (requires row lookup)
+    - "List all [rows] for [entity]" → plan (requires filtered query)
     - "Create a table for..." → plan
     - "Add a field to..." → plan
     - "Delete the..." → plan
