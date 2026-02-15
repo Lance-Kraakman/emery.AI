@@ -7,7 +7,6 @@ Falls back to ReAct with discovery tools for complex/uncertain cases.
 Routes to: "direct" | "plan" | "respond"
 """
 
-import json
 import logging
 from typing import Any
 
@@ -17,6 +16,7 @@ from dspy import KNNFewShot
 from ...reasoning.config import get_dspy_lm
 from ...reasoning.examples.triage import TRIAGE_DEMOS
 from ...reasoning.signatures.planning import TriageTask
+from ...reasoning.signatures.planning.models import RecordContext, TriageAnalysis
 from ...services.analysis.embeddings import create_dspy_embedder
 from ...services.analysis.llm_usage import record_from_lm
 from ...services.execution.events import (
@@ -101,28 +101,37 @@ async def triage_node(
             raise ValueError("token_accumulator is required for triage")
         record_from_lm(lm, runtime.token_accumulator.get_llm_tracker())
 
-        execution_mode = getattr(result, "execution_mode", "direct").strip().lower()
-        reasoning = getattr(result, "reasoning", "")
-        context_notes = getattr(result, "context_notes", "")
-        response_text = getattr(result, "response", "")
+        # Access DSPy output fields directly
+        execution_mode = result.execution_mode.strip().lower()
+        reasoning = result.reasoning
+        context_notes = result.context_notes
+        response_text = result.response
 
-        # Extract analysis fields (combined triage + analysis in single call)
-        triage_analysis = {
-            "intent": getattr(result, "intent", ""),
-            "entities": getattr(result, "entities", []),
-            "approach": getattr(result, "approach", ""),
-            "external_services": getattr(result, "external_services", []),
-        }
+        # Build typed triage analysis from DSPy outputs
+        triage_analysis = TriageAnalysis(
+            intent=result.intent,
+            entities=result.entities,
+            approach=result.approach,
+            external_services=result.external_services,
+        )
 
-        # Extract record_context for graph traversal (LLM-extracted from task)
-        record_context: dict[str, Any] | None = None
-        raw_record_context = getattr(result, "record_context", "")
-        if raw_record_context and raw_record_context.strip():
-            try:
-                record_context = json.loads(raw_record_context)
-                logger.info(f"Triage extracted record_context: {record_context}")
-            except json.JSONDecodeError as e:
-                logger.warning(f"Failed to parse record_context JSON: {e}")
+        # Extract record_context for graph traversal (typed output from DSPy)
+        # DSPy may return RecordContext instance or dict depending on parsing
+        raw_record_context = result.record_context
+        record_context: RecordContext | None = None
+        if raw_record_context:
+            if isinstance(raw_record_context, RecordContext):
+                record_context = raw_record_context
+            elif isinstance(raw_record_context, dict):
+                record_context = RecordContext.model_validate(raw_record_context)
+
+            if record_context and record_context.table_id:
+                logger.info(
+                    f"Triage extracted record_context: "
+                    f"table={record_context.table_id}, records={record_context.record_ids}"
+                )
+            else:
+                record_context = None
 
         # Validate execution_mode
         if execution_mode not in VALID_MODES:

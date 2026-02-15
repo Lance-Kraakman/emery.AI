@@ -14,6 +14,7 @@ from typing import Annotated, Any, TypedDict
 
 from ..entities.models.plan import Plan
 from ..entities.models.task_ledger import TaskLedger
+from ..reasoning.signatures.planning.models import RecordContext, TriageAnalysis
 from ..services.context import WorkspaceContext
 
 
@@ -94,12 +95,8 @@ class PlanExecuteState(TypedDict, total=False):
     execution_mode: str | None  # "direct", "plan", "respond"
     triage_reasoning: str | None
     triage_context: str | None  # Key findings from triage research
-    triage_analysis: (
-        dict[str, Any] | None
-    )  # Combined analysis: intent, entities, approach, external_services
-    record_context: (
-        dict[str, Any] | None
-    )  # {table_name, table_id, record_ids} for graph traversal
+    triage_analysis: TriageAnalysis | None  # Intent, entities, approach, external_services
+    record_context: RecordContext | None  # For graph traversal
 
     # === Mention routing (set when @skill/@agent/@tool detected) ===
     pre_selected_skill: str | None

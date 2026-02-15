@@ -19,6 +19,7 @@ from emery_agents.entities.models.plan import (
     StepPlan,
 )
 from emery_agents.entities.models.task_ledger import TaskLedger
+from emery_agents.reasoning.signatures.planning.models import TriageAnalysis
 from emery_agents.tools.capability_registry import CapabilityRegistry
 
 from .context import SessionConfig, WorkspaceContext
@@ -81,7 +82,7 @@ class PlanService:
         config: SessionConfig | None = None,
         workspace: WorkspaceContext | None = None,
         memory_context: str = "",
-        triage_analysis: dict | None = None,
+        triage_analysis: TriageAnalysis | None = None,
         configured_tools: list | None = None,
         token_accumulator: Any | None = None,
         retrieved_capabilities: str = "",

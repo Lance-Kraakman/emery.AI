@@ -10,6 +10,8 @@ Runtime context (workspace, memory, etc.) is NOT in examples.
 
 import dspy
 
+from ..signatures.planning.models import RecordContext
+
 
 def _example(
     task: str,
@@ -20,7 +22,7 @@ def _example(
     entities: list[str] | None = None,
     external_services: list[str] | None = None,
     response: str = "",
-    record_context: str = "",
+    record_context: RecordContext | None = None,
 ) -> dspy.Example:
     """Create a triage example with all input fields and routing outputs.
 
@@ -42,7 +44,7 @@ def _example(
         external_services=external_services or [],
         context_notes="",
         response=response,
-        record_context=record_context,
+        record_context=record_context or RecordContext(),
     ).with_inputs("task", "workspace_context", "memory_context", "image_context")
 
 
@@ -252,7 +254,7 @@ EXAMPLE_UPDATE_CUSTOMER = _example(
     reasoning="Updating a specific record requires plan mode.",
     approach="step-by-step",
     entities=["ABC123", "customers", "address"],
-    record_context='{"table_name": "customers", "record_ids": ["ABC123"]}',
+    record_context=RecordContext(table_id="1", record_ids=["ABC123"]),
 )
 
 EXAMPLE_DELETE_ORDER = _example(
@@ -262,7 +264,7 @@ EXAMPLE_DELETE_ORDER = _example(
     reasoning="Deleting a specific record requires plan mode.",
     approach="step-by-step",
     entities=["ORD-456", "orders"],
-    record_context='{"table_name": "orders", "record_ids": ["ORD-456"]}',
+    record_context=RecordContext(table_id="2", record_ids=["ORD-456"]),
 )
 
 EXAMPLE_VIEW_CONTACT = _example(
@@ -272,7 +274,7 @@ EXAMPLE_VIEW_CONTACT = _example(
     reasoning="Record lookup with potential relationships - requires plan mode.",
     approach="step-by-step",
     entities=["John Smith", "contacts"],
-    record_context='{"table_name": "contacts", "record_ids": ["John Smith"]}',
+    record_context=RecordContext(table_id="3", record_ids=["John Smith"]),
 )
 
 EXAMPLE_MULTI_RECORD = _example(
@@ -282,7 +284,7 @@ EXAMPLE_MULTI_RECORD = _example(
     reasoning="Modifying multiple records requires plan mode.",
     approach="step-by-step",
     entities=["ORD-001", "ORD-002", "ORD-003", "orders"],
-    record_context='{"table_name": "orders", "record_ids": ["ORD-001", "ORD-002", "ORD-003"]}',
+    record_context=RecordContext(table_id="2", record_ids=["ORD-001", "ORD-002", "ORD-003"]),
 )
 
 EXAMPLE_RELATED_RECORDS = _example(
@@ -292,7 +294,7 @@ EXAMPLE_RELATED_RECORDS = _example(
     reasoning="Querying related records across tables - requires plan mode.",
     approach="step-by-step",
     entities=["CUST-789", "orders", "customers"],
-    record_context='{"table_name": "customers", "record_ids": ["CUST-789"]}',
+    record_context=RecordContext(table_id="1", record_ids=["CUST-789"]),
 )
 
 EXAMPLE_TELL_ME_PERSON = _example(
@@ -302,7 +304,7 @@ EXAMPLE_TELL_ME_PERSON = _example(
     reasoning="Requesting info about a specific person record - requires plan mode.",
     approach="step-by-step",
     entities=["John Smith"],
-    record_context='{"table_name": "clients", "record_ids": ["John Smith"]}',
+    record_context=RecordContext(table_id="4", record_ids=["John Smith"]),
 )
 
 EXAMPLE_SOCIAL_HISTORY = _example(
@@ -312,7 +314,7 @@ EXAMPLE_SOCIAL_HISTORY = _example(
     reasoning="Querying specific person's record field - requires plan mode.",
     approach="step-by-step",
     entities=["John Smith", "social history"],
-    record_context='{"table_name": "clients", "record_ids": ["John Smith"]}',
+    record_context=RecordContext(table_id="4", record_ids=["John Smith"]),
 )
 
 EXAMPLE_PATIENT_INFO = _example(
@@ -322,7 +324,7 @@ EXAMPLE_PATIENT_INFO = _example(
     reasoning="Querying specific patient record - requires plan mode.",
     approach="step-by-step",
     entities=["Jane Doe", "patients"],
-    record_context='{"table_name": "patients", "record_ids": ["Jane Doe"]}',
+    record_context=RecordContext(table_id="5", record_ids=["Jane Doe"]),
 )
 
 

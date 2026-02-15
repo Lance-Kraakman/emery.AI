@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import dspy
 
+from .models import RecordContext
+
 
 class TriageTask(dspy.Signature):  # type: ignore[misc]
     """Analyze the user's task, extract intent/entities, and determine the best execution approach.
@@ -104,9 +106,6 @@ class TriageTask(dspy.Signature):  # type: ignore[misc]
         desc="Third-party services mentioned (e.g., ['gmail', 'slack']). "
         "Empty list if none. The planner will call search_external for each."
     )
-    record_context: str = dspy.OutputField(
-        desc="If the task references specific records/rows in tables, extract as JSON: "
-        '{"table_name": "customers", "table_id": "5", "record_ids": ["ABC", "XYZ"]}. '
-        "Use workspace_context to resolve table names to IDs. "
-        "Empty string if no specific records referenced."
+    record_context: RecordContext = dspy.OutputField(
+        desc="If task references specific rows, extract table_id and record IDs/names"
     )

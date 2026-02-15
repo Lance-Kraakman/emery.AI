@@ -35,21 +35,27 @@ class S3Config:
     endpoint: str = ""
     region: str = "us-east-1"
 
+    @property
+    def has_explicit_credentials(self) -> bool:
+        """Check if explicit credentials are provided (vs IAM role)."""
+        return bool(self.access_key and self.secret_key)
+
     @classmethod
     def from_env(cls) -> S3Config:
-        """Create S3Config from environment variables.
+        """Create S3Config from environment or IAM role.
 
-        Required env vars:
-            AWS_ACCESS_KEY_ID
-            AWS_SECRET_ACCESS_KEY
+        In production (ECS), credentials come from IAM task role (no env vars).
+        In development (MinIO), credentials come from explicit env vars.
 
         Optional env vars:
-            AWS_ENDPOINT_URL (for MinIO)
+            AWS_ACCESS_KEY_ID (empty in production - uses IAM role)
+            AWS_SECRET_ACCESS_KEY (empty in production - uses IAM role)
+            AWS_ENDPOINT_URL (for MinIO, or S3 regional endpoint)
             AWS_REGION (default: us-east-1)
         """
         return cls(
-            access_key=os.environ["AWS_ACCESS_KEY_ID"],
-            secret_key=os.environ["AWS_SECRET_ACCESS_KEY"],
+            access_key=os.environ.get("AWS_ACCESS_KEY_ID", ""),
+            secret_key=os.environ.get("AWS_SECRET_ACCESS_KEY", ""),
             endpoint=os.environ.get("AWS_ENDPOINT_URL", ""),
             region=os.environ.get("AWS_REGION", "us-east-1"),
         )

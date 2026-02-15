@@ -47,9 +47,17 @@ class GraphService:
         self._configure_s3()
 
     def _configure_s3(self) -> None:
-        """Configure S3 credentials for Delta Lake access."""
-        self._conn.execute("SET s3_access_key_id = $k", {"k": self._s3.access_key})
-        self._conn.execute("SET s3_secret_access_key = $s", {"s": self._s3.secret_key})
+        """Configure S3 credentials for Delta Lake access.
+
+        In production (ECS), credentials come from IAM task role (automatic).
+        In development (MinIO), credentials come from explicit env vars.
+        """
+        # Only set explicit credentials if provided (local MinIO)
+        # For IAM role auth, let DuckDB use default credential chain
+        if self._s3.has_explicit_credentials:
+            self._conn.execute("SET s3_access_key_id = $k", {"k": self._s3.access_key})
+            self._conn.execute("SET s3_secret_access_key = $s", {"s": self._s3.secret_key})
+
         if self._s3.endpoint:
             self._conn.execute("SET s3_endpoint = $e", {"e": self._s3.endpoint})
         self._conn.execute("SET s3_region = $r", {"r": self._s3.region})
@@ -203,3 +211,42 @@ class GraphService:
         """,
             {"id": record_id},
         )
+
+    def find_by_name(
+        self, org_id: int, table_id: str, name: str, limit: int = 5
+    ) -> list[str]:
+        """Find record IDs by searching name-like columns.
+
+        Args:
+            org_id: Organization ID
+            table_id: Table ID to search in
+            name: Name pattern to search for (case-insensitive)
+            limit: Maximum number of results
+
+        Returns:
+            List of matching record IDs
+        """
+        view = self._view_name(org_id, validate_identifier(table_id))
+
+        try:
+            # Get column names from view
+            cols_df = self.query(f"DESCRIBE {view}")
+            columns = cols_df["column_name"].to_list()
+
+            # Find name-like columns
+            name_cols = [c for c in columns if "name" in c.lower() or "title" in c.lower()]
+            if not name_cols:
+                return []
+
+            # Build ILIKE conditions for case-insensitive search
+            conditions = " OR ".join(f"{c} ILIKE $pattern" for c in name_cols)
+            result = self.query(
+                f"SELECT id FROM {view} WHERE {conditions} LIMIT {limit}",
+                {"pattern": f"%{name}%"},
+            )
+
+            return result["id"].to_list() if not result.is_empty() else []
+
+        except Exception as e:
+            logger.warning(f"find_by_name failed for table {table_id}: {e}")
+            return []

@@ -23,6 +23,7 @@ from emery_agents.entities.models.plan import (
     SkillInputDefinition,
     SkillOutputDefinition,
 )
+from emery_agents.reasoning.signatures.planning.models import TriageAnalysis
 from emery_agents.services.analysis.token_accumulator import TokenAccumulator
 from emery_agents.services.context import SessionConfig, WorkspaceContext
 from emery_agents.services.protocols import ManagedAgent, Tool
@@ -91,7 +92,7 @@ class PlanGenerationRequest:
 
     # Pre-computed triage analysis (intent, entities, approach, external_services)
     # Avoids duplicate AnalyzeTask call in PlannerModule
-    triage_analysis: dict[str, Any] | None = None
+    triage_analysis: TriageAnalysis | None = None
 
     # Tools explicitly configured for the skill (from UI tools[] array).
     # Passed to the planner so it uses these tools in generated plan steps.

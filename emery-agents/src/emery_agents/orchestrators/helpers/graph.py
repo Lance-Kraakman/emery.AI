@@ -10,6 +10,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from emery_agents.reasoning.modules.graph_retriever import GraphRetriever
+from emery_agents.reasoning.signatures.planning.models import RecordContext
 
 if TYPE_CHECKING:
     from emery_agents.services.graph import GraphService
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 def retrieve_graph_context(
-    record_context: dict[str, Any] | None,
+    record_context: RecordContext | None,
     graph_service: "GraphService | None",
     org_id: int | str | None,
     max_records: int = 3,
@@ -26,11 +27,11 @@ def retrieve_graph_context(
     """Retrieve related records via graph traversal.
 
     Traverses the Delta Lake graph to find records related to the given
-    record_context. Returns a formatted string suitable for inclusion in
-    execution context.
+    record_context. For each record_id, tries direct ID lookup first,
+    then falls back to name-based search if no results.
 
     Args:
-        record_context: Dict with table_id/table_name and record_ids from triage
+        record_context: RecordContext with table_id and record_ids
         graph_service: GraphService instance for Delta Lake traversal
         org_id: Organization ID for RLS context
         max_records: Maximum number of starting records to traverse from
@@ -38,31 +39,64 @@ def retrieve_graph_context(
     Returns:
         Formatted string of related records, or empty string if unavailable
     """
-    if not record_context or not graph_service or not org_id:
+    if not record_context:
+        logger.debug("Graph retrieval skipped: no record_context")
         return ""
+    if not graph_service:
+        logger.warning("Graph retrieval skipped: GraphService not available")
+        return ""
+    if not org_id:
+        logger.warning("Graph retrieval skipped: no org_id")
+        return ""
+
+    if not record_context.table_id or not record_context.record_ids:
+        logger.debug(
+            f"Graph retrieval skipped: missing table_id={record_context.table_id} "
+            f"or record_ids={record_context.record_ids}"
+        )
+        return ""
+
+    logger.info(
+        f"Starting graph retrieval: table={record_context.table_id}, "
+        f"records={record_context.record_ids}"
+    )
 
     try:
         graph_retriever = GraphRetriever(graph_service)
-        table_id = record_context.get("table_id") or record_context.get(
-            "table_name", ""
-        )
-        record_ids = record_context.get("record_ids", [])
-
         all_related: list[Any] = []
-        for rid in record_ids[:max_records]:
+
+        for rid in record_context.record_ids[:max_records]:
+            # Try as ID first
             related = graph_retriever(
                 org_id=int(org_id),
-                table=table_id,
+                table=record_context.table_id,
                 record_id=rid,
             )
+
+            # Fallback: try name search if no results
+            if not related:
+                found_ids = graph_service.find_by_name(int(org_id), record_context.table_id, rid, limit=1)
+                if found_ids:
+                    logger.info(f"Resolved '{rid}' to ID '{found_ids[0]}' via name search")
+                    related = graph_retriever(
+                        org_id=int(org_id),
+                        table=record_context.table_id,
+                        record_id=found_ids[0],
+                    )
+
             all_related.extend(related)
 
         if all_related:
             context = graph_retriever.format_for_planner(all_related)
             logger.info(f"Retrieved {len(all_related)} related records via graph")
             return context
+        else:
+            logger.info(
+                f"Graph retrieval returned no related records for "
+                f"table={record_context.table_id}, records={record_context.record_ids}"
+            )
 
     except Exception as e:
-        logger.warning(f"Graph retrieval failed: {e}")
+        logger.warning(f"Graph retrieval failed: {e}", exc_info=True)
 
     return ""

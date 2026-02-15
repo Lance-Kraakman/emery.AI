@@ -294,6 +294,22 @@ class PlanDiffResult(BaseModel):
     )
 
 
+class RecordContext(BaseModel):
+    """Context for record-level operations."""
+
+    table_id: str | None = Field(default=None, description="Table ID")
+    record_ids: list[str] = Field(default_factory=list, description="Record IDs or names")
+
+
+class TriageAnalysis(BaseModel):
+    """Analysis extracted during triage for downstream planning."""
+
+    intent: str = Field(default="", description="One-sentence summary of user's goal")
+    entities: list[str] = Field(default_factory=list, description="Resource/field/service names")
+    approach: str = Field(default="step-by-step", description="Reasoning approach")
+    external_services: list[str] = Field(default_factory=list, description="Third-party services")
+
+
 class PlanReflection(BaseModel):
     """Simple reflection on a draft plan - like Claude's extended thinking."""
 
