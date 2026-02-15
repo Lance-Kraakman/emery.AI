@@ -1,10 +1,6 @@
-"""
-Memory Service — Persistent semantic memory for agents and users.
+"""Memory Service — mem0-backed persistent semantic memory."""
 
-Uses ChromaDB for vector storage with HuggingFace Inference API embeddings.
-PII is stripped from agent memories (shared) via Microsoft Presidio.
-"""
-
+from .mem0_providers import TrackedEmbedder, TrackedLLM, memory_tracking_scope
 from .memory_service import MemoryService
 from .memory_tools import create_memory_crud
 from .pii_filter import PIIFilter
@@ -13,4 +9,7 @@ __all__ = [
     "MemoryService",
     "create_memory_crud",
     "PIIFilter",
+    "TrackedEmbedder",
+    "TrackedLLM",
+    "memory_tracking_scope",
 ]
