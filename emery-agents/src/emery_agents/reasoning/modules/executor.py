@@ -10,6 +10,7 @@ Uses KNNFewShot with TOOL_EXAMPLES to teach tool selection:
 """
 
 from __future__ import annotations
+from ..signatures.evaluation import JudgeDirectExecution
 
 import logging
 from typing import Any
@@ -136,27 +137,12 @@ def direct_execution_reward(kwargs: dict[str, Any], pred: Prediction) -> float:
     whether the result actually addresses the task. Fast-paths obvious
     failures (empty result, all tool errors) to avoid unnecessary LLM calls.
     """
-    from ..signatures.evaluation import JudgeDirectExecution
-
     result_text = str(getattr(pred, "result", ""))
     trajectory: dict[str, Any] = getattr(pred, "trajectory", None) or {}
     task = kwargs.get("step_description", "")
 
     # Fast-path: empty result is always bad
     if not result_text.strip():
-        return 0.0
-
-    # Fast-path: all tool calls failed
-    tool_count = 0
-    tool_failures = 0
-    idx = 0
-    while f"tool_name_{idx}" in trajectory:
-        tool_count += 1
-        obs = str(trajectory.get(f"observation_{idx}", ""))
-        if obs.startswith(("ERROR:", "Execution error", "BLOCKED:")):
-            tool_failures += 1
-        idx += 1
-    if tool_count > 0 and tool_failures == tool_count:
         return 0.0
 
     # LLM judge
