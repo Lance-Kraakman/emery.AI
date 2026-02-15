@@ -393,11 +393,13 @@ async def generate_plan_node(
     # Filter tools to read-only for planning (planner can only CALL these)
     planning_tools = filter_tools_for_mode(tools, ToolMode.PLANNING)
 
-    # Create external discovery tools for ReAct planner
-    # Internal search tools removed - replaced by KNN retrievers called below
+    # Create discovery tools for ReAct planner
+    # Includes search_capabilities for dynamic capability lookup during planning
     # Exclude workspace_overview — redundant with the static workspace_context below
     if api_key and org_id:
-        discovery_tools = create_discovery_tools(api_key, org_id)
+        discovery_tools = create_discovery_tools(
+            api_key, org_id, capability_registry=capability_registry
+        )
         discovery_tools = [t for t in discovery_tools if t.name != "workspace_overview"]
     else:
         discovery_tools = []
