@@ -163,6 +163,27 @@ class WorkspaceContext:
             parts.append(f"{len(self.existing_views)} view(s)")
         return ", ".join(parts) if parts else "empty workspace"
 
+    def triage_context(self) -> str:
+        """Compact context for triage with table names and IDs.
+
+        Provides enough detail for the LLM to extract RecordContext
+        (table_id, record_ids) without needing tool calls.
+        """
+        lines: list[str] = [self.resource_summary()]
+
+        # Table names with IDs - critical for RecordContext extraction
+        if self.existing_tables:
+            table_entries = [f"{t.name} (id={t.id})" for t in self.existing_tables]
+            lines.append(f"Tables: {', '.join(table_entries)}")
+
+        # Skills summary (truncated to avoid overwhelming triage)
+        if self.existing_skills:
+            skill_names = [s.name for s in self.existing_skills[:8]]
+            suffix = f" (+{len(self.existing_skills) - 8} more)" if len(self.existing_skills) > 8 else ""
+            lines.append(f"Skills: {', '.join(skill_names)}{suffix}")
+
+        return "\n".join(lines)
+
     def get_database_by_name(self, name: str) -> WorkspaceDatabase | None:
         """Look up database by name."""
         for db in self.existing_databases:

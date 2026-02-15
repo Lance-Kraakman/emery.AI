@@ -74,9 +74,9 @@ async def triage_node(
 
     events: list[Any] = []
 
-    # Build context for triage
+    # Build context for triage - includes table names/IDs for RecordContext extraction
     workspace = state.get("workspace_context")
-    workspace_summary = workspace.resource_summary() if workspace else ""
+    workspace_summary = workspace.triage_context() if workspace else ""
     memory_context = state.get("memory_context", "") or ""
 
     # Build image context for triage routing decisions
