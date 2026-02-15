@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from emery_agents.engine import AgentEngine
     from emery_agents.knowledge.base import KnowledgeBase
     from emery_agents.planning.registry import PlanningRegistry
+    from emery_agents.services.graph import GraphService
     from emery_agents.tools.capability_registry import CapabilityRegistry
 
 # Re-export so existing `from ..runtime import ConversationMessage` still works
@@ -89,3 +90,9 @@ class RuntimeContext:
 
     # ACE (Agentic Context Engineering) - per-agent strategy accumulation
     ace_service: StrategyAccumulationService | None = None
+
+    # Graph service for relationship traversal over Delta Lake
+    graph_service: GraphService | None = None
+
+    # Execution mode
+    autonomous_mode: bool = False  # Skip clarifying questions, execute directly

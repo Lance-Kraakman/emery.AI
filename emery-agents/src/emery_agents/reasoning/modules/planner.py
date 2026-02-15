@@ -135,6 +135,7 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         retrieved_patterns: str = "",
         retrieved_knowledge: str = "",
         retrieved_strategies: str = "",
+        graph_context: str = "",
         use_complex_planner: bool = False,
         autonomous_mode: bool = False,
     ) -> PlanOrQuestionsOutput:
@@ -159,6 +160,7 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
             retrieved_patterns: Formatted patterns from PatternRetriever
             retrieved_knowledge: Formatted knowledge from KnowledgeRetriever
             retrieved_strategies: Formatted strategies from StrategyRetriever
+            graph_context: Formatted related records from GraphRetriever
             use_complex_planner: Force ReAct planner for external tool access
 
         Returns:
@@ -194,6 +196,7 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
             retrieved_patterns=retrieved_patterns,
             retrieved_knowledge=retrieved_knowledge,
             retrieved_strategies=retrieved_strategies,
+            graph_context=graph_context,
         )
 
         # Route to appropriate planner
@@ -307,6 +310,7 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         retrieved_patterns: str = "",
         retrieved_knowledge: str = "",
         retrieved_strategies: str = "",
+        graph_context: str = "",
     ) -> str:
         """Build merged planning_context from task analysis and retrieved context.
 
@@ -316,6 +320,7 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         - Retrieved patterns (from PatternRetriever)
         - Retrieved knowledge (from KnowledgeRetriever)
         - Retrieved strategies (from StrategyRetriever, preferred over proven_strategies)
+        - Graph context (from GraphRetriever - related records)
         - Memory context
         - Delegation hint
 
@@ -360,6 +365,10 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         elif proven_strategies and proven_strategies.strip():
             # Fallback to legacy proven_strategies if no retrieved_strategies
             sections.append(f"## Proven Strategies\n{proven_strategies}")
+
+        # Graph context (from GraphRetriever - related records)
+        if graph_context and graph_context.strip():
+            sections.append(graph_context)
 
         # Memory context (only if non-empty)
         if memory_context and memory_context.strip():

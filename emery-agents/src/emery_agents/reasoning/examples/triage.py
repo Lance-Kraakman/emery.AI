@@ -20,6 +20,7 @@ def _example(
     entities: list[str] | None = None,
     external_services: list[str] | None = None,
     response: str = "",
+    record_context: str = "",
 ) -> dspy.Example:
     """Create a triage example with all input fields and routing outputs.
 
@@ -41,6 +42,7 @@ def _example(
         external_services=external_services or [],
         context_notes="",
         response=response,
+        record_context=record_context,
     ).with_inputs("task", "workspace_context", "memory_context", "image_context")
 
 
@@ -240,6 +242,61 @@ EXAMPLE_CLARIFICATION = _example(
 
 
 # =============================================================================
+# Record Context Extraction - Tasks referencing specific records
+# =============================================================================
+
+EXAMPLE_UPDATE_CUSTOMER = _example(
+    task="Update customer ABC123's address to 123 Main St",
+    execution_mode="plan",
+    intent="Update the address field for customer ABC123",
+    reasoning="Updating a specific record requires plan mode.",
+    approach="step-by-step",
+    entities=["ABC123", "customers", "address"],
+    record_context='{"table_name": "customers", "record_ids": ["ABC123"]}',
+)
+
+EXAMPLE_DELETE_ORDER = _example(
+    task="Delete order ORD-456 from the orders table",
+    execution_mode="plan",
+    intent="Delete order ORD-456",
+    reasoning="Deleting a specific record requires plan mode.",
+    approach="step-by-step",
+    entities=["ORD-456", "orders"],
+    record_context='{"table_name": "orders", "record_ids": ["ORD-456"]}',
+)
+
+EXAMPLE_VIEW_CONTACT = _example(
+    task="Show me John Smith's contact information",
+    execution_mode="direct",
+    intent="View contact details for John Smith",
+    reasoning="Viewing a specific record is read-only - direct mode.",
+    approach="step-by-step",
+    entities=["John Smith", "contacts"],
+    record_context='{"table_name": "contacts", "record_ids": ["John Smith"]}',
+)
+
+EXAMPLE_MULTI_RECORD = _example(
+    task="Archive orders ORD-001, ORD-002, and ORD-003",
+    execution_mode="plan",
+    intent="Archive multiple orders",
+    reasoning="Modifying multiple records requires plan mode.",
+    approach="step-by-step",
+    entities=["ORD-001", "ORD-002", "ORD-003", "orders"],
+    record_context='{"table_name": "orders", "record_ids": ["ORD-001", "ORD-002", "ORD-003"]}',
+)
+
+EXAMPLE_RELATED_RECORDS = _example(
+    task="Show me all orders for customer CUST-789",
+    execution_mode="direct",
+    intent="View orders related to customer CUST-789",
+    reasoning="Querying related records is read-only - direct mode.",
+    approach="step-by-step",
+    entities=["CUST-789", "orders", "customers"],
+    record_context='{"table_name": "customers", "record_ids": ["CUST-789"]}',
+)
+
+
+# =============================================================================
 # Edge Cases - Tricky routing decisions
 # =============================================================================
 
@@ -315,4 +372,10 @@ TRIAGE_DEMOS: list[dspy.Example] = [
     EXAMPLE_SKILL_DETAILS,
     EXAMPLE_CAPABILITY_QUERY,
     EXAMPLE_AMBIGUOUS_CREATE,
+    # Record context extraction
+    EXAMPLE_UPDATE_CUSTOMER,
+    EXAMPLE_DELETE_ORDER,
+    EXAMPLE_VIEW_CONTACT,
+    EXAMPLE_MULTI_RECORD,
+    EXAMPLE_RELATED_RECORDS,
 ]

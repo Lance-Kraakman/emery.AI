@@ -106,6 +106,13 @@ class PlanGenerationRequest:
     retrieved_knowledge: str = ""
     retrieved_strategies: str = ""
 
+    # Graph context (from GraphRetriever - related records via Delta Lake traversal)
+    graph_context: str = ""
+
+    # Autonomous execution mode (gRPC Tasks)
+    # When True, planner generates plan directly without asking clarifying questions
+    autonomous_mode: bool = False
+
     @property
     def configured_tools_json(self) -> str:
         """Format configured_tools as JSON string for DSPy signature input."""

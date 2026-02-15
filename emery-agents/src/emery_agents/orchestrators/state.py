@@ -97,6 +97,9 @@ class PlanExecuteState(TypedDict, total=False):
     triage_analysis: (
         dict[str, Any] | None
     )  # Combined analysis: intent, entities, approach, external_services
+    record_context: (
+        dict[str, Any] | None
+    )  # {table_name, table_id, record_ids} for graph traversal
 
     # === Mention routing (set when @skill/@agent/@tool detected) ===
     pre_selected_skill: str | None
@@ -156,6 +159,7 @@ DEFAULT_STATE: dict[str, Any] = {
     "triage_reasoning": None,
     "triage_context": None,
     "triage_analysis": None,
+    "record_context": None,
     # Mention routing
     "pre_selected_skill": None,
     "pre_selected_agent": None,

@@ -7,6 +7,7 @@ Falls back to ReAct with discovery tools for complex/uncertain cases.
 Routes to: "direct" | "plan" | "respond"
 """
 
+import json
 import logging
 from typing import Any
 
@@ -113,6 +114,16 @@ async def triage_node(
             "external_services": getattr(result, "external_services", []),
         }
 
+        # Extract record_context for graph traversal (LLM-extracted from task)
+        record_context: dict[str, Any] | None = None
+        raw_record_context = getattr(result, "record_context", "")
+        if raw_record_context and raw_record_context.strip():
+            try:
+                record_context = json.loads(raw_record_context)
+                logger.info(f"Triage extracted record_context: {record_context}")
+            except json.JSONDecodeError as e:
+                logger.warning(f"Failed to parse record_context JSON: {e}")
+
         # Validate execution_mode
         if execution_mode not in VALID_MODES:
             logger.warning(
@@ -142,6 +153,7 @@ async def triage_node(
                 "triage_reasoning": reasoning,
                 "triage_context": context_notes,
                 "triage_analysis": triage_analysis,
+                "record_context": record_context,
                 "response": final_response,
                 "success": True,
                 "events": events,
@@ -152,6 +164,7 @@ async def triage_node(
             "triage_reasoning": reasoning,
             "triage_context": context_notes,
             "triage_analysis": triage_analysis,
+            "record_context": record_context,
             "events": events,
         }
 
