@@ -52,9 +52,8 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
     Each input field to the planner has one clear purpose:
     - request: what the user wants
     - workspace_context: what already exists
-    - capability_guidance: routing table + matched capability instructions
+    - planning_context: retrieved capabilities, patterns, strategies, task analysis
     - proven_strategies: what worked before (ACE)
-    - task_analysis: pre-analyzed intent, approach, external service hints
     """
 
     # Phrases that indicate user wants us to propose defaults
@@ -125,7 +124,6 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         self,
         request: str,
         workspace_context: str,
-        capability_guidance: str,
         proven_strategies: str,
         conversation_history: str = "",
         memory_context: str = "",
@@ -149,7 +147,6 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         Args:
             request: The user's goal or task description
             workspace_context: JSON string of existing workspace resources
-            capability_guidance: Routing table + matched capability instructions
             proven_strategies: ACE patterns for similar goals (legacy, prefer retrieved_strategies)
             conversation_history: Formatted previous messages for context continuity
             memory_context: Relevant memories from previous interactions
