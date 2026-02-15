@@ -11,7 +11,10 @@ from typing import Any
 from emery_agents.ace.services.strategy_service import StrategyAccumulationService
 from emery_agents.api import WorkspaceAPI
 from emery_agents.reasoning.modules.graph_retriever import GraphRetriever
-from emery_agents.reasoning.modules.retrievers import get_or_create_retrievers
+from emery_agents.reasoning.modules.retrievers import (
+    WorkspaceRetriever,
+    get_or_create_retrievers,
+)
 from emery_agents.tools.discovery import create_discovery_tools
 
 from ...entities.models.plan import (
@@ -22,7 +25,6 @@ from ...entities.models.plan import (
 from ...entities.models.task_ledger import create_ledger_from_plan
 from ...entities.workspace import WorkspaceTable
 from ...services.analysis.embedding_usage import set_current_tracker
-from ...services.analysis.embeddings import cosine_similarity, get_embedding
 from ...services.analysis.token_accumulator import TokenAccumulator
 from ...services.context import (
     SessionConfig,
@@ -109,134 +111,6 @@ def _build_workspace_context(
         existing_skills=data.skills,
         existing_views=data.views,
     )
-
-
-# Minimum cosine similarity to consider a resource relevant.
-_RELEVANCE_THRESHOLD = 0.3
-
-
-def _score_resource(
-    task_embedding: tuple[float, ...],
-    name: str,
-    token_accumulator: TokenAccumulator,
-    description: str = "",
-) -> float:
-    """Score a resource's relevance to the task using semantic similarity.
-
-    Uses the same embedding infrastructure as CapabilityRegistry.search().
-    Embeddings are LRU-cached (1000 entries) so repeated resource names are free.
-    """
-    resource_text = f"{name} {description}".strip()
-    if not resource_text:
-        return 0.0
-    resource_embedding = get_embedding(
-        resource_text,
-        tracker=token_accumulator.get_embedding_tracker(),
-    )
-    return cosine_similarity(task_embedding, resource_embedding)
-
-
-def _top_n_relevant(
-    items: list,  # type: ignore[type-arg]
-    n: int,
-    score_fn: Any,
-    threshold: float = _RELEVANCE_THRESHOLD,
-) -> list:  # type: ignore[type-arg]
-    """Return top N items above the similarity threshold, sorted by score.
-
-    If no items score above the threshold, returns all items unchanged
-    (fallback: the task doesn't clearly relate to any resource).
-    """
-    scored = [(item, score_fn(item)) for item in items]
-    relevant = [(item, s) for item, s in scored if s >= threshold]
-    if not relevant:
-        return items  # Nothing matched — return all as fallback
-    relevant.sort(key=lambda x: x[1], reverse=True)
-    return [item for item, _ in relevant[:n]]
-
-
-def _filter_relevant_context(
-    workspace: WorkspaceContext,
-    task: str,
-    token_accumulator: TokenAccumulator,
-) -> WorkspaceContext:
-    """
-    Filter workspace context to resources relevant to the task.
-
-    Uses semantic embeddings (same as CapabilityRegistry.search()) to score
-    each resource by similarity to the task. Returns a filtered WorkspaceContext:
-    - ALL databases (always included — typically 1-3, negligible cost)
-    - Top-N most relevant tables, apps, agents, skills, views
-
-    Embeddings are LRU-cached, so after the first call resource embeddings are free.
-    If no resource scores above the threshold, returns full context unchanged.
-    """
-    if not task.strip():
-        return workspace
-
-    try:
-        task_embedding = get_embedding(
-            task,
-            tracker=token_accumulator.get_embedding_tracker(),
-        )
-
-        # Caps per resource type
-        TABLE_CAP = 15
-        APP_CAP = 10
-        AGENT_CAP = 10
-        SKILL_CAP = 10
-        VIEW_CAP = 10
-
-        filtered_tables = _top_n_relevant(
-            workspace.existing_tables,
-            TABLE_CAP,
-            lambda t: _score_resource(
-                task_embedding,
-                t.name,
-                token_accumulator,
-                " ".join(f.name for f in t.fields),
-            ),
-        )
-        filtered_apps = _top_n_relevant(
-            workspace.existing_apps,
-            APP_CAP,
-            lambda a: _score_resource(
-                task_embedding, a.name, token_accumulator, a.description
-            ),
-        )
-        filtered_agents = _top_n_relevant(
-            workspace.existing_agents,
-            AGENT_CAP,
-            lambda a: _score_resource(
-                task_embedding, a.name, token_accumulator, a.description
-            ),
-        )
-        filtered_skills = _top_n_relevant(
-            workspace.existing_skills,
-            SKILL_CAP,
-            lambda s: _score_resource(
-                task_embedding, s.name, token_accumulator, s.description
-            ),
-        )
-        filtered_views = _top_n_relevant(
-            workspace.existing_views,
-            VIEW_CAP,
-            lambda v: _score_resource(task_embedding, v.name, token_accumulator),
-        )
-
-        return WorkspaceContext(
-            existing_databases=workspace.existing_databases,  # Always include all
-            existing_tables=filtered_tables,
-            existing_apps=filtered_apps,
-            existing_agents=filtered_agents,
-            existing_skills=filtered_skills,
-            existing_views=filtered_views,
-        )
-    except Exception:
-        logger.warning(
-            "Embedding service unavailable, returning full workspace context"
-        )
-        return workspace
 
 
 _DESTRUCTIVE_KEYWORDS = {
@@ -543,12 +417,9 @@ async def generate_plan_node(
             api_key, org_id, runtime.token_accumulator
         )
 
-    # Filter to task-relevant resources
-    if not runtime.token_accumulator:
-        raise ValueError("TokenAccumulator is required for planning.")
-    workspace_context = _filter_relevant_context(
-        full_workspace, task, runtime.token_accumulator
-    )
+    # Filter to task-relevant resources using standard retriever pattern
+    workspace_retriever = WorkspaceRetriever(full_workspace)
+    workspace_context = workspace_retriever.filter_workspace(task)
 
     # === ACE Service: Per-agent strategy accumulation ===
     # Create ACE service for agent workspaces to track execution patterns
