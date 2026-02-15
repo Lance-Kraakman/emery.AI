@@ -33,9 +33,8 @@ from ...entities.execution_context import ExecutionContext
 from ...services.context import execution_scope
 from ...services.memory import create_memory_crud
 from ...types import ExecutionMode
-from ...tools.factories import create_all_tools
+from ...tools.factories import create_direct_mode_tools
 from ...tools.output import QuestionCollector, create_ask_question_tool
-from ...tools.profiles import select_tools_for_task
 from ...types import ToolMode
 from ..runtime import RuntimeContext
 from ..state import PlanExecuteState
@@ -49,8 +48,9 @@ async def direct_execute_node(
     """
     Direct execution node: execute task in a single ReAct loop.
 
-    Has ALL tools (CRUD + discovery + external). Uses DirectExecution signature
-    for completion guidance via dspy.Refine for quality gating.
+    Uses lightweight tool set (discovery + row_crud + table_crud) for Q&A/lookup.
+    In interactive mode (chat), includes ask_question tool for clarifications.
+    In autonomous mode (task), no clarifying questions - must figure it out.
 
     On success: sets `response` field (signals END).
     On failure: sets `execution_mode = "plan"` for escalation to generate_plan.
@@ -65,8 +65,9 @@ async def direct_execute_node(
 
     events: list[Any] = []
 
-    # Create all tools with auth
-    tools = create_all_tools(api_key=api_key, org_id=org_id)
+    # Create lightweight tool set for direct mode (6 tools vs 24)
+    # Discovery tools + row_crud + table_crud - enough for Q&A and lookup
+    tools = create_direct_mode_tools(api_key=api_key, org_id=org_id)
 
     # Include external tools from runtime (skill tools, Pipedream, etc.)
     if runtime.tools:
@@ -81,14 +82,15 @@ async def direct_execute_node(
     if runtime.engine:
         tools.append(create_memory_crud(runtime.engine.memory))
 
-    # Filter tools based on triage analysis (reduces tool surface for better selection)
-    triage_analysis = state.get("triage_analysis")
-    tools = select_tools_for_task(tools, triage_analysis)
-
-    # Add ask_question tool for clarification
+    # Add ask_question tool only in interactive mode (not autonomous/task mode)
     question_collector = QuestionCollector()
-    ask_question_tool = create_ask_question_tool(question_collector)
-    all_tools = [ask_question_tool] + tools
+    if not runtime.autonomous_mode:
+        # Interactive mode (chat) - can ask clarifying questions
+        ask_question_tool = create_ask_question_tool(question_collector)
+        all_tools = [ask_question_tool] + tools
+    else:
+        # Autonomous mode (task) - cannot ask questions, must figure it out
+        all_tools = tools
 
     # Determine max iterations (default 7 for direct execution)
     max_iters = 7
