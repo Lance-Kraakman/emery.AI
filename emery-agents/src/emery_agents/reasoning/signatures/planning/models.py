@@ -296,7 +296,6 @@ class PlanDiffResult(BaseModel):
 
 class RecordContext(BaseModel):
     """Context for record-level operations."""
-
     table_id: str | None = Field(default=None, description="Table ID")
     record_ids: list[str] = Field(default_factory=list, description="Record IDs or names")
 
