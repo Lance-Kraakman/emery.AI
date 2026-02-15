@@ -5,7 +5,7 @@ Uses Google Gemini embeddings (gemini-embedding-001) as primary provider.
 Falls back to HuggingFace Inference API if GEMINI_API_KEY is not set.
 
 Embeddings are cached to disk (content-addressed by text hash) for persistence
-across server restarts. Cache location: /mnt/storage/workspaces/.cache/embeddings/
+across server restarts. Cache location: {WORKSPACE_STORAGE_PATH}/.cache/embeddings/
 
 Used for:
 - Capability discovery (semantic search across 30K+ capabilities)
@@ -46,7 +46,7 @@ HF_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
 # Disk cache configuration
 # Use EFS in production, ~/.cache locally
-_efs_path = Path("/mnt/storage/workspaces")
+_efs_path = Path(os.getenv("WORKSPACE_STORAGE_PATH", "/mnt/storage/workspaces"))
 if _efs_path.exists() and _efs_path.is_dir():
     EMBEDDING_CACHE_DIR = _efs_path / ".cache" / "embeddings"
 else:
