@@ -299,30 +299,6 @@ def get_embeddings_batch(
     return results
 
 
-def cosine_similarity(a: tuple[float, ...], b: tuple[float, ...]) -> float:
-    """
-    Calculate cosine similarity between two embeddings.
-
-    Args:
-        a: First embedding vector
-        b: Second embedding vector
-
-    Returns:
-        Similarity score between -1 and 1 (higher = more similar)
-    """
-    if len(a) != len(b):
-        raise ValueError(f"Embedding dimensions must match: {len(a)} vs {len(b)}")
-
-    dot = sum(x * y for x, y in zip(a, b))
-    norm_a = sum(x * x for x in a) ** 0.5
-    norm_b = sum(x * x for x in b) ** 0.5
-
-    if norm_a == 0 or norm_b == 0:
-        return 0.0
-
-    return float(dot / (norm_a * norm_b))
-
-
 def clear_cache() -> None:
     """Clear the embedding disk cache."""
     import shutil

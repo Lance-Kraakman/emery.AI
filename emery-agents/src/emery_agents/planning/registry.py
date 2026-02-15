@@ -154,8 +154,7 @@ class PlanningRegistry:
         """
         Format patterns as planning guidance string for the planner.
 
-        Generates a string compatible with the CreatePlan signature's
-        capability_guidance field.
+        Generates a string included in the planner's planning_context field.
 
         Args:
             patterns: Patterns to format

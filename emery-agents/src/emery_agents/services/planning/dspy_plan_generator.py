@@ -24,9 +24,6 @@ import dspy
 
 from emery_agents.ace import StrategyAccumulationService
 from emery_agents.entities.models.plan import Plan, PlanStep, create_plan, create_step
-from emery_agents.reasoning.capabilities import (
-    get_planning_guidance,
-)
 from emery_agents.reasoning.config import get_dspy_lm
 from emery_agents.reasoning.modules.planner import (
     PlannerModule,
@@ -137,7 +134,6 @@ class DSPyPlanGenerator:
 
         planner = self._get_planner(discovery_tools)
         workspace_context = self._format_workspace_context(request.workspace)
-        capability_guidance = self._get_capability_guidance(request)
         conversation_history = format_conversation_history(request.conversation_history)
 
         try:
@@ -145,7 +141,6 @@ class DSPyPlanGenerator:
                 result: PlanOrQuestionsOutput = planner(
                     request=request.basic_instructions,
                     workspace_context=workspace_context,
-                    capability_guidance=capability_guidance,
                     proven_strategies=strategy_guidance,
                     conversation_history=conversation_history,
                     memory_context=request.memory_context,
@@ -200,7 +195,6 @@ class DSPyPlanGenerator:
 
         template_planner = self._get_template_planner(discovery_tools)
         workspace_context = self._format_workspace_context(request.workspace)
-        capability_guidance = self._get_capability_guidance(request)
         conversation_history = format_conversation_history(request.conversation_history)
 
         # Convert skill inputs/outputs to dicts for the module
@@ -217,7 +211,6 @@ class DSPyPlanGenerator:
                 template_plan: SkillTemplatePlanOutput = template_planner(
                     request=request.basic_instructions,
                     workspace_context=workspace_context,
-                    capability_guidance=capability_guidance,
                     proven_strategies=strategy_guidance,
                     conversation_history=conversation_history,
                     skill_inputs=skill_inputs,
@@ -325,57 +318,6 @@ class DSPyPlanGenerator:
             indent=2,
             default=str,
         )
-
-    def _get_capability_guidance(
-        self,
-        request: PlanGenerationRequest,
-    ) -> str:
-        """Get capability planning guidance for the planner using semantic search.
-
-        Searches org's enabled capabilities directly (50-500) rather than all 30K
-        capabilities. Falls back to full registry search if no org_id available.
-
-        Matched capability guidance includes tool mappings and step description
-        templates — these are the primary instructions for writing executor-ready steps.
-        """
-   
-
-        org_id = request.config.org_id if request.config else None
-
-        try:
-            # Semantic search within org's enabled capabilities only (50-500, not 30K)
-            # Falls back to full registry search if no org_id
-            if org_id:
-                matched = request.capability_registry.search_enabled(
-                    query=request.basic_instructions,
-                    org_id=org_id,
-                    limit=3,
-                )
-            else:
-                matched = request.capability_registry.search(
-                    query=request.basic_instructions,
-                    limit=3,
-                )
-
-            # Get guidance for matched capabilities
-            guidance_parts = []
-            for cap in matched:
-                g = get_planning_guidance(cap.id)
-                if g:
-                    guidance_parts.append(g)
-
-            if guidance_parts:
-                logger.info(
-                    f"Matched {len(matched)} capabilities for guidance: "
-                    f"{[c.id for c in matched]}"
-                )
-                # Capability guidance first (step templates + tool mappings), routing header second
-                return "\n\n".join(guidance_parts) + "\n\n" + CAPABILITY_ROUTING_HEADER
-
-        except Exception as e:
-            logger.warning(f"Capability search failed, using all guidance: {e}")
-
-        return ""
 
     def _convert_questions(
         self,

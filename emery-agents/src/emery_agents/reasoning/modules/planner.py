@@ -231,7 +231,6 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         result = planner(
             request=request,
             workspace_context=workspace_context,
-            capability_guidance=capability_guidance,
             planning_context=planning_context,
             conversation_history=conversation_history,
             configured_tools=configured_tools,
@@ -286,7 +285,6 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
             result = planner(
                 request=request,
                 workspace_context=workspace_context,
-                capability_guidance=capability_guidance,
                 planning_context=planning_context + reflection_context,
                 conversation_history=conversation_history,
                 configured_tools=configured_tools,
@@ -437,7 +435,6 @@ class SkillTemplatePlannerModule(PlannerModule):
         self,
         request: str,
         workspace_context: str,
-        capability_guidance: str,
         proven_strategies: str,
         conversation_history: str,
         skill_inputs: list[dict[str, Any]],
@@ -449,7 +446,6 @@ class SkillTemplatePlannerModule(PlannerModule):
         Args:
             request: What the skill should accomplish
             workspace_context: JSON of existing resources
-            capability_guidance: When to use each capability
             proven_strategies: ACE patterns
             conversation_history: Previous messages
             skill_inputs: List of {name, type, required}
@@ -458,9 +454,6 @@ class SkillTemplatePlannerModule(PlannerModule):
         Returns:
             SkillTemplatePlanOutput with steps containing prompt_template
         """
-        # Build template-specific guidance (adds template rules to base guidance)
-        template_guidance = self._build_template_guidance(capability_guidance)
-
         # Convert to typed specs
         input_specs = [SkillInputSpec(**inp) for inp in skill_inputs]
         output_specs = [SkillOutputSpec(**out) for out in skill_outputs]
@@ -468,7 +461,6 @@ class SkillTemplatePlannerModule(PlannerModule):
         result = self.template_planner(
             request=request,
             workspace_context=workspace_context,
-            capability_guidance=template_guidance,
             proven_strategies=proven_strategies,
             conversation_history=conversation_history,
             skill_inputs=input_specs,
@@ -479,31 +471,6 @@ class SkillTemplatePlannerModule(PlannerModule):
         plan = result.result
         self._validate_template_syntax(plan, skill_inputs)
         return plan  # type: ignore[no-any-return]
-
-    def _build_template_guidance(self, base_guidance: str) -> str:
-        """Add template-specific guidance to capability guidance."""
-        template_rules = """
-TEMPLATE MODE - Creating a REUSABLE skill template.
-
-FORBIDDEN - Never generate these patterns in goal, analysis, or description:
-- "Create a skill that..." or "This skill..."
-- "takes input X and returns/outputs Y" or "assigns X to Y"
-- "returns the value of X as Y"
-- "No external tools or databases are required"
-- Any text that just describes the input-to-output mapping
-
-Focus goal/analysis/description on the TASK PURPOSE, not on explaining I/O mechanics.
-
-PRESERVE USER'S RULES:
-- Copy conditional logic from request: "if X then Y" -> {% if X %}Y{% endif %}
-- Do NOT summarize - preserve verbatim
-
-VARIABLE SYNTAX:
-- Use {{ name }} in text and inside {% if %} blocks
-- description: Brief summary, {{ }} OK, NO {% if %}
-- prompt_template: Full logic with {% if %} for conditionals
-"""
-        return f"{template_rules}\n\n{base_guidance}"
 
     def _validate_template_syntax(
         self,

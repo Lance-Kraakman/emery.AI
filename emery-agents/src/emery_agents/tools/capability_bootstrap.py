@@ -6,9 +6,8 @@ Three population sources:
 2. User skills (from workspace context) — called per-request
 3. External tools (from gRPC) — called per-request
 
-AIDEV-NOTE: The registry was fully built but never populated. This module
-bridges agent_descriptors + workspace data + external tools into Capability
-objects that power search_capabilities and _get_capability_guidance().
+Capabilities are retrieved for planning via CapabilityRetriever
+(reasoning/modules/retrievers.py) which uses DSPy's FAISS-backed search.
 """
 
 from __future__ import annotations
