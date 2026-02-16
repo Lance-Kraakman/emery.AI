@@ -6,11 +6,15 @@ import os
 import re
 from dataclasses import dataclass
 
-_IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+# Allow alphanumeric + underscore (numeric IDs like '66' are valid since they're prefixed with t_)
+_IDENTIFIER_RE = re.compile(r"^[a-zA-Z0-9_]+$")
 
 
 def validate_identifier(name: str) -> str:
     """Validate and return a SQL-safe identifier.
+
+    Allows numeric table IDs (e.g., '66') since they're always prefixed
+    with 't_{org_id}_' in view names, making the final SQL valid.
 
     Args:
         name: The identifier to validate
