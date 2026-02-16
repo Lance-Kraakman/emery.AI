@@ -154,6 +154,8 @@ export interface HumanSkillOutput {
   description?: string
   /** Table field type for rich rendering (e.g., 'email-thread', 'file', 'date') */
   fieldType?: string
+  /** For relation fields: the linked table ID for record selection */
+  relatedTableId?: number
 }
 
 /**

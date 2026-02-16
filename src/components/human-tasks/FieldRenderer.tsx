@@ -21,6 +21,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { EmailThreadField } from '@/components/tables/fields/EmailThreadField';
+import { RelationField } from '@/components/tables/fields/RelationField';
 import type { FieldType } from '@/ddd/domain/tables/value-objects/table-field';
 import { isEmailThreadFieldValue } from '@/ddd/domain/tables/value-objects/field-values';
 import { Calendar, FileText, Hash, Link2, Mail, Phone } from 'lucide-react';
@@ -49,6 +50,8 @@ export interface FieldRendererProps {
   name?: string;
   /** Field description */
   description?: string;
+  /** For relation fields: the linked table ID for record selection */
+  relatedTableId?: number;
 }
 
 // ============================================================================
@@ -132,6 +135,7 @@ export function FieldRenderer({
   placeholder,
   name,
   description,
+  relatedTableId,
 }: FieldRendererProps) {
   // Default to text type if not specified
   const type = fieldType || 'text';
@@ -150,6 +154,7 @@ export function FieldRenderer({
       disabled={disabled}
       placeholder={placeholder}
       name={name}
+      relatedTableId={relatedTableId}
     />
   );
 }
@@ -312,6 +317,7 @@ interface EditModeRendererProps {
   disabled?: boolean;
   placeholder?: string;
   name?: string;
+  relatedTableId?: number;
 }
 
 /**
@@ -324,6 +330,7 @@ function EditModeRenderer({
   disabled = false,
   placeholder,
   name,
+  relatedTableId,
 }: EditModeRendererProps) {
   const handleChange = (newValue: unknown) => {
     onChange?.(newValue);
@@ -429,6 +436,33 @@ function EditModeRenderer({
           disabled={disabled}
           rows={4}
           className="bg-white dark:bg-gray-900 font-mono text-xs"
+        />
+      );
+    }
+
+    case 'relation': {
+      // If no related table configured, fall back to text input
+      if (!relatedTableId) {
+        return (
+          <Input
+            type="text"
+            value={toInputString(value)}
+            onChange={(e) => handleChange(e.target.value)}
+            placeholder={placeholder || 'Enter relation ID...'}
+            disabled={disabled}
+            className="bg-white dark:bg-gray-900"
+          />
+        );
+      }
+      return (
+        <RelationField
+          value={Array.isArray(value) ? value : []}
+          onChange={(newValue) => handleChange(newValue)}
+          isEditMode={true}
+          relatedTableId={relatedTableId}
+          multiple={true}
+          compact={false}
+          fieldName={name}
         />
       );
     }

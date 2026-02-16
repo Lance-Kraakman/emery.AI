@@ -183,6 +183,7 @@ export function HumanTaskCard({
                 placeholder={`Enter ${formatFieldName(output.name).toLowerCase()}...`}
                 name={output.name}
                 description={output.description}
+                relatedTableId={output.relatedTableId}
               />
             </div>
           ))}

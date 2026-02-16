@@ -108,6 +108,7 @@ export function TableMappingCard({
               (matchingField.metadata as { options?: Array<{ name: string }> })?.options?.map(
                 (o) => o.name
               ) || [],
+            relatedTableId: matchingField.relatedTableId || undefined,
           },
         });
         existingTargetIds.add(matchingField.id);

@@ -162,6 +162,7 @@ export function TableGroupedOutputPanel({
                   (field.metadata as { options?: Array<{ name: string }> })?.options?.map(
                     (o) => o.name
                   ) || [],
+                relatedTableId: field.relatedTableId || undefined,
               },
             };
           }
@@ -288,6 +289,7 @@ export function TableGroupedOutputPanel({
             (field.metadata as { options?: Array<{ name: string }> })?.options?.map(
               (o) => o.name
             ) || [],
+          relatedTableId: field.relatedTableId || undefined,
         },
       });
     });
