@@ -67,7 +67,8 @@ export function HumanTaskCard({
   // Resolve {{variable}} placeholders in instructions using input values
   const resolvedInstructions = useMemo(() => {
     const variableMap: Record<string, unknown> = {};
-    for (const input of humanTask.inputs) {
+    const inputs = Array.isArray(humanTask.inputs) ? humanTask.inputs : [];
+    for (const input of inputs) {
       variableMap[input.name] = input.value;
     }
     return resolveTemplate(humanTask.instructions, variableMap);
