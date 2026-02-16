@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING, Any, Literal, TypedDict, cast
 from emery_agents.engine import AgentEngine
 from emery_agents.infrastructure.storage import WORKSPACE_STORAGE_PATH
 from emery_agents.orchestrators import RuntimeContext, create_session_graph
+from emery_agents.services.graph import GraphService
 from emery_agents.orchestrators.nodes.planning import _build_workspace_context
 from emery_agents.orchestrators.state import DEFAULT_STATE, PlanExecuteState
 from emery_agents.services.analysis.token_accumulator import TokenAccumulator
@@ -40,6 +41,7 @@ from emery_agents.tools.loader import UnifiedToolLoader
 from ..agents.factory import AgentFactory
 from ..models import ModelProvider
 from .events import (
+    AwaitingHumanSkillEvent,
     ExecutionCompletedEvent,
     GoalAchievedEvent,
     PlanCreatedEvent,
@@ -201,6 +203,15 @@ class CoordinatorExecutor:
             logger.error(f"Failed to initialize AgentEngine: {e}")
             raise RuntimeError(f"Cannot execute task: engine initialization failed: {e}")
 
+        # Initialize GraphService for Delta Lake relationship traversal
+        # Uses IAM role in production, explicit env vars for local MinIO
+        try:
+            graph_service: GraphService | None = GraphService()
+            logger.info("GraphService initialized for Delta Lake traversal")
+        except Exception as e:
+            logger.warning(f"GraphService unavailable (graph retrieval disabled): {e}")
+            graph_service = None
+
         # Build runtime context
         runtime = RuntimeContext(
             engine=engine,
@@ -214,6 +225,7 @@ class CoordinatorExecutor:
             autonomous_mode=request.autonomous_mode,
             capability_registry=capability_registry,
             planning_registry=planning_registry,
+            graph_service=graph_service,
         )
 
         # Build initial state - graph handles planning, approval, and execution
@@ -375,6 +387,25 @@ class CoordinatorExecutor:
                 error_message="",
                 timestamp_ms=timestamp_ms,
                 progress_percent=100.0,
+            )
+        elif isinstance(event, AwaitingHumanSkillEvent):
+            return ProgressDict(
+                status="in_progress",
+                output=json.dumps({
+                    "type": "awaiting_human_skill",
+                    "skill_id": event.skill_id,
+                    "skill_name": event.skill_name,
+                    "step_id": event.step_id,
+                    "instructions": event.instructions,
+                    "inputs": event.inputs,
+                    "output_schema": event.output_schema,
+                    "assigned_to": event.assigned_to,
+                    "external_links": event.external_links,
+                    "session_id": event.session_id,
+                }),
+                error_message="",
+                timestamp_ms=timestamp_ms,
+                progress_percent=50.0,
             )
         else:
             # Generic event

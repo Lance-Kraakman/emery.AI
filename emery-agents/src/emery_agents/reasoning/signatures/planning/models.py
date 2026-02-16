@@ -48,8 +48,7 @@ class PlanStepOutput(BaseModel):
     )
     tool_call: str | None = Field(
         default=None,
-        description="Tool to invoke for this step (e.g., 'skill_crud' for skill execution). "
-        "Include the specific tool name when the step calls an external integration.",
+        description="Tool to invoke for this step. Include the specific tool name.",
     )
     parameters: dict[str, Any] | None = Field(
         default=None,
@@ -292,6 +291,21 @@ class PlanDiffResult(BaseModel):
     clarifying_questions: list[ClarifyingQuestionOutput] = Field(
         default_factory=list, description="Questions if clarification needed"
     )
+
+
+class RecordContext(BaseModel):
+    """Context for record-level operations."""
+    table_id: str | None = Field(default=None, description="Table ID")
+    record_ids: list[str] = Field(default_factory=list, description="Record IDs or names")
+
+
+class TriageAnalysis(BaseModel):
+    """Analysis extracted during triage for downstream planning."""
+
+    intent: str = Field(default="", description="One-sentence summary of user's goal")
+    entities: list[str] = Field(default_factory=list, description="Resource/field/service names")
+    approach: str = Field(default="step-by-step", description="Reasoning approach")
+    external_services: list[str] = Field(default_factory=list, description="Third-party services")
 
 
 class PlanReflection(BaseModel):

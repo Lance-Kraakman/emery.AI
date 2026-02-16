@@ -5,11 +5,13 @@ import { IOrganizationRepository } from '@/ddd/domain/organizations/repositories
 import { DrizzleBaseRepository } from '../base/drizzle-base-repository';
 import { Organization, CreateOrganizationData, UpdateOrganizationData, OrganizationWithMembers, OrganizationMember } from '@/ddd/domain/organizations/entities/organization';
 import type { DbClient } from '@/ddd/infrastructure/db/client';
-import { organizations, users, userOrganizations, roles, userRoles, agents } from '@/ddd/infrastructure/db/schema';
+import { organizations, users, userOrganizations, roles, userRoles, agents, invitations } from '@/ddd/infrastructure/db/schema';
 import { OrganizationId, UserId, OrganizationName, EmailAddress } from '@/ddd/domain/shared/value-objects';
 import { SystemRoleType, SYSTEM_ROLES } from '@/ddd/domain/rbac/entities/role';
 import type { Agent } from '@/ddd/domain/agents/entities/agent';
 import { AgentFactory } from '@/ddd/domain/agents/entities/agent';
+import { Invitation } from '@/ddd/domain/invitations/entities/invitation';
+import type { User, UserOrganization } from '@/ddd/domain/users/entities/user';
 
 type OrganizationRow = InferSelectModel<typeof organizations>;
 
@@ -290,8 +292,36 @@ export class DrizzleOrganizationRepository
       ...data,
       name: data.name?.value // Convert OrganizationName to string if present
     };
-    
+
     const [result] = await this.db
+      .update(organizations)
+      .set(dbData)
+      .where(eq(organizations.id, id.value))
+      .returning();
+
+    if (!result) {
+      throw new Error(`Organization with id ${id.value} not found`);
+    }
+
+    return this.fromPersistence(result);
+  }
+
+  /**
+   * Update organization bypassing RLS (bootstrap use only)
+   * Used during organization creation before user has RLS context.
+   * WARNING: Only use for trusted bootstrap operations like setting stripeCustomerId.
+   */
+  async updateRaw(id: OrganizationId, data: UpdateOrganizationData): Promise<Organization> {
+    if (!this.rawDb) {
+      throw new Error('Raw DB required for updateRaw(). This is a bootstrap operation.');
+    }
+    // Convert Value Objects to database primitives
+    const dbData = {
+      ...data,
+      name: data.name?.value // Convert OrganizationName to string if present
+    };
+
+    const [result] = await this.rawDb
       .update(organizations)
       .set(dbData)
       .where(eq(organizations.id, id.value))
@@ -488,6 +518,175 @@ export class DrizzleOrganizationRepository
       workspaceStorageBytes: organization.workspaceStorageBytes,
       storageOverageNotifiedAt: organization.storageOverageNotifiedAt,
       createdAt: organization.createdAt
+    };
+  }
+
+  // =============================================================================
+  // Bootstrap Operations (rawDb - bypass RLS for token-based auth)
+  // These operations use rawDb because the token itself is the authentication.
+  // Used during invitation acceptance before user has RLS context.
+  // =============================================================================
+
+  /**
+   * Find invitation by token bypassing RLS (token-based auth)
+   */
+  async findInvitationByTokenRaw(token: string): Promise<Invitation | null> {
+    if (!this.rawDb) {
+      throw new Error('Raw DB required for findInvitationByTokenRaw(). Pass rawDb to constructor.');
+    }
+    try {
+      const [record] = await this.rawDb
+        .select()
+        .from(invitations)
+        .where(eq(invitations.token, token))
+        .limit(1);
+
+      if (!record) {
+        return null;
+      }
+
+      return Invitation.fromPersistence({
+        id: record.id,
+        organizationId: record.organizationId,
+        invitedBy: record.invitedBy,
+        email: record.email,
+        roleIds: [record.roleId || 4], // Default to Member role
+        token: record.token,
+        expiresAt: record.expiresAt,
+        createdAt: record.createdAt
+      });
+    } catch (error) {
+      console.error('Error finding invitation by token:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Validate invitation token bypassing RLS
+   */
+  async validateInvitationTokenRaw(token: string): Promise<{ valid: boolean; invitation?: Invitation; error?: string }> {
+    const invitation = await this.findInvitationByTokenRaw(token);
+
+    if (!invitation) {
+      return { valid: false, error: 'Invalid invitation token' };
+    }
+
+    if (invitation.expiresAt < new Date()) {
+      return { valid: false, error: 'Invitation has expired' };
+    }
+
+    return { valid: true, invitation };
+  }
+
+  /**
+   * Delete invitation bypassing RLS (after acceptance)
+   */
+  async deleteInvitationRaw(invitationId: number): Promise<void> {
+    if (!this.rawDb) {
+      throw new Error('Raw DB required for deleteInvitationRaw(). Pass rawDb to constructor.');
+    }
+    await this.rawDb
+      .delete(invitations)
+      .where(eq(invitations.id, invitationId));
+  }
+
+  /**
+   * Find user by email bypassing RLS (bootstrap use)
+   */
+  async findUserByEmailRaw(email: EmailAddress): Promise<User | null> {
+    if (!this.rawDb) {
+      throw new Error('Raw DB required for findUserByEmailRaw(). Pass rawDb to constructor.');
+    }
+    try {
+      const [record] = await this.rawDb
+        .select()
+        .from(users)
+        .where(eq(users.email, email.value.toLowerCase()))
+        .limit(1);
+
+      if (!record) {
+        return null;
+      }
+
+      return this.mapUserFromPersistence(record);
+    } catch (error) {
+      console.error('Error finding user by email:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Create user bypassing RLS (bootstrap use)
+   */
+  async createUserRaw(data: { email: EmailAddress; name?: string; emailVerified?: Date }): Promise<User> {
+    if (!this.rawDb) {
+      throw new Error('Raw DB required for createUserRaw(). Pass rawDb to constructor.');
+    }
+    const [record] = await this.rawDb
+      .insert(users)
+      .values({
+        email: data.email.value.toLowerCase(),
+        name: data.name,
+        emailVerified: data.emailVerified
+      })
+      .returning();
+
+    return this.mapUserFromPersistence(record);
+  }
+
+  /**
+   * Add user to organization bypassing RLS (bootstrap use)
+   */
+  async addUserToOrganizationRaw(userId: UserId, organizationId: OrganizationId): Promise<UserOrganization> {
+    if (!this.rawDb) {
+      throw new Error('Raw DB required for addUserToOrganizationRaw(). Pass rawDb to constructor.');
+    }
+    const [record] = await this.rawDb
+      .insert(userOrganizations)
+      .values({
+        userId: userId.value,
+        organizationId: organizationId.value
+      })
+      .returning();
+
+    return {
+      id: record.id,
+      userId: UserId.fromString(record.userId),
+      organizationId: OrganizationId.fromNumber(record.organizationId),
+      systemRole: SYSTEM_ROLES.MEMBER, // Default role, actual role assignment via RBAC
+      createdAt: record.createdAt
+    };
+  }
+
+  /**
+   * Set user's current organization bypassing RLS (bootstrap use)
+   */
+  async setUserCurrentOrganizationRaw(userId: UserId, organizationId: OrganizationId): Promise<void> {
+    if (!this.rawDb) {
+      throw new Error('Raw DB required for setUserCurrentOrganizationRaw(). Pass rawDb to constructor.');
+    }
+    await this.rawDb
+      .update(users)
+      .set({ currentOrganizationId: organizationId.value })
+      .where(eq(users.id, userId.value));
+  }
+
+  // Helper to map user from persistence
+  private mapUserFromPersistence(record: any): User {
+    return {
+      id: UserId.fromString(record.id),
+      name: record.name,
+      email: record.email ? EmailAddress.fromString(record.email) : null,
+      emailVerified: record.emailVerified,
+      image: record.image,
+      currentOrganizationId: record.currentOrganizationId
+        ? OrganizationId.fromNumber(record.currentOrganizationId)
+        : null,
+      jobTitle: record.jobTitle,
+      teams: record.teams,
+      createdAt: record.createdAt,
+      isAppOnlyUser: record.isAppOnlyUser,
+      allowedApps: record.allowedApps
     };
   }
 }

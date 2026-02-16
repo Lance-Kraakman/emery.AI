@@ -1,4 +1,5 @@
-import { S3Client, HeadBucketCommand, CreateBucketCommand } from '@aws-sdk/client-s3';
+import { S3Client, HeadBucketCommand, CreateBucketCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import dotenv from 'dotenv';
 
 // Load environment variables
@@ -11,6 +12,25 @@ const s3Client = new S3Client({
 });
 
 export const BUCKET_NAME = process.env.S3_BUCKET_NAME || 'enhancd-files';
+
+// External S3 client for generating presigned URLs accessible by external services (Docker/gRPC)
+// Falls back to S3_ENDPOINT_URL if S3_EXTERNAL_ENDPOINT_URL is not set
+const externalEndpoint = process.env.S3_EXTERNAL_ENDPOINT_URL || process.env.S3_ENDPOINT_URL;
+
+export const externalS3Client = new S3Client({
+  region: process.env.AWS_REGION || 'ap-southeast-2',
+  endpoint: externalEndpoint,
+  forcePathStyle: process.env.S3_FORCE_PATH_STYLE === 'true',
+});
+
+/**
+ * Generate presigned URL for external service access (gRPC workers, Docker containers)
+ * Uses S3_EXTERNAL_ENDPOINT_URL if set, otherwise falls back to S3_ENDPOINT_URL
+ */
+export async function getExternalPresignedUrl(s3Key: string, expiresIn = 3600): Promise<string> {
+  const command = new GetObjectCommand({ Bucket: BUCKET_NAME, Key: s3Key });
+  return getSignedUrl(externalS3Client, command, { expiresIn });
+}
 
 // Ensure bucket exists - create if it doesn't
 export async function ensureBucketExists(): Promise<void> {

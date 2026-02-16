@@ -292,11 +292,12 @@ const bulkData: BulkInvitationData = {
 
   /**
    * Accept an invitation
+   * Uses rawDb methods from organizationRepository because token-based auth bypasses RLS
    */
   async acceptInvitation(command: AcceptInvitationCommand): Promise<InvitationApplicationResult<InvitationAcceptanceResult>> {
     try {
-      // Validate token and get invitation
-      const tokenValidation = await this.invitationRepository.validateToken(InvitationToken.fromString(command.token));
+      // Validate token and get invitation (uses rawDb - token is the auth)
+      const tokenValidation = await this.organizationRepository.validateInvitationTokenRaw(command.token);
       if (!tokenValidation.valid || !tokenValidation.invitation) {
         return {
           success: false,
@@ -322,19 +323,17 @@ const bulkData: BulkInvitationData = {
         };
       }
 
-      // Check if user already exists
-      let user = await this.userRepository.findByEmail(EmailAddress.fromString(command.acceptingUserEmail));
+      // Check if user already exists (uses rawDb - no RLS context yet)
+      let user = await this.organizationRepository.findUserByEmailRaw(EmailAddress.fromString(command.acceptingUserEmail));
       let isNewUser = false;
 
       if (!user) {
-        // Create new user
-        const userData: CreateUserData = {
+        // Create new user (uses rawDb - bootstrap operation)
+        user = await this.organizationRepository.createUserRaw({
           email: EmailAddress.fromString(command.acceptingUserEmail.toLowerCase()),
           name: command.userData?.name,
           emailVerified: new Date() // Auto-verify email since they clicked the invitation link
-        };
-
-        user = await this.userRepository.create(userData);
+        });
         isNewUser = true;
       }
 
@@ -342,9 +341,9 @@ const bulkData: BulkInvitationData = {
       // const existingRole = await this.rbacRepository.getUserRoles(user.id, invitation.organizationId);
       // For now, skip membership check - RBAC system will handle duplicate role assignments
       if (false) {
-        // User is already a member, just revoke the invitation
-        await this.invitationRepository.delete(invitation.id);
-        
+        // User is already a member, just delete the invitation
+        await this.organizationRepository.deleteInvitationRaw(invitation.id.value);
+
         return {
           success: true,
           data: {
@@ -356,15 +355,13 @@ const bulkData: BulkInvitationData = {
         };
       }
 
-      // Add user to organization (role assignment handled by RBAC)
-      const membershipData: CreateUserOrganizationData = {
-        userId: user.id,
-        organizationId: invitation.organizationId
-      };
-      
-      const userOrganization = await this.userRepository.addUserToOrganization(membershipData);
+      // Add user to organization (uses rawDb - bootstrap operation)
+      const userOrganization = await this.organizationRepository.addUserToOrganizationRaw(
+        user.id,
+        invitation.organizationId
+      );
 
-      // Assign the roles in RBAC system
+      // Assign the roles in RBAC system (RBAC repo already uses rawDb)
       try {
         // Assign all roles from the invitation
         for (const roleId of invitation.roleIds) {
@@ -384,13 +381,13 @@ const bulkData: BulkInvitationData = {
         // Don't fail the whole operation - user is already added to org
       }
 
-      // Set as current organization if user has no current organization
+      // Set as current organization if user has no current organization (uses rawDb)
       if (!user.currentOrganizationId) {
-        await this.userRepository.switchOrganization(user.id, invitation.organizationId);
+        await this.organizationRepository.setUserCurrentOrganizationRaw(user.id, invitation.organizationId);
       }
 
-      // Accept the invitation (marks as used)
-      await this.invitationRepository.acceptInvitation(InvitationToken.fromString(command.token), user.id);
+      // Delete the invitation after acceptance (uses rawDb)
+      await this.organizationRepository.deleteInvitationRaw(invitation.id.value);
 
       const result: InvitationAcceptanceResult = {
         success: true,
@@ -560,10 +557,12 @@ const bulkData: BulkInvitationData = {
 
   /**
    * Get invitation by token (for displaying invitation details)
+   * Uses rawDb from organizationRepository because token-based lookup bypasses RLS
    */
   async getInvitationByToken(token: string): Promise<InvitationApplicationResult<Invitation>> {
     try {
-      const invitation = await this.invitationRepository.findByToken(InvitationToken.fromString(token));
+      // Use rawDb via organization repository - token is the auth
+      const invitation = await this.organizationRepository.findInvitationByTokenRaw(token);
       if (!invitation) {
         return {
           success: false,

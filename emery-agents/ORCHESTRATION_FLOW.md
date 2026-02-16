@@ -239,6 +239,55 @@ flowchart TB
     end
 ```
 
+## Graph Retrieval Flow
+
+When triage detects a record-level query (e.g., "tell me about John Smith"), it extracts `RecordContext` and passes it through the graph retrieval pipeline.
+
+```mermaid
+flowchart TB
+    subgraph Triage["Triage Node"]
+        A[Task + workspace_context] --> B[DSPy TriageTask]
+        B --> C[RecordContext typed output]
+        C --> D{table_id present?}
+        D -->|Yes| E[Store in state]
+        D -->|No| F[record_context = None]
+    end
+
+    subgraph GraphRetrieval["Graph Retrieval (planning/direct nodes)"]
+        E --> G[retrieve_graph_context]
+        G --> H[For each record_id]
+        H --> I[Try ID lookup via GraphRetriever]
+        I --> J{Found?}
+        J -->|Yes| K[Collect related records]
+        J -->|No| L[find_by_name ILIKE search]
+        L --> M{Found ID?}
+        M -->|Yes| N[Retry with resolved ID]
+        M -->|No| O[Skip record]
+        N --> K
+        K --> P[format_for_planner]
+    end
+
+    P --> Q[Graph context added to planner input]
+```
+
+### Component Responsibilities
+
+| Component | File | Responsibility |
+|-----------|------|----------------|
+| **RecordContext** | `reasoning/signatures/planning/models.py` | Pydantic model: `table_id`, `record_ids` |
+| **TriageAnalysis** | `reasoning/signatures/planning/models.py` | Pydantic model: `intent`, `entities`, `approach`, `external_services` |
+| **TriageTask** | `reasoning/signatures/planning/triage.py` | DSPy signature with typed outputs |
+| **Triage Node** | `orchestrators/nodes/triage.py` | Extracts RecordContext and TriageAnalysis to state |
+| **Graph Helper** | `orchestrators/helpers/graph.py` | ID-first lookup, name fallback |
+| **GraphService** | `services/graph/service.py` | `find_by_name()`, `get_related()` |
+| **GraphRetriever** | `reasoning/modules/graph_retriever.py` | DuckPGQ traversal + markdown formatting |
+
+### Name Resolution Strategy
+
+1. **ID-first**: Try `record_id` as UUID directly
+2. **Name fallback**: If no results, search name-like columns via ILIKE
+3. **Dynamic columns**: `find_by_name()` queries DESCRIBE to find columns containing "name" or "title"
+
 ## Error Recovery Flow
 
 ```mermaid
@@ -284,6 +333,10 @@ flowchart TB
 | Plan Differ | `services/planning/plan_differ.py` | 181-371 |
 | ACE Context | `ace/services/context_service.py` | 137-302 |
 | ACE Strategy | `ace/services/strategy_service.py` | 86-295 |
+| RecordContext | `reasoning/signatures/planning/models.py` | 297-301 |
+| Graph Helper | `orchestrators/helpers/graph.py` | 21-93 |
+| GraphService | `services/graph/service.py` | 215-252 |
+| GraphRetriever | `reasoning/modules/graph_retriever.py` | Full file |
 
 ## Event Types
 

@@ -11,7 +11,6 @@ Uses KNNFewShot with TOOL_EXAMPLES to teach tool selection:
 
 from __future__ import annotations
 
-import copy
 import logging
 from typing import Any
 
@@ -29,54 +28,18 @@ from ...services.context import clear_human_skill_awaiting, get_human_skill_awai
 
 logger = logging.getLogger(__name__)
 
-# Module-level cache for KNNFewShot compiled modules
-# TOOL_EXAMPLES is static, so we can compile once and reuse per-process
-_COMPILED_DIRECT_REACT: dspy.Module | None = None
-_COMPILED_EXECUTOR_REACT: dspy.Module | None = None
+# Cache only the embedder (expensive FAISS index creation)
+# ReAct must be created fresh with actual tools to set Literal constraint
+_CACHED_EMBEDDER: Any = None
 
 
-def _get_compiled_direct_react(max_iters: int = 10) -> dspy.Module:
-    """Get cached KNNFewShot-compiled ReAct (compile once, copy per-use).
-
-    Returns a shallow copy to avoid shared state mutation when tools
-    are set per-instance. The FAISS index inside KNNFewShot is shared
-    (which is fine - it's read-only), but the tools list is per-copy.
-    """
-    global _COMPILED_DIRECT_REACT
-    if _COMPILED_DIRECT_REACT is None:
-        embedder = create_dspy_embedder()
-        base_react = dspy.ReAct(
-            DirectExecution,
-            tools=[],  # Tools set dynamically per-call
-            max_iters=max_iters,
-        )
-        _COMPILED_DIRECT_REACT = KNNFewShot(
-            k=5, trainset=TOOL_EXAMPLES, vectorizer=embedder
-        ).compile(base_react)
-        logger.info("Compiled and cached DirectExecutorModule KNNFewShot")
-    return copy.copy(_COMPILED_DIRECT_REACT)
-
-
-def _get_compiled_executor_react(max_iters: int = 10) -> dspy.Module:
-    """Get cached KNNFewShot-compiled ReAct (compile once, copy per-use).
-
-    Returns a shallow copy to avoid shared state mutation when tools
-    are set per-instance. The FAISS index inside KNNFewShot is shared
-    (which is fine - it's read-only), but the tools list is per-copy.
-    """
-    global _COMPILED_EXECUTOR_REACT
-    if _COMPILED_EXECUTOR_REACT is None:
-        embedder = create_dspy_embedder()
-        base_react = dspy.ReAct(
-            "step_description, context -> result",
-            tools=[],
-            max_iters=max_iters,
-        )
-        _COMPILED_EXECUTOR_REACT = KNNFewShot(
-            k=5, trainset=TOOL_EXAMPLES, vectorizer=embedder
-        ).compile(base_react)
-        logger.info("Compiled and cached ExecutorModule KNNFewShot")
-    return copy.copy(_COMPILED_EXECUTOR_REACT)
+def _get_embedder() -> Any:
+    """Get cached embedder for KNNFewShot (avoids re-creating FAISS index)."""
+    global _CACHED_EMBEDDER
+    if _CACHED_EMBEDDER is None:
+        _CACHED_EMBEDDER = create_dspy_embedder()
+        logger.info("Created and cached DSPy embedder for KNNFewShot")
+    return _CACHED_EMBEDDER
 
 
 def _check_and_raise_human_skill() -> None:
@@ -123,10 +86,31 @@ class ExecutorModule(dspy.Module):  # type: ignore[misc]
         self.max_iters = max_iters
         self.last_trajectory: dict[str, Any] | None = None
 
-        # Get cached compiled module (avoids re-embedding TOOL_EXAMPLES each request)
-        self.react = _get_compiled_executor_react(max_iters)
-        # Set tools for this instance (ReAct module has dynamic tools attribute)
-        self.react.tools = self.execution_tools  # type: ignore[attr-defined]
+        # Build tools list with finish tool BEFORE creating ReAct
+        # DSPy ReAct bakes Literal[tool_names] into the signature at init,
+        # so we MUST pass all tools at creation time - cannot add later!
+        all_tools = list(self.execution_tools)
+        all_tools.append(
+            dspy.Tool(
+                func=lambda: "Completed.",
+                name="finish",
+                desc="Marks the task as complete.",
+                args={},
+            )
+        )
+
+        # Create ReAct with actual tools - Literal constraint includes all tool names
+        base_react = dspy.ReAct(
+            "step_description, context -> result",  # type: ignore[arg-type]
+            tools=all_tools,
+            max_iters=max_iters,
+        )
+
+        # Apply KNNFewShot compilation (embedder is cached, compilation is fast)
+        embedder = _get_embedder()
+        self.react = KNNFewShot(
+            k=5, trainset=TOOL_EXAMPLES, vectorizer=embedder
+        ).compile(base_react)
 
         logger.debug(
             f"ExecutorModule initialized with {len(self.execution_tools)} tools"
@@ -236,10 +220,31 @@ class DirectExecutorModule(dspy.Module):  # type: ignore[misc]
         self.execution_tools = execution_tools or []
         self.max_iters = max_iters
 
-        # Get cached compiled module (avoids re-embedding TOOL_EXAMPLES each request)
-        self.react = _get_compiled_direct_react(max_iters)
-        # Set tools for this instance (ReAct module has dynamic tools attribute)
-        self.react.tools = self.execution_tools  # type: ignore[attr-defined]
+        # Build tools list with finish tool BEFORE creating ReAct
+        # DSPy ReAct bakes Literal[tool_names] into the signature at init,
+        # so we MUST pass all tools at creation time - cannot add later!
+        all_tools = list(self.execution_tools)
+        all_tools.append(
+            dspy.Tool(
+                func=lambda: "Completed.",
+                name="finish",
+                desc="Marks the task as complete.",
+                args={},
+            )
+        )
+
+        # Create ReAct with actual tools - Literal constraint includes all tool names
+        base_react = dspy.ReAct(
+            DirectExecution,
+            tools=all_tools,
+            max_iters=max_iters,
+        )
+
+        # Apply KNNFewShot compilation (embedder is cached, compilation is fast)
+        embedder = _get_embedder()
+        self.react = KNNFewShot(
+            k=5, trainset=TOOL_EXAMPLES, vectorizer=embedder
+        ).compile(base_react)
 
         logger.debug(
             f"DirectExecutorModule initialized with {len(self.execution_tools)} tools"

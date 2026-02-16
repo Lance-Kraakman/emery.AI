@@ -1,7 +1,9 @@
 import { Organization, CreateOrganizationData, UpdateOrganizationData, OrganizationWithMembers, OrganizationMember } from '../entities/organization';
-import { OrganizationId, UserId } from '@/ddd/domain/shared/value-objects';
+import { OrganizationId, UserId, EmailAddress } from '@/ddd/domain/shared/value-objects';
 import { SystemRoleType } from '@/ddd/domain/rbac/entities/role';
 import type { Agent } from '@/ddd/domain/agents/entities/agent';
+import type { Invitation } from '@/ddd/domain/invitations/entities/invitation';
+import type { User, UserOrganization } from '@/ddd/domain/users/entities/user';
 // NOTE: API key authentication moved to token-service.ts (unified token system)
 
 export interface IOrganizationRepository {
@@ -74,6 +76,14 @@ export interface IOrganizationRepository {
   update(id: OrganizationId, data: UpdateOrganizationData): Promise<Organization>;
 
   /**
+   * Update organization bypassing RLS (bootstrap use only)
+   * Used during organization creation before user has RLS context.
+   * WARNING: Only use for trusted bootstrap operations like setting stripeCustomerId.
+   * Requires rawDb to be configured in repository constructor.
+   */
+  updateRaw(id: OrganizationId, data: UpdateOrganizationData): Promise<Organization>;
+
+  /**
    * Delete organization (and cascade related data)
    */
   delete(id: OrganizationId): Promise<void>;
@@ -119,4 +129,60 @@ export interface IOrganizationRepository {
    * Used for public app routing
    */
   findBySlug(slug: string): Promise<Organization | null>;
+
+  // =============================================================================
+  // Bootstrap Operations (rawDb - bypass RLS for token-based auth)
+  // These operations use rawDb because the token itself is the authentication.
+  // Used during invitation acceptance before user has RLS context.
+  // =============================================================================
+
+  /**
+   * Find invitation by token bypassing RLS (token-based auth)
+   * Used during invitation acceptance before user has RLS context.
+   * The token itself authenticates the request.
+   * Requires rawDb to be configured in repository constructor.
+   */
+  findInvitationByTokenRaw(token: string): Promise<Invitation | null>;
+
+  /**
+   * Validate invitation token bypassing RLS
+   * Returns validation result with invitation if valid.
+   * Requires rawDb to be configured in repository constructor.
+   */
+  validateInvitationTokenRaw(token: string): Promise<{ valid: boolean; invitation?: Invitation; error?: string }>;
+
+  /**
+   * Delete/accept invitation bypassing RLS (token-based auth)
+   * Removes the invitation after acceptance.
+   * Requires rawDb to be configured in repository constructor.
+   */
+  deleteInvitationRaw(invitationId: number): Promise<void>;
+
+  /**
+   * Find user by email bypassing RLS (bootstrap use)
+   * Used to check if user exists during invitation acceptance.
+   * Requires rawDb to be configured in repository constructor.
+   */
+  findUserByEmailRaw(email: EmailAddress): Promise<User | null>;
+
+  /**
+   * Create user bypassing RLS (bootstrap use)
+   * Used when a new user accepts an invitation.
+   * Requires rawDb to be configured in repository constructor.
+   */
+  createUserRaw(data: { email: EmailAddress; name?: string; emailVerified?: Date }): Promise<User>;
+
+  /**
+   * Add user to organization bypassing RLS (bootstrap use)
+   * Used during invitation acceptance to create membership.
+   * Requires rawDb to be configured in repository constructor.
+   */
+  addUserToOrganizationRaw(userId: UserId, organizationId: OrganizationId): Promise<UserOrganization>;
+
+  /**
+   * Set user's current organization bypassing RLS (bootstrap use)
+   * Used after invitation acceptance to switch user to new org.
+   * Requires rawDb to be configured in repository constructor.
+   */
+  setUserCurrentOrganizationRaw(userId: UserId, organizationId: OrganizationId): Promise<void>;
 }

@@ -65,10 +65,12 @@ async def direct_execute_node(
     triage_context = state.get("triage_context", "") or ""
 
     # Retrieve graph context for record-based queries
+    # Uses workspace (ALL tables) so graph can traverse any relation
     graph_context = retrieve_graph_context(
         record_context=state.get("record_context"),
         graph_service=runtime.graph_service,
         org_id=state.get("organization_id"),
+        workspace_context=workspace,
     )
 
     events: list[Any] = []

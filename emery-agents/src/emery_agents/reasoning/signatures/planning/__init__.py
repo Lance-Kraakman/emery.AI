@@ -24,12 +24,14 @@ from .models import (
     PlanOutput,
     PlanReflection,
     PlanStepOutput,
+    RecordContext,
     SkillInputSpec,
     SkillOutputSpec,
     SkillTemplatePlanOutput,
     SkillTemplateStepOutput,
     StepModificationOutput,
     TaskClassificationResult,
+    TriageAnalysis,
 )
 
 # Signatures
@@ -51,6 +53,10 @@ __all__ = [
     "PlanOutput",
     "ClarifyingQuestionOutput",
     "PlanOrQuestionsOutput",
+    # Models - Record Context
+    "RecordContext",
+    # Models - Triage Analysis
+    "TriageAnalysis",
     # Models - Classification
     "TaskClassificationResult",
     # Models - Gap Analysis

@@ -84,6 +84,17 @@ class HumanSkillHandler:
             # Include fieldType if specified for rich rendering
             if out.field_type:
                 output_item["fieldType"] = out.field_type
+            # Extract relatedTableId from output mapping for relation fields
+            if out.field_type == "relation" and out.output_mapping:
+                for tm in out.output_mapping.table_mappings:
+                    for fm in tm.mappings:
+                        if fm.target_field_metadata:
+                            related_table_id = fm.target_field_metadata.get("relatedTableId")
+                            if related_table_id:
+                                output_item["relatedTableId"] = related_table_id
+                                break
+                    if "relatedTableId" in output_item:
+                        break
             output_schema.append(output_item)
 
         # Resolve assignee

@@ -28,6 +28,7 @@ from emery_agents.reasoning.signatures.planning import (
     AnalyzeTask,
     CreatePlan,
     CreatePlanAutonomous,
+    TriageAnalysis,
     CreateSkillTemplate,
     PlanOrQuestionsOutput,
     PlanOutput,
@@ -127,7 +128,7 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         proven_strategies: str,
         conversation_history: str = "",
         memory_context: str = "",
-        triage_analysis: dict[str, Any] | None = None,
+        triage_analysis: TriageAnalysis | None = None,
         configured_tools: str = "",
         retrieved_capabilities: str = "",
         retrieved_patterns: str = "",
@@ -167,8 +168,8 @@ class PlannerModule(dspy.Module):  # type: ignore[misc]
         has_delegation = autonomous_mode or self._has_delegation_phrase(request)
 
         # Use pre-computed triage analysis if available, otherwise run AnalyzeTask
-        if triage_analysis and triage_analysis.get("intent"):
-            analysis_data = triage_analysis
+        if triage_analysis and triage_analysis.intent:
+            analysis_data = triage_analysis.model_dump()
         else:
             # Fallback: run separate AnalyzeTask when no triage analysis available
             analysis = self.analyzer(

@@ -72,6 +72,7 @@ export function FieldMappingRow({
                     (field.metadata as { options?: Array<{ name: string }> })?.options?.map(
                       (o) => o.name
                     ) || [],
+                  relatedTableId: field.relatedTableId || undefined,
                 }
               : undefined,
           });

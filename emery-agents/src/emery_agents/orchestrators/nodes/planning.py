@@ -39,6 +39,7 @@ from ...services.execution.events import (
 from ...tools.integrations.dynamic_agent import DynamicAgentTool
 from ...tools.integrations.dynamic_skill import DynamicSkillTool
 from ...tools.tool_modes import ToolMode, filter_tools_for_mode
+from ...reasoning.signatures.planning.models import TriageAnalysis
 from ..helpers.graph import retrieve_graph_context
 from ..runtime import RuntimeContext
 from ..state import PlanExecuteState
@@ -369,21 +370,19 @@ async def generate_plan_node(
         )
 
     # Construct synthetic triage_analysis when triage was skipped (@mention path)
-    if (
-        pre_selected_skill or pre_selected_agent or pre_selected_tool
-    ) and not triage_analysis:
-        mention_name = pre_selected_skill or pre_selected_agent or pre_selected_tool
+    mention_name = pre_selected_skill or pre_selected_agent or pre_selected_tool
+    if mention_name and not triage_analysis:
         mention_type = (
             "skill"
             if pre_selected_skill
             else ("agent" if pre_selected_agent else "tool")
         )
-        triage_analysis = {
-            "intent": f"Execute {mention_type} '{mention_name}' as requested by user",
-            "entities": [mention_name],
-            "approach": "step-by-step",
-            "external_services": [],
-        }
+        triage_analysis = TriageAnalysis(
+            intent=f"Execute {mention_type} '{mention_name}' as requested by user",
+            entities=[mention_name],
+            approach="step-by-step",
+            external_services=[],
+        )
 
     events: list[Any] = []
 
@@ -492,10 +491,12 @@ async def generate_plan_node(
             logger.warning(f"KNN retrieval failed, continuing without: {e}")
 
     # === Graph Retrieval: Get related records if record context exists ===
+    # Use full_workspace (ALL tables) so graph can traverse any relation
     graph_context = retrieve_graph_context(
         record_context=state.get("record_context"),
         graph_service=runtime.graph_service,
         org_id=state.get("organization_id"),
+        workspace_context=full_workspace,
     )
 
     # Build session config

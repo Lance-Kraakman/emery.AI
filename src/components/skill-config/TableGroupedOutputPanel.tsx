@@ -162,6 +162,7 @@ export function TableGroupedOutputPanel({
                   (field.metadata as { options?: Array<{ name: string }> })?.options?.map(
                     (o) => o.name
                   ) || [],
+                relatedTableId: field.relatedTableId || undefined,
               },
             };
           }
@@ -288,6 +289,7 @@ export function TableGroupedOutputPanel({
             (field.metadata as { options?: Array<{ name: string }> })?.options?.map(
               (o) => o.name
             ) || [],
+          relatedTableId: field.relatedTableId || undefined,
         },
       });
     });
@@ -341,6 +343,10 @@ export function TableGroupedOutputPanel({
 
   const handleRemoveOutput = (outputName: string) => {
     onOutputsChange(outputs.filter((o) => o.name !== outputName));
+  };
+
+  const handleUpdateOutput = (outputName: string, updated: OutputDefinition) => {
+    onOutputsChange(outputs.map((o) => (o.name === outputName ? updated : o)));
   };
 
   const handleAddManualOutput = () => {
@@ -510,6 +516,7 @@ export function TableGroupedOutputPanel({
                 key={output.name}
                 output={output}
                 onRemove={() => handleRemoveOutput(output.name)}
+                onTypeChange={(type) => handleUpdateOutput(output.name, { ...output, type })}
               />
             ))}
           </div>

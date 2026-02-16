@@ -10,6 +10,7 @@
  */
 
 import type { TriggerContext } from '../entities/task';
+import { resolveTemplate } from '@/lib/utils/template-resolution';
 
 export class InstructionTemplateService {
   /**
@@ -29,11 +30,7 @@ export class InstructionTemplateService {
 
     const variables = this.buildVariableMap(triggerContext);
 
-    // Replace {{variable}} with actual values
-    return template.replace(/\{\{([^}]+)\}\}/g, (match, path) => {
-      const value = this.resolveVariable(path.trim(), variables);
-      return value !== undefined ? String(value) : match; // Keep original if not found
-    });
+    return resolveTemplate(template, variables);
   }
 
   /**
@@ -114,33 +111,6 @@ export class InstructionTemplateService {
     }
 
     return prefixedVars;
-  }
-
-  /**
-   * Resolve a variable path to its value
-   * Supports nested paths like "row.email" or "trigger.scheduleName"
-   */
-  private static resolveVariable(
-    path: string,
-    variables: Record<string, any>
-  ): any {
-    // Direct lookup first
-    if (path in variables) {
-      return variables[path];
-    }
-
-    // Try nested path resolution
-    const parts = path.split('.');
-    let value: any = variables;
-
-    for (const part of parts) {
-      if (value === undefined || value === null) {
-        return undefined;
-      }
-      value = value[part];
-    }
-
-    return value;
   }
 
   /**

@@ -1,12 +1,13 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { User, ExternalLink, CheckCircle, XCircle, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import ReactMarkdown from 'react-markdown'
 import { FieldRenderer } from '@/components/human-tasks/FieldRenderer'
+import { resolveTemplate } from '@/lib/utils/template-resolution'
 import type { HumanTaskState } from './types/extended-chat-handler'
 
 /**
@@ -63,6 +64,16 @@ export function HumanTaskCard({
     }
   }
 
+  // Resolve {{variable}} placeholders in instructions using input values
+  const resolvedInstructions = useMemo(() => {
+    const variableMap: Record<string, unknown> = {};
+    const inputs = Array.isArray(humanTask.inputs) ? humanTask.inputs : [];
+    for (const input of inputs) {
+      variableMap[input.name] = input.value;
+    }
+    return resolveTemplate(humanTask.instructions, variableMap);
+  }, [humanTask.instructions, humanTask.inputs]);
+
   // Check if all required outputs have non-empty values
   const isValid = humanTask.outputSchema.every(output => {
     const value = outputs[output.name]
@@ -94,7 +105,7 @@ export function HumanTaskCard({
           Instructions
         </h4>
         <div className="prose prose-sm dark:prose-invert max-w-none text-gray-700 dark:text-gray-300">
-          <ReactMarkdown>{humanTask.instructions}</ReactMarkdown>
+          <ReactMarkdown>{resolvedInstructions}</ReactMarkdown>
         </div>
       </div>
 
@@ -172,6 +183,7 @@ export function HumanTaskCard({
                 placeholder={`Enter ${formatFieldName(output.name).toLowerCase()}...`}
                 name={output.name}
                 description={output.description}
+                relatedTableId={output.relatedTableId}
               />
             </div>
           ))}

@@ -74,8 +74,8 @@ export async function createOrganization(formData: FormData): Promise<Result> {
 
         console.log("Created Stripe customer:", customer.id);
 
-        // Update organization with Stripe customer ID
-        await orgRepo.update(newOrg.id, {
+        // Update organization with Stripe customer ID (use updateRaw since user has no RLS context yet)
+        await orgRepo.updateRaw(newOrg.id, {
           stripeCustomerId: customer.id
         });
 

@@ -255,6 +255,7 @@ export function TableGroupedInputPanel({
                 input={input}
                 onRemove={() => handleRemoveInput(input.name)}
                 onToggleRequired={() => handleUpdateInput(input.name, { ...input, required: !input.required })}
+                onTypeChange={(type) => handleUpdateInput(input.name, { ...input, type })}
               />
             ))}
           </div>

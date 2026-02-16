@@ -9,12 +9,26 @@ import dspy
 
 
 def _configure_dspy_cache() -> None:
-    """Configure DSPy cache before any other imports trigger dspy initialization."""
-    efs_path = Path(os.getenv("WORKSPACE_STORAGE_PATH", "/mnt/storage/workspaces"))
-    if efs_path.exists() and efs_path.is_dir():
-        cache_dir = efs_path / ".cache" / "dspy"
-    else:
-        cache_dir = Path.home() / ".cache" / "dspy"
+    """Configure DSPy cache before any other imports trigger dspy initialization.
+
+    IMPORTANT: Uses container-local /tmp instead of shared EFS.
+
+    Why /tmp and not EFS?
+    - DSPy uses diskcache.FanoutCache which stores data in SQLite databases
+    - SQLite requires file locking which doesn't work reliably on NFS/EFS
+    - With multiple agent containers (desired_count=2, scaling to 10), all would
+      write to the same SQLite DB on EFS, causing sqlite3.OperationalError: disk I/O error
+    - Using /tmp gives each container its own isolated cache (single-writer = works)
+
+    Trade-off: Cache not shared between containers, but DSPy cache is just for LLM
+    response deduplication. Cache hit rate is <5% in production (unique user contexts),
+    so this is acceptable.
+
+    Note: Embeddings are cached separately in JSON files at .cache/embeddings/ on EFS,
+    which works because JSON files are write-once (no locking issues).
+    """
+    # Use container-local /tmp for SQLite cache (avoids EFS multi-writer issues)
+    cache_dir = Path("/tmp/.cache/dspy")
 
     try:
         cache_dir.mkdir(parents=True, exist_ok=True)
@@ -23,7 +37,9 @@ def _configure_dspy_cache() -> None:
             enable_memory_cache=True,
             disk_cache_dir=str(cache_dir),
         )
-        logging.getLogger(__name__).info(f"DSPy disk cache configured: {cache_dir}")
+        logging.getLogger(__name__).info(
+            f"DSPy disk cache configured: {cache_dir} (container-local)"
+        )
     except (PermissionError, OSError) as e:
         logging.getLogger(__name__).warning(
             f"Cannot create cache dir {cache_dir}: {e}, using memory-only"

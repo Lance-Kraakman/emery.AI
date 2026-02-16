@@ -120,6 +120,8 @@ class OutputFieldMapping:
     source: OutputFieldSource = field(default_factory=OutputFieldSource)
     target_field_id: int = 0
     append_mode: bool = False
+    # Target field metadata for rich field handling (select options, relation table, etc.)
+    target_field_metadata: dict[str, Any] | None = None
 
     @classmethod
     def from_api_response(cls, data: dict[str, Any]) -> OutputFieldMapping:
@@ -130,6 +132,7 @@ class OutputFieldMapping:
             else OutputFieldSource(),
             target_field_id=data.get("targetFieldId", data.get("target_field_id", 0)),
             append_mode=data.get("appendMode", data.get("append_mode", False)),
+            target_field_metadata=data.get("targetFieldMetadata", data.get("target_field_metadata")),
         )
 
 

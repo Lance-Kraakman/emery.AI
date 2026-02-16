@@ -16,6 +16,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from emery_agents.reasoning.signatures.planning.models import TriageAnalysis
+
 if TYPE_CHECKING:
     from emery_agents.entities.message import FileAttachment, ImageAttachment
     from emery_agents.entities.models.context_mapping import ResolvedContext
@@ -87,7 +89,7 @@ class PlanningContextComponents:
     retrieved_knowledge: str = ""
     retrieved_strategies: str = ""
     memory_context: str = ""
-    triage_analysis: dict[str, Any] | None = None
+    triage_analysis: TriageAnalysis | None = None
 
     def has_retrieved_context(self) -> bool:
         """Check if any retrieved context is present."""

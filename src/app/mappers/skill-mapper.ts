@@ -37,6 +37,7 @@ export interface TargetFieldMetadata {
   options?: string[];        // For select fields: valid option values
   maxSelections?: number;    // For multi-select: maximum allowed selections
   fieldName?: string;        // Target field name (for display)
+  relatedTableId?: number;   // For relation fields: the linked table ID
 }
 
 // =============================================================================

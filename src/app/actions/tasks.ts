@@ -564,105 +564,107 @@ export async function uploadTaskAttachment(
   agentId: number,
   formData: FormData
 ): Promise<Result<{ url: string; s3Key: string; filename: string; mimeType: string; type: 'image' | 'document' }>> {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return { success: false, error: 'Unauthorized' };
-    }
+  return withAuthContext(async () => {
+    try {
+      const session = await getServerSession(authOptions);
+      if (!session?.user?.id) {
+        return { success: false, error: 'Unauthorized' };
+      }
 
-    const file = formData.get('file') as File;
-    if (!file) {
-      return { success: false, error: 'No file provided' };
-    }
+      const file = formData.get('file') as File;
+      if (!file) {
+        return { success: false, error: 'No file provided' };
+      }
 
-    // Get agent to retrieve organizationId
-    const agentService = getAgentApplicationService();
-    const agent = await agentService.getAgent(AgentId.fromNumber(agentId));
-    if (!agent) {
-      return { success: false, error: 'Agent not found' };
-    }
+      // Get agent to retrieve organizationId
+      const agentService = getAgentApplicationService();
+      const agent = await agentService.getAgent(AgentId.fromNumber(agentId));
+      if (!agent) {
+        return { success: false, error: 'Agent not found' };
+      }
 
-    // Determine file type
-    const isImage = file.type.startsWith('image/');
-    const attachmentType = isImage ? 'image' : 'document';
+      // Determine file type
+      const isImage = file.type.startsWith('image/');
+      const attachmentType = isImage ? 'image' : 'document';
 
-    // Generate S3 key using the shared path registry
-    const fileId = uuidv4();
-    const extension = file.name.split('.').pop() || 'bin';
-    const sanitizedExt = extension.replace(/[^\w.-]/g, '_');
-    const s3Key = getTaskAttachmentKey(agent.organizationId.value, agentId, fileId, sanitizedExt);
+      // Generate S3 key using the shared path registry
+      const fileId = uuidv4();
+      const extension = file.name.split('.').pop() || 'bin';
+      const sanitizedExt = extension.replace(/[^\w.-]/g, '_');
+      const s3Key = getTaskAttachmentKey(agent.organizationId.value, agentId, fileId, sanitizedExt);
 
-    // Upload to S3
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const shouldUseEncryption = !process.env.S3_ENDPOINT_URL;
+      // Upload to S3
+      const buffer = Buffer.from(await file.arrayBuffer());
+      const shouldUseEncryption = !process.env.S3_ENDPOINT_URL;
 
-    const putCommand = new PutObjectCommand({
-      Bucket: BUCKET_NAME,
-      Key: s3Key,
-      Body: buffer,
-      ContentType: file.type,
-      ...(shouldUseEncryption && {
-        ServerSideEncryption: 'AES256'
-      })
-    });
+      const putCommand = new PutObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: s3Key,
+        Body: buffer,
+        ContentType: file.type,
+        ...(shouldUseEncryption && {
+          ServerSideEncryption: 'AES256'
+        })
+      });
 
-    await s3Client.send(putCommand);
+      await s3Client.send(putCommand);
 
-    // Invalidate storage breakdown cache so recalculation picks up this upload
-    invalidateOrgStorageCache(agent.organizationId.value);
+      // Invalidate storage breakdown cache so recalculation picks up this upload
+      invalidateOrgStorageCache(agent.organizationId.value);
 
-    // Generate pre-signed URL
-    const getCommand = new GetObjectCommand({
-      Bucket: BUCKET_NAME,
-      Key: s3Key
-    });
+      // Generate pre-signed URL
+      const getCommand = new GetObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: s3Key
+      });
 
-    const url = await getSignedUrl(s3Client, getCommand, {
-      expiresIn: 3600 // 1 hour
-    });
+      const url = await getSignedUrl(s3Client, getCommand, {
+        expiresIn: 3600 // 1 hour
+      });
 
-    // Audit log the attachment upload
-    const auditService = getAuditApplicationService();
-    auditService.logEvent(
-      agent.organizationId,
-      {
-        eventType: 'agent',
-        eventCategory: 'task_attachment',
-        eventAction: 'upload',
-        actorType: 'user',
-        actorId: session.user.id,
-        actorName: session.user.name || session.user.email || undefined,
-        resourceType: 'attachment',
-        resourceId: s3Key,
-        resourceName: file.name,
-        parentResourceType: 'agent',
-        parentResourceId: String(agentId),
-        eventData: {
-          agentId,
+      // Audit log the attachment upload
+      const auditService = getAuditApplicationService();
+      auditService.logEvent(
+        agent.organizationId,
+        {
+          eventType: 'agent',
+          eventCategory: 'task_attachment',
+          eventAction: 'upload',
+          actorType: 'user',
+          actorId: session.user.id,
+          actorName: session.user.name || session.user.email || undefined,
+          resourceType: 'attachment',
+          resourceId: s3Key,
+          resourceName: file.name,
+          parentResourceType: 'agent',
+          parentResourceId: String(agentId),
+          eventData: {
+            agentId,
+            filename: file.name,
+            mimeType: file.type,
+            attachmentType,
+            s3Key,
+          },
+          success: true,
+        }
+      );
+
+      return {
+        success: true,
+        data: {
+          url,
+          s3Key,
           filename: file.name,
           mimeType: file.type,
-          attachmentType,
-          s3Key,
-        },
-        success: true,
-      }
-    );
-
-    return {
-      success: true,
-      data: {
-        url,
-        s3Key,
-        filename: file.name,
-        mimeType: file.type,
-        type: attachmentType
-      }
-    };
-  } catch (error) {
-    console.error('[uploadTaskAttachment] error:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to upload task attachment'
-    };
-  }
+          type: attachmentType
+        }
+      };
+    } catch (error) {
+      console.error('[uploadTaskAttachment] error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to upload task attachment'
+      };
+    }
+  });
 }
