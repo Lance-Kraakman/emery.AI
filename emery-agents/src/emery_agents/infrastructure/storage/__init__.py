@@ -5,6 +5,7 @@ Provides cloud-agnostic workspace storage.
 Uses WORKSPACE_STORAGE_PATH environment variable to configure the base path.
 """
 
+from .delta_paths import build_table_relative_path, build_table_s3_path, get_delta_bucket
 from .shared_filesystem_storage import SharedFilesystemStorage
 from .workspace_paths import (
     AGENT_WORKSPACE_DIRS,
@@ -36,4 +37,8 @@ __all__ = [
     "WORKSPACE_STORAGE_PATH",
     "AGENT_WORKSPACE_DIRS",
     "USER_WORKSPACE_DIRS",
+    # Delta Lake paths
+    "build_table_s3_path",
+    "build_table_relative_path",
+    "get_delta_bucket",
 ]

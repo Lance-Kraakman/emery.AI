@@ -7,7 +7,6 @@ used by both direct.py and planning.py to enrich execution context.
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any
 
 from emery_agents.reasoning.modules.graph_retriever import GraphRetriever
@@ -60,8 +59,7 @@ def retrieve_graph_context(
     # Build graph from workspace before querying
     if workspace_context and workspace_context.existing_tables:
         try:
-            bucket = os.environ.get("S3_BUCKET_NAME", "enhancd-files")
-            builder = GraphBuilder(graph_service, bucket)
+            builder = GraphBuilder(graph_service)
             graph_name = builder.build_from_context(int(org_id), workspace_context)
             logger.info(f"Graph '{graph_name}' ready ({len(workspace_context.existing_tables)} tables)")
         except Exception as e:

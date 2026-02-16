@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 
 from emery_agents.entities.workspace import WorkspaceData
+from emery_agents.infrastructure.storage import build_table_s3_path, get_delta_bucket
 from emery_agents.services.context.models import WorkspaceContext
 
 from .service import GraphService
@@ -23,21 +24,21 @@ class GraphBuilder:
     then builds a DuckPGQ property graph for traversal.
 
     Usage:
-        builder = GraphBuilder(graph_service, bucket="emery-bucket")
+        builder = GraphBuilder(graph_service)
         graph_name = builder.build_from_workspace(org_id=1, workspace=workspace_data)
     """
 
     __slots__ = ("_graph", "_bucket")
 
-    def __init__(self, graph: GraphService, bucket: str) -> None:
+    def __init__(self, graph: GraphService, bucket: str | None = None) -> None:
         """Initialize GraphBuilder.
 
         Args:
             graph: GraphService instance for building the graph
-            bucket: S3 bucket name containing Delta Lake tables
+            bucket: Optional S3 bucket override (defaults to S3_BUCKET_NAME env var)
         """
         self._graph = graph
-        self._bucket = bucket
+        self._bucket = bucket or get_delta_bucket()
 
     def build_from_workspace(
         self, org_id: int, workspace: WorkspaceData
@@ -60,8 +61,7 @@ class GraphBuilder:
         # Build table refs and extract relation edges
         for db in workspace.databases:
             for table in db.tables:
-                # Path format: s3://{bucket}/org_{org_id}/db_{db_id}/table_{table_id}/
-                s3_path = f"s3://{self._bucket}/org_{org_id}/db_{db.id}/table_{table.id}/"
+                s3_path = build_table_s3_path(org_id, db.id, table.id, self._bucket)
                 tables.append(DeltaTableRef(str(table.id), s3_path))
 
                 # Extract edges from relation fields
@@ -103,7 +103,7 @@ class GraphBuilder:
                 logger.warning(f"Table {table.id} has no database_id, skipping")
                 continue
 
-            s3_path = f"s3://{self._bucket}/org_{org_id}/db_{table.database_id}/table_{table.id}/"
+            s3_path = build_table_s3_path(org_id, table.database_id, table.id, self._bucket)
             tables.append(DeltaTableRef(str(table.id), s3_path))
 
             for field in table.fields:
