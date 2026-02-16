@@ -7,33 +7,34 @@ used by both direct.py and planning.py to enrich execution context.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+import os
+from typing import Any
 
 from emery_agents.reasoning.modules.graph_retriever import GraphRetriever
 from emery_agents.reasoning.signatures.planning.models import RecordContext
-
-if TYPE_CHECKING:
-    from emery_agents.services.graph import GraphService
+from emery_agents.services.context.models import WorkspaceContext
+from emery_agents.services.graph import GraphBuilder, GraphService
 
 logger = logging.getLogger(__name__)
 
 
 def retrieve_graph_context(
     record_context: RecordContext | None,
-    graph_service: "GraphService | None",
+    graph_service: GraphService | None,
     org_id: int | str | None,
+    workspace_context: WorkspaceContext | None = None,
     max_records: int = 3,
 ) -> str:
     """Retrieve related records via graph traversal.
 
-    Traverses the Delta Lake graph to find records related to the given
-    record_context. For each record_id, tries direct ID lookup first,
-    then falls back to name-based search if no results.
+    Builds the graph from workspace_context (ALL tables) before querying.
+    Graph is cached per-org, so subsequent calls skip the build step.
 
     Args:
         record_context: RecordContext with table_id and record_ids
         graph_service: GraphService instance for Delta Lake traversal
         org_id: Organization ID for RLS context
+        workspace_context: WorkspaceContext with ALL tables for graph building
         max_records: Maximum number of starting records to traverse from
 
     Returns:
@@ -55,6 +56,16 @@ def retrieve_graph_context(
             f"or record_ids={record_context.record_ids}"
         )
         return ""
+
+    # Build graph from workspace before querying
+    if workspace_context and workspace_context.existing_tables:
+        try:
+            bucket = os.environ.get("S3_BUCKET_NAME", "enhancd-files")
+            builder = GraphBuilder(graph_service, bucket)
+            graph_name = builder.build_from_context(int(org_id), workspace_context)
+            logger.info(f"Graph '{graph_name}' ready ({len(workspace_context.existing_tables)} tables)")
+        except Exception as e:
+            logger.warning(f"Graph build failed: {e}")
 
     logger.info(
         f"Starting graph retrieval: table={record_context.table_id}, "

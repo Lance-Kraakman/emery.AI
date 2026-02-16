@@ -491,10 +491,12 @@ async def generate_plan_node(
             logger.warning(f"KNN retrieval failed, continuing without: {e}")
 
     # === Graph Retrieval: Get related records if record context exists ===
+    # Use full_workspace (ALL tables) so graph can traverse any relation
     graph_context = retrieve_graph_context(
         record_context=state.get("record_context"),
         graph_service=runtime.graph_service,
         org_id=state.get("organization_id"),
+        workspace_context=full_workspace,
     )
 
     # Build session config
