@@ -43,6 +43,7 @@ import { getMessageContent } from '@/lib/chat/message-helpers';
 import { processStepProgress, processContentChunk, processCompletion, encodeSSEEvent } from '@/lib/chat/event-processors';
 import { formatPlanToMarkdown, formatQuestionsForChat } from '@/lib/chat/format-utils';
 import { generateChatTitleFromMessage } from '@/lib/utils/chat-title';
+import { getExternalPresignedUrl } from '@/lib/s3/client';
 
 // Import gRPC client
 import { getChatProcessingClient, type StreamingChatResponse, type ChatProcessingOptions } from '@/ddd/infrastructure/grpc/chat-processing-client';
@@ -697,14 +698,17 @@ export async function POST(req: NextRequest) {
     // Add uploaded attachment URLs to message parts (these have real S3 URLs)
     // AIDEV-NOTE: Supports all attachment types (images, PDFs, audio, documents)
     // Python file_processor.py handles PDF text extraction and audio transcription
+    // AIDEV-NOTE: Uses S3_EXTERNAL_ENDPOINT_URL for presigned URLs so Docker/gRPC can access them
     if (attachmentMetadata.length > 0) {
       console.log('[CHAT-GRPC-API] Adding S3 attachment URLs to current message parts');
       for (const attachment of attachmentMetadata) {
-        if (attachment.url) {
+        if (attachment.s3Key) {
+          // Generate presigned URL with external endpoint for Docker/gRPC access
+          const externalUrl = await getExternalPresignedUrl(attachment.s3Key);
           currentMessageParts.push({
             type: 'data-file' as const,
             data: {
-              url: attachment.url,
+              url: externalUrl,
               mediaType: attachment.mimeType,
               filename: attachment.filename,
               size: attachment.sizeBytes
