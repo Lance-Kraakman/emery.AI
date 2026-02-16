@@ -41,6 +41,7 @@ from emery_agents.tools.loader import UnifiedToolLoader
 from ..agents.factory import AgentFactory
 from ..models import ModelProvider
 from .events import (
+    AwaitingHumanSkillEvent,
     ExecutionCompletedEvent,
     GoalAchievedEvent,
     PlanCreatedEvent,
@@ -386,6 +387,25 @@ class CoordinatorExecutor:
                 error_message="",
                 timestamp_ms=timestamp_ms,
                 progress_percent=100.0,
+            )
+        elif isinstance(event, AwaitingHumanSkillEvent):
+            return ProgressDict(
+                status="in_progress",
+                output=json.dumps({
+                    "type": "awaiting_human_skill",
+                    "skill_id": event.skill_id,
+                    "skill_name": event.skill_name,
+                    "step_id": event.step_id,
+                    "instructions": event.instructions,
+                    "inputs": event.inputs,
+                    "output_schema": event.output_schema,
+                    "assigned_to": event.assigned_to,
+                    "external_links": event.external_links,
+                    "session_id": event.session_id,
+                }),
+                error_message="",
+                timestamp_ms=timestamp_ms,
+                progress_percent=50.0,
             )
         else:
             # Generic event

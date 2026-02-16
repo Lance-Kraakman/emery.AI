@@ -229,6 +229,19 @@ class UnifiedToolLoader:
             except (IndexError, ValueError) as e:
                 raise ValueError(f"Invalid skill:{id} pattern: {tool_config.name}") from e
 
+        # Handle skill_{id}_{name} pattern from planner tool_call
+        # The planner may create steps with tool_call="skill_30_go_for_a_walk"
+        skill_underscore_match = re.match(r"skill_(\d+)_", tool_config.name)
+        if skill_underscore_match:
+            skill_id = int(skill_underscore_match.group(1))
+            org_id = organization_id if organization_id else 0
+            logger.info(f"[TOOL-LOADER] Creating DynamicSkillTool from skill_{skill_id}_* pattern")
+            return DynamicSkillTool(
+                skill_id=skill_id,
+                api_key=api_key,
+                organization_id=org_id,
+            ).to_dspy_tool()
+
         # Handle agent:{id} pattern for lazy loading during execution
         # Same pattern as skill:{id} but for agents
         if tool_config.name.startswith("agent:"):

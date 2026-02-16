@@ -383,6 +383,114 @@ EXAMPLE_NEEDS_CLARIFICATION = _example(
 )
 
 
+# =============================================================================
+# Record Lookup Examples (graph_context / record_context)
+# =============================================================================
+
+# When graph_context IS populated (GraphService worked) - synthesize directly
+EXAMPLE_RECORD_WITH_GRAPH = _example(
+    request="Tell me about John Smith and his social history",
+    # NOTE: This assumes graph_context is provided to planner containing:
+    # "John Smith (Client ID: 42): ... Social History: ..."
+    result=PlanOrQuestionsOutput(
+        plan=PlanOutput(
+            plan_id="plan_record_synthesize",
+            goal="Present information about John Smith from provided context",
+            context="Graph context contains John Smith's data and social history.",
+            analysis="Data already retrieved via graph traversal. Synthesize and present.",
+            steps=[
+                PlanStepOutput(
+                    step_id="step_1",
+                    description="Synthesize John Smith's information and social history from graph_context. Present comprehensive summary to user.",
+                    phase_name="Synthesis",
+                    phase_order=1,
+                ),
+            ],
+            auto_approve_policy="auto",
+            matched_conditions=["read_only", "synthesis_only"],
+        ),
+        questions=None,
+    ),
+)
+
+# When graph_context is EMPTY but record_context exists (triage identified record)
+EXAMPLE_RECORD_NO_GRAPH = _example(
+    request="What do we know about patient Jane Doe?",
+    # NOTE: record_context={table_id: "5", record_ids: ["Jane Doe"]} from triage
+    # but graph_context="" (GraphService unavailable)
+    result=PlanOrQuestionsOutput(
+        plan=PlanOutput(
+            plan_id="plan_patient_lookup",
+            goal="Retrieve all information about patient Jane Doe",
+            context="Record context identifies table and record. No graph data available.",
+            analysis="Triage identified table=5 and record='Jane Doe'. Use row_crud to fetch. Do NOT ask for clarification.",
+            steps=[
+                PlanStepOutput(
+                    step_id="step_1",
+                    description="Query Patients table for records matching 'Jane Doe' using row_crud.",
+                    tool_call="row_crud",
+                    parameters={"method": "get_rows", "table_id": "5"},
+                    phase_name="Discovery",
+                    phase_order=1,
+                ),
+                PlanStepOutput(
+                    step_id="step_2",
+                    description="Present patient information to user.",
+                    phase_name="Synthesis",
+                    phase_order=2,
+                ),
+            ],
+            auto_approve_policy="auto",
+            matched_conditions=["record_lookup", "read_only"],
+        ),
+        questions=None,
+    ),
+)
+
+# Multi-table relational query with explicit table references
+EXAMPLE_RECORD_RELATIONAL = _example(
+    request="Show me all orders for customer CUST-789",
+    # NOTE: record_context={table_id: "1", record_ids: ["CUST-789"]} from triage
+    # workspace_context shows: Customers (id=1), Orders (id=2) with customer_id relation
+    result=PlanOrQuestionsOutput(
+        plan=PlanOutput(
+            plan_id="plan_customer_orders",
+            goal="Retrieve orders for customer CUST-789",
+            context="Record context identifies customer. Related Orders table exists.",
+            analysis="Query Customers table for CUST-789, then query Orders by customer_id. Read-only relational lookup.",
+            steps=[
+                PlanStepOutput(
+                    step_id="step_1",
+                    description="Query Customers table to confirm CUST-789 exists and get customer record.",
+                    tool_call="row_crud",
+                    parameters={"method": "get_rows", "table_id": "1"},
+                    phase_name="Discovery",
+                    phase_order=1,
+                ),
+                PlanStepOutput(
+                    step_id="step_2",
+                    description="Query Orders table for all orders with customer_id matching CUST-789.",
+                    tool_call="row_crud",
+                    parameters={"method": "get_rows", "table_id": "2"},
+                    required_context=["step_1"],
+                    phase_name="Discovery",
+                    phase_order=2,
+                ),
+                PlanStepOutput(
+                    step_id="step_3",
+                    description="Present orders summary to user.",
+                    phase_name="Synthesis",
+                    phase_order=3,
+                ),
+            ],
+            auto_approve_policy="auto",
+            matched_conditions=["record_lookup", "read_only"],
+        ),
+        questions=None,
+    ),
+)
+
+
 PLANNING_DEMOS: list[dspy.Example] = [
     # Skill execution (highest priority for @skill: requests)
     EXAMPLE_EXECUTE_SKILL,
@@ -401,6 +509,10 @@ PLANNING_DEMOS: list[dspy.Example] = [
     EXAMPLE_READ_FILE,
     EXAMPLE_RUN_TESTS,
     EXAMPLE_CREATE_AND_RUN_SCRIPT,
+    # Record lookup (graph_context / record_context)
+    EXAMPLE_RECORD_WITH_GRAPH,
+    EXAMPLE_RECORD_NO_GRAPH,
+    EXAMPLE_RECORD_RELATIONAL,
     # Clarification
     EXAMPLE_NEEDS_CLARIFICATION,
 ]

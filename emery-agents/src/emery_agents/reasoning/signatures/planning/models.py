@@ -48,8 +48,7 @@ class PlanStepOutput(BaseModel):
     )
     tool_call: str | None = Field(
         default=None,
-        description="Tool to invoke for this step (e.g., 'skill_crud' for skill execution). "
-        "Include the specific tool name when the step calls an external integration.",
+        description="Tool to invoke for this step. Include the specific tool name.",
     )
     parameters: dict[str, Any] | None = Field(
         default=None,

@@ -133,7 +133,7 @@ services:
       NEXTJS_BASE_URL: ${NEXTJS_BASE_URL_DOCKER:-http://app-integration:3000}
       EMERY_DEBUG_PROMPTS: "1"
       WORKSPACE_STORAGE_PATH: /mnt/storage/workspaces
-      DUCKDB_HOME: /usr/local/share/duckdb
+      HOME: /usr/local/share
     volumes:
       # Shared workspace storage (same as SSH sync server)
       - ${WORKSPACE_HOST_PATH:-../../.workspace-data}:/mnt/storage/workspaces
@@ -175,6 +175,7 @@ services:
       AWS_S3_ALLOW_UNSAFE_RENAME: "true"
       REDIS_URL: redis://redis-integration:6379
       WORKSPACE_STORAGE_PATH: /mnt/storage/workspaces
+      HOME: /usr/local/share
     volumes:
       # Shared workspace storage (same as SSH sync server)
       - ${WORKSPACE_HOST_PATH:-../../.workspace-data}:/mnt/storage/workspaces

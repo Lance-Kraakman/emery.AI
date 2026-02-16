@@ -345,6 +345,8 @@ class DSPyPlanGenerator:
         for dspy_step in dspy_plan.steps:
             step = create_step(
                 description=dspy_step.description,
+                tool_call=dspy_step.tool_call,
+                parameters=dspy_step.parameters,
                 prompt_template=dspy_step.prompt_template,
                 required_context=dspy_step.required_context,
                 connection_required=dspy_step.connection_required,
