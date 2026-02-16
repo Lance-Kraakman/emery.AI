@@ -50,10 +50,24 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 RUN python -m spacy download en_core_web_sm
 
 # Pre-install DuckDB extensions for graph service (avoids first-run delay)
-# Use /usr/local/share (standard location for shared data)
-RUN mkdir -p /usr/local/share/duckdb && chown 1000:1000 /usr/local/share/duckdb
-ENV DUCKDB_HOME=/usr/local/share/duckdb
-RUN python -c "import duckdb; c = duckdb.connect(); c.install_extension('delta'); c.install_extension('duckpgq', repository='community')"
+# httpfs: Required for S3/Delta Lake access
+# delta: Delta Lake table format
+# duckpgq: Property graph queries (SQL/PGQ)
+ENV HOME=/usr/local/share
+RUN python -c "\
+import duckdb; \
+print(f'DuckDB version: {duckdb.__version__}'); \
+c = duckdb.connect(); \
+c.install_extension('delta'); \
+c.install_extension('httpfs'); \
+c.install_extension('duckpgq', repository='community'); \
+c.load_extension('delta'); \
+c.load_extension('httpfs'); \
+c.load_extension('duckpgq'); \
+print('Extensions loaded successfully'); \
+" && ls -la /usr/local/share/.duckdb/
+# Fix permissions AFTER install (container runs as 1000:1000)
+RUN chown -R 1000:1000 /usr/local/share/.duckdb
 
 # Add metadata labels
 LABEL org.opencontainers.image.version="${VERSION}"

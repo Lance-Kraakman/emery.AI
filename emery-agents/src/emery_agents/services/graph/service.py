@@ -37,6 +37,9 @@ class GraphService:
         """
         self._s3 = s3_config or S3Config.from_env()
         self._conn = duckdb.connect()
+        # Set extension directory to match Dockerfile install location
+        # Extensions are at: HOME/.duckdb/extensions/VERSION/PLATFORM/*.duckdb_extension
+        self._conn.execute("SET extension_directory = '/usr/local/share/.duckdb/extensions'")
         self._cache = GraphCache()
         self._setup()
 
