@@ -85,11 +85,15 @@ class GraphService:
         """Register a Delta Lake table as a DuckDB view.
 
         Returns the view name for use in graph queries.
+
+        Note: DDL statements don't support prepared parameters in DuckDB,
+        so we use string interpolation. S3 path is from internal code only.
         """
         view = self._view_name(org_id, ref.table_id)
+        # Escape single quotes in path (defensive, should never occur)
+        safe_path = ref.s3_path.replace("'", "''")
         self._conn.execute(
-            f"CREATE OR REPLACE VIEW {view} AS SELECT * FROM delta_scan($uri)",
-            {"uri": ref.s3_path},
+            f"CREATE OR REPLACE VIEW {view} AS SELECT * FROM delta_scan('{safe_path}')"
         )
         return view
 
